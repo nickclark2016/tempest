@@ -3,9 +3,9 @@ project('ecs', (prj) => {
     language('C++');
     
     files([
-        './include/**.hpp',
-        './src/**.hpp',
-        './src/**.cpp'
+        './include/**/*.hpp',
+        './src/**/*.hpp',
+        './src/**/*.cpp'
     ]);
 
     toolset('msc:143');

@@ -3,9 +3,9 @@ project('graphics', (prj) => {
     language('C++');
     
     files([
-        './include/**.hpp',
-        './src/**.hpp',
-        './src/**.cpp'
+        './include/**/*.hpp',
+        './src/**/*.hpp',
+        './src/**/*.cpp'
     ]);
 
     dependsOn([
