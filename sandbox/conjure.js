@@ -13,14 +13,16 @@ project('sandbox', (prj) => {
         'ecs',
         'graphics',
         'input',
-        'math'
+        'math',
+        'logger'
     ]);
 
     uses([
         'ecs:public',
         'graphics:public',
         'input:public',
-        'math:public'
+        'math:public',
+        'logger:public'
     ]);
 
     when({}, (ctx) => {

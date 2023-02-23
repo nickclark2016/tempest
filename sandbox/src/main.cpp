@@ -1,6 +1,7 @@
 #include <tempest/input.hpp>
 #include <tempest/instance.hpp>
 #include <tempest/window.hpp>
+#include <tempest/logger.hpp>
 
 int main()
 {
@@ -18,6 +19,12 @@ int main()
     });
 
     auto& gfx_device = gfx_instance->get_devices()[0];
+
+    auto logger = tempest::logger::logger_factory::create({
+        .prefix{"Tempest"},
+    });
+
+    logger->info("Tempest Engine {0}", 5);
 
     while (!win->should_close())
     {
