@@ -3,7 +3,8 @@ project('sandbox', (prj) => {
     language('C++');
 
     files([
-        './src/**.cppm'
+        './src/**/*.hpp',
+        './src/**/*.cpp'
     ]);
 
     toolset('msc:143');
