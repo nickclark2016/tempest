@@ -1,4 +1,4 @@
-project('graphics', (prj) => {
+project('logger', (prj) => {
     kind('StaticLib');
     language('C++');
     
@@ -8,14 +8,11 @@ project('graphics', (prj) => {
         './src/**/*.cpp'
     ]);
 
-    dependsOn([
-        'glfw',
-        'vk-bootstrap',
-        'vma',
-        'logger',
-    ]);
-
     toolset('msc:143');
+
+    dependsOn([
+        'spdlog',
+    ]);
 
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
@@ -28,17 +25,14 @@ project('graphics', (prj) => {
         ]);
     });
 
-    block('graphics:public', (_) => {
+    block('logger:public', (_) => {
         includeDirs([
             './include'
         ]);
     });
 
     uses([
-        'glfw:public',
-        'vk-bootstrap:public',
-        'vma:public',
-        'graphics:public',
         'logger:public',
+        'spdlog:public'
     ]);
 });

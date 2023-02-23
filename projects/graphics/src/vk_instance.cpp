@@ -3,10 +3,14 @@
 #include <algorithm>
 #include <iostream>
 
+#include <tempest/logger.hpp>
+
 namespace tempest::graphics::vk
 {
     namespace
     {
+        std::unique_ptr<logger::ilogger> logger;
+
         VKAPI_ATTR VkBool32 VKAPI_CALL vk_dbg_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                                                        VkDebugUtilsMessageTypeFlagsEXT messageType,
                                                        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -15,23 +19,23 @@ namespace tempest::graphics::vk
 
             if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
-                std::cout << "[ERROR] Vulkan Validation Message: " << pCallbackData->pMessage << "\n";
+                logger->error("Vulkan Validation Message: {0}", pCallbackData->pMessage);
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
             {
-                std::cout << "[WARN] Vulkan Validation Message: " << pCallbackData->pMessage << "\n";
+                logger->warn("Vulkan Validation Message: {0}", pCallbackData->pMessage);
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
             {
-                std::cout << "[INFO] Vulkan Validation Message: " << pCallbackData->pMessage << "\n";
+                logger->info("Vulkan Validation Message: {0}", pCallbackData->pMessage);
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
             {
-                std::cout << "[DEBUG] Vulkan Validation Message: " << pCallbackData->pMessage << "\n";
+                logger->debug("Vulkan Validation Message: {0}", pCallbackData->pMessage);
             }
             else
             {
-                std::cout << "[OTHER] Vulkan Validation Message: " << pCallbackData->pMessage << "\n";
+                logger->info("Vulkan Validation Message: {0}", pCallbackData->pMessage);
             }
 
             return VK_FALSE;
@@ -39,6 +43,10 @@ namespace tempest::graphics::vk
 
         vkb::Instance create_instance(const instance_factory::create_info& info)
         {
+            logger = logger::logger_factory::create({
+                .prefix{"VKInstance"},
+            });
+
             vkb::InstanceBuilder bldr = vkb::InstanceBuilder{}
                                             .set_engine_name("Tempest Engine")
                                             .set_engine_version(0, 0, 1)
