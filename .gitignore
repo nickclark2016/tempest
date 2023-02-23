@@ -1,0 +1,12 @@
+# Binaries
+bin/
+bin-int/
+
+# Build Tool Files
+.vs/
+.vscode/
+Makefile
+*.make
+*.sln
+*.vcxproj
+*.vcxproj.user

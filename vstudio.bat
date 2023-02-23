@@ -1,0 +1,1 @@
+.\dependencies\conjure\conjure.exe vstudio
