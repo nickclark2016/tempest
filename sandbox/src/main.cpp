@@ -17,6 +17,8 @@ int main()
         .version_patch{1},
     });
 
+    auto& gfx_device = gfx_instance->get_devices()[0];
+
     while (!win->should_close())
     {
         tempest::input::poll();

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 
 namespace tempest::graphics
@@ -19,6 +20,7 @@ namespace tempest::graphics
     {
       public:
         virtual ~iinstance() = default;
+        virtual std::span<const std::unique_ptr<idevice>> get_devices() const noexcept = 0;
     };
 
     class instance_factory
