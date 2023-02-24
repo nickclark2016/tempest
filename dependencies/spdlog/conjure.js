@@ -32,7 +32,6 @@ project('spdlog', (prj) => {
 
     block('spdlog:public', (blk) => {
         includeDirs([
-            '.',
             './include'
         ]);
     });
