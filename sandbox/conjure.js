@@ -9,30 +9,12 @@ project('sandbox', (prj) => {
 
     toolset('msc:143');
 
-    dependsOn([
-        'ecs',
-        'graphics',
-        'input',
-        'math',
-        'logger'
-    ]);
-
-    uses([
-        'ecs:public',
-        'graphics:public',
-        'input:public',
-        'math:public',
-        'logger:public'
-    ]);
-
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
         intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
     });
 
-    when({ configuration: 'Debug' }, (ctx) => {
-        defines([
-            '_DEBUG'
-        ]);
-    });
+    uses([
+        'tempest:engine'
+    ]);
 });
