@@ -15,6 +15,16 @@ namespace tempest::graphics::vk
         inline constexpr std::size_t FRAMES_IN_FLIGHT = 2;
     }
 
+    class commands final : public icommands
+    {
+      public:
+        explicit commands(VkCommandBuffer buffer);
+        ~commands() override = default;
+
+      private:
+        VkCommandBuffer _buffer; // non-owning
+    };
+
     struct frame_payload
     {
         VkSemaphore present;
@@ -34,12 +44,14 @@ namespace tempest::graphics::vk
         renderer& operator=(const renderer&) = delete;
         renderer& operator=(renderer&& rhs) noexcept;
 
+        void draw(const draw_command& cmd) override;
+
       private:
         vkb::Swapchain _swapchain;
         VkSurfaceKHR _surface{};
 
-        vkb::Device _device{}; // non-owning
-        vkb::Instance _inst{}; // non-owning
+        vkb::Device _device{};          // non-owning
+        vkb::Instance _inst{};          // non-owning
         vkb::DispatchTable _dispatch{}; // non-owning
 
         std::array<frame_payload, FRAMES_IN_FLIGHT> _frames{};

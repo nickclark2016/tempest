@@ -8,6 +8,10 @@
 
 namespace tempest::graphics::vk
 {
+    commands::commands(VkCommandBuffer buffer) : _buffer{buffer}
+    {
+    }
+
     renderer::renderer(const iinstance& instance, const idevice& dev, const iwindow& win)
         : _device{static_cast<const vk::device&>(dev).raw()}, _inst{static_cast<const vk::instance&>(instance).raw()},
           _dispatch{_device.make_table()}
@@ -90,6 +94,18 @@ namespace tempest::graphics::vk
         std::swap(_frames, rhs._frames);
 
         return *this;
+    }
+
+    void renderer::draw(const draw_command& cmd)
+    {
+        // fetch the next frame
+
+        commands buf{nullptr};
+        cmd(buf);
+
+        // submit
+        // present
+        // increment frame counter
     }
 
     void renderer::_release()

@@ -26,6 +26,8 @@ int main()
     while (!win->should_close())
     {
         tempest::input::poll();
+
+        renderer->draw([](tempest::graphics::icommands& cmds) {});
     }
 
     return 0;
