@@ -1,6 +1,8 @@
 #ifndef tempest_instance_hpp__
 #define tempest_instance_hpp__
 
+#include "window.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <span>

@@ -5,6 +5,8 @@
 
 #include <VkBootstrap.h>
 
+#include <functional>
+
 namespace tempest::graphics::vk
 {
     class device final : public idevice
@@ -14,11 +16,16 @@ namespace tempest::graphics::vk
 
         device(const device&) = delete;
         device(device&& other) noexcept;
-        
+
         ~device() override;
 
         device& operator=(const device&) = delete;
         device& operator=(device&& rhs) noexcept;
+
+        inline vkb::Device raw() const noexcept
+        {
+            return _dev;
+        }
 
       private:
         vkb::Device _dev;
@@ -40,6 +47,11 @@ namespace tempest::graphics::vk
         instance& operator=(instance&& rhs) noexcept;
 
         std::span<const std::unique_ptr<idevice>> get_devices() const noexcept override;
+
+        inline const vkb::Instance& raw() const noexcept
+        {
+            return _inst;
+        }
 
       private:
         vkb::Instance _inst;

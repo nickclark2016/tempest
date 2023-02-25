@@ -1,9 +1,11 @@
 #include "vk_instance.hpp"
 
-#include <algorithm>
-#include <iostream>
+#include "glfw_window.hpp"
 
 #include <tempest/logger.hpp>
+
+#include <algorithm>
+#include <iostream>
 
 namespace tempest::graphics::vk
 {

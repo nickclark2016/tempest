@@ -43,6 +43,11 @@ namespace tempest::graphics::glfw
             glfwShowWindow(_win);
         }
 
+        GLFWwindow* raw() const noexcept
+        {
+            return _win;
+        }
+
       private:
         GLFWwindow* _win{};
         std::uint32_t _width{};
