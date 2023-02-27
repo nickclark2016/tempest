@@ -73,6 +73,11 @@ namespace tempest::graphics::vk
 
         std::vector<std::unique_ptr<idevice>> create_devices(vkb::Instance inst)
         {
+            VkPhysicalDeviceSynchronization2FeaturesKHR sync_feat = {
+                .sType{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR},
+                .synchronization2{VK_TRUE},
+            };
+
             vkb::PhysicalDeviceSelector selector =
                 vkb::PhysicalDeviceSelector{inst}
                     .set_minimum_version(1, 3)
@@ -84,33 +89,46 @@ namespace tempest::graphics::vk
                         .fillModeNonSolid{VK_TRUE},
                         .depthBounds{VK_TRUE},
                         .alphaToOne{VK_TRUE},
+                        .shaderInt64{VK_TRUE},
                     })
                     .set_required_features_11({
                         .sType{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES},
                         .pNext{nullptr},
+                        .shaderDrawParameters{VK_TRUE},
                     })
                     .set_required_features_12({
                         .sType{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES},
                         .pNext{nullptr},
                         .drawIndirectCount{VK_TRUE},
+                        .shaderSampledImageArrayNonUniformIndexing{VK_TRUE},
+                        .descriptorBindingUpdateUnusedWhilePending{VK_TRUE},
+                        .descriptorBindingPartiallyBound{VK_TRUE},
+                        .descriptorBindingVariableDescriptorCount{VK_TRUE},
+                        .runtimeDescriptorArray{VK_TRUE},
                         .imagelessFramebuffer{VK_TRUE},
                         .separateDepthStencilLayouts{VK_TRUE},
+                        .hostQueryReset{VK_TRUE},
+                        .timelineSemaphore{VK_TRUE},
+                        .bufferDeviceAddress{VK_TRUE},
+                        .shaderOutputLayer{VK_TRUE},
                     })
                     .set_required_features_13({
                         .sType{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES},
                         .pNext{nullptr},
+                        .synchronization2{VK_TRUE},
                         .dynamicRendering{VK_TRUE},
                     })
                     .require_present()
-                    .defer_surface_initialization();
+                    .defer_surface_initialization()
+                    .add_required_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
 
             auto physical_devices_result = selector.select_devices();
             assert(physical_devices_result && "Failed to select suitable Vulkan physical devices.");
 
             std::vector<std::unique_ptr<idevice>> devices;
             std::transform(physical_devices_result->begin(), physical_devices_result->end(),
-                           std::back_inserter(devices), [&inst](const vkb::PhysicalDevice& dev) {
-                               auto vk_device_result = vkb::DeviceBuilder{dev}.build();
+                           std::back_inserter(devices), [&inst, &sync_feat](const vkb::PhysicalDevice& dev) {
+                               auto vk_device_result = vkb::DeviceBuilder{dev}.add_pNext(&sync_feat).build();
                                assert(vk_device_result && "Failed to build Vulkan device.");
                                return std::make_unique<device>(std::move(*vk_device_result));
                            });

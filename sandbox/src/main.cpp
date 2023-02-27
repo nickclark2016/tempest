@@ -12,22 +12,13 @@ int main()
         .height{1080},
     });
 
-    auto gfx_instance = tempest::graphics::instance_factory::create({
-        .name{"Sandbox"},
-        .version_major{0},
-        .version_minor{0},
-        .version_patch{1},
-    });
-
-    auto& gfx_device = gfx_instance->get_devices()[0];
-
-    auto renderer = tempest::graphics::irenderer::create(*gfx_instance, *gfx_device, *win);
+    auto renderer = tempest::graphics::irenderer::create();
 
     while (!win->should_close())
     {
         tempest::input::poll();
 
-        renderer->draw([](tempest::graphics::icommands& cmds) {});
+        renderer->draw();
     }
 
     return 0;
