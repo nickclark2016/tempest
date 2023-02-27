@@ -22,6 +22,24 @@ namespace tempest::graphics::vk
         constexpr std::size_t FRAMES_IN_FLIGHT = 3;
     }
 
+    class command_buffer final : public icommand_buffer
+    {
+      public:
+        command_buffer(vuk::CommandBuffer* buf);
+        ~command_buffer() override = default;
+
+        icommand_buffer& use_full_viewport(std::uint32_t vp_index = 0) override;
+        icommand_buffer& use_full_scissor(std::uint32_t sc_index = 0) override;
+        icommand_buffer& use_default_raster_state() override;
+        icommand_buffer& use_default_color_blend(std::string_view render_target_name) override;
+        icommand_buffer& use_graphics_pipeline(std::string_view pipeline_name) override;
+        icommand_buffer& draw(std::uint32_t vertex_count, std::uint32_t instance_count, std::uint32_t first_vertex,
+                              std::uint32_t first_instance) override;
+
+      private:
+        vuk::CommandBuffer* _buf;
+    };
+
     struct renderer_graph final : public irenderer_graph
     {
         irenderer_graph& set_final_target(render_target target) override;
@@ -31,6 +49,18 @@ namespace tempest::graphics::vk
 
         vuk::RenderGraph _vuk_graph;
         std::string_view _final_target_name;
+    };
+
+    class resource_allocator final : public iresource_allocator
+    {
+      public:
+        void set_context(vuk::Context& ctx);
+        ~resource_allocator() override = default;
+
+        void create_named_pipeline(std::span<shader_source> sources, std::string_view name) override;
+
+      private:
+        std::optional<std::reference_wrapper<vuk::Context>> _ctx;
     };
 
     class renderer final : public irenderer
@@ -52,6 +82,11 @@ namespace tempest::graphics::vk
 
         void execute(irenderer_graph& graph) override;
 
+        inline iresource_allocator& get_allocator() override
+        {
+            return *_resource_alloc;
+        }
+
       private:
         std::optional<vuk::Context> _ctx;
         std::optional<vuk::DeviceSuperFrameResource> _resources;
@@ -71,6 +106,8 @@ namespace tempest::graphics::vk
         VkQueue _compute_queue;
 
         VkSurfaceKHR _surface;
+
+        std::optional<resource_allocator> _resource_alloc;
 
         void _release();
     };

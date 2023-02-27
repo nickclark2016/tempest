@@ -6,13 +6,32 @@
 
 #include <GLFW/glfw3.h>
 
-#include <cassert>
-
+#include <vuk/CommandBuffer.hpp>
+#include <vuk/Pipeline.hpp>
 #include <vuk/RenderGraph.hpp>
 #include <vuk/Util.hpp>
 
+#include <cassert>
+#include <fstream>
+#include <sstream>
+
 namespace tempest::graphics::vk
 {
+    namespace
+    {
+        std::vector<uint32_t> read_spirv(const std::string& path)
+        {
+            std::ostringstream buf;
+            std::ifstream input(path.c_str(), std::ios::ate | std::ios::binary);
+            assert(input);
+            size_t file_size = (size_t)input.tellg();
+            std::vector<uint32_t> buffer(file_size / sizeof(uint32_t));
+            input.seekg(0);
+            input.read(reinterpret_cast<char*>(buffer.data()), file_size);
+            return buffer;
+        }
+    } // namespace
+
     namespace
     {
         instance create_instance()
@@ -107,6 +126,9 @@ namespace tempest::graphics::vk
 
         vkb_device.surface = _surface;
         _swapchain_ref = _ctx->add_swapchain(make_swapchain(vkb_device, std::nullopt));
+
+        _resource_alloc = resource_allocator();
+        _resource_alloc->set_context(*_ctx);
     }
 
     renderer::~renderer()
@@ -162,8 +184,11 @@ namespace tempest::graphics::vk
                 !target.output_name.empty() ? vuk::Name(target.output_name) : vuk::Name()});
         }
 
-        p.execute = [&](vuk::CommandBuffer& buf) {
+        auto fn = pass.execute;
 
+        p.execute = [=](vuk::CommandBuffer& buf) {
+            command_buffer b{&buf};
+            fn(b);
         };
 
         _vuk_graph.add_pass(p);
@@ -173,9 +198,66 @@ namespace tempest::graphics::vk
 
     vuk::Future renderer_graph::finalize(vuk::Future back_buffer)
     {
-        _vuk_graph.attach_in("tempest_render_graph_target", std::move(back_buffer));
+        _vuk_graph.attach_in(irenderer_graph::BACK_BUFFER, std::move(back_buffer));
         vuk::Future fut{std::make_unique<vuk::RenderGraph>(std::move(_vuk_graph)), _final_target_name};
         _vuk_graph = {"Tempest Renderer"};
         return fut;
+    }
+    
+    void resource_allocator::set_context(vuk::Context& ctx)
+    {
+        _ctx = std::ref(ctx);
+    }
+
+    void resource_allocator::create_named_pipeline(std::span<shader_source> sources, std::string_view name)
+    {
+        vuk::PipelineBaseCreateInfo pci;
+        for (const auto& src : sources)
+        {
+            pci.add_spirv(src.data, std::string(src.name));
+        }
+
+        _ctx.value().get().create_named_pipeline(name, pci);
+    }
+    
+    command_buffer::command_buffer(vuk::CommandBuffer* buf) : _buf{buf}
+    {
+    }
+
+    icommand_buffer& command_buffer::use_full_viewport(std::uint32_t vp_index)
+    {
+        _buf->set_viewport(vp_index, vuk::Rect2D::framebuffer());
+        return *this;
+    }
+    
+    icommand_buffer& command_buffer::use_full_scissor(std::uint32_t sc_index)
+    {
+        _buf->set_scissor(sc_index, vuk::Rect2D::framebuffer());
+        return *this;
+    }
+    
+    icommand_buffer& command_buffer::use_default_raster_state()
+    {
+        _buf->set_rasterization({});
+        return *this;
+    }
+    
+    icommand_buffer& command_buffer::use_default_color_blend(std::string_view render_target_name)
+    {
+        _buf->set_color_blend(render_target_name, {});
+        return *this;
+    }
+    
+    icommand_buffer& command_buffer::use_graphics_pipeline(std::string_view pipeline_name)
+    {
+        _buf->bind_graphics_pipeline(pipeline_name);
+        return *this;
+    }
+    
+    icommand_buffer& command_buffer::draw(std::uint32_t vertex_count, std::uint32_t instance_count,
+                                          std::uint32_t first_vertex, std::uint32_t first_instance)
+    {
+        _buf->draw(vertex_count, instance_count, first_vertex, first_instance);
+        return *this;
     }
 } // namespace tempest::graphics::vk
