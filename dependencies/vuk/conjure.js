@@ -52,6 +52,7 @@ project('vuk', (prj) => {
     uses([ 'vuk:public' ]);
 
     warnings('Off');
+    externalWarnings('Off');
 
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
