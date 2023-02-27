@@ -16,6 +16,7 @@ namespace tempest::graphics
     {
       public:
         virtual ~idevice() = default;
+        virtual void release() = 0;
     };
 
     class iinstance
@@ -23,6 +24,7 @@ namespace tempest::graphics
       public:
         virtual ~iinstance() = default;
         virtual std::span<const std::unique_ptr<idevice>> get_devices() const noexcept = 0;
+        virtual void release() = 0;
     };
 
     class instance_factory

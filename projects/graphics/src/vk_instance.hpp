@@ -27,6 +27,11 @@ namespace tempest::graphics::vk
             return _dev;
         }
 
+        void release() override
+        {
+            _dev = {};
+        }
+
       private:
         vkb::Device _dev;
         vkb::DispatchTable _dispatch;
@@ -51,6 +56,16 @@ namespace tempest::graphics::vk
         inline const vkb::Instance& raw() const noexcept
         {
             return _inst;
+        }
+
+        inline void release() override
+        {
+            for (auto& dev : _devices)
+            {
+                dev->release();
+            }
+            _devices.clear();
+            _inst = {};
         }
 
       private:

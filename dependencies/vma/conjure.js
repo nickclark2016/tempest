@@ -19,8 +19,8 @@ project('vma', (prj) => {
     staticRuntime('Off');
 
     defines([
-        'VMA_STATIC_VULKAN_FUNCTIONS=0',
-        'VMA_DYNAMIC_VULKAN_FUNCTIONS=1'
+        'VMA_STATIC_VULKAN_FUNCTIONS=1',
+        // 'VMA_DYNAMIC_VULKAN_FUNCTIONS=1'
     ])
 
     when({ configuration: 'Release' }, (_) => {

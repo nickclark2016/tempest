@@ -10,9 +10,10 @@ project('graphics', (prj) => {
 
     dependsOn([
         'glfw',
+        'logger',
         'vk-bootstrap',
         'vma',
-        'logger',
+        'vuk',
     ]);
 
     toolset('msc:143');
@@ -38,6 +39,7 @@ project('graphics', (prj) => {
         'glfw:public',
         'vk-bootstrap:public',
         'vma:public',
+        'vuk:public',
         'graphics:public',
         'logger:public',
     ]);

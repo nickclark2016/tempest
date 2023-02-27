@@ -1,6 +1,12 @@
+include('./concurrentqueue/conjure.js');
+include('./doctest/conjure.js');
 include('./glfw/conjure.js');
 include('./googletest/conjure.js');
+include('./plf_colony/conjure.js');
+include('./robin-hood-hashing/conjure.js');
+include('./SPIRV-Cross/conjure.js');
 include('./vk-bootstrap/conjure.js');
 include('./vma/conjure.js');
+include('./vuk/conjure.js');
 include('./vulkan/conjure.js');
 include('./spdlog/conjure.js');
