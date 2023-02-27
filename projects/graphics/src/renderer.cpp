@@ -4,8 +4,8 @@
 
 namespace tempest::graphics
 {
-    std::unique_ptr<irenderer> irenderer::create()
+    std::unique_ptr<irenderer> irenderer::create(iwindow& win)
     {
-        return std::make_unique<vk::renderer>();
+        return std::make_unique<vk::renderer>(win);
     }
 } // namespace tempest::graphics
