@@ -11,7 +11,9 @@ namespace tempest::graphics::vk
 {
     namespace
     {
-        std::unique_ptr<logger::ilogger> logger;
+        std::unique_ptr<logger::ilogger> logger = logger::logger_factory::create({
+            .prefix{"tempest::graphics::vk::instance"},
+        });
 
         VKAPI_ATTR VkBool32 VKAPI_CALL vk_dbg_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                                                        VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -45,10 +47,6 @@ namespace tempest::graphics::vk
 
         vkb::Instance create_instance(const instance_factory::create_info& info)
         {
-            logger = logger::logger_factory::create({
-                .prefix{"VKInstance"},
-            });
-
             vkb::InstanceBuilder bldr = vkb::InstanceBuilder{}
                                             .set_engine_name("Tempest Engine")
                                             .set_engine_version(0, 0, 1)
