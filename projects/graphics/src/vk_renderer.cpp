@@ -30,10 +30,7 @@ namespace tempest::graphics::vk
             input.read(reinterpret_cast<char*>(buffer.data()), file_size);
             return buffer;
         }
-    } // namespace
 
-    namespace
-    {
         instance create_instance()
         {
             auto instance_wrapper = instance(instance_factory::create_info{
