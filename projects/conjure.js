@@ -1,3 +1,4 @@
+include('./core/conjure.js');
 include('./ecs/conjure.js');
 include('./graphics/conjure.js');
 include('./input/conjure.js');
@@ -6,6 +7,7 @@ include('./math/conjure.js');
 
 block('tempest:engine', (_) => {
     uses([
+        'core:public',
         'ecs:public',
         'graphics:public',
         'input:public',
@@ -14,6 +16,7 @@ block('tempest:engine', (_) => {
     ]);
 
     dependsOn([
+        'core',
         'ecs',
         'graphics',
         'input',
