@@ -9,6 +9,7 @@ project('graphics', (prj) => {
     ]);
 
     dependsOn([
+        'core',
         'glfw',
         'logger',
         'vk-bootstrap',
@@ -38,6 +39,7 @@ project('graphics', (prj) => {
     });
 
     uses([
+        'core:public',
         'glfw:public',
         'vk-bootstrap:public',
         'vma:public',
