@@ -1,6 +1,7 @@
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/window.hpp>
+#include <tempest/math.hpp>
 
 #include <cassert>
 #include <fstream>
@@ -28,6 +29,8 @@ int main()
     });
 
     logger->info("Starting Sandbox Application.");
+
+    logger->info("Pi: {0}, Episilon: {1}, Infinity: {2}", tempest::math::constants::pi<float>, tempest::math::constants::epsilon<float>, tempest::math::constants::infinity<float>);
 
     auto win = tempest::graphics::window_factory::create({
         .title{"Sandbox"},
