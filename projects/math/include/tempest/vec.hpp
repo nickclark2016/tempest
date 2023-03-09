@@ -187,6 +187,23 @@ namespace tempest::math
             return *this;
         }
 
+        inline constexpr vec cross(const vec& other) noexcept
+        {
+            if (std::is_constant_evaluated())
+            {
+                /// TODO: impl
+                return *this;
+            }
+            else
+            {
+                vec res;
+                simd::store<T, simd::storage_type_t<T, 3>>(simd::cross<T, simd::storage_type_t<T, 3>>(simd::load<T, simd::storage_type_size<T, 3>>(data),
+                                                           simd::load<T, simd::storage_type_t<T, 3>>(other.data)), res.data);
+
+                return res;
+            }
+        }
+
         union {
             struct
             {
@@ -287,6 +304,23 @@ namespace tempest::math
             return *this;
         }
 
+        inline constexpr vec& cross(const vec& other) noexcept
+        {
+            if (std::is_constant_evaluated())
+            {
+                /// TODO: impl
+            }
+            else
+            {
+                simd::store<T, simd::storage_type_t<T, 4>>(
+                    simd::cross<T, simd::storage_type_t<T, 4>>(simd::load<T, simd::storage_type_size<T, 4>>(data),
+                                                               simd::load<T, simd::storage_type_t<T, 4>>(other.data)),
+                    data);
+            }
+
+            return *this;
+        }
+
         union {
             struct
             {
@@ -306,6 +340,18 @@ namespace tempest::math
             simd::storage_type_t<T, 4> data = {};
         };
     };
+
+    using ivec2 = vec<std::int32_t, 2>;
+    using ivec3 = vec<std::int32_t, 3>;
+    using ivec4 = vec<std::int32_t, 4>;
+    
+    using fvec2 = vec<float, 2>;
+    using fvec3 = vec<float, 3>;
+    using fvec4 = vec<float, 4>;
+
+    using dvec2 = vec<double, 2>;
+    using dvec3 = vec<double, 3>;
+    using dvec4 = vec<double, 4>;
 
     template <typename T, std::size_t D>
     inline constexpr bool operator==(const vec<T, D>& lhs, const vec<T, D>& rhs) noexcept
@@ -558,6 +604,54 @@ namespace tempest::math
 
         return lhs;
     }
+
+    template<typename T, std::size_t D> 
+    inline constexpr T dot(const vec<T, D>& lhs, const vec<T, D>& rhs)
+    {
+        if (std::is_constant_evaluated())
+        {
+            T value = 0;
+            for (std::size_t i = 0; i < D; i++)
+            {
+                value += lhs[i] * rhs[i]; 
+            }
+
+            return value;
+        }
+        else
+        {
+            auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
+            auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
+
+            return simd::dot<T, simd::storage_type_size<T, D>>(a, b);
+        }
+    }
+
+    template <typename T, std::size_t D> inline constexpr T length(const vec<T, D>& v)
+    {
+        if (std::is_constant_evaluated())
+        {
+            T dp = dot(v, v);
+            return sqrt(dp);
+        }
+        else
+        {
+            auto data = simd::load<T, simd::storage_type_size<T, D>>(v.data);
+            return sqrt(simd::dot<T, simd::storage_type_size<T, D>>(data, data));
+        }
+    }
+
+    template <typename T, std::size_t D> inline constexpr T distance(const vec<T, D>& lhs, const vec<T, D>& rhs)
+    {
+        auto delta = rhs - lhs;
+        return length(delta);
+    }
+
+    template <typename T, std::size_t D> inline constexpr T project(const vec<T, D>& lhs, const vec<T, D>& rhs)
+    {
+        return rhs * (dot(lhs, rhs) / dot(rhs, rhs));
+    }
+
 } // namespace tempest::math
 
 #endif // tempest_vec_hpp__

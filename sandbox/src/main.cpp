@@ -31,36 +31,12 @@ int main()
 
     logger->info("Starting Sandbox Application.");
 
-    logger->info("Pi: {0}, Episilon: {1}, Infinity: {2}", tempest::math::constants::pi<float>, tempest::math::constants::epsilon<float>, tempest::math::constants::infinity<float>);
-
-    tempest::math::vec<float, 2> v1(10, 10);
-    tempest::math::vec<float, 2> v2(10, 15);
-
-    logger->info("V1 x({0}), y({1})", v1.x, v1.y);
-    logger->info("V2 x({0}), y({1})", v2.x, v2.y);
-
-    if (v1 == v2)
-    {
-        logger->info("V1 Equal to V2");
-    }
-
-    v1 = v2;
-
-    if (v1 == v2)
-    {
-        logger->info("V1 Equal to V2");
-    }
-
-    tempest::math::vec<float, 2> v3 = v1 + v2;
-
-    v3 += v1;
-
-    logger->info("V3 x({0}), y({1})", v3.x, v3.y);
+    tempest::math::vec<std::uint32_t, 2> window_size(1920, 1080);
 
     auto win = tempest::graphics::window_factory::create({
         .title{"Sandbox"},
-        .width{1920},
-        .height{1080},
+        .width{window_size.x},
+        .height{window_size.y},
     });
 
     auto renderer = tempest::graphics::irenderer::create({
