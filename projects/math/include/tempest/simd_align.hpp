@@ -9,6 +9,14 @@ namespace tempest::math::simd
     {
     };
 
+    template <> struct simd_align<std::int32_t> : std::integral_constant<size_t, 16>
+    {
+    };
+
+    template <> struct simd_align<std::uint32_t> : std::integral_constant<size_t, 16>
+    {
+    };
+
     template <> struct simd_align<float> : std::integral_constant<size_t, 16>
     {
     };
