@@ -1,9 +1,10 @@
 #ifndef tempest_math_hpp__
 #define tempest_math_hpp__
 
-#include <cmath>
-#include <numeric>
+#include <limits>
 #include <numbers>
+
+#include <tempest/vec.hpp>
 
 namespace tempest::math
 {
