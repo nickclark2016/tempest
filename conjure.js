@@ -6,6 +6,10 @@ workspace('Tempest', (wks) => {
         include('./projects/conjure.js');
     });
 
+    group('Tests', (grp) => {
+        include('./projects/conjure-test.js');
+    });
+
     include('./sandbox/conjure.js');
 
     group('Dependencies', (grp) => {

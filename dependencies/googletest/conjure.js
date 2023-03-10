@@ -35,4 +35,11 @@ project('googletest', (prj) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
         intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
     });
+
+    block('googletest:public', (blk) => {
+        includeDirs([
+            '.',
+            './include'
+        ]);
+    });
 });
