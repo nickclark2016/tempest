@@ -38,7 +38,6 @@ project('googletest', (prj) => {
 
     block('googletest:public', (blk) => {
         includeDirs([
-            '.',
             './include'
         ]);
     });
