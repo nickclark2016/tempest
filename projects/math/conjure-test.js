@@ -19,7 +19,6 @@ project('math-tests', (prj) => {
     ]);
 
     uses([
-        'tempest:engine',
         'googletest:public',
         'math:public',
     ]);
