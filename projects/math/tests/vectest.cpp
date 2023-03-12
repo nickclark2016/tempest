@@ -2131,3 +2131,14 @@ TEST(vec4, ConstExprDivOperator)
     EXPECT_EQ(d2.z, 4);
     EXPECT_EQ(d2.w, 4);
 }
+
+TEST(vec3, CrossProduct)
+{
+    vec<float, 3> a(3, -3, 1);
+    vec<float, 3> b(4, 9, 2);
+    auto cross_product = cross(a, b);
+
+    EXPECT_EQ(cross_product.x, -15);
+    EXPECT_EQ(cross_product.y, -2);
+    EXPECT_EQ(cross_product.z, 39);
+}

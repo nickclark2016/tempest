@@ -419,14 +419,14 @@ namespace tempest::math::simd
                                                       intrinsic_type_t<double, 4> b) noexcept
     {
         /// TODO: Check the shuffle values
-        auto tmp0 = _mm256_shuffle_pd(b, b, _MM_SHUFFLE(3, 0, 2, 1));
-        auto tmp1 = _mm256_shuffle_pd(a, a, _MM_SHUFFLE(3, 0, 2, 1));
+        auto tmp0 = _mm256_permute4x64_pd(b, _MM_PERM_DACB);
+        auto tmp1 = _mm256_permute4x64_pd(a, _MM_PERM_DACB);
 
         tmp0 = _mm256_mul_pd(tmp0, a);
         tmp1 = _mm256_mul_pd(tmp1, b);
 
         auto tmp2 = _mm256_sub_pd(tmp0, tmp1);
-        return _mm256_shuffle_pd(tmp2, tmp2, _MM_SHUFFLE(3, 0, 2, 1));
+        return _mm256_permute4x64_pd(tmp2, _MM_PERM_DACB);
     }
 
     template <>
