@@ -407,10 +407,8 @@ namespace tempest::math
         }
         else
         {
-            auto v = simd::add<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
             vec<T, D> res;
-            simd::store<T, simd::storage_type_size<T, D>>(v, res.data);
+            res.intrin = simd::add<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
             return res;
         }
@@ -450,10 +448,8 @@ namespace tempest::math
         }
         else
         {
-            auto v = simd::sub<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
             vec<T, D> res;
-            simd::store<T, simd::storage_type_size<T, D>>(v, res.data);
+            res.intrin = simd::sub<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
             return res;
         }
@@ -506,10 +502,8 @@ namespace tempest::math
             }
             else
             {
-                auto v = simd::div<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
                 vec<T, D> res;
-                simd::store<T, simd::storage_type_size<T, D>>(v, res.data);
+                res.intrin = simd::div<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
                 return res;
             }
@@ -550,10 +544,8 @@ namespace tempest::math
         }
         else
         {
-            auto v = simd::mul<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
             vec<T, D> res;
-            simd::store<T, simd::storage_type_size<T, D>>(v, res.data);
+            res.intrin = simd::mul<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
             return res;
         }

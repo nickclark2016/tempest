@@ -344,14 +344,18 @@ namespace tempest::math::simd
     inline intrinsic_type_t<std::int32_t, 4> mul<std::int32_t, 4>(intrinsic_type_t<std::int32_t, 4> a,
                                                                   intrinsic_type_t<std::int32_t, 4> b) noexcept
     {
-        return _mm_mul_epi32(a, b);
+        return _mm_mullo_epi32(a, b);
     }
 
     template <>
     inline intrinsic_type_t<std::uint32_t, 4> mul<std::uint32_t, 4>(intrinsic_type_t<std::uint32_t, 4> a,
                                                                   intrinsic_type_t<std::uint32_t, 4> b) noexcept
     {
-        return _mm_mul_epi32(a, b);
+        auto tmp1 = _mm_mul_epu32(a, b);
+        auto tmp2 = _mm_mul_epu32(_mm_srli_si128(a, 4), _mm_srli_si128(b, 4));
+
+        return _mm_unpacklo_epi32(_mm_shuffle_epi32(tmp1, _MM_SHUFFLE(0, 0, 2, 0)),
+                                  _mm_shuffle_epi32(tmp2, _MM_SHUFFLE(0, 0, 2, 0)));
     }
 
     template <typename T, std::size_t C>
