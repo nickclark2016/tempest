@@ -181,23 +181,6 @@ namespace tempest::math
             return data[index];
         }
 
-        inline constexpr vec cross(const vec& other) const noexcept
-        {
-            if (std::is_constant_evaluated())
-            {
-                /// TODO: impl
-                return *this;
-            }
-            else
-            {
-                vec res;
-                simd::store<T, simd::storage_type_t<T, 3>>(
-                    simd::cross<T, simd::storage_type_t<T, 3>>(intrin, other.intrin), res.data);
-
-                return res;
-            }
-        }
-
         union {
             struct
             {
@@ -234,7 +217,8 @@ namespace tempest::math
         {
         }
 
-        inline constexpr vec(const vec& other) noexcept : data{other.data[0], other.data[1], other.data[2], other.data[3]}
+        inline constexpr vec(const vec& other) noexcept
+            : data{other.data[0], other.data[1], other.data[2], other.data[3]}
         {
         }
 
@@ -299,21 +283,6 @@ namespace tempest::math
         inline constexpr const T& operator[](const std::size_t index) const noexcept
         {
             return data[index];
-        }
-
-        inline constexpr vec& cross(const vec& other) noexcept
-        {
-            if (std::is_constant_evaluated())
-            {
-                /// TODO: impl
-            }
-            else
-            {
-                simd::store<T, simd::storage_type_t<T, 4>>(
-                    simd::cross<T, simd::storage_type_t<T, 4>>(intrin, other.intrin), data);
-            }
-
-            return *this;
         }
 
         union {
@@ -575,6 +544,26 @@ namespace tempest::math
         }
 
         return lhs;
+    }
+
+    template <typename T, std::size_t D>
+    inline constexpr vec<T, D> cross(const vec<T, D>& lhs, const vec<T, D>& rhs) noexcept
+    {
+        static_assert(D >= 3, "D must be 3 or 4.");
+
+        if (std::is_constant_evaluated())
+        {
+            /// TODO: impl
+            vec<T, D> res;
+            return res;
+        }
+        else
+        {
+            vec<T, D> res;
+            res.intrin = simd::cross<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
+
+            return res;
+        }
     }
 
     template <typename T, std::size_t D> inline constexpr T dot(const vec<T, D>& lhs, const vec<T, D>& rhs)

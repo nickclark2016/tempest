@@ -37,8 +37,7 @@ namespace tempest::math::simd
         using type = T[4];
     };
 
-    template <> 
-    struct storage_type<double, 2>
+    template <> struct storage_type<double, 2>
     {
         static constexpr std::size_t size = 2;
         using type = double[2];
