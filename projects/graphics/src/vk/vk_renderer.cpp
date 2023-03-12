@@ -249,9 +249,9 @@ namespace tempest::graphics
 
         auto render_graph = std::make_shared<vuk::RenderGraph>("runner");
         render_graph->attach_swapchain("_swp", _impl->swapchain);
-        render_graph->clear_image("_swp", "DEFAULT_BACK_BUFFER", vuk::ClearColor{0.3f, 0.5f, 0.3f, 1.0f});
+        render_graph->clear_image("_swp", BACKBUFFER_NAME, vuk::ClearColor{0.3f, 0.5f, 0.3f, 1.0f});
         
-        vuk::Future cleared_image_to_render_to{std::move(render_graph), "DEFAULT_BACK_BUFFER"};
+        vuk::Future cleared_image_to_render_to{std::move(render_graph), BACKBUFFER_NAME};
         // todo: create render graph and move cleared image as render target
         // todo: create ptr from future produced by render graph instead of the future from the default backbuffer color
         
