@@ -195,15 +195,8 @@ namespace tempest::graphics
         _impl->transfer_queue = transfer_queue;
 
         vuk::ContextCreateParameters::FunctionPointers context_fps = {
-            .vkSetDebugUtilsObjectNameEXT{
-                reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(_impl->logical_device.fp_vkGetDeviceProcAddr(
-                    _impl->logical_device.device, "vkSetDebugUtilsObjectNameEXT"))},
-            .vkCmdBeginDebugUtilsLabelEXT{
-                reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(_impl->logical_device.fp_vkGetDeviceProcAddr(
-                    _impl->logical_device.device, "vkCmdBeginDebugUtilsLabelEXT"))},
-            .vkCmdEndDebugUtilsLabelEXT{
-                reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(_impl->logical_device.fp_vkGetDeviceProcAddr(
-                    _impl->logical_device.device, "vkCmdEndDebugUtilsLabelEXT"))},
+            .vkGetInstanceProcAddr{_impl->instance.fp_vkGetInstanceProcAddr},
+            .vkGetDeviceProcAddr{_impl->logical_device.fp_vkGetDeviceProcAddr},
         };
 
         _impl->vuk_context.emplace(vuk::ContextCreateParameters{
@@ -259,6 +252,8 @@ namespace tempest::graphics
         render_graph->clear_image("_swp", "DEFAULT_BACK_BUFFER", vuk::ClearColor{0.3f, 0.5f, 0.3f, 1.0f});
         
         vuk::Future cleared_image_to_render_to{std::move(render_graph), "DEFAULT_BACK_BUFFER"};
+        // todo: create render graph and move cleared image as render target
+        // todo: create ptr from future produced by render graph instead of the future from the default backbuffer color
         
         auto ptr = cleared_image_to_render_to.get_render_graph();
         auto erg = *_impl->compiler.link(std::span{&ptr, 1}, {});
