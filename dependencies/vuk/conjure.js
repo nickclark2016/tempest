@@ -1,14 +1,3 @@
-function find_vulkan_libs()
-{
-    const paths = process.env.PATH;
-    const pathsList = paths.split(";").filter(path => path.includes('VulkanSDK'));
-    if (pathsList.length === 0) {
-        throw new Error('Failed to find Vulkan libraries.');
-    }
-
-    return `${pathsList[0]}/../Lib`
-}
-
 project('vuk', (prj) => {
     kind('StaticLib');
     language('C++');
@@ -38,15 +27,8 @@ project('vuk', (prj) => {
 
     dependsOn([
         'doctest',
-        'spirv-cross'
-    ]);
-
-    linksStatic([
-        'vulkan-1.lib'
-    ]);
-
-    libraryDirs([
-        find_vulkan_libs()
+        'spirv-cross',
+        'vk-bootstrap'
     ]);
 
     uses([ 'vuk:public' ]);
