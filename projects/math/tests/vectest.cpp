@@ -818,25 +818,25 @@ TEST(vec4, ConstExprMoveConstructor)
 TEST(vec2, Zero)
 {
     vec<float, 2> a(5, 10);
-    a.zero();
+    a = vec<float, 2>::zero();
 
     EXPECT_EQ(a.x, 0);
     EXPECT_EQ(a.y, 0);
 
     vec<double, 2> b(6, 2);
-    b.zero();
+    b = vec<double, 2>::zero();
 
     EXPECT_EQ(b.x, 0);
     EXPECT_EQ(b.y, 0);
 
     vec<std::int32_t, 2> c(2, 1);
-    c.zero();
+    c = vec<std::int32_t, 2>::zero();
 
     EXPECT_EQ(c.x, 0);
     EXPECT_EQ(c.y, 0);
 
     vec<std::uint32_t, 2> d(9, 8);
-    d.zero();
+    d = vec<std::uint32_t, 2>::zero();
 
     EXPECT_EQ(d.x, 0);
     EXPECT_EQ(d.y, 0);
@@ -845,28 +845,28 @@ TEST(vec2, Zero)
 TEST(vec3, Zero)
 {
     vec<float, 3> a(2, 1, 5);
-    a.zero();
+    a = vec<float, 3>::zero();
 
     EXPECT_EQ(a.x, 0);
     EXPECT_EQ(a.y, 0);
     EXPECT_EQ(a.z, 0);
 
     vec<double, 3> b(5, 8, 9);
-    b.zero();
+    b = vec<double, 3>::zero();
 
     EXPECT_EQ(b.x, 0);
     EXPECT_EQ(b.y, 0);
     EXPECT_EQ(b.z, 0);
 
     vec<std::int32_t, 3> c(1, 2, 3);
-    c.zero();
+    c = vec<std::int32_t, 3>::zero();
 
     EXPECT_EQ(c.x, 0);
     EXPECT_EQ(c.y, 0);
     EXPECT_EQ(c.z, 0);
 
     vec<std::uint32_t, 3> d(10, 5, 1);
-    d.zero();
+    d = vec<std::uint32_t, 3 >::zero();
 
     EXPECT_EQ(d.x, 0);
     EXPECT_EQ(d.y, 0);
@@ -876,7 +876,7 @@ TEST(vec3, Zero)
 TEST(vec4, Zero)
 {
     vec<float, 4> a(6, 6, 5, 2);
-    a.zero();
+    a = vec<float, 4>::zero();
 
     EXPECT_EQ(a.x, 0);
     EXPECT_EQ(a.y, 0);
@@ -884,7 +884,7 @@ TEST(vec4, Zero)
     EXPECT_EQ(a.w, 0);
 
     vec<double, 4> b(2, 6, 2, 1);
-    b.zero();
+    b = vec<double, 4>::zero();
 
     EXPECT_EQ(b.x, 0);
     EXPECT_EQ(b.y, 0);
@@ -892,7 +892,7 @@ TEST(vec4, Zero)
     EXPECT_EQ(b.w, 0);
 
     vec<std::int32_t, 4> c(7, 6, 1, 4);
-    c.zero();
+    c = vec<std::int32_t, 4>::zero();
 
     EXPECT_EQ(c.x, 0);
     EXPECT_EQ(c.y, 0);
@@ -900,7 +900,7 @@ TEST(vec4, Zero)
     EXPECT_EQ(c.w, 0);
 
     vec<std::uint32_t, 4> d(6, 2, 2, 9);
-    d.zero();
+    d = vec<std::uint32_t, 4>::zero();
 
     EXPECT_EQ(d.x, 0);
     EXPECT_EQ(d.y, 0);
@@ -1428,4 +1428,706 @@ TEST(vec4, ConstExprEqualsNotEqualsOperator)
 
     EXPECT_TRUE(d == d1);
     EXPECT_FALSE(d != d1);
+}
+
+TEST(vec2, PlusOperator)
+{
+    vec<float, 2> a(5, 10);
+    vec<float, 2> a1(5, 10);
+
+    vec<float, 2> a2 = a + a1;
+
+    EXPECT_EQ(a2.x, 10);
+    EXPECT_EQ(a2.y, 20);
+
+    vec<double, 2> b(6, 2);
+    vec<double, 2> b1(6, 2);
+
+    vec<double, 2> b2 = b + b1;
+
+    EXPECT_EQ(b2.x, 12);
+    EXPECT_EQ(b2.y, 4);
+
+    vec<std::int32_t, 2> c(2, 1);
+    vec<std::int32_t, 2> c1(2, 1);
+
+    vec<std::int32_t, 2> c2 = c + c1;
+
+    EXPECT_EQ(c2.x, 4);
+    EXPECT_EQ(c2.y, 2);
+
+    vec<std::uint32_t, 2> d(9, 8);
+    vec<std::uint32_t, 2> d1(9, 8);
+
+    vec<std::uint32_t, 2> d2 = d + d1;
+
+    EXPECT_EQ(d2.x, 18);
+    EXPECT_EQ(d2.y, 16);
+}
+
+TEST(vec3, PlusOperator)
+{
+    vec<float, 3> a(5, 10, 6);
+    vec<float, 3> a1(5, 10, 1);
+
+    vec<float, 3> a2 = a + a1;
+
+    EXPECT_EQ(a2.x, 10);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(a2.z, 7);
+
+    vec<double, 3> b(6, 2, 4);
+    vec<double, 3> b1(6, 2, 1);
+
+    vec<double, 3> b2 = b + b1;
+
+    EXPECT_EQ(b2.x, 12);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(b2.z, 5);
+
+    vec<std::int32_t, 3> c(2, 1, 6);
+    vec<std::int32_t, 3> c1(2, 1, 1);
+
+    vec<std::int32_t, 3> c2 = c + c1;
+
+    EXPECT_EQ(c2.x, 4);
+    EXPECT_EQ(c2.y, 2);
+    EXPECT_EQ(c2.z, 7);
+
+    vec<std::uint32_t, 3> d(9, 8, 3);
+    vec<std::uint32_t, 3> d1(9, 8, 4);
+
+    vec<std::uint32_t, 3> d2 = d + d1;
+
+    EXPECT_EQ(d2.x, 18);
+    EXPECT_EQ(d2.y, 16);
+    EXPECT_EQ(d2.z, 7);
+}
+
+TEST(vec4, PlusOperator)
+{
+    vec<float, 4> a(5, 10, 6, 2);
+    vec<float, 4> a1(5, 10, 1, 9);
+
+    vec<float, 4> a2 = a + a1;
+
+    EXPECT_EQ(a2.x, 10);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(a2.z, 7);
+    EXPECT_EQ(a2.w, 11);
+
+    vec<double, 4> b(6, 2, 4, 5);
+    vec<double, 4> b1(6, 2, 1, 1);
+
+    vec<double, 4> b2 = b + b1;
+
+    EXPECT_EQ(b2.x, 12);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(b2.z, 5);
+    EXPECT_EQ(b2.w, 6);
+
+    vec<std::int32_t, 4> c(2, 1, 6, 10);
+    vec<std::int32_t, 4> c1(2, 1, 1, 9);
+
+    vec<std::int32_t, 4> c2 = c + c1;
+
+    EXPECT_EQ(c2.x, 4);
+    EXPECT_EQ(c2.y, 2);
+    EXPECT_EQ(c2.z, 7);
+    EXPECT_EQ(c2.w, 19);
+
+    vec<std::uint32_t, 4> d(9, 8, 3, 2);
+    vec<std::uint32_t, 4> d1(9, 8, 4, 8);
+
+    vec<std::uint32_t, 4> d2 = d + d1;
+
+    EXPECT_EQ(d2.x, 18);
+    EXPECT_EQ(d2.y, 16);
+    EXPECT_EQ(d2.z, 7);
+    EXPECT_EQ(d2.w, 10);
+}
+
+TEST(vec2, ConstExprPlusOperator)
+{
+    constexpr vec<float, 2> a(5, 10);
+    constexpr vec<float, 2> a1(5, 10);
+
+    constexpr vec<float, 2> a2 = a + a1;
+
+    EXPECT_EQ(a2.x, 10);
+    EXPECT_EQ(a2.y, 20);
+
+    constexpr vec<double, 2> b(6, 2);
+    constexpr vec<double, 2> b1(6, 2);
+
+    constexpr vec<double, 2> b2 = b + b1;
+
+    EXPECT_EQ(b2.x, 12);
+    EXPECT_EQ(b2.y, 4);
+
+    constexpr vec<std::int32_t, 2> c(2, 1);
+    constexpr vec<std::int32_t, 2> c1(2, 1);
+
+    constexpr vec<std::int32_t, 2> c2 = c + c1;
+
+    EXPECT_EQ(c2.x, 4);
+    EXPECT_EQ(c2.y, 2);
+
+    constexpr vec<std::uint32_t, 2> d(9, 8);
+    constexpr vec<std::uint32_t, 2> d1(9, 8);
+
+    constexpr vec<std::uint32_t, 2> d2 = d + d1;
+
+    EXPECT_EQ(d2.x, 18);
+    EXPECT_EQ(d2.y, 16);
+}
+
+TEST(vec3, ConstExprPlusOperator)
+{
+    constexpr vec<float, 3> a(5, 10, 6);
+    constexpr vec<float, 3> a1(5, 10, 1);
+
+    constexpr vec<float, 3> a2 = a + a1;
+
+    EXPECT_EQ(a2.x, 10);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(a2.z, 7);
+
+    constexpr vec<double, 3> b(6, 2, 4);
+    constexpr vec<double, 3> b1(6, 2, 1);
+
+    constexpr vec<double, 3> b2 = b + b1;
+
+    EXPECT_EQ(b2.x, 12);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(b2.z, 5);
+
+    constexpr vec<std::int32_t, 3> c(2, 1, 6);
+    constexpr vec<std::int32_t, 3> c1(2, 1, 1);
+
+    constexpr vec<std::int32_t, 3> c2 = c + c1;
+
+    EXPECT_EQ(c2.x, 4);
+    EXPECT_EQ(c2.y, 2);
+    EXPECT_EQ(c2.z, 7);
+
+    constexpr vec<std::uint32_t, 3> d(9, 8, 3);
+    constexpr vec<std::uint32_t, 3> d1(9, 8, 4);
+
+    constexpr vec<std::uint32_t, 3> d2 = d + d1;
+
+    EXPECT_EQ(d2.x, 18);
+    EXPECT_EQ(d2.y, 16);
+    EXPECT_EQ(d2.z, 7);
+}
+
+TEST(vec4, ConstExprPlusOperator)
+{
+    constexpr vec<float, 4> a(5, 10, 6, 2);
+    constexpr vec<float, 4> a1(5, 10, 1, 9);
+
+    constexpr vec<float, 4> a2 = a + a1;
+
+    EXPECT_EQ(a2.x, 10);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(a2.z, 7);
+    EXPECT_EQ(a2.w, 11);
+
+    constexpr vec<double, 4> b(6, 2, 4, 5);
+    constexpr vec<double, 4> b1(6, 2, 1, 1);
+
+    constexpr vec<double, 4> b2 = b + b1;
+
+    EXPECT_EQ(b2.x, 12);
+    EXPECT_EQ(a2.y, 20);
+    EXPECT_EQ(b2.z, 5);
+    EXPECT_EQ(b2.w, 6);
+
+    constexpr vec<std::int32_t, 4> c(2, 1, 6, 10);
+    constexpr vec<std::int32_t, 4> c1(2, 1, 1, 9);
+
+    constexpr vec<std::int32_t, 4> c2 = (c + c1);
+
+    EXPECT_EQ(c2.x, 4);
+    EXPECT_EQ(c2.y, 2);
+    EXPECT_EQ(c2.z, 7);
+    EXPECT_EQ(c2.w, 19);
+
+    constexpr vec<std::uint32_t, 4> d(9, 8, 3, 2);
+    constexpr vec<std::uint32_t, 4> d1(9, 8, 4, 8);
+
+    constexpr vec<std::uint32_t, 4> d2 = d + d1;
+
+    EXPECT_EQ(d2.x, 18);
+    EXPECT_EQ(d2.y, 16);
+    EXPECT_EQ(d2.z, 7);
+    EXPECT_EQ(d2.w, 10);
+}
+
+TEST(vec2, MinusOperator)
+{
+    vec<float, 2> a(5, 10);
+    vec<float, 2> a1(5, 10);
+
+    vec<float, 2> a2 = a - a1;
+
+    EXPECT_EQ(a2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+
+    vec<double, 2> b(6, 2);
+    vec<double, 2> b1(6, 2);
+
+    vec<double, 2> b2 = b - b1;
+
+    EXPECT_EQ(b2.x, 0);
+    EXPECT_EQ(b2.y, 0);
+
+    vec<std::int32_t, 2> c(2, 1);
+    vec<std::int32_t, 2> c1(2, 1);
+
+    vec<std::int32_t, 2> c2 = c - c1;
+
+    EXPECT_EQ(c2.x, 0);
+    EXPECT_EQ(c2.y, 0);
+
+    vec<std::uint32_t, 2> d(9, 8);
+    vec<std::uint32_t, 2> d1(9, 8);
+
+    vec<std::uint32_t, 2> d2 = d - d1;
+
+    EXPECT_EQ(d2.x, 0);
+    EXPECT_EQ(d2.y, 0);
+}
+
+TEST(vec3, MinusOperator)
+{
+    vec<float, 3> a(5, 10, 6);
+    vec<float, 3> a1(5, 10, 1);
+
+    vec<float, 3> a2 = a - a1;
+
+    EXPECT_EQ(a2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(a2.z, 5);
+
+    vec<double, 3> b(6, 2, 4);
+    vec<double, 3> b1(6, 2, 1);
+
+    vec<double, 3> b2 = b - b1;
+
+    EXPECT_EQ(b2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(b2.z, 3);
+
+    vec<std::int32_t, 3> c(2, 1, 6);
+    vec<std::int32_t, 3> c1(2, 1, 1);
+
+    vec<std::int32_t, 3> c2 = c - c1;
+
+    EXPECT_EQ(c2.x, 0);
+    EXPECT_EQ(c2.y, 0);
+    EXPECT_EQ(c2.z, 5);
+
+    vec<std::uint32_t, 3> d(9, 8, 4);
+    vec<std::uint32_t, 3> d1(9, 8, 3);
+
+    vec<std::uint32_t, 3> d2 = d - d1;
+
+    EXPECT_EQ(d2.x, 0);
+    EXPECT_EQ(d2.y, 0);
+    EXPECT_EQ(d2.z, 1);
+}
+
+TEST(vec4, MinusOperator)
+{
+    vec<float, 4> a(5, 10, 6, 2);
+    vec<float, 4> a1(5, 10, 1, 9);
+
+    vec<float, 4> a2 = a - a1;
+
+    EXPECT_EQ(a2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(a2.z, 5);
+    EXPECT_EQ(a2.w, -7);
+
+    vec<double, 4> b(6, 2, 4, 5);
+    vec<double, 4> b1(6, 2, 1, 1);
+
+    vec<double, 4> b2 = b - b1;
+
+    EXPECT_EQ(b2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(b2.z, 3);
+    EXPECT_EQ(b2.w, 4);
+
+    vec<std::int32_t, 4> c(2, 1, 6, 10);
+    vec<std::int32_t, 4> c1(2, 1, 1, 9);
+
+    vec<std::int32_t, 4> c2 = c - c1;
+
+    EXPECT_EQ(c2.x, 0);
+    EXPECT_EQ(c2.y, 0);
+    EXPECT_EQ(c2.z, 5);
+    EXPECT_EQ(c2.w, 1);
+
+    vec<std::uint32_t, 4> d(9, 8, 4, 8);
+    vec<std::uint32_t, 4> d1(9, 8, 3, 2);
+
+    vec<std::uint32_t, 4> d2 = d - d1;
+
+    EXPECT_EQ(d2.x, 0);
+    EXPECT_EQ(d2.y, 0);
+    EXPECT_EQ(d2.z, 1);
+    EXPECT_EQ(d2.w, 6);
+}
+
+TEST(vec2, ConstExprMinusOperator)
+{
+    constexpr vec<float, 2> a(5, 10);
+    constexpr vec<float, 2> a1(5, 10);
+
+    constexpr vec<float, 2> a2 = a - a1;
+
+    EXPECT_EQ(a2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+
+    constexpr vec<double, 2> b(6, 2);
+    constexpr vec<double, 2> b1(6, 2);
+
+    constexpr vec<double, 2> b2 = b - b1;
+
+    EXPECT_EQ(b2.x, 0);
+    EXPECT_EQ(b2.y, 0);
+
+    constexpr vec<std::int32_t, 2> c(2, 1);
+    constexpr vec<std::int32_t, 2> c1(2, 1);
+
+    constexpr vec<std::int32_t, 2> c2 = c - c1;
+
+    EXPECT_EQ(c2.x, 0);
+    EXPECT_EQ(c2.y, 0);
+
+    constexpr vec<std::uint32_t, 2> d(9, 8);
+    constexpr vec<std::uint32_t, 2> d1(9, 8);
+
+    constexpr vec<std::uint32_t, 2> d2 = d - d1;
+
+    EXPECT_EQ(d2.x, 0);
+    EXPECT_EQ(d2.y, 0);
+}
+
+TEST(vec3, ConstExprMinusOperator)
+{
+    constexpr vec<float, 3> a(5, 10, 6);
+    constexpr vec<float, 3> a1(5, 10, 1);
+
+    constexpr vec<float, 3> a2 = a - a1;
+
+    EXPECT_EQ(a2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(a2.z, 5);
+
+    constexpr vec<double, 3> b(6, 2, 4);
+    constexpr vec<double, 3> b1(6, 2, 1);
+
+    constexpr vec<double, 3> b2 = b - b1;
+
+    EXPECT_EQ(b2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(b2.z, 3);
+
+    constexpr vec<std::int32_t, 3> c(2, 1, 6);
+    constexpr vec<std::int32_t, 3> c1(2, 1, 1);
+
+    constexpr vec<std::int32_t, 3> c2 = c - c1;
+
+    EXPECT_EQ(c2.x, 0);
+    EXPECT_EQ(c2.y, 0);
+    EXPECT_EQ(c2.z, 5);
+
+    constexpr vec<std::uint32_t, 3> d(9, 8, 4);
+    constexpr vec<std::uint32_t, 3> d1(9, 8, 3);
+
+    constexpr vec<std::uint32_t, 3> d2 = d - d1;
+
+    EXPECT_EQ(d2.x, 0);
+    EXPECT_EQ(d2.y, 0);
+    EXPECT_EQ(d2.z, 1);
+}
+
+TEST(vec4, ConstExprMinusOperator)
+{
+    constexpr vec<float, 4> a(5, 10, 6, 2);
+    constexpr vec<float, 4> a1(5, 10, 1, 9);
+
+    constexpr vec<float, 4> a2 = a - a1;
+
+    EXPECT_EQ(a2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(a2.z, 5);
+    EXPECT_EQ(a2.w, -7);
+
+    constexpr vec<double, 4> b(6, 2, 4, 5);
+    constexpr vec<double, 4> b1(6, 2, 1, 1);
+
+    constexpr vec<double, 4> b2 = b - b1;
+
+    EXPECT_EQ(b2.x, 0);
+    EXPECT_EQ(a2.y, 0);
+    EXPECT_EQ(b2.z, 3);
+    EXPECT_EQ(b2.w, 4);
+
+    constexpr vec<std::int32_t, 4> c(2, 1, 6, 10);
+    constexpr vec<std::int32_t, 4> c1(2, 1, 1, 9);
+
+    constexpr vec<std::int32_t, 4> c2 = (c - c1);
+
+    EXPECT_EQ(c2.x, 0);
+    EXPECT_EQ(c2.y, 0);
+    EXPECT_EQ(c2.z, 5);
+    EXPECT_EQ(c2.w, 1);
+
+    constexpr vec<std::uint32_t, 4> d(9, 8, 4, 8);
+    constexpr vec<std::uint32_t, 4> d1(9, 8, 3, 2);
+
+    constexpr vec<std::uint32_t, 4> d2 = d - d1;
+
+    EXPECT_EQ(d2.x, 0);
+    EXPECT_EQ(d2.y, 0);
+    EXPECT_EQ(d2.z, 1);
+    EXPECT_EQ(d2.w, 6);
+}
+
+TEST(vec2, DivOperator)
+{
+    vec<float, 2> a(5, 10);
+    vec<float, 2> a1(5, 10);
+
+    vec<float, 2> a2 = a / a1;
+
+    EXPECT_EQ(a2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+
+    vec<double, 2> b(6, 2);
+    vec<double, 2> b1(6, 2);
+
+    vec<double, 2> b2 = b / b1;
+
+    EXPECT_EQ(b2.x, 1);
+    EXPECT_EQ(b2.y, 1);
+
+    vec<std::int32_t, 2> c(2, 1);
+    vec<std::int32_t, 2> c1(2, 1);
+
+    vec<std::int32_t, 2> c2 = c / c1;
+
+    EXPECT_EQ(c2.x, 1);
+    EXPECT_EQ(c2.y, 1);
+
+    vec<std::uint32_t, 2> d(9, 8);
+    vec<std::uint32_t, 2> d1(9, 8);
+
+    vec<std::uint32_t, 2> d2 = d / d1;
+
+    EXPECT_EQ(d2.x, 1);
+    EXPECT_EQ(d2.y, 1);
+}
+
+TEST(vec3, DivOperator)
+{
+    vec<float, 3> a(5, 10, 12);
+    vec<float, 3> a1(5, 10, 6);
+
+    vec<float, 3> a2 = a / a1;
+
+    EXPECT_EQ(a2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(a2.z, 2);
+
+    vec<double, 3> b(6, 2, 4);
+    vec<double, 3> b1(6, 2, 1);
+
+    vec<double, 3> b2 = b / b1;
+
+    EXPECT_EQ(b2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(b2.z, 4);
+
+    vec<std::int32_t, 3> c(2, 1, 6);
+    vec<std::int32_t, 3> c1(2, 1, 1);
+
+    vec<std::int32_t, 3> c2 = c / c1;
+
+    EXPECT_EQ(c2.x, 1);
+    EXPECT_EQ(c2.y, 1);
+    EXPECT_EQ(c2.z, 6);
+
+    vec<std::uint32_t, 3> d(9, 8, 4);
+    vec<std::uint32_t, 3> d1(9, 8, 2);
+
+    vec<std::uint32_t, 3> d2 = d / d1;
+
+    EXPECT_EQ(d2.x, 1);
+    EXPECT_EQ(d2.y, 1);
+    EXPECT_EQ(d2.z, 2);
+}
+
+TEST(vec4, DivOperator)
+{
+    vec<float, 4> a(5, 10, 6, 8);
+    vec<float, 4> a1(5, 10, 1, 2);
+
+    vec<float, 4> a2 = a / a1;
+
+    EXPECT_EQ(a2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(a2.z, 6);
+    EXPECT_EQ(a2.w, 4);
+
+    vec<double, 4> b(6, 2, 4, 5);
+    vec<double, 4> b1(6, 2, 1, 1);
+
+    vec<double, 4> b2 = b / b1;
+
+    EXPECT_EQ(b2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(b2.z, 4);
+    EXPECT_EQ(b2.w, 5);
+
+    vec<std::int32_t, 4> c(2, 1, 6, 10);
+    vec<std::int32_t, 4> c1(2, 1, 1, 2);
+
+    vec<std::int32_t, 4> c2 = c / c1;
+
+    EXPECT_EQ(c2.x, 1);
+    EXPECT_EQ(c2.y, 1);
+    EXPECT_EQ(c2.z, 6);
+    EXPECT_EQ(c2.w, 5);
+
+    vec<std::uint32_t, 4> d(9, 8, 4, 8);
+    vec<std::uint32_t, 4> d1(9, 8, 1, 2);
+
+    vec<std::uint32_t, 4> d2 = d / d1;
+
+    EXPECT_EQ(d2.x, 1);
+    EXPECT_EQ(d2.y, 1);
+    EXPECT_EQ(d2.z, 4);
+    EXPECT_EQ(d2.w, 4);
+}
+
+TEST(vec2, ConstExprDivOperator)
+{
+    constexpr vec<float, 2> a(5, 10);
+    constexpr vec<float, 2> a1(5, 10);
+
+    constexpr vec<float, 2> a2 = a / a1;
+
+    EXPECT_EQ(a2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+
+    constexpr vec<double, 2> b(6, 2);
+    constexpr vec<double, 2> b1(6, 2);
+
+    constexpr vec<double, 2> b2 = b / b1;
+
+    EXPECT_EQ(b2.x, 1);
+    EXPECT_EQ(b2.y, 1);
+
+    constexpr vec<std::int32_t, 2> c(2, 1);
+    constexpr vec<std::int32_t, 2> c1(2, 1);
+
+    constexpr vec<std::int32_t, 2> c2 = c / c1;
+
+    EXPECT_EQ(c2.x, 1);
+    EXPECT_EQ(c2.y, 1);
+
+    constexpr vec<std::uint32_t, 2> d(9, 8);
+    constexpr vec<std::uint32_t, 2> d1(9, 8);
+
+    constexpr vec<std::uint32_t, 2> d2 = d / d1;
+
+    EXPECT_EQ(d2.x, 1);
+    EXPECT_EQ(d2.y, 1);
+}
+
+TEST(vec3, ConstExprDivOperator)
+{
+    constexpr vec<float, 3> a(5, 10, 6);
+    constexpr vec<float, 3> a1(5, 10, 1);
+
+    constexpr vec<float, 3> a2 = a / a1;
+
+    EXPECT_EQ(a2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(a2.z, 6);
+
+    constexpr vec<double, 3> b(6, 2, 4);
+    constexpr vec<double, 3> b1(6, 2, 1);
+
+    constexpr vec<double, 3> b2 = b / b1;
+
+    EXPECT_EQ(b2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(b2.z, 4);
+
+    constexpr vec<std::int32_t, 3> c(2, 1, 6);
+    constexpr vec<std::int32_t, 3> c1(2, 1, 1);
+
+    constexpr vec<std::int32_t, 3> c2 = c / c1;
+
+    EXPECT_EQ(c2.x, 1);
+    EXPECT_EQ(c2.y, 1);
+    EXPECT_EQ(c2.z, 6);
+
+    constexpr vec<std::uint32_t, 3> d(9, 8, 4);
+    constexpr vec<std::uint32_t, 3> d1(9, 8, 2);
+
+    constexpr vec<std::uint32_t, 3> d2 = d / d1;
+
+    EXPECT_EQ(d2.x, 1);
+    EXPECT_EQ(d2.y, 1);
+    EXPECT_EQ(d2.z, 2);
+}
+
+TEST(vec4, ConstExprDivOperator)
+{
+    constexpr vec<float, 4> a(5, 10, 6, 8);
+    constexpr vec<float, 4> a1(5, 10, 1, 4);
+
+    constexpr vec<float, 4> a2 = a / a1;
+
+    EXPECT_EQ(a2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(a2.z, 6);
+    EXPECT_EQ(a2.w, 2);
+
+    constexpr vec<double, 4> b(6, 2, 4, 5);
+    constexpr vec<double, 4> b1(6, 2, 1, 1);
+
+    constexpr vec<double, 4> b2 = b / b1;
+
+    EXPECT_EQ(b2.x, 1);
+    EXPECT_EQ(a2.y, 1);
+    EXPECT_EQ(b2.z, 4);
+    EXPECT_EQ(b2.w, 5);
+
+    constexpr vec<std::int32_t, 4> c(2, 1, 6, 10);
+    constexpr vec<std::int32_t, 4> c1(2, 1, 1, 2);
+
+    constexpr vec<std::int32_t, 4> c2 = (c / c1);
+
+    EXPECT_EQ(c2.x, 1);
+    EXPECT_EQ(c2.y, 1);
+    EXPECT_EQ(c2.z, 6);
+    EXPECT_EQ(c2.w, 5);
+
+    constexpr vec<std::uint32_t, 4> d(9, 8, 4, 8);
+    constexpr vec<std::uint32_t, 4> d1(9, 8, 1, 2);
+
+    constexpr vec<std::uint32_t, 4> d2 = d / d1;
+
+    EXPECT_EQ(d2.x, 1);
+    EXPECT_EQ(d2.y, 1);
+    EXPECT_EQ(d2.z, 4);
+    EXPECT_EQ(d2.w, 4);
 }

@@ -317,20 +317,6 @@ namespace tempest::math::simd
         return _mm256_div_pd(a, b);
     }
 
-    template <>
-    inline intrinsic_type_t<std::int32_t, 4> div<std::int32_t, 4>(intrinsic_type_t<std::int32_t, 4> a,
-                                                                  intrinsic_type_t<std::int32_t, 4> b) noexcept
-    {
-        return _mm_div_epi32(a, b);
-    }
-
-    template <>
-    inline intrinsic_type_t<std::uint32_t, 4> div<std::uint32_t, 4>(intrinsic_type_t<std::uint32_t, 4> a,
-                                                                  intrinsic_type_t<std::uint32_t, 4> b) noexcept
-    {
-        return _mm_div_epi32(a, b);
-    }
-
     template <typename T, std::size_t C>
     inline intrinsic_type_t<T, C> mul(intrinsic_type_t<T, C> a, intrinsic_type_t<T, C> b) noexcept;
 

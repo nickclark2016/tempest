@@ -15,53 +15,43 @@ namespace tempest::math
 
         inline constexpr vec() noexcept = default;
 
-        inline constexpr explicit vec(T v) noexcept : x{v}, y{v}
+        inline constexpr explicit vec(T v) noexcept : data{v, v}
         {
         }
 
-        inline constexpr vec(T x, T y) noexcept : x{x}, y{y}
+        inline constexpr vec(T x, T y) noexcept : data{x, y}
         {
         }
 
-        inline constexpr vec(const vec& other) noexcept : x{other.x}, y{other.y}
+        inline constexpr vec(const vec& other) noexcept : data{other.data[0], other.data[1]}
         {
         }
 
-        inline constexpr vec(vec&& other) noexcept : x{std::move(other.x)}, y{std::move(other.y)}
+        inline constexpr vec(vec&& other) noexcept : data{std::move(other.data[0]), std::move(other.data[1])}
         {
         }
 
-        inline constexpr void zero() noexcept
+        inline static constexpr vec zero() noexcept
         {
-            if (std::is_constant_evaluated())
-            {
-                x = y = 0;
-            }
-            else
-            {
-                simd::zero<T, simd::storage_type_size<T, 2>>(data);
-            }
+            return vec();
         }
 
-        inline constexpr void set(T x, T y) noexcept
+        inline void set(T x, T y) noexcept
         {
-            this->x = x;
-            this->y = y;
+            data[0] = x;
+            data[1] = y;
         }
 
         inline constexpr vec& operator=(const vec& other) noexcept
         {
             if (std::is_constant_evaluated())
             {
-                x = other.x;
-                y = other.y;
+                data[0] = other.data[0];
+                data[1] = other.data[1];
             }
             else
             {
                 intrin = other.intrin;
-                // simd::store<T, simd::storage_type_size<T, 2>>(simd::load<T, simd::storage_type_size<T,
-                // 2>>(other.data),
-                //                                               data);
             }
 
             return *this;
@@ -71,14 +61,11 @@ namespace tempest::math
         {
             if (std::is_constant_evaluated())
             {
-                x = std::move(other.x);
-                y = std::move(other.y);
+                data[0] = std::move(other.data[0]);
+                data[1] = std::move(other.data[1]);
             }
             else
             {
-                // simd::store<T, simd::storage_type_size<T, 2>>(simd::load<T, simd::storage_type_size<T,
-                // 2>>(other.data),
-                //                                               data);
                 intrin = std::move(other.intrin);
             }
 
@@ -123,54 +110,45 @@ namespace tempest::math
 
         inline constexpr vec() noexcept = default;
 
-        inline constexpr vec(T x, T y, T z) noexcept : x{x}, y{y}, z{z}
+        inline constexpr vec(T x, T y, T z) noexcept : data{x, y, z}
         {
         }
 
-        inline constexpr explicit vec(T v) noexcept : x{v}, y{v}, z{v}
+        inline constexpr explicit vec(T v) noexcept : data{v, v, v}
         {
         }
 
-        inline constexpr vec(const vec& other) noexcept : x{other.x}, y{other.y}, z{other.z}
+        inline constexpr vec(const vec& other) noexcept : data{other.data[0], other.data[1], other.data[2]}
         {
         }
 
-        inline constexpr vec(vec&& other) noexcept : x{std::move(other.x)}, y{std::move(other.y)}, z{std::move(other.z)}
+        inline constexpr vec(vec&& other) noexcept
+            : data{std::move(other.data[0]), std::move(other.data[1]), std::move(other.data[2])}
         {
         }
 
-        inline constexpr void zero() noexcept
+        inline static constexpr vec zero() noexcept
         {
-            if (std::is_constant_evaluated())
-            {
-                x = y = z = 0;
-            }
-            else
-            {
-                simd::zero<T, simd::storage_type_size<T, 3>>(data);
-            }
+            return vec();
         }
 
-        inline constexpr void set(T x, T y, T z) noexcept
+        inline void set(T x, T y, T z) noexcept
         {
-            this->x = x;
-            this->y = y;
-            this->z = z;
+            data[0] = x;
+            data[1] = y;
+            data[2] = z;
         }
 
         inline constexpr vec& operator=(const vec& other) noexcept
         {
             if (std::is_constant_evaluated())
             {
-                x = other.x;
-                y = other.y;
-                z = other.z;
+                data[0] = other.data[0];
+                data[1] = other.data[1];
+                data[2] = other.data[2];
             }
             else
             {
-                // simd::store<T, simd::storage_type_size<T, 3>>(simd::load<T, simd::storage_type_size<T,
-                // 3>>(other.data),
-                //                                               data);
                 intrin = other.intrin;
             }
 
@@ -181,15 +159,12 @@ namespace tempest::math
         {
             if (std::is_constant_evaluated())
             {
-                x = std::move(other.x);
-                y = std::move(other.y);
-                z = std::move(other.z);
+                data[0] = std::move(other.data[0]);
+                data[1] = std::move(other.data[1]);
+                data[2] = std::move(other.data[2]);
             }
             else
             {
-                // simd::store<T, simd::storage_type_size<T, 3>>(simd::load<T, simd::storage_type_size<T,
-                // 3>>(other.data),
-                //                                               data);
                 intrin = std::move(other.intrin);
             }
 
@@ -206,7 +181,7 @@ namespace tempest::math
             return data[index];
         }
 
-        inline constexpr vec cross(const vec& other) noexcept
+        inline constexpr vec cross(const vec& other) const noexcept
         {
             if (std::is_constant_evaluated())
             {
@@ -251,57 +226,48 @@ namespace tempest::math
 
         inline constexpr vec() noexcept = default;
 
-        inline constexpr vec(T x, T y, T z, T w) noexcept : x{x}, y{y}, z{z}, w{w}
+        inline constexpr vec(T x, T y, T z, T w) noexcept : data{x, y, z, w}
         {
         }
 
-        inline constexpr explicit vec(T v) noexcept : x{v}, y{v}, z{v}, w{v}
+        inline constexpr explicit vec(T v) noexcept : data{v, v, v, v}
         {
         }
 
-        inline constexpr vec(const vec& other) noexcept : x{other.x}, y{other.y}, z{other.z}, w{other.w}
+        inline constexpr vec(const vec& other) noexcept : data{other.data[0], other.data[1], other.data[2], other.data[3]}
         {
         }
 
         inline constexpr vec(vec&& other) noexcept
-            : x{std::move(other.x)}, y{std::move(other.y)}, z{std::move(other.z)}, w{std::move(other.w)}
+            : data{std::move(other.data[0]), std::move(other.data[1]), std::move(other.data[2]),
+                   std::move(other.data[3])}
         {
         }
 
-        inline constexpr void zero() noexcept
+        inline static constexpr vec zero() noexcept
         {
-            if (std::is_constant_evaluated())
-            {
-                x = y = z = w = 0;
-            }
-            else
-            {
-                simd::zero<T, simd::storage_type_size<T, 4>>(data);
-            }
+            return vec();
         }
 
         inline constexpr void set(T x, T y, T z, T w) noexcept
         {
-            this->x = x;
-            this->y = y;
-            this->z = z;
-            this->w = w;
+            data[0] = x;
+            data[1] = y;
+            data[2] = z;
+            data[3] = w;
         }
 
         inline constexpr vec& operator=(const vec& other) noexcept
         {
             if (std::is_constant_evaluated())
             {
-                x = other.x;
-                y = other.y;
-                z = other.z;
-                w = other.w;
+                data[0] = other.data[0];
+                data[1] = other.data[1];
+                data[2] = other.data[2];
+                data[3] = other.data[3];
             }
             else
             {
-                // simd::store<T, simd::storage_type_size<T, 4>>(simd::load<T, simd::storage_type_size<T,
-                // 4>>(other.data),
-                //                                               data);
                 intrin = other.intrin;
             }
 
@@ -312,16 +278,13 @@ namespace tempest::math
         {
             if (std::is_constant_evaluated())
             {
-                x = std::move(other.x);
-                y = std::move(other.y);
-                z = std::move(other.z);
-                w = std::move(other.w);
+                data[0] = std::move(other.data[0]);
+                data[1] = std::move(other.data[1]);
+                data[2] = std::move(other.data[2]);
+                data[3] = std::move(other.data[3]);
             }
             else
             {
-                // simd::store<T, simd::storage_type_size<T, 4>>(simd::load<T, simd::storage_type_size<T,
-                // 4>>(other.data),
-                //                                               data);
                 intrin = std::move(other.intrin);
             }
 
@@ -403,9 +366,6 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             return simd::compare_equal<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
         }
     }
@@ -427,9 +387,6 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             return simd::compare_nequal<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
         }
     }
@@ -450,9 +407,6 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             auto v = simd::add<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
             vec<T, D> res;
@@ -474,12 +428,7 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             lhs.intrin = simd::add<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
-            //simd::store<T, simd::storage_type_size<T, D>>(v, lhs.data);
         }
 
         return lhs;
@@ -501,9 +450,6 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             auto v = simd::sub<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
             vec<T, D> res;
@@ -525,12 +471,7 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             lhs.intrin = simd::sub<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
-            //simd::store<T, simd::storage_type_size<T, D>>(v, lhs.data);
         }
 
         return lhs;
@@ -552,15 +493,26 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
+            if constexpr (std::is_integral_v<T>)
+            {
+                vec<T, D> res;
 
-            auto v = simd::div<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
+                for (std::size_t i = 0; i < D; i++)
+                {
+                    res[i] = lhs[i] / rhs[i];
+                }
 
-            vec<T, D> res;
-            simd::store<T, simd::storage_type_size<T, D>>(v, res.data);
+                return res;
+            }
+            else
+            {
+                auto v = simd::div<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
-            return res;
+                vec<T, D> res;
+                simd::store<T, simd::storage_type_size<T, D>>(v, res.data);
+
+                return res;
+            }
         }
     }
 
@@ -576,12 +528,7 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             lhs.intrin = simd::div<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
-            //simd::store<T, simd::storage_type_size<T, D>>(v, lhs.data);
         }
 
         return lhs;
@@ -603,9 +550,6 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             auto v = simd::mul<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
 
             vec<T, D> res;
@@ -627,12 +571,7 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             lhs.intrin = simd::mul<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
-
-            //simd::store<T, simd::storage_type_size<T, D>>(v, lhs.data);
         }
 
         return lhs;
@@ -652,14 +591,11 @@ namespace tempest::math
         }
         else
         {
-            //auto a = simd::load<T, simd::storage_type_size<T, D>>(lhs.data);
-            //auto b = simd::load<T, simd::storage_type_size<T, D>>(rhs.data);
-
             return simd::dot<T, simd::storage_type_size<T, D>>(lhs.intrin, rhs.intrin);
         }
     }
 
-    template <typename T, std::size_t D> inline constexpr T length(const vec<T, D>& v)
+    template <typename T, std::size_t D> inline constexpr T magnitude(const vec<T, D>& v)
     {
         if (std::is_constant_evaluated())
         {
@@ -668,7 +604,6 @@ namespace tempest::math
         }
         else
         {
-            //auto data = simd::load<T, simd::storage_type_size<T, D>>(v.data);
             return sqrt(simd::dot<T, simd::storage_type_size<T, D>>(v.intrin, v.intrin));
         }
     }
@@ -676,7 +611,7 @@ namespace tempest::math
     template <typename T, std::size_t D> inline constexpr T distance(const vec<T, D>& lhs, const vec<T, D>& rhs)
     {
         auto delta = rhs - lhs;
-        return length(delta);
+        return magnitude(delta);
     }
 
     template <typename T, std::size_t D> inline constexpr T project(const vec<T, D>& lhs, const vec<T, D>& rhs)
