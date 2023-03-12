@@ -40,5 +40,7 @@ project('googletest', (prj) => {
         includeDirs([
             './include'
         ]);
+
+        externalWarnings('Off');
     });
 });
