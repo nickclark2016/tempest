@@ -8,6 +8,7 @@
 #include <vuk/Allocator.hpp>
 #include <vuk/Context.hpp>
 #include <vuk/Future.hpp>
+#include <vuk/RenderGraph.hpp>
 #include <vuk/resources/DeviceFrameResource.hpp>
 
 #include <array>
@@ -17,7 +18,10 @@
 
 namespace tempest::graphics
 {
-    inline constexpr std::size_t FRAMES_IN_FLIGHT = 3;
+    namespace
+    {
+        inline constexpr std::size_t FRAMES_IN_FLIGHT = 3;
+    }
 
     struct irenderer::impl
     {
@@ -35,10 +39,13 @@ namespace tempest::graphics
         VkQueue transfer_queue{};
         VkQueue compute_queue{};
 
+        vuk::Compiler compiler;
+
         vuk::Unique<std::array<VkSemaphore, FRAMES_IN_FLIGHT>> present_ready;
         vuk::Unique<std::array<VkSemaphore, FRAMES_IN_FLIGHT>> render_complete;
 
         vuk::SwapchainRef swapchain;
+        VkSurfaceKHR surface;
 
         std::mutex setup_lock;
         std::vector<vuk::Future> resource_futures;
