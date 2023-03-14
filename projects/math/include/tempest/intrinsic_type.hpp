@@ -125,6 +125,34 @@ namespace tempest::math::simd
         return _mm_loadu_si128(reinterpret_cast<const __m128i*>(data));
     }
 
+    template <typename T, std::size_t C> inline intrinsic_type_t<T, C> broadcast(const T data) noexcept;
+
+    template <> inline __m128 broadcast<float, 4>(const float data) noexcept
+    {
+        return _mm_set1_ps(data);
+    }
+
+    template <> inline __m128d broadcast<double, 2>(const double data) noexcept
+    {
+        return _mm_set1_pd(data);
+    }
+
+    template <> inline __m256d broadcast<double, 4>(const double data) noexcept
+    {
+        return _mm256_set1_pd(data);
+    }
+
+    template <> inline __m128i broadcast<std::int32_t, 4>(const std::int32_t data) noexcept
+    {
+        return _mm_set1_epi32(data);
+    }
+
+    template <> inline __m128i broadcast<std::uint32_t, 4>(const std::uint32_t data) noexcept
+    {
+        // Probably won't work for uint
+        return _mm_set1_epi32(data);
+    }
+
     template <typename T, std::size_t C> inline void store(intrinsic_type_t<T, C> src, T (&dst)[C]) noexcept;
 
     template <> inline void store<float, 4>(intrinsic_type_t<float, 4> src, float (&dst)[4]) noexcept
