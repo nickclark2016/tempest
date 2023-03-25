@@ -125,6 +125,34 @@ namespace tempest::math::simd
         return _mm_loadu_si128(reinterpret_cast<const __m128i*>(data));
     }
 
+    template <typename T, std::size_t C> inline intrinsic_type_t<T, C> broadcast(const T data) noexcept;
+
+    template <> inline __m128 broadcast<float, 4>(const float data) noexcept
+    {
+        return _mm_set1_ps(data);
+    }
+
+    template <> inline __m128d broadcast<double, 2>(const double data) noexcept
+    {
+        return _mm_set1_pd(data);
+    }
+
+    template <> inline __m256d broadcast<double, 4>(const double data) noexcept
+    {
+        return _mm256_set1_pd(data);
+    }
+
+    template <> inline __m128i broadcast<std::int32_t, 4>(const std::int32_t data) noexcept
+    {
+        return _mm_set1_epi32(data);
+    }
+
+    template <> inline __m128i broadcast<std::uint32_t, 4>(const std::uint32_t data) noexcept
+    {
+        // Probably won't work for uint
+        return _mm_set1_epi32(data);
+    }
+
     template <typename T, std::size_t C> inline void store(intrinsic_type_t<T, C> src, T (&dst)[C]) noexcept;
 
     template <> inline void store<float, 4>(intrinsic_type_t<float, 4> src, float (&dst)[4]) noexcept
@@ -344,14 +372,18 @@ namespace tempest::math::simd
     inline intrinsic_type_t<std::int32_t, 4> mul<std::int32_t, 4>(intrinsic_type_t<std::int32_t, 4> a,
                                                                   intrinsic_type_t<std::int32_t, 4> b) noexcept
     {
-        return _mm_mul_epi32(a, b);
+        return _mm_mullo_epi32(a, b);
     }
 
     template <>
     inline intrinsic_type_t<std::uint32_t, 4> mul<std::uint32_t, 4>(intrinsic_type_t<std::uint32_t, 4> a,
                                                                   intrinsic_type_t<std::uint32_t, 4> b) noexcept
     {
-        return _mm_mul_epi32(a, b);
+        auto tmp1 = _mm_mul_epu32(a, b);
+        auto tmp2 = _mm_mul_epu32(_mm_srli_si128(a, 4), _mm_srli_si128(b, 4));
+
+        return _mm_unpacklo_epi32(_mm_shuffle_epi32(tmp1, _MM_SHUFFLE(0, 0, 2, 0)),
+                                  _mm_shuffle_epi32(tmp2, _MM_SHUFFLE(0, 0, 2, 0)));
     }
 
     template <typename T, std::size_t C>
