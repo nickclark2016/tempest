@@ -14,7 +14,6 @@ project('graphics', (prj) => {
         'logger',
         'vk-bootstrap',
         'vma',
-        'vuk',
     ]);
 
     toolset('msc:143');
@@ -43,8 +42,8 @@ project('graphics', (prj) => {
         'glfw:public',
         'vk-bootstrap:public',
         'vma:public',
-        'vuk:public',
         'graphics:public',
         'logger:public',
+        'wyhash:public',
     ]);
 });

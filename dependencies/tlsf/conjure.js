@@ -1,6 +1,6 @@
-project('vma', (prj) => {
+project('tlsf', (prj) => {
     kind('StaticLib');
-    language('C++');
+    language('C');
     toolset('msc:143');
 
     when({}, (ctx) => {
@@ -9,18 +9,14 @@ project('vma', (prj) => {
     });
 
     files([
-        'include/vk_mem_alloc.h',
-        'src/Common.cpp',
-        'src/Common.h',
-        'src/VmaUsage.cpp',
-        'src/VmaUsage.h'
+        'include/tlsf/tlsf.h',
+        'src/tlsf.c',
     ]);
 
     staticRuntime('Off');
 
-    defines([
-        "VMA_STATIC_VULKAN_FUNCTIONS=0",
-        "VMA_DYNAMIC_VULKAN_FUNCTIONS=1"
+    includeDirs([
+        'include/tlsf'
     ]);
 
     when({ configuration: 'Release' }, (_) => {
@@ -35,13 +31,9 @@ project('vma', (prj) => {
         symbols('On')
     });
 
-    block('vma:public', (_) => {
+    block('tlsf:public', (_) => {
         includeDirs([
             './include'
         ]);
     });
-
-    uses([
-        'vulkan:public'
-    ]);
 });

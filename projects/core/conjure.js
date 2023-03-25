@@ -10,6 +10,10 @@ project('core', (prj) => {
 
     toolset('msc:143');
 
+    dependsOn([
+        'tlsf'
+    ])
+
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
         intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
@@ -28,6 +32,7 @@ project('core', (prj) => {
     });
 
     uses([
-        'ecs:public'
+        'tlsf:public',
+        'core:public'
     ]);
 });

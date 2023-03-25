@@ -21,17 +21,25 @@ namespace tempest::graphics::glfw
         assert(initialize_glfw() && "Failed to initialize GLFW.");
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
         _win = glfwCreateWindow(static_cast<int>(info.width), static_cast<int>(info.height), info.title.data(), nullptr,
                                 nullptr);
+
         assert(_win && "Failed to create GLFW Window.");
+        glfwSetWindowUserPointer(_win, this);
+
+        glfwSetWindowSizeCallback(_win, [](GLFWwindow* win, int width, int height) {
+            window* w = reinterpret_cast<window*>(glfwGetWindowUserPointer(win));
+            w->_width = width;
+            w->_height = height;
+        });
     }
 
     window::window(window&& other) noexcept
         : _win{std::move(other._win)}, _width{std::move(other._width)}, _height{std::move(other._height)}
     {
         other._win = nullptr;
+        glfwSetWindowUserPointer(_win, this);
     }
 
     window::~window()
@@ -47,10 +55,11 @@ namespace tempest::graphics::glfw
         }
 
         _release();
-        
+
         std::swap(_win, rhs._win);
         std::swap(_width, rhs._width);
         std::swap(_height, rhs._height);
+        glfwSetWindowUserPointer(_win, this);
 
         return *this;
     }

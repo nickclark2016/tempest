@@ -21,6 +21,8 @@ namespace tempest::graphics
         virtual std::uint32_t width() const noexcept = 0;
         virtual std::uint32_t height() const noexcept = 0;
 
+        virtual bool minimized() const noexcept = 0;
+
         virtual void show() = 0;
     };
     
