@@ -38,6 +38,11 @@ namespace tempest::graphics::glfw
             return _height;
         }
 
+        bool minimized() const noexcept override
+        {
+            return _width == 0 || _height == 0;
+        }
+
         void show() override
         {
             glfwShowWindow(_win);
