@@ -288,14 +288,12 @@ namespace tempest::graphics
             new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
-        
         if (barrier.source == pipeline_stage::FRAGMENT_SHADER &&
             barrier.destination == pipeline_stage::FRAMEBUFFER_OUTPUT)
         {
             source_access_mask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
             destination_access_mask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         }
-
 
         bool has_depth_buffer = false;
 
@@ -318,6 +316,7 @@ namespace tempest::graphics
             };
         }
 
+        std::size_t image_cnt{0};
         for (std::size_t i = 0; i < image_count; ++i)
         {
             auto& img_barrier = barrier.textures[i];
@@ -326,7 +325,7 @@ namespace tempest::graphics
             const auto is_color = !texture_format_utils::has_depth_or_stencil(tex->image_fmt);
             has_depth_buffer |= !is_color;
 
-            image_barriers[i] = {
+            image_barriers[image_cnt] = {
                 .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
                 .pNext{nullptr},
                 .srcAccessMask{is_color ? source_access_mask : source_depth_access_mask},
@@ -348,6 +347,11 @@ namespace tempest::graphics
             };
 
             tex->image_layout = image_barriers[i].newLayout;
+
+            if (image_barriers[image_cnt].oldLayout != image_barriers[image_cnt].newLayout)
+            {
+                ++image_cnt;
+            }
         }
 
         auto src_stage_mask = to_vk_pipeline_stage(barrier.source);
@@ -355,8 +359,8 @@ namespace tempest::graphics
 
         _device->_dispatch.cmdPipelineBarrier(_buf, to_vk_pipeline_stage(barrier.source),
                                               to_vk_pipeline_stage(barrier.destination), 0, 0, nullptr, buffer_count,
-                                              buffer_count ? memory_barriers.data() : nullptr, image_count,
-                                              image_count ? image_barriers.data() : nullptr);
+                                              buffer_count ? memory_barriers.data() : nullptr, image_cnt,
+                                              image_cnt ? image_barriers.data() : nullptr);
 
         return *this;
     }
@@ -386,6 +390,7 @@ namespace tempest::graphics
         _device->_dispatch.cmdPipelineBarrier(_buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
                                               &barrier);
+
         tex->image_layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 
         return *this;
