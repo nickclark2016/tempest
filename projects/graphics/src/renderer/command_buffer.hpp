@@ -29,12 +29,18 @@ namespace tempest::graphics
         command_buffer& set_clear_depth_stencil(float depth, std::uint32_t stencil);
         command_buffer& set_scissor_region(VkRect2D scissor);
         command_buffer& use_default_scissor();
-        command_buffer& set_viewport(VkViewport viewport);
-        command_buffer& use_default_viewport();
+        command_buffer& set_viewport(VkViewport viewport, bool flip = true);
+        command_buffer& use_default_viewport(bool flip = true);
         command_buffer& bind_render_pass(render_pass_handle pass);
         command_buffer& bind_pipeline(pipeline_handle pipeline);
+        command_buffer& bind_descriptor_set(std::span<descriptor_set_handle> sets, std::span<std::uint32_t> offsets,
+                                            std::uint32_t first_set = 0);
         command_buffer& draw(const std::uint32_t vertex_count, std::uint32_t instance_count, std::uint32_t first_vertex,
                              std::uint32_t first_instance);
+        command_buffer& barrier(const execution_barrier& barrier);
+
+        command_buffer& transition_to_depth_image(texture_handle depth_tex);
+        command_buffer& transition_to_color_image(texture_handle color_tex);
 
         void begin();
         void end();
