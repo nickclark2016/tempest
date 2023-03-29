@@ -11,7 +11,7 @@ namespace tempest::graphics
 
     void irenderer::render()
     {
-        _impl->render();     
+        _impl->render();
     }
 
     std::unique_ptr<irenderer> irenderer::create(const core::version& ver, iwindow& win, core::allocator& allocator)
@@ -22,7 +22,11 @@ namespace tempest::graphics
         gfx_device_create_info create_info = {
             .global_allocator{&allocator},
             .win{reinterpret_cast<glfw::window*>(&win)},
+#ifdef _DEBUG
             .enable_debug{true},
+#else
+            .enable_debug{false}
+#endif
         };
 
         renderer->_impl->device.reset(new gfx_device(create_info));
