@@ -1989,7 +1989,7 @@ namespace tempest::graphics
                 .storeOp{VK_ATTACHMENT_STORE_OP_STORE},
                 .stencilLoadOp{stencil_op},
                 .stencilStoreOp{VK_ATTACHMENT_STORE_OP_DONT_CARE},
-                .initialLayout{color_initial},
+                .initialLayout{VK_IMAGE_LAYOUT_UNDEFINED},
                 .finalLayout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
             };
 
