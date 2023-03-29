@@ -25,7 +25,7 @@ int main()
 
     auto window = tempest::graphics::window_factory::create({
         .title{"Tempest Sandbox"},
-        .width{1080},
+        .width{1280},
         .height{720},
     });
 

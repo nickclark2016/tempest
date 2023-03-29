@@ -131,10 +131,20 @@ namespace tempest::graphics
         texture_handle create_texture(const texture_create_info& ci);
         void release_texture(texture_handle handle);
 
+        sampler* access_sampler(sampler_handle handle);
+        const sampler* access_sampler(sampler_handle handle) const;
+        sampler_handle create_sampler(const sampler_create_info& ci);
+        void release_sampler(sampler_handle handle);
+
         descriptor_set_layout* access_descriptor_set_layout(descriptor_set_layout_handle handle);
         const descriptor_set_layout* access_descriptor_set_layout(descriptor_set_layout_handle handle) const;
         descriptor_set_layout_handle create_descriptor_set_layout(const descriptor_set_layout_create_info& ci);
         void release_descriptor_set_layout(descriptor_set_layout_handle handle);
+
+        descriptor_set* access_descriptor_set(descriptor_set_handle handle);
+        const descriptor_set* access_descriptor_set(descriptor_set_handle handle) const;
+        descriptor_set_handle create_descriptor_set(const descriptor_set_create_info& ci);
+        void release_descriptor_set(descriptor_set_handle handle);
 
         render_pass* access_render_pass(render_pass_handle handle);
         const render_pass* access_render_pass(render_pass_handle handle) const;
@@ -155,6 +165,7 @@ namespace tempest::graphics
         }
 
         void queue_command_buffer(const command_buffer& buffer);
+        void execute_immediate(const command_buffer& buffer);
 
       private:
         vkb::Instance _instance{};
@@ -205,14 +216,17 @@ namespace tempest::graphics
         core::object_pool _pipeline_pool;
         core::object_pool _render_pass_pool;
         core::object_pool _descriptor_set_layout_pool;
+        core::object_pool _descriptor_set_pool;
+        core::object_pool _sampler_pool;
 
-        texture_handle _default_depth_buffer{.index{invalid_resource_handle}};
+        sampler_handle _default_sampler{.index{invalid_resource_handle}};
         render_pass_handle _swapchain_render_pass{.index{invalid_resource_handle}};
         render_pass_attachment_info _swapchain_attachment_info{};
-        
+
         std::optional<command_buffer_ring> _cmd_ring;
         std::array<command_buffer, 8> _queued_commands_buffers;
         std::uint32_t _queued_command_buffer_count{0};
+        VkDescriptorPool _global_desc_pool{nullptr};
 
         std::unordered_map<std::uint64_t, VkRenderPass>
             _render_pass_cache; // TODO: investigate a flat hash map solution
@@ -227,6 +241,8 @@ namespace tempest::graphics
         void _destroy_shader_state_imm(resource_handle hnd);
         void _destroy_pipeline_imm(resource_handle hnd);
         void _destroy_render_pass_imm(resource_handle hnd);
+        void _destroy_desc_set_imm(resource_handle hnd);
+        void _destroy_sampler_imm(resource_handle hnd);
 
         VkRenderPass _fetch_vk_render_pass(const render_pass_attachment_info& out, std::string_view name);
         VkRenderPass _create_vk_render_pass(const render_pass_attachment_info& out, std::string_view name);
@@ -234,8 +250,16 @@ namespace tempest::graphics
         void _create_framebuffer(render_pass* pass, std::span<texture_handle> colors, texture_handle depth_stencil);
         render_pass_attachment_info _fill_render_pass_attachment_info(const render_pass_create_info& ci);
 
-        void _resize_swapchain();
+        void _recreate_swapchain();
         void _destroy_swapchain_resources();
+
+        void _fill_write_descriptor_sets(const descriptor_set_layout* desc_set_layout, VkDescriptorSet vk_desc_set,
+                                         std::span<VkWriteDescriptorSet> desc_write,
+                                         std::span<VkDescriptorBufferInfo> buf_info,
+                                         std::span<VkDescriptorImageInfo> img_info, std::uint32_t& resource_count,
+                                         std::span<const resource_handle> resources,
+                                         std::span<const sampler_handle> samplers,
+                                         std::span<const std::uint16_t> bindings);
     };
 } // namespace tempest::graphics
 

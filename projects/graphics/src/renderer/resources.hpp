@@ -244,7 +244,7 @@ namespace tempest::graphics
         std::uint16_t height{1};
         std::uint16_t depth{1}; // or layers, if a layered image
         std::uint8_t mipmap_count{1};
-        std::uint8_t flags{0};
+        texture_flags flags{0};
 
         VkFormat image_format{VK_FORMAT_UNDEFINED};
         texture_type image_type{texture_type::D2};
@@ -501,30 +501,6 @@ namespace tempest::graphics
         std::uint32_t length{0};
     };
 
-    struct texture_barrier
-    {
-        texture_handle tex{.index{invalid_resource_handle}};
-    };
-
-    struct memory_barrier
-    {
-        buffer_handle buf{.index{invalid_resource_handle}};
-    };
-
-    struct execution_barrier
-    {
-        pipeline_stage source_barrier_stage;
-        pipeline_stage destination_barrier_stage;
-
-        std::uint32_t load_operation{0};
-
-        std::array<texture_barrier, max_barrier_count> texture_barriers;
-        std::uint32_t num_texture_barriers{0};
-
-        std::array<memory_barrier, max_barrier_count> memory_barriers;
-        std::uint32_t num_memory_barriers{0};
-    };
-
     struct resource_update_desc
     {
         resource_deletion_type type;
@@ -578,7 +554,7 @@ namespace tempest::graphics
         std::uint16_t height{1};
         std::uint16_t depth{1};
         std::uint8_t mipmaps{1};
-        std::uint8_t flags{0};
+        texture_flags flags{0};
 
         texture_handle handle;
         texture_type type{texture_type::D2};
@@ -623,11 +599,11 @@ namespace tempest::graphics
         VkDescriptorSet set;
 
         resource_handle* resources{nullptr};
-        sampler_handle* sampelrs{nullptr};
+        sampler_handle* samplers{nullptr};
         std::uint16_t* bindings{nullptr};
         std::uint32_t num_resources{0};
 
-        const descriptor_set_layout layout{nullptr};
+        const descriptor_set_layout* layout{nullptr};
     };
 
     struct pipeline
@@ -672,6 +648,27 @@ namespace tempest::graphics
         std::uint8_t num_render_targets{0};
 
         std::string_view name;
+    };
+
+    struct texture_barrier
+    {
+        texture_handle tex;
+    };
+
+    struct memory_barrier
+    {
+        buffer_handle buf;
+    };
+
+    struct execution_barrier
+    {
+        pipeline_stage source;
+        pipeline_stage destination;
+
+        std::uint32_t load_operation{0};
+
+        std::span<texture_barrier> textures;
+        std::span<memory_barrier> buffers;
     };
 
     inline std::string_view get_compiler_extension(VkShaderStageFlagBits stage)
@@ -727,6 +724,21 @@ namespace tempest::graphics
             [[unlikely]] return VK_IMAGE_VIEW_TYPE_CUBE;
         }
         return VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+    }
+
+    inline VkPipelineStageFlags to_vk_pipeline_stage(pipeline_stage stage)
+    {
+        static constexpr VkPipelineStageFlags stages[] = {
+            VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+        };
+
+        return stages[static_cast<std::underlying_type_t<pipeline_stage>>(stage)];
     }
 
     inline VkPipelineStageFlags fetch_pipeline_stage_flags(VkAccessFlags access, VkQueueFlagBits type)
@@ -808,6 +820,68 @@ namespace tempest::graphics
 
             break;
         }
+        }
+
+        return flags;
+    }
+
+    inline VkAccessFlags fetch_access_flags(resource_state state)
+    {
+        VkAccessFlags flags{0};
+
+        if ((state & resource_state::TRANSFER_SRC) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_TRANSFER_READ_BIT;
+        }
+
+        if ((state & resource_state::TRANSFER_DST) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
+
+        if ((state & resource_state::VERTEX_AND_UNIFORM_BUFFER) != resource_state::UNDEFINED)
+        {
+            flags |= (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT);
+        }
+
+        if ((state & resource_state::INDEX_BUFFER) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_INDEX_READ_BIT;
+        }
+
+        if ((state & resource_state::UNORDERED_MEMORY_ACCESS) != resource_state::UNDEFINED)
+        {
+            flags |= (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        }
+
+        if ((state & resource_state::INDIRECT_ARGUMENT_BUFFER) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+        }
+
+        if ((state & resource_state::RENDER_TARGET) != resource_state::UNDEFINED)
+        {
+            flags |= (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+        }
+
+        if ((state & resource_state::DEPTH_WRITE) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
+
+        if ((state & resource_state::DEPTH_READ) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        }
+
+        if ((state & resource_state::GENERIC_SHADER_RESOURCE) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_SHADER_READ_BIT;
+        }
+
+        if ((state & resource_state::PRESENT) != resource_state::UNDEFINED)
+        {
+            flags |= VK_ACCESS_MEMORY_READ_BIT;
         }
 
         return flags;
