@@ -2,6 +2,7 @@
 #define tempest_graphics_device_hpp__
 
 #include "command_buffer.hpp"
+#include "descriptors.hpp"
 #include "fwd.hpp"
 #include "resources.hpp"
 
@@ -95,6 +96,7 @@ namespace tempest::graphics
     {
         friend class command_buffer;
         friend class command_buffer_ring;
+        friend class descriptor_pool;
 
         static constexpr std::size_t frames_in_flight = 3;
 
@@ -227,6 +229,8 @@ namespace tempest::graphics
         std::array<command_buffer, 8> _queued_commands_buffers;
         std::uint32_t _queued_command_buffer_count{0};
         VkDescriptorPool _global_desc_pool{nullptr};
+
+        std::optional<descriptor_pool> _desc_pool;
 
         std::unordered_map<std::uint64_t, VkRenderPass>
             _render_pass_cache; // TODO: investigate a flat hash map solution

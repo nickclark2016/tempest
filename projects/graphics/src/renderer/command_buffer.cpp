@@ -316,7 +316,7 @@ namespace tempest::graphics
             };
         }
 
-        std::size_t image_cnt{0};
+        std::uint32_t image_cnt{0};
         for (std::size_t i = 0; i < image_count; ++i)
         {
             auto& img_barrier = barrier.textures[i];
