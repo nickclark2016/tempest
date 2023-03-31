@@ -13,6 +13,7 @@ namespace tempest::graphics
 
     class command_buffer;
     class command_buffer_ring;
+    class descriptor_pool;
     class gfx_device;
     class gfx_timestamp_manager;
 

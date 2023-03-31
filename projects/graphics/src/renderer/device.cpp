@@ -106,6 +106,8 @@ namespace tempest::graphics
                                                            .shaderStorageImageArrayNonUniformIndexing{VK_TRUE},
                                                            .shaderUniformTexelBufferArrayNonUniformIndexing{VK_TRUE},
                                                            .shaderStorageTexelBufferArrayNonUniformIndexing{VK_TRUE},
+                                                           .descriptorBindingSampledImageUpdateAfterBind{VK_TRUE},
+                                                           .descriptorBindingVariableDescriptorCount{VK_TRUE},
                                                            .imagelessFramebuffer{VK_TRUE},
                                                            .separateDepthStencilLayouts{VK_TRUE},
                                                            .bufferDeviceAddress{VK_TRUE},
@@ -540,6 +542,10 @@ namespace tempest::graphics
         }
 
         {
+            _desc_pool.emplace(this);
+        }
+
+        {
             sampler_create_info sci = {
                 .min_filter{VK_FILTER_LINEAR},
                 .mag_filter{VK_FILTER_LINEAR},
@@ -567,6 +573,7 @@ namespace tempest::graphics
         release_render_pass(_swapchain_render_pass);
 
         _cmd_ring = std::nullopt;
+        _desc_pool = std::nullopt;
 
         _release_resources_imm();
 
