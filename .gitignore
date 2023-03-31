@@ -2,6 +2,8 @@
 bin/
 bin-int/
 
+*/logs/
+
 # Build Tool Files
 .vs/
 .vscode/
