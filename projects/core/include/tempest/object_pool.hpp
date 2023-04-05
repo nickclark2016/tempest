@@ -1,5 +1,5 @@
-#ifndef tempest_core_object_pool_hpp__
-#define tempest_core_object_pool_hpp__
+#ifndef tempest_core_object_pool_hpp
+#define tempest_core_object_pool_hpp
 
 #include "memory.hpp"
 
@@ -42,4 +42,4 @@ namespace tempest::core
     };
 } // namespace tempest::core
 
-#endif // tempest_core_object_pool_hpp__
+#endif // tempest_core_object_pool_hpp

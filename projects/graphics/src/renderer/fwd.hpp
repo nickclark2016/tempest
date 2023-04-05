@@ -1,5 +1,5 @@
-#ifndef tempest_graphics_fwd_hpp__
-#define tempest_graphics_fwd_hpp__
+#ifndef tempest_graphics_fwd_hpp
+#define tempest_graphics_fwd_hpp
 
 #include <cstdint>
 #include <limits>
@@ -21,4 +21,4 @@ namespace tempest::graphics
     inline constexpr resource_handle invalid_resource_handle = std::numeric_limits<resource_handle>::max();
 }
 
-#endif // tempest_graphics_fwd_hpp__
+#endif // tempest_graphics_fwd_hpp

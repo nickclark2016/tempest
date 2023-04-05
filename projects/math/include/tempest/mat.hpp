@@ -1,5 +1,5 @@
-#ifndef tempest_mat_hpp__
-#define tempest_mat_hpp__
+#ifndef tempest_mat_hpp
+#define tempest_mat_hpp
 
 #include <tempest/intrinsic_type.hpp>
 #include <tempest/simd_align.hpp>
@@ -326,4 +326,4 @@ namespace tempest::math
     }
 } // namespace tempest::math
 
-#endif // tempest_mat_hpp__
+#endif // tempest_mat_hpp

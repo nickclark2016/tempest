@@ -1,5 +1,5 @@
-#ifndef tempest_intrinsic_type_hpp__
-#define tempest_intrinsic_type_hpp__
+#ifndef tempest_intrinsic_type_hpp
+#define tempest_intrinsic_type_hpp
 
 #include <cstddef>
 #include <cstdint>
@@ -493,4 +493,4 @@ namespace tempest::math::simd
 
 } // namespace tempest::math::simd
 
-#endif // tempest_intrinsic_type_hpp__
+#endif // tempest_intrinsic_type_hpp

@@ -1,5 +1,5 @@
-#ifndef tempest_version_hpp__
-#define tempest_version_hpp__
+#ifndef tempest_version_hpp
+#define tempest_version_hpp
 
 #include <cstdint>
 
@@ -13,4 +13,4 @@ namespace tempest::core
     };
 }
 
-#endif // tempest_version_hpp__
+#endif // tempest_version_hpp

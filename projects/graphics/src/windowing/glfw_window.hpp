@@ -1,5 +1,5 @@
-#ifndef tempest_glfw_window_hpp__
-#define tempest_glfw_window_hpp__
+#ifndef tempest_glfw_window_hpp
+#define tempest_glfw_window_hpp
 
 #include <tempest/window.hpp>
 
