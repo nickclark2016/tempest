@@ -1,5 +1,5 @@
-#ifndef tempest_core_memory_hpp__
-#define tempest_core_memory_hpp__
+#ifndef tempest_core_memory_hpp
+#define tempest_core_memory_hpp
 
 #include <cstddef>
 #include <source_location>
@@ -70,4 +70,4 @@ namespace tempest::core
     };
 } // namespace tempest::core
 
-#endif // tempest_core_memory_hpp__
+#endif // tempest_core_memory_hpp

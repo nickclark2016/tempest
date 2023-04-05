@@ -1,5 +1,5 @@
-#ifndef tempest_graphics_command_buffer_hpp__
-#define tempest_graphics_command_buffer_hpp__
+#ifndef tempest_graphics_command_buffer_hpp
+#define tempest_graphics_command_buffer_hpp
 
 #include "enums.hpp"
 #include "fwd.hpp"
@@ -92,4 +92,4 @@ namespace tempest::graphics
     };
 } // namespace tempest::graphics
 
-#endif // tempest_graphics_command_buffer_hpp__
+#endif // tempest_graphics_command_buffer_hpp

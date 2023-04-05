@@ -1,5 +1,5 @@
-#ifndef tempest_graphics_enums_hpp__
-#define tempest_graphics_enums_hpp__
+#ifndef tempest_graphics_enums_hpp
+#define tempest_graphics_enums_hpp
 
 #include <vulkan/vulkan.h>
 
@@ -57,7 +57,7 @@ namespace tempest::graphics
         TRANSFER
     };
 
-    enum class resource_deletion_type
+    enum class resource_type
     {
         BUFFER,
         TEXTURE,
@@ -117,4 +117,4 @@ namespace tempest::graphics
     }
 } // namespace tempest::graphics
 
-#endif // tempest_graphics_enums_hpp__
+#endif // tempest_graphics_enums_hpp
