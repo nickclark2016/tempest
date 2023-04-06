@@ -17,7 +17,7 @@ namespace tempest::graphics
 
         texture_handle depth_target{};
         texture_handle color_target{};
-        VkFormat color_target_format = VK_FORMAT_R8G8B8A8_SRGB;
+        VkFormat color_target_format{VK_FORMAT_R8G8B8A8_SRGB};
 
         pipeline_handle blit_pipeline{};
         render_pass_handle blit_pass{};
