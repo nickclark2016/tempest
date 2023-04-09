@@ -5,6 +5,7 @@
 #include <numbers>
 
 #include <tempest/vec.hpp>
+#include <tempest/mat.hpp>
 
 namespace tempest::math
 {
