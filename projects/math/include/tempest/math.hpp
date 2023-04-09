@@ -1,5 +1,5 @@
-#ifndef tempest_math_hpp__
-#define tempest_math_hpp__
+#ifndef tempest_math_hpp
+#define tempest_math_hpp
 
 #include <limits>
 #include <numbers>
@@ -27,4 +27,4 @@ namespace tempest::math
     } // namespace constants
 } // namespace tempest
 
-#endif // tempest_math_hpp__
+#endif // tempest_math_hpp

@@ -1,5 +1,5 @@
-#ifndef tempest_window_hpp__
-#define tempest_window_hpp__
+#ifndef tempest_window_hpp
+#define tempest_window_hpp
 
 #include <cstdint>
 #include <functional>
@@ -40,4 +40,4 @@ namespace tempest::graphics
     };
 } // namespace tempest::graphics
 
-#endif // tempest_window_hpp__
+#endif // tempest_window_hpp

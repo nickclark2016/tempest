@@ -1,9 +1,9 @@
-#ifndef tempest_input_hpp__
-#define tempest_input_hpp__
+#ifndef tempest_input_hpp
+#define tempest_input_hpp
 
 namespace tempest::input
 {
     void poll();
 }
 
-#endif // tempest_input_hpp__
+#endif // tempest_input_hpp

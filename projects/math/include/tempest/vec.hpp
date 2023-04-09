@@ -1,5 +1,5 @@
-#ifndef tempest_vec_hpp__
-#define tempest_vec_hpp__
+#ifndef tempest_vec_hpp
+#define tempest_vec_hpp
 
 #include <tempest/intrinsic_type.hpp>
 #include <tempest/simd_align.hpp>
@@ -602,4 +602,4 @@ namespace tempest::math
 
 } // namespace tempest::math
 
-#endif // tempest_vec_hpp__
+#endif // tempest_vec_hpp

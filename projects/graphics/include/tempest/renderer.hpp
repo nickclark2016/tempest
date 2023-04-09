@@ -1,5 +1,5 @@
-#ifndef tempest_graphics_renderer_hpp__
-#define tempest_graphics_renderer_hpp__
+#ifndef tempest_graphics_renderer_hpp
+#define tempest_graphics_renderer_hpp
 
 #include <tempest/memory.hpp>
 #include <tempest/version.hpp>
@@ -25,4 +25,4 @@ namespace tempest::graphics
     };
 } // namespace tempest::graphics
 
-#endif // tempest_graphics_renderer_hpp__
+#endif // tempest_graphics_renderer_hpp

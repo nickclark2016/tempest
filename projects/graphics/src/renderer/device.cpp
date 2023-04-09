@@ -107,6 +107,8 @@ namespace tempest::graphics
                                                            .shaderUniformTexelBufferArrayNonUniformIndexing{VK_TRUE},
                                                            .shaderStorageTexelBufferArrayNonUniformIndexing{VK_TRUE},
                                                            .descriptorBindingSampledImageUpdateAfterBind{VK_TRUE},
+                                                           .descriptorBindingStorageImageUpdateAfterBind{VK_TRUE},
+                                                           .descriptorBindingPartiallyBound{VK_TRUE},
                                                            .descriptorBindingVariableDescriptorCount{VK_TRUE},
                                                            .imagelessFramebuffer{VK_TRUE},
                                                            .separateDepthStencilLayouts{VK_TRUE},
@@ -384,9 +386,9 @@ namespace tempest::graphics
           _shader_state_pool{_global_allocator, 128, sizeof(shader_state)},
           _pipeline_pool{_global_allocator, 128, sizeof(pipeline)}, _render_pass_pool{_global_allocator, 128,
                                                                                       sizeof(render_pass)},
-          _descriptor_set_layout_pool{_global_allocator, 128, sizeof(descriptor_set_layout)},
-          _descriptor_set_pool{_global_allocator, 128, sizeof(descriptor_set)}, _sampler_pool{_global_allocator, 32,
-                                                                                              sizeof(sampler)}
+          _descriptor_set_layout_pool{_global_allocator, 128, sizeof(descriptor_set_layout)}, _sampler_pool{
+                                                                                                  _global_allocator, 32,
+                                                                                                  sizeof(sampler)}
     {
         logger->debug("gfx_device creation started");
 
@@ -508,40 +510,6 @@ namespace tempest::graphics
         }
 
         {
-            static constexpr std::uint32_t max_global_pool_elements = 256;
-            VkDescriptorPoolSize pool_sizes[] = {
-                {VK_DESCRIPTOR_TYPE_SAMPLER, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, max_global_pool_elements},
-                {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, max_global_pool_elements},
-            };
-
-            VkDescriptorPoolCreateInfo vk_pool_ci{
-                .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO},
-                .pNext{nullptr},
-                .flags{VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT},
-                .maxSets{11 * max_global_pool_elements},
-                .poolSizeCount{11},
-                .pPoolSizes{pool_sizes},
-            };
-
-            auto result = _dispatch.createDescriptorPool(&vk_pool_ci, _alloc_callbacks, &_global_desc_pool);
-            if (result != VK_SUCCESS)
-            {
-                logger->error("Failed to create global VkDescriptorPool {0}", static_cast<std::uint32_t>(result));
-            }
-            _set_resource_name(VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<std::uint64_t>(_global_desc_pool),
-                               "DescriptorPool_Global");
-        }
-
-        {
             _desc_pool.emplace(this);
         }
 
@@ -573,9 +541,10 @@ namespace tempest::graphics
         release_render_pass(_swapchain_render_pass);
 
         _cmd_ring = std::nullopt;
-        _desc_pool = std::nullopt;
 
         _release_resources_imm();
+
+        _desc_pool = std::nullopt;
 
         for (std::size_t i = 0; i < frames_in_flight; ++i)
         {
@@ -683,6 +652,8 @@ namespace tempest::graphics
         _queued_command_buffer_count = 0;
 
         _advance_frame_counter();
+
+        _write_bindless_images();
     }
 
     buffer* gfx_device::access_buffer(buffer_handle handle)
@@ -767,7 +738,7 @@ namespace tempest::graphics
         if (handle.index < _buffer_pool.size())
         {
             _deletion_queue.push_back(resource_update_desc{
-                .type{resource_deletion_type::BUFFER},
+                .type{resource_type::BUFFER},
                 .handle{handle.index},
                 .current_frame{static_cast<std::uint32_t>(_current_frame)},
             });
@@ -869,7 +840,7 @@ namespace tempest::graphics
         if (handle.index < _shader_state_pool.size())
         {
             _deletion_queue.push_back(resource_update_desc{
-                .type{resource_deletion_type::SHADER_STATE},
+                .type{resource_type::SHADER_STATE},
                 .handle{handle.index},
                 .current_frame{static_cast<std::uint32_t>(_current_frame)},
             });
@@ -1142,7 +1113,7 @@ namespace tempest::graphics
         if (handle.index < _pipeline_pool.size())
         {
             _deletion_queue.push_back(resource_update_desc{
-                .type{resource_deletion_type::PIPELINE},
+                .type{resource_type::PIPELINE},
                 .handle{handle.index},
                 .current_frame{static_cast<std::uint32_t>(_current_frame)},
             });
@@ -1351,6 +1322,15 @@ namespace tempest::graphics
             tex->image_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
+        if (ci.bindless)
+        {
+            _texture_bindless_update_queue.push_back(resource_update_desc{
+                .type{resource_type::TEXTURE},
+                .handle{handle.index},
+                .current_frame{static_cast<std::uint32_t>(_current_frame)},
+            });
+        }
+
         return handle;
     }
 
@@ -1359,7 +1339,7 @@ namespace tempest::graphics
         if (handle.index < _texture_pool.size())
         {
             _deletion_queue.push_back(resource_update_desc{
-                .type{resource_deletion_type::TEXTURE},
+                .type{resource_type::TEXTURE},
                 .handle{handle.index},
                 .current_frame{static_cast<std::uint32_t>(_current_frame)},
             });
@@ -1425,7 +1405,7 @@ namespace tempest::graphics
     void gfx_device::release_sampler(sampler_handle handle)
     {
         _deletion_queue.push_back(resource_update_desc{
-            .type{resource_deletion_type::SAMPLER},
+            .type{resource_type::SAMPLER},
             .handle{handle.index},
             .current_frame{static_cast<std::uint32_t>(_current_frame)},
         });
@@ -1507,7 +1487,7 @@ namespace tempest::graphics
         if (handle.index < _descriptor_set_layout_pool.size())
         {
             _deletion_queue.push_back(resource_update_desc{
-                .type{resource_deletion_type::DESCRIPTOR_SET_LAYOUT},
+                .type{resource_type::DESCRIPTOR_SET_LAYOUT},
                 .handle{handle.index},
                 .current_frame{static_cast<std::uint32_t>(_current_frame)},
             });
@@ -1516,81 +1496,31 @@ namespace tempest::graphics
 
     descriptor_set* gfx_device::access_descriptor_set(descriptor_set_handle handle)
     {
-        return reinterpret_cast<descriptor_set*>(_descriptor_set_pool.access(handle.index));
+        return _desc_pool->access(handle);
     }
 
     const descriptor_set* gfx_device::access_descriptor_set(descriptor_set_handle handle) const
     {
-        return reinterpret_cast<const descriptor_set*>(_descriptor_set_pool.access(handle.index));
+        return _desc_pool->access(handle);
     }
 
     descriptor_set_handle gfx_device::create_descriptor_set(const descriptor_set_create_info& ci)
     {
-        descriptor_set_handle handle{.index{_descriptor_set_pool.acquire_resource()}};
-        if (handle.index == invalid_resource_handle)
-        {
-            return handle;
-        }
+        return _desc_pool->create(ci);
+    }
 
-        descriptor_set* set = access_descriptor_set(handle);
-        const descriptor_set_layout* layout = access_descriptor_set_layout(ci.layout);
-
-        VkDescriptorSetAllocateInfo alloc_info = {
-            .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO},
-            .pNext{nullptr},
-            .descriptorPool{_global_desc_pool},
-            .descriptorSetCount{1},
-            .pSetLayouts{&layout->layout},
-        };
-
-        auto result = _dispatch.allocateDescriptorSets(&alloc_info, &set->set);
-        if (result != VK_SUCCESS)
-        {
-            logger->error("Failed to create VkDescriptorSet {0}", ci.name);
-        }
-
-        _set_resource_name(VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<std::uint64_t>(set->set), ci.name);
-
-        std::size_t alloc_size = ci.resource_count *
-                                 (sizeof(resource_handle) + sizeof(sampler_handle) + sizeof(std::uint16_t)) *
-                                 ci.resource_count;
-        std::byte* mem = reinterpret_cast<std::byte*>(_global_allocator->allocate(alloc_size, 1));
-        set->resources = reinterpret_cast<resource_handle*>(mem);
-        set->samplers = reinterpret_cast<sampler_handle*>(mem + sizeof(resource_handle) * ci.resource_count);
-        set->bindings = reinterpret_cast<std::uint16_t*>(mem + (sizeof(resource_handle) + sizeof(sampler_handle)) *
-                                                                   ci.resource_count);
-        set->num_resources = ci.resource_count;
-        set->layout = layout;
-
-        VkWriteDescriptorSet desc_write[max_descriptors_per_set];
-        VkDescriptorBufferInfo buffer_info[max_descriptors_per_set];
-        VkDescriptorImageInfo image_info[max_descriptors_per_set];
-
-        std::uint32_t num_resources = ci.resource_count;
-        _fill_write_descriptor_sets(layout, set->set, desc_write, buffer_info, image_info, num_resources,
-                                    std::span<const resource_handle>(ci.resources),
-                                    std::span<const sampler_handle>(ci.samplers),
-                                    std::span<const std::uint16_t>(ci.bindings));
-
-        std::copy_n(ci.resources.begin(), ci.resource_count, set->resources);
-        std::copy_n(ci.samplers.begin(), ci.resource_count, set->samplers);
-        std::copy_n(ci.bindings.begin(), ci.resource_count, set->bindings);
-
-        _dispatch.updateDescriptorSets(num_resources, desc_write, 0, nullptr);
-
-        return handle;
+    descriptor_set_handle gfx_device::create_descriptor_set(const descriptor_set_builder& bldr)
+    {
+        return bldr.build(*_desc_pool);
     }
 
     void gfx_device::release_descriptor_set(descriptor_set_handle handle)
     {
-        if (handle.index < _descriptor_set_pool.size())
-        {
-            _deletion_queue.push_back(resource_update_desc{
-                .type{resource_deletion_type::DESCRIPTOR_SET},
-                .handle{handle.index},
-                .current_frame{static_cast<std::uint32_t>(_current_frame)},
-            });
-        }
+        _deletion_queue.push_back(resource_update_desc{
+            .type{resource_type::DESCRIPTOR_SET},
+            .handle{handle.index},
+            .current_frame{static_cast<std::uint32_t>(_current_frame)},
+        });
     }
 
     render_pass* gfx_device::access_render_pass(render_pass_handle handle)
@@ -1668,7 +1598,7 @@ namespace tempest::graphics
         if (handle.index < _render_pass_pool.size())
         {
             _deletion_queue.push_back(resource_update_desc{
-                .type{resource_deletion_type::RENDER_PASS},
+                .type{resource_type::RENDER_PASS},
                 .handle{handle.index},
                 .current_frame{static_cast<std::uint32_t>(_current_frame)},
             });
@@ -1758,35 +1688,35 @@ namespace tempest::graphics
 
             switch (desc.type)
             {
-            case resource_deletion_type::BUFFER: {
+            case resource_type::BUFFER: {
                 _destroy_buffer_imm(desc.handle);
                 break;
             }
-            case resource_deletion_type::DESCRIPTOR_SET: {
+            case resource_type::DESCRIPTOR_SET: {
                 _destroy_desc_set_imm(desc.handle);
                 break;
             }
-            case resource_deletion_type::DESCRIPTOR_SET_LAYOUT: {
+            case resource_type::DESCRIPTOR_SET_LAYOUT: {
                 _destroy_desc_set_layout_imm(desc.handle);
                 break;
             }
-            case resource_deletion_type::PIPELINE: {
+            case resource_type::PIPELINE: {
                 _destroy_pipeline_imm(desc.handle);
                 break;
             }
-            case resource_deletion_type::RENDER_PASS: {
+            case resource_type::RENDER_PASS: {
                 _destroy_render_pass_imm(desc.handle);
                 break;
             }
-            case resource_deletion_type::SAMPLER: {
+            case resource_type::SAMPLER: {
                 _destroy_sampler_imm(desc.handle);
                 break;
             }
-            case resource_deletion_type::SHADER_STATE: {
+            case resource_type::SHADER_STATE: {
                 _destroy_shader_state_imm(desc.handle);
                 break;
             }
-            case resource_deletion_type::TEXTURE: {
+            case resource_type::TEXTURE: {
                 _destroy_texture_imm(desc.handle);
                 break;
             }
@@ -1796,8 +1726,6 @@ namespace tempest::graphics
             }
             }
         }
-
-        _dispatch.destroyDescriptorPool(_global_desc_pool, _alloc_callbacks);
 
         for (auto& [hash, pass] : _render_pass_cache)
         {
@@ -1885,12 +1813,7 @@ namespace tempest::graphics
 
     void gfx_device::_destroy_desc_set_imm(resource_handle hnd)
     {
-        descriptor_set* set = access_descriptor_set(descriptor_set_handle{hnd});
-        if (set)
-        {
-            _global_allocator->deallocate(set->resources);
-        }
-        _descriptor_set_pool.release_resource(hnd);
+        _desc_pool->release({.index{hnd}});
     }
 
     void gfx_device::_destroy_sampler_imm(resource_handle hnd)
@@ -2353,6 +2276,57 @@ namespace tempest::graphics
         vkb::destroy_swapchain(_winfo.swapchain);
     }
 
+    void gfx_device::_write_bindless_images()
+    {
+        constexpr std::size_t writes_per_frame = 32;
+        std::array<VkWriteDescriptorSet, writes_per_frame> writes;
+        std::array<VkDescriptorImageInfo, writes_per_frame> desc_image_infos;
+
+        std::size_t expected_write_count = std::min(_texture_bindless_update_queue.size(), writes_per_frame);
+
+        // no work to be done, early return
+        if (expected_write_count == 0)
+        {
+            return;
+        }
+
+        for (std::size_t i = 0; i < expected_write_count; ++i)
+        {
+            auto desc_index = expected_write_count - i - 1;
+            auto& res_update_desc = _texture_bindless_update_queue[desc_index];
+
+            auto& desc_write = writes[i];
+            desc_write = {
+                .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                .pNext{nullptr},
+                .dstSet{_desc_pool->get_bindless_texture_descriptors()},
+                .dstBinding{_desc_pool->get_bindless_texture_index()},
+                .descriptorCount{1},
+                .descriptorType{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+                .pImageInfo{&desc_image_infos[i]},
+            };
+
+            auto& image_desc = desc_image_infos[i];
+            auto tex = access_texture(texture_handle{res_update_desc.handle});
+
+            image_desc = {
+                .sampler{tex->samp->underlying},
+                .imageView{tex->underlying_view},
+                .imageLayout{VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            };
+
+            // swap and pop
+            if (desc_index != _texture_bindless_update_queue.size())
+            {
+                // move end to current index
+                _texture_bindless_update_queue[desc_index] = _texture_bindless_update_queue.back();
+            }
+            _texture_bindless_update_queue.pop_back();
+        }
+
+        _dispatch.updateDescriptorSets(static_cast<std::uint32_t>(expected_write_count), writes.data(), 0, nullptr);
+    }
+
     void gfx_device::_fill_write_descriptor_sets(
         const descriptor_set_layout* desc_set_layout, VkDescriptorSet vk_desc_set,
         std::span<VkWriteDescriptorSet> desc_write, std::span<VkDescriptorBufferInfo> buf_info,
@@ -2427,7 +2401,7 @@ namespace tempest::graphics
                 break;
             }
             case VK_DESCRIPTOR_TYPE_SAMPLER: {
-                sampler_handle handle = {.index{resources[res]}};
+                sampler_handle handle = {.index{samplers[res]}};
                 sampler* smp = access_sampler(handle);
                 img_info[i].sampler = smp->underlying;
                 img_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

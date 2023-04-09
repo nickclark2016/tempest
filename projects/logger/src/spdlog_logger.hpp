@@ -1,5 +1,5 @@
-#ifndef tempest_spdlog_logger_hpp__
-#define tempest_spdlog_logger_hpp__
+#ifndef tempest_spdlog_logger_hpp
+#define tempest_spdlog_logger_hpp
 
 #include <tempest/logger.hpp>
 
@@ -29,4 +29,4 @@ namespace tempest::logger::spd
     };
 } // namespace tempest::logger::spdlog
 
-#endif // tempest_spdlog_logger_hpp__
+#endif // tempest_spdlog_logger_hpp
