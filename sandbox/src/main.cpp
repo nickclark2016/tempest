@@ -31,6 +31,8 @@ int main()
 
     auto renderer = tempest::graphics::irenderer::create({.major{0}, .minor{0}, .patch{1}}, *window, global_allocator);
 
+    tempest::math::mat<float, 4, 4> testmat(1.0f);
+
     while (!window->should_close())
     {
         tempest::input::poll();

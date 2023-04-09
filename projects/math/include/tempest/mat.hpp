@@ -59,14 +59,14 @@ namespace tempest::math
         {
             if (std::is_constant_evaluated())
             {
-                for (std::size_t i = 0; i < Col * Row; i++)
+                for (std::size_t i = 0; i < 4 * 4; i++)
                 {
                     data[i] = other.data[i];
                 }
             }
             else
             {
-                for (std::size_t i = 0; i < Col; i++)
+                for (std::size_t i = 0; i < 4; i++)
                 {
                     intrincolumn[i] = other.intrincolumn[i];
                 }
@@ -79,14 +79,14 @@ namespace tempest::math
         {
             if (std::is_constant_evaluated())
             {
-                for (std::size_t i = 0; i < Col * Row; i++)
+                for (std::size_t i = 0; i < 4 * 4; i++)
                 {
                     data[i] = std::move(other.data[i]);
                 }
             }
             else
             {
-                for (std::size_t i = 0; i < Col; i++)
+                for (std::size_t i = 0; i < 4; i++)
                 {
                     intrincolumn[i] = std::move(other.intrincolumn[i]);
                 }
@@ -193,9 +193,9 @@ namespace tempest::math
     {
         if (std::is_constant_evaluated())
         {
-            vec<T, D> res;
+            vec<T, Col> res;
 
-            for (std::size_t i = 0; i < D; i++)
+            for (std::size_t i = 0; i < Col; i++)
             {
                 res[i] = lhs[i] + rhs[i];
             }
@@ -204,7 +204,7 @@ namespace tempest::math
         }
         else
         {
-            vec<T, D> res;
+            vec<T, Col> res;
             for (std::size_t i = 0; i < Col; i++)
             {
                 res.intrincol[i] = simd::add<T, simd::storage_type_size<T, Col>>(lhs.intrincol[i], rhs.intrincol[i]);
@@ -240,9 +240,9 @@ namespace tempest::math
     {
         if (std::is_constant_evaluated())
         {
-            vec<T, D> res;
+            vec<T, Col> res;
 
-            for (std::size_t i = 0; i < D; i++)
+            for (std::size_t i = 0; i < Col; i++)
             {
                 res[i] = lhs[i] - rhs[i];
             }
@@ -251,7 +251,7 @@ namespace tempest::math
         }
         else
         {
-            vec<T, D> res;
+            vec<T, Col> res;
             for (std::size_t i = 0; i < Col; i++)
             {
                 res.intrincol[i] = simd::sub<T, simd::storage_type_size<T, Col>>(lhs.intrincol[i], rhs.intrincol[i]);
@@ -287,13 +287,13 @@ namespace tempest::math
     {
         if (std::is_constant_evaluated())
         {
-            vec<T, D> res;
+            mat<T, Col, Row> res;
 
             return res;
         }
         else
         {
-            vec<T, D> res;
+            mat<T, Col, Row> res;
 
             for (std::size_t i = 0; i < Col; i++)
             {
@@ -301,11 +301,11 @@ namespace tempest::math
                 auto element1 = simd::broadcast<T, simd::storage_type_size<T, Col>>(rhs.data + (Col * i + 1));
                 auto element2 = simd::broadcast<T, simd::storage_type_size<T, Col>>(rhs.data + (Col * i + 2));
                 auto element3 = simd::broadcast<T, simd::storage_type_size<T, Col>>(rhs.data + (Col * i + 3));
-
-                auto result = simd::add<T, Col>(simd::add<T, Col>(simd::mul<T, Col>(element0, lhs.intrincol[0]), simd::mul<T, Col>(element1, lhs.intrincol[1]),
+                
+                auto result = simd::add<T, Col>(simd::add<T, Col>(simd::mul<T, Col>(element0, lhs.intrincol[0]), simd::mul<T, Col>(element1, lhs.intrincol[1])),
                     simd::add<T, Col>(simd::mul<T, Col>(element2, lhs.intrincol[2]), simd::mul<T, Col>(element3, lhs.intrincol[3])));
 
-                simd::store(result, data + Col * i);
+                simd::store(result, res.data + Col * i);
             }
 
             return res;
