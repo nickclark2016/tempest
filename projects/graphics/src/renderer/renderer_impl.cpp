@@ -43,7 +43,6 @@ namespace tempest::graphics
         cmds.barrier({
                          .source{pipeline_stage::FRAGMENT_SHADER},
                          .destination{pipeline_stage::FRAMEBUFFER_OUTPUT},
-                         .load_operation{},
                          .textures{color_target_barriers},
                      })
             .set_clear_color(1.0f, 0.0f, 1.0f, 1.0f)
@@ -257,16 +256,9 @@ namespace tempest::graphics
             .name{"BlitPass_Sampler"},
         });
 
-        resource_handle tex_handle = color_target;
-        resource_handle samp_handle = default_sampler;
-
-        blit_desc_set = device->create_descriptor_set({
-            .resources{tex_handle, samp_handle},
-            .samplers{},
-            .bindings{0, 1},
-            .layout{blit_desc_set_layout},
-            .resource_count{2},
-            .name{"BlitPass_DescriptorSet"},
-        });
+        blit_desc_set = device->create_descriptor_set(descriptor_set_builder("BlitPass_DescriptorSet")
+                                                          .set_layout(blit_desc_set_layout)
+                                                          .add_image(color_target, 0)
+                                                          .add_sampler(default_sampler, 1));
     }
 } // namespace tempest::graphics

@@ -1,5 +1,5 @@
-#ifndef tempest_logger_hpp__
-#define tempest_logger_hpp__
+#ifndef tempest_logger_hpp
+#define tempest_logger_hpp
 
 #include <memory>
 #include <string_view>
@@ -64,4 +64,4 @@ namespace tempest::logger
     };
 } // namespace tempest::logger
 
-#endif // tempest_logger_hpp__
+#endif // tempest_logger_hpp

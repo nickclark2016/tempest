@@ -1,5 +1,5 @@
-#ifndef tempest_graphics_device_hpp__
-#define tempest_graphics_device_hpp__
+#ifndef tempest_graphics_device_hpp
+#define tempest_graphics_device_hpp
 
 #include "command_buffer.hpp"
 #include "descriptors.hpp"
@@ -146,6 +146,7 @@ namespace tempest::graphics
         descriptor_set* access_descriptor_set(descriptor_set_handle handle);
         const descriptor_set* access_descriptor_set(descriptor_set_handle handle) const;
         descriptor_set_handle create_descriptor_set(const descriptor_set_create_info& ci);
+        descriptor_set_handle create_descriptor_set(const descriptor_set_builder& bldr);
         void release_descriptor_set(descriptor_set_handle handle);
 
         render_pass* access_render_pass(render_pass_handle handle);
@@ -207,7 +208,9 @@ namespace tempest::graphics
         std::size_t _previous_frame{0};
         std::size_t _absolute_frame{0};
 
+        // TODO: change these to dynamic arrays using the global allocator
         std::vector<resource_update_desc> _deletion_queue;
+        std::vector<resource_update_desc> _texture_bindless_update_queue;
 
         std::uint32_t _dynamic_buffer_storage_per_frame;
         buffer_handle _global_dynamic_buffer;
@@ -218,7 +221,6 @@ namespace tempest::graphics
         core::object_pool _pipeline_pool;
         core::object_pool _render_pass_pool;
         core::object_pool _descriptor_set_layout_pool;
-        core::object_pool _descriptor_set_pool;
         core::object_pool _sampler_pool;
 
         sampler_handle _default_sampler{.index{invalid_resource_handle}};
@@ -228,7 +230,6 @@ namespace tempest::graphics
         std::optional<command_buffer_ring> _cmd_ring;
         std::array<command_buffer, 8> _queued_commands_buffers;
         std::uint32_t _queued_command_buffer_count{0};
-        VkDescriptorPool _global_desc_pool{nullptr};
 
         std::optional<descriptor_pool> _desc_pool;
 
@@ -256,6 +257,7 @@ namespace tempest::graphics
 
         void _recreate_swapchain();
         void _destroy_swapchain_resources();
+        void _write_bindless_images();
 
         void _fill_write_descriptor_sets(const descriptor_set_layout* desc_set_layout, VkDescriptorSet vk_desc_set,
                                          std::span<VkWriteDescriptorSet> desc_write,
@@ -267,4 +269,4 @@ namespace tempest::graphics
     };
 } // namespace tempest::graphics
 
-#endif // tempest_graphics_device_hpp__
+#endif // tempest_graphics_device_hpp

@@ -1,5 +1,5 @@
-#ifndef tempest_graphics_resources_hpp__
-#define tempest_graphics_resources_hpp__
+#ifndef tempest_graphics_resources_hpp
+#define tempest_graphics_resources_hpp
 
 #include "enums.hpp"
 #include "fwd.hpp"
@@ -248,6 +248,7 @@ namespace tempest::graphics
 
         VkFormat image_format{VK_FORMAT_UNDEFINED};
         texture_type image_type{texture_type::D2};
+        bool bindless{false};
 
         std::string_view name;
     };
@@ -503,7 +504,7 @@ namespace tempest::graphics
 
     struct resource_update_desc
     {
-        resource_deletion_type type;
+        resource_type type;
         resource_handle handle{invalid_resource_handle};
         std::uint32_t current_frame{0};
     };
@@ -558,6 +559,7 @@ namespace tempest::graphics
 
         texture_handle handle;
         texture_type type{texture_type::D2};
+        bool bindless{false};
 
         sampler* samp{nullptr};
         std::string_view name;
@@ -597,6 +599,7 @@ namespace tempest::graphics
     struct descriptor_set
     {
         VkDescriptorSet set;
+        VkDescriptorPool pool;
 
         resource_handle* resources{nullptr};
         sampler_handle* samplers{nullptr};
@@ -888,4 +891,4 @@ namespace tempest::graphics
     }
 } // namespace tempest::graphics
 
-#endif // tempest_graphics_resources_hpp__
+#endif // tempest_graphics_resources_hpp

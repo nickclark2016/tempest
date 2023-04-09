@@ -1,5 +1,5 @@
-#ifndef tempest_simd_align_hpp__
-#define tempest_simd_align_hpp__
+#ifndef tempest_simd_align_hpp
+#define tempest_simd_align_hpp
 
 #include <type_traits>
 
@@ -58,4 +58,4 @@ namespace tempest::math::simd
     template <typename T, std::size_t N, std::size_t R> inline constexpr auto mat_storage_type_size = storage_type<T, N, R>::size;
 } // namespace tempest::math::simd
 
-#endif // tempest_simdalign_hpp__
+#endif // tempest_simdalign_hpp

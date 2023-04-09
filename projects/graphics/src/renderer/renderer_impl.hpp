@@ -1,5 +1,5 @@
-#ifndef tempest_graphics_renderer_impl_hpp__
-#define tempest_graphics_renderer_impl_hpp__
+#ifndef tempest_graphics_renderer_impl_hpp
+#define tempest_graphics_renderer_impl_hpp
 
 #include <tempest/renderer.hpp>
 
@@ -17,7 +17,7 @@ namespace tempest::graphics
 
         texture_handle depth_target{};
         texture_handle color_target{};
-        VkFormat color_target_format = VK_FORMAT_R8G8B8A8_SRGB;
+        VkFormat color_target_format{VK_FORMAT_R8G8B8A8_SRGB};
 
         pipeline_handle blit_pipeline{};
         render_pass_handle blit_pass{};
@@ -37,4 +37,4 @@ namespace tempest::graphics
     };
 }
 
-#endif // tempest_graphics_renderer_impl_hpp__
+#endif // tempest_graphics_renderer_impl_hpp
