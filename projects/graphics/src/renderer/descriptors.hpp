@@ -32,6 +32,11 @@ namespace tempest::graphics
         std::uint32_t get_bindless_texture_index() const noexcept;
         std::uint32_t get_bindless_storage_image_index() const noexcept;
 
+        inline descriptor_set_layout_handle get_bindless_set_layout() const noexcept
+        {
+            return _image_bindless_layout_handle;
+        }
+
       private:
         gfx_device* _device;
 
@@ -40,6 +45,7 @@ namespace tempest::graphics
         VkDescriptorPool _default_pool{};
         VkDescriptorPool _bindless_pool{};
 
+        descriptor_set_layout_handle _image_bindless_layout_handle{};
         VkDescriptorSetLayout _image_bindless_layout{};
         VkDescriptorSet _texture_bindless_set{};
     };

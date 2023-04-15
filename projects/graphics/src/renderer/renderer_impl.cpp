@@ -24,6 +24,8 @@ namespace tempest::graphics
     {
         _create_blit_pipeline();
         _create_triangle_pipeline();
+
+        pbr_forward.emplace(forward_pbr_pass::create(device.get(), color_target, depth_target));
     }
 
     void irenderer::impl::render()
@@ -79,6 +81,9 @@ namespace tempest::graphics
 
     void irenderer::impl::clean_up()
     {
+        pbr_forward->release(device.get());
+        pbr_forward = std::nullopt;
+
         device->release_pipeline(blit_pipeline);
         device->release_pipeline(triangle_pipeline);
         device->release_texture(color_target);

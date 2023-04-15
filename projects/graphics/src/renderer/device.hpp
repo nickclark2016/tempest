@@ -167,6 +167,11 @@ namespace tempest::graphics
             return _swapchain_render_pass;
         }
 
+        inline descriptor_set_layout_handle get_bindless_texture_descriptor_set_layout() const noexcept
+        {
+            return _desc_pool->get_bindless_set_layout();
+        }
+
         void queue_command_buffer(const command_buffer& buffer);
         void execute_immediate(const command_buffer& buffer);
 

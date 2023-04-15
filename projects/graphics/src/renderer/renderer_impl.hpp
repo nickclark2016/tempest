@@ -4,6 +4,7 @@
 #include <tempest/renderer.hpp>
 
 #include "device.hpp"
+#include "forward_pbr_pass.hpp"
 
 #include <tempest/memory.hpp>
 
@@ -27,6 +28,8 @@ namespace tempest::graphics
 
         render_pass_handle triangle_pass{};
         pipeline_handle triangle_pipeline{};
+
+        std::optional<forward_pbr_pass> pbr_forward;
 
         void set_up();
         void render();

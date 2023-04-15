@@ -11,6 +11,7 @@ project('graphics', (prj) => {
     dependsOn([
         'core',
         'glfw',
+        'math',
         'logger',
         'vk-bootstrap',
         'vma',
@@ -44,6 +45,7 @@ project('graphics', (prj) => {
         'vma:public',
         'graphics:public',
         'logger:public',
+        'math:public',
         'wyhash:public',
     ]);
 });

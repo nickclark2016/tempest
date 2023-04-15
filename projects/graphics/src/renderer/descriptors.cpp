@@ -42,6 +42,7 @@ namespace tempest::graphics
 
         constexpr std::uint32_t bindless_image_index{0};
         constexpr std::uint32_t storage_image_index{bindless_image_index + 1};
+        constexpr std::uint32_t bindless_set{1};
     } // namespace
 
     descriptor_pool::descriptor_pool(gfx_device* device)
@@ -151,6 +152,40 @@ namespace tempest::graphics
             {
                 logger->error("Failed to allocate bindless descriptor set.");
             }
+
+            std::size_t alloc_size = (sizeof(VkDescriptorSetLayoutBinding) + sizeof(descriptor_binding)) * 2;
+            std::byte* memory = reinterpret_cast<std::byte*>(_device->_global_allocator->allocate(alloc_size, 1));
+
+            descriptor_set_layout_handle layout_handle{.index{_device->_descriptor_set_layout_pool.acquire_resource()}};
+            descriptor_set_layout* layout_ptr = _device->access_descriptor_set_layout(layout_handle);
+            layout_ptr->set_index = bindless_set;
+            layout_ptr->layout = _image_bindless_layout;
+            layout_ptr->num_bindings = 2;
+            layout_ptr->handle = layout_handle;
+            layout_ptr->bindings = reinterpret_cast<descriptor_binding*>(memory);
+            layout_ptr->vk_binding = reinterpret_cast<VkDescriptorSetLayoutBinding*>(
+                memory + sizeof(descriptor_binding) * layout_ptr->num_bindings);
+
+            layout_ptr->bindings[0] = {
+                .type{bindings[0].descriptorType},
+                .start{static_cast<std::uint16_t>(bindings[0].binding)},
+                .count{static_cast<std::uint16_t>(bindings[0].descriptorCount)},
+                .set{layout_ptr->set_index},
+                .name{"BindlessTexture_Binding"},
+            };
+
+            layout_ptr->bindings[1] = {
+                .type{bindings[1].descriptorType},
+                .start{static_cast<std::uint16_t>(bindings[1].binding)},
+                .count{static_cast<std::uint16_t>(bindings[1].descriptorCount)},
+                .set{layout_ptr->set_index},
+                .name{"BindlessStorageImage_Binding"},
+            };
+
+            layout_ptr->vk_binding[0] = bindings[0];
+            layout_ptr->vk_binding[1] = bindings[1];
+
+            _image_bindless_layout_handle = layout_handle;
         }
 
         logger->debug("Successfully created descriptor_pool.");
@@ -158,6 +193,7 @@ namespace tempest::graphics
 
     descriptor_pool::~descriptor_pool()
     {
+        _device->release_descriptor_set_layout(_image_bindless_layout_handle);
         _device->_dispatch.destroyDescriptorPool(_default_pool, _device->_alloc_callbacks);
         _device->_dispatch.destroyDescriptorPool(_bindless_pool, _device->_alloc_callbacks);
     }

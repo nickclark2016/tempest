@@ -427,6 +427,169 @@ namespace tempest::graphics
         return *this;
     }
 
+    command_buffer& command_buffer::blit_image(texture_handle src, texture_handle dst)
+    {
+        auto src_tex = _device->access_texture(src);
+        auto dst_tex = _device->access_texture(dst);
+
+        VkImageBlit blit = {
+            .srcSubresource{
+                .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                .mipLevel{0},
+                .baseArrayLayer{0},
+                .layerCount{1},
+            },
+            .srcOffsets{
+                {
+                    .x{0},
+                    .y{0},
+                    .z{0},
+                },
+                {
+                    .x{src_tex->width},
+                    .y{src_tex->height},
+                    .z{src_tex->depth},
+                },
+            },
+            .dstSubresource{
+                .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                .mipLevel{0},
+                .baseArrayLayer{0},
+                .layerCount{1},
+            },
+            .dstOffsets{
+                {
+                    .x{0},
+                    .y{0},
+                    .z{0},
+                },
+                {
+                    .x{dst_tex->width},
+                    .y{dst_tex->height},
+                    .z{dst_tex->depth},
+                },
+            },
+        };
+
+        VkImageLayout old_src_layout = src_tex->image_layout;
+        VkImageLayout old_dst_layout = dst_tex->image_layout;
+
+        std::uint32_t barrier_count{0};
+        VkImageMemoryBarrier barriers[2];
+
+        if (old_src_layout != VK_IMAGE_LAYOUT_GENERAL && old_src_layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            barriers[barrier_count] = {
+                .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
+                .pNext{nullptr},
+                .srcAccessMask{VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+                .dstAccessMask{VK_ACCESS_TRANSFER_READ_BIT},
+                .oldLayout{old_src_layout},
+                .newLayout{VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+                .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                .image{src_tex->underlying_image},
+                .subresourceRange{
+                    .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                    .baseMipLevel{0},
+                    .levelCount{1},
+                    .baseArrayLayer{0},
+                    .layerCount{1},
+                },
+            };
+
+            barrier_count++;
+        }
+
+        if (old_dst_layout != VK_IMAGE_LAYOUT_GENERAL && old_dst_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            barriers[barrier_count] = {
+                .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
+                .pNext{nullptr},
+                .srcAccessMask{VK_ACCESS_TRANSFER_WRITE_BIT},
+                .dstAccessMask{VK_ACCESS_MEMORY_READ_BIT},
+                .oldLayout{old_dst_layout},
+                .newLayout{VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+                .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                .image{dst_tex->underlying_image},
+                .subresourceRange{
+                    .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                    .baseMipLevel{0},
+                    .levelCount{1},
+                    .baseArrayLayer{0},
+                    .layerCount{1},
+                },
+            };
+
+            barrier_count++;
+        }
+
+        if (barrier_count)
+        {
+            _device->_dispatch.cmdPipelineBarrier(_buf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                  VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr,
+                                                  barrier_count, barriers);
+        }
+
+        _device->_dispatch.cmdBlitImage(_buf, src_tex->underlying_image, src_tex->image_layout,
+                                        dst_tex->underlying_image, dst_tex->image_layout, 1, &blit, VK_FILTER_LINEAR);
+
+        if (barrier_count)
+        {
+            barrier_count = 0;
+            if (old_src_layout != VK_IMAGE_LAYOUT_GENERAL && old_src_layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+            {
+                barriers[barrier_count++] = {
+                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
+                    .pNext{nullptr},
+                    .srcAccessMask{VK_ACCESS_TRANSFER_READ_BIT},
+                    .dstAccessMask{VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+                    .oldLayout{VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+                    .newLayout{old_src_layout},
+                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .image{src_tex->underlying_image},
+                    .subresourceRange{
+                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                        .baseMipLevel{0},
+                        .levelCount{1},
+                        .baseArrayLayer{0},
+                        .layerCount{1},
+                    },
+                };
+            }
+
+            if (old_dst_layout != VK_IMAGE_LAYOUT_GENERAL && old_dst_layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+            {
+                barriers[barrier_count++] = {
+                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
+                    .pNext{nullptr},
+                    .srcAccessMask{VK_ACCESS_TRANSFER_WRITE_BIT},
+                    .dstAccessMask{VK_ACCESS_MEMORY_READ_BIT},
+                    .oldLayout{VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+                    .newLayout{old_dst_layout},
+                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .image{dst_tex->underlying_image},
+                    .subresourceRange{
+                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                        .baseMipLevel{0},
+                        .levelCount{1},
+                        .baseArrayLayer{0},
+                        .layerCount{1},
+                    },
+                };
+            }
+
+            _device->_dispatch.cmdPipelineBarrier(_buf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                  VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr,
+                                                  barrier_count, barriers);
+        }
+
+        return *this;
+    }
+
     void command_buffer::begin()
     {
         reset();

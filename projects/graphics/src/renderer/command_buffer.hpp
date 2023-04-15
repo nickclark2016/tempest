@@ -41,6 +41,7 @@ namespace tempest::graphics
 
         command_buffer& transition_to_depth_image(texture_handle depth_tex);
         command_buffer& transition_to_color_image(texture_handle color_tex);
+        command_buffer& blit_image(texture_handle src, texture_handle dst);
 
         void begin();
         void end();
