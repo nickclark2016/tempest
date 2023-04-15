@@ -6,7 +6,9 @@
 #include <tempest/window.hpp>
 
 #include <cassert>
+#include <chrono>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
 namespace
@@ -33,10 +35,24 @@ int main()
 
     tempest::math::mat<float, 4, 4> testmat(1.0f);
 
+    auto last_time = std::chrono::high_resolution_clock::now();
+    std::uint32_t fps_counter = 0;
+
     while (!window->should_close())
     {
         tempest::input::poll();
         renderer->render();
+        auto current_time = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> frame_time = current_time - last_time;
+        
+        ++fps_counter;
+
+        if (frame_time.count() >= 1.0)
+        {
+            std::cout << fps_counter << " FPS" << std::endl;
+            fps_counter = 0;
+            last_time = current_time;
+        }
     }
 
     logger->info("Exiting Sandbox Application.");

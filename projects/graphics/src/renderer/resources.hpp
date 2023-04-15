@@ -207,7 +207,7 @@ namespace tempest::graphics
     {
         component_blend_op rgb;
         component_blend_op alpha;
-        VkColorComponentFlags wirte_mask;
+        VkColorComponentFlags write_mask;
 
         std::uint8_t blend_enabled : 1 {0};
         std::uint8_t separate_blend : 1 {0};
