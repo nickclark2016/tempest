@@ -1,1 +1,1 @@
-.\dependencies\conjure\conjure.exe vstudio
+.\dependencies\conjure\conjure.exe vstudio -s windows
