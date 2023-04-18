@@ -4,12 +4,14 @@
 #include <tempest/memory.hpp>
 #include <tempest/renderer.hpp>
 #include <tempest/window.hpp>
+#include <tempest/model.hpp>
 
 #include <cassert>
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <streambuf>
 
 namespace
 {
@@ -34,6 +36,11 @@ int main()
     auto renderer = tempest::graphics::irenderer::create({.major{0}, .minor{0}, .patch{1}}, *window, global_allocator);
 
     tempest::math::mat<float, 4, 4> testmat(1.0f);
+
+    std::ifstream t("data/box.gltf");
+    std::string str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
+
+    auto model = tempest::assets::model_factory::load(str);
 
     auto last_time = std::chrono::high_resolution_clock::now();
     std::uint32_t fps_counter = 0;
