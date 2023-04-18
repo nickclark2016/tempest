@@ -4,6 +4,8 @@
 #include <tempest/intrinsic_type.hpp>
 #include <tempest/simd_align.hpp>
 
+#include <tempest/vec.hpp>
+
 namespace tempest::math
 {
     template <typename T, std::size_t Col, std::size_t Row> struct mat;

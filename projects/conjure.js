@@ -4,6 +4,7 @@ include('./graphics/conjure.js');
 include('./input/conjure.js');
 include('./logger/conjure.js');
 include('./math/conjure.js');
+include('./assets/conjure.js');
 
 block('tempest:engine', (_) => {
     uses([
@@ -12,7 +13,8 @@ block('tempest:engine', (_) => {
         'graphics:public',
         'input:public',
         'logger:public',
-        'math:public'
+        'math:public',
+        'assets:public'
     ]);
 
     dependsOn([
@@ -21,7 +23,8 @@ block('tempest:engine', (_) => {
         'graphics',
         'input',
         'logger',
-        'math'
+        'math',
+        'assets'
     ]);
 
     when({ configuration: 'Debug' }, (ctx) => {

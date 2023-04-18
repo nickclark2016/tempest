@@ -12,3 +12,4 @@ include('./vma/conjure.js');
 // include('./vuk/conjure.js');
 include('./vulkan/conjure.js');
 include('./wyhash/conjure.js');
+include('./tinygltf/conjure.js');
