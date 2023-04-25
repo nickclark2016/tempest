@@ -66,15 +66,9 @@ namespace tempest::graphics
                 .blend_enabled{false},
             };
 
-            vertex_stream positions = {
+            vertex_stream verts = {
                 .binding{0},
-                .stride{3 * sizeof(float)}, // 1 position
-                .input_rate{VK_VERTEX_INPUT_RATE_VERTEX},
-            };
-
-            vertex_stream interleaved_components = {
-                .binding{1},
-                .stride{(2 + 3 * 4) * sizeof(float)}, // 2 for UV, 3 for normal, 4 for tangent
+                .stride{(3 + 2 + 3 + 4) * sizeof(float)},
                 .input_rate{VK_VERTEX_INPUT_RATE_VERTEX},
             };
 
@@ -87,29 +81,29 @@ namespace tempest::graphics
 
             vertex_attribute uv_attrib = {
                 .location{1},
-                .binding{1},
-                .offset{0},
+                .binding{0},
+                .offset{3 * sizeof(float)},
                 .fmt{VK_FORMAT_R32G32_SFLOAT},
             };
 
             vertex_attribute normal_attrib = {
                 .location{2},
-                .binding{1},
-                .offset{2 * sizeof(float)},
+                .binding{0},
+                .offset{(3 + 2) * sizeof(float)},
                 .fmt{VK_FORMAT_R32G32B32_SFLOAT},
             };
 
             vertex_attribute tangent_attrib = {
                 .location{3},
-                .binding{1},
-                .offset{(2 + 3) * sizeof(float)},
+                .binding{0},
+                .offset{(3 + 2 + 3) * sizeof(float)},
                 .fmt{VK_FORMAT_R32G32B32A32_SFLOAT},
             };
 
             vertex_input_create_info vertex = {
-                .streams{positions, interleaved_components},
+                .streams{verts},
                 .attributes{position_attrib, uv_attrib, normal_attrib, tangent_attrib},
-                .stream_count{2},
+                .stream_count{1},
                 .attribute_count{4},
             };
 
