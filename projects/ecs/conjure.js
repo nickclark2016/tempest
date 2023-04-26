@@ -25,6 +25,10 @@ project('ecs', (prj) => {
         includeDirs([
             './include'
         ]);
+
+        uses([
+            'core:public'
+        ])
     });
 
     uses([
