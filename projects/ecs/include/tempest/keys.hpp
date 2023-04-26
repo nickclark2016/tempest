@@ -9,9 +9,9 @@ namespace tempest::ecs
 {
     // clang-format off
     template <typename T>
-    concept sparse_key = requires(T t) {
+    concept sparse_key = requires(T t, T t2) {
         { t.id } -> std::same_as<std::uint32_t&>;
-    } && std::is_trivial<T>::value;
+    } && std::is_trivial<T>::value && std::equality_comparable<T>;
     // clang-format on
 } // namespace tempest::ecs
 
