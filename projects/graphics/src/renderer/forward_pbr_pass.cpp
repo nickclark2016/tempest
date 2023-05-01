@@ -48,7 +48,9 @@ namespace tempest::graphics
             });
         }
 
-        std::tuple<pipeline_handle, descriptor_set_layout_handle> create_opaque_pipeline(gfx_device* device, texture_handle color, texture_handle depth)
+        std::tuple<pipeline_handle, descriptor_set_layout_handle> create_opaque_pipeline(gfx_device* device,
+                                                                                         texture_handle color,
+                                                                                         texture_handle depth)
         {
             attachment_blend_state color_blend = {
                 .rgb{
@@ -183,6 +185,20 @@ namespace tempest::graphics
 
             return std::make_tuple(device->create_pipeline(ci), buffer_data_layout);
         }
+
+        buffer_handle initialze_draw_parameter_buffer(gfx_device* device)
+        {
+            const buffer_create_info bci = {
+                .type{VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+                .usage{resource_usage::STREAM},
+                .size{static_cast<std::uint32_t>(forward_pbr_pass::MAX_ENTITIES_PER_FRAME *
+                                                 sizeof(VkDrawIndexedIndirectCommand) *
+                                                 device->num_frames_in_flight())},
+                .name{"ForwardPbrPass_DrawIndirectArguments"},
+            };
+
+            return device->create_buffer(bci);
+        }
     } // namespace
 
     forward_pbr_pass forward_pbr_pass::create(gfx_device* device, texture_handle color, texture_handle depth)
@@ -195,11 +211,13 @@ namespace tempest::graphics
             .forward_pbr_pipeline{pipeline},
             .color_target{color},
             .depth_target{depth},
+            .draw_parameter_buffer{initialze_draw_parameter_buffer(device)},
         };
     }
 
     void forward_pbr_pass::release(gfx_device* device)
     {
+        device->release_buffer(draw_parameter_buffer);
         device->release_descriptor_set_layout(buffer_layout_desc);
         device->release_pipeline(forward_pbr_pipeline);
         device->release_render_pass(pass);

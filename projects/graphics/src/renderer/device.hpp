@@ -113,63 +113,70 @@ namespace tempest::graphics
         void start_frame();
         void end_frame();
 
-        buffer* access_buffer(buffer_handle handle);
-        const buffer* access_buffer(buffer_handle handle) const;
-        buffer_handle create_buffer(const buffer_create_info& ci);
+        [[nodiscard]] buffer* access_buffer(buffer_handle handle);
+        [[nodiscard]] const buffer* access_buffer(buffer_handle handle) const;
+        [[nodiscard]] buffer_handle create_buffer(const buffer_create_info& ci);
         void release_buffer(buffer_handle handle);
 
-        shader_state* access_shader_state(shader_state_handle handle);
-        const shader_state* access_shader_state(shader_state_handle handle) const;
-        shader_state_handle create_shader_state(const shader_state_create_info& ci);
+        [[nodiscard]] shader_state* access_shader_state(shader_state_handle handle);
+        [[nodiscard]] const shader_state* access_shader_state(shader_state_handle handle) const;
+        [[nodiscard]] shader_state_handle create_shader_state(const shader_state_create_info& ci);
         void release_shader_state(shader_state_handle handle);
 
-        pipeline* access_pipeline(pipeline_handle handle);
-        const pipeline* access_pipeline(pipeline_handle handle) const;
-        pipeline_handle create_pipeline(const pipeline_create_info& ci);
+        [[nodiscard]] pipeline* access_pipeline(pipeline_handle handle);
+        [[nodiscard]] const pipeline* access_pipeline(pipeline_handle handle) const;
+        [[nodiscard]] pipeline_handle create_pipeline(const pipeline_create_info& ci);
         void release_pipeline(pipeline_handle handle);
 
-        texture* access_texture(texture_handle handle);
-        const texture* access_texture(texture_handle handle) const;
-        texture_handle create_texture(const texture_create_info& ci);
+        [[nodiscard]] texture* access_texture(texture_handle handle);
+        [[nodiscard]] const texture* access_texture(texture_handle handle) const;
+        [[nodiscard]] texture_handle create_texture(const texture_create_info& ci);
         void release_texture(texture_handle handle);
 
-        sampler* access_sampler(sampler_handle handle);
-        const sampler* access_sampler(sampler_handle handle) const;
-        sampler_handle create_sampler(const sampler_create_info& ci);
+        [[nodiscard]] sampler* access_sampler(sampler_handle handle);
+        [[nodiscard]] const sampler* access_sampler(sampler_handle handle) const;
+        [[nodiscard]] sampler_handle create_sampler(const sampler_create_info& ci);
         void release_sampler(sampler_handle handle);
 
-        descriptor_set_layout* access_descriptor_set_layout(descriptor_set_layout_handle handle);
-        const descriptor_set_layout* access_descriptor_set_layout(descriptor_set_layout_handle handle) const;
-        descriptor_set_layout_handle create_descriptor_set_layout(const descriptor_set_layout_create_info& ci);
+        [[nodiscard]] descriptor_set_layout* access_descriptor_set_layout(descriptor_set_layout_handle handle);
+        [[nodiscard]] const descriptor_set_layout* access_descriptor_set_layout(
+            descriptor_set_layout_handle handle) const;
+        [[nodiscard]] descriptor_set_layout_handle create_descriptor_set_layout(
+            const descriptor_set_layout_create_info& ci);
         void release_descriptor_set_layout(descriptor_set_layout_handle handle);
 
-        descriptor_set* access_descriptor_set(descriptor_set_handle handle);
-        const descriptor_set* access_descriptor_set(descriptor_set_handle handle) const;
-        descriptor_set_handle create_descriptor_set(const descriptor_set_create_info& ci);
-        descriptor_set_handle create_descriptor_set(const descriptor_set_builder& bldr);
+        [[nodiscard]] descriptor_set* access_descriptor_set(descriptor_set_handle handle);
+        [[nodiscard]] const descriptor_set* access_descriptor_set(descriptor_set_handle handle) const;
+        [[nodiscard]] descriptor_set_handle create_descriptor_set(const descriptor_set_create_info& ci);
+        [[nodiscard]] descriptor_set_handle create_descriptor_set(const descriptor_set_builder& bldr);
         void release_descriptor_set(descriptor_set_handle handle);
 
-        render_pass* access_render_pass(render_pass_handle handle);
-        const render_pass* access_render_pass(render_pass_handle handle) const;
-        render_pass_handle create_render_pass(const render_pass_create_info& ci);
+        [[nodiscard]] render_pass* access_render_pass(render_pass_handle handle);
+        [[nodiscard]] const render_pass* access_render_pass(render_pass_handle handle) const;
+        [[nodiscard]] render_pass_handle create_render_pass(const render_pass_create_info& ci);
         void release_render_pass(render_pass_handle handle);
 
-        command_buffer& get_command_buffer(queue_type type, bool begin);
-        command_buffer& get_instant_command_buffer();
+        [[nodiscard]] command_buffer& get_command_buffer(queue_type type, bool begin);
+        [[nodiscard]] command_buffer& get_instant_command_buffer();
 
-        inline render_pass_attachment_info get_swapchain_attachment_info() const noexcept
+        [[nodiscard]] inline render_pass_attachment_info get_swapchain_attachment_info() const noexcept
         {
             return _swapchain_attachment_info;
         }
 
-        inline render_pass_handle get_swapchain_pass() const noexcept
+        [[nodiscard]] inline render_pass_handle get_swapchain_pass() const noexcept
         {
             return _swapchain_render_pass;
         }
 
-        inline descriptor_set_layout_handle get_bindless_texture_descriptor_set_layout() const noexcept
+        [[nodiscard]] inline descriptor_set_layout_handle get_bindless_texture_descriptor_set_layout() const noexcept
         {
             return _desc_pool->get_bindless_set_layout();
+        }
+
+        [[nodiscard]] inline std::size_t num_frames_in_flight() const noexcept
+        {
+            return _winfo.swapchain.image_count;
         }
 
         void queue_command_buffer(const command_buffer& buffer);
