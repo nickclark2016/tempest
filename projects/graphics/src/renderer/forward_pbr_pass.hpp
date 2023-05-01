@@ -25,6 +25,8 @@ namespace tempest::graphics
 
     struct forward_pbr_pass
     {
+        static constexpr std::size_t MAX_ENTITIES_PER_FRAME = 32 * 1024;
+
         render_pass_handle pass;
         descriptor_set_layout_handle buffer_layout_desc;
         pipeline_handle forward_pbr_pipeline;
@@ -35,6 +37,7 @@ namespace tempest::graphics
         buffer_handle scene_data_buffer;
         buffer_handle material_data_buffer;
         buffer_handle model_data_buffer;
+        buffer_handle draw_parameter_buffer;
 
         static forward_pbr_pass create(gfx_device* device, texture_handle color, texture_handle depth);
         void release(gfx_device* device);
