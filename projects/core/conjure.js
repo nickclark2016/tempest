@@ -11,7 +11,8 @@ project('core', (prj) => {
     toolset('msc:143');
 
     dependsOn([
-        'tlsf'
+        'math',
+        'tlsf',
     ])
 
     when({}, (ctx) => {
@@ -33,6 +34,7 @@ project('core', (prj) => {
 
     uses([
         'tlsf:public',
-        'core:public'
+        'core:public',
+        'math:public',
     ]);
 });

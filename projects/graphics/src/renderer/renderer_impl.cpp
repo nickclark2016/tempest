@@ -76,6 +76,8 @@ namespace tempest::graphics
 
         device->queue_command_buffer(cmds);
 
+        pbr_forward->render(this->device.get());
+
         device->end_frame();
     }
 

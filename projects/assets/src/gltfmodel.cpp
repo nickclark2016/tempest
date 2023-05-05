@@ -10,7 +10,7 @@
 namespace tempest::assets::gltf
 {
     void gltfmodel::load_node(const tinygltf::Node& input_node, const tinygltf::Model& input, gltfmodel::node* parent,
-                              std::vector<std::uint32_t>& index_buffer, std::vector<vertex>& vertex_buffer)
+                              std::vector<std::uint32_t>& index_buffer, std::vector<core::vertex>& vertex_buffer)
     {
         gltfmodel::node* node = new gltfmodel::node();
         node->name = input_node.name;
@@ -110,7 +110,7 @@ namespace tempest::assets::gltf
 
                     for (std::size_t i = 0; i < vertex_count; i++)
                     {
-                        vertex vert{};
+                        core::vertex vert{};
                         vert.position.set(position_buffer[i * 3], position_buffer[i * 3 + 1],
                                           position_buffer[i * 3 + 2]);
 

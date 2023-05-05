@@ -29,7 +29,7 @@ namespace tempest::graphics
         render_pass_handle triangle_pass{};
         pipeline_handle triangle_pipeline{};
 
-        std::optional<forward_pbr_pass> pbr_forward;
+        std::optional<forward_pbr_pass> pbr_forward{std::nullopt};
 
         void set_up();
         void render();

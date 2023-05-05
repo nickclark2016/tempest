@@ -53,7 +53,7 @@ namespace tempest::assets::gltf
         bool load_from_ascii(const std::string& ascii_data) override;
 
         std::vector<node*> nodes;
-        std::vector<vertex> vertices;
+        std::vector<core::vertex> vertices;
         std::vector<std::uint32_t> indices;
 
       private:
@@ -61,7 +61,7 @@ namespace tempest::assets::gltf
         tinygltf::TinyGLTF _loader;
 
         void load_node(const tinygltf::Node& input_node, const tinygltf::Model& input, gltfmodel::node* parent,
-                       std::vector<std::uint32_t>& index_buffer, std::vector<vertex>& vertex_buffer);
+                       std::vector<std::uint32_t>& index_buffer, std::vector<core::vertex>& vertex_buffer);
     };
 } // namespace tempest::assets::gltf
 

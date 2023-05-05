@@ -222,4 +222,8 @@ namespace tempest::graphics
         device->release_pipeline(forward_pbr_pipeline);
         device->release_render_pass(pass);
     }
+    
+    void forward_pbr_pass::render(gfx_device* device)
+    {
+    }
 } // namespace tempest::graphics
