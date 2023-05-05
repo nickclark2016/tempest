@@ -41,6 +41,7 @@ namespace tempest::graphics
 
         static forward_pbr_pass create(gfx_device* device, texture_handle color, texture_handle depth);
         void release(gfx_device* device);
+        void render(gfx_device* device);
     };
 } // namespace tempest::graphics
 
