@@ -9,10 +9,10 @@
 
 namespace tempest::assets::gltf
 {
-    void gltfmodel::load_node(const tinygltf::Node& input_node, const tinygltf::Model& input, gltfmodel::node* parent,
+    void gltfmodel::load_node(const tinygltf::Node& input_node, const tinygltf::Model& input, model::node* parent,
                               std::vector<std::uint32_t>& index_buffer, std::vector<core::vertex>& vertex_buffer)
     {
-        gltfmodel::node* node = new gltfmodel::node();
+        model::node* node = new model::node();
         node->name = input_node.name;
         node->parent = parent;
 
@@ -229,11 +229,14 @@ namespace tempest::assets::gltf
         //std::vector<std::uint32_t> index_buffer;
         //std::vector<vertex> vertex_buffer;
 
+        root = new model::node();
+        root->name = "Root";
+
         const tinygltf::Scene& scene = _model.scenes[0];
         for (std::size_t i = 0; i < scene.nodes.size(); i++)
         {
             const tinygltf::Node node = _model.nodes[scene.nodes[i]];
-            load_node(node, _model, nullptr, indices, vertices);
+            load_node(node, _model, root, indices, vertices);
         }
 
         return true;
@@ -269,11 +272,14 @@ namespace tempest::assets::gltf
         //std::vector<std::uint32_t> index_buffer;
         //std::vector<vertex> vertex_buffer;
 
+        root = new model::node();
+        root->name = "Root";
+
         const tinygltf::Scene& scene = _model.scenes[0];
         for (std::size_t i = 0; i < scene.nodes.size(); i++)
         {
             const tinygltf::Node node = _model.nodes[scene.nodes[i]];
-            load_node(node, _model, nullptr, indices, vertices);
+            load_node(node, _model, root, indices, vertices);
         }
 
         return true;

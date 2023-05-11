@@ -41,6 +41,21 @@ int main()
     std::string str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 
     auto model = tempest::assets::model_factory::load(str);
+    auto modelroot = model->root;
+    for (auto& node : modelroot->children)
+    {
+        if (node->m != nullptr)
+        {
+            auto matrix = node->matrix;
+            // node has mesh
+            for (auto& primitive : node->m->primitives)
+            {
+                auto indexStart = primitive.first_index;
+                auto count = primitive.index_count;
+                auto material = primitive.material_index;
+            }
+        }
+    }
 
     auto last_time = std::chrono::high_resolution_clock::now();
     std::uint32_t fps_counter = 0;
