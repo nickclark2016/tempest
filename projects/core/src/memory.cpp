@@ -12,8 +12,8 @@ namespace tempest::core
     {
         std::size_t align_memory(std::size_t sz, std::size_t align)
         {
-            const auto mask = align - 1;
-            return (sz + mask) & ~mask;
+            const auto _mask = align - 1;
+            return (sz + _mask) & ~_mask;
         }
     } // namespace
 

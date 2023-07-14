@@ -191,11 +191,11 @@ namespace tempest::assets::gltf
 
         if (parent)
         {
-            parent->children.push_back(node);
+            parent->children.emplace_back(node);
         }
         else
         {
-            nodes.push_back(node);
+            root = node;
         }
     }
 

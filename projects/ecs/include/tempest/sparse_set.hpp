@@ -43,7 +43,7 @@ namespace tempest::ecs
         sparse_set& operator=(sparse_set&& rhs) noexcept;
 
         [[nodiscard]] size_type size() const noexcept;
-        [[nodiscard]] size_type capacity() const noexcept;
+        [[nodiscard]] size_type _capacity() const noexcept;
         [[nodiscard]] bool empty() const noexcept;
 
         [[nodiscard]] bool contains(const T& value) const noexcept;
@@ -108,9 +108,9 @@ namespace tempest::ecs
         }
 
         // make a new packed array
-        _packed_begin = alloc_traits::allocate(_packed_alloc, src.capacity());
+        _packed_begin = alloc_traits::allocate(_packed_alloc, src._capacity());
         _packed_end = _packed_begin + src.size();
-        _packed_end_cap = _packed_begin + src.capacity();
+        _packed_end_cap = _packed_begin + src._capacity();
 
         core::copy_construct(src._packed_begin, src._packed_end, _packed_begin);
     }
@@ -175,9 +175,9 @@ namespace tempest::ecs
         }
 
         // make a new packed array
-        _packed_begin = alloc_traits::allocate(_packed_alloc, rhs.capacity());
+        _packed_begin = alloc_traits::allocate(_packed_alloc, rhs._capacity());
         _packed_end = _packed_begin + rhs.size();
-        _packed_end_cap = _packed_begin + rhs.capacity();
+        _packed_end_cap = _packed_begin + rhs._capacity();
         std::copy_n(rhs._packed_begin, rhs.size(), _packed_begin);
 
         return *this;
@@ -218,7 +218,7 @@ namespace tempest::ecs
     template <sparse_key T, std::size_t SparsePageSize, typename Allocator, typename PageAllocator,
               typename PageArrayAllocator>
     inline sparse_set<T, SparsePageSize, Allocator, PageAllocator, PageArrayAllocator>::size_type sparse_set<
-        T, SparsePageSize, Allocator, PageAllocator, PageArrayAllocator>::capacity() const noexcept
+        T, SparsePageSize, Allocator, PageAllocator, PageArrayAllocator>::_capacity() const noexcept
     {
         return static_cast<size_type>(_packed_end_cap - _packed_begin);
     }
@@ -258,11 +258,11 @@ namespace tempest::ecs
         const std::size_t page = _compute_page(id);
         const std::size_t offset = _compute_offset(id);
 
-        if (size() >= capacity())
+        if (size() >= _capacity())
         {
             // ensure the requested size is at least one larger than the current capacity
-            std::size_t requested = _alloc_size_strategy(capacity() + 1);
-            assert(requested > capacity());
+            std::size_t requested = _alloc_size_strategy(_capacity() + 1);
+            assert(requested > _capacity());
             _allocate(requested);
         }
 
@@ -289,11 +289,11 @@ namespace tempest::ecs
         const std::size_t page = _compute_page(id);
         const std::size_t offset = _compute_offset(id);
 
-        if (size() >= capacity())
+        if (size() >= _capacity())
         {
             // ensure the requested size is at least one larger than the current capacity
-            std::size_t requested = _alloc_size_strategy(capacity() + 1);
-            assert(requested > capacity());
+            std::size_t requested = _alloc_size_strategy(_capacity() + 1);
+            assert(requested > _capacity());
             _allocate(requested);
         }
 
@@ -519,7 +519,7 @@ namespace tempest::ecs
     {
         using alloc_traits = std::allocator_traits<dense_allocator_type>;
 
-        if (element_count <= capacity())
+        if (element_count <= _capacity())
         {
             return;
         }
@@ -532,7 +532,7 @@ namespace tempest::ecs
             alloc_traits::destroy(_packed_alloc, _packed_begin + i);
         }
 
-        alloc_traits::deallocate(_packed_alloc, _packed_begin, capacity());
+        alloc_traits::deallocate(_packed_alloc, _packed_begin, _capacity());
 
         _packed_begin = dense;
         _packed_end = dense_end;

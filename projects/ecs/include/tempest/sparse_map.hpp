@@ -47,7 +47,7 @@ namespace tempest::ecs
         sparse_map& operator=(sparse_map&& rhs) noexcept;
 
         [[nodiscard]] size_type size() const noexcept;
-        [[nodiscard]] size_type capacity() const noexcept;
+        [[nodiscard]] size_type _capacity() const noexcept;
         [[nodiscard]] bool empty() const noexcept;
 
         [[nodiscard]] bool contains(const K& key) const noexcept;
@@ -119,9 +119,9 @@ namespace tempest::ecs
             core::copy_construct(src._sparse_pages[n], src._sparse_pages[n] + SparsePageSize, _sparse_pages[i]);
         }
 
-        _keys_begin = key_alloc_trats::allocate(_packed_key_alloc, src.capacity());
+        _keys_begin = key_alloc_trats::allocate(_packed_key_alloc, src._capacity());
         _keys_end = _keys_begin + src.size();
-        _values_begin = value_alloc_traits::allocate(_packed_value_alloc, src.capacity());
+        _values_begin = value_alloc_traits::allocate(_packed_value_alloc, src._capacity());
         _values_end = _values_begin + src.size();
 
         core::copy_construct(src._keys_begin, src._keys_end, _keys_begin);
@@ -196,9 +196,9 @@ namespace tempest::ecs
             std::copy_n(rhs._sparse_pages[i], SparsePageSize, _sparse_pages[i]);
         }
 
-        _keys_begin = key_alloc_trats::allocate(_packed_key_alloc, rhs.capacity());
+        _keys_begin = key_alloc_trats::allocate(_packed_key_alloc, rhs._capacity());
         _keys_end = _keys_begin + rhs.size();
-        _values_begin = value_alloc_traits::allocate(_packed_value_alloc, rhs.capacity());
+        _values_begin = value_alloc_traits::allocate(_packed_value_alloc, rhs._capacity());
         _values_end = _values_begin + rhs.size();
 
         core::copy_construct(rhs._keys_begin, rhs._keys_end, _keys_begin);
@@ -250,7 +250,7 @@ namespace tempest::ecs
     inline sparse_map<K, V, SparsePageSize, DenseKeyAllocator, DenseValueAllocator, PageAllocator,
                       PageArrayAllocator>::size_type
     sparse_map<K, V, SparsePageSize, DenseKeyAllocator, DenseValueAllocator, PageAllocator,
-               PageArrayAllocator>::capacity() const noexcept
+               PageArrayAllocator>::_capacity() const noexcept
     {
         return _capacity;
     }
@@ -352,10 +352,10 @@ namespace tempest::ecs
         const std::size_t page = _compute_page(id);
         const std::size_t offset = _compute_offset(id);
 
-        if (size() >= capacity())
+        if (size() >= _capacity())
         {
-            std::size_t requested = _alloc_size_strategy(capacity() + 1);
-            assert(requested > capacity());
+            std::size_t requested = _alloc_size_strategy(_capacity() + 1);
+            assert(requested > _capacity());
             _allocate(requested);
         }
 
@@ -386,10 +386,10 @@ namespace tempest::ecs
         const std::size_t page = _compute_page(id);
         const std::size_t offset = _compute_offset(id);
 
-        if (size() >= capacity())
+        if (size() >= _capacity())
         {
-            std::size_t requested = _alloc_size_strategy(capacity() + 1);
-            assert(requested > capacity());
+            std::size_t requested = _alloc_size_strategy(_capacity() + 1);
+            assert(requested > _capacity());
             _allocate(requested);
         }
 
@@ -647,7 +647,7 @@ namespace tempest::ecs
         using key_alloc_traits = std::allocator_traits<key_allocator_type>;
         using value_alloc_traits = std::allocator_traits<value_allocator_type>;
 
-        if (element_count <= capacity())
+        if (element_count <= _capacity())
         {
             return;
         }
@@ -668,8 +668,8 @@ namespace tempest::ecs
             value_alloc_traits::destroy(_packed_value_alloc, _values_begin + i);
         }
 
-        key_alloc_traits::deallocate(_packed_key_alloc, _keys_begin, capacity());
-        value_alloc_traits::deallocate(_packed_value_alloc, _values_begin, capacity());
+        key_alloc_traits::deallocate(_packed_key_alloc, _keys_begin, _capacity());
+        value_alloc_traits::deallocate(_packed_value_alloc, _values_begin, _capacity());
 
         _keys_begin = keys;
         _keys_end = keys_end;

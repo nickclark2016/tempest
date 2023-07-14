@@ -13,7 +13,7 @@ namespace tempest::core
     class object_pool
     {
       public:
-        object_pool(allocator* alloc, std::uint32_t pool_size, std::uint32_t resource_size);
+        object_pool(allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size);
         object_pool(const object_pool&) = delete;
         object_pool(object_pool&&) noexcept = delete;
         virtual ~object_pool();

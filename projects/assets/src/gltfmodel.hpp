@@ -13,8 +13,8 @@ namespace tempest::assets::gltf
     class gltfmodel : public model
     {
       public:
-        bool load_from_binary(const std::vector<unsigned char>& binary_data) override;
-        bool load_from_ascii(const std::string& ascii_data) override;
+        bool load_from_binary(const std::vector<unsigned char>& binary_data);
+        bool load_from_ascii(const std::string& ascii_data);
 
       private:
         tinygltf::Model _model;

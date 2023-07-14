@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <source_location>
+#include <thread>
 
 namespace tempest::core
 {
@@ -67,6 +68,18 @@ namespace tempest::core
         std::size_t _max_size{0};
 
         void _release();
+    };
+
+    template <typename T, std::size_t N>
+    struct aligned_storage
+    {
+        alignas(alignof(T)) unsigned char data[sizeof(T[N])];
+    };
+
+    template <typename T, std::size_t N = 2>
+    struct cacheline_aligned_storage
+    {
+        alignas(N* std::hardware_constructive_interference_size) T data;
     };
 } // namespace tempest::core
 
