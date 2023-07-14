@@ -275,9 +275,9 @@ namespace tempest::graphics
         }
     } // namespace
 
-    gfx_timestamp_manager::gfx_timestamp_manager(core::allocator* alloc, std::uint16_t query_per_frame,
+    gfx_timestamp_manager::gfx_timestamp_manager(core::allocator* _alloc, std::uint16_t query_per_frame,
                                                  std::uint16_t max_frames)
-        : _alloc{alloc}, _queries_per_frame{query_per_frame}
+        : _alloc{_alloc}, _queries_per_frame{query_per_frame}
     {
         const std::uint32_t data_per_query = 2; // start, end, 2x 64 bit integers
         const std::size_t allocated_size = sizeof(gfx_timestamp) * query_per_frame * max_frames +

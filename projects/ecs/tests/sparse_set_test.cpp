@@ -10,7 +10,7 @@ TEST(sparse_set, DefaultConstructor)
     sparse_set<entity> set;
 
     ASSERT_EQ(set.size(), 0);
-    ASSERT_EQ(set.capacity(), 0);
+    ASSERT_EQ(set._capacity(), 0);
     ASSERT_TRUE(set.empty());
 }
 
@@ -20,7 +20,7 @@ TEST(sparse_set, CopyConstructFromDefault)
     sparse_set<entity> dst = src;
 
     ASSERT_EQ(dst.size(), 0);
-    ASSERT_EQ(dst.capacity(), 0);
+    ASSERT_EQ(dst._capacity(), 0);
     ASSERT_TRUE(dst.empty());
 }
 
@@ -30,7 +30,7 @@ TEST(sparse_set, MoveFromDefault)
     sparse_set<entity> dst = std::move(src);
 
     ASSERT_EQ(dst.size(), 0);
-    ASSERT_EQ(dst.capacity(), 0);
+    ASSERT_EQ(dst._capacity(), 0);
     ASSERT_TRUE(dst.empty());
 }
 
@@ -43,7 +43,7 @@ TEST(sparse_set, InsertByConstRef)
     ASSERT_TRUE(set.contains(e));
 
     ASSERT_EQ(set.size(), 1);
-    ASSERT_GE(set.capacity(), 1);
+    ASSERT_GE(set._capacity(), 1);
 
     ASSERT_TRUE(set.remove(e));
     ASSERT_FALSE(set.contains(e));
@@ -55,7 +55,7 @@ TEST(sparse_set, InsertByConstRefUntilResize)
     entity e{.id{0}, .generation{0}};
 
     set.insert(e);
-    auto cap = set.capacity();
+    auto cap = set._capacity();
 
     for (std::uint32_t i = 1; i <= cap; ++i)
     {
@@ -64,7 +64,7 @@ TEST(sparse_set, InsertByConstRefUntilResize)
     }
 
     ASSERT_EQ(set.size(), 9);
-    ASSERT_GE(set.capacity(), 9);
+    ASSERT_GE(set._capacity(), 9);
 
     for (std::uint32_t i = 0; i < 9; ++i)
     {
@@ -79,7 +79,7 @@ TEST(sparse_set, InsertByConstRefUntilResize)
     }
 
     ASSERT_EQ(set.size(), 0);
-    ASSERT_GE(set.capacity(), 0);
+    ASSERT_GE(set._capacity(), 0);
 }
 
 TEST(sparse_set, MovedAssignSetWithContents)

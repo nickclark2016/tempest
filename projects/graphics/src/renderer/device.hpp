@@ -50,7 +50,7 @@ namespace tempest::graphics
     class gfx_timestamp_manager
     {
       public:
-        gfx_timestamp_manager(core::allocator* alloc, std::uint16_t query_per_frame, std::uint16_t max_frames);
+        gfx_timestamp_manager(core::allocator* _alloc, std::uint16_t query_per_frame, std::uint16_t max_frames);
         gfx_timestamp_manager(const gfx_timestamp_manager&) = delete;
         gfx_timestamp_manager(gfx_timestamp_manager&& other) noexcept;
         ~gfx_timestamp_manager();

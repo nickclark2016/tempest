@@ -29,8 +29,8 @@ namespace tempest::assets
         struct node
         {
             node* parent = nullptr;
-            std::vector<node*> children;
-            mesh* m = nullptr;
+            std::vector<std::unique_ptr<node>> children;
+            std::unique_ptr<mesh> m = nullptr;
             tempest::math::mat<float, 4, 4> matrix;
             std::string name;
             bool visibile = true;
@@ -38,22 +38,11 @@ namespace tempest::assets
             node() : matrix(1.0f)
             {
             }
-
-            ~node()
-            {
-                for (auto& child : children)
-                {
-                    delete child;
-                }
-            }
         };
 
         node* root = nullptr;
         std::vector<core::vertex> vertices;
         std::vector<std::uint32_t> indices;
-
-        virtual bool load_from_binary(const std::vector<unsigned char>& binary_data) = 0;
-        virtual bool load_from_ascii(const std::string& ascii_data) = 0;
     };
 
     class model_factory

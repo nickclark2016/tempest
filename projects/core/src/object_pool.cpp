@@ -4,8 +4,8 @@
 
 namespace tempest::core
 {
-    object_pool::object_pool(allocator* alloc, std::uint32_t pool_size, std::uint32_t resource_size)
-        : _alloc{alloc}, _pool_size{pool_size}, _resource_size{resource_size}
+    object_pool::object_pool(allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size)
+        : _alloc{_alloc}, _pool_size{pool_size}, _resource_size{resource_size}
     {
         auto alloc_size = pool_size * (_resource_size + sizeof(std::uint32_t));
         _memory = reinterpret_cast<std::byte*>(_alloc->allocate(alloc_size, 1));
