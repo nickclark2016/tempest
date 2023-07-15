@@ -60,6 +60,8 @@ int main()
     auto last_time = std::chrono::high_resolution_clock::now();
     std::uint32_t fps_counter = 0;
 
+    auto proj = tempest::math::perspective(0.01f, 1000.0f, 100.0f, 16.0f / 9.0f);
+
     while (!window->should_close())
     {
         tempest::input::poll();
