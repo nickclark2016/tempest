@@ -50,7 +50,7 @@ namespace tempest::assets::gltf
         // If node contains mesh data
         if (input_node.mesh > -1)
         {
-            node->m = new mesh();
+            node->m = std::make_unique<mesh>();
             const tinygltf::Mesh mesh = input.meshes[input_node.mesh];
             for (std::size_t i = 0; i < mesh.primitives.size(); i++)
             {

@@ -3,8 +3,9 @@
 
 #include <tempest/intrinsic_type.hpp>
 #include <tempest/simd_align.hpp>
-
 #include <tempest/vec.hpp>
+
+#include <cmath>
 
 namespace tempest::math
 {
@@ -303,9 +304,11 @@ namespace tempest::math
                 auto element1 = simd::broadcast<T, simd::storage_type_size<T, Col>>(rhs.data + (Col * i + 1));
                 auto element2 = simd::broadcast<T, simd::storage_type_size<T, Col>>(rhs.data + (Col * i + 2));
                 auto element3 = simd::broadcast<T, simd::storage_type_size<T, Col>>(rhs.data + (Col * i + 3));
-                
-                auto result = simd::add<T, Col>(simd::add<T, Col>(simd::mul<T, Col>(element0, lhs.intrincol[0]), simd::mul<T, Col>(element1, lhs.intrincol[1])),
-                    simd::add<T, Col>(simd::mul<T, Col>(element2, lhs.intrincol[2]), simd::mul<T, Col>(element3, lhs.intrincol[3])));
+
+                auto result = simd::add<T, Col>(simd::add<T, Col>(simd::mul<T, Col>(element0, lhs.intrincol[0]),
+                                                                  simd::mul<T, Col>(element1, lhs.intrincol[1])),
+                                                simd::add<T, Col>(simd::mul<T, Col>(element2, lhs.intrincol[2]),
+                                                                  simd::mul<T, Col>(element3, lhs.intrincol[3])));
 
                 simd::store(result, res.data + Col * i);
             }
@@ -317,14 +320,28 @@ namespace tempest::math
     template <typename T, std::size_t Col, std::size_t Row>
     inline constexpr mat<T, Col, Row>& operator*=(mat<T, Col, Row>& lhs, const mat<T, Col, Row>& rhs) noexcept
     {
-        if (std::is_constant_evaluated())
-        {
-        }
-        else
-        {
-        }
+        auto cpy = lhs;
+        lhs = cpy * rhs;
 
         return lhs;
+    }
+
+    template <typename T>
+    inline mat<T, 4, 4> perspective(T near, T far, T fov_y, T aspect_ratio) noexcept
+    {
+
+        const T tan_fov_2 = std::tan(fov_y / static_cast<T>(2));
+        const T inv_tan_fov_2 = static_cast<T>(1) / tan_fov_2;
+        const T inv_aspect_tan_fov_2 = inv_tan_fov_2 * static_cast<T>(1) / aspect_ratio;
+        const T nmf = near - far;
+        const T zero = static_cast<T>(0);
+
+        const vec<T, 4> col0(inv_aspect_tan_fov_2, zero, zero, zero);
+        const vec<T, 4> col1(zero, inv_tan_fov_2, zero, zero);
+        const vec<T, 4> col2(zero, zero, (-near - far) / nmf, static_cast<T>(1));
+        const vec<T, 4> col3(zero, zero, (static_cast<T>(2) * near * far) / nmf, zero);
+
+        return mat<T, 4, 4>(col0, col1, col2, col3);
     }
 } // namespace tempest::math
 
