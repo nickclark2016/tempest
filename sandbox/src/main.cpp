@@ -1,10 +1,10 @@
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
-#include <tempest/math.hpp>
+#include <tempest/math/transformations.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/model.hpp>
 #include <tempest/renderer.hpp>
 #include <tempest/window.hpp>
-#include <tempest/model.hpp>
 
 #include <cassert>
 #include <chrono>
@@ -35,8 +35,6 @@ int main()
 
     auto renderer = tempest::graphics::irenderer::create({.major{0}, .minor{0}, .patch{1}}, *window, global_allocator);
 
-    tempest::math::mat<float, 4, 4> testmat(1.0f);
-
     std::ifstream t("data/box.gltf");
     std::string str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 
@@ -61,6 +59,7 @@ int main()
     std::uint32_t fps_counter = 0;
 
     auto proj = tempest::math::perspective(0.01f, 1000.0f, 100.0f, 16.0f / 9.0f);
+    auto modl = tempest::math::transform<float>({0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f});
 
     while (!window->should_close())
     {
@@ -68,7 +67,7 @@ int main()
         renderer->render();
         auto current_time = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> frame_time = current_time - last_time;
-        
+
         ++fps_counter;
 
         if (frame_time.count() >= 1.0)
