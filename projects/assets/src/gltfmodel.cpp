@@ -16,7 +16,7 @@ namespace tempest::assets::gltf
         node->name = input_node.name;
         node->parent = parent;
 
-        node->matrix = tempest::math::mat<float, 4, 4>(1.0f);
+        node->matrix = tempest::math::mat4<float>(1.0f);
         if (input_node.translation.size() == 3)
         {
             // assign translation matrix
@@ -111,31 +111,25 @@ namespace tempest::assets::gltf
                     for (std::size_t i = 0; i < vertex_count; i++)
                     {
                         core::vertex vert{};
-                        vert.position.set(position_buffer[i * 3], position_buffer[i * 3 + 1],
-                                          position_buffer[i * 3 + 2]);
+                        vert.position = tempest::math::vec3<float>(position_buffer[i * 3], position_buffer[i * 3 + 1],
+                                                                   position_buffer[i * 3 + 2]);
 
                         if (normals_buffer)
                         {
-                            vert.normal.set(normals_buffer[i * 2], normals_buffer[i * 2 + 1],
-                                            normals_buffer[i * 2 + 2]);
+                            vert.normal = tempest::math::vec3(normals_buffer[i * 2], normals_buffer[i * 2 + 1],
+                                                              normals_buffer[i * 2 + 2]);
                         }
-                        else
-                            vert.normal.zero();
 
                         if (texcoords_buffer)
                         {
-                            vert.uv.set(texcoords_buffer[i * 2], texcoords_buffer[i * 2 + 1]);
+                            vert.uv = tempest::math::vec2(texcoords_buffer[i * 2], texcoords_buffer[i * 2 + 1]);
                         }
-                        else
-                            vert.uv.zero();
 
                         if (tangents_buffer)
                         {
-                            vert.tangent.set(tangents_buffer[i * 4], tangents_buffer[i * 4 + 1],
-                                             tangents_buffer[i * 4 + 2], tangents_buffer[i * 4 + 3]);
+                            vert.tangent = tempest::math::vec4(tangents_buffer[i * 4], tangents_buffer[i * 4 + 1],
+                                                               tangents_buffer[i * 4 + 2], tangents_buffer[i * 4 + 3]);
                         }
-                        else
-                            vert.tangent.zero();
 
                         vertex_buffer.push_back(vert);
                     }
@@ -226,8 +220,8 @@ namespace tempest::assets::gltf
             return false;
         }
 
-        //std::vector<std::uint32_t> index_buffer;
-        //std::vector<vertex> vertex_buffer;
+        // std::vector<std::uint32_t> index_buffer;
+        // std::vector<vertex> vertex_buffer;
 
         root = new model::node();
         root->name = "Root";
@@ -269,8 +263,8 @@ namespace tempest::assets::gltf
             return false;
         }
 
-        //std::vector<std::uint32_t> index_buffer;
-        //std::vector<vertex> vertex_buffer;
+        // std::vector<std::uint32_t> index_buffer;
+        // std::vector<vertex> vertex_buffer;
 
         root = new model::node();
         root->name = "Root";

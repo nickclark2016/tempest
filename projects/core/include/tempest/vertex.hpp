@@ -1,16 +1,18 @@
 #ifndef tempest_vertex_hpp
 #define tempest_vertex_hpp
 
-#include <tempest/vec.hpp>
+#include <tempest/math/vec2.hpp>
+#include <tempest/math/vec3.hpp>
+#include <tempest/math/vec4.hpp>
 
 namespace tempest::core
 {
     struct vertex
     {
-        math::fvec3 position;
-        math::fvec2 uv;
-        math::fvec3 normal;
-        math::fvec4 tangent;
+        math::vec3<float> position;
+        math::vec2<float> uv;
+        math::vec3<float> normal;
+        math::vec4<float> tangent;
     };
 }
 

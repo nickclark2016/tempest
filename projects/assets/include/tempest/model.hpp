@@ -2,12 +2,12 @@
 #define tempest_model_hpp
 
 #include "tempest/model.hpp"
-#include <tempest/mat.hpp>
+#include <tempest/math/mat4.hpp>
 #include <tempest/vertex.hpp>
 
-#include <vector>
-#include <string>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace tempest::assets
 {
@@ -31,7 +31,7 @@ namespace tempest::assets
             node* parent = nullptr;
             std::vector<std::unique_ptr<node>> children;
             std::unique_ptr<mesh> m = nullptr;
-            tempest::math::mat<float, 4, 4> matrix;
+            tempest::math::mat4<float> matrix;
             std::string name;
             bool visibile = true;
 
@@ -50,7 +50,6 @@ namespace tempest::assets
       public:
         static std::unique_ptr<model> load(const std::string data);
     };
-} // namespace tempest::assets::gltf
-
+} // namespace tempest::assets
 
 #endif // tempest_model_hpp
