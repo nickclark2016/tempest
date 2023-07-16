@@ -58,7 +58,7 @@ int main()
     auto last_time = std::chrono::high_resolution_clock::now();
     std::uint32_t fps_counter = 0;
 
-    auto proj = tempest::math::perspective(0.01f, 1000.0f, 100.0f, 16.0f / 9.0f);
+    auto proj = tempest::math::perspective(16.0f / 9.0f, 100.0f, 0.01f, 1000.0f);
     auto modl = tempest::math::transform<float>({0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f});
 
     while (!window->should_close())
