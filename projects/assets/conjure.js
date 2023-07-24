@@ -12,7 +12,8 @@ project('assets', (prj) => {
 
     dependsOn([
         'tinygltf',
-        'core'
+        'core',
+        'logger'
     ]);
 
     when({}, (ctx) => {
@@ -30,13 +31,16 @@ project('assets', (prj) => {
         includeDirs([
             './include'
         ]);
+
+        uses([
+            'core:public',
+            'logger:public'
+        ]);
     });
 
     uses([
-        'core:public',
         'tinygltf:public',
         'assets:public',
-        'logger:public',
         'math:public'
     ]);
 });
