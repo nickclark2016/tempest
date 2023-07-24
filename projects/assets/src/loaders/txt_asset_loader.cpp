@@ -1,7 +1,5 @@
 #include <tempest/loaders/txt_asset_loader.hpp>
 
-#include <tempest/assets/txt_asset.hpp>
-
 #include <string>
 #include <fstream>
 #include <streambuf>

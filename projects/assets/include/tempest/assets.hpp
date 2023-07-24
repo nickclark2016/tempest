@@ -2,8 +2,11 @@
 #define tempest_assets_assets_hpp
 
 #include <tempest/logger.hpp>
-#include <tempest/object_pool.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/object_pool.hpp>
+
+#include <tempest/assets/asset.hpp>
+#include <tempest/loaders/asset_loader.hpp>
 
 #include <cassert>
 #include <concepts>
@@ -15,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 /*
 
@@ -28,8 +32,6 @@
 
 namespace tempest::assets
 {
-    class asset_manager;
-
     struct counter
     {
         static std::size_t value;
@@ -42,50 +44,6 @@ namespace tempest::assets
             static std::size_t v = counter::value++;
             return v;
         }
-    };
-
-    struct asset_metadata
-    {
-        std::string name;
-        std::uint64_t uuid;
-        std::optional<std::filesystem::path> path;
-    };
-
-    class asset
-    {
-      public:
-        asset(std::string_view name)
-        {
-            _metadata.name = name;
-        }
-        asset(const asset&) = delete;
-        asset(asset&& other) noexcept = default;
-        ~asset() = default;
-
-        asset& operator=(const asset&) = delete;
-        asset& operator=(asset&& rhs) noexcept = default;
-
-      private:
-        friend class asset_manager;
-
-        asset_metadata _metadata;
-    };
-
-    class asset_loader
-    {
-      public:
-        asset_loader() = default;
-        asset_loader(const asset_loader&) = default;
-        asset_loader(asset_loader&& other) noexcept = default;
-        ~asset_loader() = default;
-
-        asset_loader& operator=(const asset_loader&) = default;
-        asset_loader& operator=(asset_loader&& rhs) noexcept = default;
-
-        virtual bool load(const std::filesystem::path& path, void* dest) = 0;
-        // std::unique_ptr<asset> load_async();
-
-        virtual bool release(std::unique_ptr<asset>&& asset) = 0;
     };
 
     template <typename T>
@@ -105,9 +63,7 @@ namespace tempest::assets
     class asset_manager
     {
       public:
-        asset_manager() : _alloc{64 * 1024}
-        {
-        }
+        asset_manager();
 
         asset_manager(const asset_manager&) = delete;
         asset_manager(asset_manager&& other) noexcept = delete;
@@ -127,9 +83,9 @@ namespace tempest::assets
         template <std::derived_from<asset> T> T* release(std::string_view name);
         template <std::derived_from<asset> T> T* release(const std::filesystem::path path);
 
-        template <typename T>
-            requires std::derived_from<T, asset_loader> && std::default_initializable<T> && has_type<T>
-        void register_loader();
+        template <typename T, typename... Args>
+            requires std::derived_from<T, asset_loader> && has_type<T>
+        void register_loader(Args&&... args);
 
       private:
         std::unordered_map<std::size_t, std::unique_ptr<asset_loader>> _asset_loaders;
@@ -148,7 +104,8 @@ namespace tempest::assets
         auto& loader = _asset_loaders[asset_id];
 
         auto asset_pool_it = _asset_pools.find(asset_id);
-        assert(asset_pool_it != _asset_pools.end() && "Asset Manager does not contain a asset pool for this asset type.");
+        assert(asset_pool_it != _asset_pools.end() &&
+               "Asset Manager does not contain a asset pool for this asset type.");
 
         auto& asset_pool = asset_pool_it->second;
 
@@ -165,15 +122,15 @@ namespace tempest::assets
         return reinterpret_cast<T*>(pool_pointer);
     }
 
-    template <typename T>
-        requires std::derived_from<T, asset_loader> && std::default_initializable<T> && has_type<T>
-    inline void assets::asset_manager::register_loader()
+    template <typename T, typename... Args>
+        requires std::derived_from<T, asset_loader> && has_type<T>
+    inline void assets::asset_manager::register_loader(Args&&... args)
     {
         auto id = typeid_counter<typename T::type>::value();
 
         assert(!_asset_loaders.contains(id) && "Asset Manager already contains a loader for this type.");
 
-        std::unique_ptr<asset_loader> loader = std::make_unique<T>();
+        std::unique_ptr<asset_loader> loader = std::make_unique<T>(std::forward<Args>(args)...);
         _asset_loaders[id] = std::move(loader);
 
         // Figure out better way to determine pool size
