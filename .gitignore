@@ -2,7 +2,7 @@
 bin/
 bin-int/
 
-*/logs/
+logs/
 
 # Build Tool Files
 .vs/

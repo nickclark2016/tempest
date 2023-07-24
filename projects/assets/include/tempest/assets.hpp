@@ -113,10 +113,7 @@ namespace tempest::assets
         asset_manager(asset_manager&& other) noexcept = delete;
         ~asset_manager()
         {
-            for (auto& [id, pool] : _asset_pools)
-            {
-                pool.object_pool.release_all_resources();
-            }
+            _asset_pools.clear();
         }
 
         asset_manager& operator=(const asset_manager&) = delete;
