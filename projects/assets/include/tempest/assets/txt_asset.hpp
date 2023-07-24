@@ -2,6 +2,7 @@
 #define tempest_assets_txt_asset_hpp
 
 #include <tempest/assets.hpp>
+#include <tempest/assets/asset.hpp>
 
 #include <string>
 #include <string_view>

@@ -11,5 +11,6 @@ TEST(asset_loader, load_asset)
     asset_manager man;
     man.register_loader<txt_asset_loader>();
 
-    man.load<txt_asset>("tests/assets/loading_test.txt");
+    txt_asset* asset = man.load<txt_asset>("tests/assets/loading_test.txt");
+    printf("%s\n", asset->data.c_str());
 }
