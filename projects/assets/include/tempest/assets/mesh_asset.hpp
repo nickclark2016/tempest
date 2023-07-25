@@ -24,9 +24,8 @@ namespace tempest::assets
         {
         }
 
-        std::vector<mesh_primitive> primitives;
-        std::uint32_t vertices_handle;
-        std::uint32_t indices_handle;
+        mesh_primitive* primitives;
+        std::uint32_t primitive_count;
     };
 } // namespace tempest::assets
 

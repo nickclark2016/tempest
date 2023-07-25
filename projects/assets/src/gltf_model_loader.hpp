@@ -17,12 +17,13 @@ namespace tempest::assets
     {
       public:
         static bool load(const std::filesystem::path& path, void* dest, asset_pool* mesh_pool,
-                         asset_pool* material_pool);
+                         asset_pool* material_pool, core::heap_allocator* vertex_data_alloc);
 
       private:
         static void load_node(const tinygltf::Node& input_node, const tinygltf::Model& input, model_node* parent,
                               std::vector<std::uint32_t>& index_buffer, std::vector<core::vertex>& vertex_buffer,
-                              asset_pool* mesh_pool, asset_pool* material_pool);
+                              asset_pool* mesh_pool, asset_pool* material_pool,
+                              core::heap_allocator* vertex_data_alloc);
     };
 } // namespace tempest::assets
 
