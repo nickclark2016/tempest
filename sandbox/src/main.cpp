@@ -4,6 +4,8 @@
 #include <tempest/memory.hpp>
 #include <tempest/renderer.hpp>
 #include <tempest/window.hpp>
+#include <tempest/assets.hpp>
+#include <tempest/assets/model_asset.hpp>
 
 #include <cassert>
 #include <chrono>
@@ -39,6 +41,9 @@ int main()
 
     auto proj = tempest::math::perspective(16.0f / 9.0f, 100.0f, 0.01f, 1000.0f);
     auto modl = tempest::math::transform<float>({0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f});
+
+    auto asset_manager = tempest::assets::asset_manager();
+    auto model = asset_manager.load<tempest::assets::model_asset>("assets/box.gltf");
 
     while (!window->should_close())
     {

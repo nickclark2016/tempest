@@ -8,13 +8,16 @@
 #include <tempest/logger.hpp>
 
 #include <tempest/assets/mesh_asset.hpp>
+#include <tempest/math/transformations.hpp>
+
+#include <array>
 
 namespace tempest::assets
 {
     void gltf_model_loader::load_node(const tinygltf::Node& input_node, const tinygltf::Model& input,
                                       model_node* parent, std::vector<std::uint32_t>& index_buffer,
                                       std::vector<core::vertex>& vertex_buffer, asset_pool* mesh_pool,
-                                      asset_pool* material_pool)
+                                      asset_pool* material_pool, core::heap_allocator* vertex_data_alloc)
     {
         model_node* node = new model_node();
         node->name = input_node.name;
@@ -24,7 +27,9 @@ namespace tempest::assets
         if (input_node.translation.size() == 3)
         {
             // assign translation matrix
-            // node->matrix =
+            /* math::translate(node->matrix, {static_cast<float>(input_node.translation[0]),
+                                           static_cast<float>(input_node.translation[1]),
+                                           static_cast<float>(input_node.translation[2])});*/
         }
 
         if (input_node.rotation.size() == 4)
@@ -35,6 +40,9 @@ namespace tempest::assets
         if (input_node.scale.size() == 3)
         {
             // assign scale matrix
+            /* math::scale(node->matrix,
+                             {static_cast<float>(input_node.scale[0]), static_cast<float>(input_node.scale[1]),
+                                       static_cast<float>(input_node.scale[2])});*/
         }
 
         if (input_node.matrix.size() == 16)
@@ -47,7 +55,8 @@ namespace tempest::assets
         {
             for (std::size_t i = 0; i < input_node.children.size(); i++)
             {
-                load_node(input.nodes[input_node.children[i]], input, node, index_buffer, vertex_buffer, mesh_pool, material_pool);
+                load_node(input.nodes[input_node.children[i]], input, node, index_buffer, vertex_buffer, mesh_pool,
+                          material_pool, vertex_data_alloc);
             }
         }
 
@@ -63,6 +72,7 @@ namespace tempest::assets
             node->mesh = m;
 
             const tinygltf::Mesh mesh = input.meshes[input_node.mesh];
+            std::vector<mesh_primitive> primitives;
             for (std::size_t i = 0; i < mesh.primitives.size(); i++)
             {
                 const tinygltf::Primitive& gltf_primitive = mesh.primitives[i];
@@ -122,24 +132,23 @@ namespace tempest::assets
                     for (std::size_t i = 0; i < vertex_count; i++)
                     {
                         core::vertex vert{};
-                        vert.position = tempest::math::vec3<float>(position_buffer[i * 3], position_buffer[i * 3 + 1],
-                                                                   position_buffer[i * 3 + 2]);
+                        vert.position = {position_buffer[i * 3], position_buffer[i * 3 + 1],
+                                         position_buffer[i * 3 + 2]};
 
                         if (normals_buffer)
                         {
-                            vert.normal = tempest::math::vec3(normals_buffer[i * 2], normals_buffer[i * 2 + 1],
-                                                              normals_buffer[i * 2 + 2]);
+                            vert.normal = {normals_buffer[i * 2], normals_buffer[i * 2 + 1], normals_buffer[i * 2 + 2]};
                         }
 
                         if (texcoords_buffer)
                         {
-                            vert.uv = tempest::math::vec2(texcoords_buffer[i * 2], texcoords_buffer[i * 2 + 1]);
+                            vert.uv = {texcoords_buffer[i * 2], texcoords_buffer[i * 2 + 1]};
                         }
 
                         if (tangents_buffer)
                         {
-                            vert.tangent = tempest::math::vec4(tangents_buffer[i * 4], tangents_buffer[i * 4 + 1],
-                                                               tangents_buffer[i * 4 + 2], tangents_buffer[i * 4 + 3]);
+                            vert.tangent = {tangents_buffer[i * 4], tangents_buffer[i * 4 + 1],
+                                            tangents_buffer[i * 4 + 2], tangents_buffer[i * 4 + 3]};
                         }
 
                         vertex_buffer.push_back(vert);
@@ -186,12 +195,18 @@ namespace tempest::assets
                     }
                 }
 
-                mesh_primitive primitive{};
-                primitive.first_index = first_index;
-                primitive.index_count = index_count;
-                primitive.material_index = gltf_primitive.material;
+                mesh_primitive primitive{
+                    .first_index{first_index}, .index_count{index_count}, .material_index{gltf_primitive.material}};
 
-                node->mesh->primitives.push_back(primitive);
+                primitives.push_back(primitive);
+            }
+
+            node->mesh->primitive_count = static_cast<std::uint32_t>(primitives.size());
+            node->mesh->primitives = reinterpret_cast<mesh_primitive*>(vertex_data_alloc->allocate(primitives.size() * sizeof(mesh_primitive), 1));
+
+            for (std::size_t i = 0; i < primitives.size(); i++)
+            {
+                node->mesh->primitives[i] = primitives[i];
             }
         }
 
@@ -206,13 +221,13 @@ namespace tempest::assets
     }
 
     bool gltf_model_loader::load(const std::filesystem::path& path, void* dest, asset_pool* mesh_pool,
-                                 asset_pool* material_pool)
+                                 asset_pool* material_pool, core::heap_allocator* vertex_data_alloc)
     {
         std::string err;
         std::string warn;
 
         auto logger = tempest::logger::logger_factory::create({
-            .prefix{"tempest::assets"},
+            .prefix{"tempest::assets::gltf"},
         });
 
         tinygltf::TinyGLTF loader;
@@ -224,11 +239,11 @@ namespace tempest::assets
 
         bool ret = false;
 
-        if (extension == "glb")
+        if (extension == ".glb")
         {
             ret = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
         }
-        else if (extension == "gltf")
+        else if (extension == ".gltf")
         {
             ret = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
         }
@@ -259,7 +274,24 @@ namespace tempest::assets
         for (std::size_t i = 0; i < scene.nodes.size(); i++)
         {
             const tinygltf::Node node = model.nodes[scene.nodes[i]];
-            load_node(node, model, asset->root, indices, vertices, mesh_pool, material_pool);
+            load_node(node, model, asset->root, indices, vertices, mesh_pool, material_pool, vertex_data_alloc);
+        }
+
+        asset->index_count = static_cast<std::uint32_t>(indices.size());
+        asset->vertex_count = static_cast<std::uint32_t>(vertices.size());
+
+        asset->vertices =
+            reinterpret_cast<core::vertex*>(vertex_data_alloc->allocate(sizeof(core::vertex) * vertices.size(), 1));
+        asset->indices =
+            reinterpret_cast<std::uint32_t*>(vertex_data_alloc->allocate(sizeof(std::uint32_t) * indices.size(), 1));
+
+        for (std::size_t i = 0; i < vertices.size(); i++)
+        {
+            asset->vertices[i] = vertices[i];
+        }
+        for (std::size_t i = 0; i < indices.size(); i++)
+        {
+            asset->indices[i] = indices[i];
         }
 
         return true;

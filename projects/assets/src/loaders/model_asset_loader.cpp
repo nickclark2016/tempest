@@ -16,10 +16,12 @@ namespace tempest::assets
 
     }
 
-    model_asset_loader::model_asset_loader(asset_pool* mesh_pool, asset_pool* material_pool)
+    model_asset_loader::model_asset_loader(asset_pool* mesh_pool, asset_pool* material_pool,
+                                           core::heap_allocator* vertex_data_alloc)
     {
         _mesh_asset_pool = mesh_pool;
         _material_asset_pool = material_pool;
+        _vertex_data_alloc = vertex_data_alloc;
     }
 
     bool model_asset_loader::load(const std::filesystem::path& path, void* dest)
@@ -33,12 +35,12 @@ namespace tempest::assets
         std::transform(extension.begin(), extension.end(), extension.begin(),
                        [](unsigned char c) { return std::tolower(c); });
 
-        if (extension == "glb" || extension == "gltf")
+        if (extension == ".glb" || extension == ".gltf")
         {
             // GLTF
-            gltf_model_loader::load(path, dest, _mesh_asset_pool, _material_asset_pool);
+            gltf_model_loader::load(path, dest, _mesh_asset_pool, _material_asset_pool, _vertex_data_alloc);
         }
-        else if (extension == "fbx")
+        else if (extension == ".fbx")
         {
             // FBX
         }

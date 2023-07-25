@@ -10,6 +10,9 @@
 
 #include <cassert>
 
+#undef near
+#undef far
+
 namespace tempest::math
 {
     template <typename T> constexpr vec3<T> front = vec3<T>(static_cast<T>(0), static_cast<T>(0), static_cast<T>(1));
@@ -308,7 +311,8 @@ namespace tempest::math
         return mat4(col0, col1, col2, col3);
     }
 
-    template <typename T> inline constexpr mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>& up)
+    template <typename T> inline constexpr mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>&
+    up)
     {
         const auto fwd = normalize(target - eye);
         const auto side = normalize(cross(up, fwd));

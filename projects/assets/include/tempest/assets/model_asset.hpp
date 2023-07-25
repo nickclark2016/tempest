@@ -7,6 +7,8 @@
 
 #include <tempest/math/mat4.hpp>
 
+#include <tempest/vertex.hpp>
+
 #include <string>
 #include <string_view>
 #include <vector>
@@ -33,6 +35,12 @@ namespace tempest::assets
         }
 
         model_node* root;
+
+        std::uint32_t vertex_count = 0;
+        std::uint32_t index_count = 0;
+
+        core::vertex* vertices = nullptr;
+        std::uint32_t* indices = nullptr;
     };
 } // namespace tempest::assets
 
