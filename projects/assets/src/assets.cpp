@@ -8,7 +8,8 @@
 namespace tempest::assets
 {
     std::size_t counter::value = 0;
-    asset_manager::asset_manager() : _alloc{64 * 1024}
+    
+    asset_manager::asset_manager() : _alloc{64 * 1024} // 64 kb, should probably increase this
     {
         /// TODO: Find a way to properly determine these sizes
         auto mesh_asset_pool = _asset_pools.emplace(std::piecewise_construct, std::forward_as_tuple(typeid_counter<mesh_asset>::value()),
@@ -18,5 +19,10 @@ namespace tempest::assets
 
         register_loader<model_asset_loader>(&mesh_asset_pool.first->second,
                                             &material_asset_pool.first->second);
+    }
+    
+    asset_manager::~asset_manager()
+    {
+        _asset_pools.clear();
     }
 } // namespace tempest::assets

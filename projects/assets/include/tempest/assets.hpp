@@ -67,10 +67,7 @@ namespace tempest::assets
 
         asset_manager(const asset_manager&) = delete;
         asset_manager(asset_manager&& other) noexcept = delete;
-        ~asset_manager()
-        {
-            _asset_pools.clear();
-        }
+        ~asset_manager();
 
         asset_manager& operator=(const asset_manager&) = delete;
         asset_manager& operator=(asset_manager&& rhs) noexcept = delete;
