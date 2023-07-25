@@ -2,7 +2,6 @@
 #include <tempest/logger.hpp>
 #include <tempest/math/transformations.hpp>
 #include <tempest/memory.hpp>
-#include <tempest/model.hpp>
 #include <tempest/renderer.hpp>
 #include <tempest/window.hpp>
 

@@ -3,16 +3,20 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define __STDC_LIB_EXT1__
 
-#include "gltfmodel.hpp"
+#include "gltf_model_loader.hpp"
 #include <span>
 #include <tempest/logger.hpp>
 
-namespace tempest::assets::gltf
+#include <tempest/assets/mesh_asset.hpp>
+
+namespace tempest::assets
 {
-    void gltfmodel::load_node(const tinygltf::Node& input_node, const tinygltf::Model& input, model::node* parent,
-                              std::vector<std::uint32_t>& index_buffer, std::vector<core::vertex>& vertex_buffer)
+    void gltf_model_loader::load_node(const tinygltf::Node& input_node, const tinygltf::Model& input,
+                                      model_node* parent, std::vector<std::uint32_t>& index_buffer,
+                                      std::vector<core::vertex>& vertex_buffer, asset_pool* mesh_pool,
+                                      asset_pool* material_pool)
     {
-        model::node* node = new model::node();
+        model_node* node = new model_node();
         node->name = input_node.name;
         node->parent = parent;
 
@@ -43,14 +47,21 @@ namespace tempest::assets::gltf
         {
             for (std::size_t i = 0; i < input_node.children.size(); i++)
             {
-                load_node(input.nodes[input_node.children[i]], input, node, index_buffer, vertex_buffer);
+                load_node(input.nodes[input_node.children[i]], input, node, index_buffer, vertex_buffer, mesh_pool, material_pool);
             }
         }
 
         // If node contains mesh data
         if (input_node.mesh > -1)
         {
-            node->m = std::make_unique<mesh>();
+            auto pool_id = mesh_pool->object_pool.acquire_resource();
+            auto pool_pointer = mesh_pool->object_pool.access(pool_id);
+
+            mesh_asset* m = std::construct_at(reinterpret_cast<mesh_asset*>(pool_pointer),
+                                              input_node.name + "_" + std::to_string(input_node.mesh));
+
+            node->mesh = m;
+
             const tinygltf::Mesh mesh = input.meshes[input_node.mesh];
             for (std::size_t i = 0; i < mesh.primitives.size(); i++)
             {
@@ -175,11 +186,12 @@ namespace tempest::assets::gltf
                     }
                 }
 
-                gltfmodel::primitive primitive{};
+                mesh_primitive primitive{};
                 primitive.first_index = first_index;
                 primitive.index_count = index_count;
                 primitive.material_index = gltf_primitive.material;
-                node->m->primitives.push_back(primitive);
+
+                node->mesh->primitives.push_back(primitive);
             }
         }
 
@@ -189,21 +201,37 @@ namespace tempest::assets::gltf
         }
         else
         {
-            root = node;
+            // root = node;
         }
     }
 
-    bool gltfmodel::load_from_binary(const std::vector<unsigned char>& binary_data)
+    bool gltf_model_loader::load(const std::filesystem::path& path, void* dest, asset_pool* mesh_pool,
+                                 asset_pool* material_pool)
     {
         std::string err;
         std::string warn;
 
         auto logger = tempest::logger::logger_factory::create({
-            .prefix{"Tempest::Assets"},
+            .prefix{"tempest::assets"},
         });
 
-        bool ret = _loader.LoadBinaryFromMemory(&_model, &err, &warn, binary_data.data(),
-                                                static_cast<std::uint32_t>(binary_data.size()), "data");
+        tinygltf::TinyGLTF loader;
+        tinygltf::Model model;
+
+        std::string extension = path.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+
+        bool ret = false;
+
+        if (extension == "glb")
+        {
+            ret = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
+        }
+        else if (extension == "gltf")
+        {
+            ret = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
+        }
 
         if (!warn.empty())
         {
@@ -220,62 +248,20 @@ namespace tempest::assets::gltf
             return false;
         }
 
-        // std::vector<std::uint32_t> index_buffer;
-        // std::vector<vertex> vertex_buffer;
+        model_asset* asset = std::construct_at(reinterpret_cast<model_asset*>(dest), path.string());
 
-        root = new model::node();
-        root->name = "Root";
+        std::vector<std::uint32_t> indices;
+        std::vector<core::vertex> vertices;
 
-        const tinygltf::Scene& scene = _model.scenes[0];
+        asset->root = new model_node{.name{path.string()}, .parent{nullptr}};
+
+        const tinygltf::Scene& scene = model.scenes[0];
         for (std::size_t i = 0; i < scene.nodes.size(); i++)
         {
-            const tinygltf::Node node = _model.nodes[scene.nodes[i]];
-            load_node(node, _model, root, indices, vertices);
+            const tinygltf::Node node = model.nodes[scene.nodes[i]];
+            load_node(node, model, asset->root, indices, vertices, mesh_pool, material_pool);
         }
 
         return true;
     }
-
-    bool gltfmodel::load_from_ascii(const std::string& ascii_data)
-    {
-        std::string err;
-        std::string warn;
-
-        auto logger = tempest::logger::logger_factory::create({
-            .prefix{"Tempest::Assets"},
-        });
-
-        bool ret = _loader.LoadASCIIFromString(&_model, &err, &warn, ascii_data.c_str(),
-                                               static_cast<std::uint32_t>(ascii_data.length()), "data");
-
-        if (!warn.empty())
-        {
-            logger->warn(warn);
-        }
-
-        if (!err.empty())
-        {
-            logger->error(err);
-        }
-
-        if (!ret)
-        {
-            return false;
-        }
-
-        // std::vector<std::uint32_t> index_buffer;
-        // std::vector<vertex> vertex_buffer;
-
-        root = new model::node();
-        root->name = "Root";
-
-        const tinygltf::Scene& scene = _model.scenes[0];
-        for (std::size_t i = 0; i < scene.nodes.size(); i++)
-        {
-            const tinygltf::Node node = _model.nodes[scene.nodes[i]];
-            load_node(node, _model, root, indices, vertices);
-        }
-
-        return true;
-    }
-} // namespace tempest::assets::gltf
+} // namespace tempest::assets
