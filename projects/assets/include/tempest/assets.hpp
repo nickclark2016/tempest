@@ -57,7 +57,7 @@ namespace tempest::assets
         }
 
         core::object_pool object_pool;
-        std::unordered_map<std::size_t, std::uint32_t> _asset_id_to_object_id;
+        std::unordered_map<std::string, std::uint32_t> asset_id_to_object_id;
     };
 
     class asset_manager
@@ -72,7 +72,7 @@ namespace tempest::assets
         asset_manager& operator=(const asset_manager&) = delete;
         asset_manager& operator=(asset_manager&& rhs) noexcept = delete;
 
-        template <std::derived_from<asset> T> T* get(std::string_view name);
+        //template <std::derived_from<asset> T> T* get(std::string_view name);
         template <std::derived_from<asset> T> T* get(const std::filesystem::path path);
 
         template <std::derived_from<asset> T> T* load(const std::filesystem::path path);
@@ -90,6 +90,27 @@ namespace tempest::assets
         core::heap_allocator _alloc;
     };
 
+    template <std::derived_from<asset> T> inline T* assets::asset_manager::get(const std::filesystem::path path)
+    {
+        //static auto logger = tempest::logger::logger_factory::create({.prefix{"tempest::assets::asset_manager"}});
+
+        static auto asset_id = typeid_counter<T>::value();
+
+        assert(_asset_loaders.contains(asset_id) && "Asset Manager does not contain a loader for this asset type.");
+
+        auto asset_pool_it = _asset_pools.find(asset_id);
+        assert(asset_pool_it != _asset_pools.end() &&
+               "Asset Manager does not contain a asset pool for this asset type.");
+
+        auto& asset_pool = asset_pool_it->second;
+        auto& lud = asset_pool.asset_id_to_object_id;
+
+        auto lud_it = lud.find(path.string());
+        assert(lud_it != lud.end() && "Asset Manager does not contain an asset with this path.");
+
+        return reinterpret_cast<T*>(asset_pool.object_pool.access(lud_it->second));
+    }
+
     template <std::derived_from<asset> T> inline T* assets::asset_manager::load(const std::filesystem::path path)
     {
         static auto logger = tempest::logger::logger_factory::create({.prefix{"tempest::assets::asset_manager"}});
@@ -105,6 +126,7 @@ namespace tempest::assets
                "Asset Manager does not contain a asset pool for this asset type.");
 
         auto& asset_pool = asset_pool_it->second;
+        auto& lud = asset_pool.asset_id_to_object_id;
 
         auto pool_id = asset_pool.object_pool.acquire_resource();
         auto pool_pointer = asset_pool.object_pool.access(pool_id);
@@ -116,7 +138,11 @@ namespace tempest::assets
             asset_pool.object_pool.release_resource(pool_id);
         }
 
-        return reinterpret_cast<T*>(pool_pointer);
+        auto* asset_pointer = reinterpret_cast<T*>(pool_pointer);
+
+        lud.insert(std::make_pair(path.string(), pool_id));
+
+        return asset_pointer;
     }
 
     template <typename T, typename... Args>
