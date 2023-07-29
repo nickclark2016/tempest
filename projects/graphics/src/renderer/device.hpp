@@ -182,6 +182,9 @@ namespace tempest::graphics
         void queue_command_buffer(const command_buffer& buffer);
         void execute_immediate(const command_buffer& buffer);
 
+        void* map_buffer(const buffer_mapping& info);
+        void unmap_buffer(const buffer_mapping& info);
+
       private:
         vkb::Instance _instance{};
         vkb::PhysicalDevice _physical_device{};

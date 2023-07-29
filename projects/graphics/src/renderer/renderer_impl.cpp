@@ -22,10 +22,11 @@ namespace tempest::graphics
 
     void irenderer::impl::set_up()
     {
+        _create_mesh_buffers();
         _create_blit_pipeline();
         _create_triangle_pipeline();
 
-        pbr_forward.emplace(forward_pbr_pass::create(device.get(), color_target, depth_target));
+        // pbr_forward.emplace(forward_pbr_pass::create(device.get(), color_target, depth_target));
     }
 
     void irenderer::impl::render()
@@ -42,6 +43,9 @@ namespace tempest::graphics
             },
         };
 
+        descriptor_set_handle mesh_sets[] = {mesh_data_set};
+        uint32_t offsets[] = {0}; 
+
         cmds.barrier({
                          .source{pipeline_stage::FRAGMENT_SHADER},
                          .destination{pipeline_stage::FRAMEBUFFER_OUTPUT},
@@ -53,6 +57,7 @@ namespace tempest::graphics
             .set_viewport({0, 0, 1280, 720, 0.0, 1.0})
             .bind_render_pass(triangle_pass)
             .bind_pipeline(triangle_pipeline)
+            .bind_descriptor_set({mesh_sets}, {offsets})
             .draw(3, 1, 0, 0)
             .barrier({
                 .source{pipeline_stage::FRAMEBUFFER_OUTPUT},
@@ -76,15 +81,17 @@ namespace tempest::graphics
 
         device->queue_command_buffer(cmds);
 
-        pbr_forward->render(this->device.get());
+        // pbr_forward->render(this->device.get());
 
         device->end_frame();
     }
 
     void irenderer::impl::clean_up()
     {
-        pbr_forward->release(device.get());
-        pbr_forward = std::nullopt;
+        // pbr_forward->release(device.get());
+        // pbr_forward = std::nullopt;
+
+        device->release_buffer(mesh_data);
 
         device->release_pipeline(blit_pipeline);
         device->release_pipeline(triangle_pipeline);
@@ -120,8 +127,8 @@ namespace tempest::graphics
             device->execute_immediate(cmd);
         }
 
-        auto tri_vs_spv = read_spirv("data/triangle.vs.spv");
-        auto tri_fs_spv = read_spirv("data/triangle.fs.spv");
+        auto tri_vs_spv = read_spirv("data/pbr/pbr.vx.spv");
+        auto tri_fs_spv = read_spirv("data/pbr/pbr.px.spv");
 
         std::array<shader_stage, 5> stages = {{
             {
@@ -152,6 +159,24 @@ namespace tempest::graphics
             .name{"RenderPass_Triangle"},
         });
 
+        descriptor_set_layout_create_info::binding mesh_binding = {
+            .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
+            .start_binding{0},
+            .binding_count{0},
+            .name{"mesh_data_binding"},
+        };
+
+        descriptor_set_layout_create_info set0_layout_ci = {
+            .bindings{mesh_binding},
+            .binding_count{1},
+            .set_index{0},
+            .name = {"mesh_set"},
+        };
+
+        mesh_data_layout = device->create_descriptor_set_layout(set0_layout_ci);
+        mesh_data_set = device->create_descriptor_set(
+            descriptor_set_builder("mesh_data_set").add_buffer(mesh_data, 0).set_layout(mesh_data_layout));
+
         triangle_pipeline = device->create_pipeline({
             .ds{
                 .depth_comparison{VK_COMPARE_OP_LESS_OR_EQUAL},
@@ -169,6 +194,10 @@ namespace tempest::graphics
                 .name{"triangle_shader"},
             },
             .output{attachments},
+            .desc_layouts{
+                mesh_data_layout,
+            },
+            .active_desc_layouts{1},
         });
     }
 
@@ -201,8 +230,8 @@ namespace tempest::graphics
 
         blit_pass = device->get_swapchain_pass();
 
-        auto vs_spv = read_spirv("data/blit.vs.spv");
-        auto fs_spv = read_spirv("data/blit.fs.spv");
+        auto vs_spv = read_spirv("data/blit/blit.vx.spv");
+        auto fs_spv = read_spirv("data/blit/blit.px.spv");
 
         std::array<shader_stage, 5> stages = {{
             {
@@ -267,5 +296,29 @@ namespace tempest::graphics
                                                           .set_layout(blit_desc_set_layout)
                                                           .add_image(color_target, 0)
                                                           .add_sampler(default_sampler, 1));
+    }
+
+    void irenderer::impl::_create_mesh_buffers()
+    {
+        float positions[] = {0.0f, 0.5f, 0.0f, 0.5f, -0.5f, 0.0f, -0.5f, -0.5f, 0.0f};
+
+        buffer_create_info meshes_bci = {
+            .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+            .usage{resource_usage::DYNAMIC},
+            .size{1024},
+            .name{"positions"},
+        };
+
+        mesh_data = device->create_buffer(meshes_bci);
+
+        buffer_mapping map_info = {
+            .offset = 0,
+            .range = static_cast<std::uint32_t>(sizeof(float) * 9),
+            .buffer = mesh_data,
+        };
+
+        void* data = device->map_buffer(map_info);
+        std::memcpy(data, positions, map_info.range);
+        device->unmap_buffer(map_info);
     }
 } // namespace tempest::graphics

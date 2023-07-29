@@ -674,6 +674,13 @@ namespace tempest::graphics
         std::span<memory_barrier> buffers;
     };
 
+    struct buffer_mapping
+    {
+        std::uint32_t offset;
+        std::uint32_t range;
+        buffer_handle buffer;
+    };
+
     inline std::string_view get_compiler_extension(VkShaderStageFlagBits stage)
     {
         switch (stage)

@@ -801,7 +801,7 @@ namespace tempest::graphics
                 .pNext{nullptr},
                 .flags{0},
                 .stage{stage.shader_type},
-                .pName{"main"},
+                .pName{stage.shader_type == VK_SHADER_STAGE_VERTEX_BIT ? "VSMain" : "PSMain"},
             };
 
             auto result = _dispatch.createShaderModule(&vk_module_ci, _alloc_callbacks, &vk_stage_ci.module);
@@ -1653,6 +1653,42 @@ namespace tempest::graphics
         _dispatch.queueWaitIdle(_graphics_queue);
     }
 
+    void* gfx_device::map_buffer(const buffer_mapping& info)
+    {
+        if (info.buffer.index == invalid_resource_handle)
+        {
+            return nullptr;
+        }
+
+        buffer* buf = access_buffer(info.buffer);
+        if (buf->parent_buffer.index == _global_dynamic_buffer.index)
+        {
+            logger->error("Mapping not yet supported for global dynamic buffer.");
+            return nullptr;
+        }
+
+        void* ptr;
+        vmaMapMemory(_vma_alloc, buf->allocation, &ptr);
+        return ptr;
+    }
+
+    void gfx_device::unmap_buffer(const buffer_mapping& info)
+    {
+        if (info.buffer.index == invalid_resource_handle)
+        {
+            return;
+        }
+
+        buffer* buf = access_buffer(info.buffer);
+        if (buf->parent_buffer.index == _global_dynamic_buffer.index)
+        {
+            logger->error("Mapping not yet supported for global dynamic buffer.");
+            return;
+        }
+
+        vmaUnmapMemory(_vma_alloc, buf->allocation);
+    }
+
     void gfx_device::_advance_frame_counter() noexcept
     {
         _previous_frame = _current_frame;
@@ -2409,6 +2445,8 @@ namespace tempest::graphics
                 desc_write[i].pImageInfo = &img_info[i];
                 break;
             }
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                [[fallthrough]];
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
                 [[fallthrough]];
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
@@ -2426,7 +2464,8 @@ namespace tempest::graphics
                 }
 
                 buf_info[i].offset = 0;
-                buf_info[i].range = buf->vk_size;
+                buf_info[i].range = buf->size;
+                desc_write[i].pBufferInfo = &buf_info[i];
                 break;
             }
             default:

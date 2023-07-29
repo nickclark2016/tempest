@@ -186,6 +186,8 @@ namespace tempest::graphics
                 {
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
                     [[fallthrough]];
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                    [[fallthrough]];
                 case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
                     const auto resource_index = set->bindings[layout];
                     resource_handle buf_handle = set->resources[resource_index];

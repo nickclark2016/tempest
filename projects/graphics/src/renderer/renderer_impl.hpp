@@ -28,6 +28,8 @@ namespace tempest::graphics
 
         render_pass_handle triangle_pass{};
         pipeline_handle triangle_pipeline{};
+        descriptor_set_layout_handle mesh_data_layout{};
+        descriptor_set_handle mesh_data_set;
 
         std::optional<forward_pbr_pass> pbr_forward{std::nullopt};
 
@@ -37,6 +39,9 @@ namespace tempest::graphics
 
         void _create_triangle_pipeline();
         void _create_blit_pipeline();
+        void _create_mesh_buffers();
+
+        buffer_handle mesh_data{};
     };
 }
 
