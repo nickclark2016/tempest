@@ -1,5 +1,7 @@
 #include "renderer_impl.hpp"
 
+#include <tempest/logger.hpp>
+
 #include <fstream>
 #include <sstream>
 
@@ -7,6 +9,8 @@ namespace tempest::graphics
 {
     namespace
     {
+        auto logger = logger::logger_factory::create({.prefix{"tempest::graphics::renderer_impl"}});
+
         inline std::vector<uint32_t> read_spirv(const std::string& path)
         {
             std::ostringstream buf;
@@ -22,10 +26,17 @@ namespace tempest::graphics
 
     void irenderer::impl::set_up()
     {
+        vertex_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+                .usage{resource_usage::DYNAMIC},
+                .size{1024 * 1024 * 32},
+                .name{"mesh_buffer"},
+            },
+            device.get()); // 32 mb initial allocation
         _create_mesh_buffers();
         _create_blit_pipeline();
         _create_triangle_pipeline();
-
         // pbr_forward.emplace(forward_pbr_pass::create(device.get(), color_target, depth_target));
     }
 
@@ -44,7 +55,7 @@ namespace tempest::graphics
         };
 
         descriptor_set_handle mesh_sets[] = {mesh_data_set};
-        uint32_t offsets[] = {0}; 
+        uint32_t offsets[] = {0};
 
         cmds.barrier({
                          .source{pipeline_stage::FRAGMENT_SHADER},
@@ -88,10 +99,13 @@ namespace tempest::graphics
 
     void irenderer::impl::clean_up()
     {
+        device->release_descriptor_set(mesh_data_set);
+        device->release_descriptor_set_layout(mesh_data_layout);
+
+        vertex_buffer_allocator->release();
+
         // pbr_forward->release(device.get());
         // pbr_forward = std::nullopt;
-
-        device->release_buffer(mesh_data);
 
         device->release_pipeline(blit_pipeline);
         device->release_pipeline(triangle_pipeline);
@@ -174,8 +188,9 @@ namespace tempest::graphics
         };
 
         mesh_data_layout = device->create_descriptor_set_layout(set0_layout_ci);
-        mesh_data_set = device->create_descriptor_set(
-            descriptor_set_builder("mesh_data_set").add_buffer(mesh_data, 0).set_layout(mesh_data_layout));
+        mesh_data_set = device->create_descriptor_set(descriptor_set_builder("mesh_data_set")
+                                                          .add_buffer(vertex_buffer_allocator->current_buf, 0)
+                                                          .set_layout(mesh_data_layout));
 
         triangle_pipeline = device->create_pipeline({
             .ds{
@@ -302,23 +317,44 @@ namespace tempest::graphics
     {
         float positions[] = {0.0f, 0.5f, 0.0f, 0.5f, -0.5f, 0.0f, -0.5f, -0.5f, 0.0f};
 
-        buffer_create_info meshes_bci = {
-            .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
-            .usage{resource_usage::DYNAMIC},
-            .size{1024},
-            .name{"positions"},
-        };
-
-        mesh_data = device->create_buffer(meshes_bci);
-
         buffer_mapping map_info = {
             .offset = 0,
             .range = static_cast<std::uint32_t>(sizeof(float) * 9),
-            .buffer = mesh_data,
+            .buffer = vertex_buffer_allocator->current_buf,
         };
 
         void* data = device->map_buffer(map_info);
         std::memcpy(data, positions, map_info.range);
         device->unmap_buffer(map_info);
+    }
+
+    buffer_suballocator::buffer_suballocator(const buffer_create_info& initial, gfx_device* dev)
+        : device{dev}, ci{initial}, scheme{initial.size}
+    {
+        buffer_handle handle = device->create_buffer(ci);
+        if (!handle)
+        {
+            logger->critical("Failed to allocate buffer.");
+        }
+
+        current_buf = handle;
+    }
+
+    void buffer_suballocator::release()
+    {
+        device->release_buffer(current_buf);
+        if (previous_buf)
+        {
+            device->release_buffer(previous_buf);
+        }
+
+        current_buf = {.index{invalid_resource_handle}};
+        previous_buf = {.index{invalid_resource_handle}};
+
+        scheme.release_all();
+    }
+
+    void buffer_suballocator::reallocate_and_wait(std::size_t new_capacity)
+    {
     }
 } // namespace tempest::graphics

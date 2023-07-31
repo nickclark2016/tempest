@@ -2,6 +2,7 @@
 #define tempest_common_mesh_hlsl
 
 struct Mesh {
+    uint vertex_size;
     uint positions_offset;
     uint uv_offset;
     uint normal_offset;

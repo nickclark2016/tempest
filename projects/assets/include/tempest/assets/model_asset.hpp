@@ -5,7 +5,7 @@
 #include <tempest/assets/asset.hpp>
 #include <tempest/assets/mesh_asset.hpp>
 
-#include <tempest/math/mat4.hpp>
+#include <tempest/mat4.hpp>
 
 #include <tempest/vertex.hpp>
 

@@ -1,6 +1,6 @@
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
-#include <tempest/math/transformations.hpp>
+#include <tempest/transformations.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/renderer.hpp>
 #include <tempest/window.hpp>
