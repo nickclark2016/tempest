@@ -193,6 +193,9 @@ namespace tempest::graphics
 
     descriptor_pool::~descriptor_pool()
     {
+        _device->_dispatch.freeDescriptorSets(_bindless_pool, 1, &_texture_bindless_set);
+        _device->_dispatch.destroyDescriptorSetLayout(_image_bindless_layout, _device->_alloc_callbacks);
+
         _device->release_descriptor_set_layout(_image_bindless_layout_handle);
         _device->_dispatch.destroyDescriptorPool(_default_pool, _device->_alloc_callbacks);
         _device->_dispatch.destroyDescriptorPool(_bindless_pool, _device->_alloc_callbacks);
@@ -273,9 +276,6 @@ namespace tempest::graphics
     void descriptor_pool::release(descriptor_set_handle handle)
     {
         auto set = access(handle);
-        // TODO: make sure this isn't in use
-        _device->_dispatch.freeDescriptorSets(_bindless_pool, 1, &_texture_bindless_set);
-        _device->_dispatch.destroyDescriptorSetLayout(_image_bindless_layout, _device->_alloc_callbacks);
         _device->_dispatch.freeDescriptorSets(set->pool, 1, &set->set);
         _descriptor_set_pool.release_resource(handle.index);
         _device->_global_allocator->deallocate(set->resources);

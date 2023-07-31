@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include <tempest/math/mat4.hpp>
-#include <tempest/math/vec4.hpp>
+#include <tempest/mat4.hpp>
+#include <tempest/vec4.hpp>
 
 using tempest::math::mat4;
 using tempest::math::vec4;

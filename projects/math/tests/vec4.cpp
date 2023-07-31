@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <tempest/math/vec4.hpp>
+#include <tempest/vec4.hpp>
 
 using tempest::math::vec4;
 

@@ -7,7 +7,9 @@ struct PSInput {
 };
 
 PSInput VSMain(uint vertex_id : SV_VERTEXID) {
-    float3 position = pull_vec3_f32(mesh_data, vertex_id * 3);
+    uint position_offset = vertex_id * 3;
+
+    float3 position = pull_vec3_f32(mesh_data, vertex_id * 3 * 4);
     
     PSInput result;
     result.position = float4(position, 1.0);

@@ -8,7 +8,7 @@
 #include <tempest/logger.hpp>
 
 #include <tempest/assets/mesh_asset.hpp>
-#include <tempest/math/transformations.hpp>
+#include <tempest/transformations.hpp>
 
 #include <array>
 

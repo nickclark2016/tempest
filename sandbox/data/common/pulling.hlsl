@@ -4,9 +4,9 @@
 float3 pull_vec3_f32(StructuredBuffer<uint> source, uint byte_offset)
 {
     uint index = byte_offset / 4;
-    uint v0 = source[byte_offset + 0];
-    uint v1 = source[byte_offset + 1];
-    uint v2 = source[byte_offset + 2];
+    uint v0 = source[index + 0];
+    uint v1 = source[index + 1];
+    uint v2 = source[index + 2];
     
     float3 v = {
         asfloat(v0),
