@@ -47,7 +47,7 @@ int main()
 
     auto modelcheck = asset_manager.get<tempest::assets::model_asset>("assets/box.gltf");
 
-     while (!window->should_close())
+    while (!window->should_close())
     {
         tempest::input::poll();
         renderer->render();

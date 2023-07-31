@@ -120,7 +120,7 @@ namespace tempest::core
         std::optional<fit> optimal_block = std::nullopt;
         T best_fit = len - len;
 
-        for (std::size_t i = 0; i < _free; ++i)
+        for (std::size_t i = 0; i < _free.size(); ++i)
         {
             range<T> rng = _free[i];
 
@@ -141,7 +141,7 @@ namespace tempest::core
             }
             else
             {
-                best_fit = ([&]() -> std::optional<fit> {
+                optimal_block = ([&]() -> std::optional<fit> {
                     if (optimal_block)
                     {
                         if (range_size < (optimal_block->range.end - optimal_block->range.start))
@@ -179,8 +179,8 @@ namespace tempest::core
                 _free[index].start += len;
             }
             return range<T>{
-                .start{range.start},
-                .end{range.start + len},
+                .start{rng.start},
+                .end{rng.start + len},
             };
         }
 

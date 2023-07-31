@@ -317,14 +317,17 @@ namespace tempest::graphics
     {
         float positions[] = {0.0f, 0.5f, 0.0f, 0.5f, -0.5f, 0.0f, -0.5f, -0.5f, 0.0f};
 
+        auto positions_size = sizeof(float) * 9;
+        auto rng = vertex_buffer_allocator->scheme.allocate(positions_size);
+        
         buffer_mapping map_info = {
-            .offset = 0,
-            .range = static_cast<std::uint32_t>(sizeof(float) * 9),
+            .offset = static_cast<std::uint32_t>(rng->start),
+            .range = static_cast<std::uint32_t>(rng->end - rng->start),
             .buffer = vertex_buffer_allocator->current_buf,
         };
 
         void* data = device->map_buffer(map_info);
-        std::memcpy(data, positions, map_info.range);
+        std::memcpy(data, positions, rng->end - rng->start);
         device->unmap_buffer(map_info);
     }
 
