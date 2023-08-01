@@ -34,6 +34,25 @@ namespace tempest::graphics
                 .name{"mesh_buffer"},
             },
             device.get()); // 32 mb initial allocation
+
+        instance_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+                .usage{resource_usage::DYNAMIC},
+                .size{1024 * 1024 * 32},
+                .name{"instance_data_buffer"},
+            },
+            device.get());
+
+        scene_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT},
+                .usage{resource_usage::STREAM},
+                .size{1024 * 64 * 3},
+                .name{"scene_data_buffer"},
+            },
+            device.get());
+
         _create_mesh_buffers();
         _create_blit_pipeline();
         _create_triangle_pipeline();
@@ -55,14 +74,14 @@ namespace tempest::graphics
         };
 
         descriptor_set_handle mesh_sets[] = {mesh_data_set};
-        uint32_t offsets[] = {0};
+        uint32_t offsets[] = {0, 0, 0};
 
         cmds.barrier({
                          .source{pipeline_stage::FRAGMENT_SHADER},
                          .destination{pipeline_stage::FRAMEBUFFER_OUTPUT},
                          .textures{color_target_barriers},
                      })
-            .set_clear_color(1.0f, 0.0f, 1.0f, 1.0f)
+            .set_clear_color(0.5f, 0.1f, 0.8f, 1.0f)
             .set_clear_depth_stencil(1.0f, 0)
             .set_scissor_region({{0, 0}, {1280, 720}})
             .set_viewport({0, 0, 1280, 720, 0.0, 1.0})
@@ -79,7 +98,7 @@ namespace tempest::graphics
 
         descriptor_set_handle sets_to_bind[] = {blit_desc_set};
 
-        cmds.set_clear_color(1.0f, 0.0f, 1.0f, 1.0f)
+        cmds.set_clear_color(0.0f, 0.0f, 0.0f, 1.0f)
             .set_clear_depth_stencil(1.0f, 0)
             .use_default_scissor()
             .use_default_viewport(false)
@@ -103,6 +122,8 @@ namespace tempest::graphics
         device->release_descriptor_set_layout(mesh_data_layout);
 
         vertex_buffer_allocator->release();
+        instance_buffer_allocator->release();
+        scene_buffer_allocator->release();
 
         // pbr_forward->release(device.get());
         // pbr_forward = std::nullopt;
@@ -180,16 +201,32 @@ namespace tempest::graphics
             .name{"mesh_data_binding"},
         };
 
+        descriptor_set_layout_create_info::binding object_binding = {
+            .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
+            .start_binding{1},
+            .binding_count{0},
+            .name{"instance_object_data_binding"},
+        };
+
+        descriptor_set_layout_create_info::binding scene_binding = {
+            .type{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
+            .start_binding{2},
+            .binding_count{0},
+            .name{"scene_data_binding"},
+        };
+
         descriptor_set_layout_create_info set0_layout_ci = {
-            .bindings{mesh_binding},
-            .binding_count{1},
+            .bindings{mesh_binding, object_binding, scene_binding},
+            .binding_count{3},
             .set_index{0},
-            .name = {"mesh_set"},
+            .name = {"object_data_set"},
         };
 
         mesh_data_layout = device->create_descriptor_set_layout(set0_layout_ci);
-        mesh_data_set = device->create_descriptor_set(descriptor_set_builder("mesh_data_set")
+        mesh_data_set = device->create_descriptor_set(descriptor_set_builder("object_data_set")
                                                           .add_buffer(vertex_buffer_allocator->current_buf, 0)
+                                                          .add_buffer(instance_buffer_allocator->current_buf, 1)
+                                                          .add_buffer(scene_buffer_allocator->current_buf, 2)
                                                           .set_layout(mesh_data_layout));
 
         triangle_pipeline = device->create_pipeline({
@@ -319,7 +356,7 @@ namespace tempest::graphics
 
         auto positions_size = sizeof(float) * 9;
         auto rng = vertex_buffer_allocator->scheme.allocate(positions_size);
-        
+
         buffer_mapping map_info = {
             .offset = static_cast<std::uint32_t>(rng->start),
             .range = static_cast<std::uint32_t>(rng->end - rng->start),
@@ -328,6 +365,44 @@ namespace tempest::graphics
 
         void* data = device->map_buffer(map_info);
         std::memcpy(data, positions, rng->end - rng->start);
+        device->unmap_buffer(map_info);
+
+        model_matrix = math::transform(math::vec3<float>(0.5f, 0.5f, 1.0f),
+                                       math::vec3<float>(0.0f, 0.0f, 1.5707963267f), math::vec3<float>(1.0f));
+        proj_matrix = math::perspective(16.0f / 9.0f, 100.0f, 0.01f, 1000.0f);
+
+        auto model_size = sizeof(math::mat4<float>) * 2;
+        auto model_rng = instance_buffer_allocator->scheme.allocate(model_size);
+        map_info = {
+            .offset = static_cast<std::uint32_t>(model_rng->start),
+            .range = static_cast<std::uint32_t>(model_rng->end - model_rng->start),
+            .buffer = instance_buffer_allocator->current_buf,
+        };
+
+        data = device->map_buffer(map_info);
+        std::memcpy(data, &model_matrix, sizeof(math::mat4<float>));
+        device->unmap_buffer(map_info);
+
+        auto scene_size = sizeof(math::mat4<float>) * 3;
+        auto scene_rng = scene_buffer_allocator->scheme.allocate(scene_size);
+        map_info = {
+            .offset = static_cast<std::uint32_t>(scene_rng->start),
+            .range = static_cast<std::uint32_t>(scene_rng->end - scene_rng->start),
+            .buffer = scene_buffer_allocator->current_buf,
+        };
+
+        auto view_matrix = math::look_at(math::vec3<float>(0.0f, 0.0f, -1.0f), math::vec3<float>(0.0f, 0.0f, 0.0f),
+                                         math::vec3<float>(0.0f, 1.0f, 0.0f));
+        auto view_proj = proj_matrix * view_matrix;
+
+        math::mat4<float> camera_data[] = {
+            proj_matrix,
+            view_matrix,
+            view_proj,
+        };
+
+        data = device->map_buffer(map_info);
+        std::memcpy(data, camera_data, sizeof(math::mat4<float>) * 3);
         device->unmap_buffer(map_info);
     }
 

@@ -273,6 +273,28 @@ namespace tempest::graphics
 
             dispatch.cmdPipelineBarrier(buf, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &img_barrier);
         }
+    
+
+        std::size_t max_binding_range(const VkPhysicalDeviceProperties& props, VkDescriptorType type)
+        {
+            switch (type)
+            {
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                [[fallthrough]];
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+                return props.limits.maxUniformBufferRange;
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+                [[fallthrough]];
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                return props.limits.maxStorageBufferRange;
+            default:
+                break;
+            }
+
+            logger->error("Unsupported descriptor type.");
+
+            return 0;
+        }
     } // namespace
 
     gfx_timestamp_manager::gfx_timestamp_manager(core::allocator* _alloc, std::uint16_t query_per_frame,
@@ -2449,7 +2471,10 @@ namespace tempest::graphics
                 [[fallthrough]];
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
                 [[fallthrough]];
-            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+                [[fallthrough]];
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                {
                 buffer_handle handle = {.index{resources[res]}};
                 buffer* buf = access_buffer(handle);
 
@@ -2463,8 +2488,10 @@ namespace tempest::graphics
                     buf_info[i].buffer = buf->underlying;
                 }
 
+                auto clamped_range = std::min(static_cast<std::size_t>(buf->size), max_binding_range(_physical_device_properties, binding.type));
+
                 buf_info[i].offset = 0;
-                buf_info[i].range = buf->size;
+                buf_info[i].range = clamped_range;
                 desc_write[i].pBufferInfo = &buf_info[i];
                 break;
             }

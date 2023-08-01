@@ -184,6 +184,8 @@ namespace tempest::graphics
                 const auto& binding = set_layout->bindings[layout];
                 switch (binding.type)
                 {
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+                    [[fallthrough]];
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
                     [[fallthrough]];
                 case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:

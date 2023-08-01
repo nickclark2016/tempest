@@ -1,11 +1,11 @@
-#include <tempest/input.hpp>
-#include <tempest/logger.hpp>
-#include <tempest/transformations.hpp>
-#include <tempest/memory.hpp>
-#include <tempest/renderer.hpp>
-#include <tempest/window.hpp>
 #include <tempest/assets.hpp>
 #include <tempest/assets/model_asset.hpp>
+#include <tempest/input.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/renderer.hpp>
+#include <tempest/transformations.hpp>
+#include <tempest/window.hpp>
 
 #include <cassert>
 #include <chrono>
@@ -44,8 +44,6 @@ int main()
 
     auto asset_manager = tempest::assets::asset_manager();
     auto model = asset_manager.load<tempest::assets::model_asset>("assets/box.gltf");
-
-    auto modelcheck = asset_manager.get<tempest::assets::model_asset>("assets/box.gltf");
 
     while (!window->should_close())
     {

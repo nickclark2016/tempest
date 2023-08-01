@@ -6,7 +6,9 @@
 #include "device.hpp"
 #include "forward_pbr_pass.hpp"
 
+#include <tempest/mat4.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/transformations.hpp>
 
 #include <VkBootstrap.h>
 
@@ -31,6 +33,8 @@ namespace tempest::graphics
     {
         std::unique_ptr<gfx_device> device;
         std::optional<buffer_suballocator> vertex_buffer_allocator;
+        std::optional<buffer_suballocator> instance_buffer_allocator;
+        std::optional<buffer_suballocator> scene_buffer_allocator;
 
         texture_handle depth_target{};
         texture_handle color_target{};
@@ -56,6 +60,9 @@ namespace tempest::graphics
         void _create_triangle_pipeline();
         void _create_blit_pipeline();
         void _create_mesh_buffers();
+
+        math::mat4<float> model_matrix{};
+        math::mat4<float> proj_matrix{};
     };
 } // namespace tempest::graphics
 
