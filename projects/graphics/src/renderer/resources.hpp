@@ -122,21 +122,6 @@ namespace tempest::graphics
         }
     };
 
-    struct render_pass_handle
-    {
-        resource_handle index;
-
-        inline constexpr operator bool() const noexcept
-        {
-            return index != invalid_resource_handle;
-        }
-
-        inline constexpr operator resource_handle() const noexcept
-        {
-            return index;
-        }
-    };
-
     inline constexpr std::size_t max_framebuffer_attachments = 8;
     inline constexpr std::size_t max_descriptor_set_layouts = 8;
     inline constexpr std::size_t max_shader_stages = 5;
@@ -337,36 +322,6 @@ namespace tempest::graphics
         std::uint32_t attribute_count{0};
     };
 
-    struct render_pass_attachment_info
-    {
-        std::array<VkFormat, max_framebuffer_attachments> color_formats;
-        VkFormat depth_stencil_format;
-        std::uint32_t color_attachment_count;
-
-        render_pass_attachment_operation color_load{render_pass_attachment_operation::DONT_CARE};
-        render_pass_attachment_operation depth_load{render_pass_attachment_operation::DONT_CARE};
-        render_pass_attachment_operation stencil_load{render_pass_attachment_operation::DONT_CARE};
-    };
-
-    struct render_pass_create_info
-    {
-        std::uint32_t render_targets;
-        render_pass_type type{render_pass_type::RASTERIZATION};
-
-        std::array<texture_handle, max_framebuffer_attachments> color_outputs;
-        texture_handle depth_stencil_texture{.index{invalid_resource_handle}};
-
-        float scale_x{1.0f};
-        float scale_y{1.0f};
-        std::uint8_t resize{1};
-
-        render_pass_attachment_operation color_load{render_pass_attachment_operation::DONT_CARE};
-        render_pass_attachment_operation depth_load{render_pass_attachment_operation::DONT_CARE};
-        render_pass_attachment_operation stencil_load{render_pass_attachment_operation::DONT_CARE};
-
-        std::string_view name;
-    };
-
     struct dynamic_render_state
     {
         std::array<VkFormat, max_framebuffer_attachments> color_format;
@@ -377,14 +332,13 @@ namespace tempest::graphics
 
     struct pipeline_create_info
     {
-        std::optional<dynamic_render_state> dynamic_render_state;
+        dynamic_render_state dynamic_render;
 
         rasterization_create_info raster{};
         depth_stencil_create_info ds{};
         attachment_blend_state_create_info blend{};
         vertex_input_create_info vertex_input{};
         shader_state_create_info shaders{};
-        std::optional<render_pass_attachment_info> output;
         std::array<descriptor_set_layout_handle, max_descriptor_set_layouts> desc_layouts;
         std::uint32_t active_desc_layouts;
 
@@ -638,30 +592,6 @@ namespace tempest::graphics
 
         pipeline_handle handle;
         bool is_graphics_pipeline{true};
-    };
-
-    struct render_pass
-    {
-        VkRenderPass pass;
-        VkFramebuffer target;
-
-        render_pass_attachment_info output;
-        std::array<texture_handle, max_framebuffer_attachments> output_color_textures;
-        texture_handle output_depth_attachment{.index{invalid_resource_handle}};
-
-        render_pass_type type{render_pass_type::RASTERIZATION};
-
-        float scale_x{1.0f};
-        float scale_y{1.0f};
-        std::uint16_t width{0};
-        std::uint16_t height{0};
-        std::uint16_t dispatch_x{0};
-        std::uint16_t dispatch_y{0};
-        std::uint16_t dispatch_z{0};
-        std::uint8_t resize{0};
-        std::uint8_t num_render_targets{0};
-
-        std::string_view name;
     };
 
     struct texture_barrier

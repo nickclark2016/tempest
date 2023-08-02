@@ -56,16 +56,11 @@ namespace tempest::graphics
         _create_mesh_buffers();
         _create_blit_pipeline();
         _create_triangle_pipeline();
-        // pbr_forward.emplace(forward_pbr_pass::create(device.get(), color_target, depth_target));
     }
 
     void irenderer::impl::render()
     {
         device->start_frame();
-
-        auto& cmds = device->get_command_buffer(queue_type::GRAPHICS, false);
-
-        cmds.begin();
 
         texture_barrier color_target_barriers[] = {
             {
@@ -156,6 +151,10 @@ namespace tempest::graphics
             },
         };
 
+        auto& cmds = device->get_command_buffer(queue_type::GRAPHICS, false);
+
+        cmds.begin();
+
         cmds.transition_resource(prepare_pre_present_transitions, pipeline_stage::TOP,
                                  pipeline_stage::FRAMEBUFFER_OUTPUT)
             .transition_resource(prepare_render_transitions, pipeline_stage::FRAGMENT_SHADER,
@@ -187,8 +186,6 @@ namespace tempest::graphics
 
         device->queue_command_buffer(cmds);
 
-        // pbr_forward->render(this->device.get());
-
         device->end_frame();
     }
 
@@ -200,9 +197,6 @@ namespace tempest::graphics
         vertex_buffer_allocator->release();
         instance_buffer_allocator->release();
         scene_buffer_allocator->release();
-
-        // pbr_forward->release(device.get());
-        // pbr_forward = std::nullopt;
 
         device->release_pipeline(blit_pipeline);
         device->release_pipeline(triangle_pipeline);
@@ -287,14 +281,12 @@ namespace tempest::graphics
                                                           .set_layout(mesh_data_layout));
 
         triangle_pipeline = device->create_pipeline({
-            .dynamic_render_state{
-                dynamic_render_state{
-                    .color_format{
-                        color_target_format,
-                    },
-                    .active_color_attachments{1},
-                    .depth_format{VK_FORMAT_D32_SFLOAT},
+            .dynamic_render{
+                .color_format{
+                    color_target_format,
                 },
+                .active_color_attachments{1},
+                .depth_format{VK_FORMAT_D32_SFLOAT},
             },
             .ds{
                 .depth_comparison{VK_COMPARE_OP_LESS_OR_EQUAL},
@@ -378,11 +370,9 @@ namespace tempest::graphics
         });
 
         blit_pipeline = device->create_pipeline({
-            .dynamic_render_state{
-                dynamic_render_state{
-                    .color_format{device->get_swapchain_attachment_info().color_formats[0]},
-                    .active_color_attachments{0},
-                },
+            .dynamic_render{
+                .color_format{device->get_swapchain_format()},
+                .active_color_attachments{0},
             },
             .ds{
                 .depth_comparison{VK_COMPARE_OP_LESS_OR_EQUAL},

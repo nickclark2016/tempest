@@ -407,9 +407,8 @@ namespace tempest::graphics
     gfx_device::gfx_device(const gfx_device_create_info& info)
         : _global_allocator{info.global_allocator}, _temporary_allocator{info.temp_allocator},
           _buffer_pool{_global_allocator, 512, sizeof(buffer)}, _texture_pool{_global_allocator, 512, sizeof(texture)},
-          _shader_state_pool{_global_allocator, 128, sizeof(shader_state)},
-          _pipeline_pool{_global_allocator, 128, sizeof(pipeline)}, _render_pass_pool{_global_allocator, 128,
-                                                                                      sizeof(render_pass)},
+          _shader_state_pool{_global_allocator, 128, sizeof(shader_state)}, _pipeline_pool{_global_allocator, 128,
+                                                                                           sizeof(pipeline)},
           _descriptor_set_layout_pool{_global_allocator, 128, sizeof(descriptor_set_layout)}, _sampler_pool{
                                                                                                   _global_allocator, 32,
                                                                                                   sizeof(sampler)}
@@ -507,32 +506,6 @@ namespace tempest::graphics
             _dispatch.createQueryPool(&ci, _alloc_callbacks, &_timestamp_query_pool);
         }
 
-        // Set up default depth buffer
-        {
-            std::fill_n(std::begin(_swapchain_attachment_info.color_formats),
-                        _swapchain_attachment_info.color_formats.size(), VK_FORMAT_UNDEFINED);
-
-            _swapchain_attachment_info.color_formats[0] = _winfo.swapchain.image_format;
-            _swapchain_attachment_info.depth_stencil_format = VK_FORMAT_UNDEFINED;
-            _swapchain_attachment_info.color_attachment_count = 1;
-            _swapchain_attachment_info.color_load = _swapchain_attachment_info.depth_load =
-                _swapchain_attachment_info.stencil_load = render_pass_attachment_operation::DONT_CARE;
-        }
-
-        // Set up swapchain render pass
-        {
-            render_pass_create_info ci = {
-                .render_targets{1},
-                .type{render_pass_type::SWAPCHAIN},
-                .color_load{render_pass_attachment_operation::CLEAR},
-                .depth_load{render_pass_attachment_operation::CLEAR},
-                .stencil_load{render_pass_attachment_operation::CLEAR},
-                .name{"Swapchain Resolve Pass"},
-            };
-
-            _swapchain_render_pass = create_render_pass(ci);
-        }
-
         {
             _desc_pool.emplace(this);
         }
@@ -551,6 +524,8 @@ namespace tempest::graphics
             _default_sampler = create_sampler(sci);
         }
 
+        _create_swapchain_resources();
+
         logger->debug("gfx_device creation completed");
     }
 
@@ -562,7 +537,6 @@ namespace tempest::graphics
 
         release_sampler(_default_sampler);
         release_buffer(_global_dynamic_buffer);
-        release_render_pass(_swapchain_render_pass);
 
         _cmd_ring = std::nullopt;
 
@@ -1095,15 +1069,19 @@ namespace tempest::graphics
                 .pDynamicStates{dyn_states},
             };
 
-            VkRenderPass render_pass = VK_NULL_HANDLE;
-            if (ci.output)
-            {
-                render_pass = _fetch_vk_render_pass(*ci.output, ci.name);
-            }
+            VkPipelineRenderingCreateInfo dynamic = {
+                .sType{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO},
+                .pNext{nullptr},
+                .colorAttachmentCount{ci.dynamic_render.active_color_attachments},
+                .pColorAttachmentFormats{
+                    ci.dynamic_render.active_color_attachments ? ci.dynamic_render.color_format.data() : nullptr},
+                .depthAttachmentFormat{ci.dynamic_render.depth_format},
+                .stencilAttachmentFormat{ci.dynamic_render.stencil_format},
+            };
 
             VkGraphicsPipelineCreateInfo graphics_pipeline_ci = {
                 .sType{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO},
-                .pNext{nullptr},
+                .pNext{&dynamic},
                 .flags{0},
                 .stageCount{shader_data->shader_count},
                 .pStages{shader_data->stage_infos.data()},
@@ -1117,25 +1095,9 @@ namespace tempest::graphics
                 .pColorBlendState{&color_blend_ci},
                 .pDynamicState{&dynamic_state_ci},
                 .layout{pipeline_layout},
-                .renderPass{render_pass},
+                .renderPass{nullptr},
                 .subpass{0},
             };
-
-            VkPipelineRenderingCreateInfo dynamic = {
-                .sType{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO},
-                .pNext{nullptr},
-            };
-
-            if (ci.dynamic_render_state)
-            {
-                dynamic.colorAttachmentCount = ci.dynamic_render_state->active_color_attachments;
-                dynamic.pColorAttachmentFormats =
-                    dynamic.colorAttachmentCount ? ci.dynamic_render_state->color_format.data() : nullptr;
-                dynamic.depthAttachmentFormat = ci.dynamic_render_state->depth_format;
-                dynamic.stencilAttachmentFormat = ci.dynamic_render_state->stencil_format;
-
-                graphics_pipeline_ci.pNext = &dynamic;
-            }
 
             auto result = _dispatch.createGraphicsPipelines(nullptr, 1, &graphics_pipeline_ci, _alloc_callbacks,
                                                             &pipeline_data->pipeline);
@@ -1569,88 +1531,6 @@ namespace tempest::graphics
         });
     }
 
-    render_pass* gfx_device::access_render_pass(render_pass_handle handle)
-    {
-        return reinterpret_cast<render_pass*>(_render_pass_pool.access(handle.index));
-    }
-
-    const render_pass* gfx_device::access_render_pass(render_pass_handle handle) const
-    {
-        return reinterpret_cast<const render_pass*>(_render_pass_pool.access(handle.index));
-    }
-
-    render_pass_handle gfx_device::create_render_pass(const render_pass_create_info& ci)
-    {
-        render_pass_handle handle{.index{_render_pass_pool.acquire_resource()}};
-        if (handle.index == invalid_resource_handle)
-        {
-            return handle;
-        }
-
-        render_pass* pass = access_render_pass(handle);
-        *pass = {
-            .pass{nullptr},
-            .target{nullptr},
-            .type{ci.type},
-            .scale_x{ci.scale_x},
-            .scale_y{ci.scale_y},
-            .dispatch_x{0},
-            .dispatch_y{0},
-            .dispatch_z{0},
-            .resize{ci.resize},
-            .num_render_targets{static_cast<std::uint8_t>(ci.render_targets)},
-            .name{ci.name},
-        };
-
-        // fetch and cache the texture target handles to build the framebuffer
-        std::uint32_t color_target_count{0};
-        for (; color_target_count < ci.render_targets; ++color_target_count)
-        {
-            texture* tex = access_texture(ci.color_outputs[color_target_count]);
-            pass->width = tex->width;
-            pass->height = tex->height;
-            pass->output_color_textures[color_target_count] = ci.color_outputs[color_target_count];
-        }
-
-        pass->output_depth_attachment = ci.depth_stencil_texture;
-
-        switch (ci.type)
-        {
-        case render_pass_type::RASTERIZATION: {
-            pass->output = _fill_render_pass_attachment_info(ci);
-            pass->pass = _fetch_vk_render_pass(pass->output, ci.name);
-            _create_framebuffer(pass,
-                                std::span<texture_handle>(pass->output_color_textures.data(), pass->num_render_targets),
-                                ci.depth_stencil_texture);
-            break;
-        }
-        case render_pass_type::SWAPCHAIN: {
-            _create_swapchain_pass(ci, pass);
-            break;
-        }
-        case render_pass_type::COMPUTE: {
-            logger->error("TODO: Implement compute pass construction.");
-            break;
-        }
-        default:
-            break;
-        }
-
-        return handle;
-    }
-
-    void gfx_device::release_render_pass(render_pass_handle handle)
-    {
-        if (handle.index < _render_pass_pool.size())
-        {
-            _deletion_queue.push_back(resource_update_desc{
-                .type{resource_type::RENDER_PASS},
-                .handle{handle.index},
-                .current_frame{static_cast<std::uint32_t>(_current_frame)},
-            });
-        }
-    }
-
     command_buffer& gfx_device::get_command_buffer(queue_type type, bool begin)
     {
         auto& cb = _cmd_ring->fetch_buffer(static_cast<std::uint32_t>(_current_frame));
@@ -1791,10 +1671,6 @@ namespace tempest::graphics
                 _destroy_pipeline_imm(desc.handle);
                 break;
             }
-            case resource_type::RENDER_PASS: {
-                _destroy_render_pass_imm(desc.handle);
-                break;
-            }
             case resource_type::SAMPLER: {
                 _destroy_sampler_imm(desc.handle);
                 break;
@@ -1812,17 +1688,6 @@ namespace tempest::graphics
                 break;
             }
             }
-        }
-
-        for (auto& [hash, pass] : _render_pass_cache)
-        {
-            _dispatch.destroyRenderPass(pass, _alloc_callbacks);
-        }
-
-        _dispatch.destroyRenderPass(access_render_pass(_swapchain_render_pass)->pass, _alloc_callbacks);
-        for (auto& img : _winfo.swapchain_targets)
-        {
-            _dispatch.destroyFramebuffer(img, _alloc_callbacks);
         }
 
         _dispatch.destroyQueryPool(_timestamp_query_pool, _alloc_callbacks);
@@ -1888,19 +1753,6 @@ namespace tempest::graphics
         _pipeline_pool.release_resource(hnd);
     }
 
-    void gfx_device::_destroy_render_pass_imm(resource_handle hnd)
-    {
-        render_pass* pass = access_render_pass(render_pass_handle{hnd});
-        if (pass)
-        {
-            if (pass->num_render_targets > 0)
-            {
-                _dispatch.destroyFramebuffer(pass->target, _alloc_callbacks);
-            }
-        }
-        _render_pass_pool.release_resource(hnd);
-    }
-
     void gfx_device::_destroy_desc_set_imm(resource_handle hnd)
     {
         _desc_pool->release({.index{hnd}});
@@ -1917,238 +1769,9 @@ namespace tempest::graphics
         _sampler_pool.release_resource(hnd);
     }
 
-    VkRenderPass gfx_device::_fetch_vk_render_pass(const render_pass_attachment_info& out, std::string_view name)
+    void gfx_device::_create_swapchain_resources()
     {
-        auto hashed = wyhash(&out, sizeof(render_pass_attachment_info), 0, _wyp);
-        auto render_pass_it = _render_pass_cache.find(hashed);
-        if (render_pass_it != _render_pass_cache.end())
-        {
-            return render_pass_it->second;
-        }
-
-        auto pass = _create_vk_render_pass(out, name);
-        _render_pass_cache[hashed] = pass;
-        return pass;
-    }
-
-    VkRenderPass gfx_device::_create_vk_render_pass(const render_pass_attachment_info& out, std::string_view name)
-    {
-        std::array<VkAttachmentDescription, max_framebuffer_attachments> color_attachments;
-        std::array<VkAttachmentReference, max_framebuffer_attachments> color_attachment_refs;
-        VkAttachmentLoadOp color_op, depth_op{}, stencil_op{};
-        VkImageLayout color_initial, depth_initial{};
-
-        switch (out.color_load)
-        {
-        case render_pass_attachment_operation::LOAD: {
-            color_op = VK_ATTACHMENT_LOAD_OP_LOAD;
-            color_initial = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            break;
-        }
-        case render_pass_attachment_operation::CLEAR: {
-            color_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            color_initial = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            break;
-        }
-        case render_pass_attachment_operation::DONT_CARE: {
-            color_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            color_initial = VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        }
-        default:
-            break;
-        }
-
-        switch (out.depth_load)
-        {
-        case render_pass_attachment_operation::LOAD: {
-            depth_op = VK_ATTACHMENT_LOAD_OP_LOAD;
-            depth_initial = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            break;
-        }
-        case render_pass_attachment_operation::CLEAR: {
-            depth_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depth_initial = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            break;
-        }
-        case render_pass_attachment_operation::DONT_CARE: {
-            depth_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            depth_initial = VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        }
-        default:
-            break;
-        }
-
-        switch (out.stencil_load)
-        {
-        case render_pass_attachment_operation::LOAD: {
-            stencil_op = VK_ATTACHMENT_LOAD_OP_LOAD;
-            break;
-        }
-        case render_pass_attachment_operation::CLEAR: {
-            stencil_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            break;
-        }
-        case render_pass_attachment_operation::DONT_CARE: {
-            stencil_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            break;
-        }
-        default:
-            break;
-        }
-
-        std::uint32_t attachment_index = 0;
-
-        for (; attachment_index < out.color_attachment_count; ++attachment_index)
-        {
-            color_attachments[attachment_index] = {
-                .format{out.color_formats[attachment_index]},
-                .samples{VK_SAMPLE_COUNT_1_BIT},
-                .loadOp{color_op},
-                .storeOp{VK_ATTACHMENT_STORE_OP_STORE},
-                .stencilLoadOp{stencil_op},
-                .stencilStoreOp{VK_ATTACHMENT_STORE_OP_DONT_CARE},
-                .initialLayout{VK_IMAGE_LAYOUT_UNDEFINED},
-                .finalLayout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-            };
-
-            color_attachment_refs[attachment_index] = {
-                .attachment{attachment_index},
-                .layout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-            };
-        }
-
-        VkAttachmentDescription depth_attachment{};
-        VkAttachmentReference depth_reference{};
-        // check if we have a depth stencil attachment
-        if (out.depth_stencil_format != VK_FORMAT_UNDEFINED)
-        {
-            depth_attachment = {
-                .format{out.depth_stencil_format},
-                .samples{VK_SAMPLE_COUNT_1_BIT},
-                .loadOp{depth_op},
-                .storeOp{VK_ATTACHMENT_STORE_OP_STORE},
-                .stencilLoadOp{stencil_op},
-                .stencilStoreOp{VK_ATTACHMENT_STORE_OP_DONT_CARE},
-                .initialLayout{depth_initial},
-                .finalLayout{VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
-            };
-
-            depth_reference = {
-                .attachment{attachment_index},
-                .layout{VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
-            };
-        }
-
-        // TODO: multisubpass render passes
-        VkSubpassDescription subpass = {};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-
-        std::array<VkAttachmentDescription, max_framebuffer_attachments + 1> image_attachments;
-        std::copy_n(std::begin(color_attachments), out.color_attachment_count, std::begin(image_attachments));
-
-        subpass.colorAttachmentCount = out.color_attachment_count ? out.color_attachment_count : 0;
-        subpass.pColorAttachments = color_attachment_refs.data();
-        subpass.pDepthStencilAttachment = nullptr;
-
-        std::uint32_t depth_stencil_count = 0;
-        if (out.depth_stencil_format != VK_FORMAT_UNDEFINED)
-        {
-            image_attachments[subpass.colorAttachmentCount] = depth_attachment;
-            subpass.pDepthStencilAttachment = &depth_reference;
-            depth_stencil_count = 1;
-        }
-
-        VkRenderPassCreateInfo render_pass_info = {
-            .sType{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .attachmentCount{out.color_attachment_count + depth_stencil_count},
-            .pAttachments{image_attachments.data()},
-            .subpassCount{1},
-            .pSubpasses{&subpass},
-        };
-
-        VkRenderPass rp{VK_NULL_HANDLE};
-        auto result = _dispatch.createRenderPass(&render_pass_info, _alloc_callbacks, &rp);
-        if (result != VK_SUCCESS)
-        {
-            logger->error("Failed to create VkRenderPass.");
-            return rp;
-        }
-
-        _set_resource_name(VK_OBJECT_TYPE_RENDER_PASS, reinterpret_cast<std::uint64_t>(rp), name);
-        return rp;
-    }
-
-    void gfx_device::_create_swapchain_pass(const render_pass_create_info& ci, render_pass* pass)
-    {
-        VkAttachmentDescription swapchain_attachment = {
-            .format{_winfo.swapchain.image_format},
-            .samples{VK_SAMPLE_COUNT_1_BIT},
-            .loadOp{VK_ATTACHMENT_LOAD_OP_CLEAR},
-            .storeOp{VK_ATTACHMENT_STORE_OP_STORE},
-            .stencilLoadOp{VK_ATTACHMENT_LOAD_OP_DONT_CARE},
-            .stencilStoreOp{VK_ATTACHMENT_STORE_OP_DONT_CARE},
-            .initialLayout{VK_IMAGE_LAYOUT_UNDEFINED},
-            .finalLayout{VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
-        };
-
-        VkAttachmentReference swapchain_image_ref = {
-            .attachment{0},
-            .layout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-        };
-
-        VkSubpassDescription blit_pass = {
-            .flags{0},
-            .pipelineBindPoint{VK_PIPELINE_BIND_POINT_GRAPHICS},
-            .inputAttachmentCount{0},
-            .pInputAttachments{nullptr},
-            .colorAttachmentCount{1},
-            .pColorAttachments{&swapchain_image_ref},
-            .pResolveAttachments{nullptr},
-            .pDepthStencilAttachment{nullptr},
-            .preserveAttachmentCount{0},
-            .pPreserveAttachments{nullptr},
-        };
-
-        VkAttachmentDescription attachments[] = {swapchain_attachment};
-
-        VkRenderPassCreateInfo vk_rp_ci = {
-            .sType{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .attachmentCount{1},
-            .pAttachments{attachments},
-            .subpassCount{1},
-            .pSubpasses{&blit_pass},
-            .dependencyCount{0},
-            .pDependencies{nullptr},
-        };
-
-        auto rp_result = _dispatch.createRenderPass(&vk_rp_ci, _alloc_callbacks, &pass->pass);
-        if (rp_result != VK_SUCCESS)
-        {
-            logger->error("Failed to create VkRenderPass.");
-            return;
-        }
-        _set_resource_name(VK_OBJECT_TYPE_RENDER_PASS, reinterpret_cast<std::uint64_t>(pass->pass), ci.name);
-
-        VkFramebufferCreateInfo vk_fb_ci = {
-            .sType{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .renderPass{pass->pass},
-            .attachmentCount{1},
-            .width{_winfo.swapchain.extent.width},
-            .height{_winfo.swapchain.extent.height},
-            .layers{1},
-        };
-
         // 2 attachments, 1 swapchain image, 1 depth buffer image
-        VkImageView fb_attachments[1];
-        _winfo.swapchain_targets.resize(_winfo.swapchain.image_count);
         _winfo.textures.resize(_winfo.swapchain.image_count);
 
         for (std::size_t i = 0; i < _winfo.swapchain.image_count; ++i)
@@ -2160,20 +1783,7 @@ namespace tempest::graphics
             tex->underlying_image = _winfo.images[i];
             tex->underlying_view = _winfo.views[i];
             _winfo.textures[i] = tex_handle;
-
-            fb_attachments[0] = _winfo.views[i];
-            vk_fb_ci.pAttachments = fb_attachments;
-
-            auto fb_result = _dispatch.createFramebuffer(&vk_fb_ci, _alloc_callbacks, &_winfo.swapchain_targets[i]);
-            if (fb_result != VK_SUCCESS)
-            {
-                logger->error("Failed to create VkFramebuffer for swapchain pass.");
-                return;
-            }
         }
-
-        pass->width = static_cast<std::uint16_t>(_winfo.swapchain.extent.width);
-        pass->height = static_cast<std::uint16_t>(_winfo.swapchain.extent.height);
 
         // record and submit
         {
@@ -2225,71 +1835,6 @@ namespace tempest::graphics
         }
     }
 
-    void gfx_device::_create_framebuffer(render_pass* pass, std::span<texture_handle> colors,
-                                         texture_handle depth_stencil)
-    {
-        std::array<VkImageView, max_framebuffer_attachments + 1> attachments;
-        std::uint32_t attachment_count{0};
-
-        assert(colors.size() + 1 <= max_framebuffer_attachments);
-
-        for (auto& handle : colors)
-        {
-            texture* tex = access_texture(handle);
-            attachments[attachment_count++] = tex->underlying_view;
-        }
-
-        if (depth_stencil.index != invalid_resource_handle)
-        {
-            texture* tex = access_texture(depth_stencil);
-            assert(attachment_count < attachments.size());
-            attachments[attachment_count++] = tex->underlying_view;
-        }
-
-        VkFramebufferCreateInfo vk_fb_ci = {
-            .sType{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .renderPass{pass->pass},
-            .attachmentCount{attachment_count},
-            .pAttachments{attachments.data()},
-            .width{pass->width},
-            .height{pass->height},
-            .layers{1},
-        };
-
-        auto result = _dispatch.createFramebuffer(&vk_fb_ci, _alloc_callbacks, &pass->target);
-        if (result != VK_SUCCESS)
-        {
-            logger->error("Failed to create VkFramebuffer for pass {0}", pass->name);
-        }
-        _set_resource_name(VK_OBJECT_TYPE_FRAMEBUFFER, reinterpret_cast<std::uint64_t>(pass->target), pass->name);
-    }
-
-    render_pass_attachment_info gfx_device::_fill_render_pass_attachment_info(const render_pass_create_info& ci)
-    {
-        render_pass_attachment_info attachment_info{
-            .color_attachment_count{ci.render_targets},
-            .color_load{ci.color_load},
-            .depth_load{ci.depth_load},
-            .stencil_load{ci.stencil_load},
-        };
-
-        for (std::size_t i = 0; i < ci.render_targets; ++i)
-        {
-            texture* tex = access_texture(ci.color_outputs[i]);
-            attachment_info.color_formats[i] = tex->image_fmt;
-        }
-
-        if (ci.depth_stencil_texture.index != invalid_resource_handle)
-        {
-            texture* tex = access_texture(ci.depth_stencil_texture);
-            attachment_info.depth_stencil_format = tex->image_fmt;
-        }
-
-        return attachment_info;
-    }
-
     void gfx_device::_recreate_swapchain()
     {
         logger->info("Swapchain no longer optimal. Reconstructing the swapchain.");
@@ -2310,8 +1855,6 @@ namespace tempest::graphics
             return;
         }
 
-        render_pass* swap_pass = access_render_pass(_swapchain_render_pass);
-        _dispatch.destroyRenderPass(swap_pass->pass, _alloc_callbacks);
         _destroy_swapchain_resources();
 
         vkb::SwapchainBuilder bldr =
@@ -2345,24 +1888,7 @@ namespace tempest::graphics
         _winfo.images = *swapchain_images_result;
         _winfo.views = *swapchain_views_result;
 
-        std::fill_n(std::begin(_swapchain_attachment_info.color_formats),
-                    _swapchain_attachment_info.color_formats.size(), VK_FORMAT_UNDEFINED);
-
-        _swapchain_attachment_info.color_formats[0] = _winfo.swapchain.image_format;
-        _swapchain_attachment_info.depth_stencil_format = VK_FORMAT_UNDEFINED;
-        _swapchain_attachment_info.color_attachment_count = 1;
-        _swapchain_attachment_info.color_load = _swapchain_attachment_info.depth_load =
-            _swapchain_attachment_info.stencil_load = render_pass_attachment_operation::DONT_CARE;
-
-        render_pass_create_info ci = {
-            .type{render_pass_type::SWAPCHAIN},
-            .color_load{render_pass_attachment_operation::CLEAR},
-            .depth_load{render_pass_attachment_operation::CLEAR},
-            .stencil_load{render_pass_attachment_operation::CLEAR},
-            .name{"Swapchain Resolve Pass"},
-        };
-
-        _create_swapchain_pass(ci, swap_pass);
+        _create_swapchain_resources();
     }
 
     void gfx_device::_destroy_swapchain_resources()
@@ -2370,7 +1896,6 @@ namespace tempest::graphics
         for (std::size_t i = 0; i < _winfo.swapchain.image_count; ++i)
         {
             release_texture(_winfo.textures[i]);
-            _dispatch.destroyFramebuffer(_winfo.swapchain_targets[i], _alloc_callbacks);
             _dispatch.destroyImageView(_winfo.views[i], _alloc_callbacks);
         }
         vkb::destroy_swapchain(_winfo.swapchain);

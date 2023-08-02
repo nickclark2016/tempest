@@ -29,7 +29,6 @@ namespace tempest::graphics
         vkb::Swapchain swapchain;
         std::vector<VkImage> images;
         std::vector<VkImageView> views;
-        std::vector<VkFramebuffer> swapchain_targets;
         std::vector<texture_handle> textures;
         std::uint32_t image_index{0};
     };
@@ -152,23 +151,8 @@ namespace tempest::graphics
         [[nodiscard]] descriptor_set_handle create_descriptor_set(const descriptor_set_builder& bldr);
         void release_descriptor_set(descriptor_set_handle handle);
 
-        [[nodiscard]] render_pass* access_render_pass(render_pass_handle handle);
-        [[nodiscard]] const render_pass* access_render_pass(render_pass_handle handle) const;
-        [[nodiscard]] render_pass_handle create_render_pass(const render_pass_create_info& ci);
-        void release_render_pass(render_pass_handle handle);
-
         [[nodiscard]] command_buffer& get_command_buffer(queue_type type, bool begin);
         [[nodiscard]] command_buffer& get_instant_command_buffer();
-
-        [[nodiscard]] inline render_pass_attachment_info get_swapchain_attachment_info() const noexcept
-        {
-            return _swapchain_attachment_info;
-        }
-
-        [[nodiscard]] inline render_pass_handle get_swapchain_pass() const noexcept
-        {
-            return _swapchain_render_pass;
-        }
 
         [[nodiscard]] texture_handle get_current_swapchain_texture() const noexcept;
 
@@ -180,6 +164,11 @@ namespace tempest::graphics
         [[nodiscard]] inline std::size_t num_frames_in_flight() const noexcept
         {
             return _winfo.swapchain.image_count;
+        }
+
+        [[nodiscard]] inline VkFormat get_swapchain_format() const noexcept
+        {
+            return _winfo.swapchain.image_format;
         }
 
         void queue_command_buffer(const command_buffer& buffer);
@@ -237,22 +226,16 @@ namespace tempest::graphics
         core::object_pool _texture_pool;
         core::object_pool _shader_state_pool;
         core::object_pool _pipeline_pool;
-        core::object_pool _render_pass_pool;
         core::object_pool _descriptor_set_layout_pool;
         core::object_pool _sampler_pool;
 
         sampler_handle _default_sampler{.index{invalid_resource_handle}};
-        render_pass_handle _swapchain_render_pass{.index{invalid_resource_handle}};
-        render_pass_attachment_info _swapchain_attachment_info{};
 
         std::optional<command_buffer_ring> _cmd_ring;
         std::array<command_buffer, 8> _queued_commands_buffers;
         std::uint32_t _queued_command_buffer_count{0};
 
         std::optional<descriptor_pool> _desc_pool;
-
-        std::unordered_map<std::uint64_t, VkRenderPass>
-            _render_pass_cache; // TODO: investigate a flat hash map solution
 
         void _advance_frame_counter() noexcept;
         void _set_resource_name(VkObjectType type, std::uint64_t handle, std::string_view name);
@@ -263,15 +246,8 @@ namespace tempest::graphics
         void _destroy_texture_imm(resource_handle hnd);
         void _destroy_shader_state_imm(resource_handle hnd);
         void _destroy_pipeline_imm(resource_handle hnd);
-        void _destroy_render_pass_imm(resource_handle hnd);
         void _destroy_desc_set_imm(resource_handle hnd);
         void _destroy_sampler_imm(resource_handle hnd);
-
-        VkRenderPass _fetch_vk_render_pass(const render_pass_attachment_info& out, std::string_view name);
-        VkRenderPass _create_vk_render_pass(const render_pass_attachment_info& out, std::string_view name);
-        void _create_swapchain_pass(const render_pass_create_info& ci, render_pass* pass);
-        void _create_framebuffer(render_pass* pass, std::span<texture_handle> colors, texture_handle depth_stencil);
-        render_pass_attachment_info _fill_render_pass_attachment_info(const render_pass_create_info& ci);
 
         void _recreate_swapchain();
         void _destroy_swapchain_resources();
@@ -284,6 +260,8 @@ namespace tempest::graphics
                                          std::span<const resource_handle> resources,
                                          std::span<const sampler_handle> samplers,
                                          std::span<const std::uint16_t> bindings);
+
+        void _create_swapchain_resources();
     };
 } // namespace tempest::graphics
 
