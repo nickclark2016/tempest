@@ -11,6 +11,30 @@
 
 namespace tempest::core
 {
+    class no_copy
+    {
+      public:
+        no_copy(const no_copy&) = delete;
+        virtual ~no_copy() = default;
+
+        no_copy& operator=(const no_copy&) = delete;
+
+      private:
+    };
+
+    class no_move
+    {
+      public:
+        no_move(no_move&&) noexcept = delete;
+        virtual ~no_move() = default;
+
+        no_move& operator=(no_move&&) noexcept = delete;
+    };
+
+    class no_copy_move : public no_copy, no_move
+    {
+    };
+
     template <typename T> class best_fit_scheme
     {
       public:

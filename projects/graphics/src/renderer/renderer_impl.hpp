@@ -41,12 +41,10 @@ namespace tempest::graphics
         VkFormat color_target_format{VK_FORMAT_R8G8B8A8_SRGB};
 
         pipeline_handle blit_pipeline{};
-        render_pass_handle blit_pass{};
         descriptor_set_layout_handle blit_desc_set_layout{};
         descriptor_set_handle blit_desc_set{};
         sampler_handle default_sampler{};
 
-        render_pass_handle triangle_pass{};
         pipeline_handle triangle_pipeline{};
         descriptor_set_layout_handle mesh_data_layout{};
         descriptor_set_handle mesh_data_set;

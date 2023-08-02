@@ -367,14 +367,24 @@ namespace tempest::graphics
         std::string_view name;
     };
 
+    struct dynamic_render_state
+    {
+        std::array<VkFormat, max_framebuffer_attachments> color_format;
+        std::uint32_t active_color_attachments;
+        VkFormat depth_format;
+        VkFormat stencil_format;
+    };
+
     struct pipeline_create_info
     {
+        std::optional<dynamic_render_state> dynamic_render_state;
+
         rasterization_create_info raster{};
         depth_stencil_create_info ds{};
         attachment_blend_state_create_info blend{};
         vertex_input_create_info vertex_input{};
         shader_state_create_info shaders{};
-        render_pass_attachment_info output;
+        std::optional<render_pass_attachment_info> output;
         std::array<descriptor_set_layout_handle, max_descriptor_set_layouts> desc_layouts;
         std::uint32_t active_desc_layouts;
 
@@ -560,6 +570,7 @@ namespace tempest::graphics
         texture_handle handle;
         texture_type type{texture_type::D2};
         bool bindless{false};
+        bool swapchain{false};
 
         sampler* samp{nullptr};
         std::string_view name;
@@ -739,6 +750,7 @@ namespace tempest::graphics
     inline VkPipelineStageFlags to_vk_pipeline_stage(pipeline_stage stage)
     {
         static constexpr VkPipelineStageFlags stages[] = {
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
@@ -746,9 +758,70 @@ namespace tempest::graphics
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
         };
 
         return stages[static_cast<std::underlying_type_t<pipeline_stage>>(stage)];
+    }
+
+    inline VkAccessFlags to_vk_access_flags(resource_state state)
+    {
+        switch (state)
+        {
+        case resource_state::VERTEX_AND_UNIFORM_BUFFER:
+            return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT;
+        case resource_state::INDEX_BUFFER:
+            return VK_ACCESS_INDEX_READ_BIT;
+        case resource_state::RENDER_TARGET:
+            return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        case resource_state::UNORDERED_MEMORY_ACCESS:
+            return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        case resource_state::DEPTH_READ:
+            return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        case resource_state::DEPTH_WRITE:
+            return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        case resource_state::GENERIC_SHADER_RESOURCE:
+            [[fallthrough]];
+        case resource_state::FRAGMENT_SHADER_RESOURCE:
+            return VK_ACCESS_SHADER_READ_BIT;
+        case resource_state::INDIRECT_ARGUMENT_BUFFER:
+            return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+        case resource_state::TRANSFER_SRC:
+            return VK_ACCESS_TRANSFER_READ_BIT;
+        case resource_state::TRANSFER_DST:
+            return VK_ACCESS_TRANSFER_WRITE_BIT;
+        case resource_state::PRESENT:
+            return VK_ACCESS_NONE;
+        }
+
+        return 0;
+    }
+
+    inline VkImageLayout to_vk_image_layout(resource_state state)
+    {
+        switch (state)
+        {
+        case resource_state::UNDEFINED:
+            return VK_IMAGE_LAYOUT_UNDEFINED;
+        case resource_state::RENDER_TARGET:
+            return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        case resource_state::FRAGMENT_SHADER_RESOURCE:
+            return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        case resource_state::UNORDERED_MEMORY_ACCESS:
+            return VK_IMAGE_LAYOUT_GENERAL;
+        case resource_state::DEPTH_READ:
+            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        case resource_state::DEPTH_WRITE:
+            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        case resource_state::TRANSFER_SRC:
+            return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        case resource_state::TRANSFER_DST:
+            return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        case resource_state::PRESENT:
+            return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        }
+
+        return static_cast<VkImageLayout>(0);
     }
 
     inline VkPipelineStageFlags fetch_pipeline_stage_flags(VkAccessFlags access, VkQueueFlagBits type)
