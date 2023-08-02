@@ -61,7 +61,6 @@ namespace tempest::graphics
         command_buffer& use_default_scissor();
         command_buffer& set_viewport(VkViewport viewport, bool flip = true);
         command_buffer& use_default_viewport(bool flip = true);
-        command_buffer& bind_render_pass(render_pass_handle pass);
         command_buffer& begin_rendering(VkRect2D viewport, std::span<render_attachment_descriptor> colors,
                                         const std::optional<render_attachment_descriptor>& depth,
                                         const std::optional<render_attachment_descriptor>& stencil);
@@ -86,7 +85,6 @@ namespace tempest::graphics
         VkCommandBuffer _buf{VK_NULL_HANDLE};
         gfx_device* _device{nullptr};
         std::array<VkDescriptorSet, 16> _descriptors{};
-        render_pass* _active_pass{nullptr};
         pipeline* _active_pipeline{nullptr};
         std::array<VkClearValue, 2> _clear_values{}; // 0 - color, 1 - depth
         bool _is_recording{false};

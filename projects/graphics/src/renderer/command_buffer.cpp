@@ -42,7 +42,6 @@ namespace tempest::graphics
     command_buffer& command_buffer::reset()
     {
         _is_recording = false;
-        _active_pass = nullptr;
         _active_pipeline = nullptr;
         _current_command = 0;
 
@@ -114,47 +113,6 @@ namespace tempest::graphics
         };
 
         return set_viewport(viewport, flip);
-    }
-
-    command_buffer& command_buffer::bind_render_pass(render_pass_handle pass)
-    {
-        _is_recording = true;
-        render_pass* p = _device->access_render_pass(pass);
-
-        if (_active_pass != nullptr && _active_pass->type != render_pass_type::COMPUTE && p != _active_pass)
-        {
-            _device->_dispatch.cmdEndRenderPass(_buf);
-        }
-
-        if (p != _active_pass && p->type != render_pass_type::COMPUTE)
-        {
-            VkRenderPassBeginInfo begin = {
-                .sType{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO},
-                .pNext{nullptr},
-                .renderPass{p->pass},
-                .framebuffer{p->type == render_pass_type::SWAPCHAIN
-                                 ? _device->_winfo.swapchain_targets[_device->_winfo.image_index]
-                                 : p->target},
-                .renderArea{
-                    .offset{
-                        .x{0},
-                        .y{0},
-                    },
-                    .extent{
-                        .width{p->width},
-                        .height{p->height},
-                    },
-                },
-                .clearValueCount{p->num_render_targets + (p->output_depth_attachment ? 1u : 0u)},
-                .pClearValues{_clear_values.data()},
-            };
-
-            _device->_dispatch.cmdBeginRenderPass(_buf, &begin, VK_SUBPASS_CONTENTS_INLINE);
-        }
-
-        _active_pass = p;
-
-        return *this;
     }
 
     command_buffer& command_buffer::begin_rendering(VkRect2D viewport, std::span<render_attachment_descriptor> colors,
@@ -300,12 +258,6 @@ namespace tempest::graphics
 
     command_buffer& command_buffer::barrier(const execution_barrier& barrier)
     {
-        if (_active_pass && _active_pass->type != render_pass_type::COMPUTE)
-        {
-            _device->_dispatch.cmdEndRenderPass(_buf);
-            _active_pass = nullptr;
-        }
-
         std::uint32_t buffer_count = static_cast<std::uint32_t>(barrier.buffers.size());
         std::uint32_t image_count = static_cast<std::uint32_t>(barrier.textures.size());
 
@@ -702,12 +654,6 @@ namespace tempest::graphics
     command_buffer& command_buffer::transition_resource(std::span<state_transition_descriptor> descs,
                                                         pipeline_stage src, pipeline_stage dst)
     {
-        if (_active_pass && _active_pass->type != render_pass_type::COMPUTE)
-        {
-            _device->_dispatch.cmdEndRenderPass(_buf);
-            _active_pass = nullptr;
-        }
-
         static constexpr std::size_t MAX_BARRIER_COUNT = 16;
 
         assert(descs.size() <= MAX_BARRIER_COUNT);
@@ -783,11 +729,6 @@ namespace tempest::graphics
 
     void command_buffer::end()
     {
-        if (_active_pass && _active_pass->type != render_pass_type::COMPUTE)
-        {
-            _device->_dispatch.cmdEndRenderPass(_buf);
-            _active_pass = nullptr;
-        }
         _device->_dispatch.endCommandBuffer(_buf);
     }
 
