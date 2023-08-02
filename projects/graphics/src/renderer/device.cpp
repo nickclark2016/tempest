@@ -49,7 +49,7 @@ namespace tempest::graphics
                                             .set_app_version(0, 0, 1)
                                             .set_engine_name("Tempest Engine")
                                             .set_engine_version(0, 0, 1)
-                                            .require_api_version(1, 2, 0)
+                                            .require_api_version(1, 3, 0)
                                             .set_allocation_callbacks(alloc_callbacks);
 
             if (info.enable_debug)
@@ -84,7 +84,7 @@ namespace tempest::graphics
                                                        .defer_surface_initialization()
                                                        .add_desired_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
                                                        .require_present()
-                                                       .set_minimum_version(1, 2)
+                                                       .set_minimum_version(1, 3)
                                                        .set_required_features({
                                                            .independentBlend{VK_TRUE},
                                                            .logicOp{VK_TRUE},
@@ -113,6 +113,9 @@ namespace tempest::graphics
                                                            .imagelessFramebuffer{VK_TRUE},
                                                            .separateDepthStencilLayouts{VK_TRUE},
                                                            .bufferDeviceAddress{VK_TRUE},
+                                                       })
+                                                       .set_required_features_13({
+                                                           .dynamicRendering{VK_TRUE},
                                                        });
 
             auto result = selector.select();
@@ -273,7 +276,6 @@ namespace tempest::graphics
 
             dispatch.cmdPipelineBarrier(buf, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &img_barrier);
         }
-    
 
         std::size_t max_binding_range(const VkPhysicalDeviceProperties& props, VkDescriptorType type)
         {
@@ -1093,6 +1095,12 @@ namespace tempest::graphics
                 .pDynamicStates{dyn_states},
             };
 
+            VkRenderPass render_pass = VK_NULL_HANDLE;
+            if (ci.output)
+            {
+                render_pass = _fetch_vk_render_pass(*ci.output, ci.name);
+            }
+
             VkGraphicsPipelineCreateInfo graphics_pipeline_ci = {
                 .sType{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO},
                 .pNext{nullptr},
@@ -1109,9 +1117,25 @@ namespace tempest::graphics
                 .pColorBlendState{&color_blend_ci},
                 .pDynamicState{&dynamic_state_ci},
                 .layout{pipeline_layout},
-                .renderPass{_fetch_vk_render_pass(ci.output, ci.name)},
+                .renderPass{render_pass},
                 .subpass{0},
             };
+
+            VkPipelineRenderingCreateInfo dynamic = {
+                .sType{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO},
+                .pNext{nullptr},
+            };
+
+            if (ci.dynamic_render_state)
+            {
+                dynamic.colorAttachmentCount = ci.dynamic_render_state->active_color_attachments;
+                dynamic.pColorAttachmentFormats =
+                    dynamic.colorAttachmentCount ? ci.dynamic_render_state->color_format.data() : nullptr;
+                dynamic.depthAttachmentFormat = ci.dynamic_render_state->depth_format;
+                dynamic.stencilAttachmentFormat = ci.dynamic_render_state->stencil_format;
+
+                graphics_pipeline_ci.pNext = &dynamic;
+            }
 
             auto result = _dispatch.createGraphicsPipelines(nullptr, 1, &graphics_pipeline_ci, _alloc_callbacks,
                                                             &pipeline_data->pipeline);
@@ -1655,6 +1679,11 @@ namespace tempest::graphics
         return _cmd_ring->fetch_buffer(static_cast<std::uint32_t>(_current_frame));
     }
 
+    texture_handle gfx_device::get_current_swapchain_texture() const noexcept
+    {
+        return _winfo.textures[_winfo.image_index];
+    }
+
     void gfx_device::queue_command_buffer(const command_buffer& buffer)
     {
         _queued_commands_buffers[_queued_command_buffer_count++] = buffer;
@@ -1825,8 +1854,11 @@ namespace tempest::graphics
         auto texture = access_texture(texture_handle{hnd});
         if (texture)
         {
-            _dispatch.destroyImageView(texture->underlying_view, _alloc_callbacks);
-            vmaDestroyImage(_vma_alloc, texture->underlying_image, texture->allocation);
+            if (!texture->swapchain)
+            {
+                _dispatch.destroyImageView(texture->underlying_view, _alloc_callbacks);
+                vmaDestroyImage(_vma_alloc, texture->underlying_image, texture->allocation);
+            }
         }
         _texture_pool.release_resource(hnd);
     }
@@ -2117,9 +2149,18 @@ namespace tempest::graphics
         // 2 attachments, 1 swapchain image, 1 depth buffer image
         VkImageView fb_attachments[1];
         _winfo.swapchain_targets.resize(_winfo.swapchain.image_count);
+        _winfo.textures.resize(_winfo.swapchain.image_count);
 
         for (std::size_t i = 0; i < _winfo.swapchain.image_count; ++i)
         {
+            texture_handle tex_handle{.index = _texture_pool.acquire_resource()};
+            texture* tex = access_texture(tex_handle);
+            tex->swapchain = true;
+            tex->image_fmt = _winfo.swapchain.image_format;
+            tex->underlying_image = _winfo.images[i];
+            tex->underlying_view = _winfo.views[i];
+            _winfo.textures[i] = tex_handle;
+
             fb_attachments[0] = _winfo.views[i];
             vk_fb_ci.pAttachments = fb_attachments;
 
@@ -2328,6 +2369,7 @@ namespace tempest::graphics
     {
         for (std::size_t i = 0; i < _winfo.swapchain.image_count; ++i)
         {
+            release_texture(_winfo.textures[i]);
             _dispatch.destroyFramebuffer(_winfo.swapchain_targets[i], _alloc_callbacks);
             _dispatch.destroyImageView(_winfo.views[i], _alloc_callbacks);
         }
@@ -2473,8 +2515,7 @@ namespace tempest::graphics
                 [[fallthrough]];
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
                 [[fallthrough]];
-            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-                {
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
                 buffer_handle handle = {.index{resources[res]}};
                 buffer* buf = access_buffer(handle);
 
@@ -2488,7 +2529,8 @@ namespace tempest::graphics
                     buf_info[i].buffer = buf->underlying;
                 }
 
-                auto clamped_range = std::min(static_cast<std::size_t>(buf->size), max_binding_range(_physical_device_properties, binding.type));
+                auto clamped_range = std::min(static_cast<std::size_t>(buf->size),
+                                              max_binding_range(_physical_device_properties, binding.type));
 
                 buf_info[i].offset = 0;
                 buf_info[i].range = clamped_range;

@@ -76,25 +76,99 @@ namespace tempest::graphics
         descriptor_set_handle mesh_sets[] = {mesh_data_set};
         uint32_t offsets[] = {0, 0, 0};
 
-        cmds.barrier({
-                         .source{pipeline_stage::FRAGMENT_SHADER},
-                         .destination{pipeline_stage::FRAMEBUFFER_OUTPUT},
-                         .textures{color_target_barriers},
-                     })
-            .set_clear_color(0.5f, 0.1f, 0.8f, 1.0f)
-            .set_clear_depth_stencil(1.0f, 0)
+        state_transition_descriptor prepare_render_transitions[] = {
+            state_transition_descriptor{
+                .texture{color_target},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::UNDEFINED},
+                .dst_state{resource_state::RENDER_TARGET},
+            },
+        };
+
+        state_transition_descriptor prepare_blit_transitions[] = {
+            state_transition_descriptor{
+                .texture{color_target},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::RENDER_TARGET},
+                .dst_state{resource_state::FRAGMENT_SHADER_RESOURCE},
+            },
+        };
+
+        state_transition_descriptor prepare_pre_present_transitions[] = {
+            state_transition_descriptor{
+                .texture{device->get_current_swapchain_texture()},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::UNDEFINED},
+                .dst_state{resource_state::RENDER_TARGET},
+            },
+        };
+
+        state_transition_descriptor prepare_present_transitions[] = {
+            state_transition_descriptor{
+                .texture{device->get_current_swapchain_texture()},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::RENDER_TARGET},
+                .dst_state{resource_state::PRESENT},
+            },
+        };
+
+        render_attachment_descriptor color_attachments[] = {
+            render_attachment_descriptor{
+                .tex{color_target},
+                .layout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                .load{VK_ATTACHMENT_LOAD_OP_CLEAR},
+                .store{VK_ATTACHMENT_STORE_OP_STORE},
+                .clear{.color{0.5f, 0.1f, 0.8f, 1.0f}},
+            },
+        };
+
+        render_attachment_descriptor depth_attachment{
+            .tex{depth_target},
+            .layout{VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
+            .load{VK_ATTACHMENT_LOAD_OP_CLEAR},
+            .store{VK_ATTACHMENT_STORE_OP_STORE},
+            .clear{
+                .depthStencil{
+                    .depth{1.0f},
+                    .stencil{0},
+                },
+            },
+        };
+
+        render_attachment_descriptor swapchain_attachments[] = {
+            render_attachment_descriptor{
+                .tex{device->get_current_swapchain_texture()},
+                .layout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                .load{VK_ATTACHMENT_LOAD_OP_CLEAR},
+                .store{VK_ATTACHMENT_STORE_OP_STORE},
+            },
+        };
+
+        cmds.transition_resource(prepare_pre_present_transitions, pipeline_stage::TOP,
+                                 pipeline_stage::FRAMEBUFFER_OUTPUT)
+            .transition_resource(prepare_render_transitions, pipeline_stage::FRAGMENT_SHADER,
+                                 pipeline_stage::FRAMEBUFFER_OUTPUT)
             .set_scissor_region({{0, 0}, {1280, 720}})
             .set_viewport({0, 0, 1280, 720, 0.0, 1.0})
-            .bind_render_pass(triangle_pass)
             .bind_pipeline(triangle_pipeline)
+            .begin_rendering({{0, 0}, {1280, 720}}, color_attachments, depth_attachment, std::nullopt)
             .bind_descriptor_set({mesh_sets}, {offsets})
             .draw(3, 1, 0, 0)
-            .barrier({
-                .source{pipeline_stage::FRAMEBUFFER_OUTPUT},
-                .destination{pipeline_stage::FRAGMENT_SHADER},
-                .load_operation{},
-                .textures{color_target_barriers},
-            });
+            .end_rendering()
+            .transition_resource(prepare_blit_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT,
+                                 pipeline_stage::FRAGMENT_SHADER);
 
         descriptor_set_handle sets_to_bind[] = {blit_desc_set};
 
@@ -102,10 +176,12 @@ namespace tempest::graphics
             .set_clear_depth_stencil(1.0f, 0)
             .use_default_scissor()
             .use_default_viewport(false)
-            .bind_render_pass(blit_pass)
             .bind_pipeline(blit_pipeline)
+            .begin_rendering({{0, 0}, {1280, 720}}, swapchain_attachments, std::nullopt, std::nullopt)
             .bind_descriptor_set({sets_to_bind}, {})
-            .draw(6, 1, 0, 0);
+            .draw(6, 1, 0, 0)
+            .end_rendering()
+            .transition_resource(prepare_present_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT, pipeline_stage::END);
 
         cmds.end();
 
@@ -135,7 +211,6 @@ namespace tempest::graphics
         device->release_sampler(default_sampler);
         device->release_descriptor_set(blit_desc_set);
         device->release_descriptor_set_layout(blit_desc_set_layout);
-        device->release_render_pass(triangle_pass);
     }
 
     void irenderer::impl::_create_triangle_pipeline()
@@ -176,24 +251,6 @@ namespace tempest::graphics
             },
         }};
 
-        render_pass_attachment_info attachments = {
-            .color_formats{color_target_format},
-            .depth_stencil_format{VK_FORMAT_D32_SFLOAT},
-            .color_attachment_count{1},
-            .color_load{render_pass_attachment_operation::CLEAR},
-            .depth_load{render_pass_attachment_operation::CLEAR},
-        };
-
-        triangle_pass = device->create_render_pass({
-            .render_targets{1},
-            .type{render_pass_type::RASTERIZATION},
-            .color_outputs{color_target},
-            .depth_stencil_texture{depth_target},
-            .color_load{render_pass_attachment_operation::CLEAR},
-            .depth_load{render_pass_attachment_operation::CLEAR},
-            .name{"RenderPass_Triangle"},
-        });
-
         descriptor_set_layout_create_info::binding mesh_binding = {
             .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
             .start_binding{0},
@@ -230,6 +287,15 @@ namespace tempest::graphics
                                                           .set_layout(mesh_data_layout));
 
         triangle_pipeline = device->create_pipeline({
+            .dynamic_render_state{
+                dynamic_render_state{
+                    .color_format{
+                        color_target_format,
+                    },
+                    .active_color_attachments{1},
+                    .depth_format{VK_FORMAT_D32_SFLOAT},
+                },
+            },
             .ds{
                 .depth_comparison{VK_COMPARE_OP_LESS_OR_EQUAL},
                 .depth_test_enable{true},
@@ -245,7 +311,6 @@ namespace tempest::graphics
                 .stage_count{2},
                 .name{"triangle_shader"},
             },
-            .output{attachments},
             .desc_layouts{
                 mesh_data_layout,
             },
@@ -277,10 +342,6 @@ namespace tempest::graphics
 
             device->execute_immediate(cmd);
         }
-
-        std::array<texture_handle, max_framebuffer_attachments> color_targets{device->get_swapchain_pass()};
-
-        blit_pass = device->get_swapchain_pass();
 
         auto vs_spv = read_spirv("data/blit/blit.vx.spv");
         auto fs_spv = read_spirv("data/blit/blit.px.spv");
@@ -317,6 +378,12 @@ namespace tempest::graphics
         });
 
         blit_pipeline = device->create_pipeline({
+            .dynamic_render_state{
+                dynamic_render_state{
+                    .color_format{device->get_swapchain_attachment_info().color_formats[0]},
+                    .active_color_attachments{0},
+                },
+            },
             .ds{
                 .depth_comparison{VK_COMPARE_OP_LESS_OR_EQUAL},
                 .depth_test_enable{true},
@@ -332,7 +399,6 @@ namespace tempest::graphics
                 .stage_count{2},
                 .name{"blit_shader"},
             },
-            .output{device->get_swapchain_attachment_info()},
             .desc_layouts{blit_desc_set_layout},
             .active_desc_layouts{1},
         });

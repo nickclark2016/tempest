@@ -157,6 +157,86 @@ namespace tempest::graphics
         return *this;
     }
 
+    command_buffer& command_buffer::begin_rendering(VkRect2D viewport, std::span<render_attachment_descriptor> colors,
+                                                    const std::optional<render_attachment_descriptor>& depth,
+                                                    const std::optional<render_attachment_descriptor>& stencil)
+    {
+        std::array<VkRenderingAttachmentInfo, max_framebuffer_attachments> vk_colors;
+        std::optional<VkRenderingAttachmentInfo> vk_depth;
+        std::optional<VkRenderingAttachmentInfo> vk_stencil;
+
+        std::uint32_t color_count = 0;
+
+        for (const auto& color : colors)
+        {
+            vk_colors[color_count++] = {
+                .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
+                .pNext{nullptr},
+                .imageView{_device->access_texture(color.tex)->underlying_view},
+                .imageLayout{color.layout},
+                .resolveMode{color.resolve_mode},
+                .resolveImageView{color.resolve_target ? _device->access_texture(color.resolve_target)->underlying_view
+                                                       : nullptr},
+                .resolveImageLayout{color.resolve_layout},
+                .loadOp{color.load},
+                .storeOp{color.store},
+                .clearValue{color.clear},
+            };
+        }
+
+        if (depth)
+        {
+            vk_depth = VkRenderingAttachmentInfo{
+                .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
+                .pNext{nullptr},
+                .imageView{_device->access_texture(depth->tex)->underlying_view},
+                .imageLayout{depth->layout},
+                .resolveMode{depth->resolve_mode},
+                .resolveImageView{
+                    depth->resolve_target ? _device->access_texture(depth->resolve_target)->underlying_view : nullptr},
+                .resolveImageLayout{depth->resolve_layout},
+                .loadOp{depth->load},
+                .storeOp{depth->store},
+                .clearValue{depth->clear},
+            };
+        }
+
+        if (stencil)
+        {
+            vk_stencil = VkRenderingAttachmentInfo{
+                .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
+                .pNext{nullptr},
+                .imageView{_device->access_texture(stencil->tex)->underlying_view},
+                .imageLayout{stencil->layout},
+                .resolveMode{stencil->resolve_mode},
+                .resolveImageView{stencil->resolve_target
+                                      ? _device->access_texture(stencil->resolve_target)->underlying_view
+                                      : nullptr},
+                .resolveImageLayout{stencil->resolve_layout},
+                .loadOp{stencil->load},
+                .storeOp{stencil->store},
+                .clearValue{stencil->clear},
+            };
+        }
+
+        VkRenderingInfo render_info{
+            .sType{VK_STRUCTURE_TYPE_RENDERING_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .renderArea{viewport},
+            .layerCount{1},
+            .colorAttachmentCount{color_count},
+            .pColorAttachments{color_count ? vk_colors.data() : nullptr},
+            .pDepthAttachment{vk_depth ? &*vk_depth : nullptr},
+            .pStencilAttachment{vk_stencil ? &*vk_stencil : nullptr},
+        };
+
+        _device->_dispatch.cmdBeginRendering(_buf, &render_info);
+
+        // TODO: insert return statement here
+        return *this;
+    }
+
     command_buffer& command_buffer::bind_pipeline(pipeline_handle pipeline)
     {
         auto pipe = _device->access_pipeline(pipeline);
@@ -366,6 +446,12 @@ namespace tempest::graphics
                                               buffer_count ? memory_barriers.data() : nullptr, image_cnt,
                                               image_cnt ? image_barriers.data() : nullptr);
 
+        return *this;
+    }
+
+    command_buffer& command_buffer::end_rendering()
+    {
+        _device->_dispatch.cmdEndRendering(_buf);
         return *this;
     }
 
@@ -590,6 +676,96 @@ namespace tempest::graphics
                                                   VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr,
                                                   barrier_count, barriers);
         }
+
+        return *this;
+    }
+
+    namespace
+    {
+        VkImageAspectFlags get_aspect(resource_state state)
+        {
+            switch (state)
+            {
+            case resource_state::DEPTH_READ:
+            case resource_state::DEPTH_WRITE:
+                return VK_IMAGE_ASPECT_DEPTH_BIT;
+            case resource_state::GENERIC_SHADER_RESOURCE:
+            case resource_state::RENDER_TARGET:
+            case resource_state::PRESENT:
+                return VK_IMAGE_ASPECT_COLOR_BIT;
+            default:
+                return 0;
+            }
+        }
+    } // namespace
+
+    command_buffer& command_buffer::transition_resource(std::span<state_transition_descriptor> descs,
+                                                        pipeline_stage src, pipeline_stage dst)
+    {
+        if (_active_pass && _active_pass->type != render_pass_type::COMPUTE)
+        {
+            _device->_dispatch.cmdEndRenderPass(_buf);
+            _active_pass = nullptr;
+        }
+
+        static constexpr std::size_t MAX_BARRIER_COUNT = 16;
+
+        assert(descs.size() <= MAX_BARRIER_COUNT);
+
+        VkImageMemoryBarrier images[MAX_BARRIER_COUNT];
+        VkBufferMemoryBarrier buffers[MAX_BARRIER_COUNT];
+
+        std::uint32_t image_barrier_count{0};
+        std::uint32_t buffer_barrier_count{0};
+
+        for (const state_transition_descriptor& desc : descs)
+        {
+            if (desc.texture)
+            {
+                auto texture = _device->access_texture(desc.texture);
+
+                VkImageMemoryBarrier& barrier = images[image_barrier_count++];
+                barrier = VkImageMemoryBarrier{
+                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
+                    .pNext{nullptr},
+                    .srcAccessMask{to_vk_access_flags(desc.src_state)},
+                    .dstAccessMask{to_vk_access_flags(desc.dst_state)},
+                    .oldLayout{to_vk_image_layout(desc.src_state)},
+                    .newLayout{to_vk_image_layout(desc.dst_state)},
+                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .image{texture->underlying_image},
+                    .subresourceRange{
+                        .aspectMask{get_aspect(desc.src_state) | get_aspect(desc.dst_state)},
+                        .baseMipLevel{desc.first_mip},
+                        .levelCount{desc.mip_count},
+                        .baseArrayLayer{desc.base_layer},
+                        .layerCount{desc.layer_count},
+                    },
+                };
+            }
+            else if (desc.buffer)
+            {
+                auto buffer = _device->access_buffer(desc.buffer);
+
+                VkBufferMemoryBarrier& barrier = buffers[buffer_barrier_count++];
+                barrier = VkBufferMemoryBarrier{
+                    .sType{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER},
+                    .pNext{nullptr},
+                    .srcAccessMask{to_vk_access_flags(desc.src_state)},
+                    .dstAccessMask{to_vk_access_flags(desc.dst_state)},
+                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .buffer{buffer->underlying},
+                    .offset{desc.offset},
+                    .size{desc.range},
+                };
+            }
+        }
+
+        _device->_dispatch.cmdPipelineBarrier(_buf, to_vk_pipeline_stage(src), to_vk_pipeline_stage(dst), 0, 0, nullptr,
+                                              buffer_barrier_count, buffer_barrier_count ? buffers : nullptr,
+                                              image_barrier_count, image_barrier_count ? images : nullptr);
 
         return *this;
     }

@@ -1,8 +1,6 @@
 #ifndef tempest_graphics_enums_hpp
 #define tempest_graphics_enums_hpp
 
-#include <vulkan/vulkan.h>
-
 #include <cstdint>
 #include <type_traits>
 
@@ -10,15 +8,15 @@ namespace tempest::graphics
 {
     enum class render_pass_attachment_operation
     {
-        LOAD = VK_ATTACHMENT_LOAD_OP_LOAD,
-        CLEAR = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        DONT_CARE = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        LOAD = 0,
+        CLEAR = 1,
+        DONT_CARE = 2,
     };
 
     enum class render_pass_type
     {
-        RASTERIZATION = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        COMPUTE = VK_PIPELINE_BIND_POINT_COMPUTE,
+        RASTERIZATION = 0,
+        COMPUTE = 1,
         SWAPCHAIN = 10,
     };
 
@@ -48,13 +46,15 @@ namespace tempest::graphics
 
     enum class pipeline_stage
     {
+        TOP,
         DRAW_INDIRECT,
         VERTEX_INPUT,
         VERTEX_SHADER,
         FRAGMENT_SHADER,
         FRAMEBUFFER_OUTPUT,
         COMPUTE_SHADER,
-        TRANSFER
+        TRANSFER,
+        END,
     };
 
     enum class resource_type
@@ -71,9 +71,9 @@ namespace tempest::graphics
 
     enum class queue_type
     {
-        GRAPHICS = VK_QUEUE_GRAPHICS_BIT,
-        TRANSFER = VK_QUEUE_TRANSFER_BIT,
-        COMPUTE = VK_QUEUE_COMPUTE_BIT
+        GRAPHICS = 1,
+        COMPUTE = 2,
+        TRANSFER = 4,
     };
 
     enum class resource_state
@@ -115,6 +115,21 @@ namespace tempest::graphics
         return static_cast<resource_state>(static_cast<std::underlying_type_t<resource_state>>(lhs) ^
                                            static_cast<std::underlying_type_t<resource_state>>(rhs));
     }
+
+    enum class image_format
+    {
+        RGBA8_UINT,
+        RGBA8_SRGB,
+        D32_FLOAT,
+        MAX_ENUM,
+    };
+
+    enum class data_format
+    {
+        RG32_FLOAT,
+        RGB32_FLOAT,
+        RGBA32_FLOAT,
+    };
 } // namespace tempest::graphics
 
 #endif // tempest_graphics_enums_hpp

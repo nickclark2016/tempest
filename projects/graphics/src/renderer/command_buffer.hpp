@@ -14,6 +14,36 @@ namespace tempest::graphics
 {
     class command_buffer_ring;
 
+    struct state_transition_descriptor
+    {
+        texture_handle texture;
+        buffer_handle buffer;
+
+        std::uint32_t first_mip;
+        std::uint32_t mip_count;
+        std::uint32_t base_layer;
+        std::uint32_t layer_count;
+        std::uint32_t offset;
+        std::uint32_t range;
+
+        resource_state src_state;
+        resource_state dst_state;
+    };
+
+    struct render_attachment_descriptor
+    {
+        texture_handle tex;
+
+        VkImageLayout layout;
+        VkAttachmentLoadOp load{VK_ATTACHMENT_LOAD_OP_CLEAR};
+        VkAttachmentStoreOp store{VK_ATTACHMENT_STORE_OP_STORE};
+        VkClearValue clear;
+
+        texture_handle resolve_target{.index{invalid_resource_handle}};
+        VkImageLayout resolve_layout;
+        VkResolveModeFlagBits resolve_mode{VK_RESOLVE_MODE_NONE};
+    };
+
     class command_buffer
     {
       public:
@@ -32,16 +62,22 @@ namespace tempest::graphics
         command_buffer& set_viewport(VkViewport viewport, bool flip = true);
         command_buffer& use_default_viewport(bool flip = true);
         command_buffer& bind_render_pass(render_pass_handle pass);
+        command_buffer& begin_rendering(VkRect2D viewport, std::span<render_attachment_descriptor> colors,
+                                        const std::optional<render_attachment_descriptor>& depth,
+                                        const std::optional<render_attachment_descriptor>& stencil);
         command_buffer& bind_pipeline(pipeline_handle pipeline);
         command_buffer& bind_descriptor_set(std::span<descriptor_set_handle> sets, std::span<std::uint32_t> offsets,
                                             std::uint32_t first_set = 0);
         command_buffer& draw(const std::uint32_t vertex_count, std::uint32_t instance_count, std::uint32_t first_vertex,
                              std::uint32_t first_instance);
+        command_buffer& end_rendering();
         command_buffer& barrier(const execution_barrier& barrier);
 
         command_buffer& transition_to_depth_image(texture_handle depth_tex);
         command_buffer& transition_to_color_image(texture_handle color_tex);
         command_buffer& blit_image(texture_handle src, texture_handle dst);
+        command_buffer& transition_resource(std::span<state_transition_descriptor> descs, pipeline_stage src,
+                                            pipeline_stage dst);
 
         void begin();
         void end();

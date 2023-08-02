@@ -30,6 +30,7 @@ namespace tempest::graphics
         std::vector<VkImage> images;
         std::vector<VkImageView> views;
         std::vector<VkFramebuffer> swapchain_targets;
+        std::vector<texture_handle> textures;
         std::uint32_t image_index{0};
     };
 
@@ -168,6 +169,8 @@ namespace tempest::graphics
         {
             return _swapchain_render_pass;
         }
+
+        [[nodiscard]] texture_handle get_current_swapchain_texture() const noexcept;
 
         [[nodiscard]] inline descriptor_set_layout_handle get_bindless_texture_descriptor_set_layout() const noexcept
         {
