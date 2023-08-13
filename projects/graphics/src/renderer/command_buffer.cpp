@@ -256,6 +256,16 @@ namespace tempest::graphics
         return *this;
     }
 
+    command_buffer& command_buffer::draw_indexed(const std::uint32_t index_count, std::uint32_t instance_count,
+                                                 std::uint32_t first_index, std::int32_t vertex_offset,
+                                                 std::uint32_t first_instance)
+    {
+        _device->_dispatch.cmdDrawIndexed(_buf, index_count, instance_count, first_index, vertex_offset,
+                                          first_instance);
+
+        return *this;
+    }
+
     command_buffer& command_buffer::barrier(const execution_barrier& barrier)
     {
         std::uint32_t buffer_count = static_cast<std::uint32_t>(barrier.buffers.size());

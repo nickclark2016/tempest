@@ -15,11 +15,12 @@ project('ecs-tests', (prj) => {
     });
 
     dependsOn([
+        'ecs',
         'googletest',
     ]);
 
     uses([
-        'googletest:public',
         'ecs:public',
+        'googletest:public',
     ]);
 });

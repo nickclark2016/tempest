@@ -10,6 +10,7 @@ project('graphics', (prj) => {
 
     dependsOn([
         'core',
+        'ecs',
         'glfw',
         'math',
         'logger',
@@ -40,6 +41,7 @@ project('graphics', (prj) => {
 
     uses([
         'core:public',
+        'ecs:public',
         'glfw:public',
         'vk-bootstrap:public',
         'vma:public',
