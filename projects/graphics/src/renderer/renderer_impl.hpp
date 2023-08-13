@@ -1,6 +1,7 @@
 #ifndef tempest_graphics_renderer_impl_hpp
 #define tempest_graphics_renderer_impl_hpp
 
+#include <tempest/mesh_component.hpp>
 #include <tempest/renderer.hpp>
 
 #include "device.hpp"
@@ -32,6 +33,7 @@ namespace tempest::graphics
     {
         std::unique_ptr<gfx_device> device;
         std::optional<buffer_suballocator> vertex_buffer_allocator;
+        std::optional<buffer_suballocator> mesh_buffer_allocator;
         std::optional<buffer_suballocator> instance_buffer_allocator;
         std::optional<buffer_suballocator> scene_buffer_allocator;
 
@@ -56,8 +58,9 @@ namespace tempest::graphics
         void _create_blit_pipeline();
         void _create_mesh_buffers();
 
-        math::mat4<float> model_matrix{};
         math::mat4<float> proj_matrix{};
+        
+        object_payload object{};
     };
 } // namespace tempest::graphics
 

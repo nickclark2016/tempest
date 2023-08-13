@@ -1,6 +1,7 @@
 #include "renderer_impl.hpp"
 
 #include <tempest/logger.hpp>
+#include <tempest/mesh_component.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -53,6 +54,15 @@ namespace tempest::graphics
             },
             device.get());
 
+        mesh_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+                .usage{resource_usage::DYNAMIC},
+                .size{sizeof(mesh_layout) * 1024},
+                .name{"mesh_buffer_layout"},
+            },
+            device.get());
+
         _create_mesh_buffers();
         _create_blit_pipeline();
         _create_triangle_pipeline();
@@ -69,7 +79,7 @@ namespace tempest::graphics
         };
 
         descriptor_set_handle mesh_sets[] = {mesh_data_set};
-        uint32_t offsets[] = {0, 0, 0};
+        uint32_t offsets[] = {0, 0, 0, 0};
 
         state_transition_descriptor prepare_render_transitions[] = {
             state_transition_descriptor{
@@ -195,6 +205,7 @@ namespace tempest::graphics
         device->release_descriptor_set_layout(mesh_data_layout);
 
         vertex_buffer_allocator->release();
+        mesh_buffer_allocator->release();
         instance_buffer_allocator->release();
         scene_buffer_allocator->release();
 
@@ -252,23 +263,30 @@ namespace tempest::graphics
             .name{"mesh_data_binding"},
         };
 
-        descriptor_set_layout_create_info::binding object_binding = {
+        descriptor_set_layout_create_info::binding mesh_layout_binding = {
             .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
             .start_binding{1},
+            .binding_count{0},
+            .name{"mesh_layout_binding"},
+        };
+
+        descriptor_set_layout_create_info::binding object_binding = {
+            .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
+            .start_binding{2},
             .binding_count{0},
             .name{"instance_object_data_binding"},
         };
 
         descriptor_set_layout_create_info::binding scene_binding = {
             .type{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
-            .start_binding{2},
+            .start_binding{3},
             .binding_count{0},
             .name{"scene_data_binding"},
         };
 
         descriptor_set_layout_create_info set0_layout_ci = {
-            .bindings{mesh_binding, object_binding, scene_binding},
-            .binding_count{3},
+            .bindings{mesh_binding, mesh_layout_binding, object_binding, scene_binding},
+            .binding_count{4},
             .set_index{0},
             .name = {"object_data_set"},
         };
@@ -276,8 +294,9 @@ namespace tempest::graphics
         mesh_data_layout = device->create_descriptor_set_layout(set0_layout_ci);
         mesh_data_set = device->create_descriptor_set(descriptor_set_builder("object_data_set")
                                                           .add_buffer(vertex_buffer_allocator->current_buf, 0)
-                                                          .add_buffer(instance_buffer_allocator->current_buf, 1)
-                                                          .add_buffer(scene_buffer_allocator->current_buf, 2)
+                                                          .add_buffer(mesh_buffer_allocator->current_buf, 1)
+                                                          .add_buffer(instance_buffer_allocator->current_buf, 2)
+                                                          .add_buffer(scene_buffer_allocator->current_buf, 3)
                                                           .set_layout(mesh_data_layout));
 
         triangle_pipeline = device->create_pipeline({
@@ -409,9 +428,27 @@ namespace tempest::graphics
     void irenderer::impl::_create_mesh_buffers()
     {
         float positions[] = {0.0f, 0.5f, 0.0f, 0.5f, -0.5f, 0.0f, -0.5f, -0.5f, 0.0f};
+        float interleave[] = {
+            0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f
+        };
+        std::uint32_t indices[] = {0, 1, 2};
 
-        auto positions_size = sizeof(float) * 9;
-        auto rng = vertex_buffer_allocator->scheme.allocate(positions_size);
+        mesh_layout mesh = {
+            .mesh_start_offset = 0,
+            .positions_offset = 0,
+            .interleave_offset = 36, // sizeof(float) * 9
+            .interleave_stride = 36, // sizeof(float) * 9
+            .uvs_offset = 0,
+            .normals_offset = 8,
+            .color_offset = 20,
+            .index_offset = sizeof(positions) + sizeof(interleave),
+        };
+
+        auto positions_size = sizeof(float) * 3 * 3;
+        auto interleave_size = sizeof(float) * 3 * 9;
+        auto rng = vertex_buffer_allocator->scheme.allocate(positions_size + interleave_size);
 
         buffer_mapping map_info = {
             .offset = static_cast<std::uint32_t>(rng->start),
@@ -420,11 +457,15 @@ namespace tempest::graphics
         };
 
         void* data = device->map_buffer(map_info);
-        std::memcpy(data, positions, rng->end - rng->start);
+        std::memcpy(data, positions, sizeof(positions));
+        std::memcpy(((char*)data) + sizeof(positions), interleave, sizeof(interleave));
+        std::memcpy(((char*)data) + sizeof(positions) + sizeof(interleave), indices, sizeof(indices));
         device->unmap_buffer(map_info);
 
-        model_matrix = math::transform(math::vec3<float>(0.5f, 0.5f, 1.0f),
-                                       math::vec3<float>(0.0f, 0.0f, 1.5707963267f), math::vec3<float>(1.0f));
+        object.transform = math::transform(math::vec3<float>(0.5f, 0.5f, 1.0f),
+                                           math::vec3<float>(0.0f, 0.0f, 1.5707963267f), math::vec3<float>(1.0f));
+        object.mesh_id = 0;
+
         proj_matrix = math::perspective(16.0f / 9.0f, 100.0f, 0.01f, 1000.0f);
 
         auto model_size = sizeof(math::mat4<float>) * 2;
@@ -436,7 +477,17 @@ namespace tempest::graphics
         };
 
         data = device->map_buffer(map_info);
-        std::memcpy(data, &model_matrix, sizeof(math::mat4<float>));
+        std::memcpy(data, &object, sizeof(object_payload));
+        device->unmap_buffer(map_info);
+
+        map_info = {
+            .offset = 0,
+            .range = sizeof(mesh_layout),
+            .buffer = mesh_buffer_allocator->current_buf,
+        };
+
+        data = device->map_buffer(map_info);
+        std::memcpy(data, &mesh, sizeof(mesh_layout));
         device->unmap_buffer(map_info);
 
         auto scene_size = sizeof(math::mat4<float>) * 3;

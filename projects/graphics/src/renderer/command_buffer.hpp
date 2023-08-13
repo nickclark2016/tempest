@@ -69,6 +69,9 @@ namespace tempest::graphics
                                             std::uint32_t first_set = 0);
         command_buffer& draw(const std::uint32_t vertex_count, std::uint32_t instance_count, std::uint32_t first_vertex,
                              std::uint32_t first_instance);
+        command_buffer& draw_indexed(const std::uint32_t index_count, std::uint32_t instance_count,
+                                     std::uint32_t first_index, std::int32_t vertex_offset,
+                                     std::uint32_t first_instance);
         command_buffer& end_rendering();
         command_buffer& barrier(const execution_barrier& barrier);
 
