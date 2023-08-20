@@ -324,9 +324,9 @@ namespace tempest::graphics
 
     struct dynamic_render_state
     {
-        std::array<VkFormat, max_framebuffer_attachments> color_format;
+        std::array<VkFormat, max_framebuffer_attachments> _color_format;
         std::uint32_t active_color_attachments;
-        VkFormat depth_format;
+        VkFormat _depth_format;
         VkFormat stencil_format;
     };
 

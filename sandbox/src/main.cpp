@@ -3,7 +3,7 @@
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
-#include <tempest/renderer.hpp>
+#include <tempest/render_system.hpp>
 #include <tempest/transformations.hpp>
 #include <tempest/window.hpp>
 
@@ -34,7 +34,7 @@ int main()
         .height{720},
     });
 
-    auto renderer = tempest::graphics::irenderer::create({.major{0}, .minor{0}, .patch{1}}, *window, global_allocator);
+    auto renderer = tempest::graphics::render_system({.major{0}, .minor{0}, .patch{1}}, *window, global_allocator);
 
     auto last_time = std::chrono::high_resolution_clock::now();
     std::uint32_t fps_counter = 0;
@@ -48,7 +48,7 @@ int main()
     while (!window->should_close())
     {
         tempest::input::poll();
-        renderer->render();
+        renderer.render();
         auto current_time = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> frame_time = current_time - last_time;
 

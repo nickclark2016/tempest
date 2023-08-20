@@ -2,6 +2,7 @@
 #define tempest_graphics_blit_pass_hpp
 
 #include "../command_buffer.hpp"
+#include "../device.hpp"
 
 namespace tempest::graphics
 {
