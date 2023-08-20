@@ -86,7 +86,7 @@ namespace tempest::graphics
 
         blit_pipeline = device.create_pipeline({
             .dynamic_render{
-                .color_format{device.get_swapchain_format()},
+                ._color_format{device.get_swapchain_format()},
                 .active_color_attachments{0},
             },
             .ds{
