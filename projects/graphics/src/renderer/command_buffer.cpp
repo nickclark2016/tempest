@@ -726,6 +726,26 @@ namespace tempest::graphics
         return *this;
     }
 
+    command_buffer& command_buffer::copy_buffer(buffer_handle src, buffer_handle dst,
+                                                std::span<buffer_copy_region> regions)
+    {
+        std::array<VkBufferCopy, 16> vk_regions;
+        for (std::size_t i = 0; i < regions.size() && i < vk_regions.size(); ++i)
+        {
+            vk_regions[i] = {
+                .srcOffset{regions[i].src_offset},
+                .dstOffset{regions[i].dst_offset},
+                .size{regions[i].len_bytes},
+            };
+        }
+
+        _device->_dispatch.cmdCopyBuffer(_buf, _device->access_buffer(src)->underlying,
+                                         _device->access_buffer(dst)->underlying,
+                                         static_cast<std::uint32_t>(regions.size()), vk_regions.data());
+
+        return *this;
+    }
+
     void command_buffer::begin()
     {
         reset();

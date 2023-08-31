@@ -148,7 +148,7 @@ namespace tempest::assets
                         if (tangents_buffer)
                         {
                             vert.tangent = {tangents_buffer[i * 4], tangents_buffer[i * 4 + 1],
-                                            tangents_buffer[i * 4 + 2], tangents_buffer[i * 4 + 3]};
+                                            tangents_buffer[i * 4 + 2]};
                         }
 
                         vertex_buffer.push_back(vert);

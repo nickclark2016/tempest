@@ -16,7 +16,7 @@ namespace tempest::graphics
         std::int32_t vertex_offset;
     };
 
-    struct mesh_layout
+    struct alignas(16) mesh_layout
     {
         std::uint32_t mesh_start_offset;
         std::uint32_t positions_offset;
@@ -28,6 +28,7 @@ namespace tempest::graphics
         std::uint32_t bitangents_offset = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t color_offset = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t index_offset;
+        std::uint32_t index_count;
     };
 
     struct alignas(16) object_payload

@@ -7,6 +7,7 @@
 #include <tempest/archetype.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/version.hpp>
+#include <tempest/vertex.hpp>
 
 #include <memory>
 
@@ -19,6 +20,8 @@ namespace tempest::graphics
         ~render_system();
 
         void render();
+        
+        void upload_mesh(const core::mesh& mesh);
       private:
         class render_system_impl;
 

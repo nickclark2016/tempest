@@ -12,6 +12,7 @@ struct Mesh {
     uint bitangent_offset;
     uint color_offset;
     uint index_offset;
+    uint index_count;
 };
 
 struct ObjectData {

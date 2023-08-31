@@ -44,6 +44,13 @@ namespace tempest::graphics
         VkResolveModeFlagBits resolve_mode{VK_RESOLVE_MODE_NONE};
     };
 
+    struct buffer_copy_region
+    {
+        std::size_t src_offset;
+        std::size_t dst_offset;
+        std::size_t len_bytes;
+    };
+
     class command_buffer
     {
       public:
@@ -80,6 +87,8 @@ namespace tempest::graphics
         command_buffer& blit_image(texture_handle src, texture_handle dst);
         command_buffer& transition_resource(std::span<state_transition_descriptor> descs, pipeline_stage src,
                                             pipeline_stage dst);
+
+        command_buffer& copy_buffer(buffer_handle src, buffer_handle dst, std::span<buffer_copy_region> regions);
 
         void begin();
         void end();
