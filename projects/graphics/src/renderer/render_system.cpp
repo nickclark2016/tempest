@@ -6,8 +6,8 @@
 
 #include <tempest/logger.hpp>
 #include <tempest/mesh_component.hpp>
-#include <tempest/vec3.hpp>
 #include <tempest/transformations.hpp>
+#include <tempest/vec3.hpp>
 
 #include <optional>
 
@@ -29,6 +29,7 @@ namespace tempest::graphics
 
         void release();
         void reallocate_and_wait(std::size_t new_capacity);
+        core::range<std::size_t> allocate(std::size_t len);
 
         core::best_fit_scheme<std::size_t> scheme;
     };
@@ -36,153 +37,11 @@ namespace tempest::graphics
     class render_system::render_system_impl
     {
       public:
-        render_system_impl(const core::version& ver, iwindow& win, core::allocator& allocator)
-            : _ver{ver}, _win{win}, _alloc{allocator}
-        {
-            gfx_device_create_info create_info = {
-                .global_allocator{&allocator},
-                .win{reinterpret_cast<glfw::window*>(&win)},
-#ifdef _DEBUG
-                .enable_debug{true},
-#else
-                .enable_debug{false}
-#endif
-            };
+        render_system_impl(const core::version& ver, iwindow& win, core::allocator& allocator);
+        ~render_system_impl();
 
-            _device.emplace(create_info);
-
-            _vertex_buffer_allocator.emplace(
-                buffer_create_info{
-                    .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
-                    .usage{resource_usage::DYNAMIC},
-                    .size{1024 * 1024 * 32},
-                    .name{"mesh_buffer"},
-                },
-                &*_device); // 32 mb initial allocation
-
-            _instance_buffer_allocator.emplace(
-                buffer_create_info{
-                    .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
-                    .usage{resource_usage::DYNAMIC},
-                    .size{1024 * 1024 * 32},
-                    .name{"instance_data_buffer"},
-                },
-                &*_device);
-
-            _scene_buffer_allocator.emplace(
-                buffer_create_info{
-                    .type{VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT},
-                    .usage{resource_usage::STREAM},
-                    .size{1024 * 64 * 3},
-                    .name{"scene_data_buffer"},
-                },
-                &*_device);
-
-            _mesh_buffer_allocator.emplace(
-                buffer_create_info{
-                    .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
-                    .usage{resource_usage::DYNAMIC},
-                    .size{sizeof(mesh_layout) * 1024},
-                    .name{"mesh_buffer_layout"},
-                },
-                &*_device);
-
-            _initialize_mesh_data();
-            _initialize_depth_buffer();
-            _populate_mesh_data();
-
-            _blit.initialize(*_device, 1280, 720, _color_format);
-            _triangle.initialize(*_device, _color_format, _depth_format, _mesh_data_layout);
-        }
-
-        ~render_system_impl()
-        {
-            _triangle.release(*_device);
-            _blit.release(*_device);
-
-            _release_depth_buffer();
-            _release_mesh_data();
-
-            _vertex_buffer_allocator->release();
-            _mesh_buffer_allocator->release();
-            _instance_buffer_allocator->release();
-            _scene_buffer_allocator->release();
-        }
-
-        void render()
-        {
-            _device->start_frame();
-
-            state_transition_descriptor prepare_render_transitions[] = {
-                state_transition_descriptor{
-                    .texture{_blit.blit_src},
-                    .first_mip{0},
-                    .mip_count{1},
-                    .base_layer{0},
-                    .layer_count{1},
-                    .src_state{resource_state::UNDEFINED},
-                    .dst_state{resource_state::RENDER_TARGET},
-                },
-            };
-
-            state_transition_descriptor prepare_blit_transitions[] = {
-                state_transition_descriptor{
-                    .texture{_blit.blit_src},
-                    .first_mip{0},
-                    .mip_count{1},
-                    .base_layer{0},
-                    .layer_count{1},
-                    .src_state{resource_state::RENDER_TARGET},
-                    .dst_state{resource_state::FRAGMENT_SHADER_RESOURCE},
-                },
-            };
-
-            state_transition_descriptor prepare_pre_present_transitions[] = {
-                state_transition_descriptor{
-                    .texture{_device->get_current_swapchain_texture()},
-                    .first_mip{0},
-                    .mip_count{1},
-                    .base_layer{0},
-                    .layer_count{1},
-                    .src_state{resource_state::UNDEFINED},
-                    .dst_state{resource_state::RENDER_TARGET},
-                },
-            };
-
-            state_transition_descriptor prepare_present_transitions[] = {
-                state_transition_descriptor{
-                    .texture{_device->get_current_swapchain_texture()},
-                    .first_mip{0},
-                    .mip_count{1},
-                    .base_layer{0},
-                    .layer_count{1},
-                    .src_state{resource_state::RENDER_TARGET},
-                    .dst_state{resource_state::PRESENT},
-                },
-            };
-            auto& cmds = _device->get_command_buffer(queue_type::GRAPHICS, false);
-
-            cmds.begin();
-
-            cmds.transition_resource(prepare_pre_present_transitions, pipeline_stage::TOP,
-                                     pipeline_stage::FRAMEBUFFER_OUTPUT)
-                .transition_resource(prepare_render_transitions, pipeline_stage::FRAGMENT_SHADER,
-                                     pipeline_stage::FRAMEBUFFER_OUTPUT);
-
-            _triangle.record(cmds, _blit.blit_src, _default_depth_buffer, {0, 0, 1280, 720}, _mesh_data_set);
-
-            cmds.transition_resource(prepare_blit_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT,
-                                     pipeline_stage::FRAGMENT_SHADER);
-
-            // TODO: Fetch swapchain size from swapchain
-            _blit.record(cmds, _device->get_current_swapchain_texture(), {0, 0, 1280, 720});
-            cmds.transition_resource(prepare_present_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT,
-                                     pipeline_stage::END);
-
-            cmds.end();
-            _device->queue_command_buffer(cmds);
-            _device->end_frame();
-        }
+        void render();
+        void upload_mesh(const core::mesh& mesh);
 
       private:
         core::version _ver;
@@ -228,6 +87,11 @@ namespace tempest::graphics
         _impl->render();
     }
 
+    void render_system::upload_mesh(const core::mesh& mesh)
+    {
+        _impl->upload_mesh(mesh);
+    }
+
     buffer_resource_suballocator::buffer_resource_suballocator(const buffer_create_info& initial, gfx_device* dev)
         : device{dev}, ci{initial}, scheme{initial.size}
     {
@@ -256,6 +120,252 @@ namespace tempest::graphics
 
     void buffer_resource_suballocator::reallocate_and_wait(std::size_t new_capacity)
     {
+        auto new_buffer_ci = ci;
+        new_buffer_ci.size = new_capacity;
+
+        auto new_buffer = device->create_buffer(ci);
+
+        auto& cmds = device->get_instant_command_buffer();
+
+        cmds.begin();
+
+        buffer_copy_region region{
+            .src_offset{0},
+            .dst_offset{0},
+            .len_bytes{ci.size},
+        };
+
+        buffer_copy_region regions[] = {region};
+
+        cmds.copy_buffer(current_buf, new_buffer, regions);
+        cmds.end();
+
+        device->execute_immediate(cmds);
+    }
+
+    core::range<std::size_t> buffer_resource_suballocator::allocate(std::size_t len)
+    {
+        auto result = scheme.allocate(len);
+        if (!result)
+        {
+            // reallocate buffer, extend for len
+            auto current_len = scheme.max_extent() - scheme.min_extent();
+            auto requested_len = current_len + len;
+            reallocate_and_wait(requested_len);
+            result = scheme.allocate(len);
+        }
+        return *result;
+    }
+
+    render_system::render_system_impl::render_system_impl(const core::version& ver, iwindow& win,
+                                                          core::allocator& allocator)
+        : _ver{ver}, _win{win}, _alloc{allocator}
+    {
+        gfx_device_create_info create_info = {
+            .global_allocator{&allocator},
+            .win{reinterpret_cast<glfw::window*>(&win)},
+#ifdef _DEBUG
+            .enable_debug{true},
+#else
+            .enable_debug{false}
+#endif
+        };
+
+        _device.emplace(create_info);
+
+        _vertex_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+                .usage{resource_usage::DYNAMIC},
+                .size{1024 * 1024 * 32},
+                .name{"mesh_buffer"},
+            },
+            &*_device); // 32 mb initial allocation
+
+        _instance_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+                .usage{resource_usage::DYNAMIC},
+                .size{1024 * 1024 * 32},
+                .name{"instance_data_buffer"},
+            },
+            &*_device);
+
+        _scene_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT},
+                .usage{resource_usage::STREAM},
+                .size{1024 * 64 * 3},
+                .name{"scene_data_buffer"},
+            },
+            &*_device);
+
+        _mesh_buffer_allocator.emplace(
+            buffer_create_info{
+                .type{VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
+                .usage{resource_usage::DYNAMIC},
+                .size{sizeof(mesh_layout) * 1024},
+                .name{"mesh_buffer_layout"},
+            },
+            &*_device);
+
+        _initialize_mesh_data();
+        _initialize_depth_buffer();
+        _populate_mesh_data();
+
+        _blit.initialize(*_device, 1280, 720, _color_format);
+        _triangle.initialize(*_device, _color_format, _depth_format, _mesh_data_layout);
+    }
+
+    render_system::render_system_impl::~render_system_impl()
+    {
+        _triangle.release(*_device);
+        _blit.release(*_device);
+
+        _release_depth_buffer();
+        _release_mesh_data();
+
+        _vertex_buffer_allocator->release();
+        _mesh_buffer_allocator->release();
+        _instance_buffer_allocator->release();
+        _scene_buffer_allocator->release();
+    }
+
+    void render_system::render_system_impl::render()
+    {
+        _device->start_frame();
+
+        state_transition_descriptor prepare_render_transitions[] = {
+            state_transition_descriptor{
+                .texture{_blit.blit_src},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::UNDEFINED},
+                .dst_state{resource_state::RENDER_TARGET},
+            },
+        };
+
+        state_transition_descriptor prepare_blit_transitions[] = {
+            state_transition_descriptor{
+                .texture{_blit.blit_src},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::RENDER_TARGET},
+                .dst_state{resource_state::FRAGMENT_SHADER_RESOURCE},
+            },
+        };
+
+        state_transition_descriptor prepare_pre_present_transitions[] = {
+            state_transition_descriptor{
+                .texture{_device->get_current_swapchain_texture()},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::UNDEFINED},
+                .dst_state{resource_state::RENDER_TARGET},
+            },
+        };
+
+        state_transition_descriptor prepare_present_transitions[] = {
+            state_transition_descriptor{
+                .texture{_device->get_current_swapchain_texture()},
+                .first_mip{0},
+                .mip_count{1},
+                .base_layer{0},
+                .layer_count{1},
+                .src_state{resource_state::RENDER_TARGET},
+                .dst_state{resource_state::PRESENT},
+            },
+        };
+        auto& cmds = _device->get_command_buffer(queue_type::GRAPHICS, false);
+
+        cmds.begin();
+
+        cmds.transition_resource(prepare_pre_present_transitions, pipeline_stage::TOP,
+                                 pipeline_stage::FRAMEBUFFER_OUTPUT)
+            .transition_resource(prepare_render_transitions, pipeline_stage::FRAGMENT_SHADER,
+                                 pipeline_stage::FRAMEBUFFER_OUTPUT);
+
+        _triangle.record(cmds, _blit.blit_src, _default_depth_buffer, {0, 0, 1280, 720}, _mesh_data_set);
+
+        cmds.transition_resource(prepare_blit_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT,
+                                 pipeline_stage::FRAGMENT_SHADER);
+
+        // TODO: Fetch swapchain size from swapchain
+        _blit.record(cmds, _device->get_current_swapchain_texture(), {0, 0, 1280, 720});
+        cmds.transition_resource(prepare_present_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT, pipeline_stage::END);
+
+        cmds.end();
+        _device->queue_command_buffer(cmds);
+        _device->end_frame();
+    }
+
+    void render_system::render_system_impl::upload_mesh(const core::mesh& mesh)
+    {
+        auto buffer_region = _mesh_buffer_allocator->allocate(mesh.underlying_data_length);
+
+        // for now, sync buffer upload
+        {
+            buffer_mapping mesh_buffer_map_info{
+                .offset{static_cast<std::uint32_t>(buffer_region.start)},
+                .range{static_cast<std::uint32_t>(buffer_region.end - buffer_region.start)},
+                .buffer{_mesh_buffer_allocator->current_buf},
+            };
+
+            void* ptr = _device->map_buffer(mesh_buffer_map_info);
+            std::memcpy(ptr, mesh.underlying, mesh.underlying_data_length);
+            _device->unmap_buffer(mesh_buffer_map_info);
+        }
+
+        std::size_t start_index = buffer_region.start;
+
+        std::uint32_t interleave_size = 0;
+
+        interleave_size += 2 * sizeof(float);
+        interleave_size += 3 * sizeof(float);
+        
+        std::uint32_t tangents_offset = std::numeric_limits<std::uint32_t>::max();
+        std::uint32_t bitangents_offset = std::numeric_limits<std::uint32_t>::max();
+        std::uint32_t colors_offset = std::numeric_limits<std::uint32_t>::max();
+
+        if (!mesh.tangents.empty())
+        {
+            tangents_offset = interleave_size;
+            interleave_size += 3 * sizeof(float);
+        }
+
+        if (!mesh.bitangents.empty())
+        {
+            bitangents_offset = interleave_size;
+            interleave_size += 3 * sizeof(float);
+        }
+
+        if (!mesh.colors.empty())
+        {
+            colors_offset = interleave_size;
+            interleave_size = 4 * sizeof(float);
+        }
+
+        mesh_layout layout = {
+            .mesh_start_offset{static_cast<std::uint32_t>(buffer_region.start)},
+            .positions_offset{0},
+            .interleave_offset{static_cast<std::uint32_t>(mesh.positions.size() * 4 + buffer_region.start)},
+            .interleave_stride{interleave_size},
+            .uvs_offset{0},
+            .normals_offset{2 * sizeof(float)},
+            .tangents_offset{tangents_offset},
+            .bitangents_offset{bitangents_offset},
+            .color_offset{colors_offset},
+            .index_offset{interleave_size * static_cast<std::uint32_t>(mesh.vertex_count())},
+            .index_count{static_cast<std::uint32_t>(mesh.indices.size())},
+        };
+
+        // TODO: Upload to mesh data buffer
     }
 
     void render_system::render_system_impl::_initialize_mesh_data()

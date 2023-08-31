@@ -39,10 +39,12 @@ namespace tempest::core
     {
       public:
         explicit best_fit_scheme(const T initial_range);
-        std::optional<range<T>> allocate(const T& len);
+        [[nodiscard]] std::optional<range<T>> allocate(const T& len);
         void release(range<T>&& rng);
         void release_all();
         void extend(const T& new_length);
+        [[nodiscard]] T min_extent() const noexcept;
+        [[nodiscard]] T max_extent() const noexcept;
 
       private:
         range<T> _full;
@@ -273,6 +275,16 @@ namespace tempest::core
                 .end{new_length},
             });
         }
+    }
+
+    template <typename T> inline T best_fit_scheme<T>::min_extent() const noexcept
+    {
+        return _full.start;
+    }
+
+    template <typename T> inline T best_fit_scheme<T>::max_extent() const noexcept
+    {
+        return _full.end;
     }
 } // namespace tempest::core
 
