@@ -34,7 +34,7 @@ namespace tempest::graphics
     struct alignas(16) object_payload
     {
         math::mat4<float> transform;
-        std::uint32_t mesh_id;
+        std::uint32_t mesh_id{~0u};
     };
 } // namespace tempest::graphics
 

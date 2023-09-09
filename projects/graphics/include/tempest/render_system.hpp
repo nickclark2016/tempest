@@ -21,7 +21,7 @@ namespace tempest::graphics
 
         void render();
         
-        void upload_mesh(const core::mesh& mesh);
+        mesh_layout upload_mesh(const core::mesh& mesh);
       private:
         class render_system_impl;
 
