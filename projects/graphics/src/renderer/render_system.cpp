@@ -41,7 +41,7 @@ namespace tempest::graphics
         ~render_system_impl();
 
         void render();
-        void upload_mesh(const core::mesh& mesh);
+        mesh_layout upload_mesh(const core::mesh& mesh);
 
       private:
         core::version _ver;
@@ -87,9 +87,9 @@ namespace tempest::graphics
         _impl->render();
     }
 
-    void render_system::upload_mesh(const core::mesh& mesh)
+    mesh_layout render_system::upload_mesh(const core::mesh& mesh)
     {
-        _impl->upload_mesh(mesh);
+        return _impl->upload_mesh(mesh);
     }
 
     buffer_resource_suballocator::buffer_resource_suballocator(const buffer_create_info& initial, gfx_device* dev)
@@ -121,7 +121,7 @@ namespace tempest::graphics
     void buffer_resource_suballocator::reallocate_and_wait(std::size_t new_capacity)
     {
         auto new_buffer_ci = ci;
-        new_buffer_ci.size = new_capacity;
+        new_buffer_ci.size = static_cast<std::uint32_t>(new_capacity);
 
         auto new_buffer = device->create_buffer(ci);
 
@@ -305,22 +305,9 @@ namespace tempest::graphics
         _device->end_frame();
     }
 
-    void render_system::render_system_impl::upload_mesh(const core::mesh& mesh)
+    mesh_layout render_system::render_system_impl::upload_mesh(const core::mesh& mesh)
     {
         auto buffer_region = _mesh_buffer_allocator->allocate(mesh.underlying_data_length);
-
-        // for now, sync buffer upload
-        {
-            buffer_mapping mesh_buffer_map_info{
-                .offset{static_cast<std::uint32_t>(buffer_region.start)},
-                .range{static_cast<std::uint32_t>(buffer_region.end - buffer_region.start)},
-                .buffer{_mesh_buffer_allocator->current_buf},
-            };
-
-            void* ptr = _device->map_buffer(mesh_buffer_map_info);
-            std::memcpy(ptr, mesh.underlying, mesh.underlying_data_length);
-            _device->unmap_buffer(mesh_buffer_map_info);
-        }
 
         std::size_t start_index = buffer_region.start;
 
@@ -328,7 +315,7 @@ namespace tempest::graphics
 
         interleave_size += 2 * sizeof(float);
         interleave_size += 3 * sizeof(float);
-        
+
         std::uint32_t tangents_offset = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t bitangents_offset = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t colors_offset = std::numeric_limits<std::uint32_t>::max();
@@ -365,7 +352,54 @@ namespace tempest::graphics
             .index_count{static_cast<std::uint32_t>(mesh.indices.size())},
         };
 
-        // TODO: Upload to mesh data buffer
+        // for now, sync buffer upload
+        {
+            buffer_mapping mesh_buffer_map_info{
+                .offset{static_cast<std::uint32_t>(buffer_region.start)},
+                .range{static_cast<std::uint32_t>(buffer_region.end - buffer_region.start)},
+                .buffer{_mesh_buffer_allocator->current_buf},
+            };
+
+            std::byte* ptr = reinterpret_cast<std::byte*>(_device->map_buffer(mesh_buffer_map_info));
+
+            std::memcpy(ptr, mesh.positions.data(), mesh.positions.size_bytes());
+
+            std::size_t interleave_start = layout.interleave_offset;
+
+            for (std::size_t i = 0; i < mesh.vertex_count(); ++i)
+            {
+                auto uv_ptr = ptr + interleave_start + layout.uvs_offset + i * layout.interleave_stride;
+                std::memcpy(uv_ptr, mesh.uvs.data() + 2 * i, sizeof(float) * 2); // copy 2 floats
+            
+                auto normal_ptr = ptr + interleave_start + layout.normals_offset + i * layout.interleave_stride;
+                std::memcpy(normal_ptr, mesh.normals.data() + 3 * i, sizeof(float) * 3);
+
+                if (!mesh.tangents.empty())
+                {
+                    auto tangent_ptr = ptr + interleave_start + layout.tangents_offset + i * layout.interleave_stride;
+                    std::memcpy(tangent_ptr, mesh.tangents.data() + 3 * i, sizeof(float) * 3);
+                }
+
+                if (!mesh.bitangents.empty())
+                {
+                    auto bitangent_ptr =
+                        ptr + interleave_start + layout.bitangents_offset + i * layout.interleave_stride;
+                    std::memcpy(bitangent_ptr, mesh.bitangents.data() + 3 * i, sizeof(float) * 3);
+                }
+
+                if (!mesh.colors.empty())
+                {
+                    auto color_ptr = ptr + interleave_start + layout.color_offset + i * layout.interleave_stride;
+                    std::memcpy(color_ptr, mesh.colors.data() + 4 * i, sizeof(float) * 4);
+                }
+            }
+
+            std::memcpy(ptr + layout.index_offset, mesh.indices.data(), mesh.indices.size_bytes());
+
+            _device->unmap_buffer(mesh_buffer_map_info);
+        }
+
+        return layout;
     }
 
     void render_system::render_system_impl::_initialize_mesh_data()
