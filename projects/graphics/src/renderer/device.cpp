@@ -97,6 +97,7 @@ namespace tempest::graphics
                                                            .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
                                                            .shaderStorageBufferArrayDynamicIndexing{VK_TRUE},
                                                            .shaderStorageImageArrayDynamicIndexing{VK_TRUE},
+                                                           .shaderInt64{VK_TRUE},
                                                        })
                                                        .set_required_features_12({
                                                            .drawIndirectCount{VK_TRUE},
@@ -159,7 +160,8 @@ namespace tempest::graphics
                                              .set_required_min_image_count(2)
                                              .set_desired_format({.format{VK_FORMAT_R8G8B8A8_SRGB},
                                                                   .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}})
-                                             .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+                                             .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+                                             .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             auto swap_result = bldr.build();
             if (!swap_result)
             {
@@ -190,7 +192,7 @@ namespace tempest::graphics
             };
         }
 
-        std::tuple<VkQueue, std::uint32_t> fetch_queue(vkb::Device dev, vkb::QueueType type)
+        std::optional<std::tuple<VkQueue, std::uint32_t>> fetch_queue(vkb::Device dev, vkb::QueueType type)
         {
             auto queue_result = dev.get_queue(type);
             auto index_result = dev.get_queue_index(type);
@@ -198,6 +200,7 @@ namespace tempest::graphics
             if (!queue_result || !index_result)
             {
                 logger->error("Failed to fetch queue of type {0}", static_cast<std::uint32_t>(type));
+                return std::nullopt;
             }
 
             return std::make_tuple(*queue_result, *index_result);
@@ -407,11 +410,10 @@ namespace tempest::graphics
     gfx_device::gfx_device(const gfx_device_create_info& info)
         : _global_allocator{info.global_allocator}, _temporary_allocator{info.temp_allocator},
           _buffer_pool{_global_allocator, 512, sizeof(buffer)}, _texture_pool{_global_allocator, 512, sizeof(texture)},
-          _shader_state_pool{_global_allocator, 128, sizeof(shader_state)}, _pipeline_pool{_global_allocator, 128,
-                                                                                           sizeof(pipeline)},
-          _descriptor_set_layout_pool{_global_allocator, 128, sizeof(descriptor_set_layout)}, _sampler_pool{
-                                                                                                  _global_allocator, 32,
-                                                                                                  sizeof(sampler)}
+          _shader_state_pool{_global_allocator, 128, sizeof(shader_state)},
+          _pipeline_pool{_global_allocator, 128, sizeof(pipeline)},
+          _descriptor_set_layout_pool{_global_allocator, 128, sizeof(descriptor_set_layout)},
+          _sampler_pool{_global_allocator, 32, sizeof(sampler)}
     {
         logger->debug("gfx_device creation started");
 
@@ -433,9 +435,43 @@ namespace tempest::graphics
 
         _physical_device_properties = _physical_device.properties;
 
-        auto [graphics_queue, graphics_queue_family] = fetch_queue(_logical_device, vkb::QueueType::graphics);
-        auto [transfer_queue, transfer_queue_family] = fetch_queue(_logical_device, vkb::QueueType::transfer);
-        auto [compute_queue, compute_queue_family] = fetch_queue(_logical_device, vkb::QueueType::compute);
+        auto gfx_queue_result = fetch_queue(_logical_device, vkb::QueueType::graphics);
+        auto transfer_queue_result = fetch_queue(_logical_device, vkb::QueueType::transfer);
+        auto compute_queue_result = fetch_queue(_logical_device, vkb::QueueType::compute);
+
+        if (!gfx_queue_result)
+        {
+            logger->critical("Failed to get queue for graphics operations.");
+            throw std::runtime_error("Failed to find eligible queue for graphics operations.");
+        }
+
+        auto [graphics_queue, graphics_queue_family] = *gfx_queue_result;
+        auto [transfer_queue, transfer_queue_family] = ([&]() {
+            if (transfer_queue_result)
+            {
+                return *transfer_queue_result;
+            }
+            if ((_logical_device.queue_families[graphics_queue_family].queueFlags & VK_QUEUE_TRANSFER_BIT) !=
+                VK_QUEUE_TRANSFER_BIT)
+            {
+                throw std::runtime_error("Failed to find eligible queue for transfer operations.");
+            }
+            logger->warn("Failed to fetch transfer queue. Falling back on graphics queue.");
+            return std::make_tuple(graphics_queue, graphics_queue_family);
+        })();
+        auto [compute_queue, compute_queue_family] = ([&, this]() {
+            if (compute_queue_result)
+            {
+                return *compute_queue_result;
+            }
+            if ((_logical_device.queue_families[graphics_queue_family].queueFlags & VK_QUEUE_COMPUTE_BIT) !=
+                VK_QUEUE_COMPUTE_BIT)
+            {
+                throw std::runtime_error("Failed to find eligible queue for compute operations.");
+            }
+            logger->warn("Failed to fetch compute queue. Falling back on graphics queue.");
+            return std::make_tuple(graphics_queue, graphics_queue_family);
+        })();
 
         _graphics_queue = graphics_queue;
         _graphics_queue_family = graphics_queue_family;
@@ -1193,7 +1229,8 @@ namespace tempest::graphics
         else
         {
             img_ci.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            img_ci.usage |= is_render_target ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT : 0;
+            img_ci.usage |=
+                is_render_target ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0;
         }
 
         img_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1544,7 +1581,8 @@ namespace tempest::graphics
         {
             // VkCommandBuffer buf = cb;
             //_dispatch.cmdResetQueryPool(buf, _timestamp_query_pool,
-            //                            static_cast<std::uint32_t>(_current_frame) * _timestamps->queries_per_frame()
+            //                            static_cast<std::uint32_t>(_current_frame) *
+            //                            _timestamps->queries_per_frame()
             //                            *
             //                                 2,
             //                             _timestamps->queries_per_frame());
@@ -1782,6 +1820,9 @@ namespace tempest::graphics
             tex->image_fmt = _winfo.swapchain.image_format;
             tex->underlying_image = _winfo.images[i];
             tex->underlying_view = _winfo.views[i];
+            tex->width = _winfo.swapchain.extent.width;
+            tex->height = _winfo.swapchain.extent.height;
+            tex->depth = 1;
             _winfo.textures[i] = tex_handle;
         }
 
@@ -1862,7 +1903,8 @@ namespace tempest::graphics
                 .set_allocation_callbacks(_alloc_callbacks)
                 .set_required_min_image_count(2)
                 .set_desired_format({.format{VK_FORMAT_R8G8B8A8_SRGB}, .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}})
-                .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+                .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+                .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         auto swap_result = bldr.build();
         if (!swap_result)
         {
