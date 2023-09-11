@@ -22,17 +22,6 @@ project('graphics', (prj) => {
 
     externalWarnings('Off');
 
-    when({}, (ctx) => {
-        targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
-        intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
-    });
-
-    when({ configuration: 'Debug' }, (ctx) => {
-        defines([
-            '_DEBUG'
-        ]);
-    });
-
     block('graphics:public', (_) => {
         includeDirs([
             './include'
@@ -40,6 +29,7 @@ project('graphics', (prj) => {
     });
 
     uses([
+        'tempest:common',
         'core:public',
         'ecs:public',
         'glfw:public',

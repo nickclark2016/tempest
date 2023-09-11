@@ -15,4 +15,29 @@ workspace('Tempest', (wks) => {
     group('Dependencies', (grp) => {
         include('./dependencies/conjure.js');
     });
+
+    block('tempest:common', (_) => {
+        when({ configuration: 'Debug' }, (_) => {
+            optimize('Off');
+            runtime('Debug');
+            symbols('On');
+            defines([
+                '_DEBUG'
+            ]);
+        });
+    
+        when({ configuration: 'Release'}, (_) => {
+            optimize('Full');
+            runtime('Release');
+            symbols('Off');
+            defines([
+                'NDEBUG'
+            ]);
+        });
+
+        when({}, (ctx) => {
+            targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
+            intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${ctx.project.getName()}`);
+        });
+    });
 });

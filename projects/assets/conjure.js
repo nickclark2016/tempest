@@ -16,17 +16,6 @@ project('assets', (prj) => {
         'logger'
     ]);
 
-    when({}, (ctx) => {
-        targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
-        intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
-    });
-
-    when({ configuration: 'Debug' }, (ctx) => {
-        defines([
-            '_DEBUG'
-        ]);
-    });
-
     block('assets:public', (_) => {
         includeDirs([
             './include'
@@ -39,6 +28,7 @@ project('assets', (prj) => {
     });
 
     uses([
+        'tempest:common',
         'tinygltf:public',
         'assets:public',
         'math:public'

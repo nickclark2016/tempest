@@ -14,17 +14,6 @@ project('input', (prj) => {
         'glfw'
     ]);
 
-    when({}, (ctx) => {
-        targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
-        intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
-    });
-
-    when({ configuration: 'Debug' }, (ctx) => {
-        defines([
-            '_DEBUG'
-        ]);
-    });
-
     block('input:public', (_) => {
         includeDirs([
             './include'
@@ -32,6 +21,7 @@ project('input', (prj) => {
     });
 
     uses([
+        'tempest:common',
         'glfw:public',
         'input:public'
     ]);

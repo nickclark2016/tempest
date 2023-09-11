@@ -14,17 +14,6 @@ project('logger', (prj) => {
         'spdlog',
     ]);
 
-    when({}, (ctx) => {
-        targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
-        intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
-    });
-
-    when({ configuration: 'Debug' }, (ctx) => {
-        defines([
-            '_DEBUG'
-        ]);
-    });
-
     block('logger:public', (_) => {
         includeDirs([
             './include'
@@ -32,6 +21,7 @@ project('logger', (prj) => {
     });
 
     uses([
+        'tempest:common',
         'logger:public',
         'spdlog:public'
     ]);
