@@ -9,17 +9,13 @@ project('assets-tests', (prj) => {
 
     toolset('msc:143');
 
-    when({}, (ctx) => {
-        targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
-        intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
-    });
-
     dependsOn([
         'googletest',
         'assets'
     ]);
 
     uses([
+        'tempest:common',
         'googletest:public',
         'assets:public',
     ]);

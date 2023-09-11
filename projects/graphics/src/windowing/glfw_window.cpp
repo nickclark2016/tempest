@@ -18,7 +18,8 @@ namespace tempest::graphics::glfw
 
     window::window(const window_factory::create_info& info) : _width{info.width}, _height{info.height}
     {
-        assert(initialize_glfw() && "Failed to initialize GLFW.");
+        auto init = initialize_glfw();
+        assert(init && "Failed to initialize GLFW.");
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 

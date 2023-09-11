@@ -28,6 +28,9 @@ project('vk-bootstrap', (prj) => {
         optimize('Full');
         runtime('Release');
         symbols('Off');
+        defines([
+            'NDEBUG'
+        ]);
     });
 
     when({ configuration: 'Debug' }, (_) => {

@@ -27,12 +27,18 @@ project('vma', (prj) => {
         optimize('Full');
         runtime('Release');
         symbols('Off');
+        defines([
+            'NDEBUG'
+        ]);
     });
 
     when({ configuration: 'Debug' }, (_) => {
         optimize('Off');
         runtime('Debug');
-        symbols('On')
+        symbols('On');
+        defines([
+            '_DEBUG'
+        ]);
     });
 
     block('vma:public', (_) => {

@@ -15,17 +15,6 @@ project('core', (prj) => {
         'tlsf',
     ])
 
-    when({}, (ctx) => {
-        targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
-        intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
-    });
-
-    when({ configuration: 'Debug' }, (ctx) => {
-        defines([
-            '_DEBUG'
-        ]);
-    });
-
     block('core:public', (_) => {
         includeDirs([
             './include'
@@ -33,6 +22,7 @@ project('core', (prj) => {
     });
 
     uses([
+        'tempest:common',
         'tlsf:public',
         'core:public',
         'math:public',

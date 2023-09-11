@@ -82,7 +82,6 @@ namespace tempest::graphics
             vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector{instance}
                                                        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
                                                        .defer_surface_initialization()
-                                                       .add_desired_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
                                                        .require_present()
                                                        .set_minimum_version(1, 3)
                                                        .set_required_features({

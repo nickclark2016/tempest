@@ -14,6 +14,9 @@ project('spdlog', (prj) => {
         optimize('Speed');
         runtime('Release');
         symbols('Off');
+        defines([
+            'NDEBUG'
+        ]);
     });
 
     when({ configuration: 'Debug' }, (filter) => {
