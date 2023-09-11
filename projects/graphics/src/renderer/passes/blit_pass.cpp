@@ -91,8 +91,8 @@ namespace tempest::graphics
             },
             .ds{
                 .depth_comparison{VK_COMPARE_OP_LESS_OR_EQUAL},
-                .depth_test_enable{true},
-                .depth_write_enable{true},
+                .depth_test_enable{false},
+                .depth_write_enable{false},
             },
             .blend{
                 .blend_states{},
@@ -133,17 +133,19 @@ namespace tempest::graphics
             },
         };
 
-        descriptor_set_handle sets_to_bind[] = {image_inputs};
+        // descriptor_set_handle sets_to_bind[] = {image_inputs};
 
-        buf.set_clear_color(0.0f, 0.0f, 0.0f, 1.0f)
-            .set_clear_depth_stencil(1.0f, 0)
-            .use_default_scissor()
-            .use_default_viewport(false)
-            .bind_pipeline(blit_pipeline)
-            .begin_rendering(viewport, color_targets, std::nullopt, std::nullopt)
-            .bind_descriptor_set(sets_to_bind, {})
-            .draw(6, 1, 0, 0)
-            .end_rendering();
+        buf.blit_image(blit_src, blit_dst);
+
+        //buf.set_clear_color(0.0f, 0.0f, 0.0f, 1.0f)
+        //    .set_clear_depth_stencil(1.0f, 0)
+        //    .use_default_scissor()
+        //    .use_default_viewport(false)
+        //    .bind_pipeline(blit_pipeline)
+        //    .begin_rendering(viewport, color_targets, std::nullopt, std::nullopt)
+        //    .bind_descriptor_set(sets_to_bind, {})
+        //    .draw(6, 1, 0, 0)
+        //    .end_rendering();
     }
 
     void blit_pass::release(gfx_device& device)

@@ -255,7 +255,7 @@ namespace tempest::graphics
                 .base_layer{0},
                 .layer_count{1},
                 .src_state{resource_state::RENDER_TARGET},
-                .dst_state{resource_state::FRAGMENT_SHADER_RESOURCE},
+                .dst_state{resource_state::TRANSFER_SRC},
             },
         };
 
@@ -267,7 +267,7 @@ namespace tempest::graphics
                 .base_layer{0},
                 .layer_count{1},
                 .src_state{resource_state::UNDEFINED},
-                .dst_state{resource_state::RENDER_TARGET},
+                .dst_state{resource_state::TRANSFER_DST},
             },
         };
 
@@ -278,7 +278,7 @@ namespace tempest::graphics
                 .mip_count{1},
                 .base_layer{0},
                 .layer_count{1},
-                .src_state{resource_state::RENDER_TARGET},
+                .src_state{resource_state::TRANSFER_DST},
                 .dst_state{resource_state::PRESENT},
             },
         };
@@ -287,18 +287,18 @@ namespace tempest::graphics
         cmds.begin();
 
         cmds.transition_resource(prepare_pre_present_transitions, pipeline_stage::TOP,
-                                 pipeline_stage::FRAMEBUFFER_OUTPUT)
+                                 pipeline_stage::TRANSFER)
             .transition_resource(prepare_render_transitions, pipeline_stage::FRAGMENT_SHADER,
                                  pipeline_stage::FRAMEBUFFER_OUTPUT);
 
         _triangle.record(cmds, _blit.blit_src, _default_depth_buffer, {0, 0, 1280, 720}, _mesh_data_set);
 
         cmds.transition_resource(prepare_blit_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT,
-                                 pipeline_stage::FRAGMENT_SHADER);
+                                 pipeline_stage::TRANSFER);
 
         // TODO: Fetch swapchain size from swapchain
         _blit.record(cmds, _device->get_current_swapchain_texture(), {0, 0, 1280, 720});
-        cmds.transition_resource(prepare_present_transitions, pipeline_stage::FRAMEBUFFER_OUTPUT, pipeline_stage::END);
+        cmds.transition_resource(prepare_present_transitions, pipeline_stage::TRANSFER, pipeline_stage::END);
 
         cmds.end();
         _device->queue_command_buffer(cmds);
