@@ -8,6 +8,7 @@ include('./assets/conjure.js');
 
 block('tempest:engine', (_) => {
     uses([
+        'tempest:common',
         'core:public',
         'ecs:public',
         'graphics:public',
@@ -26,16 +27,4 @@ block('tempest:engine', (_) => {
         'math',
         'assets'
     ]);
-
-    when({ configuration: 'Debug' }, (ctx) => {
-        defines([
-            '_DEBUG'
-        ]);
-    });
-
-    when({ configuration: 'Release'}, (ctx) => {
-        defines([
-            'NDEBUG'
-        ]);
-    });
 });
