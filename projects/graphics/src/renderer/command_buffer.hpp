@@ -81,6 +81,7 @@ namespace tempest::graphics
                                      std::uint32_t first_instance);
         command_buffer& end_rendering();
         command_buffer& barrier(const execution_barrier& barrier);
+        command_buffer& push_constants(push_constant_range range, void* values);
 
         command_buffer& transition_to_depth_image(texture_handle depth_tex);
         command_buffer& transition_to_color_image(texture_handle color_tex);
@@ -89,6 +90,8 @@ namespace tempest::graphics
                                             pipeline_stage dst);
 
         command_buffer& copy_buffer(buffer_handle src, buffer_handle dst, std::span<buffer_copy_region> regions);
+
+        command_buffer& dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z);
 
         void begin();
         void end();

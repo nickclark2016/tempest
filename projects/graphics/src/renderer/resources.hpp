@@ -129,6 +129,7 @@ namespace tempest::graphics
     inline constexpr std::size_t max_vertex_streams = 16;
     inline constexpr std::size_t max_vertex_attributes = 16;
     inline constexpr std::size_t max_barrier_count = 8;
+    inline constexpr std::size_t max_push_constant_ranges = 8;
 
     inline constexpr std::size_t submit_header_sentinel = 0xfefeb7ba;
     inline constexpr std::size_t max_resource_deletions_per_frame = 64;
@@ -330,6 +331,12 @@ namespace tempest::graphics
         VkFormat stencil_format;
     };
 
+    struct push_constant_range
+    {
+        std::uint32_t offset;
+        std::uint32_t range;
+    };
+
     struct pipeline_create_info
     {
         dynamic_render_state dynamic_render;
@@ -341,6 +348,8 @@ namespace tempest::graphics
         shader_state_create_info shaders{};
         std::array<descriptor_set_layout_handle, max_descriptor_set_layouts> desc_layouts;
         std::uint32_t active_desc_layouts;
+        std::array<push_constant_range, max_push_constant_ranges> push_constants;
+        std::uint32_t active_push_constant_ranges;
 
         std::string_view name;
     };

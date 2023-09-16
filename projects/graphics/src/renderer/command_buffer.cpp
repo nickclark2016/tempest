@@ -411,6 +411,14 @@ namespace tempest::graphics
         return *this;
     }
 
+    command_buffer& command_buffer::push_constants(push_constant_range range, void* values)
+    {
+        auto layout_handle = _active_pipeline->layout;
+        _device->_dispatch.cmdPushConstants(_buf, layout_handle, VK_SHADER_STAGE_ALL, range.offset, range.range,
+                                            values);
+        return *this;
+    }
+
     command_buffer& command_buffer::end_rendering()
     {
         _device->_dispatch.cmdEndRendering(_buf);
@@ -632,6 +640,13 @@ namespace tempest::graphics
         _device->_dispatch.cmdCopyBuffer(_buf, _device->access_buffer(src)->underlying,
                                          _device->access_buffer(dst)->underlying,
                                          static_cast<std::uint32_t>(regions.size()), vk_regions.data());
+
+        return *this;
+    }
+
+    command_buffer& command_buffer::dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z)
+    {
+        _device->_dispatch.cmdDispatch(_buf, x, y, z);
 
         return *this;
     }

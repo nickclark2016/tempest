@@ -2,6 +2,7 @@ project('tlsf', (prj) => {
     kind('StaticLib');
     language('C');
     toolset('msc:143');
+    languageVersion('C11');
 
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);

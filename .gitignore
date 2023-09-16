@@ -12,3 +12,6 @@ Makefile
 *.sln
 *.vcxproj
 *.vcxproj.user
+*.ninja
+*.ninja_log
+*.ninja_deps

@@ -85,6 +85,7 @@ namespace tempest::graphics
                                                        .require_present()
                                                        .set_minimum_version(1, 3)
                                                        .set_required_features({
+                                                           .robustBufferAccess{VK_TRUE},
                                                            .independentBlend{VK_TRUE},
                                                            .logicOp{VK_TRUE},
                                                            .depthClamp{VK_TRUE},
@@ -298,6 +299,21 @@ namespace tempest::graphics
             logger->error("Unsupported descriptor type.");
 
             return 0;
+        }
+
+        const char* get_stage_entrypoint(VkShaderStageFlagBits stage)
+        {
+            switch (stage)
+            {
+            case VK_SHADER_STAGE_VERTEX_BIT:
+                return "VSMain";
+            case VK_SHADER_STAGE_FRAGMENT_BIT:
+                return "PSMain";
+            case VK_SHADER_STAGE_COMPUTE_BIT:
+                return "CSMain";
+            default:
+                return "UNKNOWN";
+            }
         }
     } // namespace
 
@@ -834,7 +850,7 @@ namespace tempest::graphics
                 .pNext{nullptr},
                 .flags{0},
                 .stage{stage.shader_type},
-                .pName{stage.shader_type == VK_SHADER_STAGE_VERTEX_BIT ? "VSMain" : "PSMain"},
+                .pName{get_stage_entrypoint(stage.shader_type)},
             };
 
             auto result = _dispatch.createShaderModule(&vk_module_ci, _alloc_callbacks, &vk_stage_ci.module);
@@ -920,14 +936,24 @@ namespace tempest::graphics
             vk_layouts[i] = pipeline_data->desc_set_layouts[i]->layout;
         }
 
+        std::array<VkPushConstantRange, max_push_constant_ranges> vk_push_constants;
+        for (std::uint32_t i = 0; i < ci.active_push_constant_ranges; ++i)
+        {
+            vk_push_constants[i] = {
+                .stageFlags = VK_SHADER_STAGE_ALL,
+                .offset{ci.push_constants[i].offset},
+                .size{ci.push_constants[i].range},
+            };
+        }
+
         VkPipelineLayoutCreateInfo pipeline_layout_ci = {
             .sType{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO},
             .pNext{nullptr},
             .flags{0},
             .setLayoutCount{ci.active_desc_layouts},
-            .pSetLayouts{vk_layouts.data()},
-            .pushConstantRangeCount{0},
-            .pPushConstantRanges{nullptr},
+            .pSetLayouts{ci.active_desc_layouts ? vk_layouts.data() : nullptr},
+            .pushConstantRangeCount{ci.active_push_constant_ranges},
+            .pPushConstantRanges{ci.active_push_constant_ranges ? vk_push_constants.data() : nullptr},
         };
 
         VkPipelineLayout pipeline_layout;
@@ -1145,7 +1171,23 @@ namespace tempest::graphics
         }
         else
         {
-            logger->error("TODO: Implement compute pipeline.");
+            VkComputePipelineCreateInfo compute_ci = {
+                .sType{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO},
+                .pNext{nullptr},
+                .stage{shader_data->stage_infos[0]},
+                .layout{pipeline_layout},
+                .basePipelineHandle{VK_NULL_HANDLE},
+                .basePipelineIndex{0},
+            };
+
+            auto result =
+                _dispatch.createComputePipelines(nullptr, 1, &compute_ci, _alloc_callbacks, &pipeline_data->pipeline);
+            if (result != VK_SUCCESS)
+            {
+                logger->error("Failed to create VkPipeline: {0}", ci.name);
+            }
+
+            pipeline_data->kind = VK_PIPELINE_BIND_POINT_COMPUTE;
         }
 
         return handle;
@@ -1655,6 +1697,11 @@ namespace tempest::graphics
         }
 
         vmaUnmapMemory(_vma_alloc, buf->allocation);
+    }
+
+    void gfx_device::idle()
+    {
+        _dispatch.deviceWaitIdle();
     }
 
     void gfx_device::_advance_frame_counter() noexcept

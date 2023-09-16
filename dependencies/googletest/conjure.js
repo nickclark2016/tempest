@@ -1,6 +1,7 @@
 project('googletest', (prj) => {
     kind('StaticLib');
     language('C++');
+    languageVersion('C++20');
     
     files([
         './src/gmock-all.cc',

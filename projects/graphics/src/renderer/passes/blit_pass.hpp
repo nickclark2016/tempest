@@ -17,11 +17,7 @@ namespace tempest::graphics
 
         void transition_to_present(command_buffer& buf, texture_handle blit_dst);
 
-        descriptor_set_layout_handle image_input_layout; 
-        descriptor_set_handle image_inputs;
-        pipeline_handle blit_pipeline;
         texture_handle blit_src;
-        sampler_handle blit_sampler;
 
         inline static constexpr resource_state required_input_layout = resource_state::FRAGMENT_SHADER_RESOURCE;
     };

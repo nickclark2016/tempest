@@ -1,6 +1,7 @@
 project('spdlog', (prj) => {
     kind('StaticLib');
     language('C++');
+    languageVersion('C++20');
     
     files([
         './src/spdlog.cpp',
