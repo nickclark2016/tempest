@@ -2,6 +2,7 @@
 
 #include <tempest/logger.hpp>
 
+#include <cassert>
 #include <fstream>
 #include <sstream>
 
@@ -40,41 +41,6 @@ namespace tempest::graphics
                 .shader_type{VK_SHADER_STAGE_FRAGMENT_BIT},
             },
         }};
-
-        descriptor_set_layout_create_info::binding mesh_binding = {
-            .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
-            .start_binding{0},
-            .binding_count{0},
-            .name{"mesh_data_binding"},
-        };
-
-        descriptor_set_layout_create_info::binding mesh_layout_binding = {
-            .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
-            .start_binding{1},
-            .binding_count{0},
-            .name{"mesh_layout_binding"},
-        };
-
-        descriptor_set_layout_create_info::binding object_binding = {
-            .type{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
-            .start_binding{2},
-            .binding_count{0},
-            .name{"instance_object_data_binding"},
-        };
-
-        descriptor_set_layout_create_info::binding scene_binding = {
-            .type{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
-            .start_binding{3},
-            .binding_count{0},
-            .name{"scene_data_binding"},
-        };
-
-        descriptor_set_layout_create_info set0_layout_ci = {
-            .bindings{mesh_binding, mesh_layout_binding, object_binding, scene_binding},
-            .binding_count{4},
-            .set_index{0},
-            .name = {"object_data_set"},
-        };
 
         triangle_pipeline = device.create_pipeline({
             .dynamic_render{

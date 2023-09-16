@@ -1,6 +1,7 @@
 #include <tempest/render_system.hpp>
 
 #include "device.hpp"
+#include "passes/binned_histogram_pass.hpp"
 #include "passes/blit_pass.hpp"
 #include "passes/simple_triangle_pass.hpp"
 
@@ -66,6 +67,7 @@ namespace tempest::graphics
         // Passes
         blit_pass _blit;
         simple_triangle_pass _triangle;
+        binned_histogram_pass _histogram;
 
         // Helpers
         void _initialize_mesh_data();
@@ -215,12 +217,20 @@ namespace tempest::graphics
 
         _blit.initialize(*_device, 1280, 720, _color_format);
         _triangle.initialize(*_device, _color_format, _depth_format, _mesh_data_layout);
+
+        {
+            _histogram.initialize(*_device);
+            auto cmds = _device->get_instant_command_buffer();
+            _histogram.record(cmds);
+            _device->execute_immediate(cmds);
+        }
     }
 
     render_system::render_system_impl::~render_system_impl()
     {
         _triangle.release(*_device);
         _blit.release(*_device);
+        _histogram.release(*_device);
 
         _release_depth_buffer();
         _release_mesh_data();

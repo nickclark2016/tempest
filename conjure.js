@@ -39,5 +39,7 @@ workspace('Tempest', (wks) => {
             targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
             intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${ctx.project.getName()}`);
         });
+
+        languageVersion('C++20');
     });
 });

@@ -1,6 +1,7 @@
 project('tinygltf', (prj) => {
     kind('StaticLib');
     language('C++');
+    languageVersion('C++20');
     
     files([
         './src/tinygltf.cpp',

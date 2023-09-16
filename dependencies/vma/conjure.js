@@ -1,6 +1,7 @@
 project('vma', (prj) => {
     kind('StaticLib');
     language('C++');
+    languageVersion('C++20');
     toolset('msc:143');
 
     when({}, (ctx) => {

@@ -177,6 +177,8 @@ namespace tempest::graphics
         void* map_buffer(const buffer_mapping& info);
         void unmap_buffer(const buffer_mapping& info);
 
+        void idle();
+
       private:
         vkb::Instance _instance{};
         vkb::PhysicalDevice _physical_device{};
