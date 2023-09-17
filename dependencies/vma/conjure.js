@@ -51,4 +51,6 @@ project('vma', (prj) => {
     uses([
         'vulkan:public'
     ]);
+
+    warnings('Off');
 });

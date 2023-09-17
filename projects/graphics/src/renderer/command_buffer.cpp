@@ -134,7 +134,7 @@ namespace tempest::graphics
                 .imageLayout{color.layout},
                 .resolveMode{color.resolve_mode},
                 .resolveImageView{color.resolve_target ? _device->access_texture(color.resolve_target)->underlying_view
-                                                       : nullptr},
+                                                       : VK_NULL_HANDLE},
                 .resolveImageLayout{color.resolve_layout},
                 .loadOp{color.load},
                 .storeOp{color.store},
@@ -151,7 +151,7 @@ namespace tempest::graphics
                 .imageLayout{depth->layout},
                 .resolveMode{depth->resolve_mode},
                 .resolveImageView{
-                    depth->resolve_target ? _device->access_texture(depth->resolve_target)->underlying_view : nullptr},
+                    depth->resolve_target ? _device->access_texture(depth->resolve_target)->underlying_view : VK_NULL_HANDLE},
                 .resolveImageLayout{depth->resolve_layout},
                 .loadOp{depth->load},
                 .storeOp{depth->store},
@@ -169,7 +169,7 @@ namespace tempest::graphics
                 .resolveMode{stencil->resolve_mode},
                 .resolveImageView{stencil->resolve_target
                                       ? _device->access_texture(stencil->resolve_target)->underlying_view
-                                      : nullptr},
+                                      : VK_NULL_HANDLE},
                 .resolveImageLayout{stencil->resolve_layout},
                 .loadOp{stencil->load},
                 .storeOp{stencil->store},

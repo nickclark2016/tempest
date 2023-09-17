@@ -211,7 +211,7 @@ namespace tempest::graphics
 
         std::optional<gfx_timestamp_manager> _timestamps;
         bool _gpu_timestamp_reset{true};
-        VkQueryPool _timestamp_query_pool{nullptr};
+        VkQueryPool _timestamp_query_pool{VK_NULL_HANDLE};
 
         std::size_t _current_frame{0};
         std::size_t _previous_frame{0};
