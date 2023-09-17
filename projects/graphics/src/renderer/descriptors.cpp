@@ -239,7 +239,7 @@ namespace tempest::graphics
             return handle;
         }
 
-        _device->_set_resource_name(VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<std::uint64_t>(set->set), ci.name);
+        _device->_set_resource_name(VK_OBJECT_TYPE_DESCRIPTOR_SET, std::bit_cast<std::uint64_t>(set->set), ci.name);
 
         std::size_t alloc_size = ci.resource_count *
                                  (sizeof(resource_handle) + sizeof(sampler_handle) + sizeof(std::uint16_t)) *

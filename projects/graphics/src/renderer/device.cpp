@@ -767,7 +767,7 @@ namespace tempest::graphics
         }
 
         // should probably use a bit cast, but i like to live dangerously
-        _set_resource_name(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<std::uint64_t>(buf->underlying), buf->name);
+        _set_resource_name(VK_OBJECT_TYPE_BUFFER, std::bit_cast<std::uint64_t>(buf->underlying), buf->name);
         buf->memory = alloc_info.deviceMemory;
 
         if (ci.initial_data.size() > 0)
@@ -864,7 +864,7 @@ namespace tempest::graphics
                 break;
             }
 
-            _set_resource_name(VK_OBJECT_TYPE_SHADER_MODULE, reinterpret_cast<std::uint64_t>(vk_stage_ci.module),
+            _set_resource_name(VK_OBJECT_TYPE_SHADER_MODULE, std::bit_cast<std::uint64_t>(vk_stage_ci.module),
                                ci.name);
             state->stage_infos[i] = vk_stage_ci;
         }
@@ -1156,11 +1156,11 @@ namespace tempest::graphics
                 .pColorBlendState{&color_blend_ci},
                 .pDynamicState{&dynamic_state_ci},
                 .layout{pipeline_layout},
-                .renderPass{nullptr},
+                .renderPass{VK_NULL_HANDLE},
                 .subpass{0},
             };
 
-            auto result = _dispatch.createGraphicsPipelines(nullptr, 1, &graphics_pipeline_ci, _alloc_callbacks,
+            auto result = _dispatch.createGraphicsPipelines(VK_NULL_HANDLE, 1, &graphics_pipeline_ci, _alloc_callbacks,
                                                             &pipeline_data->pipeline);
             if (result != VK_SUCCESS)
             {
@@ -1181,7 +1181,7 @@ namespace tempest::graphics
             };
 
             auto result =
-                _dispatch.createComputePipelines(nullptr, 1, &compute_ci, _alloc_callbacks, &pipeline_data->pipeline);
+                _dispatch.createComputePipelines(VK_NULL_HANDLE, 1, &compute_ci, _alloc_callbacks, &pipeline_data->pipeline);
             if (result != VK_SUCCESS)
             {
                 logger->error("Failed to create VkPipeline: {0}", ci.name);
@@ -1287,7 +1287,7 @@ namespace tempest::graphics
             logger->error("Failed to create VkImage {0}", ci.name);
         }
 
-        _set_resource_name(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<std::uint64_t>(tex->underlying_image), ci.name);
+        _set_resource_name(VK_OBJECT_TYPE_IMAGE, std::bit_cast<std::uint64_t>(tex->underlying_image), ci.name);
 
         VkImageViewCreateInfo img_view_ci = {
             .sType{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO},
@@ -1483,7 +1483,7 @@ namespace tempest::graphics
         {
             logger->error("Failed to create VkSampler {}", ci.name);
         }
-        _set_resource_name(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<std::uint64_t>(smp->underlying), ci.name);
+        _set_resource_name(VK_OBJECT_TYPE_SAMPLER, std::bit_cast<std::uint64_t>(smp->underlying), ci.name);
 
         return handle;
     }
@@ -1562,7 +1562,7 @@ namespace tempest::graphics
         {
             logger->error("Failed to create VkDescriptorSetLayout {0}", ci.name);
         }
-        _set_resource_name(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<std::uint64_t>(layout->layout),
+        _set_resource_name(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, std::bit_cast<std::uint64_t>(layout->layout),
                            ci.name);
 
         return handle;
