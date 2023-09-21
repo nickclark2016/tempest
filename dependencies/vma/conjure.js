@@ -43,7 +43,7 @@ project('vma', (prj) => {
     });
 
     block('vma:public', (_) => {
-        includeDirs([
+        externalIncludeDirs([
             './include'
         ]);
     });

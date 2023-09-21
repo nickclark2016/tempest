@@ -39,7 +39,7 @@ project('tlsf', (prj) => {
     });
 
     block('tlsf:public', (_) => {
-        includeDirs([
+        externalIncludeDirs([
             './include'
         ]);
     });

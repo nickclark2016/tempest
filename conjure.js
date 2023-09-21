@@ -41,5 +41,6 @@ workspace('Tempest', (wks) => {
         });
 
         languageVersion('C++20');
+        externalWarnings('Off');
     });
 });

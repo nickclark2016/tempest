@@ -11,7 +11,7 @@ project('tinygltf', (prj) => {
 
     staticRuntime('Off');
 
-    when({ configuration: 'Release' }, (filter) => {
+    when({ configuration: 'Release' }, (_) => {
         optimize('Speed');
         runtime('Release');
         symbols('Off');
@@ -20,7 +20,7 @@ project('tinygltf', (prj) => {
         ]);
     });
 
-    when({ configuration: 'Debug' }, (filter) => {
+    when({ configuration: 'Debug' }, (_) => {
         optimize('Off');
         runtime('Debug');
         symbols('On');
@@ -34,13 +34,13 @@ project('tinygltf', (prj) => {
         intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
     });
 
-    block('tinygltf:public', (blk) => {
-        includeDirs([
+    includeDirs([
+        './include'
+    ]);
+
+    block('tinygltf:public', (_) => {
+        externalIncludeDirs([
             './include'
         ]);
     });
-
-    uses([
-        'tinygltf:public',
-    ]);
 });

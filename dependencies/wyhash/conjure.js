@@ -1,5 +1,5 @@
 block('wyhash:public', (_) => {
-    includeDirs([
+    externalIncludeDirs([
         './include'
     ]);
 });

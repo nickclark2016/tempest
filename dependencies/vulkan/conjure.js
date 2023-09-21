@@ -1,5 +1,7 @@
 block('vulkan:public', (_) => {
-    includeDirs([
+    externalIncludeDirs([
         './include'
     ]);
+
+    externalWarnings('Off');
 });

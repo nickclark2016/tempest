@@ -18,35 +18,33 @@ namespace tempest::core
         std::array<float, 4> color;
     };
 
-    struct mesh
+    struct mesh_view
     {
-        void release();
-        mesh create_submesh(std::size_t first_index, std::size_t index_count);
-
-        [[nodiscard]] std::size_t vertex_count() const noexcept;
-        [[nodiscard]] std::size_t primitive_count() const noexcept;
-
-        core::allocator* owner;
-
-        std::size_t underlying_data_length;
-        void* underlying;
-        std::span<float> positions;
-        std::span<float> uvs;
-        std::span<float> normals;
-        std::span<float> tangents;
-        std::span<float> bitangents;
-        std::span<float> colors;
+        std::span<vertex> vertices;
         std::span<std::uint32_t> indices;
+
+        bool has_tangents;
+        bool has_bitangents;
+        bool has_colors;
+
+        [[nodiscard]] std::size_t bytes_per_vertex() const noexcept;
+        [[nodiscard]] std::size_t size_bytes() const noexcept;
     };
 
-    inline std::size_t mesh::vertex_count() const noexcept
+    inline std::size_t mesh_view::bytes_per_vertex() const noexcept
     {
-        return positions.size() / 3; // 3 floats for one vertex position
+        std::size_t bpv = (3 + 2 + 3) * sizeof(float);
+        bpv += (has_tangents ? 3 : 0) * sizeof(float);
+        bpv += (has_bitangents ? 3 : 0) * sizeof(float);
+        bpv += (has_colors ? 4 : 0) * sizeof(float);
+        return bpv;
     }
 
-    inline std::size_t mesh::primitive_count() const noexcept
+    inline std::size_t mesh_view::size_bytes() const noexcept
     {
-        return indices.size() / 3; // 3 vertices per triangle
+        std::size_t vertex_size = vertices.size() * bytes_per_vertex();
+        std::size_t index_size = indices.size_bytes();
+        return vertex_size + index_size;
     }
 } // namespace tempest::core
 

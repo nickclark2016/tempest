@@ -10,16 +10,6 @@ project('vk-bootstrap', (prj) => {
         'src/**.cpp'
     ]);
 
-    block('vk-bootstrap:public', (_) => {
-        includeDirs([
-            'include'
-        ]);
-
-        uses(['vulkan:public']);
-    });
-
-    uses([ 'vk-bootstrap:public' ]);
-
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
         intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
@@ -41,5 +31,19 @@ project('vk-bootstrap', (prj) => {
         defines([
             '_DEBUG'
         ]);
+    });
+
+    includeDirs([
+        'include'
+    ]);
+
+    uses(['vulkan:public']);
+
+    block('vk-bootstrap:public', (_) => {
+        externalIncludeDirs([
+            'include'
+        ]);
+
+        uses(['vulkan:public']);
     });
 });

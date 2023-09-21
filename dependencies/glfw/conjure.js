@@ -68,12 +68,12 @@ project('glfw', (prj) => {
     });
 
     block('glfw:public', (blk) => {
-        includeDirs([
+        externalIncludeDirs([
             './include'
         ]);
 
         defines([
             'GLFW_DLL'
-        ])
+        ]);
     });
 });
