@@ -17,7 +17,7 @@ project('googletest', (prj) => {
 
     staticRuntime('Off');
 
-    when({ configuration: 'Release' }, (filter) => {
+    when({ configuration: 'Release' }, (_) => {
         optimize('Speed');
         runtime('Release');
         symbols('Off');
@@ -26,7 +26,7 @@ project('googletest', (prj) => {
         ]);
     });
 
-    when({ configuration: 'Debug' }, (filter) => {
+    when({ configuration: 'Debug' }, (_) => {
         optimize('Off');
         runtime('Debug');
         symbols('On');
@@ -40,8 +40,8 @@ project('googletest', (prj) => {
         intermediateDirectory(`${ctx.pathToWorkspace}/bin-int/${ctx.platform}/${ctx.configuration}/${prj.name}`);
     });
 
-    block('googletest:public', (blk) => {
-        includeDirs([
+    block('googletest:public', (_) => {
+        externalIncludeDirs([
             './include'
         ]);
 

@@ -42,7 +42,7 @@ namespace tempest::graphics
         ~render_system_impl();
 
         void render();
-        mesh_layout upload_mesh(const core::mesh& mesh);
+        mesh_layout upload_mesh(const core::mesh_view& mesh);
 
       private:
         core::version _ver;
@@ -89,7 +89,7 @@ namespace tempest::graphics
         _impl->render();
     }
 
-    mesh_layout render_system::upload_mesh(const core::mesh& mesh)
+    mesh_layout render_system::upload_mesh(const core::mesh_view& mesh)
     {
         return _impl->upload_mesh(mesh);
     }
@@ -296,8 +296,7 @@ namespace tempest::graphics
 
         cmds.begin();
 
-        cmds.transition_resource(prepare_pre_present_transitions, pipeline_stage::TOP,
-                                 pipeline_stage::TRANSFER)
+        cmds.transition_resource(prepare_pre_present_transitions, pipeline_stage::TOP, pipeline_stage::TRANSFER)
             .transition_resource(prepare_render_transitions, pipeline_stage::FRAGMENT_SHADER,
                                  pipeline_stage::FRAMEBUFFER_OUTPUT);
 
@@ -315,9 +314,9 @@ namespace tempest::graphics
         _device->end_frame();
     }
 
-    mesh_layout render_system::render_system_impl::upload_mesh(const core::mesh& mesh)
+    mesh_layout render_system::render_system_impl::upload_mesh(const core::mesh_view& mesh)
     {
-        auto buffer_region = _mesh_buffer_allocator->allocate(mesh.underlying_data_length);
+        auto buffer_region = _mesh_buffer_allocator->allocate(mesh.size_bytes());
 
         std::size_t start_index = buffer_region.start;
 
@@ -330,19 +329,19 @@ namespace tempest::graphics
         std::uint32_t bitangents_offset = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t colors_offset = std::numeric_limits<std::uint32_t>::max();
 
-        if (!mesh.tangents.empty())
+        if (mesh.has_tangents)
         {
             tangents_offset = interleave_size;
             interleave_size += 3 * sizeof(float);
         }
 
-        if (!mesh.bitangents.empty())
+        if (mesh.has_bitangents)
         {
             bitangents_offset = interleave_size;
             interleave_size += 3 * sizeof(float);
         }
 
-        if (!mesh.colors.empty())
+        if (mesh.has_colors)
         {
             colors_offset = interleave_size;
             interleave_size = 4 * sizeof(float);
@@ -351,14 +350,15 @@ namespace tempest::graphics
         mesh_layout layout = {
             .mesh_start_offset{static_cast<std::uint32_t>(buffer_region.start)},
             .positions_offset{0},
-            .interleave_offset{static_cast<std::uint32_t>(mesh.positions.size() * 4 + buffer_region.start)},
+            .interleave_offset{
+                static_cast<std::uint32_t>((mesh.vertices.size() * 3 * sizeof(float)) + buffer_region.start)},
             .interleave_stride{interleave_size},
             .uvs_offset{0},
             .normals_offset{2 * sizeof(float)},
             .tangents_offset{tangents_offset},
             .bitangents_offset{bitangents_offset},
             .color_offset{colors_offset},
-            .index_offset{interleave_size * static_cast<std::uint32_t>(mesh.vertex_count())},
+            .index_offset{interleave_size * static_cast<std::uint32_t>(mesh.vertices.size())},
             .index_count{static_cast<std::uint32_t>(mesh.indices.size())},
         };
 
@@ -370,41 +370,15 @@ namespace tempest::graphics
                 .buffer{_mesh_buffer_allocator->current_buf},
             };
 
-            std::byte* ptr = reinterpret_cast<std::byte*>(_device->map_buffer(mesh_buffer_map_info));
+            void* ptr = _device->map_buffer(mesh_buffer_map_info);
+            float* positions = reinterpret_cast<float*>(ptr);
+            float* uvs = positions + mesh.vertices.size() * 3;
+            float* normals = reinterpret_cast<float*>(ptr) + mesh.vertices.size() * 2;
 
-            std::memcpy(ptr, mesh.positions.data(), mesh.positions.size_bytes());
-
-            std::size_t interleave_start = layout.interleave_offset;
-
-            for (std::size_t i = 0; i < mesh.vertex_count(); ++i)
+            for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
             {
-                auto uv_ptr = ptr + interleave_start + layout.uvs_offset + i * layout.interleave_stride;
-                std::memcpy(uv_ptr, mesh.uvs.data() + 2 * i, sizeof(float) * 2); // copy 2 floats
-            
-                auto normal_ptr = ptr + interleave_start + layout.normals_offset + i * layout.interleave_stride;
-                std::memcpy(normal_ptr, mesh.normals.data() + 3 * i, sizeof(float) * 3);
-
-                if (!mesh.tangents.empty())
-                {
-                    auto tangent_ptr = ptr + interleave_start + layout.tangents_offset + i * layout.interleave_stride;
-                    std::memcpy(tangent_ptr, mesh.tangents.data() + 3 * i, sizeof(float) * 3);
-                }
-
-                if (!mesh.bitangents.empty())
-                {
-                    auto bitangent_ptr =
-                        ptr + interleave_start + layout.bitangents_offset + i * layout.interleave_stride;
-                    std::memcpy(bitangent_ptr, mesh.bitangents.data() + 3 * i, sizeof(float) * 3);
-                }
-
-                if (!mesh.colors.empty())
-                {
-                    auto color_ptr = ptr + interleave_start + layout.color_offset + i * layout.interleave_stride;
-                    std::memcpy(color_ptr, mesh.colors.data() + 4 * i, sizeof(float) * 4);
-                }
+                
             }
-
-            std::memcpy(ptr + layout.index_offset, mesh.indices.data(), mesh.indices.size_bytes());
 
             _device->unmap_buffer(mesh_buffer_map_info);
         }
