@@ -373,11 +373,98 @@ namespace tempest::graphics
             void* ptr = _device->map_buffer(mesh_buffer_map_info);
             float* positions = reinterpret_cast<float*>(ptr);
             float* uvs = positions + mesh.vertices.size() * 3;
-            float* normals = reinterpret_cast<float*>(ptr) + mesh.vertices.size() * 2;
+            float* normals = uvs + mesh.vertices.size() * 2;
+            float* tangents = nullptr;
+            float* bitangents = nullptr;
+            float* colors = nullptr;
 
+            float* next_ptr = normals + mesh.vertices.size() * 3;
+
+            if (mesh.has_tangents)
+            {
+                tangents = next_ptr;
+                next_ptr = next_ptr + mesh.vertices.size() * 3;
+            }
+
+            if (mesh.has_bitangents)
+            {
+                bitangents = next_ptr;
+                next_ptr = next_ptr + mesh.vertices.size() * 3;
+            }
+
+            if (mesh.has_colors)
+            {
+                colors = next_ptr;
+                next_ptr = next_ptr + mesh.vertices.size() * 4;
+            }
+
+            // fill positions
             for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
             {
-                
+                const auto& vertex = mesh.vertices[i];
+
+                positions[3 * i + 0] = vertex.position[0];
+                positions[3 * i + 1] = vertex.position[1];
+                positions[3 * i + 2] = vertex.position[2];
+            }
+
+            // fill uvs
+            for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
+            {
+                const auto& vertex = mesh.vertices[i];
+
+                uvs[2 * i + 0] = vertex.uv[0];
+                uvs[2 * i + 1] = vertex.uv[1];
+            }
+
+            // fill normals
+            for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
+            {
+                const auto& vertex = mesh.vertices[i];
+
+                normals[3 * i + 0] = vertex.normal[0];
+                normals[3 * i + 1] = vertex.normal[1];
+                normals[3 * i + 2] = vertex.normal[2];
+            }
+
+            // fill tangents
+            if (mesh.has_tangents)
+            {
+                for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
+                {
+                    const auto& vertex = mesh.vertices[i];
+
+                    tangents[3 * i + 0] = vertex.tangent[0];
+                    tangents[3 * i + 1] = vertex.tangent[1];
+                    tangents[3 * i + 2] = vertex.tangent[2];
+                }
+            }
+
+            // fill bitangents
+            if (mesh.has_bitangents)
+            {
+                for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
+                {
+                    const auto& vertex = mesh.vertices[i];
+
+                    bitangents[3 * i + 0] = vertex.bitangent[0];
+                    bitangents[3 * i + 1] = vertex.bitangent[1];
+                    bitangents[3 * i + 2] = vertex.bitangent[2];
+                }
+            }
+
+            // fill tangents
+            if (mesh.has_colors)
+            {
+                for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
+                {
+                    const auto& vertex = mesh.vertices[i];
+
+                    colors[4 * i + 0] = vertex.color[0];
+                    colors[4 * i + 1] = vertex.color[1];
+                    colors[4 * i + 2] = vertex.color[2];
+                    colors[4 * i + 3] = vertex.color[3];
+                }
             }
 
             _device->unmap_buffer(mesh_buffer_map_info);
