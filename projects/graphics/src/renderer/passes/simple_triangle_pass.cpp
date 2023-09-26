@@ -115,7 +115,7 @@ namespace tempest::graphics
             .bind_pipeline(triangle_pipeline)
             .begin_rendering(viewport, color_attachments, depth_attachment, std::nullopt)
             .bind_descriptor_set(sets, offsets)
-            .draw(3, 1, 0, 0)
+            .draw(36, 1, 0, 0)
             .end_rendering();
     }
 
