@@ -45,6 +45,16 @@ int main()
     auto asset_manager = tempest::assets::asset_manager();
     auto model = asset_manager.load<tempest::assets::model_asset>("assets/box.gltf");
 
+    auto box_mesh_view = tempest::core::mesh_view{
+        .vertices{model->vertices, model->vertex_count},
+        .indices{model->indices, model->index_count},
+        .has_tangents{false},
+        .has_bitangents{false},
+        .has_colors{false},
+    };
+
+    renderer.upload_mesh(box_mesh_view);
+
     while (!window->should_close())
     {
         tempest::input::poll();

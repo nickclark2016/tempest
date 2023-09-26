@@ -16,7 +16,7 @@ namespace tempest::graphics
         std::int32_t vertex_offset;
     };
 
-    struct alignas(16) mesh_layout
+    struct mesh_layout
     {
         std::uint32_t mesh_start_offset;
         std::uint32_t positions_offset;

@@ -1679,7 +1679,7 @@ namespace tempest::graphics
 
         void* ptr;
         vmaMapMemory(_vma_alloc, buf->allocation, &ptr);
-        return ptr;
+        return reinterpret_cast<std::byte*>(ptr) + info.offset;
     }
 
     void gfx_device::unmap_buffer(const buffer_mapping& info)

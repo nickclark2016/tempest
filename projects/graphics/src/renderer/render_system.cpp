@@ -316,7 +316,7 @@ namespace tempest::graphics
 
     mesh_layout render_system::render_system_impl::upload_mesh(const core::mesh_view& mesh)
     {
-        auto buffer_region = _mesh_buffer_allocator->allocate(mesh.size_bytes());
+        auto buffer_region = _vertex_buffer_allocator->allocate(mesh.size_bytes());
 
         std::size_t start_index = buffer_region.start;
 
@@ -347,18 +347,19 @@ namespace tempest::graphics
             interleave_size = 4 * sizeof(float);
         }
 
+        auto interleave_offset = static_cast<std::uint32_t>((mesh.vertices.size() * 3 * sizeof(float)));
+
         mesh_layout layout = {
             .mesh_start_offset{static_cast<std::uint32_t>(buffer_region.start)},
             .positions_offset{0},
-            .interleave_offset{
-                static_cast<std::uint32_t>((mesh.vertices.size() * 3 * sizeof(float)) + buffer_region.start)},
+            .interleave_offset{interleave_offset},
             .interleave_stride{interleave_size},
             .uvs_offset{0},
             .normals_offset{2 * sizeof(float)},
             .tangents_offset{tangents_offset},
             .bitangents_offset{bitangents_offset},
             .color_offset{colors_offset},
-            .index_offset{interleave_size * static_cast<std::uint32_t>(mesh.vertices.size())},
+            .index_offset{interleave_offset + interleave_size * static_cast<std::uint32_t>(mesh.vertices.size())},
             .index_count{static_cast<std::uint32_t>(mesh.indices.size())},
         };
 
@@ -367,36 +368,12 @@ namespace tempest::graphics
             buffer_mapping mesh_buffer_map_info{
                 .offset{static_cast<std::uint32_t>(buffer_region.start)},
                 .range{static_cast<std::uint32_t>(buffer_region.end - buffer_region.start)},
-                .buffer{_mesh_buffer_allocator->current_buf},
+                .buffer{_vertex_buffer_allocator->current_buf},
             };
 
             void* ptr = _device->map_buffer(mesh_buffer_map_info);
             float* positions = reinterpret_cast<float*>(ptr);
-            float* uvs = positions + mesh.vertices.size() * 3;
-            float* normals = uvs + mesh.vertices.size() * 2;
-            float* tangents = nullptr;
-            float* bitangents = nullptr;
-            float* colors = nullptr;
-
-            float* next_ptr = normals + mesh.vertices.size() * 3;
-
-            if (mesh.has_tangents)
-            {
-                tangents = next_ptr;
-                next_ptr = next_ptr + mesh.vertices.size() * 3;
-            }
-
-            if (mesh.has_bitangents)
-            {
-                bitangents = next_ptr;
-                next_ptr = next_ptr + mesh.vertices.size() * 3;
-            }
-
-            if (mesh.has_colors)
-            {
-                colors = next_ptr;
-                next_ptr = next_ptr + mesh.vertices.size() * 4;
-            }
+            float* interleave = positions + 3 * mesh.vertices.size();
 
             // fill positions
             for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
@@ -413,8 +390,9 @@ namespace tempest::graphics
             {
                 const auto& vertex = mesh.vertices[i];
 
-                uvs[2 * i + 0] = vertex.uv[0];
-                uvs[2 * i + 1] = vertex.uv[1];
+                std::size_t uv_start = (i * interleave_size + layout.uvs_offset) / sizeof(float);
+                interleave[uv_start + 0] = vertex.uv[0];
+                interleave[uv_start + 1] = vertex.uv[1];
             }
 
             // fill normals
@@ -422,9 +400,10 @@ namespace tempest::graphics
             {
                 const auto& vertex = mesh.vertices[i];
 
-                normals[3 * i + 0] = vertex.normal[0];
-                normals[3 * i + 1] = vertex.normal[1];
-                normals[3 * i + 2] = vertex.normal[2];
+                std::size_t normal_start = (i * interleave_size + layout.normals_offset) / sizeof(float);
+                interleave[normal_start + 0] = vertex.normal[0];
+                interleave[normal_start + 1] = vertex.normal[1];
+                interleave[normal_start + 2] = vertex.normal[2];
             }
 
             // fill tangents
@@ -434,9 +413,10 @@ namespace tempest::graphics
                 {
                     const auto& vertex = mesh.vertices[i];
 
-                    tangents[3 * i + 0] = vertex.tangent[0];
-                    tangents[3 * i + 1] = vertex.tangent[1];
-                    tangents[3 * i + 2] = vertex.tangent[2];
+                    std::size_t tangent_start = (i * interleave_size + layout.tangents_offset) / sizeof(float);
+                    interleave[tangent_start + 0] = vertex.tangent[0];
+                    interleave[tangent_start + 1] = vertex.tangent[1];
+                    interleave[tangent_start + 2] = vertex.tangent[2];
                 }
             }
 
@@ -447,9 +427,10 @@ namespace tempest::graphics
                 {
                     const auto& vertex = mesh.vertices[i];
 
-                    bitangents[3 * i + 0] = vertex.bitangent[0];
-                    bitangents[3 * i + 1] = vertex.bitangent[1];
-                    bitangents[3 * i + 2] = vertex.bitangent[2];
+                    std::size_t bitangent_start = (i * interleave_size + layout.bitangents_offset) / sizeof(float);
+                    interleave[bitangent_start + 0] = vertex.bitangent[0];
+                    interleave[bitangent_start + 1] = vertex.bitangent[1];
+                    interleave[bitangent_start + 2] = vertex.bitangent[2];
                 }
             }
 
@@ -460,14 +441,34 @@ namespace tempest::graphics
                 {
                     const auto& vertex = mesh.vertices[i];
 
-                    colors[4 * i + 0] = vertex.color[0];
-                    colors[4 * i + 1] = vertex.color[1];
-                    colors[4 * i + 2] = vertex.color[2];
-                    colors[4 * i + 3] = vertex.color[3];
+                    std::size_t color_start = (i * interleave_size + layout.color_offset) / sizeof(float);
+                    interleave[color_start + 0] = vertex.color[0];
+                    interleave[color_start + 1] = vertex.color[1];
+                    interleave[color_start + 2] = vertex.color[2];
+                    interleave[color_start + 3] = vertex.color[3];
                 }
             }
 
+            // fill indices
+            std::uint32_t* indices =
+                reinterpret_cast<std::uint32_t*>(reinterpret_cast<std::byte*>(ptr) + layout.index_offset);
+            std::memcpy(indices, mesh.indices.data(), mesh.indices.size_bytes());
+
             _device->unmap_buffer(mesh_buffer_map_info);
+        }
+
+        {
+            auto mesh_buffer_region = _mesh_buffer_allocator->allocate(sizeof(mesh_layout));
+
+            buffer_mapping mesh_data_buffer_map_info{
+                .offset{static_cast<std::uint32_t>(mesh_buffer_region.start)},
+                .range{static_cast<std::uint32_t>(mesh_buffer_region.end - mesh_buffer_region.start)},
+                .buffer{_mesh_buffer_allocator->current_buf},
+            };
+
+            void* ptr = _device->map_buffer(mesh_data_buffer_map_info);
+            std::memcpy(ptr, &layout, sizeof(mesh_layout));
+            _device->unmap_buffer(mesh_data_buffer_map_info);
         }
 
         return layout;
@@ -527,66 +528,57 @@ namespace tempest::graphics
 
     void render_system::render_system_impl::_populate_mesh_data()
     {
-        float positions[] = {0.0f, 0.5f, 0.0f, 0.5f, -0.5f, 0.0f, -0.5f, -0.5f, 0.0f};
-        float interleave[] = {0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-                              0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f};
         std::uint32_t indices[] = {0, 1, 2};
 
-        mesh_layout mesh = {
-            .mesh_start_offset = 0,
-            .positions_offset = 0,
-            .interleave_offset = 36, // sizeof(float) * 9
-            .interleave_stride = 36, // sizeof(float) * 9
-            .uvs_offset = 0,
-            .normals_offset = 8,
-            .color_offset = 20,
-            .index_offset = sizeof(positions) + sizeof(interleave),
+        std::array<core::vertex, 3> vertices = {
+            core::vertex{
+                .position{0.0f, 0.5f, 0.0f},
+                .uv{0.0f, 0.0f},
+                .normal{0.0f, 0.0f, 1.0f},
+                .color{1.0f, 0.0f, 0.0f, 1.0f},
+            },
+            core::vertex{
+                .position{0.5f, -0.5f, 0.0f},
+                .uv{0.0f, 0.0f},
+                .normal{0.0f, 0.0f, 1.0f},
+                .color{0.0f, 1.0f, 0.0f, 1.0f},
+            },
+            core::vertex{
+                .position{-0.5f, -0.5f, 0.0f},
+                .uv{0.0f, 0.0f},
+                .normal{0.0f, 0.0f, 1.0f},
+                .color{0.0f, 0.0f, 1.0f, 1.0f},
+            },
         };
 
-        auto positions_size = sizeof(float) * 3 * 3;
-        auto interleave_size = sizeof(float) * 3 * 9;
-        auto rng = _vertex_buffer_allocator->scheme.allocate(positions_size + interleave_size);
-
-        buffer_mapping map_info = {
-            .offset = static_cast<std::uint32_t>(rng->start),
-            .range = static_cast<std::uint32_t>(rng->end - rng->start),
-            .buffer = _vertex_buffer_allocator->current_buf,
+        const core::mesh_view triangle{
+            .vertices{vertices},
+            .indices{indices},
+            .has_tangents{false},
+            .has_bitangents{false},
+            .has_colors{true},
         };
 
-        void* data = _device->map_buffer(map_info);
-        std::memcpy(data, positions, sizeof(positions));
-        std::memcpy(((char*)data) + sizeof(positions), interleave, sizeof(interleave));
-        std::memcpy(((char*)data) + sizeof(positions) + sizeof(interleave), indices, sizeof(indices));
-        _device->unmap_buffer(map_info);
+        upload_mesh(triangle);
 
         object_payload object;
 
-        object.transform = math::transform(math::vec3<float>(0.5f, 0.5f, 1.0f),
-                                           math::vec3<float>(0.0f, 0.0f, 1.5707963267f), math::vec3<float>(1.0f));
-        object.mesh_id = 0;
+        object.transform = math::transform(math::vec3<float>(0.5f, 0.0f, 1.0f),
+                                           math::vec3<float>(0.0f, 0.0f, 1.5707963267f / 2.0f), math::vec3<float>(1.0f));
+        object.mesh_id = 1;
 
         auto proj_matrix = math::perspective(16.0f / 9.0f, 100.0f, 0.01f, 1000.0f);
 
         auto model_size = sizeof(math::mat4<float>) * 2;
         auto model_rng = _instance_buffer_allocator->scheme.allocate(model_size);
-        map_info = {
+        buffer_mapping map_info = {
             .offset = static_cast<std::uint32_t>(model_rng->start),
             .range = static_cast<std::uint32_t>(model_rng->end - model_rng->start),
             .buffer = _instance_buffer_allocator->current_buf,
         };
 
-        data = _device->map_buffer(map_info);
+        void* data = _device->map_buffer(map_info);
         std::memcpy(data, &object, sizeof(object_payload));
-        _device->unmap_buffer(map_info);
-
-        map_info = {
-            .offset = 0,
-            .range = sizeof(mesh_layout),
-            .buffer = _mesh_buffer_allocator->current_buf,
-        };
-
-        data = _device->map_buffer(map_info);
-        std::memcpy(data, &mesh, sizeof(mesh_layout));
         _device->unmap_buffer(map_info);
 
         auto scene_size = sizeof(math::mat4<float>) * 3;
@@ -597,7 +589,7 @@ namespace tempest::graphics
             .buffer = _scene_buffer_allocator->current_buf,
         };
 
-        auto view_matrix = math::look_at(math::vec3<float>(0.0f, 0.0f, -1.0f), math::vec3<float>(0.0f, 0.0f, 0.0f),
+        auto view_matrix = math::look_at(math::vec3<float>(0.0f, 0.0f, -4.0f), math::vec3<float>(0.0f, 0.0f, 0.0f),
                                          math::vec3<float>(0.0f, 1.0f, 0.0f));
         auto view_proj = proj_matrix * view_matrix;
 
