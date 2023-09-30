@@ -57,8 +57,9 @@ bool has_component(uint offset)
     return offset != MAX_UINT;
 }
 
-Vertex pull_vertex(StructuredBuffer<uint> source, uint byte_offset, Mesh mesh, uint index)
+Vertex pull_vertex(StructuredBuffer<uint> source, Mesh mesh, uint index)
 {
+    uint byte_offset = mesh.mesh_start_offset;
     uint mesh_start_word = byte_offset / 4;
     uint vertex_id = source[mesh_start_word + mesh.index_offset / 4 + index];
 

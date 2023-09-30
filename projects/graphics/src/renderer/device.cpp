@@ -1135,8 +1135,8 @@ namespace tempest::graphics
                 .pNext{nullptr},
                 .colorAttachmentCount{ci.dynamic_render.active_color_attachments},
                 .pColorAttachmentFormats{
-                    ci.dynamic_render.active_color_attachments ? ci.dynamic_render._color_format.data() : nullptr},
-                .depthAttachmentFormat{ci.dynamic_render._depth_format},
+                    ci.dynamic_render.active_color_attachments ? ci.dynamic_render.color_format.data() : nullptr},
+                .depthAttachmentFormat{ci.dynamic_render.depth_format},
                 .stencilAttachmentFormat{ci.dynamic_render.stencil_format},
             };
 

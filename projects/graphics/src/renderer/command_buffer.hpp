@@ -92,6 +92,9 @@ namespace tempest::graphics
         command_buffer& copy_buffer(buffer_handle src, buffer_handle dst, std::span<buffer_copy_region> regions);
 
         command_buffer& dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z);
+        command_buffer& dispatch_indirect(buffer_handle buf, std::uint32_t offset);
+
+        command_buffer& fill(buffer_handle dst, std::size_t offset, std::size_t size, std::uint32_t value);
 
         void begin();
         void end();
