@@ -31,10 +31,28 @@ namespace tempest::graphics
         std::uint32_t index_count;
     };
 
-    struct alignas(16) object_payload
+    enum class material_type : std::uint32_t
+    {
+        OPAQUE = 0,
+        TRASPARENT = 1,
+    };
+
+    struct material_payload
+    {
+        material_type type{material_type::OPAQUE};
+
+        std::uint32_t albedo_map_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t normal_map_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t metallic_map_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t roughness_map_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t ao_map_id{std::numeric_limits<std::uint32_t>::max()};
+    };
+
+    struct object_payload
     {
         math::mat4<float> transform;
         std::uint32_t mesh_id{~0u};
+        std::uint32_t material_id{~0u};
     };
 } // namespace tempest::graphics
 

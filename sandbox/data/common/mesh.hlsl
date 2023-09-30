@@ -18,6 +18,7 @@ struct Mesh {
 struct ObjectData {
     float4x4 model_matrix;
     uint mesh_id;
+    uint material_id;
 };
 
 struct CameraData {

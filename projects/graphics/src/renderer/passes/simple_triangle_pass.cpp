@@ -25,7 +25,7 @@ namespace tempest::graphics
         }
     } // namespace
 
-    bool simple_triangle_pass::initialize(gfx_device& device, VkFormat _color_format, VkFormat _depth_format,
+    bool simple_triangle_pass::initialize(gfx_device& device, VkFormat color_format, VkFormat depth_format,
                                           descriptor_set_layout_handle meshes)
     {
         auto tri_vs_spv = read_spirv("data/simple_triangle/simple_triangle.vx.spv");
@@ -44,11 +44,11 @@ namespace tempest::graphics
 
         triangle_pipeline = device.create_pipeline({
             .dynamic_render{
-                ._color_format{
-                    _color_format,
+                .color_format{
+                    color_format,
                 },
                 .active_color_attachments{1},
-                ._depth_format{_depth_format},
+                .depth_format{depth_format},
             },
             .ds{
                 .depth_comparison{VK_COMPARE_OP_LESS_OR_EQUAL},

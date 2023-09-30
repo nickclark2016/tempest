@@ -651,6 +651,20 @@ namespace tempest::graphics
         return *this;
     }
 
+    command_buffer& command_buffer::dispatch_indirect(buffer_handle buf, std::uint32_t offset)
+    {
+        _device->_dispatch.cmdDispatchIndirect(_buf, _device->access_buffer(buf)->underlying, offset);
+
+        return *this;
+    }
+
+    command_buffer& command_buffer::fill(buffer_handle dst, std::size_t offset, std::size_t size, std::uint32_t value)
+    {
+        _device->_dispatch.cmdFillBuffer(_buf, _device->access_buffer(dst)->underlying, offset, size, value);
+
+        return *this;
+    }
+
     void command_buffer::begin()
     {
         reset();
