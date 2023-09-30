@@ -109,7 +109,7 @@ namespace tempest::graphics
         graph_pass_builder& add_transfer_source_buffer(buffer_resource_handle handle,
                                                        pipeline_stage first_read = pipeline_stage::INFER,
                                                        pipeline_stage last_read = pipeline_stage::INFER);
-        graph_pass_builder& add_transfer_source_buffer(buffer_resource_handle handle,
+        graph_pass_builder& add_transfer_destination_buffer(buffer_resource_handle handle,
                                                        pipeline_stage first_write = pipeline_stage::INFER,
                                                        pipeline_stage last_write = pipeline_stage::INFER);
 

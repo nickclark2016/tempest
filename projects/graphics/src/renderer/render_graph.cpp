@@ -134,6 +134,58 @@ namespace tempest::graphics
         return *this;
     }
 
+    graph_pass_builder& graph_pass_builder::add_structured_buffer(buffer_resource_handle handle,
+                                                                  pipeline_stage first_read, pipeline_stage last_read)
+    {
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_rw_structured_buffer(buffer_resource_handle handle,
+                                                                     pipeline_stage first_access,
+                                                                     pipeline_stage last_access)
+    {
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_vertex_buffer(buffer_resource_handle handle, pipeline_stage first_read,
+                                                              pipeline_stage last_read)
+    {
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_index_buffer(buffer_resource_handle handle, pipeline_stage first_read,
+                                                             pipeline_stage last_read)
+    {
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_constant_buffer(buffer_resource_handle handle,
+                                                                pipeline_stage first_read, pipeline_stage last_read)
+    {
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_indirect_argument_buffer(buffer_resource_handle handle,
+                                                                         pipeline_stage first_read,
+                                                                         pipeline_stage last_read)
+    {
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_transfer_source_buffer(buffer_resource_handle handle,
+                                                                       pipeline_stage first_read,
+                                                                       pipeline_stage last_read)
+    {
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_transfer_destination_buffer(buffer_resource_handle handle,
+                                                                            pipeline_stage first_write,
+                                                                            pipeline_stage last_write)
+    {
+        return *this;
+    }
+
     graph_pass_builder& graph_pass_builder::on_execute(std::function<void(command_list&)> commands)
     {
         _commands = commands;
@@ -163,6 +215,11 @@ namespace tempest::graphics
     }
 
     image_resource_handle render_graph_compiler::create_image(image_desc desc)
+    {
+        return _resource_lib->load(desc);
+    }
+
+    buffer_resource_handle render_graph_compiler::create_buffer(buffer_desc desc)
     {
         return _resource_lib->load(desc);
     }

@@ -103,6 +103,52 @@ namespace tempest::graphics::vk
 
     void render_graph_resource_library::add_buffer_usage(buffer_resource_handle handle, buffer_resource_usage usage)
     {
+        auto buffer_it = std::find_if(std::begin(_buffers_to_compile), std::end(_buffers_to_compile),
+                                      [handle](const auto& def) { return def.allocation == handle; });
+
+        if (buffer_it != std::end(_buffers_to_compile))
+        {
+            switch (usage)
+            {
+            case buffer_resource_usage::STRUCTURED:
+                [[fallthrough]];
+            case buffer_resource_usage::RW_STRUCTURED:
+            {
+                buffer_it->info.storage_buffer = true;
+                break;
+            }
+            case buffer_resource_usage::CONSTANT:
+            {
+                buffer_it->info.uniform_buffer = true;
+                break;
+            }
+            case buffer_resource_usage::INDEX:
+            {
+                buffer_it->info.index_buffer = true;
+                break;
+            }
+            case buffer_resource_usage::VERTEX:
+            {
+                buffer_it->info.vertex_buffer = true;
+                break;
+            }
+            case buffer_resource_usage::INDIRECT_ARGUMENT:
+            {
+                buffer_it->info.indirect_buffer = true;
+                break;
+            }
+            case buffer_resource_usage::TRANSFER_SOURCE:
+            {
+                buffer_it->info.transfer_source = true;
+                break;
+            }
+            case buffer_resource_usage::TRANSFER_DESTINATION:
+            {
+                buffer_it->info.transfer_destination = true;
+                break;
+            }
+            }
+        }
     }
 
     bool render_graph_resource_library::compile()

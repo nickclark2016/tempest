@@ -58,6 +58,9 @@ namespace tempest::graphics::vk
 
         std::vector<deferred_image_create_info> _images_to_compile;
         std::vector<image_resource_handle> _compiled_images;
+
+        std::vector<deferred_buffer_create_info> _buffers_to_compile;
+        std::vector<buffer_resource_handle> _compiled_buffers;
     };
 
     class render_graph_compiler : public graphics::render_graph_compiler
