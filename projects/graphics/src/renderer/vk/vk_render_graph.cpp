@@ -98,6 +98,8 @@ namespace tempest::graphics::vk
 
     buffer_resource_handle render_graph_resource_library::load(const buffer_desc& desc)
     {
+        auto handle = _device->allocate_buffer();
+
         return buffer_resource_handle();
     }
 
