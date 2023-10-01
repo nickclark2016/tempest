@@ -245,19 +245,63 @@ namespace tempest::graphics::vk
         _current_frame++;
     }
 
+    buffer* render_device::access_buffer(buffer_resource_handle handle) noexcept
+    {
+        return reinterpret_cast<buffer*>(_buffers->access({
+            .index{handle.id},
+            .generation{handle.generation},
+        }));
+    }
+
+    const buffer* render_device::access_buffer(buffer_resource_handle handle) const noexcept
+    {
+        return reinterpret_cast<const buffer*>(_buffers->access({
+            .index{handle.id},
+            .generation{handle.generation},
+        }));
+    }
+
+    buffer_resource_handle render_device::allocate_buffer()
+    {
+        auto key = _buffers->acquire_resource();
+        return buffer_resource_handle(key.index, key.generation);
+    }
+
     buffer_resource_handle render_device::create_buffer(const buffer_create_info& ci)
     {
-        return buffer_resource_handle();
+        return create_buffer(ci, allocate_buffer());
+    }
+
+    buffer_resource_handle render_device::create_buffer(const buffer_create_info& ci, buffer_resource_handle handle)
+    {
+        return handle;
+    }
+
+    void render_device::release_buffer(buffer_resource_handle handle)
+    {
+        _delete_queue->add_to_queue(_current_frame, [this, handle]() {
+            auto buf = access_buffer(handle);
+            if (buf)
+            {
+                vmaDestroyBuffer(_vk_alloc, buf->buffer, buf->allocation);
+            }
+        });
     }
 
     image* render_device::access_image(image_resource_handle handle) noexcept
     {
-        return reinterpret_cast<image*>(_images->access({.index{handle.id}, .generation{handle.generation}}));
+        return reinterpret_cast<image*>(_images->access({
+            .index{handle.id},
+            .generation{handle.generation},
+        }));
     }
 
     const image* render_device::access_image(image_resource_handle handle) const noexcept
     {
-        return reinterpret_cast<const image*>(_images->access({.index{handle.id}, .generation{handle.generation}}));
+        return reinterpret_cast<const image*>(_images->access({
+            .index{handle.id},
+            .generation{handle.generation},
+        }));
     }
 
     image_resource_handle render_device::create_image(const image_create_info& ci)

@@ -62,12 +62,17 @@ namespace tempest::graphics::vk
         void start_frame() noexcept override;
         void end_frame() noexcept override;
 
+        buffer* access_buffer(buffer_resource_handle handle) noexcept;
+        const buffer* access_buffer(buffer_resource_handle handle) const noexcept;
+        buffer_resource_handle allocate_buffer();
         buffer_resource_handle create_buffer(const buffer_create_info& ci) override;
+        buffer_resource_handle create_buffer(const buffer_create_info& ci, buffer_resource_handle handle);
+        void release_buffer(buffer_resource_handle handle);
 
         image* access_image(image_resource_handle handle) noexcept;
         const image* access_image(image_resource_handle handle) const noexcept;
-        image_resource_handle create_image(const image_create_info& ci) override;
         image_resource_handle allocate_image();
+        image_resource_handle create_image(const image_create_info& ci) override;
         image_resource_handle create_image(const image_create_info& ci, image_resource_handle handle);
         void release_image(image_resource_handle handle);
 
