@@ -18,7 +18,7 @@ namespace tempest::graphics::vk
 
     render_graph_resource_library::~render_graph_resource_library()
     {
-        for (auto img : _compiled_images)
+        for (auto& img : _compiled_images)
         {
             _device->release_image(img);
         }

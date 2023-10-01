@@ -27,6 +27,7 @@ namespace tempest::graphics::vk
     struct buffer
     {
         VmaAllocation allocation;
+        VmaAllocationInfo alloc_info;
         VkBuffer buffer;
         VkBufferCreateInfo info;
         std::string name;
