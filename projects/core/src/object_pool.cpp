@@ -169,7 +169,7 @@ namespace tempest::core
 
         for (std::size_t i = 0; i < _pool_size; ++i)
         {
-            _keys[i].index = i + 1;
+            _keys[i].index = static_cast<std::uint32_t>(i) + 1;
             _keys[i].generation++;
         }
     }

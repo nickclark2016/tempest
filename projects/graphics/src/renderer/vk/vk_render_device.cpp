@@ -274,6 +274,85 @@ namespace tempest::graphics::vk
 
     buffer_resource_handle render_device::create_buffer(const buffer_create_info& ci, buffer_resource_handle handle)
     {
+        if (!handle)
+        {
+            return buffer_resource_handle();
+        }
+
+        VkBufferUsageFlags usage = 0;
+        usage |= ci.index_buffer ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT : 0;
+        usage |= ci.indirect_buffer ? VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT : 0;
+        usage |= ci.storage_buffer ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : 0;
+        usage |= ci.transfer_destination ? VK_BUFFER_USAGE_TRANSFER_DST_BIT : 0;
+        usage |= ci.transfer_source ? VK_BUFFER_USAGE_TRANSFER_SRC_BIT : 0;
+        usage |= ci.uniform_buffer ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : 0;
+        usage |= ci.vertex_buffer ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : 0;
+
+        VkBufferCreateInfo buf_ci = {
+            .sType{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .size{ci.size},
+            .usage{usage},
+            .sharingMode{VK_SHARING_MODE_EXCLUSIVE},
+            .queueFamilyIndexCount{0},
+            .pQueueFamilyIndices{nullptr},
+        };
+
+        VmaMemoryUsage mem_usage = ([ci]() {
+            switch (ci.loc)
+            {
+            case memory_location::DEVICE:
+                return VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+            case memory_location::HOST:
+                return VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+            default:
+                return VMA_MEMORY_USAGE_AUTO;
+            }
+        })();
+
+        VkMemoryPropertyFlags required = 0;
+        VkMemoryPropertyFlags preferred = 0;
+
+        if (ci.uniform_buffer || ci.loc == memory_location::HOST)
+        {
+            required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            preferred |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        }
+
+        VmaAllocationCreateFlags alloc_flags = 0;
+        if (required & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+        {
+            alloc_flags |=
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+        }
+
+        VmaAllocationCreateInfo alloc_ci = {
+            .flags{alloc_flags},
+            .usage{mem_usage},
+            .requiredFlags{required},
+            .preferredFlags{preferred},
+        };
+
+        buffer buf{
+            .info{buf_ci},
+            .name{std::string{ci.name}},
+        };
+
+        auto result = vmaCreateBuffer(_vk_alloc, &buf_ci, &alloc_ci, &buf.buffer, &buf.allocation, &buf.alloc_info);
+        if (result != VK_SUCCESS)
+        {
+            _buffers->release_resource({
+                .index{handle.id},
+                .generation{handle.generation},
+            });
+
+            return buffer_resource_handle();
+        }
+
+        buffer* buf_ptr = access_buffer(handle);
+        std::construct_at(buf_ptr, buf);
+
         return handle;
     }
 
@@ -284,6 +363,7 @@ namespace tempest::graphics::vk
             if (buf)
             {
                 vmaDestroyBuffer(_vk_alloc, buf->buffer, buf->allocation);
+                std::destroy_at(buf);
             }
         });
     }
@@ -352,7 +432,14 @@ namespace tempest::graphics::vk
             .initialLayout{VK_IMAGE_LAYOUT_UNDEFINED},
         };
 
+        VmaAllocationCreateFlags alloc_flags = 0;
+        if (ci.color_attachment || ci.depth_attachment)
+        {
+            alloc_flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+        }
+
         VmaAllocationCreateInfo alloc_create_info = {
+            .flags{alloc_flags},
             .usage{VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE},
             .requiredFlags{VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT},
         };
@@ -438,6 +525,7 @@ namespace tempest::graphics::vk
                     vmaDestroyImage(_vk_alloc, img->image, img->allocation);
                 }
                 _dispatch.destroyImageView(img->view, nullptr);
+                std::destroy_at(img);
             }
         });
     }
@@ -493,7 +581,7 @@ namespace tempest::graphics::vk
                 auto device_result = vkb::DeviceBuilder(phys_dev).build();
                 if (device_result)
                 {
-                    auto device = *device_result;
+                    vkb::Device device = *device_result;
                     _devices.emplace_back(std::make_unique<render_device>(alloc, _instance, phys_dev, device));
                 }
             }

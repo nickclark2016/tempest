@@ -51,6 +51,10 @@ void render_graph_demo()
         .size{1024 * 1024 * 128 * 3},
     });
 
+    auto scene_data_buffer = rgc->create_buffer({
+        .size{1024 * 16 * 3},
+    });
+
     auto material_data_buffer = rgc->create_buffer({
         .size{1024 * 64},
         .location{graphics::memory_location::DEVICE},
@@ -75,25 +79,48 @@ void render_graph_demo()
         .size{1024 * 12 * 3},
     });
 
+    auto visibility_clear_pass =
+        rgc->add_graph_pass("visibility_buffer_start_clear", [&](graphics::graph_pass_builder& bldr) {
+            bldr.add_rw_structured_buffer(material_count_buffer)
+                .add_rw_structured_buffer(material_start_buffer)
+                .on_execute([&](graphics::command_list& cmds) {});
+        });
+
     auto visibility_buffer_pass = rgc->add_graph_pass("visibility_buffer", [&](graphics::graph_pass_builder& bldr) {
         bldr.add_color_output(visibility_buffer)
             .add_depth_output(depth_buffer)
+            .add_structured_buffer(vertex_data_buffer)
+            .add_structured_buffer(object_data_buffer)
+            .add_constant_buffer(scene_data_buffer)
             .on_execute([&](graphics::command_list& cmds) {});
     });
 
     auto material_count_pass =
         rgc->add_graph_pass("visibility_material_count", [&](graphics::graph_pass_builder& bldr) {
-            bldr.add_storage_image(visibility_buffer).on_execute([&](graphics::command_list& cmds) {});
+            bldr.add_storage_image(visibility_buffer)
+                .add_rw_structured_buffer(material_count_buffer)
+                .on_execute([&](graphics::command_list& cmds) {});
         });
 
     auto material_start_pass =
         rgc->add_graph_pass("visibility_material_start", [&](graphics::graph_pass_builder& bldr) {
-            bldr.on_execute([&](graphics::command_list& cmds) {});
+            bldr.add_structured_buffer(material_count_buffer)
+                .add_rw_structured_buffer(material_start_buffer)
+                .on_execute([&](graphics::command_list& cmds) {});
+        });
+
+    auto material_start_clear_pass =
+        rgc->add_graph_pass("visibility_material_count_clear_pass", [&](graphics::graph_pass_builder& bldr) {
+            bldr.add_rw_structured_buffer(material_count_buffer).on_execute([&](graphics::command_list& cmds) {});
         });
 
     auto material_pixel_sort_pass =
         rgc->add_graph_pass("visibility_material_sort", [&](graphics::graph_pass_builder& bldr) {
-            bldr.add_storage_image(visibility_buffer).on_execute([&](graphics::command_list& cmds) {});
+            bldr.add_storage_image(visibility_buffer)
+                .add_rw_structured_buffer(material_count_buffer)
+                .add_rw_structured_buffer(pixel_xy_buffer)
+                .add_structured_buffer(material_start_buffer)
+                .on_execute([&](graphics::command_list& cmds) {});
         });
 
     auto graph = std::move(*rgc).compile();
