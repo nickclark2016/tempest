@@ -9,20 +9,76 @@
 
 #include <vulkan/vulkan.h>
 
+#include <array>
+#include <bitset>
+
 namespace tempest::graphics::vk
 {
+    class render_device;
     class render_graph_resource_library;
+
+    struct render_graph_buffer_state
+    {
+        VkPipelineStageFlags stage_mask;
+        VkAccessFlags access_mask;
+        VkBuffer buffer;
+        VkDeviceSize offset;
+        VkDeviceSize size;
+        std::uint32_t queue_family;
+    };
+
+    struct render_graph_image_state
+    {
+        VkPipelineStageFlags stage_mask;
+        VkAccessFlags access_mask;
+        VkImageLayout image_layout;
+        VkImage image;
+        VkImageAspectFlags aspect;
+        std::uint32_t base_mip;
+        std::uint32_t mip_count;
+        std::uint32_t base_array_layer;
+        std::uint32_t layer_count;
+        std::uint32_t queue_family;
+    };
+
+    struct swapchain_resource_state
+    {
+        swapchain_resource_handle swapchain;
+        VkImageLayout image_layout;
+        VkPipelineStageFlags stage_mask;
+        VkAccessFlags access_mask;
+    };
+
+    struct render_graph_resource_state
+    {
+        std::unordered_map<std::uint64_t, render_graph_buffer_state> buffers;
+        std::unordered_map<std::uint64_t, render_graph_image_state> images;
+        std::unordered_map<std::uint64_t, swapchain_resource_state> swapchain;
+    };
 
     class render_graph : public graphics::render_graph
     {
       public:
-        explicit render_graph(core::allocator* alloc, std::unique_ptr<render_graph_resource_library>&& resources);
+        explicit render_graph(core::allocator* alloc, render_device* device,
+                              std::span<graphics::graph_pass_builder> pass_builders,
+                              std::unique_ptr<render_graph_resource_library>&& resources);
         void execute() override;
 
       private:
+        using pass_active_mask = std::bitset<1024>;
+
         std::unique_ptr<render_graph_resource_library> _resource_lib;
 
+        std::vector<graph_pass_builder> _all_passes;
+
+        pass_active_mask _active_passes;
+        std::vector<std::reference_wrapper<graph_pass_builder>> _active_pass_set;
+        std::vector<swapchain_resource_handle> _active_swapchain_set;
+
         core::allocator* _alloc;
+        render_device* _device;
+
+        render_graph_resource_state _last_known_state;
     };
 
     class render_graph_resource_library : public graphics::render_graph_resource_library

@@ -4,6 +4,7 @@
 #include <tempest/object_pool.hpp>
 #include <tempest/render_device.hpp>
 
+#include <deque>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -33,6 +34,24 @@ namespace tempest::graphics::vk
         std::string name;
     };
 
+    struct graphics_pipeline
+    {
+        VkShaderModule vertex_module;
+        VkShaderModule fragment_module;
+        std::vector<VkDescriptorSetLayout> set_layouts;
+        VkPipeline pipeline;
+        VkPipelineLayout pipeline_layout;
+        std::string name;
+    };
+
+    struct swapchain
+    {
+        std::uint32_t image_index;
+        vkb::Swapchain sc;
+        VkSurfaceKHR surface;
+        std::vector<image_resource_handle> image_handles;
+    };
+
     class resource_deletion_queue
     {
       public:
@@ -53,11 +72,102 @@ namespace tempest::graphics::vk
         std::size_t _frames_in_flight;
     };
 
+    struct queue_info
+    {
+        VkQueue queue;
+        std::uint32_t queue_family_index;
+        std::uint32_t queue_index;
+        VkQueueFlags flags;
+    };
+
+    class command_list : public graphics::command_list
+    {
+      public:
+        command_list(VkCommandBuffer buffer, vkb::DispatchTable* dispatch);
+        ~command_list() override = default;
+
+        operator VkCommandBuffer() const noexcept;
+
+      private:
+        VkCommandBuffer _cmds;
+        vkb::DispatchTable* _dispatch;
+    };
+
+    struct command_buffer_allocator
+    {
+        queue_info queue;
+        VkCommandPool pool;
+
+        std::vector<VkCommandBuffer> cached_commands;
+        std::size_t command_buffer_index{0};
+
+        vkb::DispatchTable* dispatch;
+
+        void reset();
+        command_list allocate();
+        void release();
+    };
+
+    struct command_buffer_recycler
+    {
+        struct command_buffer_recycle_payload
+        {
+            command_buffer_allocator allocator;
+            std::size_t recycled_frame;
+        };
+
+        std::size_t frames_in_flight;
+        queue_info queue;
+        std::vector<command_buffer_allocator> global_pool;
+        std::deque<command_buffer_recycle_payload> recycle_pool;
+
+        command_buffer_allocator acquire(vkb::DispatchTable& dispatch);
+        void release(command_buffer_allocator&& allocator, std::size_t current_frame);
+        void recycle(std::size_t current_frame, vkb::DispatchTable& dispatch);
+        void release_all(vkb::DispatchTable& dispatch);
+    };
+
+    struct sync_primitive_recycler
+    {
+        struct fence_recycle_payload
+        {
+            VkFence fence;
+            std::size_t recycled_frame;
+        };
+
+        struct semaphore_recycle_payload
+        {
+            VkSemaphore sem;
+            std::size_t recycled_frame;
+        };
+
+        std::vector<VkFence> global_fence_pool;
+        std::deque<fence_recycle_payload> recycle_fence_pool;
+        std::vector<VkSemaphore> global_semaphore_pool;
+        std::deque<semaphore_recycle_payload> recycle_semaphore_pool;
+
+        std::size_t frames_in_flight;
+
+        VkFence acquire_fence(vkb::DispatchTable& dispatch);
+        VkSemaphore acquire_semaphore(vkb::DispatchTable& dispatch);
+        void release(VkFence&& fen, std::size_t current_frame);
+        void release(VkSemaphore&& sem, std::size_t current_frame);
+        void recycle(std::size_t current_frame, vkb::DispatchTable& dispatch);
+
+        void release_all(vkb::DispatchTable& dispatch);
+    };
+
+    struct per_frame_data
+    {
+        VkSemaphore present_ready;
+        VkSemaphore render_ready;
+        VkFence render_fence;
+    };
+
     class render_device : public graphics::render_device
     {
       public:
-        explicit render_device(core::allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical,
-                               vkb::Device device);
+        explicit render_device(core::allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical);
         ~render_device() override;
 
         void start_frame() noexcept override;
@@ -68,14 +178,73 @@ namespace tempest::graphics::vk
         buffer_resource_handle allocate_buffer();
         buffer_resource_handle create_buffer(const buffer_create_info& ci) override;
         buffer_resource_handle create_buffer(const buffer_create_info& ci, buffer_resource_handle handle);
-        void release_buffer(buffer_resource_handle handle);
+        void release_buffer(buffer_resource_handle handle) override;
 
         image* access_image(image_resource_handle handle) noexcept;
         const image* access_image(image_resource_handle handle) const noexcept;
         image_resource_handle allocate_image();
         image_resource_handle create_image(const image_create_info& ci) override;
         image_resource_handle create_image(const image_create_info& ci, image_resource_handle handle);
-        void release_image(image_resource_handle handle);
+        void release_image(image_resource_handle handle) override;
+
+        graphics_pipeline* access_graphics_pipeline(graphics_pipeline_resource_handle handle) noexcept;
+        const graphics_pipeline* access_graphics_pipeline(graphics_pipeline_resource_handle handle) const noexcept;
+        graphics_pipeline_resource_handle allocate_graphics_pipeline();
+        graphics_pipeline_resource_handle create_graphics_pipeline(const graphics_pipeline_create_info& ci) override;
+        graphics_pipeline_resource_handle create_graphics_pipeline(const graphics_pipeline_create_info& ci,
+                                                                   graphics_pipeline_resource_handle handle);
+        void release_graphics_pipeline(graphics_pipeline_resource_handle handle) override;
+
+        swapchain* access_swapchain(swapchain_resource_handle handle) noexcept;
+        const swapchain* access_swapchain(swapchain_resource_handle handle) const noexcept;
+        swapchain_resource_handle allocate_swapchain();
+        swapchain_resource_handle create_swapchain(const swapchain_create_info& info) override;
+        swapchain_resource_handle create_swapchain(const swapchain_create_info& info, swapchain_resource_handle handle);
+        void release_swapchain(swapchain_resource_handle handle) override;
+        void recreate_swapchain(swapchain_resource_handle handle, std::uint32_t width, std::uint32_t height) override;
+
+        VkResult acquire_next_image(swapchain_resource_handle handle, VkSemaphore sem, VkFence fen);
+
+        per_frame_data& get_current_frame() noexcept;
+        const per_frame_data& get_current_frame() const noexcept;
+
+        queue_info get_queue() const noexcept
+        {
+            return _queue;
+        }
+
+        size_t frame_in_flight() const noexcept override
+        {
+            return _current_frame % _frames_in_flight;
+        }
+
+        size_t frames_in_flight() const noexcept override
+        {
+            return _frames_in_flight;
+        }
+
+        command_buffer_allocator acquire_frame_local_command_buffer_allocator();
+        void release_frame_local_command_buffer_allocator(command_buffer_allocator&& allocator);
+
+        VkSemaphore acquire_semaphore()
+        {
+            return _sync_prim_recycler.acquire_semaphore(_dispatch);
+        }
+
+        void release_semaphore(VkSemaphore&& sem)
+        {
+            _sync_prim_recycler.release(std::move(sem), _current_frame);
+        }
+
+        VkFence acquire_fence()
+        {
+            return _sync_prim_recycler.acquire_fence(_dispatch);
+        }
+
+        void release_fence(VkFence&& fence)
+        {
+            return _sync_prim_recycler.release(std::move(fence), _current_frame);
+        }
 
       private:
         core::allocator* _alloc;
@@ -87,11 +256,20 @@ namespace tempest::graphics::vk
 
         std::optional<core::generational_object_pool> _images;
         std::optional<core::generational_object_pool> _buffers;
+        std::optional<core::generational_object_pool> _graphics_pipelines;
+        std::optional<core::generational_object_pool> _swapchains;
+
+        queue_info _queue;
+
+        std::vector<per_frame_data> _per_frame;
 
         std::optional<resource_deletion_queue> _delete_queue;
 
         std::size_t _current_frame{0};
         static constexpr std::size_t _frames_in_flight{2};
+
+        command_buffer_recycler _recycled_cmd_buf_pool{};
+        sync_primitive_recycler _sync_prim_recycler{};
     };
 
     class render_context : public graphics::render_context

@@ -10,47 +10,6 @@
 
 namespace tempest::graphics
 {
-    struct gfx_resource_handle
-    {
-        std::uint32_t id;
-        std::uint32_t generation;
-
-        constexpr gfx_resource_handle(std::uint32_t id, std::uint32_t generation) : id{id}, generation{generation}
-        {
-        }
-
-        inline constexpr operator bool() const noexcept
-        {
-            return generation != ~0u;
-        }
-
-        constexpr auto operator<=>(const gfx_resource_handle& rhs) const noexcept = default;
-    };
-
-    struct image_resource_handle : public gfx_resource_handle
-    {
-        constexpr image_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
-            : gfx_resource_handle(id, generation)
-        {
-        }
-    };
-
-    struct buffer_resource_handle : public gfx_resource_handle
-    {
-        constexpr buffer_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
-            : gfx_resource_handle(id, generation)
-        {
-        }
-    };
-
-    struct graph_pass_handle : public gfx_resource_handle
-    {
-        constexpr graph_pass_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
-            : gfx_resource_handle(id, generation)
-        {
-        }
-    };
-
     class render_device;
 
     class render_context
@@ -77,7 +36,21 @@ namespace tempest::graphics
         virtual void end_frame() noexcept = 0;
 
         virtual buffer_resource_handle create_buffer(const buffer_create_info& ci) = 0;
+        virtual void release_buffer(buffer_resource_handle handle) = 0;
+
         virtual image_resource_handle create_image(const image_create_info& ci) = 0;
+        virtual void release_image(image_resource_handle handle) = 0;
+
+        virtual graphics_pipeline_resource_handle create_graphics_pipeline(const graphics_pipeline_create_info& ci) = 0;
+        virtual void release_graphics_pipeline(graphics_pipeline_resource_handle handle) = 0;
+
+        virtual swapchain_resource_handle create_swapchain(const swapchain_create_info& ci) = 0;
+        virtual void release_swapchain(swapchain_resource_handle handle) = 0;
+        virtual void recreate_swapchain(swapchain_resource_handle handle, std::uint32_t width,
+                                        std::uint32_t height) = 0;
+
+        virtual size_t frame_in_flight() const noexcept = 0;
+        virtual size_t frames_in_flight() const noexcept = 0;
 
         virtual ~render_device() = default;
     };

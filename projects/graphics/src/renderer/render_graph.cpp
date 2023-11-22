@@ -3,6 +3,10 @@
 #include "vk/vk_render_device.hpp"
 #include "vk/vk_render_graph.hpp"
 
+#include <algorithm>
+#include <ranges>
+#include <unordered_set>
+
 namespace tempest::graphics
 {
     namespace
@@ -20,15 +24,35 @@ namespace tempest::graphics
             case image_resource_usage::SAMPLED: {
                 return pipeline_stage::FRAGMENT;
             }
-            case image_resource_usage::STORAGE:
-                [[fallthrough]];
-            case image_resource_usage::RW_STORAGE: {
+            case image_resource_usage::STORAGE: {
                 return pipeline_stage::COMPUTE;
             }
-            case image_resource_usage::TRANSFER_SOURCE: {
+            case image_resource_usage::TRANSFER_SOURCE:
+                [[fallthrough]];
+            case image_resource_usage::TRANSFER_DESTINATION: {
                 return pipeline_stage::TRANSFER;
             }
-            case image_resource_usage::TRANSFER_DESTINATION: {
+            }
+
+            return pipeline_stage::BEGIN;
+        }
+
+        constexpr pipeline_stage infer_stage(buffer_resource_usage usage)
+        {
+            switch (usage)
+            {
+            case buffer_resource_usage::STRUCTURED:
+            case buffer_resource_usage::CONSTANT:
+            case buffer_resource_usage::VERTEX:
+            case buffer_resource_usage::INDEX: {
+                return pipeline_stage::VERTEX;
+            }
+            case buffer_resource_usage::INDIRECT_ARGUMENT: {
+                return pipeline_stage::DRAW_INDIRECT;
+            }
+            case buffer_resource_usage::TRANSFER_SOURCE:
+                [[fallthrough]];
+            case buffer_resource_usage::TRANSFER_DESTINATION: {
                 return pipeline_stage::TRANSFER;
             }
             }
@@ -37,33 +61,40 @@ namespace tempest::graphics
         }
     } // namespace
 
-    graph_pass_builder::graph_pass_builder(render_graph_resource_library& lib, std::string_view name)
-        : _resource_lib{lib}, _name{name}
+    graph_pass_builder::graph_pass_builder(render_graph_resource_library& lib, std::string_view name,
+                                           queue_operation_type type)
+        : _resource_lib{lib}, _name{name}, _op_type{type}
     {
     }
 
-    graph_pass_builder& graph_pass_builder::add_color_output(image_resource_handle handle, pipeline_stage first_write,
-                                                             pipeline_stage last_write)
+    graph_pass_builder& graph_pass_builder::add_color_attachment(image_resource_handle handle,
+                                                                 resource_access_type access,
+                                                                 pipeline_stage first_access,
+                                                                 pipeline_stage last_access)
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::COLOR_ATTACHMENT);
         _image_states.push_back(image_resource_state{
+            .type{access},
             .img{handle},
             .usage{image_resource_usage::COLOR_ATTACHMENT},
-            .first_access{first_write},
-            .last_access{last_write},
+            .first_access{first_access},
+            .last_access{last_access},
         });
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::add_depth_output(image_resource_handle handle, pipeline_stage first_write,
-                                                             pipeline_stage last_write)
+    graph_pass_builder& graph_pass_builder::add_depth_attachment(image_resource_handle handle,
+                                                                 resource_access_type access,
+                                                                 pipeline_stage first_access,
+                                                                 pipeline_stage last_access)
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::DEPTH_ATTACHMENT);
         _image_states.push_back(image_resource_state{
+            .type{access},
             .img{handle},
             .usage{image_resource_usage::DEPTH_ATTACHMENT},
-            .first_access{first_write},
-            .last_access{last_write},
+            .first_access{first_access},
+            .last_access{last_access},
         });
         return *this;
     }
@@ -73,6 +104,7 @@ namespace tempest::graphics
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::SAMPLED);
         _image_states.push_back(image_resource_state{
+            .type{resource_access_type::READ},
             .img{handle},
             .usage{image_resource_usage::SAMPLED},
             .first_access{first_read},
@@ -86,7 +118,22 @@ namespace tempest::graphics
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::TRANSFER_DESTINATION);
         _image_states.push_back(image_resource_state{
+            .type{resource_access_type::WRITE},
             .img{handle},
+            .usage{image_resource_usage::TRANSFER_DESTINATION},
+            .first_access{first_write},
+            .last_access{last_write},
+        });
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_external_blit_target(swapchain_resource_handle swap,
+                                                                     pipeline_stage first_write,
+                                                                     pipeline_stage last_write)
+    {
+        _external_swapchain_states.push_back(swapchain_resource_state{
+            .type{resource_access_type::WRITE},
+            .swap{swap},
             .usage{image_resource_usage::TRANSFER_DESTINATION},
             .first_access{first_write},
             .last_access{last_write},
@@ -99,6 +146,7 @@ namespace tempest::graphics
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::TRANSFER_SOURCE);
         _image_states.push_back(image_resource_state{
+            .type{resource_access_type::READ},
             .img{handle},
             .usage{image_resource_usage::TRANSFER_SOURCE},
             .first_access{first_read},
@@ -107,61 +155,75 @@ namespace tempest::graphics
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::add_storage_image(image_resource_handle handle, pipeline_stage first_read,
-                                                              pipeline_stage last_read)
+    graph_pass_builder& graph_pass_builder::add_storage_image(image_resource_handle handle, resource_access_type access,
+                                                              pipeline_stage first_access, pipeline_stage last_access)
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::STORAGE);
         _image_states.push_back(image_resource_state{
+            .type{access},
             .img{handle},
             .usage{image_resource_usage::STORAGE},
-            .first_access{first_read},
-            .last_access{last_read},
-        });
-        return *this;
-    }
-
-    graph_pass_builder& graph_pass_builder::add_writable_storage_image(image_resource_handle handle,
-                                                                       pipeline_stage first_read,
-                                                                       pipeline_stage last_read)
-    {
-        _resource_lib.add_image_usage(handle, image_resource_usage::RW_STORAGE);
-        _image_states.push_back(image_resource_state{
-            .img{handle},
-            .usage{image_resource_usage::RW_STORAGE},
-            .first_access{first_read},
-            .last_access{last_read},
+            .first_access{first_access},
+            .last_access{last_access},
         });
         return *this;
     }
 
     graph_pass_builder& graph_pass_builder::add_structured_buffer(buffer_resource_handle handle,
-                                                                  pipeline_stage first_read, pipeline_stage last_read)
+                                                                  resource_access_type access,
+                                                                  pipeline_stage first_access,
+                                                                  pipeline_stage last_access)
     {
-        return *this;
-    }
-
-    graph_pass_builder& graph_pass_builder::add_rw_structured_buffer(buffer_resource_handle handle,
-                                                                     pipeline_stage first_access,
-                                                                     pipeline_stage last_access)
-    {
+        _resource_lib.add_buffer_usage(handle, buffer_resource_usage::STRUCTURED);
+        _buffer_states.push_back(buffer_resource_state{
+            .type{access},
+            .buf{handle},
+            .usage{buffer_resource_usage::STRUCTURED},
+            .first_access{first_access},
+            .last_access{last_access},
+        });
         return *this;
     }
 
     graph_pass_builder& graph_pass_builder::add_vertex_buffer(buffer_resource_handle handle, pipeline_stage first_read,
                                                               pipeline_stage last_read)
     {
+        _resource_lib.add_buffer_usage(handle, buffer_resource_usage::VERTEX);
+        _buffer_states.push_back(buffer_resource_state{
+            .type{resource_access_type::READ},
+            .buf{handle},
+            .usage{buffer_resource_usage::VERTEX},
+            .first_access{first_read},
+            .last_access{last_read},
+        });
         return *this;
     }
 
     graph_pass_builder& graph_pass_builder::add_index_buffer(buffer_resource_handle handle, pipeline_stage first_read,
                                                              pipeline_stage last_read)
     {
+        _resource_lib.add_buffer_usage(handle, buffer_resource_usage::INDEX);
+        _buffer_states.push_back(buffer_resource_state{
+            .type{resource_access_type::READ},
+            .buf{handle},
+            .usage{buffer_resource_usage::INDEX},
+            .first_access{first_read},
+            .last_access{last_read},
+        });
         return *this;
     }
 
     graph_pass_builder& graph_pass_builder::add_constant_buffer(buffer_resource_handle handle,
                                                                 pipeline_stage first_read, pipeline_stage last_read)
     {
+        _resource_lib.add_buffer_usage(handle, buffer_resource_usage::CONSTANT);
+        _buffer_states.push_back(buffer_resource_state{
+            .type{resource_access_type::READ},
+            .buf{handle},
+            .usage{buffer_resource_usage::CONSTANT},
+            .first_access{first_read},
+            .last_access{last_read},
+        });
         return *this;
     }
 
@@ -169,6 +231,14 @@ namespace tempest::graphics
                                                                          pipeline_stage first_read,
                                                                          pipeline_stage last_read)
     {
+        _resource_lib.add_buffer_usage(handle, buffer_resource_usage::INDIRECT_ARGUMENT);
+        _buffer_states.push_back(buffer_resource_state{
+            .type{resource_access_type::READ},
+            .buf{handle},
+            .usage{buffer_resource_usage::INDIRECT_ARGUMENT},
+            .first_access{first_read},
+            .last_access{last_read},
+        });
         return *this;
     }
 
@@ -176,6 +246,14 @@ namespace tempest::graphics
                                                                        pipeline_stage first_read,
                                                                        pipeline_stage last_read)
     {
+        _resource_lib.add_buffer_usage(handle, buffer_resource_usage::TRANSFER_SOURCE);
+        _buffer_states.push_back(buffer_resource_state{
+            .type{resource_access_type::READ},
+            .buf{handle},
+            .usage{buffer_resource_usage::TRANSFER_SOURCE},
+            .first_access{first_read},
+            .last_access{last_read},
+        });
         return *this;
     }
 
@@ -183,6 +261,21 @@ namespace tempest::graphics
                                                                             pipeline_stage first_write,
                                                                             pipeline_stage last_write)
     {
+        _resource_lib.add_buffer_usage(handle, buffer_resource_usage::TRANSFER_DESTINATION);
+        _buffer_states.push_back(buffer_resource_state{
+            .type{resource_access_type::WRITE},
+            .buf{handle},
+            .usage{buffer_resource_usage::TRANSFER_DESTINATION},
+            .first_access{first_write},
+            .last_access{last_write},
+        });
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::depends_on(graph_pass_handle src)
+    {
+        _depends_on.push_back(src);
+
         return *this;
     }
 
@@ -192,9 +285,33 @@ namespace tempest::graphics
         return *this;
     }
 
+    graph_pass_builder& graph_pass_builder::should_execute(std::function<bool()> fn)
+    {
+        _should_execute = fn;
+        return *this;
+    }
+
+    std::string_view graph_pass_builder::name() const noexcept
+    {
+        return _name;
+    }
+
     void graph_pass_builder::_infer()
     {
         for (auto& state : _image_states)
+        {
+            if (state.first_access == pipeline_stage::INFER)
+            {
+                state.first_access = infer_stage(state.usage);
+            }
+
+            if (state.last_access == pipeline_stage::INFER)
+            {
+                state.last_access = infer_stage(state.usage);
+            }
+        }
+
+        for (auto& state : _buffer_states)
         {
             if (state.first_access == pipeline_stage::INFER)
             {
@@ -224,10 +341,10 @@ namespace tempest::graphics
         return _resource_lib->load(desc);
     }
 
-    graph_pass_handle render_graph_compiler::add_graph_pass(std::string_view name,
+    graph_pass_handle render_graph_compiler::add_graph_pass(std::string_view name, queue_operation_type type,
                                                             std::function<void(graph_pass_builder&)> build)
     {
-        graph_pass_builder bldr(*_resource_lib, name);
+        graph_pass_builder bldr(*_resource_lib, name, type);
 
         build(bldr);
 
@@ -236,6 +353,9 @@ namespace tempest::graphics
         graph_pass_handle handle;
         handle.id = static_cast<std::uint32_t>(_builders.size() - 1);
         handle.generation = 0;
+
+        _builders.back()._self = handle;
+
         return handle;
     }
 
@@ -247,5 +367,63 @@ namespace tempest::graphics
 
     void render_graph::execute()
     {
+    }
+
+    void dependency_graph::add_graph_pass(std::uint64_t pass_id)
+    {
+        if (!_adjacency_list.contains(pass_id))
+        {
+            _adjacency_list[pass_id] = {};
+        }
+    }
+
+    void dependency_graph::add_graph_dependency(std::uint64_t src_pass, std::uint64_t dst_pass)
+    {
+        _adjacency_list[src_pass].push_back(dst_pass);
+        if (!_adjacency_list.contains(dst_pass))
+        {
+            add_graph_pass(dst_pass);
+        }
+    }
+
+    namespace
+    {
+        void dfs(const std::unordered_map<std::uint64_t, std::vector<std::uint64_t>>& adjacency_list,
+                 std::unordered_set<std::uint64_t>& visited, std::uint64_t node, std::vector<std::uint64_t>& results)
+        {
+            visited.insert(node);
+
+            const auto it = adjacency_list.find(node);
+            if (it != adjacency_list.cend())
+            {
+                for (std::uint64_t adjacency : it->second)
+                {
+                    if (!visited.contains(adjacency))
+                    {
+                        dfs(adjacency_list, visited, adjacency, results);
+                    }
+                }
+            }
+            results.push_back(node);
+        }
+    } // namespace
+
+    std::vector<std::uint64_t> dependency_graph::toposort() const noexcept
+    {
+        std::unordered_set<std::uint64_t> visited;
+        std::vector<std::uint64_t> result;
+        result.reserve(_adjacency_list.size());
+
+        for (std::size_t node : std::ranges::views::keys(_adjacency_list))
+        {
+            if (!visited.contains(node))
+            {
+                dfs(_adjacency_list, visited, node, result);
+            }
+        }
+
+        std::reverse(std::begin(result), std::end(result));
+
+        return result;
     }
 } // namespace tempest::graphics
