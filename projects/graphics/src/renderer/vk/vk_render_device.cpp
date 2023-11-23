@@ -435,31 +435,6 @@ namespace tempest::graphics::vk
         const auto result = vmaCreateAllocator(&ci, &allocator);
         _vk_alloc = allocator;
 
-        _per_frame.reserve(_frames_in_flight);
-
-        for (std::size_t i = 0; i < _frames_in_flight; ++i)
-        {
-            per_frame_data data = {
-
-            };
-
-            VkSemaphoreCreateInfo sem_ci = {
-                .sType{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO},
-                .flags{},
-            };
-
-            VkFenceCreateInfo fence_ci = {
-                .sType{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO},
-                .flags{VK_FENCE_CREATE_SIGNALED_BIT},
-            };
-
-            _dispatch.createSemaphore(&sem_ci, nullptr, &data.present_ready);
-            _dispatch.createSemaphore(&sem_ci, nullptr, &data.render_ready);
-            _dispatch.createFence(&fence_ci, nullptr, &data.render_fence);
-
-            _per_frame.push_back(data);
-        }
-
         _recycled_cmd_buf_pool = command_buffer_recycler{
             .frames_in_flight{_frames_in_flight},
             .queue{_queue},
@@ -478,15 +453,6 @@ namespace tempest::graphics::vk
         _recycled_cmd_buf_pool.release_all(_dispatch);
         _sync_prim_recycler.release_all(_dispatch);
 
-        for (const auto& frame : _per_frame)
-        {
-            _dispatch.destroySemaphore(frame.present_ready, nullptr);
-            _dispatch.destroySemaphore(frame.render_ready, nullptr);
-            _dispatch.destroyFence(frame.render_fence, nullptr);
-        }
-
-        _per_frame.clear();
-
         vmaDestroyAllocator(_vk_alloc);
         vkb::destroy_device(_device);
     }
@@ -497,6 +463,7 @@ namespace tempest::graphics::vk
 
     void render_device::end_frame() noexcept
     {
+        _sync_prim_recycler.recycle(_current_frame, _dispatch);
         _recycled_cmd_buf_pool.recycle(_current_frame, _dispatch);
         _delete_queue->flush_frame(_current_frame);
         _current_frame++;
@@ -1260,16 +1227,6 @@ namespace tempest::graphics::vk
         return _dispatch.acquireNextImageKHR(swap->sc, UINT_MAX, sem, fen, &swap->image_index);
     }
 
-    per_frame_data& render_device::get_current_frame() noexcept
-    {
-        return _per_frame[_current_frame % _frames_in_flight];
-    }
-
-    const per_frame_data& render_device::get_current_frame() const noexcept
-    {
-        return _per_frame[_current_frame % _frames_in_flight];
-    }
-
     command_buffer_allocator render_device::acquire_frame_local_command_buffer_allocator()
     {
         return _recycled_cmd_buf_pool.acquire(_dispatch);
@@ -1516,7 +1473,7 @@ namespace tempest::graphics::vk
             VkFenceCreateInfo create = {
                 .sType{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO},
                 .pNext{nullptr},
-                .flags{VK_FENCE_CREATE_SIGNALED_BIT},
+                .flags{},
             };
             VkFence fen{VK_NULL_HANDLE};
             auto result = dispatch.createFence(&create, nullptr, &fen);
@@ -1585,7 +1542,7 @@ namespace tempest::graphics::vk
 
         while (!recycle_semaphore_pool.empty())
         {
-            if (recycle_fence_pool.front().recycled_frame + frames_in_flight > current_frame)
+            if (recycle_semaphore_pool.front().recycled_frame + frames_in_flight > current_frame)
             {
                 break;
             }

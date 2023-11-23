@@ -49,6 +49,11 @@ namespace tempest::graphics::vk
         VkAccessFlags access_mask;
     };
 
+    struct per_frame_data
+    {
+        VkFence commands_complete;
+    };
+
     struct render_graph_resource_state
     {
         std::unordered_map<std::uint64_t, render_graph_buffer_state> buffers;
@@ -62,6 +67,7 @@ namespace tempest::graphics::vk
         explicit render_graph(core::allocator* alloc, render_device* device,
                               std::span<graphics::graph_pass_builder> pass_builders,
                               std::unique_ptr<render_graph_resource_library>&& resources);
+        ~render_graph() override;
         void execute() override;
 
       private:
@@ -69,6 +75,7 @@ namespace tempest::graphics::vk
 
         std::unique_ptr<render_graph_resource_library> _resource_lib;
 
+        std::vector<per_frame_data> _per_frame;
         std::vector<graph_pass_builder> _all_passes;
 
         pass_active_mask _active_passes;

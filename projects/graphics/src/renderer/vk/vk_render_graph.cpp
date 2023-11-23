@@ -51,7 +51,7 @@ namespace tempest::graphics::vk
                 break;
             }
             case image_resource_usage::DEPTH_ATTACHMENT:
-                return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
             case image_resource_usage::SAMPLED:
                 return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             case image_resource_usage::STORAGE: {
@@ -297,6 +297,23 @@ namespace tempest::graphics::vk
         {
             _all_passes.push_back(bldr);
         }
+
+        _per_frame.resize(_device->frames_in_flight());
+        for (auto& frame : _per_frame)
+        {
+            frame.commands_complete = VK_NULL_HANDLE;
+        }
+    }
+
+    render_graph::~render_graph()
+    {
+        for (auto& frame : _per_frame)
+        {
+            if (frame.commands_complete)
+            {
+                _device->release_fence(std::move(frame.commands_complete));
+            }
+        }
     }
 
     void render_graph::execute()
@@ -366,15 +383,46 @@ namespace tempest::graphics::vk
             }
         }
 
-        for (auto& swapchain : _active_swapchain_set)
-        {
-        }
-
-        auto queue = _device->get_queue();
-
         // write barriers
         auto cmd_buffer_alloc = _device->acquire_frame_local_command_buffer_allocator();
         auto cmds = cmd_buffer_alloc.allocate();
+        auto dispatch = cmd_buffer_alloc.dispatch;
+
+        // first, wait for commands to complete
+        auto& frame_data = _per_frame[_device->frame_in_flight() % _device->frames_in_flight()];
+        VkFence& commands_complete = frame_data.commands_complete;
+        if (commands_complete == VK_NULL_HANDLE) [[unlikely]]
+        {
+            commands_complete = _device->acquire_fence();
+        }
+        else if (dispatch->getFenceStatus(commands_complete) != VK_SUCCESS) [[likely]]
+        {
+            dispatch->waitForFences(1, &commands_complete, VK_TRUE, UINT_MAX);
+        }
+
+        dispatch->resetFences(1, &commands_complete);
+
+        std::vector<VkSemaphore> image_acquired_sems;
+        std::vector<VkSemaphore> render_complete_sems;
+        std::vector<VkPipelineStageFlags> wait_stages;
+        std::vector<VkSwapchainKHR> swapchains;
+        std::vector<uint32_t> image_indices;
+
+        // next, acquire the swapchain image
+        for (auto& swapchain : _active_swapchain_set)
+        {
+            auto signal_sem = _device->acquire_semaphore();
+            auto render_complete_sem = _device->acquire_semaphore();
+            auto swap = _device->access_swapchain(swapchain);
+            dispatch->acquireNextImageKHR(swap->sc.swapchain, UINT_MAX, signal_sem, VK_NULL_HANDLE, &swap->image_index);
+            image_acquired_sems.push_back(signal_sem);
+            wait_stages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+            render_complete_sems.push_back(render_complete_sem);
+            swapchains.push_back(swap->sc.swapchain);
+            image_indices.push_back(swap->image_index);
+        }
+
+        auto queue = _device->get_queue();
 
         VkCommandBufferBeginInfo begin = {
             .sType{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO},
@@ -408,7 +456,7 @@ namespace tempest::graphics::vk
                 VkImageMemoryBarrier barrier = {
                     .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
                     .pNext{nullptr},
-                    .srcAccessMask{VK_ACCESS_NONE},
+                    .srcAccessMask{VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
                     .dstAccessMask{next_state.access_mask},
                     .oldLayout{VK_IMAGE_LAYOUT_UNDEFINED},
                     .newLayout{next_state.image_layout},
@@ -461,31 +509,36 @@ namespace tempest::graphics::vk
                     .queue_family{queue.queue_family_index},
                 };
 
+                // populate transition
+                VkImageMemoryBarrier img_barrier = {
+                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
+                    .pNext{nullptr},
+                    .srcAccessMask{0},
+                    .dstAccessMask{next_state.access_mask},
+                    .oldLayout{VK_IMAGE_LAYOUT_UNDEFINED},
+                    .newLayout{next_state.image_layout},
+                    .srcQueueFamilyIndex{next_state.queue_family},
+                    .dstQueueFamilyIndex{next_state.queue_family},
+                    .image{vk_img->image},
+                    .subresourceRange{vk_img->view_info.subresourceRange},
+                };
+
                 if (image_state_it != _last_known_state.images.end()) [[likely]]
                 {
                     render_graph_image_state last_state = image_state_it->second;
 
-                    // populate transition
-                    VkImageMemoryBarrier img_barrier = {
-                        .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
-                        .pNext{nullptr},
-                        .srcAccessMask{last_state.access_mask},
-                        .dstAccessMask{next_state.access_mask},
-                        .oldLayout{last_state.image_layout},
-                        .newLayout{next_state.image_layout},
-                        .srcQueueFamilyIndex{last_state.queue_family},
-                        .dstQueueFamilyIndex{next_state.queue_family},
-                        .image{vk_img->image},
-                        .subresourceRange{vk_img->view_info.subresourceRange},
-                    };
+                    img_barrier.oldLayout = last_state.image_layout;
+                    img_barrier.srcAccessMask = last_state.access_mask;
+                    img_barrier.srcQueueFamilyIndex = last_state.queue_family;
 
-                    if (last_state.image_layout != next_state.image_layout ||
-                        last_state.queue_family != next_state.queue_family)
-                    {
-                        src_stage_mask |= last_state.stage_mask;
-                        dst_stage_mask |= next_state.stage_mask;
-                        image_barriers.push_back(img_barrier);
-                    }
+                    src_stage_mask |= last_state.stage_mask;
+                }
+
+                if (img_barrier.oldLayout != img_barrier.newLayout ||
+                    img_barrier.srcQueueFamilyIndex != img_barrier.dstQueueFamilyIndex)
+                {
+                    dst_stage_mask |= next_state.stage_mask;
+                    image_barriers.push_back(img_barrier);
                 }
 
                 // write new state for the end of the frame
@@ -503,6 +556,16 @@ namespace tempest::graphics::vk
 
             if (!image_barriers.empty() || !buffer_barriers.empty())
             {
+                if (src_stage_mask == 0)
+                {
+                    src_stage_mask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                }
+
+                if (dst_stage_mask == 0)
+                {
+                    dst_stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                }
+
                 cmd_buffer_alloc.dispatch->cmdPipelineBarrier(cmds, src_stage_mask, dst_stage_mask, 0, 0, nullptr, 0,
                                                               nullptr, static_cast<uint32_t>(image_barriers.size()),
                                                               image_barriers.empty() ? nullptr : image_barriers.data());
@@ -541,6 +604,13 @@ namespace tempest::graphics::vk
             final_transition_flags |= state.stage_mask;
 
             transition_to_present.push_back(std::move(barrier));
+
+            _last_known_state.swapchain[state.swapchain.as_uint64()] = {
+                .swapchain{state.swapchain},
+                .image_layout{VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
+                .stage_mask{VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT},
+                .access_mask{VK_ACCESS_NONE},
+            };
         }
 
         if (!transition_to_present.empty())
@@ -552,9 +622,51 @@ namespace tempest::graphics::vk
 
         cmd_buffer_alloc.dispatch->endCommandBuffer(cmds);
 
+        VkCommandBuffer to_submit = cmds;
+
+        VkSubmitInfo submit_info = {
+            .sType{VK_STRUCTURE_TYPE_SUBMIT_INFO},
+            .pNext{nullptr},
+            .waitSemaphoreCount{static_cast<uint32_t>(image_acquired_sems.size())},
+            .pWaitSemaphores{image_acquired_sems.data()},
+            .pWaitDstStageMask{wait_stages.data()},
+            .commandBufferCount{1},
+            .pCommandBuffers{&to_submit},
+            .signalSemaphoreCount{static_cast<uint32_t>(render_complete_sems.size())},
+            .pSignalSemaphores{render_complete_sems.data()},
+        };
+
+        dispatch->queueSubmit(queue.queue, 1, &submit_info, commands_complete);
+
+        VkPresentInfoKHR present = {
+            .sType{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR},
+            .pNext{nullptr},
+            .waitSemaphoreCount{submit_info.signalSemaphoreCount},
+            .pWaitSemaphores{submit_info.pSignalSemaphores},
+            .swapchainCount{static_cast<uint32_t>(swapchains.size())},
+            .pSwapchains{swapchains.data()},
+            .pImageIndices{image_indices.data()},
+            .pResults{nullptr},
+        };
+
+        dispatch->queuePresentKHR(queue.queue, &present);
+
+        for (auto sem : image_acquired_sems)
+        {
+            _device->release_semaphore(std::move(sem));
+        }
+
+        for (auto sem : render_complete_sems)
+        {
+            _device->release_semaphore(std::move(sem));
+        }
+
         // return allocator
         _device->release_frame_local_command_buffer_allocator(std::move(cmd_buffer_alloc));
-    } // namespace tempest::graphics::vk
+        
+        _last_known_state.images.clear();
+        _last_known_state.swapchain.clear();
+    }
 
     render_graph_compiler::render_graph_compiler(core::allocator* alloc, graphics::render_device* device)
         : graphics::render_graph_compiler(alloc, device)
