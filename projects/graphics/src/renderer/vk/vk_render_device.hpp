@@ -157,13 +157,6 @@ namespace tempest::graphics::vk
         void release_all(vkb::DispatchTable& dispatch);
     };
 
-    struct per_frame_data
-    {
-        VkSemaphore present_ready;
-        VkSemaphore render_ready;
-        VkFence render_fence;
-    };
-
     class render_device : public graphics::render_device
     {
       public:
@@ -204,9 +197,6 @@ namespace tempest::graphics::vk
         void recreate_swapchain(swapchain_resource_handle handle, std::uint32_t width, std::uint32_t height) override;
 
         VkResult acquire_next_image(swapchain_resource_handle handle, VkSemaphore sem, VkFence fen);
-
-        per_frame_data& get_current_frame() noexcept;
-        const per_frame_data& get_current_frame() const noexcept;
 
         queue_info get_queue() const noexcept
         {
@@ -260,8 +250,6 @@ namespace tempest::graphics::vk
         std::optional<core::generational_object_pool> _swapchains;
 
         queue_info _queue;
-
-        std::vector<per_frame_data> _per_frame;
 
         std::optional<resource_deletion_queue> _delete_queue;
 
