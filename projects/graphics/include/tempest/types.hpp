@@ -322,6 +322,13 @@ namespace tempest::graphics
         std::string name;
     };
 
+    struct compute_pipeline_create_info
+    {
+        pipeline_layout_create_info layout;
+        shader_create_info compute_shader;
+        std::string name;
+    };
+
     struct swapchain_create_info
     {
         iwindow* win;
