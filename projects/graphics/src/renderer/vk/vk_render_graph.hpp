@@ -49,9 +49,44 @@ namespace tempest::graphics::vk
         VkAccessFlags access_mask;
     };
 
+    struct external_image_state
+    {
+        std::uint32_t count;
+        std::uint32_t binding;
+        std::uint32_t set;
+        
+        std::vector<VkDescriptorImageInfo> images;
+    };
+
+    struct external_sampler_state
+    {
+        std::uint32_t count;
+        std::uint32_t binding;
+        std::uint32_t set;
+
+        std::vector<VkDescriptorImageInfo> samplers;
+    };
+
     struct per_frame_data
     {
+        VkDescriptorPool desc_pool;
         VkFence commands_complete;
+    };
+
+    struct descriptor_set_frame_state
+    {
+        std::vector<std::uint32_t> dynamic_offsets;
+        std::array<VkDescriptorSet, 8> descriptor_sets;
+        std::size_t last_frame_changed{0};
+    };
+
+    struct descriptor_set_state
+    {
+        std::vector<VkDescriptorSetLayout> set_layouts;
+        VkPipelineLayout layout;
+        std::vector<descriptor_set_frame_state> per_frame_descriptors;
+        std::vector<VkWriteDescriptorSet> writes;
+        std::size_t last_update_frame{0};
     };
 
     struct render_graph_resource_state
@@ -59,6 +94,9 @@ namespace tempest::graphics::vk
         std::unordered_map<std::uint64_t, render_graph_buffer_state> buffers;
         std::unordered_map<std::uint64_t, render_graph_image_state> images;
         std::unordered_map<std::uint64_t, swapchain_resource_state> swapchain;
+
+        std::vector<external_image_state> external_images;
+        std::vector<external_sampler_state> external_samplers;
     };
 
     class render_graph : public graphics::render_graph
@@ -71,6 +109,8 @@ namespace tempest::graphics::vk
         void execute() override;
 
       private:
+        void build_descriptor_sets();
+
         using pass_active_mask = std::bitset<1024>;
 
         std::unique_ptr<render_graph_resource_library> _resource_lib;
@@ -81,11 +121,15 @@ namespace tempest::graphics::vk
         pass_active_mask _active_passes;
         std::vector<std::reference_wrapper<graph_pass_builder>> _active_pass_set;
         std::vector<swapchain_resource_handle> _active_swapchain_set;
+        std::unordered_map<std::uint64_t, std::size_t> _pass_index_map;
 
         core::allocator* _alloc;
         render_device* _device;
 
         render_graph_resource_state _last_known_state;
+        bool _recreated_sc_last_frame{false};
+
+        std::vector<descriptor_set_state> _descriptor_set_states;
     };
 
     class render_graph_resource_library : public graphics::render_graph_resource_library

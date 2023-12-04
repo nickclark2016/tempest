@@ -21,10 +21,11 @@ namespace tempest::graphics
         image_resource_usage usage;
         pipeline_stage first_access;
         pipeline_stage last_access;
+        load_op load;
+        store_op store;
 
-        std::uint32_t previous_pass_id;
-        std::uint32_t next_pass_id;
-        std::uint32_t execution_queue_id;
+        std::uint32_t set;
+        std::uint32_t binding;
     };
 
     struct buffer_resource_state
@@ -35,10 +36,10 @@ namespace tempest::graphics
         buffer_resource_usage usage;
         pipeline_stage first_access;
         pipeline_stage last_access;
+        bool per_frame_memory{false};
 
-        std::uint32_t previous_pass_id;
-        std::uint32_t next_pass_id;
-        std::uint32_t execution_queue_id;
+        std::uint32_t set;
+        std::uint32_t binding;
     };
 
     struct swapchain_resource_state
@@ -49,6 +50,28 @@ namespace tempest::graphics
         image_resource_usage usage;
         pipeline_stage first_access;
         pipeline_stage last_access;
+        load_op load;
+        store_op store;
+    };
+
+    struct external_image_resource_state
+    {
+        resource_access_type type;
+        image_resource_usage usage;
+        std::vector<image_resource_handle> images;
+        pipeline_stage stages;
+
+        std::uint32_t set;
+        std::uint32_t binding;
+    };
+
+    struct external_sampler_resource_state
+    {
+        std::vector<sampler_resource_handle> samplers;
+        pipeline_stage stages;
+
+        std::uint32_t set;
+        std::uint32_t binding;
     };
 
     class render_graph_resource_library
@@ -77,14 +100,25 @@ namespace tempest::graphics
 
       public:
         graph_pass_builder& add_color_attachment(image_resource_handle handle, resource_access_type access,
+                                                 load_op load = load_op::LOAD, store_op store = store_op::STORE,
                                                  pipeline_stage first_access = pipeline_stage::INFER,
                                                  pipeline_stage last_access = pipeline_stage::INFER);
+        graph_pass_builder& add_external_color_attachment(swapchain_resource_handle, resource_access_type access,
+                                                          load_op load = load_op::LOAD,
+                                                          store_op store = store_op::STORE,
+                                                          pipeline_stage first_write = pipeline_stage::INFER,
+                                                          pipeline_stage last_write = pipeline_stage::INFER);
         graph_pass_builder& add_depth_attachment(image_resource_handle handle, resource_access_type access,
+                                                 load_op load = load_op::LOAD, store_op store = store_op::STORE,
                                                  pipeline_stage first_access = pipeline_stage::INFER,
                                                  pipeline_stage last_access = pipeline_stage::INFER);
-        graph_pass_builder& add_sampled_image(image_resource_handle handle,
+        graph_pass_builder& add_sampled_image(image_resource_handle handle, std::uint32_t set, std::uint32_t binding,
                                               pipeline_stage first_read = pipeline_stage::INFER,
                                               pipeline_stage last_read = pipeline_stage::INFER);
+        graph_pass_builder& add_external_sampled_image(image_resource_handle handle, std::uint32_t set,
+                                                       std::uint32_t binding, pipeline_stage usage);
+        graph_pass_builder& add_external_sampled_images(std::span<image_resource_handle> handles, std::uint32_t set,
+                                                       std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_blit_target(image_resource_handle handle,
                                             pipeline_stage first_write = pipeline_stage::INFER,
                                             pipeline_stage last_write = pipeline_stage::INFER);
@@ -95,10 +129,12 @@ namespace tempest::graphics
                                             pipeline_stage first_read = pipeline_stage::INFER,
                                             pipeline_stage last_read = pipeline_stage::INFER);
         graph_pass_builder& add_storage_image(image_resource_handle handle, resource_access_type access,
+                                              std::uint32_t set, std::uint32_t binding,
                                               pipeline_stage first_access = pipeline_stage::INFER,
                                               pipeline_stage last_access = pipeline_stage::INFER);
 
         graph_pass_builder& add_structured_buffer(buffer_resource_handle handle, resource_access_type access,
+                                                  std::uint32_t set, std::uint32_t binding,
                                                   pipeline_stage first_access = pipeline_stage::INFER,
                                                   pipeline_stage last_access = pipeline_stage::INFER);
         graph_pass_builder& add_vertex_buffer(buffer_resource_handle handle,
@@ -107,7 +143,7 @@ namespace tempest::graphics
         graph_pass_builder& add_index_buffer(buffer_resource_handle handle,
                                              pipeline_stage first_read = pipeline_stage::INFER,
                                              pipeline_stage last_read = pipeline_stage::INFER);
-        graph_pass_builder& add_constant_buffer(buffer_resource_handle handle,
+        graph_pass_builder& add_constant_buffer(buffer_resource_handle handle, std::uint32_t set, std::uint32_t binding,
                                                 pipeline_stage first_read = pipeline_stage::INFER,
                                                 pipeline_stage last_read = pipeline_stage::INFER);
         graph_pass_builder& add_indirect_argument_buffer(buffer_resource_handle handle,
@@ -119,6 +155,8 @@ namespace tempest::graphics
         graph_pass_builder& add_transfer_destination_buffer(buffer_resource_handle handle,
                                                             pipeline_stage first_write = pipeline_stage::INFER,
                                                             pipeline_stage last_write = pipeline_stage::INFER);
+        graph_pass_builder& add_sampler(sampler_resource_handle handle, std::uint32_t set, std::uint32_t binding,
+                                        pipeline_stage usage);
 
         graph_pass_builder& depends_on(graph_pass_handle src);
 
@@ -162,6 +200,16 @@ namespace tempest::graphics
             return _external_swapchain_states;
         }
 
+        std::span<const external_image_resource_state> external_sampled_images() const noexcept
+        {
+            return _external_image_states;
+        }
+
+        std::span<const external_sampler_resource_state> external_samplers() const noexcept
+        {
+            return _sampler_states;
+        }
+
         queue_operation_type operation_type() const noexcept
         {
             return _op_type;
@@ -175,6 +223,8 @@ namespace tempest::graphics
         std::vector<image_resource_state> _image_states;
         std::vector<buffer_resource_state> _buffer_states;
         std::vector<swapchain_resource_state> _external_swapchain_states;
+        std::vector<external_image_resource_state> _external_image_states;
+        std::vector<external_sampler_resource_state> _sampler_states;
         std::vector<graph_pass_handle> _depends_on;
         graph_pass_handle _self;
         std::string _name;

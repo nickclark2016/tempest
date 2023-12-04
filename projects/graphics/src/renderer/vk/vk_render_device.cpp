@@ -22,7 +22,6 @@ namespace tempest::graphics::vk
                                                       const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
                                                       void* pUserData)
         {
-
             if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
                 logger->error("Vulkan Validation Message: {}", pCallbackData->pMessage);
@@ -170,8 +169,14 @@ namespace tempest::graphics::vk
         {
             switch (fmt)
             {
+            case resource_format::RGBA8_UINT:
+                return VK_FORMAT_R8G8B8A8_UINT;
+            case resource_format::RGBA8_UNORM:
+                return VK_FORMAT_R8G8B8A8_UNORM;
             case resource_format::RGBA8_SRGB:
                 return VK_FORMAT_R8G8B8A8_SRGB;
+            case resource_format::BGRA8_SRGB:
+                return VK_FORMAT_B8G8R8A8_SRGB;
             case resource_format::RG32_FLOAT:
                 return VK_FORMAT_R32G32_SFLOAT;
             case resource_format::RG32_UINT:
@@ -195,6 +200,7 @@ namespace tempest::graphics::vk
             switch (fmt)
             {
             case resource_format::RGBA8_SRGB:
+            case resource_format::BGRA8_SRGB:
                 return 4;
             case resource_format::RG32_FLOAT:
                 return 2 * sizeof(float);
@@ -239,8 +245,12 @@ namespace tempest::graphics::vk
             switch (type)
             {
             case descriptor_binding_type::STRUCTURED_BUFFER:
+                return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC:
                 return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
             case descriptor_binding_type::CONSTANT_BUFFER:
+                return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            case descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC:
                 return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
             case descriptor_binding_type::STORAGE_IMAGE:
                 return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -328,6 +338,8 @@ namespace tempest::graphics::vk
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
             case resource_format::RGBA8_SRGB:
                 [[fallthrough]];
+            case resource_format::BGRA8_SRGB:
+                [[fallthrough]];
             case resource_format::RGBA32_FLOAT:
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                        VK_COLOR_COMPONENT_A_BIT;
@@ -341,12 +353,62 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
+        constexpr VkFilter to_vulkan(filter f)
+        {
+            return static_cast<VkFilter>(f);
+        }
+
+        constexpr VkSamplerMipmapMode to_vulkan(mipmap_mode m)
+        {
+            return static_cast<VkSamplerMipmapMode>(m);
+        }
+
+        VkImageLayout compute_layout(image_resource_usage usage)
+        {
+            switch (usage)
+            {
+            case image_resource_usage::UNDEFINED:
+                return VK_IMAGE_LAYOUT_UNDEFINED;
+            case image_resource_usage::COLOR_ATTACHMENT:
+                return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            case image_resource_usage::DEPTH_ATTACHMENT:
+                return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            case image_resource_usage::PRESENT:
+                return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            case image_resource_usage::SAMPLED:
+                return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            case image_resource_usage::STORAGE:
+                return VK_IMAGE_LAYOUT_GENERAL;
+            case image_resource_usage::TRANSFER_DESTINATION:
+                return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            case image_resource_usage::TRANSFER_SOURCE:
+                return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            }
+            logger->critical("Failed to compute expected image layout.");
+            std::exit(EXIT_FAILURE);
+        }
+
+        void name_object(const vkb::DispatchTable& dispatch, std::uint64_t object_handle, VkObjectType type,
+                         const char* name)
+        {
+#ifdef _DEBUG
+            VkDebugUtilsObjectNameInfoEXT name_info = {
+                .sType{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT},
+                .pNext{nullptr},
+                .objectType{type},
+                .objectHandle{object_handle},
+                .pObjectName{name},
+            };
+
+            dispatch.setDebugUtilsObjectNameEXT(&name_info);
+#endif
+        }
+
         static constexpr std::uint32_t IMAGE_POOL_SIZE = 4096;
         static constexpr std::uint32_t BUFFER_POOL_SIZE = 512;
         static constexpr std::uint32_t GRAPHICS_PIPELINE_POOL_SIZE = 256;
         static constexpr std::uint32_t SWAPCHAIN_POOL_SIZE = 8;
-        static constexpr std::uint32_t SEMAPHORE_POOL_SIZE = 512;
-        static constexpr std::uint32_t FENCE_POOL_SIZE = 256;
+        static constexpr std::uint32_t SAMPLER_POOL_SIZE = 128;
     } // namespace
 
     render_device::render_device(core::allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical)
@@ -357,6 +419,7 @@ namespace tempest::graphics::vk
         _graphics_pipelines.emplace(_alloc, GRAPHICS_PIPELINE_POOL_SIZE,
                                     static_cast<std::uint32_t>(sizeof(graphics_pipeline)));
         _swapchains.emplace(_alloc, SWAPCHAIN_POOL_SIZE, static_cast<std::uint32_t>(sizeof(swapchain)));
+        _samplers.emplace(_alloc, SAMPLER_POOL_SIZE, static_cast<std::uint32_t>(sizeof(sampler)));
         _delete_queue.emplace(_frames_in_flight);
 
         auto queue_families = _physical.get_queue_families();
@@ -443,15 +506,28 @@ namespace tempest::graphics::vk
         _sync_prim_recycler = sync_primitive_recycler{
             .frames_in_flight{_frames_in_flight},
         };
+
+        _executor.emplace(_dispatch, *this);
+
+        _staging_buffer = create_buffer({
+            .per_frame{true},
+            .loc{graphics::memory_location::HOST},
+            .size{64 * 1024 * 1024 * frames_in_flight()},
+            .transfer_source{true},
+            .name{"Staging Buffer"},
+        });
     }
 
     render_device::~render_device()
     {
+        release_buffer(_staging_buffer);
+
         _dispatch.deviceWaitIdle();
 
         _delete_queue->flush_all();
         _recycled_cmd_buf_pool.release_all(_dispatch);
         _sync_prim_recycler.release_all(_dispatch);
+        _executor = std::nullopt;
 
         vmaDestroyAllocator(_vk_alloc);
         vkb::destroy_device(_device);
@@ -506,11 +582,16 @@ namespace tempest::graphics::vk
         VkBufferUsageFlags usage = 0;
         usage |= ci.index_buffer ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT : 0;
         usage |= ci.indirect_buffer ? VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT : 0;
-        usage |= ci.storage_buffer ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : 0;
+        usage |= ci.storage_buffer ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT : 0;
         usage |= ci.transfer_destination ? VK_BUFFER_USAGE_TRANSFER_DST_BIT : 0;
         usage |= ci.transfer_source ? VK_BUFFER_USAGE_TRANSFER_SRC_BIT : 0;
         usage |= ci.uniform_buffer ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT : 0;
         usage |= ci.vertex_buffer ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : 0;
+
+        if (ci.loc == memory_location::DEVICE)
+        {
+            usage |= (VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        }
 
         VkBufferCreateInfo buf_ci = {
             .sType{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO},
@@ -558,6 +639,7 @@ namespace tempest::graphics::vk
         };
 
         buffer buf{
+            .per_frame_resource{ci.per_frame},
             .info{buf_ci},
             .name{std::string{ci.name}},
         };
@@ -572,6 +654,8 @@ namespace tempest::graphics::vk
 
             return buffer_resource_handle();
         }
+
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(buf.buffer), VK_OBJECT_TYPE_BUFFER, ci.name.c_str());
 
         buffer* buf_ptr = access_buffer(handle);
         std::construct_at(buf_ptr, buf);
@@ -592,6 +676,56 @@ namespace tempest::graphics::vk
         }
     }
 
+    std::span<std::byte> render_device::map_buffer(buffer_resource_handle handle)
+    {
+        auto vk_buf = access_buffer(handle);
+        void* result;
+        auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
+        assert(res == VK_SUCCESS);
+        return std::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
+    }
+
+    std::span<std::byte> render_device::map_buffer_frame(buffer_resource_handle handle, std::uint64_t frame_offset)
+    {
+        auto vk_buf = access_buffer(handle);
+        void* result;
+        auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
+        assert(res == VK_SUCCESS);
+
+        std::uint64_t frame = (_current_frame + frame_offset) % _frames_in_flight;
+
+        if (vk_buf->per_frame_resource)
+        {
+            std::uint64_t size_per_frame = vk_buf->alloc_info.size / _frames_in_flight;
+            return std::span(reinterpret_cast<std::byte*>(result) + size_per_frame * frame, size_per_frame);
+        }
+
+        logger->warn("Performance Note: Buffer is not a per-frame resource. Use map_buffer instead.");
+
+        return std::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
+    }
+
+    std::size_t render_device::get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset)
+    {
+        auto vk_buf = access_buffer(handle);
+
+        std::uint64_t frame = (_current_frame + frame_offset) % _frames_in_flight;
+
+        if (vk_buf->per_frame_resource)
+        {
+            std::uint64_t size_per_frame = vk_buf->alloc_info.size / _frames_in_flight;
+            return frame * size_per_frame;
+        }
+
+        return 0;
+    }
+
+    void render_device::unmap_buffer(buffer_resource_handle handle)
+    {
+        auto vk_buf = access_buffer(handle);
+        vmaUnmapMemory(_vk_alloc, vk_buf->allocation);
+    }
+
     image* render_device::access_image(image_resource_handle handle) noexcept
     {
         return reinterpret_cast<image*>(_images->access({
@@ -608,15 +742,15 @@ namespace tempest::graphics::vk
         }));
     }
 
-    image_resource_handle render_device::create_image(const image_create_info& ci)
-    {
-        return create_image(ci, allocate_image());
-    }
-
     image_resource_handle render_device::allocate_image()
     {
         auto key = _images->acquire_resource();
         return image_resource_handle(key.index, key.generation);
+    }
+
+    image_resource_handle render_device::create_image(const image_create_info& ci)
+    {
+        return create_image(ci, allocate_image());
     }
 
     image_resource_handle render_device::create_image(const image_create_info& ci, image_resource_handle handle)
@@ -682,6 +816,8 @@ namespace tempest::graphics::vk
             return image_resource_handle();
         }
 
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(img), VK_OBJECT_TYPE_IMAGE, ci.name.c_str());
+
         VkImageAspectFlags aspect = 0;
         aspect |= (ci.color_attachment || ci.sampled) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
         aspect |= ci.depth_attachment ? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
@@ -722,6 +858,8 @@ namespace tempest::graphics::vk
             return image_resource_handle();
         }
 
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(view), VK_OBJECT_TYPE_IMAGE_VIEW, ci.name.c_str());
+
         image img_info = {
             .allocation{alloc},
             .alloc_info{alloc_info},
@@ -751,6 +889,98 @@ namespace tempest::graphics::vk
                 _dispatch.destroyImageView(img->view, nullptr);
                 std::destroy_at(img);
                 _images->release_resource({.index{handle.id}, .generation{handle.generation}});
+            });
+        }
+    }
+
+    sampler* render_device::access_sampler(sampler_resource_handle handle) noexcept
+    {
+        return reinterpret_cast<sampler*>(_samplers->access({
+            .index{handle.id},
+            .generation{handle.generation},
+        }));
+    }
+
+    const sampler* render_device::access_sampler(sampler_resource_handle handle) const noexcept
+    {
+        return reinterpret_cast<const sampler*>(_samplers->access({
+            .index{handle.id},
+            .generation{handle.generation},
+        }));
+    }
+
+    sampler_resource_handle render_device::allocate_sampler()
+    {
+        auto key = _samplers->acquire_resource();
+        return sampler_resource_handle(key.index, key.generation);
+    }
+
+    sampler_resource_handle render_device::create_sampler(const sampler_create_info& ci)
+    {
+        return create_sampler(ci, allocate_sampler());
+    }
+
+    sampler_resource_handle render_device::create_sampler(const sampler_create_info& ci, sampler_resource_handle handle)
+    {
+        if (!handle)
+        {
+            return sampler_resource_handle();
+        }
+
+        VkSamplerCreateInfo create_info = {
+            .sType{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .magFilter{to_vulkan(ci.mag)},
+            .minFilter{to_vulkan(ci.min)},
+            .mipmapMode{to_vulkan(ci.mipmap)},
+            .addressModeU{VK_SAMPLER_ADDRESS_MODE_REPEAT},
+            .addressModeV{VK_SAMPLER_ADDRESS_MODE_REPEAT},
+            .addressModeW{VK_SAMPLER_ADDRESS_MODE_REPEAT},
+            .mipLodBias{ci.mip_lod_bias},
+            .anisotropyEnable{VK_FALSE},
+            .maxAnisotropy{0.0f},
+            .compareEnable{VK_FALSE},
+            .compareOp{VK_COMPARE_OP_NEVER},
+            .minLod{ci.min_lod},
+            .maxLod{ci.max_lod},
+            .borderColor{VK_BORDER_COLOR_MAX_ENUM},
+            .unnormalizedCoordinates{VK_FALSE},
+        };
+
+        VkSampler s;
+        auto result = _dispatch.createSampler(&create_info, nullptr, &s);
+        if (result != VK_SUCCESS)
+        {
+            _samplers->release_resource({
+                .index{handle.id},
+                .generation{handle.generation},
+            });
+
+            return sampler_resource_handle();
+        }
+
+        sampler smp{
+            .vk_sampler{s},
+            .info{create_info},
+            .name{ci.name},
+        };
+
+        auto ptr = access_sampler(handle);
+        std::construct_at(ptr, std::move(smp));
+
+        return handle;
+    }
+
+    void render_device::release_sampler(sampler_resource_handle handle)
+    {
+        sampler* smp = access_sampler(handle);
+        if (smp)
+        {
+            _delete_queue->add_to_queue(_current_frame, [this, smp, handle] {
+                _dispatch.destroySampler(smp->vk_sampler, nullptr);
+                std::destroy_at(smp);
+                _samplers->release_resource({.index{handle.id}, .generation{handle.generation}});
             });
         }
     }
@@ -805,7 +1035,7 @@ namespace tempest::graphics::vk
                     .binding{binding.binding_index},
                     .descriptorType{to_vulkan(binding.type)},
                     .descriptorCount{binding.binding_count},
-                    .stageFlags{VK_SHADER_STAGE_ALL},
+                    .stageFlags{VK_SHADER_STAGE_ALL_GRAPHICS},
                     .pImmutableSamplers{nullptr},
                 });
             }
@@ -896,6 +1126,11 @@ namespace tempest::graphics::vk
             logger->error("Failed to create VkShaderModules for pipeline.");
             return graphics_pipeline_resource_handle();
         }
+
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(vertex_module), VK_OBJECT_TYPE_SHADER_MODULE,
+                    ci.vertex_shader.name.c_str());
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(fragment_module), VK_OBJECT_TYPE_SHADER_MODULE,
+                    ci.fragment_shader.name.c_str());
 
         VkPipelineShaderStageCreateInfo vertex_stage_ci = {
             .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
@@ -1000,7 +1235,7 @@ namespace tempest::graphics::vk
             .rasterizerDiscardEnable{VK_FALSE},
             .polygonMode{VK_POLYGON_MODE_FILL},
             .cullMode{VK_CULL_MODE_BACK_BIT},
-            .frontFace{VK_FRONT_FACE_COUNTER_CLOCKWISE},
+            .frontFace{VK_FRONT_FACE_CLOCKWISE},
             .depthBiasEnable{ci.depth_testing.enable_depth_bias ? VK_TRUE : VK_FALSE},
             .depthBiasConstantFactor{ci.depth_testing.depth_bias_constant_factor},
             .depthBiasClamp{ci.depth_testing.depth_bias_clamp},
@@ -1082,6 +1317,8 @@ namespace tempest::graphics::vk
             return graphics_pipeline_resource_handle();
         }
 
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(pipeline), VK_OBJECT_TYPE_PIPELINE, ci.name.c_str());
+
         graphics_pipeline gfx_pipeline = {
             .vertex_module{vertex_module},
             .fragment_module{fragment_module},
@@ -1143,8 +1380,12 @@ namespace tempest::graphics::vk
                                                               swapchain_resource_handle handle)
     {
         VkSurfaceKHR surface = VK_NULL_HANDLE;
+        glfw::window* win = dynamic_cast<glfw::window*>(info.win);
 
-        if (glfw::window* win = dynamic_cast<glfw::window*>(info.win))
+        std::uint32_t width = info.win->width();
+        std::uint32_t height = info.win->height();
+
+        if (win)
         {
             auto window = win->raw();
             auto result = glfwCreateWindowSurface(_instance.instance, window, nullptr, &surface);
@@ -1152,13 +1393,18 @@ namespace tempest::graphics::vk
             {
                 return swapchain_resource_handle();
             }
+
+            int w, h;
+            glfwGetFramebufferSize(win->raw(), &w, &h);
+            width = static_cast<std::uint32_t>(w);
+            height = static_cast<std::uint32_t>(h);
         }
 
         vkb::SwapchainBuilder swap_bldr =
             vkb::SwapchainBuilder(_physical, _device, surface)
                 .add_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                 .set_required_min_image_count(info.desired_frame_count)
-                .set_desired_extent(info.win->width(), info.win->height())
+                .set_desired_extent(width, height)
                 .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
                 .set_desired_format({.format{VK_FORMAT_B8G8R8A8_SRGB}, .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}});
 
@@ -1169,6 +1415,7 @@ namespace tempest::graphics::vk
         }
 
         swapchain sc = {
+            .win{win},
             .sc{result.value()},
             .surface{surface},
         };
@@ -1183,6 +1430,19 @@ namespace tempest::graphics::vk
                 .allocation{nullptr},
                 .image{images[i]},
                 .view{views[i]},
+                .img_info{
+                    .extent{
+                        .width{sc.sc.extent.width},
+                        .height{sc.sc.extent.height},
+                        .depth{1},
+                    },
+                },
+                .view_info{
+                    .image{images[i]},
+                    .subresourceRange{
+                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                    },
+                },
                 .name{std::format("swapchain_image_{}", i)},
             };
 
@@ -1217,8 +1477,118 @@ namespace tempest::graphics::vk
         }
     }
 
-    void render_device::recreate_swapchain(swapchain_resource_handle handle, std::uint32_t width, std::uint32_t height)
+    void render_device::recreate_swapchain(swapchain_resource_handle handle)
     {
+        auto sc = access_swapchain(handle);
+        if (sc->win->minimized())
+        {
+            return;
+        }
+
+        _dispatch.deviceWaitIdle();
+        auto width = sc->win->width();
+        auto height = sc->win->height();
+
+        if (auto win = dynamic_cast<glfw::window*>(sc->win))
+        {
+            int w, h;
+            glfwGetFramebufferSize(win->raw(), &w, &h);
+            width = static_cast<std::uint32_t>(w);
+            height = static_cast<std::uint32_t>(h);
+        }
+
+        if (width == 0 || height == 0)
+        {
+            logger->warn("Cannot resize swapchain with 0 sized dimension. Requested dimensions: {0}x{1}", width,
+                         height);
+
+            return;
+        }
+
+        vkb::Swapchain old_swap = sc->sc;
+
+        vkb::SwapchainBuilder swap_bldr =
+            vkb::SwapchainBuilder(_physical, _device, sc->surface)
+                .add_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                .set_required_min_image_count(sc->sc.image_count)
+                .set_desired_extent(width, height)
+                .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+                .set_desired_format({.format{VK_FORMAT_B8G8R8A8_SRGB}, .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}})
+                .set_old_swapchain(sc->sc);
+
+        auto swap_result = swap_bldr.build();
+        if (!swap_result)
+        {
+            logger->error("Failed to create VkSwapchainKHR for window.");
+            return;
+        }
+
+        for (auto img_handle : sc->image_handles)
+        {
+            auto img = *access_image(img_handle);
+            _delete_queue->add_to_queue(_current_frame,
+                                        [this, img]() { _dispatch.destroyImageView(img.view, nullptr); });
+        }
+
+        _delete_queue->add_to_queue(_current_frame, [this, old_swap]() { vkb::destroy_swapchain(old_swap); });
+
+        sc->sc = *swap_result;
+
+        auto images = sc->sc.get_images().value();
+        auto views = sc->sc.get_image_views().value();
+        sc->image_handles.reserve(views.size());
+
+        if (views.size() < sc->image_handles.size())
+        {
+            for (std::size_t i = views.size(); i < sc->image_handles.size(); ++i)
+            {
+                release_image(sc->image_handles[i]);
+            }
+            sc->image_handles.erase(sc->image_handles.begin() + views.size(), sc->image_handles.end());
+        }
+
+        for (std::uint32_t i = 0; i < sc->sc.image_count; ++i)
+        {
+            image sc_image = {
+                .allocation{nullptr},
+                .image{images[i]},
+                .view{views[i]},
+                .img_info{
+                    .extent{
+                        .width{sc->sc.extent.width},
+                        .height{sc->sc.extent.height},
+                        .depth{1},
+                    },
+                },
+                .view_info{
+                    .image{images[i]},
+                    .subresourceRange{
+                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                    },
+                },
+                .name{std::format("swapchain_image_{}", i)},
+            };
+
+            if (i < sc->image_handles.size())
+            {
+                auto sc_image_ptr = access_image(sc->image_handles[i]);
+                *sc_image_ptr = sc_image;
+            }
+            else
+            {
+                auto sc_image_handle = allocate_image();
+                auto sc_image_ptr = access_image(sc_image_handle);
+                std::construct_at(sc_image_ptr, std::move(sc_image));
+
+                sc->image_handles.push_back(sc_image_handle);
+            }
+        }
+    }
+
+    image_resource_handle render_device::fetch_current_image(swapchain_resource_handle handle)
+    {
+        auto sc = access_swapchain(handle);
+        return sc->image_handles[sc->image_index];
     }
 
     VkResult render_device::acquire_next_image(swapchain_resource_handle handle, VkSemaphore sem, VkFence fen)
@@ -1229,7 +1599,7 @@ namespace tempest::graphics::vk
 
     command_buffer_allocator render_device::acquire_frame_local_command_buffer_allocator()
     {
-        return _recycled_cmd_buf_pool.acquire(_dispatch);
+        return _recycled_cmd_buf_pool.acquire(_dispatch, this);
     }
 
     void render_device::release_frame_local_command_buffer_allocator(command_buffer_allocator&& allocator)
@@ -1254,6 +1624,7 @@ namespace tempest::graphics::vk
                                                        .fillModeNonSolid{VK_TRUE},
                                                        .depthBounds{VK_TRUE},
                                                        .alphaToOne{VK_TRUE},
+                                                       .samplerAnisotropy{VK_TRUE},
                                                        .shaderUniformBufferArrayDynamicIndexing{VK_TRUE},
                                                        .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
                                                        .shaderStorageBufferArrayDynamicIndexing{VK_TRUE},
@@ -1352,14 +1723,233 @@ namespace tempest::graphics::vk
         _queue.clear();
     }
 
-    command_list::command_list(VkCommandBuffer buffer, vkb::DispatchTable* dispatch)
-        : _cmds{buffer}, _dispatch{dispatch}
+    command_list::command_list(VkCommandBuffer buffer, vkb::DispatchTable* dispatch, render_device* device)
+        : _cmds{buffer}, _dispatch{dispatch}, _device{device}
     {
     }
 
     command_list::operator VkCommandBuffer() const noexcept
     {
         return _cmds;
+    }
+
+    command_list& command_list::set_viewport(float x, float y, float width, float height, float min_depth,
+                                             float max_depth, std::uint32_t viewport_id)
+    {
+        VkViewport vp = {
+            .x{x},
+            .y{y},
+            .width{width},
+            .height{height},
+            .minDepth{min_depth},
+            .maxDepth{max_depth},
+        };
+
+        _dispatch->cmdSetViewport(_cmds, viewport_id, 1, &vp);
+
+        return *this;
+    }
+
+    command_list& command_list::set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,
+                                                   std::uint32_t height)
+    {
+        VkRect2D scissor = {
+            .offset{
+                .x{x},
+                .y{y},
+            },
+            .extent{
+                .width{width},
+                .height{height},
+            },
+        };
+
+        _dispatch->cmdSetScissor(_cmds, 0, 1, &scissor);
+
+        return *this;
+    }
+
+    command_list& command_list::draw(std::uint32_t vertex_count, std::uint32_t instance_count,
+                                     std::uint32_t first_vertex, std::uint32_t first_index)
+    {
+        _dispatch->cmdDraw(_cmds, vertex_count, instance_count, first_vertex, first_index);
+
+        return *this;
+    }
+
+    command_list& command_list::use_pipeline(graphics_pipeline_resource_handle pipeline)
+    {
+        auto vk_pipeline = _device->access_graphics_pipeline(pipeline);
+        _dispatch->cmdBindPipeline(_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline->pipeline);
+
+        return *this;
+    }
+
+    command_list& command_list::blit(image_resource_handle src, image_resource_handle dst)
+    {
+        auto src_img = _device->access_image(src);
+        auto dst_img = _device->access_image(dst);
+
+        VkImageBlit region = {
+            .srcSubresource{
+                .aspectMask{src_img->view_info.subresourceRange.aspectMask},
+                .mipLevel{0},
+                .baseArrayLayer{0},
+                .layerCount{1},
+            },
+            .srcOffsets{
+                {
+                    .x{0},
+                    .y{0},
+                    .z{0},
+                },
+                {
+                    .x{static_cast<int32_t>(src_img->img_info.extent.width)},
+                    .y{static_cast<int32_t>(src_img->img_info.extent.height)},
+                    .z{1},
+                },
+            },
+            .dstSubresource{
+                .aspectMask{src_img->view_info.subresourceRange.aspectMask},
+                .mipLevel{0},
+                .baseArrayLayer{0},
+                .layerCount{1},
+            },
+            .dstOffsets{
+                {
+                    .x{0},
+                    .y{0},
+                    .z{0},
+                },
+                {
+                    .x{static_cast<int32_t>(dst_img->img_info.extent.width)},
+                    .y{static_cast<int32_t>(dst_img->img_info.extent.height)},
+                    .z{1},
+                },
+            },
+        };
+
+        _dispatch->cmdBlitImage(_cmds, src_img->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst_img->image,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_LINEAR);
+
+        return *this;
+    }
+
+    command_list& command_list::copy(buffer_resource_handle src, buffer_resource_handle dst, std::size_t src_offset,
+                                     std::size_t dst_offset, std::size_t byte_count)
+    {
+        auto src_buf = _device->access_buffer(src);
+        auto dst_buf = _device->access_buffer(dst);
+
+        assert(src_buf->info.size > src_offset &&
+               "Buffer copy source size must be larger than the source copy offset.");
+        assert(dst_buf->info.size > dst_offset &&
+               "Buffer copy source size must be larger than the source copy offset.");
+
+        if (byte_count == std::numeric_limits<std::size_t>::max())
+        {
+            std::size_t src_bytes_available = src_buf->info.size - src_offset;
+            std::size_t dst_bytes_available = dst_buf->info.size - dst_offset;
+            std::size_t bytes_available = std::min(src_bytes_available, dst_bytes_available);
+
+            byte_count = bytes_available;
+        }
+
+        assert(src_offset + byte_count <= src_buf->info.size &&
+               "src_offset + byte_count must be less than the size of the source buffer.");
+        assert(dst_offset + byte_count <= dst_buf->info.size &&
+               "src_offset + byte_count must be less than the size of the source buffer.");
+
+        VkBufferCopy copy = {
+            .srcOffset{src_offset},
+            .dstOffset{dst_offset},
+            .size{byte_count},
+        };
+
+        _dispatch->cmdCopyBuffer(_cmds, src_buf->buffer, dst_buf->buffer, 1, &copy);
+
+        return *this;
+    }
+
+    command_list& command_list::copy(buffer_resource_handle src, image_resource_handle dst, std::size_t buffer_offset,
+                                     std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level,
+                                     std::int32_t offset_x, std::int32_t offset_y)
+    {
+        VkBufferImageCopy copy = {
+            .bufferOffset{buffer_offset},
+            .bufferRowLength{0},
+            .bufferImageHeight{0},
+            .imageSubresource{
+                .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                .mipLevel{mip_level},
+                .baseArrayLayer{0},
+                .layerCount{1},
+            },
+            .imageOffset{
+                .x{offset_x},
+                .y{offset_y},
+                .z{0},
+            },
+            .imageExtent{
+                .width{region_width},
+                .height{region_height},
+                .depth{1},
+            },
+        };
+
+        _dispatch->cmdCopyBufferToImage(_cmds, _device->access_buffer(src)->buffer, _device->access_image(dst)->image,
+                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+        return *this;
+    }
+
+    command_list& command_list::transition_image(image_resource_handle img, image_resource_usage old_usage,
+                                                 image_resource_usage new_usage)
+    {
+        auto vk_img = _device->access_image(img);
+
+        VkImageMemoryBarrier img_barrier = {
+            .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
+            .pNext{nullptr},
+            .srcAccessMask{VK_ACCESS_NONE},
+            .dstAccessMask{VK_ACCESS_NONE},
+            .oldLayout{compute_layout(old_usage)},
+            .newLayout{compute_layout(new_usage)},
+            .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+            .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+            .image{vk_img->image},
+            .subresourceRange{
+                .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                .baseMipLevel{0},
+                .levelCount{vk_img->img_info.mipLevels},
+                .baseArrayLayer{0},
+                .layerCount{vk_img->img_info.arrayLayers},
+            },
+        };
+
+        VkPipelineStageFlags src_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        VkPipelineStageFlags dst_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+        if (old_usage == image_resource_usage::UNDEFINED && new_usage == image_resource_usage::TRANSFER_DESTINATION)
+        {
+            dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            img_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
+        else if (old_usage == image_resource_usage::TRANSFER_DESTINATION && new_usage == image_resource_usage::SAMPLED)
+        {
+            dst_stage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+            src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            img_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            img_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        }
+        else
+        {
+            logger->warn("Unexpected transition.");
+        }
+
+        _dispatch->cmdPipelineBarrier(_cmds, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &img_barrier);
+
+        return *this;
     }
 
     void command_buffer_allocator::reset()
@@ -1385,7 +1975,7 @@ namespace tempest::graphics::vk
             cached_commands.push_back(buf);
         }
         VkCommandBuffer cmds = cached_commands[command_buffer_index++];
-        return command_list(cmds, dispatch);
+        return command_list(cmds, dispatch, device);
     }
 
     void command_buffer_allocator::release()
@@ -1398,7 +1988,7 @@ namespace tempest::graphics::vk
         dispatch->destroyCommandPool(pool, nullptr);
     }
 
-    command_buffer_allocator command_buffer_recycler::acquire(vkb::DispatchTable& dispatch)
+    command_buffer_allocator command_buffer_recycler::acquire(vkb::DispatchTable& dispatch, render_device* device)
     {
         if (global_pool.empty())
         {
@@ -1418,6 +2008,7 @@ namespace tempest::graphics::vk
                 .queue{queue},
                 .pool{pool},
                 .dispatch{&dispatch},
+                .device{device},
             };
             global_pool.push_back(allocator);
         }
@@ -1575,5 +2166,88 @@ namespace tempest::graphics::vk
         {
             dispatch.destroyFence(fence.fence, nullptr);
         }
+    }
+
+    command_execution_service::command_execution_service(vkb::DispatchTable& dispatch, render_device& device)
+        : _dispatch{&dispatch}, _device{&device}
+    {
+        VkCommandPoolCreateInfo create_info = {
+            .sType{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT},
+            .queueFamilyIndex{device.get_queue().queue_family_index},
+        };
+
+        auto res = _dispatch->createCommandPool(&create_info, nullptr, &_pool);
+        assert(res == VK_SUCCESS);
+
+        VkCommandBufferAllocateInfo alloc_ci = {
+            .sType{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO},
+            .pNext{nullptr},
+            .commandPool{_pool},
+            .level{VK_COMMAND_BUFFER_LEVEL_PRIMARY},
+            .commandBufferCount{1},
+        };
+
+        VkCommandBuffer buf;
+        res = _dispatch->allocateCommandBuffers(&alloc_ci, &buf);
+        assert(res == VK_SUCCESS);
+
+        _cmds.emplace(buf, _dispatch, _device);
+    }
+
+    command_execution_service::~command_execution_service()
+    {
+        _dispatch->destroyCommandPool(_pool, nullptr);
+    }
+
+    command_list& command_execution_service::get_commands()
+    {
+        if (!_is_recording)
+        {
+            VkCommandBufferBeginInfo begin = {
+                .sType{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO},
+                .pNext{nullptr},
+                .flags{},
+                .pInheritanceInfo{nullptr},
+            };
+            VkCommandBuffer buf = _cmds.value();
+            auto res = _dispatch->beginCommandBuffer(buf, &begin);
+            assert(res == VK_SUCCESS);
+            _is_recording = true;
+        }
+        return _cmds.value();
+    }
+
+    void command_execution_service::submit_and_wait()
+    {
+        if (!_is_recording) [[unlikely]]
+        {
+            return;
+        }
+
+        VkCommandBuffer cmds = _cmds.value();
+
+        _dispatch->endCommandBuffer(cmds);
+
+        VkSubmitInfo submit = {
+            .sType{VK_STRUCTURE_TYPE_SUBMIT_INFO},
+            .pNext{nullptr},
+            .waitSemaphoreCount{0},
+            .pWaitSemaphores{nullptr},
+            .pWaitDstStageMask{nullptr},
+            .commandBufferCount{1},
+            .pCommandBuffers{&cmds},
+            .signalSemaphoreCount{0},
+            .pSignalSemaphores{0},
+        };
+
+        VkFence fence = _device->acquire_fence();
+        _dispatch->queueSubmit(_device->get_queue().queue, 1, &submit, fence);
+        _dispatch->waitForFences(1, &fence, VK_TRUE, UINT64_MAX);
+
+        _device->release_fence(std::move(fence));
+
+        _is_recording = false;
     }
 } // namespace tempest::graphics::vk

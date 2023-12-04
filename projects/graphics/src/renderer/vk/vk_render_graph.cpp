@@ -3,7 +3,10 @@
 #include <tempest/logger.hpp>
 
 #include <algorithm>
+#include <cassert>
+#include <map>
 #include <ranges>
+#include <unordered_set>
 
 namespace tempest::graphics::vk
 {
@@ -34,7 +37,8 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        VkPipelineStageFlags compute_image_stage_access(resource_access_type type, image_resource_usage usage)
+        VkPipelineStageFlags compute_image_stage_access(resource_access_type type, image_resource_usage usage,
+                                                        pipeline_stage stage)
         {
             switch (usage)
             {
@@ -55,7 +59,14 @@ namespace tempest::graphics::vk
             case image_resource_usage::SAMPLED:
                 return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             case image_resource_usage::STORAGE: {
-                return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                switch (stage)
+                {
+                case pipeline_stage::COMPUTE:
+                    return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                case pipeline_stage::FRAGMENT:
+                    return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                }
+                break;
             }
             case image_resource_usage::TRANSFER_SOURCE:
                 [[fallthrough]];
@@ -64,6 +75,44 @@ namespace tempest::graphics::vk
             case image_resource_usage::PRESENT:
                 return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
             }
+
+            logger->critical("Failed to determine VkPipelineStageFlags for image access.");
+            std::exit(EXIT_FAILURE);
+        }
+
+        VkPipelineStageFlags compute_buffer_stage_access(resource_access_type type, buffer_resource_usage usage,
+                                                         queue_operation_type ops)
+        {
+            switch (usage)
+            {
+            case buffer_resource_usage::CONSTANT:
+            case buffer_resource_usage::STRUCTURED: {
+                switch (ops)
+                {
+                case queue_operation_type::GRAPHICS:
+                    [[fallthrough]];
+                case queue_operation_type::GRAPHICS_AND_TRANSFER:
+                    return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+                case queue_operation_type::COMPUTE:
+                    [[fallthrough]];
+                case queue_operation_type::COMPUTE_AND_TRANSFER:
+                    return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                }
+                break;
+            }
+            case buffer_resource_usage::VERTEX:
+                [[fallthrough]];
+            case buffer_resource_usage::INDEX:
+                return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+            case buffer_resource_usage::INDIRECT_ARGUMENT:
+                return VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+            case buffer_resource_usage::TRANSFER_DESTINATION:
+                [[fallthrough]];
+            case buffer_resource_usage::TRANSFER_SOURCE:
+                return VK_PIPELINE_STAGE_TRANSFER_BIT;
+            }
+
+            logger->critical("Failed to determine VkPipelineStageFlags for buffer access.");
             std::exit(EXIT_FAILURE);
         }
 
@@ -117,7 +166,100 @@ namespace tempest::graphics::vk
             case image_resource_usage::PRESENT:
                 return VK_ACCESS_NONE;
             }
+
+            logger->critical("Failed to determine VkAccessFlags for image access.");
             std::exit(EXIT_FAILURE);
+        }
+
+        VkAccessFlags compute_buffer_access_mask(resource_access_type type, buffer_resource_usage usage)
+        {
+            switch (usage)
+            {
+            case buffer_resource_usage::STRUCTURED: {
+                switch (type)
+                {
+                case resource_access_type::READ:
+                    return VK_ACCESS_SHADER_READ_BIT;
+                case resource_access_type::WRITE:
+                    return VK_ACCESS_SHADER_WRITE_BIT;
+                case resource_access_type::READ_WRITE:
+                    return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                }
+                break;
+            }
+            case buffer_resource_usage::CONSTANT:
+                return VK_ACCESS_SHADER_READ_BIT;
+            case buffer_resource_usage::VERTEX:
+                return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+            case buffer_resource_usage::INDEX:
+                return VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+            case buffer_resource_usage::INDIRECT_ARGUMENT:
+                return VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+            case buffer_resource_usage::TRANSFER_DESTINATION:
+                return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            case buffer_resource_usage::TRANSFER_SOURCE:
+                return VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            }
+
+            logger->critical("Failed to determine VkAccessFlags for buffer access.");
+            std::exit(EXIT_FAILURE);
+        }
+
+        VkAttachmentLoadOp compute_load_op(load_op load)
+        {
+            return static_cast<VkAttachmentLoadOp>(load);
+        }
+
+        VkAttachmentStoreOp compute_store_op(store_op store)
+        {
+            return static_cast<VkAttachmentStoreOp>(store);
+        }
+
+        VkShaderStageFlags compute_accessible_stages(queue_operation_type op)
+        {
+            switch (op)
+            {
+            case queue_operation_type::COMPUTE_AND_TRANSFER:
+                [[fallthrough]];
+            case queue_operation_type::COMPUTE:
+                return VK_SHADER_STAGE_COMPUTE_BIT;
+            case queue_operation_type::GRAPHICS_AND_TRANSFER:
+                [[fallthrough]];
+            case queue_operation_type::GRAPHICS:
+                return VK_SHADER_STAGE_ALL_GRAPHICS;
+            }
+
+            logger->critical("Failed to determine VkPipelineStageFlags for resource access.");
+            std::exit(EXIT_FAILURE);
+        }
+
+        VkDescriptorType get_descriptor_type(buffer_resource_usage usage, bool per_frame)
+        {
+            switch (usage)
+            {
+            case buffer_resource_usage::STRUCTURED: {
+                return per_frame ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            }
+            case buffer_resource_usage::CONSTANT:
+                return per_frame ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            }
+
+            return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        }
+
+        VkDescriptorType get_descriptor_type(image_resource_usage usage)
+        {
+            switch (usage)
+            {
+            case image_resource_usage::SAMPLED: {
+                return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            }
+            case image_resource_usage::STORAGE: {
+                return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            }
+            }
+
+            return VK_DESCRIPTOR_TYPE_MAX_ENUM;
         }
     } // namespace
 
@@ -211,9 +353,18 @@ namespace tempest::graphics::vk
 
     buffer_resource_handle render_graph_resource_library::load(const buffer_desc& desc)
     {
+        auto mem = desc.per_frame_memory;
         auto handle = _device->allocate_buffer();
+
+        auto aligned_size = (desc.size + 64 - 1) & -64;
+
         _buffers_to_compile.push_back(deferred_buffer_create_info{
-            .info{.loc{desc.location}, .size{desc.size}, .name{std::string(desc.name)}},
+            .info{
+                .per_frame{desc.per_frame_memory},
+                .loc{desc.location},
+                .size{aligned_size * (desc.per_frame_memory ? _device->frames_in_flight() : 1)},
+                .name{std::string(desc.name)},
+            },
             .allocation{handle},
         });
 
@@ -295,6 +446,7 @@ namespace tempest::graphics::vk
 
         for (auto& bldr : pass_builders)
         {
+            _pass_index_map[bldr.handle().as_uint64()] = _all_passes.size();
             _all_passes.push_back(bldr);
         }
 
@@ -303,21 +455,62 @@ namespace tempest::graphics::vk
         {
             frame.commands_complete = VK_NULL_HANDLE;
         }
+
+        _descriptor_set_states.resize(_all_passes.size());
+        for (auto& state : _descriptor_set_states)
+        {
+            state.per_frame_descriptors.resize(_device->frames_in_flight());
+        }
+
+        build_descriptor_sets();
     }
 
     render_graph::~render_graph()
     {
+        for (auto& write : _descriptor_set_states[0].writes)
+        {
+            if (write.descriptorCount == 1)
+            {
+                delete write.pBufferInfo;
+                delete write.pImageInfo;
+            }
+            else
+            {
+                delete[] write.pBufferInfo;
+                delete[] write.pImageInfo;
+            }
+        }
+
+        _device->idle();
+
         for (auto& frame : _per_frame)
         {
             if (frame.commands_complete)
             {
                 _device->release_fence(std::move(frame.commands_complete));
             }
+
+            _device->dispatch().destroyDescriptorPool(frame.desc_pool, nullptr);
+        }
+
+        for (auto& desc_set_state : _descriptor_set_states)
+        {
+            for (VkDescriptorSetLayout layout : desc_set_state.set_layouts)
+            {
+                _device->dispatch().destroyDescriptorSetLayout(layout, nullptr);
+            }
+
+            if (desc_set_state.layout != VK_NULL_HANDLE)
+            {
+                _device->dispatch().destroyPipelineLayout(desc_set_state.layout, nullptr);
+            }
         }
     }
 
     void render_graph::execute()
     {
+        _device->start_frame();
+
         // first, check to see if the pass states are the same
         bool active_change_detected = false;
         for (std::size_t i = 0; i < _all_passes.size(); ++i)
@@ -395,9 +588,10 @@ namespace tempest::graphics::vk
         {
             commands_complete = _device->acquire_fence();
         }
-        else if (dispatch->getFenceStatus(commands_complete) != VK_SUCCESS) [[likely]]
+        else if (dispatch->getFenceStatus(commands_complete) != VK_SUCCESS && !_recreated_sc_last_frame) [[likely]]
         {
             dispatch->waitForFences(1, &commands_complete, VK_TRUE, UINT_MAX);
+            _recreated_sc_last_frame = false;
         }
 
         dispatch->resetFences(1, &commands_complete);
@@ -414,7 +608,32 @@ namespace tempest::graphics::vk
             auto signal_sem = _device->acquire_semaphore();
             auto render_complete_sem = _device->acquire_semaphore();
             auto swap = _device->access_swapchain(swapchain);
-            dispatch->acquireNextImageKHR(swap->sc.swapchain, UINT_MAX, signal_sem, VK_NULL_HANDLE, &swap->image_index);
+            auto acquire_result = dispatch->acquireNextImageKHR(swap->sc.swapchain, UINT_MAX, signal_sem,
+                                                                VK_NULL_HANDLE, &swap->image_index);
+
+            if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                _device->release_frame_local_command_buffer_allocator(std::move(cmd_buffer_alloc));
+                for (auto sem : image_acquired_sems)
+                {
+                    _device->release_semaphore(std::move(sem));
+                }
+
+                for (auto sem : render_complete_sems)
+                {
+                    _device->release_semaphore(std::move(sem));
+                }
+
+                _device->release_semaphore(std::move(signal_sem));
+                _device->release_semaphore(std::move(render_complete_sem));
+
+                _device->recreate_swapchain(swapchain);
+                _device->end_frame();
+                _recreated_sc_last_frame = true;
+
+                return;
+            }
+
             image_acquired_sems.push_back(signal_sem);
             wait_stages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
             render_complete_sems.push_back(render_complete_sem);
@@ -449,14 +668,14 @@ namespace tempest::graphics::vk
                 swapchain_resource_state next_state = {
                     .swapchain{swap.swap},
                     .image_layout{compute_layout(swap.usage)},
-                    .stage_mask{compute_image_stage_access(swap.type, swap.usage)},
+                    .stage_mask{compute_image_stage_access(swap.type, swap.usage, swap.first_access)},
                     .access_mask{compute_image_access_mask(swap.type, swap.usage, queue_operation_type::GRAPHICS)},
                 };
 
                 VkImageMemoryBarrier barrier = {
                     .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
                     .pNext{nullptr},
-                    .srcAccessMask{VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+                    .srcAccessMask{VK_ACCESS_NONE},
                     .dstAccessMask{next_state.access_mask},
                     .oldLayout{VK_IMAGE_LAYOUT_UNDEFINED},
                     .newLayout{next_state.image_layout},
@@ -491,13 +710,18 @@ namespace tempest::graphics::vk
                 _last_known_state.swapchain[swap.swap.as_uint64()] = next_state;
             }
 
+            if (dst_stage_mask == 0 && !image_barriers.empty())
+            {
+                dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            }
+
             for (const auto& img : pass_ref.image_usage())
             {
                 auto image_state_it = _last_known_state.images.find(img.img.as_uint64());
                 auto vk_img = _device->access_image(img.img);
 
                 render_graph_image_state next_state = {
-                    .stage_mask{compute_image_stage_access(img.type, img.usage)},
+                    .stage_mask{compute_image_stage_access(img.type, img.usage, img.first_access)},
                     .access_mask{compute_image_access_mask(img.type, img.usage, pass_ref.operation_type())},
                     .image_layout{compute_layout(img.usage)},
                     .image{vk_img->image},
@@ -548,9 +772,45 @@ namespace tempest::graphics::vk
             for (const auto& buf : pass_ref.buffer_usage())
             {
                 const auto buffer_state_it = _last_known_state.buffers.find(buf.buf.as_uint64());
+                auto vk_buf = _device->access_buffer(buf.buf);
+
+                render_graph_buffer_state next_state = {
+                    .stage_mask{compute_buffer_stage_access(buf.type, buf.usage, pass_ref.operation_type())},
+                    .access_mask{compute_buffer_access_mask(buf.type, buf.usage)},
+                    .buffer{vk_buf->buffer},
+                    .offset{0},
+                    .size{VK_WHOLE_SIZE}, // TODO: figure out the proper mechanism to get offsets
+                    .queue_family{queue.queue_family_index},
+
+                };
+
+                VkBufferMemoryBarrier buf_barrier = {
+                    .sType{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER},
+                    .pNext{nullptr},
+                    .srcAccessMask{VK_ACCESS_NONE},
+                    .dstAccessMask{next_state.access_mask},
+                    .srcQueueFamilyIndex{queue.queue_family_index},
+                    .dstQueueFamilyIndex{next_state.queue_family},
+                    .buffer{vk_buf->buffer},
+                    .offset{next_state.offset},
+                    .size{next_state.size},
+                };
+
                 if (buffer_state_it != _last_known_state.buffers.end()) [[likely]]
                 {
                     render_graph_buffer_state last_state = buffer_state_it->second;
+
+                    buf_barrier.srcAccessMask = last_state.access_mask;
+                    buf_barrier.srcQueueFamilyIndex = last_state.queue_family;
+
+                    src_stage_mask |= last_state.stage_mask;
+                }
+
+                // if we've got a queue ownership transformation or a write access, force a barrier
+                if (buf_barrier.srcQueueFamilyIndex != buf_barrier.dstQueueFamilyIndex ||
+                    ((buf_barrier.srcAccessMask | buf_barrier.dstAccessMask) & VK_ACCESS_SHADER_WRITE_BIT) != 0)
+                {
+                    buffer_barriers.push_back(buf_barrier);
                 }
             }
 
@@ -571,7 +831,135 @@ namespace tempest::graphics::vk
                                                               image_barriers.empty() ? nullptr : image_barriers.data());
             }
 
+            if (pass_ref.operation_type() == queue_operation_type::GRAPHICS)
+            {
+                VkRect2D area;
+                std::vector<VkRenderingAttachmentInfo> color_attachments;
+                VkRenderingAttachmentInfo depth_attachment;
+                bool has_depth = false;
+
+                for (const auto& sc : pass_ref.external_swapchain_usage())
+                {
+                    auto swap = _device->access_swapchain(sc.swap);
+                    auto vk_img = _device->access_image(swap->image_handles[swap->image_index]);
+
+                    if (sc.usage == image_resource_usage::COLOR_ATTACHMENT)
+                    {
+                        VkRenderingAttachmentInfo info = {
+                            .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
+                            .pNext{nullptr},
+                            .imageView{vk_img->view},
+                            .imageLayout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                            .resolveMode{VK_RESOLVE_MODE_NONE},
+                            .resolveImageView{VK_NULL_HANDLE},
+                            .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
+                            .loadOp{compute_load_op(sc.load)},
+                            .storeOp{compute_store_op(sc.store)},
+                            .clearValue{},
+                        };
+
+                        area.offset = {
+                            .x{0},
+                            .y{0},
+                        };
+
+                        area.extent = {
+                            .width{vk_img->img_info.extent.width},
+                            .height{vk_img->img_info.extent.height},
+                        };
+
+                        color_attachments.push_back(info);
+                    }
+                }
+
+                for (const auto& img : pass_ref.image_usage())
+                {
+                    auto vk_img = _device->access_image(img.img);
+
+                    if (img.usage == image_resource_usage::COLOR_ATTACHMENT)
+                    {
+                        VkRenderingAttachmentInfo info = {
+                            .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
+                            .pNext{nullptr},
+                            .imageView{vk_img->view},
+                            .imageLayout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                            .resolveMode{VK_RESOLVE_MODE_NONE},
+                            .resolveImageView{VK_NULL_HANDLE},
+                            .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
+                            .loadOp{compute_load_op(img.load)},
+                            .storeOp{compute_store_op(img.store)},
+                            .clearValue{},
+                        };
+
+                        area.offset = {
+                            .x{0},
+                            .y{0},
+                        };
+
+                        area.extent = {
+                            .width{vk_img->img_info.extent.width},
+                            .height{vk_img->img_info.extent.height},
+                        };
+
+                        color_attachments.push_back(info);
+                    }
+                    else if (img.usage == image_resource_usage::COLOR_ATTACHMENT)
+                    {
+                        depth_attachment = {
+                            .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
+                            .pNext{nullptr},
+                            .imageView{vk_img->view},
+                            .imageLayout{VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
+                            .resolveMode{VK_RESOLVE_MODE_NONE},
+                            .resolveImageView{VK_NULL_HANDLE},
+                            .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
+                            .loadOp{compute_load_op(img.load)},
+                            .storeOp{compute_store_op(img.store)},
+                        };
+
+                        has_depth = true;
+                    }
+                }
+
+                VkRenderingInfo render_info = {
+                    .sType{VK_STRUCTURE_TYPE_RENDERING_INFO},
+                    .pNext{nullptr},
+                    .renderArea{area},
+                    .layerCount{1},
+                    .viewMask{0},
+                    .colorAttachmentCount{static_cast<uint32_t>(color_attachments.size())},
+                    .pColorAttachments{color_attachments.empty() ? nullptr : color_attachments.data()},
+                    .pDepthAttachment{has_depth ? &depth_attachment : nullptr},
+                };
+
+                dispatch->cmdBeginRendering(cmds, &render_info);
+            }
+
+            std::size_t pass_idx = _pass_index_map[pass_ref.handle().as_uint64()];
+            auto& set_frame_state =
+                _descriptor_set_states[pass_idx]
+                    .per_frame_descriptors[_device->frame_in_flight() % _device->frames_in_flight()];
+
+            if (!_descriptor_set_states[pass_idx].set_layouts.empty())
+            {
+                VkPipelineBindPoint bind_point = pass_ref.operation_type() == queue_operation_type::GRAPHICS
+                                                     ? VK_PIPELINE_BIND_POINT_GRAPHICS
+                                                     : VK_PIPELINE_BIND_POINT_COMPUTE;
+
+                dispatch->cmdBindDescriptorSets(
+                    cmds, bind_point, _descriptor_set_states[pass_idx].layout, 0,
+                    static_cast<std::uint32_t>(_descriptor_set_states[pass_idx].set_layouts.size()),
+                    set_frame_state.descriptor_sets.data(),
+                    static_cast<std::uint32_t>(set_frame_state.dynamic_offsets.size()),
+                    set_frame_state.dynamic_offsets.empty() ? nullptr : set_frame_state.dynamic_offsets.data());
+            }
+
             pass_ref.execute(cmds);
+
+            if (pass_ref.operation_type() == queue_operation_type::GRAPHICS)
+            {
+                dispatch->cmdEndRendering(cmds);
+            }
         }
 
         VkPipelineStageFlags final_transition_flags{0};
@@ -638,6 +1026,7 @@ namespace tempest::graphics::vk
 
         dispatch->queueSubmit(queue.queue, 1, &submit_info, commands_complete);
 
+        std::vector<VkResult> results(swapchains.size(), VK_SUCCESS);
         VkPresentInfoKHR present = {
             .sType{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR},
             .pNext{nullptr},
@@ -646,10 +1035,20 @@ namespace tempest::graphics::vk
             .swapchainCount{static_cast<uint32_t>(swapchains.size())},
             .pSwapchains{swapchains.data()},
             .pImageIndices{image_indices.data()},
-            .pResults{nullptr},
+            .pResults{results.data()},
         };
 
         dispatch->queuePresentKHR(queue.queue, &present);
+
+        for (std::size_t i = 0; i < results.size(); ++i)
+        {
+            VkResult present_result = results[i];
+            if (present_result == VK_ERROR_OUT_OF_DATE_KHR || present_result == VK_SUBOPTIMAL_KHR)
+            {
+                auto sc = _active_swapchain_set[i];
+                _device->recreate_swapchain(sc);
+            }
+        }
 
         for (auto sem : image_acquired_sems)
         {
@@ -663,9 +1062,353 @@ namespace tempest::graphics::vk
 
         // return allocator
         _device->release_frame_local_command_buffer_allocator(std::move(cmd_buffer_alloc));
-        
+
         _last_known_state.images.clear();
         _last_known_state.swapchain.clear();
+
+        _device->end_frame();
+    }
+
+    void render_graph::build_descriptor_sets()
+    {
+        std::size_t set_count{0};
+        VkDescriptorPoolSize sizes[11] = {}; // VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT + 1
+        for (std::size_t i = 0; i < 11; ++i)
+        {
+            sizes[i] = {
+                .type{static_cast<VkDescriptorType>(i)},
+                .descriptorCount{0},
+            };
+        }
+
+        for (const auto& pass : _all_passes)
+        {
+            std::unordered_set<std::uint32_t> sets;
+
+            for (const auto& buffer : pass.buffer_usage())
+            {
+                switch (buffer.usage)
+                {
+                case buffer_resource_usage::CONSTANT: {
+                    if (buffer.per_frame_memory)
+                    {
+                        sizes[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC].descriptorCount++;
+                    }
+                    else
+                    {
+                        sizes[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER].descriptorCount++;
+                    }
+                    break;
+                }
+                case buffer_resource_usage::STRUCTURED: {
+                    if (buffer.per_frame_memory)
+                    {
+                        sizes[VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC].descriptorCount++;
+                    }
+                    else
+                    {
+                        sizes[VK_DESCRIPTOR_TYPE_STORAGE_BUFFER].descriptorCount++;
+                    }
+                    break;
+                }
+                default:
+                    continue;
+                }
+
+                sets.insert(buffer.set);
+            }
+
+            for (const auto& img : pass.image_usage())
+            {
+                switch (img.usage)
+                {
+                case image_resource_usage::SAMPLED: {
+                    sizes[VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE].descriptorCount++;
+                    break;
+                }
+                case image_resource_usage::STORAGE: {
+                    sizes[VK_DESCRIPTOR_TYPE_STORAGE_IMAGE].descriptorCount++;
+                    break;
+                }
+                default:
+                    continue;
+                }
+
+                sets.insert(img.set);
+            }
+
+            for (const auto& external_img : pass.external_sampled_images())
+            {
+                sizes[VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE].descriptorCount +=
+                    static_cast<std::uint32_t>(external_img.images.size());
+                sets.insert(external_img.set);
+            }
+
+            set_count += sets.size();
+        }
+
+        auto first_not_sized = std::partition(std::begin(sizes), std::end(sizes),
+                                              [](VkDescriptorPoolSize sz) { return sz.descriptorCount > 0; });
+        auto pool_size_count = std::distance(std::begin(sizes), first_not_sized);
+
+        VkDescriptorPoolCreateInfo ci = {
+            .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .maxSets{static_cast<std::uint32_t>(set_count)},
+            .poolSizeCount{static_cast<std::uint32_t>(pool_size_count)},
+            .pPoolSizes{sizes},
+        };
+
+        for (auto& frame : _per_frame)
+        {
+            _device->dispatch().createDescriptorPool(&ci, nullptr, &frame.desc_pool);
+        }
+
+        std::size_t pass_index{0};
+
+        for (auto& pass : _all_passes)
+        {
+            std::unordered_map<std::uint32_t, std::vector<VkDescriptorSetLayoutBinding>> bindings;
+            std::map<std::uint32_t, std::vector<VkWriteDescriptorSet>> binding_writes;
+
+            for (auto& buffer : pass.buffer_usage())
+            {
+                auto type = get_descriptor_type(buffer.usage, buffer.per_frame_memory);
+                if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM)
+                {
+                    continue;
+                }
+
+                bindings[buffer.set].push_back(VkDescriptorSetLayoutBinding{
+                    .binding{buffer.binding},
+                    .descriptorType{type},
+                    .descriptorCount{1},
+                    .stageFlags{compute_accessible_stages(pass.operation_type())},
+                    .pImmutableSamplers{nullptr},
+                });
+
+                auto buf = _device->access_buffer(buffer.buf);
+                auto buffer_size =
+                    buffer.per_frame_memory ? buf->alloc_info.size / _device->frames_in_flight() : buf->alloc_info.size;
+
+                binding_writes[buffer.set].push_back(VkWriteDescriptorSet{
+                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                    .pNext{nullptr},
+                    .dstBinding{buffer.binding},
+                    .dstArrayElement{0},
+                    .descriptorCount{1},
+                    .descriptorType{type},
+                    .pImageInfo{nullptr},
+                    .pBufferInfo{
+                        new VkDescriptorBufferInfo{
+                            .buffer{buf->buffer},
+                            .offset{0},
+                            .range{buffer_size},
+                        },
+                    },
+                    .pTexelBufferView{nullptr},
+                });
+            }
+
+            for (auto& img : pass.image_usage())
+            {
+                auto type = get_descriptor_type(img.usage);
+                if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM)
+                {
+                    continue;
+                }
+
+                bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
+                    .binding{img.binding},
+                    .descriptorType{type},
+                    .descriptorCount{1},
+                    .stageFlags{compute_accessible_stages(pass.operation_type())},
+                    .pImmutableSamplers{nullptr},
+                });
+
+                auto vk_img = _device->access_image(img.img);
+
+                binding_writes[img.set].push_back(VkWriteDescriptorSet{
+                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                    .pNext{nullptr},
+                    .dstBinding{img.binding},
+                    .dstArrayElement{0},
+                    .descriptorCount{1},
+                    .descriptorType{type},
+                    .pImageInfo{new VkDescriptorImageInfo{
+                        .sampler{VK_NULL_HANDLE},
+                        .imageView{vk_img->view},
+                        .imageLayout{compute_layout(img.usage)},
+                    }},
+                    .pBufferInfo{nullptr},
+                    .pTexelBufferView{nullptr},
+                });
+            }
+
+            for (auto& img : pass.external_sampled_images())
+            {
+                auto type = get_descriptor_type(img.usage);
+                if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM)
+                {
+                    continue;
+                }
+
+                bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
+                    .binding{img.binding},
+                    .descriptorType{type},
+                    .descriptorCount{1},
+                    .stageFlags{compute_accessible_stages(pass.operation_type())},
+                    .pImmutableSamplers{nullptr},
+                });
+
+                auto img_count = img.images.size();
+                auto images = new VkDescriptorImageInfo[img_count];
+
+                binding_writes[img.set].push_back(VkWriteDescriptorSet{
+                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                    .pNext{nullptr},
+                    .dstBinding{img.binding},
+                    .dstArrayElement{0},
+                    .descriptorCount{static_cast<std::uint32_t>(img_count)},
+                    .descriptorType{type},
+                    .pImageInfo{images},
+                    .pBufferInfo{nullptr},
+                    .pTexelBufferView{nullptr},
+                });
+
+                for (std::size_t i = 0; i < img_count; ++i)
+                {
+                    images[i] = {
+                        .sampler{VK_NULL_HANDLE},
+                        .imageView{_device->access_image(img.images[i])->view},
+                        .imageLayout{compute_layout(img.usage)},
+                    };
+                }
+            }
+
+            for (auto& smp : pass.external_samplers())
+            {
+                bindings[smp.set].push_back(VkDescriptorSetLayoutBinding{
+                    .binding{smp.binding},
+                    .descriptorType{VK_DESCRIPTOR_TYPE_SAMPLER},
+                    .descriptorCount{1},
+                    .stageFlags{compute_accessible_stages(pass.operation_type())},
+                    .pImmutableSamplers{nullptr},
+                });
+
+                auto sampler_count = smp.samplers.size();
+                auto samplers = new VkDescriptorImageInfo[sampler_count];
+
+                binding_writes[smp.set].push_back(VkWriteDescriptorSet{
+                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                    .pNext{nullptr},
+                    .dstBinding{smp.binding},
+                    .dstArrayElement{0},
+                    .descriptorCount{static_cast<std::uint32_t>(sampler_count)},
+                    .descriptorType{VK_DESCRIPTOR_TYPE_SAMPLER},
+                    .pImageInfo{samplers},
+                    .pBufferInfo{nullptr},
+                    .pTexelBufferView{nullptr},
+                });
+
+                for (std::size_t i = 0; i < sampler_count; ++i)
+                {
+                    samplers[i] = {
+                        .sampler{_device->access_sampler(smp.samplers[i])->vk_sampler},
+                    };
+                }
+            }
+
+            if (bindings.empty())
+            {
+                continue;
+            }
+
+            std::vector<VkDescriptorSetLayout> set_layouts;
+            for (auto& [id, binding_arr] : bindings)
+            {
+                VkDescriptorSetLayoutCreateInfo layout_ci = {
+                    .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO},
+                    .pNext{nullptr},
+                    .flags{0},
+                    .bindingCount{static_cast<std::uint32_t>(binding_arr.size())},
+                    .pBindings{binding_arr.data()},
+                };
+
+                VkDescriptorSetLayout layout;
+                auto result = _device->dispatch().createDescriptorSetLayout(&layout_ci, nullptr, &layout);
+                assert(result == VK_SUCCESS);
+
+                set_layouts.push_back(layout);
+            }
+
+            VkPipelineLayoutCreateInfo pipeline_layout_ci = {
+                .sType{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO},
+                .pNext{nullptr},
+                .flags{0},
+                .setLayoutCount{static_cast<std::uint32_t>(set_layouts.size())},
+                .pSetLayouts{set_layouts.data()},
+                .pushConstantRangeCount{0},
+                .pPushConstantRanges{nullptr},
+            };
+
+            VkPipelineLayout layout;
+            auto result = _device->dispatch().createPipelineLayout(&pipeline_layout_ci, nullptr, &layout);
+            assert(result == VK_SUCCESS);
+
+            auto& set_state = _descriptor_set_states[pass_index];
+
+            set_state.layout = layout;
+            set_state.set_layouts = std::move(set_layouts);
+
+            for (std::size_t i = 0; i < _device->frames_in_flight(); ++i)
+            {
+                VkDescriptorPool pool = _per_frame[i].desc_pool;
+                VkDescriptorSetAllocateInfo alloc_info = {
+                    .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO},
+                    .pNext{nullptr},
+                    .descriptorPool{pool},
+                    .descriptorSetCount{static_cast<std::uint32_t>(set_state.set_layouts.size())},
+                    .pSetLayouts{set_state.set_layouts.data()}};
+
+                auto result = _device->dispatch().allocateDescriptorSets(
+                    &alloc_info, _descriptor_set_states[pass_index].per_frame_descriptors[i].descriptor_sets.data());
+                assert(result == VK_SUCCESS);
+
+                for (auto& [set_id, writes] : binding_writes)
+                {
+                    for (auto& write : writes)
+                    {
+                        // only write once to backing data
+                        if (i == 0)
+                        {
+                            _descriptor_set_states[pass_index].writes.push_back(write);
+                        }
+                    }
+
+                    for (auto& write : _descriptor_set_states[pass_index].writes)
+                    {
+                        write.dstSet =
+                            _descriptor_set_states[pass_index].per_frame_descriptors[i].descriptor_sets[set_id];
+
+                        if (write.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
+                            write.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+                        {
+                            auto per_frame_size = write.pBufferInfo->range / _device->frames_in_flight();
+                            _descriptor_set_states[pass_index].per_frame_descriptors[i].dynamic_offsets.push_back(
+                                static_cast<std::uint32_t>(per_frame_size * i));
+                        }
+                    }
+                }
+
+                _device->dispatch().updateDescriptorSets(
+                    static_cast<std::uint32_t>(_descriptor_set_states[pass_index].writes.size()),
+                    _descriptor_set_states[pass_index].writes.data(), 0, nullptr);
+            }
+
+            ++pass_index;
+        }
     }
 
     render_graph_compiler::render_graph_compiler(core::allocator* alloc, graphics::render_device* device)
