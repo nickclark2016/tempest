@@ -4,6 +4,7 @@
 #include <tempest/object_pool.hpp>
 #include <tempest/render_device.hpp>
 
+#include <array>
 #include <deque>
 #include <functional>
 #include <optional>
@@ -12,8 +13,12 @@
 #include <VkBootstrap.h>
 #include <vk_mem_alloc.h>
 
+#include "../../windowing/glfw_window.hpp"
+
 namespace tempest::graphics::vk
 {
+    class render_device;
+
     struct image
     {
         VmaAllocation allocation;
@@ -27,6 +32,7 @@ namespace tempest::graphics::vk
 
     struct buffer
     {
+        bool per_frame_resource;
         VmaAllocation allocation;
         VmaAllocationInfo alloc_info;
         VkBuffer buffer;
@@ -46,10 +52,18 @@ namespace tempest::graphics::vk
 
     struct swapchain
     {
+        glfw::window* win;
         std::uint32_t image_index;
         vkb::Swapchain sc;
         VkSurfaceKHR surface;
         std::vector<image_resource_handle> image_handles;
+    };
+
+    struct sampler
+    {
+        VkSampler vk_sampler;
+        VkSamplerCreateInfo info;
+        std::string name;
     };
 
     class resource_deletion_queue
@@ -83,14 +97,34 @@ namespace tempest::graphics::vk
     class command_list : public graphics::command_list
     {
       public:
-        command_list(VkCommandBuffer buffer, vkb::DispatchTable* dispatch);
+        command_list(VkCommandBuffer buffer, vkb::DispatchTable* dispatch, render_device* device);
         ~command_list() override = default;
 
         operator VkCommandBuffer() const noexcept;
 
+        command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
+                                   float max_depth = 1.0f, std::uint32_t viewport_id = 0) override;
+        command_list& set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,
+                                         std::uint32_t height) override;
+        command_list& draw(std::uint32_t vertex_count, std::uint32_t instance_count = 1, std::uint32_t first_vertex = 0,
+                           std::uint32_t first_index = 0) override;
+        command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) override;
+
+        command_list& blit(image_resource_handle src, image_resource_handle dst) override;
+        command_list& copy(buffer_resource_handle src, buffer_resource_handle dst, std::size_t src_offset = 0,
+                           std::size_t dst_offset = 0,
+                           std::size_t byte_count = std::numeric_limits<std::size_t>::max()) override;
+        command_list& copy(buffer_resource_handle src, image_resource_handle dst, std::size_t buffer_offset,
+                           std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level,
+                           std::int32_t offset_x = 0, std::int32_t offset_y = 0) override;
+
+        command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
+                                       image_resource_usage new_usage) override;
+
       private:
         VkCommandBuffer _cmds;
         vkb::DispatchTable* _dispatch;
+        render_device* _device;
     };
 
     struct command_buffer_allocator
@@ -102,6 +136,7 @@ namespace tempest::graphics::vk
         std::size_t command_buffer_index{0};
 
         vkb::DispatchTable* dispatch;
+        render_device* device;
 
         void reset();
         command_list allocate();
@@ -121,7 +156,7 @@ namespace tempest::graphics::vk
         std::vector<command_buffer_allocator> global_pool;
         std::deque<command_buffer_recycle_payload> recycle_pool;
 
-        command_buffer_allocator acquire(vkb::DispatchTable& dispatch);
+        command_buffer_allocator acquire(vkb::DispatchTable& dispatch, render_device* device);
         void release(command_buffer_allocator&& allocator, std::size_t current_frame);
         void recycle(std::size_t current_frame, vkb::DispatchTable& dispatch);
         void release_all(vkb::DispatchTable& dispatch);
@@ -157,6 +192,24 @@ namespace tempest::graphics::vk
         void release_all(vkb::DispatchTable& dispatch);
     };
 
+    class command_execution_service : public graphics::command_execution_service
+    {
+      public:
+        command_execution_service(vkb::DispatchTable& dispatch, render_device& device);
+        ~command_execution_service();
+
+        command_list& get_commands() override;
+        void submit_and_wait() override;
+
+      private:
+        vkb::DispatchTable* _dispatch;
+        render_device* _device;
+        VkCommandPool _pool{VK_NULL_HANDLE};
+        VkCommandBuffer _buffer{VK_NULL_HANDLE};
+        std::optional<command_list> _cmds;
+        bool _is_recording{false};
+    };
+
     class render_device : public graphics::render_device
     {
       public:
@@ -173,12 +226,24 @@ namespace tempest::graphics::vk
         buffer_resource_handle create_buffer(const buffer_create_info& ci, buffer_resource_handle handle);
         void release_buffer(buffer_resource_handle handle) override;
 
+        std::span<std::byte> map_buffer(buffer_resource_handle handle) override;
+        std::span<std::byte> map_buffer_frame(buffer_resource_handle handlee, std::uint64_t frame_offset) override;
+        std::size_t get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset) override;
+        void unmap_buffer(buffer_resource_handle handle) override;
+
         image* access_image(image_resource_handle handle) noexcept;
         const image* access_image(image_resource_handle handle) const noexcept;
         image_resource_handle allocate_image();
         image_resource_handle create_image(const image_create_info& ci) override;
         image_resource_handle create_image(const image_create_info& ci, image_resource_handle handle);
         void release_image(image_resource_handle handle) override;
+
+        sampler* access_sampler(sampler_resource_handle handle) noexcept;
+        const sampler* access_sampler(sampler_resource_handle handle) const noexcept;
+        sampler_resource_handle allocate_sampler();
+        sampler_resource_handle create_sampler(const sampler_create_info& ci) override;
+        sampler_resource_handle create_sampler(const sampler_create_info& ci, sampler_resource_handle handle);
+        void release_sampler(sampler_resource_handle handle) override;
 
         graphics_pipeline* access_graphics_pipeline(graphics_pipeline_resource_handle handle) noexcept;
         const graphics_pipeline* access_graphics_pipeline(graphics_pipeline_resource_handle handle) const noexcept;
@@ -194,7 +259,18 @@ namespace tempest::graphics::vk
         swapchain_resource_handle create_swapchain(const swapchain_create_info& info) override;
         swapchain_resource_handle create_swapchain(const swapchain_create_info& info, swapchain_resource_handle handle);
         void release_swapchain(swapchain_resource_handle handle) override;
-        void recreate_swapchain(swapchain_resource_handle handle, std::uint32_t width, std::uint32_t height) override;
+        void recreate_swapchain(swapchain_resource_handle handle) override;
+        image_resource_handle fetch_current_image(swapchain_resource_handle handle) override;
+
+        command_execution_service& get_command_executor() override
+        {
+            return _executor.value();
+        }
+
+        buffer_resource_handle get_staging_buffer() override
+        {
+            return _staging_buffer;
+        }
 
         VkResult acquire_next_image(swapchain_resource_handle handle, VkSemaphore sem, VkFence fen);
 
@@ -236,6 +312,21 @@ namespace tempest::graphics::vk
             return _sync_prim_recycler.release(std::move(fence), _current_frame);
         }
 
+        vkb::DispatchTable& dispatch()
+        {
+            return _dispatch;
+        }
+
+        const vkb::DispatchTable& dispatch() const
+        {
+            return _dispatch;
+        }
+
+        void idle()
+        {
+            _dispatch.deviceWaitIdle();
+        }
+
       private:
         core::allocator* _alloc;
         vkb::Instance _instance;
@@ -248,8 +339,10 @@ namespace tempest::graphics::vk
         std::optional<core::generational_object_pool> _buffers;
         std::optional<core::generational_object_pool> _graphics_pipelines;
         std::optional<core::generational_object_pool> _swapchains;
+        std::optional<core::generational_object_pool> _samplers;
 
         queue_info _queue;
+        std::optional<command_execution_service> _executor;
 
         std::optional<resource_deletion_queue> _delete_queue;
 
@@ -258,6 +351,8 @@ namespace tempest::graphics::vk
 
         command_buffer_recycler _recycled_cmd_buf_pool{};
         sync_primitive_recycler _sync_prim_recycler{};
+
+        buffer_resource_handle _staging_buffer;
     };
 
     class render_context : public graphics::render_context

@@ -33,12 +33,42 @@ namespace tempest::graphics
     {
         UNKNOWN,
         RGBA8_SRGB,
+        BGRA8_SRGB,
+        RGBA8_UINT,
+        RGBA8_UNORM,
         RG32_FLOAT,
         RG32_UINT,
         RGB32_FLOAT,
         RGBA32_FLOAT,
         D32_FLOAT,
     };
+
+    inline std::size_t bytes_per_element(resource_format fmt)
+    {
+        switch (fmt)
+        {
+        case resource_format::D32_FLOAT:
+            [[fallthrough]];
+        case resource_format::RGBA8_SRGB:
+            [[fallthrough]];
+        case resource_format::RGBA8_UINT:
+            [[fallthrough]];
+        case resource_format::RGBA8_UNORM:
+            [[fallthrough]];
+        case resource_format::BGRA8_SRGB:
+            return 4;
+        case resource_format::RG32_FLOAT:
+            [[fallthrough]];
+        case resource_format::RG32_UINT:
+            return 8;
+        case resource_format::RGB32_FLOAT:
+            return 12;
+        case resource_format::RGBA32_FLOAT:
+            return 16;
+        }
+
+        std::exit(EXIT_FAILURE);
+    }
 
     enum class image_type
     {
@@ -72,6 +102,7 @@ namespace tempest::graphics
 
     enum class image_resource_usage
     {
+        UNDEFINED,
         COLOR_ATTACHMENT,
         DEPTH_ATTACHMENT,
         SAMPLED,
@@ -118,10 +149,12 @@ namespace tempest::graphics
         std::size_t size;
         memory_location location{memory_location::AUTO};
         std::string_view name;
+        bool per_frame_memory{false};
     };
 
     struct buffer_create_info
     {
+        bool per_frame;
         memory_location loc;
         std::size_t size;
         bool transfer_source : 1;
@@ -156,7 +189,9 @@ namespace tempest::graphics
     enum class descriptor_binding_type
     {
         STRUCTURED_BUFFER,
+        STRUCTURED_BUFFER_DYNAMIC,
         CONSTANT_BUFFER,
+        CONSTANT_BUFFER_DYNAMIC,
         STORAGE_IMAGE,
         SAMPLED_IMAGE,
         SAMPLER,
@@ -293,6 +328,63 @@ namespace tempest::graphics
         std::uint32_t desired_frame_count;
     };
 
+    struct texture_mip_descriptor
+    {
+        std::uint32_t width;
+        std::uint32_t height;
+        std::span<std::byte> bytes;
+    };
+
+    struct texture_data_descriptor
+    {
+        resource_format fmt;
+        std::vector<texture_mip_descriptor> mips;
+        std::string name;
+    };
+
+    enum class filter
+    {
+        NEAREST,
+        LINEAR
+    };
+
+    enum class mipmap_mode
+    {
+        NEAREST,
+        LINEAR
+    };
+
+    struct sampler_create_info
+    {
+        filter mag;
+        filter min;
+        mipmap_mode mipmap;
+        float mip_lod_bias;
+        float min_lod{0.0f};
+        float max_lod{1000.0f};
+        std::string name;
+    };
+
+    enum class resource_access_type
+    {
+        READ,
+        WRITE,
+        READ_WRITE,
+    };
+
+    enum class load_op
+    {
+        LOAD,
+        CLEAR,
+        DONT_CARE
+    };
+
+    enum class store_op
+    {
+        STORE,
+        DONT_CARE
+    };
+
     struct gfx_resource_handle
     {
         std::uint32_t id;
@@ -306,7 +398,7 @@ namespace tempest::graphics
         {
             return generation != ~0u;
         }
-        
+
         inline constexpr std::uint64_t as_uint64() const noexcept
         {
             return (static_cast<std::uint64_t>(id) << 32) | generation;
@@ -355,11 +447,12 @@ namespace tempest::graphics
         }
     };
 
-    enum class resource_access_type
+    struct sampler_resource_handle : public gfx_resource_handle
     {
-        READ,
-        WRITE,
-        READ_WRITE,
+        constexpr sampler_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+            : gfx_resource_handle(id, generation)
+        {
+        }
     };
 
     class command_list
@@ -367,10 +460,33 @@ namespace tempest::graphics
       public:
         virtual ~command_list() = default;
 
-        // virtual command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
-        //                                    float max_depth = 1.0f, std::uint32_t viewport_id = 0) = 0;
-        // virtual command_list& set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,
-        //                                          std::uint32_t height) = 0;
+        virtual command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
+                                           float max_depth = 1.0f, std::uint32_t viewport_id = 0) = 0;
+        virtual command_list& set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,
+                                                 std::uint32_t height) = 0;
+        virtual command_list& draw(std::uint32_t vertex_count, std::uint32_t instance_count = 1,
+                                   std::uint32_t first_vertex = 0, std::uint32_t first_index = 0) = 0;
+        virtual command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) = 0;
+
+        virtual command_list& blit(image_resource_handle src, image_resource_handle dst) = 0;
+        virtual command_list& copy(buffer_resource_handle src, buffer_resource_handle dst, std::size_t src_offset = 0,
+                                   std::size_t dst_offset = 0,
+                                   std::size_t byte_count = std::numeric_limits<std::size_t>::max()) = 0;
+        virtual command_list& copy(buffer_resource_handle src, image_resource_handle dst, std::size_t buffer_offset,
+                           std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level, std::int32_t offset_x = 0,
+                           std::int32_t offset_y = 0) = 0;
+
+        virtual command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
+                                               image_resource_usage new_usage) = 0;
+    };
+
+    class command_execution_service
+    {
+      public:
+        virtual ~command_execution_service() = default;
+
+        virtual command_list& get_commands() = 0;
+        virtual void submit_and_wait() = 0;
     };
 } // namespace tempest::graphics
 
