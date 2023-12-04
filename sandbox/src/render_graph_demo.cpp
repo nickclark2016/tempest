@@ -94,8 +94,8 @@ void render_graph_demo()
     auto textures = graphics::renderer_utilities::upload_textures(graphics_device, texture_data,
                                                                   graphics_device.get_staging_buffer(), false);
 
-    auto triangle_pass = rgc->add_graph_pass(
-        "triangle_pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
+    auto quad_pass = rgc->add_graph_pass(
+        "quad_pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
             bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR)
                 .add_structured_buffer(vertex_buffer, graphics::resource_access_type::READ, 0, 0)
                 .add_external_sampled_images(textures, 0, 1, graphics::pipeline_stage::FRAGMENT)
@@ -113,7 +113,7 @@ void render_graph_demo()
                             [&](graphics::graph_pass_builder& bldr) {
                                 bldr.add_blit_source(color_buffer)
                                     .add_external_blit_target(swapchain)
-                                    .depends_on(triangle_pass)
+                                    .depends_on(quad_pass)
                                     .on_execute([&](graphics::command_list& cmds) {
                                         cmds.blit(color_buffer, graphics_device.fetch_current_image(swapchain));
                                     });
