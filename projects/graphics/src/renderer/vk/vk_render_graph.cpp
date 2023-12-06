@@ -888,7 +888,16 @@ namespace tempest::graphics::vk
                             .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
                             .loadOp{compute_load_op(img.load)},
                             .storeOp{compute_store_op(img.store)},
-                            .clearValue{},
+                            .clearValue{
+                                .color{
+                                    .float32{
+                                        img.clear_color.x,
+                                        img.clear_color.y,
+                                        img.clear_color.z,
+                                        img.clear_color.w,
+                                    },
+                                },
+                            },
                         };
 
                         area.offset = {
@@ -903,7 +912,7 @@ namespace tempest::graphics::vk
 
                         color_attachments.push_back(info);
                     }
-                    else if (img.usage == image_resource_usage::COLOR_ATTACHMENT)
+                    else if (img.usage == image_resource_usage::DEPTH_ATTACHMENT)
                     {
                         depth_attachment = {
                             .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
@@ -915,6 +924,11 @@ namespace tempest::graphics::vk
                             .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
                             .loadOp{compute_load_op(img.load)},
                             .storeOp{compute_store_op(img.store)},
+                            .clearValue{
+                                .depthStencil{
+                                    .depth{img.clear_depth},
+                                },
+                            },
                         };
 
                         has_depth = true;
@@ -1087,10 +1101,12 @@ namespace tempest::graphics::vk
 
             for (const auto& buffer : pass.buffer_usage())
             {
+                auto vk_buf = _device->access_buffer(buffer.buf);
+
                 switch (buffer.usage)
                 {
                 case buffer_resource_usage::CONSTANT: {
-                    if (buffer.per_frame_memory)
+                    if (vk_buf->per_frame_resource)
                     {
                         sizes[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC].descriptorCount++;
                     }
@@ -1101,7 +1117,7 @@ namespace tempest::graphics::vk
                     break;
                 }
                 case buffer_resource_usage::STRUCTURED: {
-                    if (buffer.per_frame_memory)
+                    if (vk_buf->per_frame_resource)
                     {
                         sizes[VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC].descriptorCount++;
                     }
@@ -1174,7 +1190,8 @@ namespace tempest::graphics::vk
 
             for (auto& buffer : pass.buffer_usage())
             {
-                auto type = get_descriptor_type(buffer.usage, buffer.per_frame_memory);
+                auto vk_buf = _device->access_buffer(buffer.buf);
+                auto type = get_descriptor_type(buffer.usage, vk_buf->per_frame_resource);
                 if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM)
                 {
                     continue;
@@ -1190,7 +1207,7 @@ namespace tempest::graphics::vk
 
                 auto buf = _device->access_buffer(buffer.buf);
                 auto buffer_size =
-                    buffer.per_frame_memory ? buf->alloc_info.size / _device->frames_in_flight() : buf->alloc_info.size;
+                    vk_buf->per_frame_resource ? buf->alloc_info.size / _device->frames_in_flight() : buf->alloc_info.size;
 
                 binding_writes[buffer.set].push_back(VkWriteDescriptorSet{
                     .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
@@ -1380,31 +1397,28 @@ namespace tempest::graphics::vk
                 {
                     for (auto& write : writes)
                     {
-                        // only write once to backing data
-                        if (i == 0)
-                        {
-                            _descriptor_set_states[pass_index].writes.push_back(write);
-                        }
-                    }
-
-                    for (auto& write : _descriptor_set_states[pass_index].writes)
-                    {
                         write.dstSet =
                             _descriptor_set_states[pass_index].per_frame_descriptors[i].descriptor_sets[set_id];
+                        _descriptor_set_states[pass_index].writes.push_back(write);
+                    }
+                }
 
-                        if (write.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
-                            write.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
-                        {
-                            auto per_frame_size = write.pBufferInfo->range / _device->frames_in_flight();
-                            _descriptor_set_states[pass_index].per_frame_descriptors[i].dynamic_offsets.push_back(
-                                static_cast<std::uint32_t>(per_frame_size * i));
-                        }
+                for (auto& write : _descriptor_set_states[pass_index].writes)
+                {
+                    if (write.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
+                        write.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
+                    {
+                        auto per_frame_size = write.pBufferInfo->range;
+                        _descriptor_set_states[pass_index].per_frame_descriptors[i].dynamic_offsets.push_back(
+                            static_cast<std::uint32_t>(per_frame_size * i));
                     }
                 }
 
                 _device->dispatch().updateDescriptorSets(
                     static_cast<std::uint32_t>(_descriptor_set_states[pass_index].writes.size()),
                     _descriptor_set_states[pass_index].writes.data(), 0, nullptr);
+
+                _descriptor_set_states[pass_index].writes.clear();
             }
 
             ++pass_index;

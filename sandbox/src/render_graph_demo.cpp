@@ -1,8 +1,11 @@
 #include <tempest/files.hpp>
 #include <tempest/input.hpp>
+#include <tempest/mat4.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/render_device.hpp>
 #include <tempest/render_graph.hpp>
+#include <tempest/texture_asset.hpp>
+#include <tempest/transformations.hpp>
 #include <tempest/window.hpp>
 
 #include <chrono>
@@ -14,6 +17,13 @@ namespace
 {
     inline constexpr std::size_t global_memory_allocator_size = 1024 * 1024 * 64;
 }
+
+struct CameraData
+{
+    math::mat4<float> proj;
+    math::mat4<float> view;
+    math::mat4<float> view_proj;
+};
 
 graphics::graphics_pipeline_resource_handle create_textured_quad_pipeline(graphics::render_device& device);
 
@@ -42,11 +52,26 @@ void render_graph_demo()
         .name{"Color Buffer Target"},
     });
 
+    auto depth_buffer = rgc->create_image({
+        .width{1920},
+        .height{1080},
+        .fmt{graphics::resource_format::D32_FLOAT},
+        .type{graphics::image_type::IMAGE_2D},
+        .name{"Depth Buffer Target"},
+    });
+
     auto vertex_buffer = rgc->create_buffer({
         .size{sizeof(float) * 8 * 6},
         .location{graphics::memory_location::DEVICE},
         .name{"Vertex Buffer"},
         .per_frame_memory{false},
+    });
+
+    auto camera_data_buffer = rgc->create_buffer({
+        .size{sizeof(CameraData)},
+        .location{graphics::memory_location::DEVICE},
+        .name{"Camera Data Buffer"},
+        .per_frame_memory{true},
     });
 
     auto texture_sampler = graphics_device.create_sampler({
@@ -60,13 +85,6 @@ void render_graph_demo()
     auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});
 
     // clang-format off
-    std::uint8_t pixels[] = {
-        255, 0, 0, 255,
-        0, 255, 0, 255,
-        0, 0, 255, 255,
-        255, 255, 255, 255,
-    };
-
     float vertices[] = {
         -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
          0.5f,  0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
@@ -77,14 +95,16 @@ void render_graph_demo()
     };
     // clang-format on
 
+    auto image = assets::load_texture("assets/logo512.png");
+
     graphics::texture_data_descriptor texture_data[] = {
         {
             .fmt{graphics::resource_format::RGBA8_UNORM},
             .mips{
                 graphics::texture_mip_descriptor{
-                    .width{2},
-                    .height{2},
-                    .bytes{reinterpret_cast<std::byte*>(pixels), 16},
+                    .width{image->width},
+                    .height{image->height},
+                    .bytes{image->data.data(), image->data.size() * sizeof(std::byte)},
                 },
             },
             .name{"Test Texture"},
@@ -96,10 +116,14 @@ void render_graph_demo()
 
     auto quad_pass = rgc->add_graph_pass(
         "quad_pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
-            bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR)
+            bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR,
+                                      graphics::store_op::STORE, math::vec4<float>(1.0f))
+                .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
+                                      graphics::load_op::CLEAR, graphics::store_op::STORE, 1.0f)
                 .add_structured_buffer(vertex_buffer, graphics::resource_access_type::READ, 0, 0)
-                .add_external_sampled_images(textures, 0, 1, graphics::pipeline_stage::FRAGMENT)
-                .add_sampler(texture_sampler, 0, 2, graphics::pipeline_stage::FRAGMENT)
+                .add_constant_buffer(camera_data_buffer, 0, 1)
+                .add_external_sampled_images(textures, 1, 0, graphics::pipeline_stage::FRAGMENT)
+                .add_sampler(texture_sampler, 1, 1, graphics::pipeline_stage::FRAGMENT)
                 .on_execute([&](graphics::command_list& cmds) {
                     cmds.set_viewport(0, 0, 1920, 1080)
                         .set_scissor_region(0, 0, 1920, 1080)
@@ -130,6 +154,30 @@ void render_graph_demo()
         auto& cmds = cmd_executor.get_commands();
 
         cmds.copy(graphics_device.get_staging_buffer(), vertex_buffer, 0, 0, sizeof(vertices));
+
+        cmd_executor.submit_and_wait();
+    }
+
+    {
+        CameraData cameras = {
+            .proj{math::perspective(16.0f / 9.0f, 90.0f, 0.01f, 1000.0f)},
+            .view{math::look_at(math::vec3<float>(0.0f, 0.0f, -10.0f), math::vec3<float>(0.0f, 0.0f, 0.0f),
+                                math::vec3<float>(0.0f, 1.0, 0.0f))},
+            .view_proj{1.0f},
+        };
+
+        auto staging_buffer_ptr = graphics_device.map_buffer(graphics_device.get_staging_buffer());
+        for (std::size_t i = 0; i < graphics_device.frames_in_flight(); ++i)
+        {
+            std::memcpy(staging_buffer_ptr.data() + sizeof(CameraData) * i, &cameras, sizeof(CameraData));
+        }
+
+        graphics_device.unmap_buffer(graphics_device.get_staging_buffer());
+
+        auto& cmd_executor = graphics_device.get_command_executor();
+        auto& cmds = cmd_executor.get_commands();
+
+        cmds.copy(graphics_device.get_staging_buffer(), camera_data_buffer, 0, 0, sizeof(CameraData) * graphics_device.frames_in_flight());
 
         cmd_executor.submit_and_wait();
     }
@@ -168,8 +216,8 @@ void render_graph_demo()
 
 graphics::graphics_pipeline_resource_handle create_textured_quad_pipeline(graphics::render_device& device)
 {
-    auto vertex_shader_bytes = core::read_bytes("data/simple_quad/simple_quad.vx.spv");
-    auto fragment_shader_bytes = core::read_bytes("data/simple_quad/simple_quad.px.spv");
+    auto vertex_shader_bytes = core::read_bytes("data/perspective_quad/perspective_quad.vx.spv");
+    auto fragment_shader_bytes = core::read_bytes("data/perspective_quad/perspective_quad.px.spv");
 
     graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
     graphics::color_blend_attachment_state blending[] = {
@@ -178,31 +226,42 @@ graphics::graphics_pipeline_resource_handle create_textured_quad_pipeline(graphi
         },
     };
 
-    graphics::descriptor_binding_info bindings[] = {
+    graphics::descriptor_binding_info buffer_bindings[] = {
         {
             .type{graphics::descriptor_binding_type::STRUCTURED_BUFFER},
             .binding_index{0},
             .binding_count{1},
         },
+
+        {
+            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
+            .binding_index{1},
+            .binding_count{1},
+        },
+    };
+
+    graphics::descriptor_binding_info texture_bindings[] = {
         {
             .type{graphics::descriptor_binding_type::SAMPLED_IMAGE},
-            .binding_index{1},
+            .binding_index{0},
             .binding_count{1},
         },
         {
             .type{graphics::descriptor_binding_type::SAMPLER},
-            .binding_index{2},
+            .binding_index{1},
             .binding_count{1},
         },
     };
 
-    graphics::descriptor_set_layout_create_info layout = {
-        .set{0},
-        .bindings{bindings},
-    };
-
     graphics::descriptor_set_layout_create_info layouts[] = {
-        layout,
+        {
+            .set{0},
+            .bindings{buffer_bindings},
+        },
+        {
+            .set{1},
+            .bindings{texture_bindings},
+        },
     };
 
     graphics::graphics_pipeline_create_info quad_pipeline_ci = {
@@ -213,21 +272,23 @@ graphics::graphics_pipeline_resource_handle create_textured_quad_pipeline(graphi
         },
         .target{
             .color_attachment_formats{color_buffer_fmt},
+            .depth_attachment_format{graphics::resource_format::D32_FLOAT},
         },
         .vertex_shader{
             .bytes{vertex_shader_bytes},
             .entrypoint{"VSMain"},
-            .name{"simple_quad_vertex_shader"},
+            .name{"perspective_quad_vertex_shader"},
         },
         .fragment_shader{
             .bytes{fragment_shader_bytes},
             .entrypoint{"PSMain"},
-            .name{"simple_quad_fragment_shader"},
+            .name{"perspective_quad_fragment_shader"},
         },
         .vertex_layout{},
         .depth_testing{
-            .enable_test{false},
-            .enable_write{false},
+            .enable_test{true},
+            .enable_write{true},
+            .depth_test_op{graphics::compare_operation::LESS},
         },
 
         .blending{.attachment_blend_ops{blending}},

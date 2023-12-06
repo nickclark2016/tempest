@@ -407,6 +407,7 @@ namespace tempest::graphics::vk
         static constexpr std::uint32_t IMAGE_POOL_SIZE = 4096;
         static constexpr std::uint32_t BUFFER_POOL_SIZE = 512;
         static constexpr std::uint32_t GRAPHICS_PIPELINE_POOL_SIZE = 256;
+        static constexpr std::uint32_t COMPUTE_PIPELINE_POOL_SIZE = 128;
         static constexpr std::uint32_t SWAPCHAIN_POOL_SIZE = 8;
         static constexpr std::uint32_t SAMPLER_POOL_SIZE = 128;
     } // namespace
@@ -418,6 +419,8 @@ namespace tempest::graphics::vk
         _buffers.emplace(_alloc, BUFFER_POOL_SIZE, static_cast<std::uint32_t>(sizeof(buffer)));
         _graphics_pipelines.emplace(_alloc, GRAPHICS_PIPELINE_POOL_SIZE,
                                     static_cast<std::uint32_t>(sizeof(graphics_pipeline)));
+        _compute_pipelines.emplace(_alloc, COMPUTE_PIPELINE_POOL_SIZE,
+                                   static_cast<std::uint32_t>(sizeof(compute_pipeline)));
         _swapchains.emplace(_alloc, SWAPCHAIN_POOL_SIZE, static_cast<std::uint32_t>(sizeof(swapchain)));
         _samplers.emplace(_alloc, SAMPLER_POOL_SIZE, static_cast<std::uint32_t>(sizeof(sampler)));
         _delete_queue.emplace(_frames_in_flight);
@@ -1350,6 +1353,188 @@ namespace tempest::graphics::vk
                 }
                 std::destroy_at(pipeline);
                 _graphics_pipelines->release_resource({.index{handle.id}, .generation{handle.generation}});
+            });
+        }
+    }
+
+    compute_pipeline* render_device::access_compute_pipeline(compute_pipeline_resource_handle handle) noexcept
+    {
+        return reinterpret_cast<compute_pipeline*>(
+            _compute_pipelines->access({.index{handle.id}, .generation{handle.generation}}));
+    }
+
+    const compute_pipeline* render_device::access_compute_pipeline(
+        compute_pipeline_resource_handle handle) const noexcept
+    {
+        return reinterpret_cast<const compute_pipeline*>(
+            _compute_pipelines->access({.index{handle.id}, .generation{handle.generation}}));
+    }
+
+    compute_pipeline_resource_handle render_device::allocate_compute_pipeline()
+    {
+        auto key = _compute_pipelines->acquire_resource();
+        return compute_pipeline_resource_handle(key.index, key.generation);
+    }
+
+    compute_pipeline_resource_handle render_device::create_compute_pipeline(const compute_pipeline_create_info& ci)
+    {
+        return create_compute_pipeline(ci, allocate_compute_pipeline());
+    }
+
+    compute_pipeline_resource_handle render_device::create_compute_pipeline(const compute_pipeline_create_info& ci,
+                                                                            compute_pipeline_resource_handle handle)
+    {
+        if (!handle)
+        {
+            return compute_pipeline_resource_handle();
+        }
+
+        // TODO: Cache Descriptor Set Layouts and Pipeline Layouts
+        std::vector<VkDescriptorSetLayout> set_layouts;
+        std::vector<VkPushConstantRange> ranges;
+
+        for (const auto& info : ci.layout.set_layouts)
+        {
+            std::vector<VkDescriptorSetLayoutBinding> bindings;
+
+            for (const auto& binding : info.bindings)
+            {
+                bindings.push_back(VkDescriptorSetLayoutBinding{
+                    .binding{binding.binding_index},
+                    .descriptorType{to_vulkan(binding.type)},
+                    .descriptorCount{binding.binding_count},
+                    .stageFlags{VK_SHADER_STAGE_ALL_GRAPHICS},
+                    .pImmutableSamplers{nullptr},
+                });
+            }
+
+            VkDescriptorSetLayoutCreateInfo set_layout_ci = {
+                .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO},
+                .pNext{nullptr},
+                .bindingCount{static_cast<std::uint32_t>(bindings.size())},
+                .pBindings{bindings.data()},
+            };
+
+            VkDescriptorSetLayout layout;
+            auto result = _dispatch.createDescriptorSetLayout(&set_layout_ci, nullptr, &layout);
+            if (result != VK_SUCCESS)
+            {
+                logger->error("Failed to create VkDescriptorSetLayout.");
+                return compute_pipeline_resource_handle();
+            }
+
+            set_layouts.push_back(layout);
+        }
+
+        for (const auto& range : ci.layout.push_constants)
+        {
+            ranges.push_back(VkPushConstantRange{
+                .stageFlags{VK_SHADER_STAGE_ALL},
+                .offset{range.offset},
+                .size{range.range},
+            });
+        }
+
+        VkPipelineLayoutCreateInfo pipeline_layout_ci = {
+            .sType{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .setLayoutCount{static_cast<std::uint32_t>(set_layouts.size())},
+            .pSetLayouts{set_layouts.empty() ? nullptr : set_layouts.data()},
+            .pushConstantRangeCount{static_cast<std::uint32_t>(ranges.size())},
+            .pPushConstantRanges{ranges.empty() ? nullptr : ranges.data()},
+        };
+
+        VkPipelineLayout pipeline_layout;
+        auto pipeline_layout_result = _dispatch.createPipelineLayout(&pipeline_layout_ci, nullptr, &pipeline_layout);
+        if (pipeline_layout_result != VK_SUCCESS)
+        {
+            logger->error("Failed to create VkPipelineLayout.");
+            return compute_pipeline_resource_handle();
+        }
+
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(pipeline_layout), VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+                    ci.name.c_str());
+
+        VkShaderModuleCreateInfo compute_module_ci = {
+            .sType{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .codeSize{ci.compute_shader.bytes.size()},
+            .pCode{reinterpret_cast<std::uint32_t*>(ci.compute_shader.bytes.data())},
+        };
+
+        VkShaderModule compute_shader_module{VK_NULL_HANDLE};
+
+        auto module_result = _dispatch.createShaderModule(&compute_module_ci, nullptr, &compute_shader_module);
+        if (module_result != VK_SUCCESS)
+        {
+            logger->error("Failed to create VkShaderModule");
+            return compute_pipeline_resource_handle();
+        }
+
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(compute_shader_module), VK_OBJECT_TYPE_SHADER_MODULE,
+                    ci.compute_shader.name.c_str());
+
+        VkPipelineShaderStageCreateInfo compute_stage{
+            .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .stage{VK_SHADER_STAGE_COMPUTE_BIT},
+            .module{compute_shader_module},
+            .pName{ci.compute_shader.entrypoint.data()},
+            .pSpecializationInfo{nullptr},
+        };
+
+        VkComputePipelineCreateInfo compute_ci = {
+            .sType{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .layout{pipeline_layout},
+            .basePipelineHandle{VK_NULL_HANDLE},
+            .basePipelineIndex{0},
+        };
+
+        compute_pipeline pipeline = {
+            .compute_module{compute_shader_module},
+            .set_layouts{set_layouts},
+            .pipeline_layout{pipeline_layout},
+            .name{ci.name},
+        };
+
+        auto compute_result =
+            _dispatch.createComputePipelines(VK_NULL_HANDLE, 1, &compute_ci, nullptr, &pipeline.pipeline);
+
+        if (compute_result != VK_SUCCESS)
+        {
+            logger->error("Failed to create compute VkPipeline.");
+            return compute_pipeline_resource_handle();
+        }
+
+        name_object(_dispatch, std::bit_cast<std::uint64_t>(pipeline.pipeline), VK_OBJECT_TYPE_PIPELINE,
+                    pipeline.name.c_str());
+
+        auto compute_ptr = access_compute_pipeline(handle);
+        std::construct_at(compute_ptr, std::move(pipeline));
+
+        return handle;
+    }
+
+    void render_device::release_compute_pipeline(compute_pipeline_resource_handle handle)
+    {
+        compute_pipeline* pipeline = access_compute_pipeline(handle);
+        if (pipeline)
+        {
+            _delete_queue->add_to_queue(_current_frame, [this, pipeline, handle]() {
+                _dispatch.destroyPipeline(pipeline->pipeline, nullptr);
+                _dispatch.destroyShaderModule(pipeline->compute_module, nullptr);
+                _dispatch.destroyPipelineLayout(pipeline->pipeline_layout, nullptr);
+                for (auto layout : pipeline->set_layouts)
+                {
+                    _dispatch.destroyDescriptorSetLayout(layout, nullptr);
+                }
+                std::destroy_at(pipeline);
+                _compute_pipelines->release_resource({.index{handle.id}, .generation{handle.generation}});
             });
         }
     }

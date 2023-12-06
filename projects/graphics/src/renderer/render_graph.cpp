@@ -69,7 +69,8 @@ namespace tempest::graphics
 
     graph_pass_builder& graph_pass_builder::add_color_attachment(image_resource_handle handle,
                                                                  resource_access_type access, load_op load,
-                                                                 store_op store, pipeline_stage first_access,
+                                                                 store_op store, math::vec4<float> clear_color,
+                                                                 pipeline_stage first_access,
                                                                  pipeline_stage last_access)
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::COLOR_ATTACHMENT);
@@ -81,6 +82,7 @@ namespace tempest::graphics
             .last_access{last_access},
             .load{load},
             .store{store},
+            .clear_color{clear_color},
         });
         return *this;
     }
@@ -104,7 +106,8 @@ namespace tempest::graphics
 
     graph_pass_builder& graph_pass_builder::add_depth_attachment(image_resource_handle handle,
                                                                  resource_access_type access, load_op load,
-                                                                 store_op store, pipeline_stage first_access,
+                                                                 store_op store, float clear_depth,
+                                                                 pipeline_stage first_access,
                                                                  pipeline_stage last_access)
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::DEPTH_ATTACHMENT);
@@ -116,6 +119,7 @@ namespace tempest::graphics
             .last_access{last_access},
             .load{load},
             .store{store},
+            .clear_depth{clear_depth},
         });
         return *this;
     }
