@@ -5,6 +5,7 @@
 #include "types.hpp"
 
 #include <tempest/memory.hpp>
+#include <tempest/vec4.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -23,6 +24,8 @@ namespace tempest::graphics
         pipeline_stage last_access;
         load_op load;
         store_op store;
+        math::vec4<float> clear_color;
+        float clear_depth;
 
         std::uint32_t set;
         std::uint32_t binding;
@@ -101,6 +104,7 @@ namespace tempest::graphics
       public:
         graph_pass_builder& add_color_attachment(image_resource_handle handle, resource_access_type access,
                                                  load_op load = load_op::LOAD, store_op store = store_op::STORE,
+                                                 math::vec4<float> clear_color = math::vec4(0.0f),
                                                  pipeline_stage first_access = pipeline_stage::INFER,
                                                  pipeline_stage last_access = pipeline_stage::INFER);
         graph_pass_builder& add_external_color_attachment(swapchain_resource_handle, resource_access_type access,
@@ -110,6 +114,7 @@ namespace tempest::graphics
                                                           pipeline_stage last_write = pipeline_stage::INFER);
         graph_pass_builder& add_depth_attachment(image_resource_handle handle, resource_access_type access,
                                                  load_op load = load_op::LOAD, store_op store = store_op::STORE,
+                                                 float clear_depth = 0.0f,
                                                  pipeline_stage first_access = pipeline_stage::INFER,
                                                  pipeline_stage last_access = pipeline_stage::INFER);
         graph_pass_builder& add_sampled_image(image_resource_handle handle, std::uint32_t set, std::uint32_t binding,
@@ -118,7 +123,7 @@ namespace tempest::graphics
         graph_pass_builder& add_external_sampled_image(image_resource_handle handle, std::uint32_t set,
                                                        std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_external_sampled_images(std::span<image_resource_handle> handles, std::uint32_t set,
-                                                       std::uint32_t binding, pipeline_stage usage);
+                                                        std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_blit_target(image_resource_handle handle,
                                             pipeline_stage first_write = pipeline_stage::INFER,
                                             pipeline_stage last_write = pipeline_stage::INFER);

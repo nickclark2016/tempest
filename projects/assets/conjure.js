@@ -29,6 +29,7 @@ project('assets', (prj) => {
 
     uses([
         'tempest:common',
+        'stb:public',
         'tinygltf:public',
         'assets:public',
         'math:public'

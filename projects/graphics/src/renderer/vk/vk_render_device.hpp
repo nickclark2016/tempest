@@ -50,6 +50,15 @@ namespace tempest::graphics::vk
         std::string name;
     };
 
+    struct compute_pipeline
+    {
+        VkShaderModule compute_module;
+        std::vector<VkDescriptorSetLayout> set_layouts;
+        VkPipeline pipeline;
+        VkPipelineLayout pipeline_layout;
+        std::string name;
+    };
+
     struct swapchain
     {
         glfw::window* win;
@@ -253,6 +262,14 @@ namespace tempest::graphics::vk
                                                                    graphics_pipeline_resource_handle handle);
         void release_graphics_pipeline(graphics_pipeline_resource_handle handle) override;
 
+        compute_pipeline* access_compute_pipeline(compute_pipeline_resource_handle handle) noexcept;
+        const compute_pipeline* access_compute_pipeline(compute_pipeline_resource_handle handle) const noexcept;
+        compute_pipeline_resource_handle allocate_compute_pipeline();
+        compute_pipeline_resource_handle create_compute_pipeline(const compute_pipeline_create_info& ci) override;
+        compute_pipeline_resource_handle create_compute_pipeline(const compute_pipeline_create_info& ci,
+                                                                 compute_pipeline_resource_handle handle);
+        void release_compute_pipeline(compute_pipeline_resource_handle handle) override;
+
         swapchain* access_swapchain(swapchain_resource_handle handle) noexcept;
         const swapchain* access_swapchain(swapchain_resource_handle handle) const noexcept;
         swapchain_resource_handle allocate_swapchain();
@@ -338,6 +355,7 @@ namespace tempest::graphics::vk
         std::optional<core::generational_object_pool> _images;
         std::optional<core::generational_object_pool> _buffers;
         std::optional<core::generational_object_pool> _graphics_pipelines;
+        std::optional<core::generational_object_pool> _compute_pipelines;
         std::optional<core::generational_object_pool> _swapchains;
         std::optional<core::generational_object_pool> _samplers;
 

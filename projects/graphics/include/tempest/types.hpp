@@ -3,6 +3,9 @@
 
 #include "window.hpp"
 
+#include <tempest/mat4.hpp>
+#include <tempest/vec3.hpp>
+
 #include <compare>
 #include <cstddef>
 #include <numeric>
@@ -446,6 +449,14 @@ namespace tempest::graphics
         }
     };
 
+    struct compute_pipeline_resource_handle : public gfx_resource_handle
+    {
+        constexpr compute_pipeline_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+            : gfx_resource_handle(id, generation)
+        {
+        }
+    };
+
     struct swapchain_resource_handle : public gfx_resource_handle
     {
         constexpr swapchain_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
@@ -494,6 +505,19 @@ namespace tempest::graphics
 
         virtual command_list& get_commands() = 0;
         virtual void submit_and_wait() = 0;
+    };
+
+    struct camera_data
+    {
+        math::mat4<float> view_matrix;
+        math::mat4<float> proj_matrix;
+        math::mat4<float> view_proj_matrix;
+    };
+
+    struct directional_light
+    {
+        math::vec3<float> light_direction;
+        math::vec4<float> color_illum;
     };
 } // namespace tempest::graphics
 

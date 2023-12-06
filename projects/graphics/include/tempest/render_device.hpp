@@ -51,6 +51,9 @@ namespace tempest::graphics
         virtual graphics_pipeline_resource_handle create_graphics_pipeline(const graphics_pipeline_create_info& ci) = 0;
         virtual void release_graphics_pipeline(graphics_pipeline_resource_handle handle) = 0;
 
+        virtual compute_pipeline_resource_handle create_compute_pipeline(const compute_pipeline_create_info& ci) = 0;
+        virtual void release_compute_pipeline(compute_pipeline_resource_handle handle) = 0;
+
         virtual swapchain_resource_handle create_swapchain(const swapchain_create_info& ci) = 0;
         virtual void release_swapchain(swapchain_resource_handle handle) = 0;
         virtual void recreate_swapchain(swapchain_resource_handle handle) = 0;
