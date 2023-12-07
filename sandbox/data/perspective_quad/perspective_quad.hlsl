@@ -1,4 +1,4 @@
-#include "../common/mesh.hlsl"
+#include "../common/camera.hlsl"
 
 struct SimpleVertex {
     float4 position;

@@ -1291,6 +1291,16 @@ namespace tempest::graphics::vk
             .pScissors{nullptr},
         };
 
+        VkPipelineMultisampleStateCreateInfo multisample_state = {
+            .sType{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO},
+            .pNext{nullptr},
+            .flags{0},
+            .rasterizationSamples{VK_SAMPLE_COUNT_1_BIT},
+            .sampleShadingEnable{VK_FALSE},
+            .alphaToCoverageEnable{VK_FALSE},
+            .alphaToOneEnable{VK_FALSE},
+        };
+
         VkGraphicsPipelineCreateInfo pipeline_ci = {
             .sType{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO},
             .pNext{&dynamic_render},
@@ -1302,7 +1312,7 @@ namespace tempest::graphics::vk
             .pTessellationState{nullptr},
             .pViewportState{&viewport},
             .pRasterizationState{&raster_state},
-            .pMultisampleState{nullptr},
+            .pMultisampleState{&multisample_state},
             .pDepthStencilState{&depth_stencil_state},
             .pColorBlendState{&color_blend_state},
             .pDynamicState{&dynamic_state},
@@ -1808,7 +1818,6 @@ namespace tempest::graphics::vk
                                                        .depthBiasClamp{VK_TRUE},
                                                        .fillModeNonSolid{VK_TRUE},
                                                        .depthBounds{VK_TRUE},
-                                                       .alphaToOne{VK_TRUE},
                                                        .samplerAnisotropy{VK_TRUE},
                                                        .shaderUniformBufferArrayDynamicIndexing{VK_TRUE},
                                                        .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
@@ -1848,6 +1857,7 @@ namespace tempest::graphics::vk
         if (_devices.empty())
         {
             logger->critical("Failed to find suitable device for rendering.");
+            std::exit(EXIT_FAILURE);
         }
     }
 
@@ -1923,9 +1933,9 @@ namespace tempest::graphics::vk
     {
         VkViewport vp = {
             .x{x},
-            .y{y},
+            .y{height - y},
             .width{width},
-            .height{height},
+            .height{-height},
             .minDepth{min_depth},
             .maxDepth{max_depth},
         };

@@ -92,7 +92,7 @@ namespace tempest::graphics::vk
                 case queue_operation_type::GRAPHICS:
                     [[fallthrough]];
                 case queue_operation_type::GRAPHICS_AND_TRANSFER:
-                    return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+                    return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                 case queue_operation_type::COMPUTE:
                     [[fallthrough]];
                 case queue_operation_type::COMPUTE_AND_TRANSFER:
@@ -192,13 +192,13 @@ namespace tempest::graphics::vk
             case buffer_resource_usage::VERTEX:
                 return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
             case buffer_resource_usage::INDEX:
-                return VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+                return VK_ACCESS_INDEX_READ_BIT;
             case buffer_resource_usage::INDIRECT_ARGUMENT:
-                return VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+                return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
             case buffer_resource_usage::TRANSFER_DESTINATION:
-                return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+                return VK_ACCESS_TRANSFER_WRITE_BIT;
             case buffer_resource_usage::TRANSFER_SOURCE:
-                return VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+                return VK_ACCESS_TRANSFER_READ_BIT;
             }
 
             logger->critical("Failed to determine VkAccessFlags for buffer access.");
@@ -774,6 +774,10 @@ namespace tempest::graphics::vk
                 const auto buffer_state_it = _last_known_state.buffers.find(buf.buf.as_uint64());
                 auto vk_buf = _device->access_buffer(buf.buf);
 
+                auto size_per_frame = vk_buf->per_frame_resource ? vk_buf->alloc_info.size / _device->frames_in_flight()
+                                                                 : vk_buf->alloc_info.size;
+                auto offset = vk_buf->per_frame_resource ? size_per_frame * _device->frame_in_flight() : 0;
+
                 render_graph_buffer_state next_state = {
                     .stage_mask{compute_buffer_stage_access(buf.type, buf.usage, pass_ref.operation_type())},
                     .access_mask{compute_buffer_access_mask(buf.type, buf.usage)},
@@ -796,6 +800,11 @@ namespace tempest::graphics::vk
                     .size{next_state.size},
                 };
 
+                if ((next_state.access_mask & (VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)) != 0)
+                {
+                    dst_stage_mask |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+                }
+
                 if (buffer_state_it != _last_known_state.buffers.end()) [[likely]]
                 {
                     render_graph_buffer_state last_state = buffer_state_it->second;
@@ -808,10 +817,14 @@ namespace tempest::graphics::vk
 
                 // if we've got a queue ownership transformation or a write access, force a barrier
                 if (buf_barrier.srcQueueFamilyIndex != buf_barrier.dstQueueFamilyIndex ||
-                    ((buf_barrier.srcAccessMask | buf_barrier.dstAccessMask) & VK_ACCESS_SHADER_WRITE_BIT) != 0)
+                    ((buf_barrier.srcAccessMask | buf_barrier.dstAccessMask) &
+                     (VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)) != 0)
                 {
+                    dst_stage_mask |= next_state.stage_mask;
                     buffer_barriers.push_back(buf_barrier);
                 }
+
+                _last_known_state.buffers[buf.buf.as_uint64()] = next_state;
             }
 
             if (!image_barriers.empty() || !buffer_barriers.empty())
@@ -826,8 +839,11 @@ namespace tempest::graphics::vk
                     dst_stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                 }
 
-                cmd_buffer_alloc.dispatch->cmdPipelineBarrier(cmds, src_stage_mask, dst_stage_mask, 0, 0, nullptr, 0,
-                                                              nullptr, static_cast<uint32_t>(image_barriers.size()),
+                cmd_buffer_alloc.dispatch->cmdPipelineBarrier(cmds, src_stage_mask, dst_stage_mask, 0, 0, nullptr,
+                                                              static_cast<std::uint32_t>(buffer_barriers.size()),
+                                                              buffer_barriers.empty() ? nullptr
+                                                                                      : buffer_barriers.data(),
+                                                              static_cast<uint32_t>(image_barriers.size()),
                                                               image_barriers.empty() ? nullptr : image_barriers.data());
             }
 
@@ -1206,8 +1222,8 @@ namespace tempest::graphics::vk
                 });
 
                 auto buf = _device->access_buffer(buffer.buf);
-                auto buffer_size =
-                    vk_buf->per_frame_resource ? buf->alloc_info.size / _device->frames_in_flight() : buf->alloc_info.size;
+                auto buffer_size = vk_buf->per_frame_resource ? buf->alloc_info.size / _device->frames_in_flight()
+                                                              : buf->alloc_info.size;
 
                 binding_writes[buffer.set].push_back(VkWriteDescriptorSet{
                     .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
@@ -1339,6 +1355,7 @@ namespace tempest::graphics::vk
 
             if (bindings.empty())
             {
+                ++pass_index;
                 continue;
             }
 
