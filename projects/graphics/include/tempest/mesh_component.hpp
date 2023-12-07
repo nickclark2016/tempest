@@ -4,6 +4,7 @@
 #include <tempest/mat4.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <numeric>
 #include <span>
 

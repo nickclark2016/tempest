@@ -1823,6 +1823,53 @@ namespace tempest::graphics::vk
         return static_cast<std::uint32_t>(_devices.size());
     }
 
+    namespace
+    {
+        vkb::PhysicalDeviceSelector select_device(vkb::Instance instance)
+        {
+            vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector(instance)
+                                                       .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
+                                                       .defer_surface_initialization()
+                                                       .require_present()
+                                                       .set_minimum_version(1, 3)
+                                                       .set_required_features({
+                                                           .robustBufferAccess{VK_TRUE},
+                                                           .independentBlend{VK_TRUE},
+                                                           .logicOp{VK_TRUE},
+                                                           .depthClamp{VK_TRUE},
+                                                           .depthBiasClamp{VK_TRUE},
+                                                           .fillModeNonSolid{VK_TRUE},
+                                                           .depthBounds{VK_TRUE},
+                                                           .samplerAnisotropy{VK_TRUE},
+                                                           .shaderUniformBufferArrayDynamicIndexing{VK_TRUE},
+                                                           .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
+                                                           .shaderStorageBufferArrayDynamicIndexing{VK_TRUE},
+                                                           .shaderStorageImageArrayDynamicIndexing{VK_TRUE},
+                                                           .shaderInt64{VK_FALSE},
+                                                       })
+                                                       .set_required_features_12({
+                                                           .drawIndirectCount{VK_TRUE},
+                                                           .shaderUniformBufferArrayNonUniformIndexing{VK_TRUE},
+                                                           .shaderSampledImageArrayNonUniformIndexing{VK_TRUE},
+                                                           .shaderStorageBufferArrayNonUniformIndexing{VK_TRUE},
+                                                           .shaderStorageImageArrayNonUniformIndexing{VK_TRUE},
+                                                           .shaderUniformTexelBufferArrayNonUniformIndexing{VK_TRUE},
+                                                           .shaderStorageTexelBufferArrayNonUniformIndexing{VK_TRUE},
+                                                           .descriptorBindingSampledImageUpdateAfterBind{VK_TRUE},
+                                                           .descriptorBindingStorageImageUpdateAfterBind{VK_TRUE},
+                                                           .descriptorBindingPartiallyBound{VK_TRUE},
+                                                           .descriptorBindingVariableDescriptorCount{VK_TRUE},
+                                                           .imagelessFramebuffer{VK_TRUE},
+                                                           .separateDepthStencilLayouts{VK_TRUE},
+                                                           .bufferDeviceAddress{VK_TRUE},
+                                                       })
+                                                       .set_required_features_13({
+                                                           .dynamicRendering{VK_TRUE},
+                                                       });
+            return selector;
+        }
+    }
+
     graphics::render_device& render_context::create_device(std::uint32_t idx)
     {
         auto devices = enumerate_suitable_devices();
@@ -1833,45 +1880,7 @@ namespace tempest::graphics::vk
             _devices.resize(idx + 1);
         }
 
-        vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector(_instance)
-                                                   .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
-                                                   .defer_surface_initialization()
-                                                   .require_present()
-                                                   .set_minimum_version(1, 3)
-                                                   .set_required_features({
-                                                       .robustBufferAccess{VK_TRUE},
-                                                       .independentBlend{VK_TRUE},
-                                                       .logicOp{VK_TRUE},
-                                                       .depthClamp{VK_TRUE},
-                                                       .depthBiasClamp{VK_TRUE},
-                                                       .fillModeNonSolid{VK_TRUE},
-                                                       .depthBounds{VK_TRUE},
-                                                       .samplerAnisotropy{VK_TRUE},
-                                                       .shaderUniformBufferArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderStorageBufferArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderStorageImageArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderInt64{VK_TRUE},
-                                                   })
-                                                   .set_required_features_12({
-                                                       .drawIndirectCount{VK_TRUE},
-                                                       .shaderUniformBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderSampledImageArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderStorageBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderStorageImageArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderUniformTexelBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderStorageTexelBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .descriptorBindingSampledImageUpdateAfterBind{VK_TRUE},
-                                                       .descriptorBindingStorageImageUpdateAfterBind{VK_TRUE},
-                                                       .descriptorBindingPartiallyBound{VK_TRUE},
-                                                       .descriptorBindingVariableDescriptorCount{VK_TRUE},
-                                                       .imagelessFramebuffer{VK_TRUE},
-                                                       .separateDepthStencilLayouts{VK_TRUE},
-                                                       .bufferDeviceAddress{VK_TRUE},
-                                                   })
-                                                   .set_required_features_13({
-                                                       .dynamicRendering{VK_TRUE},
-                                                   });
+        vkb::PhysicalDeviceSelector selector = select_device(_instance);
 
         auto selection = selector.select_devices();
         _devices[idx] = std::make_unique<render_device>(_alloc, _instance, (*selection)[idx]);
@@ -1881,45 +1890,7 @@ namespace tempest::graphics::vk
 
     std::vector<physical_device_context> render_context::enumerate_suitable_devices()
     {
-        vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector(_instance)
-                                                   .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
-                                                   .defer_surface_initialization()
-                                                   .require_present()
-                                                   .set_minimum_version(1, 3)
-                                                   .set_required_features({
-                                                       .robustBufferAccess{VK_TRUE},
-                                                       .independentBlend{VK_TRUE},
-                                                       .logicOp{VK_TRUE},
-                                                       .depthClamp{VK_TRUE},
-                                                       .depthBiasClamp{VK_TRUE},
-                                                       .fillModeNonSolid{VK_TRUE},
-                                                       .depthBounds{VK_TRUE},
-                                                       .samplerAnisotropy{VK_TRUE},
-                                                       .shaderUniformBufferArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderStorageBufferArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderStorageImageArrayDynamicIndexing{VK_TRUE},
-                                                       .shaderInt64{VK_TRUE},
-                                                   })
-                                                   .set_required_features_12({
-                                                       .drawIndirectCount{VK_TRUE},
-                                                       .shaderUniformBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderSampledImageArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderStorageBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderStorageImageArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderUniformTexelBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .shaderStorageTexelBufferArrayNonUniformIndexing{VK_TRUE},
-                                                       .descriptorBindingSampledImageUpdateAfterBind{VK_TRUE},
-                                                       .descriptorBindingStorageImageUpdateAfterBind{VK_TRUE},
-                                                       .descriptorBindingPartiallyBound{VK_TRUE},
-                                                       .descriptorBindingVariableDescriptorCount{VK_TRUE},
-                                                       .imagelessFramebuffer{VK_TRUE},
-                                                       .separateDepthStencilLayouts{VK_TRUE},
-                                                       .bufferDeviceAddress{VK_TRUE},
-                                                   })
-                                                   .set_required_features_13({
-                                                       .dynamicRendering{VK_TRUE},
-                                                   });
+        vkb::PhysicalDeviceSelector selector = select_device(_instance);
 
         auto selection = selector.select_devices();
         std::vector<physical_device_context> devices;
