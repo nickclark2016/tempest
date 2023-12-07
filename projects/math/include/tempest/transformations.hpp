@@ -15,13 +15,17 @@
 
 namespace tempest::math
 {
-    template <typename T> constexpr vec3<T> front = vec3<T>(static_cast<T>(0), static_cast<T>(0), static_cast<T>(1));
+    template <typename T>
+    constexpr vec3<T> front = vec3<T>(static_cast<T>(0), static_cast<T>(0), static_cast<T>(1));
 
-    template <typename T> constexpr vec3<T> up = vec3<T>(static_cast<T>(0), static_cast<T>(1), static_cast<T>(0));
+    template <typename T>
+    constexpr vec3<T> up = vec3<T>(static_cast<T>(0), static_cast<T>(1), static_cast<T>(0));
 
-    template <typename T> constexpr vec3<T> right = vec3<T>(static_cast<T>(1), static_cast<T>(0), static_cast<T>(0));
+    template <typename T>
+    constexpr vec3<T> right = vec3<T>(static_cast<T>(1), static_cast<T>(0), static_cast<T>(0));
 
-    template <typename T> inline constexpr mat3<T> as_mat3(const quat<T>& q)
+    template <typename T>
+    inline constexpr mat3<T> as_mat3(const quat<T>& q)
     {
         const T n = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
         const T s = n > 0 ? 2 / n : 0;
@@ -47,7 +51,8 @@ namespace tempest::math
         return res;
     }
 
-    template <typename T> inline constexpr quat<T> as_quat(const mat3<T>& m)
+    template <typename T>
+    inline constexpr quat<T> as_quat(const mat3<T>& m)
     {
         quat<T> quat(static_cast<T>(0));
 
@@ -97,7 +102,8 @@ namespace tempest::math
         return quat;
     }
 
-    template <typename T> inline constexpr mat4<T> as_mat4(const quat<T>& q)
+    template <typename T>
+    inline constexpr mat4<T> as_mat4(const quat<T>& q)
     {
         mat4 res(static_cast<T>(1));
         const T n = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
@@ -122,19 +128,22 @@ namespace tempest::math
         return res;
     }
 
-    template <typename T> inline constexpr mat4<T> translate(const mat4<T>& m, const vec3<T>& v)
+    template <typename T>
+    inline constexpr mat4<T> translate(const mat4<T>& m, const vec3<T>& v)
     {
         mat4 res(m);
         res[3] = v[0] * m[0] + v[1] * m[1] + v[2] * m[2] + static_cast<T>(1) * m[3];
         return res;
     }
 
-    template <typename T> inline constexpr mat4<T> translate(const vec3<T>& v)
+    template <typename T>
+    inline constexpr mat4<T> translate(const vec3<T>& v)
     {
         return translate(mat4(static_cast<T>(1)), v);
     }
 
-    template <typename T> inline constexpr mat4<T> rotate(const mat4<T>& m, const T& angle, const vec3<T>& v)
+    template <typename T>
+    inline constexpr mat4<T> rotate(const mat4<T>& m, const T& angle, const vec3<T>& v)
     {
         const T a = angle;
         const T c = cos(a);
@@ -165,12 +174,14 @@ namespace tempest::math
         return res;
     }
 
-    template <typename T> inline constexpr mat4<T> rotate(const T& angle, const vec3<T>& v)
+    template <typename T>
+    inline constexpr mat4<T> rotate(const T& angle, const vec3<T>& v)
     {
         return rotate(mat4(static_cast<T>(1)), angle, v);
     }
 
-    template <typename T> inline constexpr quat<T> rotate(const quat<T>& q, const T& angle, const vec3<T>& axis)
+    template <typename T>
+    inline constexpr quat<T> rotate(const quat<T>& q, const T& angle, const vec3<T>& axis)
     {
         const vec3 normalizedAxis = normalize(axis);
         const T sine = std::sin(angle * static_cast<T>(0.5));
@@ -179,7 +190,8 @@ namespace tempest::math
                            normalizedAxis.z * sine);
     }
 
-    template <typename T> inline constexpr mat4<T> scale(const mat4<T>& m, const vec3<T>& v)
+    template <typename T>
+    inline constexpr mat4<T> scale(const mat4<T>& m, const vec3<T>& v)
     {
         mat4<T> res;
         res[0] = v[0] * m[0];
@@ -189,7 +201,8 @@ namespace tempest::math
         return res;
     }
 
-    template <typename T> inline constexpr mat4<T> scale(const vec3<T>& v)
+    template <typename T>
+    inline constexpr mat4<T> scale(const vec3<T>& v)
     {
         return scale(mat4(static_cast<T>(1)), v);
     }
@@ -289,7 +302,8 @@ namespace tempest::math
         return true;
     }
 
-    template <typename T> inline constexpr mat4<T> perspective(const T aspect, const T fov, const T near, const T far)
+    template <typename T>
+    inline constexpr mat4<T> perspective(const T aspect, const T fov, const T near, const T far)
     {
         assert(near < far && "Near plane distance must be less than far plane distance");
         // 1 / (aspect * tan(fov / 2))  0                       0                               0
@@ -311,14 +325,14 @@ namespace tempest::math
         return mat4(col0, col1, col2, col3);
     }
 
-    template <typename T> inline constexpr mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>&
-    up)
+    template <typename T>
+    inline constexpr mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>& up)
     {
         const auto fwd = normalize(target - eye);
         const auto side = normalize(cross(up, fwd));
         const auto u = cross(fwd, side);
 
-        mat4 look(static_cast<T>(1));
+        mat4<float> look(T(1));
 
         look[0][0] = side.x;
         look[1][0] = side.y;
@@ -330,7 +344,7 @@ namespace tempest::math
         look[1][2] = fwd.y;
         look[2][2] = fwd.z;
         look[3][0] = -dot(side, eye);
-        look[3][1] = -dot(up, eye);
+        look[3][1] = -dot(u, eye);
         look[3][2] = -dot(fwd, eye);
 
         return look;
@@ -367,7 +381,8 @@ namespace tempest::math
         return mat3(tangent, bitangent, normal);
     }
 
-    template <typename T> inline constexpr quat<T> encode_tbn(const mat3<T> tbn)
+    template <typename T>
+    inline constexpr quat<T> encode_tbn(const mat3<T> tbn)
     {
         const mat3 tmp = {tbn[0], cross(tbn[2], tbn[0]), tbn[2]};
         quat q = normalize(as_quat(tmp));
@@ -393,7 +408,8 @@ namespace tempest::math
         return q;
     }
 
-    template <typename T> inline constexpr vec3<T> extract_forward(const quat<T>& rotation)
+    template <typename T>
+    inline constexpr vec3<T> extract_forward(const quat<T>& rotation)
     {
         const T x = static_cast<T>(2) * (rotation.x * rotation.z + rotation.w * rotation.y);
         const T y = static_cast<T>(2) * (rotation.y * rotation.z - rotation.w * rotation.x);
@@ -401,7 +417,8 @@ namespace tempest::math
         return vec3(x, y, z);
     }
 
-    template <typename T> inline constexpr vec3<T> extract_up(const quat<T>& rotation)
+    template <typename T>
+    inline constexpr vec3<T> extract_up(const quat<T>& rotation)
     {
         const T x = static_cast<T>(2) * (rotation.x * rotation.y - rotation.w * rotation.z);
         const T y = static_cast<T>(1) - static_cast<T>(2) * (rotation.x * rotation.x + rotation.z * rotation.z);
@@ -409,7 +426,8 @@ namespace tempest::math
         return vec3(x, y, z);
     }
 
-    template <typename T> inline constexpr vec2<T> encode_direction_to_euler_angles(const vec3<T>& dir)
+    template <typename T>
+    inline constexpr vec2<T> encode_direction_to_euler_angles(const vec3<T>& dir)
     {
         const auto d = normalize(dir);
         const T theta = std::atan(static_cast<T>(1) / d.z);

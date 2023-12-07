@@ -21,12 +21,6 @@ struct ObjectData {
     uint material_id;
 };
 
-struct CameraData {
-    float4x4 proj_matrix;
-    float4x4 view_matrix;
-    float4x4 view_proj_matrix;
-};
-
 struct Vertex {
     float3 position;
     float2 uv0;
