@@ -27,7 +27,7 @@ namespace tempest::logger::spd
 
         // 0 == console, 1 == file
 #if defined(_DEBUG)
-        _logger->sinks()[0]->set_level(spdlog::level::info);
+        _logger->sinks()[0]->set_level(spdlog::level::warn);
         _logger->sinks()[1]->set_level(spdlog::level::debug);
 #else
         _logger->sinks()[0]->set_level(spdlog::level::critical);

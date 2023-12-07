@@ -1805,8 +1805,36 @@ namespace tempest::graphics::vk
     render_context::render_context(core::allocator* alloc)
         : graphics::render_context(alloc), _instance{build_instance()}
     {
+    }
+
+    render_context::~render_context()
+    {
+        _devices.clear();
+        vkb::destroy_instance(_instance);
+    }
+
+    bool render_context::has_suitable_device() const noexcept
+    {
+        return !_devices.empty();
+    }
+
+    std::uint32_t render_context::device_count() const noexcept
+    {
+        return static_cast<std::uint32_t>(_devices.size());
+    }
+
+    graphics::render_device& render_context::create_device(std::uint32_t idx)
+    {
+        auto devices = enumerate_suitable_devices();
+        assert(idx < devices.size() && "Device query index out of bounds.");
+
+        if (idx >= _devices.size())
+        {
+            _devices.resize(idx + 1);
+        }
+
         vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector(_instance)
-                                                   .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+                                                   .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
                                                    .defer_surface_initialization()
                                                    .require_present()
                                                    .set_minimum_version(1, 3)
@@ -1846,41 +1874,68 @@ namespace tempest::graphics::vk
                                                    });
 
         auto selection = selector.select_devices();
+        _devices[idx] = std::make_unique<render_device>(_alloc, _instance, (*selection)[idx]);
+
+        return *(_devices[idx]);
+    }
+
+    std::vector<physical_device_context> render_context::enumerate_suitable_devices()
+    {
+        vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector(_instance)
+                                                   .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
+                                                   .defer_surface_initialization()
+                                                   .require_present()
+                                                   .set_minimum_version(1, 3)
+                                                   .set_required_features({
+                                                       .robustBufferAccess{VK_TRUE},
+                                                       .independentBlend{VK_TRUE},
+                                                       .logicOp{VK_TRUE},
+                                                       .depthClamp{VK_TRUE},
+                                                       .depthBiasClamp{VK_TRUE},
+                                                       .fillModeNonSolid{VK_TRUE},
+                                                       .depthBounds{VK_TRUE},
+                                                       .samplerAnisotropy{VK_TRUE},
+                                                       .shaderUniformBufferArrayDynamicIndexing{VK_TRUE},
+                                                       .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
+                                                       .shaderStorageBufferArrayDynamicIndexing{VK_TRUE},
+                                                       .shaderStorageImageArrayDynamicIndexing{VK_TRUE},
+                                                       .shaderInt64{VK_TRUE},
+                                                   })
+                                                   .set_required_features_12({
+                                                       .drawIndirectCount{VK_TRUE},
+                                                       .shaderUniformBufferArrayNonUniformIndexing{VK_TRUE},
+                                                       .shaderSampledImageArrayNonUniformIndexing{VK_TRUE},
+                                                       .shaderStorageBufferArrayNonUniformIndexing{VK_TRUE},
+                                                       .shaderStorageImageArrayNonUniformIndexing{VK_TRUE},
+                                                       .shaderUniformTexelBufferArrayNonUniformIndexing{VK_TRUE},
+                                                       .shaderStorageTexelBufferArrayNonUniformIndexing{VK_TRUE},
+                                                       .descriptorBindingSampledImageUpdateAfterBind{VK_TRUE},
+                                                       .descriptorBindingStorageImageUpdateAfterBind{VK_TRUE},
+                                                       .descriptorBindingPartiallyBound{VK_TRUE},
+                                                       .descriptorBindingVariableDescriptorCount{VK_TRUE},
+                                                       .imagelessFramebuffer{VK_TRUE},
+                                                       .separateDepthStencilLayouts{VK_TRUE},
+                                                       .bufferDeviceAddress{VK_TRUE},
+                                                   })
+                                                   .set_required_features_13({
+                                                       .dynamicRendering{VK_TRUE},
+                                                   });
+
+        auto selection = selector.select_devices();
+        std::vector<physical_device_context> devices;
+
         if (selection)
         {
-            for (const vkb::PhysicalDevice& phys_dev : selection.value())
+            for (std::size_t i = 0; i < selection->size(); ++i)
             {
-                _devices.emplace_back(std::make_unique<render_device>(alloc, _instance, phys_dev));
+                devices.push_back(physical_device_context{
+                    .id{static_cast<std::uint32_t>(i)},
+                    .name{(*selection)[i].name},
+                });
             }
         }
 
-        if (_devices.empty())
-        {
-            logger->critical("Failed to find suitable device for rendering.");
-            std::exit(EXIT_FAILURE);
-        }
-    }
-
-    render_context::~render_context()
-    {
-        _devices.clear();
-        vkb::destroy_instance(_instance);
-    }
-
-    bool render_context::has_suitable_device() const noexcept
-    {
-        return !_devices.empty();
-    }
-
-    std::uint32_t render_context::device_count() const noexcept
-    {
-        return static_cast<std::uint32_t>(_devices.size());
-    }
-
-    graphics::render_device& render_context::get_device(std::uint32_t idx)
-    {
-        assert(idx < _devices.size() && "Device query index out of bounds.");
-        return *(_devices[idx]);
+        return devices;
     }
 
     resource_deletion_queue::resource_deletion_queue(std::size_t frames_in_flight) : _frames_in_flight{frames_in_flight}

@@ -65,14 +65,41 @@ void render_graph_demo()
 
     auto global_allocator = core::heap_allocator(global_memory_allocator_size);
 
-    auto win = graphics::window_factory::create({
-        .title{"Tempest Render Graph Demo"},
-        .width{1920},
-        .height{1080},
-    });
-
     auto graphics_ctx = graphics::render_context::create(&global_allocator);
-    auto& graphics_device = graphics_ctx->get_device(0);
+
+    auto devices = graphics_ctx->enumerate_suitable_devices();
+
+    std::uint32_t id = std::numeric_limits<std::uint32_t>::max();
+
+    if (devices.size() > 1)
+    {
+        std::cout << "Found Suitable Devices:\n";
+
+        for (auto& device : devices)
+        {
+            std::cout << device.id << " " << device.name << "\n";
+        }
+        std::cout << "Found multiple suitable rendering devices. Select device: ";
+
+        std::cin >> id;
+        if (id >= devices.size() || !std::cin.good())
+        {
+            std::cerr << "Invalid Device Selected.";
+            std::exit(EXIT_FAILURE);
+        }
+    }
+    else if (devices.size() == 1)
+    {
+        std::cout << "Found single suitable rendering device: " << devices[0].name << "\n";
+        id = 0;
+    }
+    else
+    {
+        std::cerr << "Found no suitable rendering devices. Exiting.";
+        std::exit(EXIT_FAILURE);
+    }
+
+    auto& graphics_device = graphics_ctx->create_device(id);
 
     auto water_pipeline = create_water_pipeline(graphics_device);
 
@@ -113,6 +140,12 @@ void render_graph_demo()
         .location{graphics::memory_location::DEVICE},
         .name{"Simulation Parameter Buffer"},
         .per_frame_memory{true},
+    });
+
+    auto win = graphics::window_factory::create({
+        .title{"Tempest Render Graph Demo"},
+        .width{1920},
+        .height{1080},
     });
 
     auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});

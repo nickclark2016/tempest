@@ -381,7 +381,8 @@ namespace tempest::graphics::vk
 
         bool has_suitable_device() const noexcept override;
         std::uint32_t device_count() const noexcept override;
-        graphics::render_device& get_device(std::uint32_t idx) override;
+        graphics::render_device& create_device(std::uint32_t idx) override;
+        std::vector<physical_device_context> enumerate_suitable_devices() override;
 
       private:
         std::vector<std::unique_ptr<render_device>> _devices;

@@ -6,11 +6,19 @@
 #include <tempest/memory.hpp>
 
 #include <compare>
+#include <cstdint>
 #include <memory>
+#include <string>
 
 namespace tempest::graphics
 {
     class render_device;
+
+    struct physical_device_context
+    {
+        std::uint32_t id;
+        std::string name;
+    };
 
     class render_context
     {
@@ -19,7 +27,8 @@ namespace tempest::graphics
 
         virtual bool has_suitable_device() const noexcept = 0;
         virtual std::uint32_t device_count() const noexcept = 0;
-        virtual render_device& get_device(std::uint32_t idx = 0) = 0;
+        virtual render_device& create_device(std::uint32_t idx = 0) = 0;
+        virtual std::vector<physical_device_context> enumerate_suitable_devices() = 0;
 
         static std::unique_ptr<render_context> create(core::allocator* alloc);
 
