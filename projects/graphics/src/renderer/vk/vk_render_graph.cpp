@@ -848,7 +848,7 @@ namespace tempest::graphics::vk
                 };
 
                 VkBufferMemoryBarrier2 buf_barrier_2 = {
-                    .sType{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER},
+                    .sType{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2},
                     .pNext{nullptr},
                     .srcAccessMask{VK_ACCESS_NONE},
                     .dstAccessMask{next_state.access_mask},
@@ -862,7 +862,7 @@ namespace tempest::graphics::vk
                 if ((next_state.access_mask & (VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)) != 0)
                 {
                     dst_stage_mask |= VK_PIPELINE_STAGE_TRANSFER_BIT;
-                    buf_barrier_2.dstStageMask |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    buf_barrier_2.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
                 }
 
                 if (buffer_state_it != _last_known_state.buffers.end()) [[likely]]
@@ -870,10 +870,10 @@ namespace tempest::graphics::vk
                     render_graph_buffer_state last_state = buffer_state_it->second;
 
                     buf_barrier_2.srcAccessMask = buf_barrier.srcAccessMask = last_state.access_mask;
-                    buf_barrier_2.dstAccessMask = buf_barrier.srcQueueFamilyIndex = last_state.queue_family;
+                    buf_barrier_2.srcQueueFamilyIndex = buf_barrier.srcQueueFamilyIndex = last_state.queue_family;
 
                     src_stage_mask |= last_state.stage_mask;
-                    buf_barrier_2.srcStageMask |= last_state.stage_mask;
+                    buf_barrier_2.srcStageMask = last_state.stage_mask;
                 }
 
                 // if we've got a queue ownership transformation or a write access, force a barrier
