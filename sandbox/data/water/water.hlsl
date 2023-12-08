@@ -159,7 +159,6 @@ PSInput VSMain(uint index_id : SV_VERTEXID)
 
     float4 position = float4(x, 0, z, 1.0) + float4(h, 0.0);
 
-
     PSInput result;
     result.world_position = position;
     result.pixel_position = mul(camera_data.proj_matrix, mul(camera_data.view_matrix, position));

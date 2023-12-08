@@ -1864,11 +1864,12 @@ namespace tempest::graphics::vk
                                                            .bufferDeviceAddress{VK_TRUE},
                                                        })
                                                        .set_required_features_13({
+                                                           .synchronization2{VK_TRUE},
                                                            .dynamicRendering{VK_TRUE},
                                                        });
             return selector;
         }
-    }
+    } // namespace
 
     graphics::render_device& render_context::create_device(std::uint32_t idx)
     {
