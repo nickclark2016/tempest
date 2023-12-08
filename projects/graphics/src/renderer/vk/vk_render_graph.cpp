@@ -656,6 +656,10 @@ namespace tempest::graphics::vk
             // compute the transitions we need
             std::vector<VkImageMemoryBarrier> image_barriers;
             std::vector<VkBufferMemoryBarrier> buffer_barriers;
+
+            std::vector<VkImageMemoryBarrier2> image_barriers_2;
+            std::vector<VkBufferMemoryBarrier2> buffer_barriers_2;
+
             VkPipelineStageFlags src_stage_mask{};
             VkPipelineStageFlags dst_stage_mask{};
 
@@ -691,20 +695,45 @@ namespace tempest::graphics::vk
                     },
                 };
 
+                VkImageMemoryBarrier2 img_barrier_2 = {
+                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2},
+                    .pNext{nullptr},
+                    .srcStageMask{VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT},
+                    .srcAccessMask{0},
+                    .dstStageMask{next_state.stage_mask},
+                    .dstAccessMask{next_state.access_mask},
+                    .oldLayout{VK_IMAGE_LAYOUT_UNDEFINED},
+                    .newLayout{next_state.image_layout},
+                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .image{vk_img->image},
+                    .subresourceRange{
+                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                        .baseMipLevel{0},
+                        .levelCount{1},
+                        .baseArrayLayer{0},
+                        .layerCount{1},
+                    },
+                };
+
                 if (swapchain_state_it != _last_known_state.swapchain.end())
                 {
                     swapchain_resource_state last_state = swapchain_state_it->second;
 
-                    barrier.oldLayout = last_state.image_layout;
-                    barrier.srcAccessMask = last_state.access_mask;
+                    img_barrier_2.oldLayout = barrier.oldLayout = last_state.image_layout;
+                    img_barrier_2.srcAccessMask = barrier.srcAccessMask = last_state.access_mask;
 
                     src_stage_mask |= last_state.stage_mask;
                     dst_stage_mask |= next_state.stage_mask;
+
+                    img_barrier_2.srcStageMask = last_state.stage_mask;
+                    img_barrier_2.dstStageMask = next_state.stage_mask;
                 }
 
                 if (barrier.oldLayout != barrier.newLayout)
                 {
                     image_barriers.push_back(barrier);
+                    image_barriers_2.push_back(img_barrier_2);
                 }
 
                 _last_known_state.swapchain[swap.swap.as_uint64()] = next_state;
@@ -747,13 +776,28 @@ namespace tempest::graphics::vk
                     .subresourceRange{vk_img->view_info.subresourceRange},
                 };
 
+                VkImageMemoryBarrier2 img_barrier_2 = {
+                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2},
+                    .pNext{nullptr},
+                    .srcStageMask{VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT},
+                    .srcAccessMask{0},
+                    .dstStageMask{next_state.stage_mask},
+                    .dstAccessMask{next_state.access_mask},
+                    .oldLayout{VK_IMAGE_LAYOUT_UNDEFINED},
+                    .newLayout{next_state.image_layout},
+                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
+                    .image{vk_img->image},
+                    .subresourceRange{vk_img->view_info.subresourceRange},
+                };
+
                 if (image_state_it != _last_known_state.images.end()) [[likely]]
                 {
                     render_graph_image_state last_state = image_state_it->second;
 
-                    img_barrier.oldLayout = last_state.image_layout;
-                    img_barrier.srcAccessMask = last_state.access_mask;
-                    img_barrier.srcQueueFamilyIndex = last_state.queue_family;
+                    img_barrier_2.oldLayout = img_barrier.oldLayout = last_state.image_layout;
+                    img_barrier_2.srcAccessMask = img_barrier.srcAccessMask = last_state.access_mask;
+                    img_barrier_2.srcStageMask |= last_state.stage_mask;
 
                     src_stage_mask |= last_state.stage_mask;
                 }
@@ -762,7 +806,10 @@ namespace tempest::graphics::vk
                     img_barrier.srcQueueFamilyIndex != img_barrier.dstQueueFamilyIndex)
                 {
                     dst_stage_mask |= next_state.stage_mask;
+                    img_barrier_2.dstStageMask |= next_state.stage_mask;
+
                     image_barriers.push_back(img_barrier);
+                    image_barriers_2.push_back(img_barrier_2);
                 }
 
                 // write new state for the end of the frame
@@ -800,19 +847,33 @@ namespace tempest::graphics::vk
                     .size{next_state.size},
                 };
 
+                VkBufferMemoryBarrier2 buf_barrier_2 = {
+                    .sType{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER},
+                    .pNext{nullptr},
+                    .srcAccessMask{VK_ACCESS_NONE},
+                    .dstAccessMask{next_state.access_mask},
+                    .srcQueueFamilyIndex{queue.queue_family_index},
+                    .dstQueueFamilyIndex{next_state.queue_family},
+                    .buffer{vk_buf->buffer},
+                    .offset{next_state.offset},
+                    .size{next_state.size},
+                };
+
                 if ((next_state.access_mask & (VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)) != 0)
                 {
                     dst_stage_mask |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    buf_barrier_2.dstStageMask |= VK_PIPELINE_STAGE_TRANSFER_BIT;
                 }
 
                 if (buffer_state_it != _last_known_state.buffers.end()) [[likely]]
                 {
                     render_graph_buffer_state last_state = buffer_state_it->second;
 
-                    buf_barrier.srcAccessMask = last_state.access_mask;
-                    buf_barrier.srcQueueFamilyIndex = last_state.queue_family;
+                    buf_barrier_2.srcAccessMask = buf_barrier.srcAccessMask = last_state.access_mask;
+                    buf_barrier_2.dstAccessMask = buf_barrier.srcQueueFamilyIndex = last_state.queue_family;
 
                     src_stage_mask |= last_state.stage_mask;
+                    buf_barrier_2.srcStageMask |= last_state.stage_mask;
                 }
 
                 // if we've got a queue ownership transformation or a write access, force a barrier
@@ -820,8 +881,10 @@ namespace tempest::graphics::vk
                     ((buf_barrier.srcAccessMask | buf_barrier.dstAccessMask) &
                      (VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)) != 0)
                 {
+                    buf_barrier_2.dstStageMask |= next_state.stage_mask;
                     dst_stage_mask |= next_state.stage_mask;
                     buffer_barriers.push_back(buf_barrier);
+                    buffer_barriers_2.push_back(buf_barrier_2);
                 }
 
                 _last_known_state.buffers[buf.buf.as_uint64()] = next_state;
@@ -839,12 +902,25 @@ namespace tempest::graphics::vk
                     dst_stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                 }
 
-                cmd_buffer_alloc.dispatch->cmdPipelineBarrier(cmds, src_stage_mask, dst_stage_mask, 0, 0, nullptr,
+                /*cmd_buffer_alloc.dispatch->cmdPipelineBarrier(cmds, src_stage_mask, dst_stage_mask, 0, 0, nullptr,
                                                               static_cast<std::uint32_t>(buffer_barriers.size()),
                                                               buffer_barriers.empty() ? nullptr
                                                                                       : buffer_barriers.data(),
                                                               static_cast<uint32_t>(image_barriers.size()),
-                                                              image_barriers.empty() ? nullptr : image_barriers.data());
+                                                              image_barriers.empty() ? nullptr :
+                   image_barriers.data());*/
+                VkDependencyInfo dep_info = {
+                    .sType{VK_STRUCTURE_TYPE_DEPENDENCY_INFO},
+                    .pNext{nullptr},
+                    .dependencyFlags{},
+                    .memoryBarrierCount{0},
+                    .pMemoryBarriers{nullptr},
+                    .bufferMemoryBarrierCount{static_cast<std::uint32_t>(buffer_barriers_2.size())},
+                    .pBufferMemoryBarriers{buffer_barriers_2.empty() ? nullptr : buffer_barriers_2.data()},
+                    .imageMemoryBarrierCount{static_cast<uint32_t>(image_barriers_2.size())},
+                    .pImageMemoryBarriers{image_barriers_2.empty() ? nullptr : image_barriers_2.data()},
+                };
+                cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
             }
 
             if (pass_ref.operation_type() == queue_operation_type::GRAPHICS)
