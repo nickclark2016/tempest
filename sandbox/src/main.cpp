@@ -3,7 +3,7 @@ extern void simple_triangle_demo();
 
 int main()
 {
-    simple_triangle_demo();
+    render_graph_demo();
 
     return 0;
 }

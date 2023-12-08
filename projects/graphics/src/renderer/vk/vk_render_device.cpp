@@ -1967,7 +1967,7 @@ namespace tempest::graphics::vk
             .maxDepth{max_depth},
         };
 
-        _dispatch->cmdSetViewport(_cmds, viewport_id, 1, &vp);
+        _dispatch->cmdSetViewportWithCount(_cmds, 1, &vp);
 
         return *this;
     }
@@ -1986,7 +1986,7 @@ namespace tempest::graphics::vk
             },
         };
 
-        _dispatch->cmdSetScissor(_cmds, 0, 1, &scissor);
+        _dispatch->cmdSetScissorWithCount(_cmds, 1, &scissor);
 
         return *this;
     }
