@@ -344,6 +344,21 @@ namespace tempest::graphics::vk
             _dispatch.deviceWaitIdle();
         }
 
+        vkb::Instance instance() const noexcept
+        {
+            return _instance;
+        }
+
+        vkb::PhysicalDevice physical_device() const noexcept
+        {
+            return _physical;
+        }
+        
+        vkb::Device logical_device() const noexcept
+        {
+            return _device;
+        }
+
       private:
         core::allocator* _alloc;
         vkb::Instance _instance;

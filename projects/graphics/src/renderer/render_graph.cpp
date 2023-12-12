@@ -439,6 +439,11 @@ namespace tempest::graphics
         return handle;
     }
 
+    void render_graph_compiler::enable_imgui(bool enabled)
+    {
+        _imgui_enabled = enabled;
+    }
+
     std::unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(core::allocator* alloc,
                                                                                   render_device* device)
     {

@@ -1,4 +1,5 @@
 #include <tempest/files.hpp>
+#include <tempest/imgui_context.hpp>
 #include <tempest/input.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/memory.hpp>
@@ -58,11 +59,10 @@ struct alignas(16) water_sim_state
 
 graphics::graphics_pipeline_resource_handle create_water_pipeline(graphics::render_device& device);
 water_sim_state generate_water_sim_state(int num_waves);
+void draw_gui(water_sim_state& state, std::uint32_t fps);
 
-void render_graph_demo()
+void fbm_water_demo()
 {
-    auto offset = offsetof(water_sim_state, time);
-
     auto global_allocator = core::heap_allocator(global_memory_allocator_size);
 
     auto graphics_ctx = graphics::render_context::create(&global_allocator);
@@ -104,6 +104,7 @@ void render_graph_demo()
     auto water_pipeline = create_water_pipeline(graphics_device);
 
     auto rgc = graphics::render_graph_compiler::create_compiler(&global_allocator, &graphics_device);
+    rgc->enable_imgui();
 
     auto color_buffer = rgc->create_image({
         .width{1920},
@@ -148,12 +149,14 @@ void render_graph_demo()
         .height{1080},
     });
 
+    graphics::imgui_context::initialize_for_window(*win);
+
     auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});
 
     auto water_sim_state = generate_water_sim_state(16);
 
     camera_data cameras = {
-        .proj{math::perspective(16.0f / 9.0f, 90.0f, 0.01f, 1000.0f)},
+        .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.01f, 1000.0f)},
         .view{math::look_at(math::vec3<float>(0.0f, 10.0f, 0.0f), math::vec3<float>(15.0f, 2.0f, 15.0f),
                             math::vec3<float>(0.0f, 1.0, 0.0f))},
         .view_proj{1.0f},
@@ -161,7 +164,7 @@ void render_graph_demo()
     };
 
     auto state_upload_pass = rgc->add_graph_pass(
-        "sim_state_upload", graphics::queue_operation_type::TRANSFER, [&](graphics::graph_pass_builder& bldr) {
+        "Water Sim State Buffer Upload Graph Pass", graphics::queue_operation_type::TRANSFER, [&](graphics::graph_pass_builder& bldr) {
             bldr.add_transfer_source_buffer(graphics_device.get_staging_buffer())
                 .add_transfer_destination_buffer(camera_data_buffer)
                 .add_transfer_destination_buffer(wave_data_buffer)
@@ -178,7 +181,7 @@ void render_graph_demo()
         });
 
     auto water_sim_pass = rgc->add_graph_pass(
-        "water_sim_pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
+        "Water Simulation Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
             bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR,
                                       graphics::store_op::STORE, math::vec4<float>(0.0f))
                 .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
@@ -195,12 +198,21 @@ void render_graph_demo()
                 });
         });
 
+    auto imgui_pass =
+        rgc->add_graph_pass("ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
+            bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
+                                      graphics::store_op::STORE)
+                .draw_imgui()
+                .depends_on(water_sim_pass)
+                .on_execute([](auto& cmds) {});
+        });
+
     auto blit_pass =
-        rgc->add_graph_pass("swapchain_target_blit_pass", graphics::queue_operation_type::GRAPHICS_AND_TRANSFER,
+        rgc->add_graph_pass("Swapchain Blit Graph Pass", graphics::queue_operation_type::GRAPHICS_AND_TRANSFER,
                             [&](graphics::graph_pass_builder& bldr) {
                                 bldr.add_blit_source(color_buffer)
                                     .add_external_blit_target(swapchain)
-                                    .depends_on(water_sim_pass)
+                                    .depends_on(imgui_pass)
                                     .on_execute([&](graphics::command_list& cmds) {
                                         cmds.blit(color_buffer, graphics_device.fetch_current_image(swapchain));
                                     });
@@ -251,10 +263,13 @@ void render_graph_demo()
     auto last_tick_time = std::chrono::high_resolution_clock::now();
     auto last_frame_time = last_tick_time;
     std::uint32_t fps_counter = 0;
+    std::uint32_t last_fps = 0;
 
     while (!win->should_close())
     {
         input::poll();
+
+        draw_gui(water_sim_state, last_fps);
 
         graph->execute();
 
@@ -274,7 +289,7 @@ void render_graph_demo()
 
         if (time_since_tick.count() >= 1.0)
         {
-            std::cout << fps_counter << " FPS" << std::endl;
+            last_fps = fps_counter;
             fps_counter = 0;
             last_tick_time = current_time;
         }
@@ -282,6 +297,8 @@ void render_graph_demo()
 
     graphics_device.release_graphics_pipeline(water_pipeline);
     graphics_device.release_swapchain(swapchain);
+
+    graphics::imgui_context::shutdown();
 }
 
 graphics::graphics_pipeline_resource_handle create_water_pipeline(graphics::render_device& device)
@@ -376,4 +393,138 @@ water_sim_state generate_water_sim_state(int num_waves)
     };
 
     return state;
+}
+
+void draw_gui(water_sim_state& water, std::uint32_t fps)
+{
+    graphics::imgui_context::create_frame([&]() {
+        graphics::imgui_context::create_window("Editor", [&]() {
+            graphics::imgui_context::create_tree_node("Performance Metrics", [&]() {
+                graphics::imgui_context::create_table("##Performance Metrics", 2, [&]() {
+                    graphics::imgui_context::next_row();
+                    graphics::imgui_context::next_column();
+                    graphics::imgui_context::label("Frames per Second");
+                    graphics::imgui_context::next_column();
+                    graphics::imgui_context::label(std::format("{}", fps));
+                });
+            });
+
+            graphics::imgui_context::create_tree_node("Water Simulation Parameters", [&]() {
+                graphics::imgui_context::create_table("##Water Simulation Properties", 2, [&]() {
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Frequency");
+                        graphics::imgui_context::next_column();
+                        water.frequency = graphics::imgui_context::float_slider("##wave_freq", 0, 10, water.frequency);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Frequency Multiplier");
+                        graphics::imgui_context::next_column();
+                        water.frequency_multiplier = graphics::imgui_context::float_slider(
+                            "##wave_freq_multiplier", 0, 5, water.frequency_multiplier);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Initial Seed");
+                        graphics::imgui_context::next_column();
+                        water.initial_seed =
+                            graphics::imgui_context::float_slider("##initial_seed", -1024, 1024, water.initial_seed);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Seed Iterator");
+                        graphics::imgui_context::next_column();
+                        water.seed_iter =
+                            graphics::imgui_context::float_slider("##seed_iter", -1024, 1024, water.seed_iter);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Amplitude");
+                        graphics::imgui_context::next_column();
+                        water.amplitude =
+                            graphics::imgui_context::float_slider("##wave_amplitude", 0, 5, water.amplitude);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Amplitude Multiplier");
+                        graphics::imgui_context::next_column();
+                        water.amplitude_multiplier = graphics::imgui_context::float_slider(
+                            "##wave_amplitude_multiplier", 0, 1, water.amplitude_multiplier);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Initial Wave Speed");
+                        graphics::imgui_context::next_column();
+                        water.initial_speed =
+                            graphics::imgui_context::float_slider("##wave_speed", 0, 10, water.initial_seed);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Speed Ramp");
+                        graphics::imgui_context::next_column();
+                        water.speed_ramp =
+                            graphics::imgui_context::float_slider("##wave_speed_ramp", 0, 10, water.speed_ramp);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Drag");
+                        graphics::imgui_context::next_column();
+                        water.drag = graphics::imgui_context::float_slider("##wave_drag", 0, 1, water.drag);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Height");
+                        graphics::imgui_context::next_column();
+                        water.height = graphics::imgui_context::float_slider("##wave_height", 0, 10, water.height);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Max Peak");
+                        graphics::imgui_context::next_column();
+                        water.max_peak =
+                            graphics::imgui_context::float_slider("##wave_max_peak", 0, 10, water.max_peak);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Peak Offset");
+                        graphics::imgui_context::next_column();
+                        water.peak_offset =
+                            graphics::imgui_context::float_slider("##wave_peak_offset", 0, 10, water.peak_offset);
+                    }
+
+                    {
+                        graphics::imgui_context::next_row();
+                        graphics::imgui_context::next_column();
+                        graphics::imgui_context::label("Wave Count");
+                        graphics::imgui_context::next_column();
+                        water.num_waves = graphics::imgui_context::int_slider("##wave_count", 0, 256, water.num_waves);
+                    }
+                });
+            });
+        });
+    });
 }
