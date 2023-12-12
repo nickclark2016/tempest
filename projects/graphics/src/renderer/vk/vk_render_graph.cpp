@@ -8,6 +8,8 @@
 #include <ranges>
 #include <unordered_set>
 
+#include <backends/imgui_impl_vulkan.h>
+
 namespace tempest::graphics::vk
 {
     namespace
@@ -37,7 +39,7 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        VkPipelineStageFlags compute_image_stage_access(resource_access_type type, image_resource_usage usage,
+        VkPipelineStageFlags2 compute_image_stage_access(resource_access_type type, image_resource_usage usage,
                                                         pipeline_stage stage)
         {
             switch (usage)
@@ -48,30 +50,30 @@ namespace tempest::graphics::vk
                 case resource_access_type::READ_WRITE:
                     [[fallthrough]];
                 case resource_access_type::READ:
-                    return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
                 case resource_access_type::WRITE:
-                    return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
                 }
                 break;
             }
             case image_resource_usage::DEPTH_ATTACHMENT:
-                return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
             case image_resource_usage::SAMPLED:
-                return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             case image_resource_usage::STORAGE: {
                 switch (stage)
                 {
                 case pipeline_stage::COMPUTE:
-                    return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                    return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
                 case pipeline_stage::FRAGMENT:
-                    return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                    return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
                 }
                 break;
             }
             case image_resource_usage::TRANSFER_SOURCE:
                 [[fallthrough]];
             case image_resource_usage::TRANSFER_DESTINATION:
-                return VK_PIPELINE_STAGE_TRANSFER_BIT;
+                return VK_PIPELINE_STAGE_2_BLIT_BIT;
             case image_resource_usage::PRESENT:
                 return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
             }
@@ -80,7 +82,7 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        VkPipelineStageFlags compute_buffer_stage_access(resource_access_type type, buffer_resource_usage usage,
+        VkPipelineStageFlags2 compute_buffer_stage_access(resource_access_type type, buffer_resource_usage usage,
                                                          queue_operation_type ops)
         {
             switch (usage)
@@ -92,24 +94,24 @@ namespace tempest::graphics::vk
                 case queue_operation_type::GRAPHICS:
                     [[fallthrough]];
                 case queue_operation_type::GRAPHICS_AND_TRANSFER:
-                    return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                    return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
                 case queue_operation_type::COMPUTE:
                     [[fallthrough]];
                 case queue_operation_type::COMPUTE_AND_TRANSFER:
-                    return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                    return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
                 }
                 break;
             }
             case buffer_resource_usage::VERTEX:
                 [[fallthrough]];
             case buffer_resource_usage::INDEX:
-                return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+                return VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
             case buffer_resource_usage::INDIRECT_ARGUMENT:
-                return VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+                return VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
             case buffer_resource_usage::TRANSFER_DESTINATION:
                 [[fallthrough]];
             case buffer_resource_usage::TRANSFER_SOURCE:
-                return VK_PIPELINE_STAGE_TRANSFER_BIT;
+                return VK_PIPELINE_STAGE_2_COPY_BIT;
             }
 
             logger->critical("Failed to determine VkPipelineStageFlags for buffer access.");
@@ -205,6 +207,15 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
+        bool has_write_mask(VkAccessFlags2 access)
+        {
+            static constexpr VkAccessFlags2 write_access_mask =
+                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT |
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_HOST_WRITE_BIT |
+                VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            return (access & write_access_mask) != 0;
+        }
+
         VkAttachmentLoadOp compute_load_op(load_op load)
         {
             return static_cast<VkAttachmentLoadOp>(load);
@@ -260,6 +271,25 @@ namespace tempest::graphics::vk
             }
 
             return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        }
+
+        void begin_marked_region(const vkb::DispatchTable& dispatch, VkCommandBuffer buf, std::string_view name)
+        {
+#ifdef _DEBUG
+            VkDebugUtilsLabelEXT label = {
+                .sType{VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT},
+                .pNext{nullptr},
+                .pLabelName{name.data()},
+            };
+            dispatch.cmdBeginDebugUtilsLabelEXT(buf, &label);
+#endif
+        }
+
+        void end_marked_region(const vkb::DispatchTable& dispatch, VkCommandBuffer buf)
+        {
+#ifdef _DEBUG
+            dispatch.cmdEndDebugUtilsLabelEXT(buf);
+#endif
         }
     } // namespace
 
@@ -439,7 +469,7 @@ namespace tempest::graphics::vk
 
     render_graph::render_graph(core::allocator* alloc, render_device* device,
                                std::span<graphics::graph_pass_builder> pass_builders,
-                               std::unique_ptr<render_graph_resource_library>&& resources)
+                               std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled)
         : _alloc{alloc}, _device{device}, _resource_lib{std::move(resources)}
     {
         graphics::dependency_graph pass_graph;
@@ -463,6 +493,76 @@ namespace tempest::graphics::vk
         }
 
         build_descriptor_sets();
+
+        if (imgui_enabled)
+        {
+            VkDescriptorPoolSize pool_sizes[] = {
+                {
+                    .type{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
+                    .descriptorCount{1},
+                },
+            };
+
+            VkDescriptorPoolCreateInfo pool_ci = {
+                .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO},
+                .pNext{nullptr},
+                .flags{VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT},
+                .maxSets{1},
+                .poolSizeCount{1},
+                .pPoolSizes{pool_sizes},
+            };
+
+            imgui_render_graph_context ctx = {
+                .instance{_device->instance().instance},
+                .dev{_device->logical_device().device},
+                .instance_proc_addr{_device->instance().fp_vkGetInstanceProcAddr},
+                .dev_proc_addr{_device->logical_device().fp_vkGetDeviceProcAddr},
+                .imgui_desc_pool{VK_NULL_HANDLE},
+            };
+
+            auto res = _device->dispatch().createDescriptorPool(&pool_ci, nullptr, &ctx.imgui_desc_pool);
+            if (res != VK_SUCCESS)
+            {
+                logger->error("Failed to create VkDescriptorPool for ImGUI context.");
+                return;
+            }
+
+            ImGui_ImplVulkan_InitInfo init_info = {
+                .Instance{_device->instance().instance},
+                .PhysicalDevice{_device->physical_device().physical_device},
+                .Device{_device->logical_device().device},
+                .QueueFamily{_device->get_queue().queue_family_index},
+                .Queue{_device->get_queue().queue},
+                .DescriptorPool{ctx.imgui_desc_pool},
+                .Subpass{0},
+                .MinImageCount{static_cast<std::uint32_t>(_device->frames_in_flight())},
+                .ImageCount{static_cast<std::uint32_t>(_device->frames_in_flight())},
+                .MSAASamples{VK_SAMPLE_COUNT_1_BIT},
+                .UseDynamicRendering{true},
+                .CheckVkResultFn{[](VkResult res) {
+                    if (res != VK_SUCCESS)
+                    {
+                        logger->error("ImGUI Vulkan returned non-success result: {}",
+                                      static_cast<std::underlying_type_t<VkResult>>(res));
+                    }
+                }},
+            };
+
+            ctx.init_info = init_info;
+            _imgui_ctx = ctx;
+
+            ImGui_ImplVulkan_LoadFunctions(
+                [](const char* fn_name, void* user_data) {
+                    imgui_render_graph_context* ctx = reinterpret_cast<imgui_render_graph_context*>(user_data);
+                    PFN_vkVoidFunction instance_addr = ctx->instance_proc_addr(ctx->instance, fn_name);
+                    PFN_vkVoidFunction device_addr = ctx->dev_proc_addr(ctx->dev, fn_name);
+                    return device_addr ? device_addr : instance_addr;
+                },
+                &_imgui_ctx.value());
+
+            ImGui_ImplVulkan_Init(&_imgui_ctx->init_info, VK_NULL_HANDLE);
+            ImGui_ImplVulkan_CreateFontsTexture();
+        }
     }
 
     render_graph::~render_graph()
@@ -482,6 +582,13 @@ namespace tempest::graphics::vk
         }
 
         _device->idle();
+
+        if (_imgui_ctx)
+        {
+            ImGui_ImplVulkan_DestroyFontsTexture();
+            ImGui_ImplVulkan_Shutdown();
+            _device->dispatch().destroyDescriptorPool(_imgui_ctx->imgui_desc_pool, nullptr);
+        }
 
         for (auto& frame : _per_frame)
         {
@@ -652,6 +759,7 @@ namespace tempest::graphics::vk
         for (auto pass_ref_wrapper : _active_pass_set)
         {
             auto& pass_ref = pass_ref_wrapper.get();
+            begin_marked_region(_device->dispatch(), cmds, pass_ref.name());
 
             std::vector<VkImageMemoryBarrier2> image_barriers_2;
             std::vector<VkBufferMemoryBarrier2> buffer_barriers_2;
@@ -700,7 +808,8 @@ namespace tempest::graphics::vk
                     img_barrier_2.dstStageMask = next_state.stage_mask;
                 }
 
-                if (img_barrier_2.oldLayout != img_barrier_2.newLayout)
+                if (img_barrier_2.oldLayout != img_barrier_2.newLayout || has_write_mask(img_barrier_2.srcAccessMask) ||
+                    has_write_mask(img_barrier_2.dstAccessMask))
                 {
                     image_barriers_2.push_back(img_barrier_2);
                 }
@@ -751,7 +860,8 @@ namespace tempest::graphics::vk
                 }
 
                 if (img_barrier_2.oldLayout != img_barrier_2.newLayout ||
-                    img_barrier_2.srcQueueFamilyIndex != img_barrier_2.dstQueueFamilyIndex)
+                    img_barrier_2.srcQueueFamilyIndex != img_barrier_2.dstQueueFamilyIndex ||
+                    has_write_mask(img_barrier_2.srcAccessMask) || has_write_mask(img_barrier_2.dstAccessMask))
                 {
                     img_barrier_2.dstStageMask |= next_state.stage_mask;
                     image_barriers_2.push_back(img_barrier_2);
@@ -808,8 +918,7 @@ namespace tempest::graphics::vk
 
                 // if we've got a queue ownership transformation or a write access, force a barrier
                 if (buf_barrier_2.srcQueueFamilyIndex != buf_barrier_2.dstQueueFamilyIndex ||
-                    ((buf_barrier_2.srcAccessMask | buf_barrier_2.dstAccessMask) &
-                     (VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)) != 0)
+                    has_write_mask(buf_barrier_2.srcAccessMask) || has_write_mask(buf_barrier_2.dstAccessMask))
                 {
                     buf_barrier_2.dstStageMask |= next_state.stage_mask;
                     buffer_barriers_2.push_back(buf_barrier_2);
@@ -840,6 +949,7 @@ namespace tempest::graphics::vk
                 std::vector<VkRenderingAttachmentInfo> color_attachments;
                 VkRenderingAttachmentInfo depth_attachment;
                 bool has_depth = false;
+                VkFormat first_color_fmt{VK_FORMAT_UNDEFINED};
 
                 for (const auto& sc : pass_ref.external_swapchain_usage())
                 {
@@ -872,6 +982,11 @@ namespace tempest::graphics::vk
                         };
 
                         color_attachments.push_back(info);
+
+                        if (first_color_fmt == VK_FORMAT_UNDEFINED)
+                        {
+                            first_color_fmt = vk_img->img_info.format;
+                        }
                     }
                 }
 
@@ -914,6 +1029,11 @@ namespace tempest::graphics::vk
                         };
 
                         color_attachments.push_back(info);
+
+                        if (first_color_fmt == VK_FORMAT_UNDEFINED)
+                        {
+                            first_color_fmt = vk_img->img_info.format;
+                        }
                     }
                     else if (img.usage == image_resource_usage::DEPTH_ATTACHMENT)
                     {
@@ -950,6 +1070,22 @@ namespace tempest::graphics::vk
                 };
 
                 dispatch->cmdBeginRendering(cmds, &render_info);
+
+                if (pass_ref.should_draw_imgui())
+                {
+                    _imgui_ctx->init_info.ColorAttachmentFormat = first_color_fmt;
+                    if (!_imgui_ctx->initialized)
+                    {
+                        ImGui_ImplVulkan_GetBackendData()->VulkanInitInfo.ColorAttachmentFormat = first_color_fmt;
+                        ImGui_ImplVulkan_CreateDeviceObjects();
+                        _imgui_ctx->initialized = true;
+                    }
+
+                    ImGui_ImplVulkan_NewFrame();
+                    ImGui::Render();
+                    ImDrawData* data = ImGui::GetDrawData();
+                    ImGui_ImplVulkan_RenderDrawData(data, cmds);
+                }
             }
 
             std::size_t pass_idx = _pass_index_map[pass_ref.handle().as_uint64()];
@@ -977,6 +1113,8 @@ namespace tempest::graphics::vk
             {
                 dispatch->cmdEndRendering(cmds);
             }
+
+            end_marked_region(_device->dispatch(), cmds);
         }
 
         VkPipelineStageFlags final_transition_flags{0};
@@ -1450,6 +1588,7 @@ namespace tempest::graphics::vk
         return std::make_unique<vk::render_graph>(
             _alloc, static_cast<render_device*>(_device), _builders,
             std::unique_ptr<vk::render_graph_resource_library>(
-                static_cast<vk::render_graph_resource_library*>(_resource_lib.release())));
+                static_cast<vk::render_graph_resource_library*>(_resource_lib.release())),
+            _imgui_enabled);
     }
 } // namespace tempest::graphics::vk

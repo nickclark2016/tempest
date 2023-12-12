@@ -1600,7 +1600,7 @@ namespace tempest::graphics::vk
                 .add_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                 .set_required_min_image_count(info.desired_frame_count)
                 .set_desired_extent(width, height)
-                .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+                .set_desired_present_mode(info.use_vsync ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR)
                 .set_desired_format({.format{VK_FORMAT_B8G8R8A8_SRGB}, .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}});
 
         auto result = swap_bldr.build();
@@ -1707,7 +1707,7 @@ namespace tempest::graphics::vk
                 .add_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                 .set_required_min_image_count(sc->sc.image_count)
                 .set_desired_extent(width, height)
-                .set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
+                .set_desired_present_mode(old_swap.present_mode)
                 .set_desired_format({.format{VK_FORMAT_B8G8R8A8_SRGB}, .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}})
                 .set_old_swapchain(sc->sc);
 

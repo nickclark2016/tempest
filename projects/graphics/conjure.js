@@ -1,4 +1,4 @@
-project('graphics', (prj) => {
+project('graphics', (_) => {
     kind('StaticLib');
     language('C++');
     
@@ -12,6 +12,7 @@ project('graphics', (prj) => {
         'core',
         'ecs',
         'glfw',
+        'imgui',
         'math',
         'logger',
         'vk-bootstrap',
@@ -33,11 +34,12 @@ project('graphics', (prj) => {
         'core:public',
         'ecs:public',
         'glfw:public',
-        'vk-bootstrap:public',
-        'vma:public',
         'graphics:public',
+        'imgui:public',
         'logger:public',
         'math:public',
+        'vk-bootstrap:public',
+        'vma:public',
         'wyhash:public',
     ]);
 });

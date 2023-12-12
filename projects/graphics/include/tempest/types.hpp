@@ -336,6 +336,7 @@ namespace tempest::graphics
     {
         iwindow* win;
         std::uint32_t desired_frame_count;
+        bool use_vsync;
     };
 
     struct texture_mip_descriptor

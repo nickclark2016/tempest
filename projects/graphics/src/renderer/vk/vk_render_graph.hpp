@@ -9,6 +9,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <backends/imgui_impl_vulkan.h>
+
 #include <array>
 #include <bitset>
 
@@ -19,64 +21,64 @@ namespace tempest::graphics::vk
 
     struct render_graph_buffer_state
     {
-        VkPipelineStageFlags stage_mask;
-        VkAccessFlags access_mask;
-        VkBuffer buffer;
-        VkDeviceSize offset;
-        VkDeviceSize size;
-        std::uint32_t queue_family;
+        VkPipelineStageFlags2 stage_mask{0};
+        VkAccessFlags access_mask{0};
+        VkBuffer buffer{VK_NULL_HANDLE};
+        VkDeviceSize offset{0};
+        VkDeviceSize size{0};
+        std::uint32_t queue_family{0};
     };
 
     struct render_graph_image_state
     {
-        VkPipelineStageFlags stage_mask;
-        VkAccessFlags access_mask;
-        VkImageLayout image_layout;
-        VkImage image;
-        VkImageAspectFlags aspect;
-        std::uint32_t base_mip;
-        std::uint32_t mip_count;
-        std::uint32_t base_array_layer;
-        std::uint32_t layer_count;
-        std::uint32_t queue_family;
+        VkPipelineStageFlags2 stage_mask{0};
+        VkAccessFlags access_mask{0};
+        VkImageLayout image_layout{VK_IMAGE_LAYOUT_UNDEFINED};
+        VkImage image{VK_NULL_HANDLE};
+        VkImageAspectFlags aspect{0};
+        std::uint32_t base_mip{0};
+        std::uint32_t mip_count{0};
+        std::uint32_t base_array_layer{0};
+        std::uint32_t layer_count{0};
+        std::uint32_t queue_family{0};
     };
 
     struct swapchain_resource_state
     {
         swapchain_resource_handle swapchain;
-        VkImageLayout image_layout;
-        VkPipelineStageFlags stage_mask;
-        VkAccessFlags access_mask;
+        VkImageLayout image_layout{VK_IMAGE_LAYOUT_UNDEFINED};
+        VkPipelineStageFlags2 stage_mask{0};
+        VkAccessFlags access_mask{0};
     };
 
     struct external_image_state
     {
-        std::uint32_t count;
-        std::uint32_t binding;
-        std::uint32_t set;
+        std::uint32_t count{0};
+        std::uint32_t binding{0};
+        std::uint32_t set{0};
         
         std::vector<VkDescriptorImageInfo> images;
     };
 
     struct external_sampler_state
     {
-        std::uint32_t count;
-        std::uint32_t binding;
-        std::uint32_t set;
+        std::uint32_t count{0};
+        std::uint32_t binding{0};
+        std::uint32_t set{0};
 
         std::vector<VkDescriptorImageInfo> samplers;
     };
 
     struct per_frame_data
     {
-        VkDescriptorPool desc_pool;
-        VkFence commands_complete;
+        VkDescriptorPool desc_pool{VK_NULL_HANDLE};
+        VkFence commands_complete{VK_NULL_HANDLE};
     };
 
     struct descriptor_set_frame_state
     {
-        std::vector<std::uint32_t> dynamic_offsets;
-        std::array<VkDescriptorSet, 8> descriptor_sets;
+        std::vector<std::uint32_t> dynamic_offsets{};
+        std::array<VkDescriptorSet, 8> descriptor_sets{};
         std::size_t last_frame_changed{0};
     };
 
@@ -99,12 +101,24 @@ namespace tempest::graphics::vk
         std::vector<external_sampler_state> external_samplers;
     };
 
+    struct imgui_render_graph_context
+    {
+        VkInstance instance;
+        VkDevice dev;
+        PFN_vkGetInstanceProcAddr instance_proc_addr;
+        PFN_vkGetDeviceProcAddr dev_proc_addr;
+
+        VkDescriptorPool imgui_desc_pool;
+        ImGui_ImplVulkan_InitInfo init_info;
+        bool initialized{false};
+    };
+
     class render_graph : public graphics::render_graph
     {
       public:
         explicit render_graph(core::allocator* alloc, render_device* device,
                               std::span<graphics::graph_pass_builder> pass_builders,
-                              std::unique_ptr<render_graph_resource_library>&& resources);
+                              std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled);
         ~render_graph() override;
         void execute() override;
 
@@ -130,6 +144,8 @@ namespace tempest::graphics::vk
         bool _recreated_sc_last_frame{false};
 
         std::vector<descriptor_set_state> _descriptor_set_states;
+
+        std::optional<imgui_render_graph_context> _imgui_ctx;
     };
 
     class render_graph_resource_library : public graphics::render_graph_resource_library

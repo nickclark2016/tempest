@@ -170,6 +170,18 @@ namespace tempest::graphics
 
         std::string_view name() const noexcept;
 
+        graph_pass_builder& draw_imgui()
+        {
+            _draw_imgui = true;
+
+            return *this;
+        }
+
+        bool should_draw_imgui() const noexcept
+        {
+            return _draw_imgui;
+        }
+
         inline graph_pass_handle handle() const noexcept
         {
             return _self;
@@ -234,6 +246,8 @@ namespace tempest::graphics
         graph_pass_handle _self;
         std::string _name;
 
+        bool _draw_imgui{false};
+
         void _infer();
     };
 
@@ -254,6 +268,8 @@ namespace tempest::graphics
         graph_pass_handle add_graph_pass(std::string_view name, queue_operation_type type,
                                          std::function<void(graph_pass_builder&)> build);
 
+        void enable_imgui(bool enabled = true);
+
         virtual std::unique_ptr<render_graph> compile() && = 0;
 
         static std::unique_ptr<render_graph_compiler> create_compiler(core::allocator* alloc, render_device* device);
@@ -263,6 +279,7 @@ namespace tempest::graphics
         core::allocator* _alloc;
         std::vector<graph_pass_builder> _builders;
         std::unique_ptr<render_graph_resource_library> _resource_lib;
+        bool _imgui_enabled = false;
 
         explicit render_graph_compiler(core::allocator* alloc, render_device* device);
     };
