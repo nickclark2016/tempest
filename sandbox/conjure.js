@@ -1,4 +1,4 @@
-project('sandbox', (prj) => {
+project('sandbox', (_) => {
     kind('ConsoleApp');
     language('C++');
 
