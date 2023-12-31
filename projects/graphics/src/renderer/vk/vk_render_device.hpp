@@ -27,6 +27,7 @@ namespace tempest::graphics::vk
         VkImageView view;
         VkImageCreateInfo img_info;
         VkImageViewCreateInfo view_info;
+        bool persistent;
         std::string name;
     };
 
@@ -126,9 +127,13 @@ namespace tempest::graphics::vk
         command_list& copy(buffer_resource_handle src, image_resource_handle dst, std::size_t buffer_offset,
                            std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level,
                            std::int32_t offset_x = 0, std::int32_t offset_y = 0) override;
+        command_list& clear_color(image_resource_handle handle, float r, float g, float b, float a) override;
 
         command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
                                        image_resource_usage new_usage) override;
+
+        command_list& use_pipeline(compute_pipeline_resource_handle pipeline) override;
+        command_list& dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z) override;
 
       private:
         VkCommandBuffer _cmds;
@@ -353,7 +358,7 @@ namespace tempest::graphics::vk
         {
             return _physical;
         }
-        
+
         vkb::Device logical_device() const noexcept
         {
             return _device;

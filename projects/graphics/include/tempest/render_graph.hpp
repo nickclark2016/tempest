@@ -124,9 +124,17 @@ namespace tempest::graphics
                                                        std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_external_sampled_images(std::span<image_resource_handle> handles, std::uint32_t set,
                                                         std::uint32_t binding, pipeline_stage usage);
+        graph_pass_builder& add_external_storage_image(image_resource_handle handle, resource_access_type access,
+                                                       std::uint32_t set, std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_blit_target(image_resource_handle handle,
                                             pipeline_stage first_write = pipeline_stage::INFER,
                                             pipeline_stage last_write = pipeline_stage::INFER);
+        graph_pass_builder& add_transfer_target(image_resource_handle handle,
+                                                pipeline_stage first_write = pipeline_stage::INFER,
+                                                pipeline_stage last_write = pipeline_stage::INFER)
+        {
+            return add_blit_target(handle, first_write, last_write);
+        }
         graph_pass_builder& add_external_blit_target(swapchain_resource_handle,
                                                      pipeline_stage first_write = pipeline_stage::INFER,
                                                      pipeline_stage last_write = pipeline_stage::INFER);
@@ -217,7 +225,7 @@ namespace tempest::graphics
             return _external_swapchain_states;
         }
 
-        std::span<const external_image_resource_state> external_sampled_images() const noexcept
+        std::span<const external_image_resource_state> external_images() const noexcept
         {
             return _external_image_states;
         }

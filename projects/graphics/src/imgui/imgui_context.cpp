@@ -71,6 +71,14 @@ namespace tempest::graphics
         }
     }
 
+    void imgui_context::create_header(std::string_view name, std::function<void()> contents)
+    {
+        if (ImGui::CollapsingHeader(name.data()))
+        {
+            contents();
+        }
+    }
+
     void imgui_context::label(std::string_view contents)
     {
         ImGui::Text(contents.data());
@@ -83,11 +91,28 @@ namespace tempest::graphics
         return value;
     }
 
+    math::vec2<float> imgui_context::float2_slider(std::string_view name, float min, float max, math::vec2<float> current_value)
+    {
+        ImGui::SliderFloat2(name.data(), current_value.data, min, max);
+        return current_value;
+    }
+
     int imgui_context::int_slider(std::string_view name, int min, int max, int current_value)
     {
         int value = current_value;
         ImGui::SliderInt(name.data(), &value, min, max, "%d");
         return value;
+    }
+
+    bool imgui_context::checkbox(std::string_view label, bool current_value)
+    {
+        ImGui::Checkbox(label.data(), &current_value);
+        return current_value;
+    }
+
+    bool imgui_context::button(std::string label)
+    {
+        return ImGui::Button(label.data());
     }
 
     void imgui_context::shutdown()

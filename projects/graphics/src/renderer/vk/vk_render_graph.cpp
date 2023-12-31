@@ -40,7 +40,7 @@ namespace tempest::graphics::vk
         }
 
         VkPipelineStageFlags2 compute_image_stage_access(resource_access_type type, image_resource_usage usage,
-                                                        pipeline_stage stage)
+                                                         pipeline_stage stage)
         {
             switch (usage)
             {
@@ -61,19 +61,12 @@ namespace tempest::graphics::vk
             case image_resource_usage::SAMPLED:
                 return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             case image_resource_usage::STORAGE: {
-                switch (stage)
-                {
-                case pipeline_stage::COMPUTE:
-                    return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                case pipeline_stage::FRAGMENT:
-                    return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-                }
-                break;
+                return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             }
             case image_resource_usage::TRANSFER_SOURCE:
                 [[fallthrough]];
             case image_resource_usage::TRANSFER_DESTINATION:
-                return VK_PIPELINE_STAGE_2_BLIT_BIT;
+                return VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT;
             case image_resource_usage::PRESENT:
                 return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
             }
@@ -83,7 +76,7 @@ namespace tempest::graphics::vk
         }
 
         VkPipelineStageFlags2 compute_buffer_stage_access(resource_access_type type, buffer_resource_usage usage,
-                                                         queue_operation_type ops)
+                                                          queue_operation_type ops)
         {
             switch (usage)
             {
@@ -329,6 +322,7 @@ namespace tempest::graphics::vk
             .mip_count{1},
             .format{desc.fmt},
             .samples{desc.samples},
+            .persistent{desc.persistent},
             .name{std::string(desc.name)},
         };
 
@@ -636,7 +630,7 @@ namespace tempest::graphics::vk
             for (std::size_t i = 0; i < _all_passes.size(); ++i)
             {
                 auto& pass = _all_passes[i];
-                if (!pass.should_execute())
+                if (!_active_passes.test(i))
                 {
                     continue;
                 }
@@ -823,6 +817,7 @@ namespace tempest::graphics::vk
                 auto vk_img = _device->access_image(img.img);
 
                 render_graph_image_state next_state = {
+                    .persistent{vk_img->persistent},
                     .stage_mask{compute_image_stage_access(img.type, img.usage, img.first_access)},
                     .access_mask{compute_image_access_mask(img.type, img.usage, pass_ref.operation_type())},
                     .image_layout{compute_layout(img.usage)},
@@ -1226,7 +1221,11 @@ namespace tempest::graphics::vk
         // return allocator
         _device->release_frame_local_command_buffer_allocator(std::move(cmd_buffer_alloc));
 
-        _last_known_state.images.clear();
+        std::erase_if(_last_known_state.images, [](const auto& state) {
+            auto [key, info] = state;
+            return !info.persistent;
+        });
+
         _last_known_state.swapchain.clear();
 
         _device->end_frame();
@@ -1302,10 +1301,19 @@ namespace tempest::graphics::vk
                 sets.insert(img.set);
             }
 
-            for (const auto& external_img : pass.external_sampled_images())
+            for (const auto& external_img : pass.external_images())
             {
-                sizes[VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE].descriptorCount +=
-                    static_cast<std::uint32_t>(external_img.images.size());
+                if (external_img.usage == image_resource_usage::SAMPLED)
+                {
+                    sizes[VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE].descriptorCount +=
+                        static_cast<std::uint32_t>(external_img.images.size());
+                }
+                else if (external_img.usage == image_resource_usage::STORAGE)
+                {
+                    sizes[VK_DESCRIPTOR_TYPE_STORAGE_IMAGE].descriptorCount +=
+                        static_cast<std::uint32_t>(external_img.images.size());
+                }
+
                 sets.insert(external_img.set);
             }
 
@@ -1324,6 +1332,11 @@ namespace tempest::graphics::vk
             .poolSizeCount{static_cast<std::uint32_t>(pool_size_count)},
             .pPoolSizes{sizes},
         };
+
+        if (ci.maxSets == 0)
+        {
+            return;
+        }
 
         for (auto& frame : _per_frame)
         {
@@ -1412,7 +1425,7 @@ namespace tempest::graphics::vk
                 });
             }
 
-            for (auto& img : pass.external_sampled_images())
+            for (auto& img : pass.external_images())
             {
                 auto type = get_descriptor_type(img.usage);
                 if (type == VK_DESCRIPTOR_TYPE_MAX_ENUM)
