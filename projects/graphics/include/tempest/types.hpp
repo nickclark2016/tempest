@@ -39,6 +39,8 @@ namespace tempest::graphics
         BGRA8_SRGB,
         RGBA8_UINT,
         RGBA8_UNORM,
+        RGBA16_FLOAT,
+        RG16_FLOAT,
         RG32_FLOAT,
         RG32_UINT,
         RGB32_FLOAT,
@@ -144,6 +146,7 @@ namespace tempest::graphics
         std::uint32_t layers{1};
         resource_format fmt;
         image_type type;
+        bool persistent = false;
         std::string_view name;
     };
 
@@ -186,6 +189,7 @@ namespace tempest::graphics
         bool storage : 1;
         bool color_attachment : 1;
         bool depth_attachment : 1;
+        bool persistent;
         std::string name;
     };
 
@@ -492,11 +496,14 @@ namespace tempest::graphics
                                    std::size_t dst_offset = 0,
                                    std::size_t byte_count = std::numeric_limits<std::size_t>::max()) = 0;
         virtual command_list& copy(buffer_resource_handle src, image_resource_handle dst, std::size_t buffer_offset,
-                           std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level, std::int32_t offset_x = 0,
-                           std::int32_t offset_y = 0) = 0;
+                                   std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level,
+                                   std::int32_t offset_x = 0, std::int32_t offset_y = 0) = 0;
+        virtual command_list& clear_color(image_resource_handle handle, float r, float g, float b, float a) = 0;
 
         virtual command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
                                                image_resource_usage new_usage) = 0;
+        virtual command_list& use_pipeline(compute_pipeline_resource_handle pipeline) = 0;
+        virtual command_list& dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z) = 0;
     };
 
     class command_execution_service

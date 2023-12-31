@@ -177,6 +177,10 @@ namespace tempest::graphics::vk
                 return VK_FORMAT_R8G8B8A8_SRGB;
             case resource_format::BGRA8_SRGB:
                 return VK_FORMAT_B8G8R8A8_SRGB;
+            case resource_format::RGBA16_FLOAT:
+                return VK_FORMAT_R16G16B16A16_SFLOAT;
+            case resource_format::RG16_FLOAT:
+                return VK_FORMAT_R16G16_SFLOAT;
             case resource_format::RG32_FLOAT:
                 return VK_FORMAT_R32G32_SFLOAT;
             case resource_format::RG32_UINT:
@@ -202,12 +206,16 @@ namespace tempest::graphics::vk
             case resource_format::RGBA8_SRGB:
             case resource_format::BGRA8_SRGB:
                 return 4;
+            case resource_format::RG16_FLOAT:
+                return 2 * sizeof(short);
             case resource_format::RG32_FLOAT:
                 return 2 * sizeof(float);
             case resource_format::RG32_UINT:
                 return 2 * sizeof(std::uint32_t);
             case resource_format::RGB32_FLOAT:
                 return 3 * sizeof(float);
+            case resource_format::RGBA16_FLOAT:
+                return 4 * sizeof(short);
             case resource_format::RGBA32_FLOAT:
                 return 4 * sizeof(float);
             case resource_format::D32_FLOAT:
@@ -330,6 +338,8 @@ namespace tempest::graphics::vk
         {
             switch (fmt)
             {
+            case resource_format::RG16_FLOAT:
+                [[fallthrough]];
             case resource_format::RG32_FLOAT:
                 [[fallthrough]];
             case resource_format::RG32_UINT:
@@ -339,6 +349,8 @@ namespace tempest::graphics::vk
             case resource_format::RGBA8_SRGB:
                 [[fallthrough]];
             case resource_format::BGRA8_SRGB:
+                [[fallthrough]];
+            case resource_format::RGBA16_FLOAT:
                 [[fallthrough]];
             case resource_format::RGBA32_FLOAT:
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
@@ -822,7 +834,7 @@ namespace tempest::graphics::vk
         name_object(_dispatch, std::bit_cast<std::uint64_t>(img), VK_OBJECT_TYPE_IMAGE, ci.name.c_str());
 
         VkImageAspectFlags aspect = 0;
-        aspect |= (ci.color_attachment || ci.sampled) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
+        aspect |= (ci.color_attachment || ci.sampled || ci.storage) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
         aspect |= ci.depth_attachment ? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
 
         VkImageViewCreateInfo view_ci = {
@@ -870,6 +882,7 @@ namespace tempest::graphics::vk
             .view{view},
             .img_info{image_ci},
             .view_info{view_ci},
+            .persistent{ci.persistent},
             .name{std::string(ci.name)},
         };
 
@@ -1413,7 +1426,7 @@ namespace tempest::graphics::vk
                     .binding{binding.binding_index},
                     .descriptorType{to_vulkan(binding.type)},
                     .descriptorCount{binding.binding_count},
-                    .stageFlags{VK_SHADER_STAGE_ALL_GRAPHICS},
+                    .stageFlags{VK_SHADER_STAGE_COMPUTE_BIT},
                     .pImmutableSamplers{nullptr},
                 });
             }
@@ -1500,6 +1513,7 @@ namespace tempest::graphics::vk
             .sType{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO},
             .pNext{nullptr},
             .flags{0},
+            .stage{compute_stage},
             .layout{pipeline_layout},
             .basePipelineHandle{VK_NULL_HANDLE},
             .basePipelineIndex{0},
@@ -2007,6 +2021,20 @@ namespace tempest::graphics::vk
         return *this;
     }
 
+    command_list& command_list::use_pipeline(compute_pipeline_resource_handle pipeline)
+    {
+        auto vk_pipeline = _device->access_compute_pipeline(pipeline);
+        _dispatch->cmdBindPipeline(_cmds, VK_PIPELINE_BIND_POINT_COMPUTE, vk_pipeline->pipeline);
+
+        return *this;
+    }
+
+    command_list& command_list::dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z)
+    {
+        _dispatch->cmdDispatch(_cmds, x, y, z);
+        return *this;
+    }
+
     command_list& command_list::blit(image_resource_handle src, image_resource_handle dst)
     {
         auto src_img = _device->access_image(src);
@@ -2125,6 +2153,26 @@ namespace tempest::graphics::vk
         return *this;
     }
 
+    command_list& command_list::clear_color(image_resource_handle handle, float r, float g, float b, float a)
+    {
+        VkClearColorValue color = {
+            .float32{r, g, b, a},
+        };
+
+        VkImageSubresourceRange range = {
+            .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+            .baseMipLevel{0},
+            .levelCount{VK_REMAINING_ARRAY_LAYERS},
+            .baseArrayLayer{0},
+            .layerCount{VK_REMAINING_ARRAY_LAYERS},
+        };
+
+        _dispatch->cmdClearColorImage(_cmds, _device->access_image(handle)->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      &color, 1, &range);
+
+        return *this;
+    }
+
     command_list& command_list::transition_image(image_resource_handle img, image_resource_usage old_usage,
                                                  image_resource_usage new_usage)
     {
@@ -2163,6 +2211,13 @@ namespace tempest::graphics::vk
             src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             img_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             img_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        }
+        else if (old_usage == image_resource_usage::TRANSFER_DESTINATION && new_usage == image_resource_usage::STORAGE)
+        {
+            dst_stage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            img_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            img_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
         }
         else
         {

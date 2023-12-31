@@ -172,6 +172,21 @@ namespace tempest::graphics
         return *this;
     }
 
+    graph_pass_builder& graph_pass_builder::add_external_storage_image(image_resource_handle handle, resource_access_type access, std::uint32_t set,
+                                                                       std::uint32_t binding, pipeline_stage usage)
+    {
+        _external_image_states.push_back(external_image_resource_state{
+            .type{resource_access_type::READ},
+            .usage{image_resource_usage::STORAGE},
+            .images{handle},
+            .stages{usage},
+            .set{set},
+            .binding{binding},
+        });
+
+        return *this;
+    }
+
     graph_pass_builder& graph_pass_builder::add_blit_target(image_resource_handle handle, pipeline_stage first_write,
                                                             pipeline_stage last_write)
     {
