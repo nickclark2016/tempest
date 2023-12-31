@@ -77,7 +77,11 @@ VSOutput VSMain(uint index_id : SV_VertexID, uint instance_id : SV_InstanceID)
     VSOutput output;
     output.uv = v.uv0;
     float4x4 model_matrix = instances[instance_id].model_matrix;
-    output.world_pos = mul(model_matrix, float4(v.position, 1.0f));
+
+    float4 world_pos = mul(model_matrix, float4(v.position, 1.0f));
+
+    output.world_pos = world_pos;
+    output.pos = mul(camera_data.proj_matrix, mul(camera_data.view_matrix, world_pos));
     return output;
 }
 

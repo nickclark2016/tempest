@@ -87,7 +87,7 @@ namespace tempest::graphics::vk
                 case queue_operation_type::GRAPHICS:
                     [[fallthrough]];
                 case queue_operation_type::GRAPHICS_AND_TRANSFER:
-                    return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                    return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
                 case queue_operation_type::COMPUTE:
                     [[fallthrough]];
                 case queue_operation_type::COMPUTE_AND_TRANSFER:
@@ -1315,6 +1315,12 @@ namespace tempest::graphics::vk
                 }
 
                 sets.insert(external_img.set);
+            }
+
+            for (const auto& external_smp : pass.external_samplers())
+            {
+                sizes[VK_DESCRIPTOR_TYPE_SAMPLER].descriptorCount +=
+                    static_cast<std::uint32_t>(external_smp.samplers.size());
             }
 
             set_count += sets.size();
