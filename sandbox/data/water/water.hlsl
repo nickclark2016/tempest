@@ -43,7 +43,7 @@ static const float3 k_tip_color = float3(1, 1, 1);
 // 0---3
 
 static const uint indices[6] = {
-    0, 1, 2, 2, 3, 0
+    0, 2, 3, 0, 1, 2
 };
 
 static const uint row_offset[6] = {
@@ -51,7 +51,7 @@ static const uint row_offset[6] = {
 };
 
 static const uint col_offset[6] = {
-    0, 0, 1, 1, 1, 0
+    0, 1, 0, 1, 0, 1
 };
 
 struct PSInput

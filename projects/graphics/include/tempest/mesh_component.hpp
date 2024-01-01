@@ -52,6 +52,7 @@ namespace tempest::graphics
     struct object_payload
     {
         math::mat4<float> transform;
+        math::mat4<float> inv_transform;
         std::uint32_t mesh_id{~0u};
         std::uint32_t material_id{~0u};
     };

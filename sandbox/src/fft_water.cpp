@@ -144,8 +144,23 @@ struct water_gfx_constants
 {
     camera_data camera;
     graphics::directional_light sun;
-    math::mat4<float> tiling;
+    math::vec4<float> tiling;
+    math::vec4<float> foam_subtract;
+    math::vec4<float> scatter_color;
+    math::vec4<float> bubble_color;
+    math::vec4<float> foam_color;
+    float normal_strength;
     float displacement_depth_attenuation;
+    float far_over_near;
+    float foam_depth_atten;
+    float foam_roughness;
+    float roughness;
+    float normal_depth_atten;
+    float height_modifier;
+    float bubble_density;
+    float wave_peak_scatter_strength;
+    float scatter_strength;
+    float scatter_shadow_strength;
 };
 
 void draw_gui(ocean_fft_state& state);
@@ -230,7 +245,7 @@ void fft_water_demo()
         .length_scalar = {512, 128, 64, 32},
         .foam_bias = 0.85f,
         .foam_decay_rate = 0.175f,
-        .foam_add = 0.1f,
+        .foam_add = 0.3f,
         .foam_threshold = 0.0f,
     };
 
@@ -450,22 +465,39 @@ void fft_water_demo()
     std::vector<graphics::object_payload> objects;
     water_gfx_constants gfx_constants = {
         .camera{
-            .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.01f, 1000.0f)},
-            .view{math::look_at(math::vec3<float>(-4.0f, 2.0f, 0.0f), math::vec3<float>(0.0f, 2.0f, 0.0f),
-                                math::vec3<float>(0.0f, 1.0, 0.0f))},
+            .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.1f)},
+            .view{math::look_at(math::vec3<float>(-16.0f, 6.0f, 0.0f), math::vec3<float>(0.0f, 6.0f, 0.0f),
+                                    math::vec3<float>(0.0f, 1.0, 0.0f))},
             .view_proj{1.0f},
-            .position{0.0f, 10.0f, 0.0f},
+            .position{-16.0f, 6.0f, 0.0f},
         },
         .sun{
-            .light_direction{-1.0, 1.0, -1.0f},
-            .color_illum{1.0f, 1.0f, 1.0f, 25000.0f},
+            .light_direction{-1.29f, -1.0f, 4.86f},
+            .color_illum{0.8f, 0.794f, 0.78f, 25000.0f},
         },
         .tiling = {4.0f, 8.0f, 64.0f, 128.0f},
+        .foam_subtract = {0.04f, -0.04f, -0.46f, -0.38f},
+        .scatter_color = {0.16f, 0.0736f, 0.16f, 1.0f},
+        .bubble_color = {0.0f, 0.02f, 0.016f, 1.0f},
+        .foam_color = {0.50f, 0.5568f, 0.492f, 1.0f},
+        .normal_strength = 10.0f,
         .displacement_depth_attenuation = 1.0f,
+        .foam_depth_atten = 0.1f,
+        .foam_roughness = 0.0f,
+        .roughness = 0.075f,
+        .normal_depth_atten = 1.0f,
+        .height_modifier = 0.5f,
+        .bubble_density = 1.0f,
+        .wave_peak_scatter_strength = 1.0f,
+        .scatter_strength = 0.2f,
+        .scatter_shadow_strength = 0.5f,
     };
 
+    auto transform = math::transform(math::vec3<float>{}, math::vec3<float>{}, math::vec3<float>{10.0f, 1.0f, 10.0f});
+
     objects.push_back(graphics::object_payload{
-        .transform = {1.0f},
+        .transform = {transform},
+        .inv_transform = math::inverse(transform),
         .mesh_id = 0,
         .material_id = 0,
     });
@@ -595,13 +627,13 @@ void fft_water_demo()
                 .add_structured_buffer(vertex_buffer, graphics::resource_access_type::READ, 0, 1)
                 .add_structured_buffer(mesh_buffer, graphics::resource_access_type::READ, 0, 2)
                 .add_structured_buffer(object_data_buffer, graphics::resource_access_type::READ, 0, 3)
-                .add_storage_image(displacement_textures, graphics::resource_access_type::READ, 0, 4)
-                .add_storage_image(slope_textures, graphics::resource_access_type::READ, 0, 5)
+                .add_sampled_image(displacement_textures, 0, 4)
+                .add_sampled_image(slope_textures, 0, 5)
                 .add_sampler(fft_water_sampler, 0, 6, graphics::pipeline_stage::VERTEX)
                 .add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR,
                                       graphics::store_op::STORE)
                 .add_depth_attachment(depth_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR,
-                                      graphics::store_op::DONT_CARE, 1.0f)
+                                      graphics::store_op::DONT_CARE, 0.0f)
                 .depends_on(map_assembly)
                 .on_execute([&](graphics::command_list& cmds) {
                     cmds.set_viewport(0, 0, 1920, 1080)
@@ -1181,12 +1213,12 @@ graphics::graphics_pipeline_resource_handle create_water_graphics(graphics::rend
             .binding_count = 1,
         },
         {
-            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
             .binding_index = 4,
             .binding_count = 1,
         },
         {
-            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
             .binding_index = 5,
             .binding_count = 1,
         },
@@ -1232,7 +1264,7 @@ graphics::graphics_pipeline_resource_handle create_water_graphics(graphics::rend
         .depth_testing{
             .enable_test = true,
             .enable_write = true,
-            .depth_test_op = graphics::compare_operation::LESS,
+            .depth_test_op = graphics::compare_operation::GREATER_OR_EQUALS,
         },
         .blending{
             .attachment_blend_ops = blending,
@@ -1306,11 +1338,11 @@ graphics::mesh_layout create_water_plane(std::vector<std::uint32_t>& data)
         for (unsigned int z = 0; z < vertex_count; write_index += 6, ++vi, ++z)
         {
             data[write_index + 0] = vi;
-            data[write_index + 1] = vi + 1;
-            data[write_index + 2] = vi + vertex_count + 2;
+            data[write_index + 1] = vi + vertex_count + 2;
+            data[write_index + 2] = vi + 1;
             data[write_index + 3] = vi;
-            data[write_index + 4] = vi + vertex_count + 2;
-            data[write_index + 5] = vi + vertex_count + 1;
+            data[write_index + 4] = vi + vertex_count + 1;
+            data[write_index + 5] = vi + vertex_count + 2;
         }
     }
 
