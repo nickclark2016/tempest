@@ -156,8 +156,8 @@ void fbm_water_demo()
     auto water_sim_state = generate_water_sim_state(16);
 
     camera_data cameras = {
-        .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.01f, 1000.0f)},
-        .view{math::look_at(math::vec3<float>(0.0f, 10.0f, 0.0f), math::vec3<float>(15.0f, 2.0f, 15.0f),
+        .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.01f)},
+        .view{math::look_direction(math::vec3<float>(0.0f, 10.0f, 0.0f), math::vec3<float>(15.0f, 2.0f, 15.0f),
                             math::vec3<float>(0.0f, 1.0, 0.0f))},
         .view_proj{1.0f},
         .position{0.0f, 10.0f, 0.0f},
@@ -185,7 +185,7 @@ void fbm_water_demo()
             bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR,
                                       graphics::store_op::STORE, math::vec4<float>(0.0f))
                 .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
-                                      graphics::load_op::CLEAR, graphics::store_op::STORE, 1.0f)
+                                      graphics::load_op::CLEAR, graphics::store_op::STORE, 0.0f)
                 .add_constant_buffer(camera_data_buffer, 0, 0)
                 .add_constant_buffer(lighting_data_buffer, 0, 1)
                 .add_constant_buffer(wave_data_buffer, 0, 2)
@@ -362,7 +362,7 @@ graphics::graphics_pipeline_resource_handle create_water_pipeline(graphics::rend
         .depth_testing{
             .enable_test{true},
             .enable_write{true},
-            .depth_test_op{graphics::compare_operation::LESS},
+            .depth_test_op{graphics::compare_operation::GREATER_OR_EQUALS},
         },
 
         .blending{.attachment_blend_ops{blending}},

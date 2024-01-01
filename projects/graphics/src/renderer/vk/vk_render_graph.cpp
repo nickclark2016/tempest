@@ -59,7 +59,7 @@ namespace tempest::graphics::vk
             case image_resource_usage::DEPTH_ATTACHMENT:
                 return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
             case image_resource_usage::SAMPLED:
-                return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             case image_resource_usage::STORAGE: {
                 return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             }

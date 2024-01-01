@@ -303,51 +303,33 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr mat4<T> perspective(const T aspect, const T fov, const T near, const T far)
+    inline constexpr mat4<T> perspective(const T aspect, const T fov, T near)
     {
-        assert(near < far && "Near plane distance must be less than far plane distance");
-        // 1 / (aspect * tan(fov / 2))  0                       0                               0
-        // 0                            1 / tan(fov / 2)        0                               0
-        // 0                            0                       (-near - far) / (near - far)    (2 * near * far) / (near
-        // - far) 0                            0                       1                               0
-        const T fovRad = as_radians(fov);
-        const T tanFov2 = static_cast<T>(std::tan(fovRad / static_cast<T>(2)));
-        const T invTanFov2 = static_cast<T>(1) / tanFov2;
-        const T invAspectTanFov2 = invTanFov2 * (static_cast<T>(1) / aspect);
-        const T nearMinusFar = near - far;
-
-        const T zero = static_cast<T>(0);
-
-        const vec4<T> col0(invAspectTanFov2, zero, zero, zero);
-        const vec4<T> col1(zero, invTanFov2, zero, zero);
-        const vec4<T> col2(zero, zero, (-near - far) / nearMinusFar, static_cast<T>(1));
-        const vec4<T> col3(zero, zero, (static_cast<T>(2) * near * far) / nearMinusFar, zero);
-        return mat4(col0, col1, col2, col3);
+        const T f = static_cast<T>(1) / std::tan(as_radians(fov / 2));
+        return mat4<T>(f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, -1, 0, 0, near, 0);
     }
 
     template <typename T>
-    inline constexpr mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>& up)
+    mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>& up)
     {
-        const auto fwd = normalize(target - eye);
-        const auto side = normalize(cross(up, fwd));
-        const auto u = cross(fwd, side);
+        const vec3<T> f(normalize(target - eye));
+        const vec3<T> s(normalize(cross(f, up)));
+        const vec3<T> u(cross(s, f));
 
-        mat4<float> look(T(1));
-
-        look[0][0] = side.x;
-        look[1][0] = side.y;
-        look[2][0] = side.z;
-        look[0][1] = u.x;
-        look[1][1] = u.y;
-        look[2][1] = u.z;
-        look[0][2] = fwd.x;
-        look[1][2] = fwd.y;
-        look[2][2] = fwd.z;
-        look[3][0] = -dot(side, eye);
-        look[3][1] = -dot(u, eye);
-        look[3][2] = -dot(fwd, eye);
-
-        return look;
+        mat4<T> result(1);
+        result[0][0] = s.x;
+        result[1][0] = s.y;
+        result[2][0] = s.z;
+        result[0][1] = u.x;
+        result[1][1] = u.y;
+        result[2][1] = u.z;
+        result[0][2] = -f.x;
+        result[1][2] = -f.y;
+        result[2][2] = -f.z;
+        result[3][0] = -dot(s, eye);
+        result[3][1] = -dot(u, eye);
+        result[3][2] = dot(f, eye);
+        return result;
     }
 
     template <typename T>

@@ -6,7 +6,7 @@ struct CameraData {
     float4x4 view_matrix;
     float4x4 view_proj_matrix;
     float3 position;
-    float4 _pad0;
+    float _pad0;
 };
 
 #endif // tempest_common_camera_hlsl
