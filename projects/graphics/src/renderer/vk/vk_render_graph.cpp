@@ -87,7 +87,8 @@ namespace tempest::graphics::vk
                 case queue_operation_type::GRAPHICS:
                     [[fallthrough]];
                 case queue_operation_type::GRAPHICS_AND_TRANSFER:
-                    return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                    return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+                           VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
                 case queue_operation_type::COMPUTE:
                     [[fallthrough]];
                 case queue_operation_type::COMPUTE_AND_TRANSFER:
@@ -1354,6 +1355,7 @@ namespace tempest::graphics::vk
         for (auto& pass : _all_passes)
         {
             std::unordered_map<std::uint32_t, std::vector<VkDescriptorSetLayoutBinding>> bindings;
+            std::unordered_map<std::uint32_t, std::vector<VkDescriptorBindingFlags>> binding_flags;
             std::map<std::uint32_t, std::vector<VkWriteDescriptorSet>> binding_writes;
 
             for (auto& buffer : pass.buffer_usage())
@@ -1372,6 +1374,8 @@ namespace tempest::graphics::vk
                     .stageFlags{compute_accessible_stages(pass.operation_type())},
                     .pImmutableSamplers{nullptr},
                 });
+
+                binding_flags[buffer.set].push_back(0);
 
                 auto buf = _device->access_buffer(buffer.buf);
                 auto buffer_size = vk_buf->per_frame_resource ? buf->alloc_info.size / _device->frames_in_flight()
@@ -1429,6 +1433,8 @@ namespace tempest::graphics::vk
                     .pBufferInfo{nullptr},
                     .pTexelBufferView{nullptr},
                 });
+
+                binding_flags[img.set].push_back(0);
             }
 
             for (auto& img : pass.external_images())
@@ -1439,37 +1445,44 @@ namespace tempest::graphics::vk
                     continue;
                 }
 
+                auto img_count = static_cast<std::uint32_t>(img.images.size());
+
                 bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
                     .binding{img.binding},
                     .descriptorType{type},
-                    .descriptorCount{1},
+                    .descriptorCount{img_count},
                     .stageFlags{compute_accessible_stages(pass.operation_type())},
                     .pImmutableSamplers{nullptr},
                 });
 
-                auto img_count = img.images.size();
-                auto images = new VkDescriptorImageInfo[img_count];
-
-                binding_writes[img.set].push_back(VkWriteDescriptorSet{
-                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
-                    .pNext{nullptr},
-                    .dstBinding{img.binding},
-                    .dstArrayElement{0},
-                    .descriptorCount{static_cast<std::uint32_t>(img_count)},
-                    .descriptorType{type},
-                    .pImageInfo{images},
-                    .pBufferInfo{nullptr},
-                    .pTexelBufferView{nullptr},
-                });
-
-                for (std::size_t i = 0; i < img_count; ++i)
+                for (std::uint32_t i = 0; i < img_count; ++i)
                 {
-                    images[i] = {
-                        .sampler{VK_NULL_HANDLE},
-                        .imageView{_device->access_image(img.images[i])->view},
-                        .imageLayout{compute_layout(img.usage)},
-                    };
+                    VkImageView view = VK_NULL_HANDLE;
+                    if (img.images[i])
+                    {
+                        view = _device->access_image(img.images[i])->view;
+                        auto image = new VkDescriptorImageInfo[1];
+                        *image = {
+                            .sampler{VK_NULL_HANDLE},
+                            .imageView{view},
+                            .imageLayout{compute_layout(img.usage)},
+                        };
+
+                        binding_writes[img.set].push_back(VkWriteDescriptorSet{
+                            .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                            .pNext{nullptr},
+                            .dstBinding{img.binding},
+                            .dstArrayElement{i},
+                            .descriptorCount{1},
+                            .descriptorType{type},
+                            .pImageInfo{image},
+                            .pBufferInfo{nullptr},
+                            .pTexelBufferView{nullptr},
+                        });
+                    }
                 }
+
+                binding_flags[img.set].push_back(img_count > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
             }
 
             for (auto& smp : pass.external_samplers())
@@ -1503,6 +1516,8 @@ namespace tempest::graphics::vk
                         .sampler{_device->access_sampler(smp.samplers[i])->vk_sampler},
                     };
                 }
+
+                binding_flags[smp.set].push_back(sampler_count > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
             }
 
             if (bindings.empty())
@@ -1514,9 +1529,18 @@ namespace tempest::graphics::vk
             std::vector<VkDescriptorSetLayout> set_layouts;
             for (auto& [id, binding_arr] : bindings)
             {
+                auto& bind_flags = binding_flags[id];
+
+                VkDescriptorSetLayoutBindingFlagsCreateInfo binding_ci = {
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                    .pNext = nullptr,
+                    .bindingCount = static_cast<std::uint32_t>(bind_flags.size()),
+                    .pBindingFlags = bind_flags.empty() ? nullptr : bind_flags.data(),
+                };
+
                 VkDescriptorSetLayoutCreateInfo layout_ci = {
                     .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO},
-                    .pNext{nullptr},
+                    .pNext{&binding_ci},
                     .flags{0},
                     .bindingCount{static_cast<std::uint32_t>(binding_arr.size())},
                     .pBindings{binding_arr.data()},

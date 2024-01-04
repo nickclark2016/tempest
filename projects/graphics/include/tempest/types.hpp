@@ -257,6 +257,12 @@ namespace tempest::graphics
         NOT_EQUALS
     };
 
+    enum class vertex_winding_order
+    {
+        CLOCKWISE,
+        COUNTER_CLOCKWISE,
+    };
+
     struct attachment_blend_info
     {
         blend_factor src;
@@ -489,6 +495,8 @@ namespace tempest::graphics
                                                  std::uint32_t height) = 0;
         virtual command_list& draw(std::uint32_t vertex_count, std::uint32_t instance_count = 1,
                                    std::uint32_t first_vertex = 0, std::uint32_t first_index = 0) = 0;
+        virtual command_list& draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
+                                   std::uint32_t stride) = 0;
         virtual command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) = 0;
 
         virtual command_list& blit(image_resource_handle src, image_resource_handle dst) = 0;
@@ -502,6 +510,9 @@ namespace tempest::graphics
 
         virtual command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
                                                image_resource_usage new_usage) = 0;
+        virtual command_list& generate_mip_chain(image_resource_handle img, image_resource_usage usage, std::uint32_t base_mip = 0,
+                                                 std::uint32_t mip_count = std::numeric_limits<std::uint32_t>::max()) = 0;
+
         virtual command_list& use_pipeline(compute_pipeline_resource_handle pipeline) = 0;
         virtual command_list& dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z) = 0;
     };
@@ -515,6 +526,14 @@ namespace tempest::graphics
         virtual void submit_and_wait() = 0;
     };
 
+    struct indirect_command
+    {
+        std::uint32_t vertex_count;
+        std::uint32_t instance_count;
+        std::uint32_t first_vertex;
+        std::uint32_t first_instance;
+    };
+
     struct camera_data
     {
         math::mat4<float> view_matrix;
@@ -526,6 +545,14 @@ namespace tempest::graphics
     {
         math::vec3<float> light_direction;
         math::vec4<float> color_illum;
+    };
+
+    struct point_light
+    {
+        math::vec4<float> location;
+        math::vec3<float> color;
+        float range;
+        float intensity;
     };
 } // namespace tempest::graphics
 

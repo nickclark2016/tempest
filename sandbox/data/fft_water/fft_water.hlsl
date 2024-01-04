@@ -356,7 +356,7 @@ void AssembleMaps(uint3 tid : SV_DispatchThreadID)
         foam *= exp(-foam_decay_rate);
         foam = saturate(foam);
         
-        float biased_jacobian = max(0.0f, (-jacobian - foam_bias));
+        float biased_jacobian = max(0.0f, -(jacobian - foam_bias));
         if (biased_jacobian > foam_threshold)
         {
             foam += foam_add * biased_jacobian;

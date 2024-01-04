@@ -115,33 +115,33 @@ namespace tempest::math
 
     template <typename T> inline constexpr T roll(const quat<T>& q)
     {
-        const T x = q.w * q.w + q.z * q.z - q.y * q.y - q.z * q.z;
-        const T y = as<T>(2) * (q.x * q.y + q.w * q.z);
+        T const y = static_cast<T>(2) * (q.x * q.y + q.w * q.z);
+        T const x = q.w * q.w + q.x * q.x - q.y * q.y - q.z * q.z;
 
-        if (x == as<T>(0) && y == as<T>(0))
+        if (x == static_cast<T>(0) && y == static_cast<T>(0))
         {
-            return as<T>(0);
+            return static_cast<T>(0);
         }
 
-        return as<T>(std::atan2(y, x));
+        return static_cast<T>(std::atan2(y, x));
     }
 
     template <typename T> inline constexpr T pitch(const quat<T>& q)
     {
-        const T x = q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z;
-        const T y = as<T>(2) * (q.y * q.z + q.w * q.x);
+        T const y = static_cast<T>(2) * (q.y * q.z + q.w * q.x);
+        T const x = q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z;
 
-        if (x == as<T>(0) && y == as<T>(0))
+        if (x == static_cast<T>(0) && y == static_cast<T>(0))
         {
-            return as<T>(as<T>(2) * std::atan2(q.x, q.w));
+            return static_cast<T>(static_cast<T>(2) * std::atan2(q.x, q.w));
         }
 
-        return as<T>(std::atan2(y, x));
+        return static_cast<T>(std::atan2(y, x));
     }
 
     template <typename T> inline constexpr T yaw(const quat<T>& q)
     {
-        return std::asin(clamp(as<T>(-2) * (q.x * q.z - q.w * q.y), as<T>(-1), as<T>(1)));
+        return std::asin(clamp(static_cast<T>(-2) * (q.x * q.z - q.w * q.y), static_cast<T>(-1), static_cast<T>(1)));
     }
 
     template <typename T> inline constexpr vec3<T> euler(const quat<T>& q)

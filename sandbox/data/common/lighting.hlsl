@@ -7,4 +7,12 @@ struct DirectionalLight
     float4 color_illum;
 };
 
+struct PointLight
+{
+    float4 location;
+    float4 color;
+    float range;
+    float intensity;
+};
+
 #endif // tempest_common_lighting_hlsl

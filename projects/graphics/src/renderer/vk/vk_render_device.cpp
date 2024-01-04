@@ -743,6 +743,11 @@ namespace tempest::graphics::vk
 
     image* render_device::access_image(image_resource_handle handle) noexcept
     {
+        if (!handle)
+        {
+            return nullptr;
+        }
+
         return reinterpret_cast<image*>(_images->access({
             .index{handle.id},
             .generation{handle.generation},
@@ -1044,6 +1049,7 @@ namespace tempest::graphics::vk
         for (const auto& info : ci.layout.set_layouts)
         {
             std::vector<VkDescriptorSetLayoutBinding> bindings;
+            std::vector<VkDescriptorBindingFlags> flags;
 
             for (const auto& binding : info.bindings)
             {
@@ -1054,11 +1060,20 @@ namespace tempest::graphics::vk
                     .stageFlags{VK_SHADER_STAGE_ALL_GRAPHICS},
                     .pImmutableSamplers{nullptr},
                 });
+
+                flags.push_back(binding.binding_count > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
             }
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                .pNext = nullptr,
+                .bindingCount = static_cast<std::uint32_t>(flags.size()),
+                .pBindingFlags = flags.empty() ? nullptr : flags.data(),
+            };
 
             VkDescriptorSetLayoutCreateInfo set_layout_ci = {
                 .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO},
-                .pNext{nullptr},
+                .pNext{&binding_flags},
                 .bindingCount{static_cast<std::uint32_t>(bindings.size())},
                 .pBindings{bindings.data()},
             };
@@ -1850,6 +1865,8 @@ namespace tempest::graphics::vk
                                                            .robustBufferAccess{VK_TRUE},
                                                            .independentBlend{VK_TRUE},
                                                            .logicOp{VK_TRUE},
+                                                           .multiDrawIndirect = VK_TRUE,
+                                                           .drawIndirectFirstInstance = VK_TRUE,
                                                            .depthClamp{VK_TRUE},
                                                            .depthBiasClamp{VK_TRUE},
                                                            .fillModeNonSolid{VK_TRUE},
@@ -1873,6 +1890,7 @@ namespace tempest::graphics::vk
                                                            .descriptorBindingStorageImageUpdateAfterBind{VK_TRUE},
                                                            .descriptorBindingPartiallyBound{VK_TRUE},
                                                            .descriptorBindingVariableDescriptorCount{VK_TRUE},
+                                                           .runtimeDescriptorArray = VK_TRUE,
                                                            .imagelessFramebuffer{VK_TRUE},
                                                            .separateDepthStencilLayouts{VK_TRUE},
                                                            .bufferDeviceAddress{VK_TRUE},
@@ -2009,6 +2027,14 @@ namespace tempest::graphics::vk
                                      std::uint32_t first_vertex, std::uint32_t first_index)
     {
         _dispatch->cmdDraw(_cmds, vertex_count, instance_count, first_vertex, first_index);
+
+        return *this;
+    }
+
+    command_list& command_list::draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
+                                     std::uint32_t stride)
+    {
+        _dispatch->cmdDrawIndirect(_cmds, _device->access_buffer(buf)->buffer, offset, count, stride);
 
         return *this;
     }
@@ -2177,6 +2203,19 @@ namespace tempest::graphics::vk
                                                  image_resource_usage new_usage)
     {
         auto vk_img = _device->access_image(img);
+        return transition_image(img, old_usage, new_usage, 0, vk_img->img_info.mipLevels);
+    }
+
+    command_list& command_list::transition_image(image_resource_handle img, image_resource_usage old_usage,
+                                                 image_resource_usage new_usage, std::uint32_t base_mip,
+                                                 std::uint32_t mip_count)
+    {
+        if (old_usage == new_usage)
+        {
+            return *this;
+        }
+
+        auto vk_img = _device->access_image(img);
 
         VkImageMemoryBarrier img_barrier = {
             .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
@@ -2190,8 +2229,8 @@ namespace tempest::graphics::vk
             .image{vk_img->image},
             .subresourceRange{
                 .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
-                .baseMipLevel{0},
-                .levelCount{vk_img->img_info.mipLevels},
+                .baseMipLevel{base_mip},
+                .levelCount{mip_count},
                 .baseArrayLayer{0},
                 .layerCount{vk_img->img_info.arrayLayers},
             },
@@ -2219,12 +2258,111 @@ namespace tempest::graphics::vk
             img_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             img_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
         }
+        else if (old_usage == image_resource_usage::TRANSFER_DESTINATION &&
+                 new_usage == image_resource_usage::TRANSFER_SOURCE)
+        {
+            dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            img_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            img_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        }
+        else if (old_usage == image_resource_usage::TRANSFER_SOURCE &&
+                 new_usage == image_resource_usage::TRANSFER_DESTINATION)
+        {
+            dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            img_barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            img_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
         else
         {
             logger->warn("Unexpected transition.");
         }
 
         _dispatch->cmdPipelineBarrier(_cmds, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &img_barrier);
+
+        return *this;
+    }
+
+    command_list& command_list::generate_mip_chain(image_resource_handle img, image_resource_usage usage,
+                                                   std::uint32_t base_mip, std::uint32_t mip_count)
+    {
+        auto vk_img = _device->access_image(img);
+        auto img_mip_count = vk_img->img_info.mipLevels;
+        auto mips_to_generate = std::min(mip_count, img_mip_count) - 1;
+
+        std::uint32_t src_width = vk_img->img_info.extent.width;
+        std::uint32_t src_height = vk_img->img_info.extent.height;
+
+        for (std::uint32_t i = base_mip; i < base_mip + mips_to_generate; ++i)
+        {
+            std::uint32_t dst_width = src_width / 2;
+            std::uint32_t dst_height = src_height / 2;
+
+            VkImageBlit region = {
+                .srcSubresource{
+                    .aspectMask{vk_img->view_info.subresourceRange.aspectMask},
+                    .mipLevel{i},
+                    .baseArrayLayer{0},
+                    .layerCount{1},
+                },
+                .srcOffsets{
+                    {
+                        .x{0},
+                        .y{0},
+                        .z{0},
+                    },
+                    {
+                        .x{static_cast<int32_t>(src_width)},
+                        .y{static_cast<int32_t>(src_height)},
+                        .z{1},
+                    },
+                },
+                .dstSubresource{
+                    .aspectMask{vk_img->view_info.subresourceRange.aspectMask},
+                    .mipLevel{i + 1},
+                    .baseArrayLayer{0},
+                    .layerCount{1},
+                },
+                .dstOffsets{
+                    {
+                        .x{0},
+                        .y{0},
+                        .z{0},
+                    },
+                    {
+                        .x{static_cast<int32_t>(dst_width)},
+                        .y{static_cast<int32_t>(dst_height)},
+                        .z{1},
+                    },
+                },
+            };
+
+            if (i == base_mip)
+            {
+                transition_image(img, usage, image_resource_usage::TRANSFER_SOURCE, i, 1);
+            }
+
+            transition_image(img, usage, image_resource_usage::TRANSFER_DESTINATION, i + 1, 1);
+
+            _dispatch->cmdBlitImage(_cmds, vk_img->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk_img->image,
+                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_LINEAR);
+
+            transition_image(img, image_resource_usage::TRANSFER_SOURCE, usage, i, 1);
+
+            if (i == base_mip + mips_to_generate - 1)
+            {
+                transition_image(img, image_resource_usage::TRANSFER_DESTINATION, usage, i + 1, 1);
+            }
+            else
+            {
+                transition_image(img, image_resource_usage::TRANSFER_DESTINATION, image_resource_usage::TRANSFER_SOURCE,
+                                 i + 1, 1);
+            }
+
+            src_width = dst_width;
+            src_height = dst_height;
+        }
 
         return *this;
     }

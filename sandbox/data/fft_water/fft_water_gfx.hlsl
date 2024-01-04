@@ -61,7 +61,7 @@ VSOutput VSMain(uint index_id : SV_VertexID, uint instance_id : SV_InstanceID)
     float4 clip_pos = mul(vp, world_pos);
     
     output.uv = v.uv0;
-    output.depth = 1 - (clip_pos.z * camera_data.proj_matrix[2][2] + camera_data.proj_matrix[2][3]) / (clip_pos.z * camera_data.proj_matrix[3][2] + camera_data.proj_matrix[3][3]);
+    output.depth = 1 + (clip_pos.z * camera_data.proj_matrix[2][2] + camera_data.proj_matrix[2][3]) / (clip_pos.w * camera_data.proj_matrix[3][2] + camera_data.proj_matrix[3][3]);
 
     float4 displacement_0 = displacement_textures.SampleLevel(texture_sampler, float3(v.uv0 * tiling_factors.x, 0), 0);
     float4 displacement_1 = displacement_textures.SampleLevel(texture_sampler, float3((v.uv0 - 0.5f) * tiling_factors.y, 1), 0);
@@ -69,7 +69,7 @@ VSOutput VSMain(uint index_id : SV_VertexID, uint instance_id : SV_InstanceID)
     float4 displacement_3 = displacement_textures.SampleLevel(texture_sampler, float3((v.uv0 - 1.25f) * tiling_factors.y, 3), 0);
     float4 total_displacement = displacement_0 + displacement_1 + displacement_2 + displacement_3;
 
-    total_displacement = lerp(0.0f, total_displacement, pow(saturate(output.depth), displacement_depth_attenuation) / 10);
+    total_displacement = lerp(0.0f, total_displacement, pow(saturate(output.depth), displacement_depth_attenuation) / 12);
 
     v.position.xyz += mul(inv_model_matrix, float4(total_displacement.xyz, 1.0)).xyz;
     
@@ -182,8 +182,7 @@ float4 PSMain(VSOutput input) : SV_Target
 	
 	float3 output = (1 - F) * scatter + specular + F * envReflection;
 	output = max(0.0f, output);
-	output = lerp(output, foam_color.rgb, saturate(foam));
-
-	
-	return float4(output, 1.0f);
+    float saturated_foam = saturate(foam);
+    output = lerp(output, foam_color.rgb, saturated_foam);
+    return float4(output, 1.0f);
 }

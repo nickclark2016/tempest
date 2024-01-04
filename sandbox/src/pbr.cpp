@@ -1,0 +1,660 @@
+#include <tempest/files.hpp>
+#include <tempest/imgui_context.hpp>
+#include <tempest/input.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/mesh_asset.hpp>
+#include <tempest/mesh_component.hpp>
+#include <tempest/render_camera.hpp>
+#include <tempest/render_device.hpp>
+#include <tempest/render_graph.hpp>
+#include <tempest/transformations.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <iostream>
+#include <ranges>
+#include <utility>
+
+using namespace tempest;
+
+namespace
+{
+    inline constexpr std::size_t global_memory_allocator_size = 1024 * 1024 * 64;
+}
+
+struct pbr_scene_constants
+{
+    graphics::render_camera camera;
+    graphics::directional_light sun;
+};
+
+graphics::material_type convert_material_type(assets::material_type type);
+std::vector<graphics::mesh_layout> upload_meshes(graphics::render_device& device, std::span<assets::mesh_asset> meshes, graphics::buffer_resource_handle target);
+graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render_device& device);
+
+void pbr_demo()
+{
+    auto global_allocator = core::heap_allocator(global_memory_allocator_size);
+
+    auto graphics_ctx = graphics::render_context::create(&global_allocator);
+
+    auto devices = graphics_ctx->enumerate_suitable_devices();
+
+    std::uint32_t id = std::numeric_limits<std::uint32_t>::max();
+
+    if (devices.size() > 1)
+    {
+        std::cout << "Found Suitable Devices:\n";
+
+        for (auto& device : devices)
+        {
+            std::cout << device.id << " " << device.name << "\n";
+        }
+        std::cout << "Found multiple suitable rendering devices. Select device: ";
+
+        std::cin >> id;
+        if (id >= devices.size() || !std::cin.good())
+        {
+            std::cerr << "Invalid Device Selected.";
+            std::exit(EXIT_FAILURE);
+        }
+    }
+    else if (devices.size() == 1)
+    {
+        std::cout << "Found single suitable rendering device: " << devices[0].name << "\n";
+        id = 0;
+    }
+    else
+    {
+        std::cerr << "Found no suitable rendering devices. Exiting.";
+        std::exit(EXIT_FAILURE);
+    }
+
+    auto& graphics_device = graphics_ctx->create_device(id);
+    auto win = graphics::window_factory::create({
+        .title{"Tempest Render Graph Demo"},
+        .width{1920},
+        .height{1080},
+    });
+    graphics::imgui_context::initialize_for_window(*win);
+
+    auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});
+
+    auto rgc = graphics::render_graph_compiler::create_compiler(&global_allocator, &graphics_device);
+
+    auto constants_buffer = rgc->create_buffer({
+        .size = sizeof(pbr_scene_constants),
+        .location = graphics::memory_location::DEVICE,
+        .name = "PBR Scene Constants",
+        .per_frame_memory = true,
+    });
+
+    auto point_lights_buffer = rgc->create_buffer({
+        .size = sizeof(graphics::point_light) * 4096,
+        .location = graphics::memory_location::DEVICE,
+        .name = "Point Lights Buffer",
+        .per_frame_memory = true,
+    });
+
+    auto vertex_pull_buffer = rgc->create_buffer({
+        .size = 1024 * 1024 * 512,
+        .location = graphics::memory_location::DEVICE,
+        .name = "Vertex Pull Buffer",
+        .per_frame_memory = false,
+    });
+
+    auto mesh_layout_buffer = rgc->create_buffer({
+        .size = sizeof(graphics::mesh_layout) * 4096,
+        .location = graphics::memory_location::DEVICE,
+        .name = "Mesh Layout Buffer",
+        .per_frame_memory = false,
+    });
+
+    auto object_data_buffer = rgc->create_buffer({
+        .size = sizeof(graphics::object_payload) * 64 * 1024,
+        .location = graphics::memory_location::DEVICE,
+        .name = "Object Payload Buffer",
+        .per_frame_memory = true,
+    });
+
+    auto material_buffer = rgc->create_buffer({
+        .size = sizeof(graphics::material_payload) * 1024,
+        .location = graphics::memory_location::DEVICE,
+        .name = "Material Payload Buffer",
+        .per_frame_memory = false,
+    });
+
+    auto color_buffer = rgc->create_image({
+        .width{1920},
+        .height{1080},
+        .fmt{graphics::resource_format::RGBA8_SRGB},
+        .type{graphics::image_type::IMAGE_2D},
+        .name{"Color Buffer Target"},
+    });
+
+    auto depth_buffer = rgc->create_image({
+        .width{1920},
+        .height{1080},
+        .fmt{graphics::resource_format::D32_FLOAT},
+        .type{graphics::image_type::IMAGE_2D},
+        .name{"Depth Buffer Target"},
+    });
+
+    auto indirect_commands = rgc->create_buffer({
+        .size = sizeof(graphics::indirect_command) * 4096,
+        .location = graphics::memory_location::HOST,
+        .name = "Indirect Arguments",
+        .per_frame_memory = true,
+    });
+
+    auto pbr_opaque = create_pbr_pipeline(graphics_device);
+
+    rgc->enable_imgui();
+
+    auto scene = assets::load_scene("assets/glTF-Sample-Assets/Models/Sponza/GLTF/Sponza.gltf");
+    std::vector<graphics::texture_data_descriptor> cube_scene_texture_decs;
+    for (auto& tex_asset : scene->textures)
+    {
+        graphics::texture_data_descriptor desc{
+            .fmt = graphics::resource_format::RGBA8_SRGB,
+            .mips{
+                {
+                    {
+                        .width = tex_asset.width,
+                        .height = tex_asset.height,
+                        .bytes = tex_asset.data,
+                    },
+                },
+            },
+        };
+
+        cube_scene_texture_decs.push_back(desc);
+    }
+
+    auto textures = graphics::renderer_utilities::upload_textures(graphics_device, cube_scene_texture_decs,
+                                                                  graphics_device.get_staging_buffer(), true, true);
+    textures.resize(1024);
+    auto default_sampler = graphics_device.create_sampler({
+        .mag = graphics::filter::LINEAR,
+        .min = graphics::filter::LINEAR,
+        .mipmap = graphics::mipmap_mode::LINEAR,
+        .mip_lod_bias = 0.0f,
+        .max_lod = 1.8f,
+    });
+
+    cube_scene_texture_decs.clear();
+
+    pbr_scene_constants scene_data{
+        .camera{
+            .proj = math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.1f),
+            .view = math::look_at(math::vec3<float>(4.5f, 1.5f, 0.0f), math::vec3<float>(0.0f, 1.5f, 0.0f),
+                                  math::vec3<float>(0.0f, 1.0, 0.0f)),
+            .view_proj = 1.0f,
+            .eye_position = {4.5f, 1.5f, 0.0f},
+        },
+        .sun{
+            .light_direction{-1.29f, -1.0f, 4.86f},
+            .color_illum{0.8f, 0.794f, 0.78f, 25000.0f},
+        },
+    };
+
+    std::vector<graphics::object_payload> objects;
+    std::vector<graphics::mesh_layout> mesh_layouts;
+    std::vector<graphics::material_payload> materials;
+    std::vector<graphics::indirect_command> indirect_draw_commands;
+
+    for (auto& node : scene->nodes)
+    {
+        math::mat4<float> parent_transform(1.0f);
+        if (node.parent != std::numeric_limits<std::uint32_t>::max())
+        {
+            parent_transform = objects[node.parent].transform;
+        }
+
+        auto mesh_id = node.mesh_id;
+        auto material = scene->meshes[mesh_id].material_id;
+        auto transform = parent_transform * math::transform(node.position, node.rotation, node.scale);
+        auto inv_transform = math::inverse(transform);
+
+        if (mesh_id == std::numeric_limits<std::uint32_t>::max())
+        {
+            continue;
+        }
+
+        objects.push_back({
+            .transform = transform,
+            .inv_transform = inv_transform,
+            .mesh_id = mesh_id,
+            .material_id = material,
+            .self_id = static_cast<std::uint32_t>(objects.size()),
+        });
+    }
+
+    for (auto& mat : scene->materials)
+    {
+        materials.push_back(graphics::material_payload{
+            .type = convert_material_type(mat.type),
+            .albedo_map_id = mat.base_color_texture,
+            .normal_map_id = mat.normal_map_texture,
+            .metallic_map_id = mat.metallic_roughness_texture,
+            .roughness_map_id = mat.metallic_roughness_texture,
+            .ao_map_id = mat.occlusion_map_texture,
+        });
+    }
+
+    auto upload_pass = rgc->add_graph_pass(
+        "Upload Pass", graphics::queue_operation_type::TRANSFER, [&](graphics::graph_pass_builder& bldr) {
+            bldr.add_transfer_destination_buffer(constants_buffer)
+                .add_transfer_destination_buffer(object_data_buffer)
+                .on_execute([&](graphics::command_list& cmds) {
+                    auto staging_buffer = graphics_device.get_staging_buffer();
+                    auto staging_buffer_ptr = graphics_device.map_buffer_frame(staging_buffer);
+
+                    std::size_t write_offset = 0;
+                    std::memcpy(staging_buffer_ptr.data(), &scene_data, sizeof(pbr_scene_constants));
+
+                    cmds.copy(staging_buffer, constants_buffer, graphics_device.get_buffer_frame_offset(staging_buffer),
+                              graphics_device.get_buffer_frame_offset(constants_buffer), sizeof(pbr_scene_constants));
+
+                    write_offset += sizeof(pbr_scene_constants);
+
+                    std::memcpy(staging_buffer_ptr.data() + write_offset, objects.data(),
+                                sizeof(graphics::object_payload) * objects.size());
+                    cmds.copy(staging_buffer, object_data_buffer,
+                              graphics_device.get_buffer_frame_offset(staging_buffer) + write_offset,
+                              graphics_device.get_buffer_frame_offset(object_data_buffer),
+                              sizeof(graphics::object_payload) * objects.size());
+
+                    write_offset += sizeof(graphics::object_payload) * objects.size();
+
+                    graphics_device.unmap_buffer(staging_buffer);
+
+                    auto cmds_ptr = graphics_device.map_buffer_frame(indirect_commands);
+                    std::memcpy(cmds_ptr.data(), indirect_draw_commands.data(),
+                                sizeof(graphics::indirect_command) * indirect_draw_commands.size());
+                    graphics_device.unmap_buffer(indirect_commands);
+                });
+        });
+
+    std::size_t opaque_count = 0;
+
+    auto pbr_opaque_pass = rgc->add_graph_pass(
+        "PBR Opaque Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
+            bldr.depends_on(upload_pass)
+                .add_color_attachment(color_buffer, graphics::resource_access_type::READ_WRITE,
+                                      graphics::load_op::CLEAR, tempest::graphics::store_op::STORE,
+                                      {0.0f, 0.0f, 0.0f, 1.0f})
+                .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
+                                      graphics::load_op::CLEAR, tempest::graphics::store_op::DONT_CARE, 0.0f)
+                .add_constant_buffer(constants_buffer, 0, 0)
+                .add_structured_buffer(point_lights_buffer, graphics::resource_access_type::READ, 0, 1)
+                .add_structured_buffer(vertex_pull_buffer, graphics::resource_access_type::READ, 0, 2)
+                .add_structured_buffer(mesh_layout_buffer, graphics::resource_access_type::READ, 0, 3)
+                .add_structured_buffer(object_data_buffer, graphics::resource_access_type::READ, 0, 4)
+                .add_structured_buffer(material_buffer, graphics::resource_access_type::READ, 0, 5)
+                .add_indirect_argument_buffer(indirect_commands)
+                .add_sampler(default_sampler, 0, 6, graphics::pipeline_stage::FRAGMENT)
+                .add_external_sampled_images(textures, 0, 7, graphics::pipeline_stage::FRAGMENT)
+                .on_execute([&](graphics::command_list& cmds) {
+                    cmds.set_scissor_region(0, 0, 1920, 1080)
+                        .set_viewport(0, 0, 1920, 1080)
+                        .use_pipeline(pbr_opaque)
+                        .draw(indirect_commands,
+                              static_cast<std::uint32_t>(graphics_device.get_buffer_frame_offset(indirect_commands)),
+                              static_cast<std::uint32_t>(opaque_count),
+                              sizeof(graphics::indirect_command));
+                });
+        });
+
+    std::ignore =
+        rgc->add_graph_pass("Swapchain Blit Graph Pass", graphics::queue_operation_type::GRAPHICS_AND_TRANSFER,
+                            [&](graphics::graph_pass_builder& bldr) {
+                                bldr.add_blit_source(color_buffer)
+                                    .add_external_blit_target(swapchain)
+                                    .depends_on(pbr_opaque_pass)
+                                    .on_execute([&](graphics::command_list& cmds) {
+                                        cmds.blit(color_buffer, graphics_device.fetch_current_image(swapchain));
+                                    });
+                            });
+
+    auto graph = std::move(*rgc).compile();
+
+    {
+        auto staging_buffer = graphics_device.get_staging_buffer();
+        auto staging_buffer_ptr = graphics_device.map_buffer(staging_buffer);
+
+        mesh_layouts = upload_meshes(graphics_device, scene->meshes, vertex_pull_buffer);
+        auto& executor = graphics_device.get_command_executor();
+
+        {
+            auto& cmds = executor.get_commands();
+            std::memcpy(staging_buffer_ptr.data(), mesh_layouts.data(),
+                        sizeof(graphics::mesh_layout) * mesh_layouts.size());
+            cmds.copy(staging_buffer, mesh_layout_buffer, 0, 0, sizeof(graphics::mesh_layout) * mesh_layouts.size());
+            executor.submit_and_wait();
+        }
+
+        {
+            auto& cmds = executor.get_commands();
+            std::memcpy(staging_buffer_ptr.data(), materials.data(),
+                        sizeof(graphics::material_payload) * materials.size());
+            cmds.copy(staging_buffer, material_buffer, 0, 0, sizeof(graphics::material_payload) * materials.size());
+            executor.submit_and_wait();
+        }
+
+        graphics_device.unmap_buffer(staging_buffer);
+    }
+
+    auto end_opaque =
+        std::partition(std::begin(objects), std::end(objects), [&](const graphics::object_payload& object) {
+            auto& mat = materials[object.material_id];
+            return mat.type == graphics::material_type::OPAQUE;
+        });
+
+    auto end_mask = std::partition(end_opaque, std::end(objects), [&](const graphics::object_payload& object) {
+        auto& mat = materials[object.material_id];
+        return mat.type == graphics::material_type::MASK;
+    });
+
+    opaque_count = std::distance(std::begin(objects), end_mask);
+
+    std::partition(end_mask, std::end(objects), [&](const graphics::object_payload& object) {
+        auto& mat = materials[object.material_id];
+        return mat.type == graphics::material_type::TRANSPARENT;
+    });
+
+    for (auto& object : objects)
+    {
+        auto& mesh = mesh_layouts[object.mesh_id];
+
+        indirect_draw_commands.push_back({
+            .vertex_count = mesh.index_count,
+            .instance_count = 1,
+            .first_vertex = 0,
+            .first_instance = object.self_id,
+        });
+    }
+
+    auto last_tick_time = std::chrono::high_resolution_clock::now();
+    auto last_frame_time = last_tick_time;
+    std::uint32_t fps_counter = 0;
+    std::uint32_t last_fps = 0;
+
+    scene = std::nullopt;
+
+    while (!win->should_close())
+    {
+        input::poll();
+        graph->execute();
+
+        auto current_time = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> time_since_tick = current_time - last_tick_time;
+        std::chrono::duration<double> frame_time = current_time - last_frame_time;
+        last_frame_time = current_time;
+
+        ++fps_counter;
+
+        if (time_since_tick.count() >= 1.0)
+        {
+            last_fps = fps_counter;
+            fps_counter = 0;
+            last_tick_time = current_time;
+            std::cout << last_fps << std::endl;
+        }
+    }
+
+    for (auto& texture : textures)
+    {
+        graphics_device.release_image(texture);
+    }
+
+    graphics_device.release_sampler(default_sampler);
+    graphics_device.release_graphics_pipeline(pbr_opaque);
+    graphics_device.release_swapchain(swapchain);
+}
+
+graphics::material_type convert_material_type(assets::material_type type)
+{
+    switch (type)
+    {
+    case assets::material_type::OPAQUE:
+        return graphics::material_type::OPAQUE;
+    case assets::material_type::BLEND:
+        return graphics::material_type::TRANSPARENT;
+    case assets::material_type::MASK:
+        return graphics::material_type::MASK;
+    }
+
+    std::exit(EXIT_FAILURE);
+}
+
+std::vector<graphics::mesh_layout> upload_meshes(graphics::render_device& device, std::span<assets::mesh_asset> meshes, graphics::buffer_resource_handle target)
+{
+    std::size_t bytes_written = 0;
+    std::size_t staging_buffer_bytes_written = 0;
+    std::size_t last_write_index = 0;
+    std::vector<graphics::mesh_layout> result;
+    result.reserve(meshes.size());
+
+    auto staging_buffer = device.get_staging_buffer();
+    auto staging_buffer_ptr = device.map_buffer(staging_buffer);
+    auto dst = staging_buffer_ptr.data();
+
+    auto& executor = device.get_command_executor();
+
+    for (auto& mesh : meshes)
+    {
+        graphics::mesh_layout layout = {
+            .mesh_start_offset = static_cast<std::uint32_t>(bytes_written),
+            .positions_offset = 0,
+            .interleave_offset = 3 * static_cast<std::uint32_t>(sizeof(float) * mesh.mesh.vertices.size()),
+            .uvs_offset = 0,
+            .normals_offset = static_cast<std::uint32_t>(2 * sizeof(float)),
+        };
+
+        std::uint32_t last_offset = 5 * sizeof(float);
+
+        if (mesh.mesh.has_tangents)
+        {
+            layout.tangents_offset = last_offset;
+            last_offset += static_cast<std::uint32_t>(4 * sizeof(float));
+        }
+
+        if (mesh.mesh.has_colors)
+        {
+            layout.color_offset = last_offset;
+            last_offset += static_cast<std::uint32_t>(4 * sizeof(float));
+        }
+
+        layout.interleave_stride = last_offset;
+        layout.index_offset =
+            layout.interleave_offset + layout.interleave_stride * static_cast<std::uint32_t>(mesh.mesh.vertices.size());
+        layout.index_count = static_cast<std::uint32_t>(mesh.mesh.indices.size());
+
+        result.push_back(layout);
+
+        // upload the data
+
+        if (staging_buffer_bytes_written + mesh.mesh.vertices.size() * 3 * sizeof(float) > staging_buffer_ptr.size())
+        {
+            auto& cmds = executor.get_commands();
+            cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+            executor.submit_and_wait();
+            staging_buffer_bytes_written = 0;
+            last_write_index = bytes_written;
+        }
+
+        std::size_t vertices_written = 0;
+        for (const auto& vertex : mesh.mesh.vertices)
+        {
+            std::memcpy(dst + staging_buffer_bytes_written + vertices_written * 3 * sizeof(float),
+                        &vertex.position, 3 * sizeof(float));
+
+            ++vertices_written;
+        }
+
+        bytes_written += layout.interleave_offset;
+        staging_buffer_bytes_written += layout.interleave_offset;
+
+        if (bytes_written + mesh.mesh.vertices.size() * layout.interleave_stride > staging_buffer_ptr.size())
+        {
+            auto& cmds = executor.get_commands();
+            cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+            executor.submit_and_wait();
+            staging_buffer_bytes_written = 0;
+            last_write_index = bytes_written;
+        }
+
+        vertices_written = 0;
+        for (const auto& vertex : mesh.mesh.vertices)
+        {
+            std::memcpy(dst + staging_buffer_bytes_written + layout.uvs_offset + vertices_written * layout.interleave_stride,
+                        &vertex.uv,
+                        2 * sizeof(float));
+            std::memcpy(dst + staging_buffer_bytes_written + layout.normals_offset +
+                            vertices_written * layout.interleave_stride,
+                        &vertex.normal,
+                        3 * sizeof(float));
+
+            if (mesh.mesh.has_tangents)
+            {
+                std::memcpy(dst + staging_buffer_bytes_written + layout.tangents_offset +
+                                vertices_written * layout.interleave_stride,
+                            &vertex.tangent,
+                            4 * sizeof(float));
+            }
+
+            if (mesh.mesh.has_colors)
+            {
+                std::memcpy(dst + staging_buffer_bytes_written + layout.tangents_offset +
+                                vertices_written * layout.interleave_stride,
+                            &vertex.tangent,
+                            4 * sizeof(float));
+            }
+
+            ++vertices_written;
+        }
+
+        bytes_written += mesh.mesh.vertices.size() * layout.interleave_stride;
+        staging_buffer_bytes_written += mesh.mesh.vertices.size() * layout.interleave_stride;
+
+        if (staging_buffer_bytes_written + layout.index_count * sizeof(std::uint32_t) > staging_buffer_ptr.size())
+        {
+            auto& cmds = executor.get_commands();
+            cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+            executor.submit_and_wait();
+            staging_buffer_bytes_written = 0;
+            last_write_index = bytes_written;
+        }
+
+        std::memcpy(dst + staging_buffer_bytes_written, mesh.mesh.indices.data(),
+                    layout.index_count * sizeof(std::uint32_t));
+        
+        bytes_written += layout.index_count * sizeof(std::uint32_t);
+        staging_buffer_bytes_written += layout.index_count * sizeof(std::uint32_t);
+    }
+
+    if (staging_buffer_bytes_written > 0)
+    {
+        auto& cmds = executor.get_commands();
+        cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+        executor.submit_and_wait();
+        staging_buffer_bytes_written = 0;
+    }
+
+    device.unmap_buffer(staging_buffer);
+
+    return result;
+}
+
+graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render_device& device)
+{
+    auto vertex_shader = core::read_bytes("data/pbr/pbr.vx.spv");
+    auto fragment_shader = core::read_bytes("data/pbr/pbr.px.spv");
+
+    graphics::descriptor_binding_info set0_bindings[] = {
+        {
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .binding_index = 1,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding_index = 2,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding_index = 3,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .binding_index = 4,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding_index = 5,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::SAMPLER,
+            .binding_index = 6,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
+            .binding_index = 7,
+            .binding_count = 1024,
+        },
+    };
+
+    graphics::descriptor_set_layout_create_info layouts[] = {
+        {
+            .set{0},
+            .bindings{set0_bindings},
+        },
+    };
+
+    graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
+    graphics::color_blend_attachment_state blending[] = {
+        {
+            .enabled{false},
+        },
+    };
+
+    return device.create_graphics_pipeline({
+        .layout{
+            .set_layouts = layouts,
+        },
+        .target{
+            .color_attachment_formats = color_buffer_fmt,
+            .depth_attachment_format = graphics::resource_format::D32_FLOAT,
+        },
+        .vertex_shader{
+            .bytes = vertex_shader,
+            .entrypoint = "VSMain",
+            .name = "PBR Opaque Shader Module",
+        },
+        .fragment_shader{
+            .bytes = fragment_shader,
+            .entrypoint = "PSMain",
+            .name = "PBR Opaque Shader Module",
+        },
+        .depth_testing{
+            .enable_test = true,
+            .enable_write = true,
+            .depth_test_op = graphics::compare_operation::GREATER_OR_EQUALS,
+        },
+        .blending{
+            .attachment_blend_ops = blending,
+        },
+        .name = "PBR Opaque Graphics Pipeline",
+    });
+}

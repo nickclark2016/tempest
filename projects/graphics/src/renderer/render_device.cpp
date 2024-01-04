@@ -16,7 +16,8 @@ namespace tempest::graphics
     std::vector<image_resource_handle> renderer_utilities::upload_textures(render_device& dev,
                                                                            std::span<texture_data_descriptor> textures,
                                                                            buffer_resource_handle staging_buffer,
-                                                                           bool use_entire_buffer)
+                                                                           bool use_entire_buffer,
+                                                                           bool generate_mip_maps)
     {
         std::vector<image_resource_handle> images;
 
@@ -26,15 +27,20 @@ namespace tempest::graphics
         // first, create image for each texture and transition image to transfer destination
         for (texture_data_descriptor& tex_dat : textures)
         {
+            auto mip_count = generate_mip_maps
+                                 ? std::bit_width(std::min(tex_dat.mips[0].width, tex_dat.mips[0].height)) - 1
+                                 : static_cast<std::uint32_t>(tex_dat.mips.size());
+
             image_create_info ci = {
                 .type{image_type::IMAGE_2D},
                 .width{tex_dat.mips[0].width},
                 .height{tex_dat.mips[0].height},
                 .depth{1},
                 .layers{1},
-                .mip_count{static_cast<std::uint32_t>(tex_dat.mips.size())},
+                .mip_count{mip_count},
                 .format{tex_dat.fmt},
                 .samples{sample_count::COUNT_1},
+                .transfer_source{true},
                 .transfer_destination{true},
                 .sampled{true},
                 .name{tex_dat.name},
@@ -78,14 +84,15 @@ namespace tempest::graphics
                         cmds = &cmd_executor.get_commands();
 
                         staging_buffer_bytes_written = 0;
+                        continue;
                     }
 
                     std::size_t buffer_offset = global_staging_buffer_offset + staging_buffer_bytes_written;
 
                     std::memcpy(staging_buffer_bytes.data() + staging_buffer_bytes_written,
                                 mip_data.bytes.data() + mip_bytes_written, bytes_to_write);
-                    cmds->copy(staging_buffer, images[image_index], buffer_offset, mip_data.width, static_cast<std::uint32_t>(row_count), mip_index,
-                               0, 0);
+                    cmds->copy(staging_buffer, images[image_index], buffer_offset, mip_data.width,
+                               static_cast<std::uint32_t>(row_count), mip_index, 0, 0);
 
                     row_index += row_count;
                     mip_bytes_written += bytes_to_write;
@@ -93,6 +100,23 @@ namespace tempest::graphics
                 }
 
                 mip_index += 1;
+            }
+
+            image_index += 1;
+        }
+
+        if (generate_mip_maps)
+        {
+            for (std::size_t i = 0; i < images.size(); ++i)
+            {
+                auto& tex_dat = textures[i];
+                auto handle = images[i];
+
+                auto mip_count = generate_mip_maps
+                                     ? std::bit_width(std::min(tex_dat.mips[0].width, tex_dat.mips[0].height)) - 1
+                                     : static_cast<std::uint32_t>(tex_dat.mips.size());
+
+                cmds->generate_mip_chain(handle, image_resource_usage::TRANSFER_DESTINATION, 0, mip_count);
             }
         }
 

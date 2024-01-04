@@ -68,11 +68,10 @@ Vertex pull_vertex(StructuredBuffer<uint> source, Mesh mesh, uint index)
 
     uint interleave_start = byte_offset + mesh.interleave_offset + mesh.interleave_stride * vertex_id;
 
-    v.uv0 = pull_vec2_f32(source, byte_offset + interleave_start + mesh.uv_offset);
-    v.normal = pull_vec3_f32(source, byte_offset + interleave_start + mesh.normal_offset);
-    v.tangent = has_component(mesh.tangent_offset) ? pull_vec3_f32(source, byte_offset + interleave_start + mesh.tangent_offset) : float3(0, 0, 0);
-    v.bitangent = has_component(mesh.bitangent_offset) ? pull_vec3_f32(source, byte_offset + interleave_start + mesh.bitangent_offset) : float3(0, 0, 0);
-    v.color = has_component(mesh.color_offset) ? pull_vec4_f32(source, byte_offset + interleave_start + mesh.color_offset) : float4(1.0, 0.0, 1.0, 1.0);
+    v.uv0 = pull_vec2_f32(source, interleave_start + mesh.uv_offset);
+    v.normal = pull_vec3_f32(source, interleave_start + mesh.normal_offset);
+    v.tangent = has_component(mesh.tangent_offset) ? pull_vec4_f32(source, interleave_start + mesh.tangent_offset) : float4(0, 0, 0, 1);
+    v.color = has_component(mesh.color_offset) ? pull_vec4_f32(source, interleave_start + mesh.color_offset) : float4(1.0, 0.0, 1.0, 1.0);
 
     return v;
 }
