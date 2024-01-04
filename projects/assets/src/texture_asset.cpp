@@ -7,8 +7,11 @@ namespace tempest::assets
 {
     std::optional<texture_asset> load_texture(const std::filesystem::path& path)
     {
-        FILE* f = fopen(path.string().c_str(), "rb");
+        auto fp = path.string();
+        FILE* f = fopen(fp.c_str(), "rb");
         int width, height, channels;
+        bool is_16_bit = stbi_is_16_bit(fp.c_str());
+
         auto bytes = stbi_load_from_file(f, &width, &height, &channels, 4);
 
         if (bytes)
@@ -18,7 +21,7 @@ namespace tempest::assets
                                              reinterpret_cast<std::byte*>(bytes + (width * height * 4)))},
                 .width{static_cast<std::uint32_t>(width)},
                 .height{static_cast<std::uint32_t>(height)},
-                .bit_depth{8},
+                .bit_depth{is_16_bit ? 16u : 8u},
             };
 
             stbi_image_free(bytes);

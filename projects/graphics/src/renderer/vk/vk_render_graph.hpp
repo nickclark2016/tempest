@@ -31,7 +31,7 @@ namespace tempest::graphics::vk
 
     struct render_graph_image_state
     {
-        bool persistent;
+        bool persistent{false};
         VkPipelineStageFlags2 stage_mask{0};
         VkAccessFlags access_mask{0};
         VkImageLayout image_layout{VK_IMAGE_LAYOUT_UNDEFINED};
@@ -86,7 +86,7 @@ namespace tempest::graphics::vk
     struct descriptor_set_state
     {
         std::vector<VkDescriptorSetLayout> set_layouts;
-        VkPipelineLayout layout;
+        VkPipelineLayout layout{VK_NULL_HANDLE};
         std::vector<descriptor_set_frame_state> per_frame_descriptors;
         std::vector<VkWriteDescriptorSet> writes;
         std::size_t last_update_frame{0};

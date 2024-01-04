@@ -244,9 +244,9 @@ void fft_water_demo()
         .n = spectrum_texture_dim,
         .length_scalar = {512, 128, 64, 32},
         .foam_bias = 0.85f,
-        .foam_decay_rate = 0.175f,
-        .foam_add = 0.3f,
-        .foam_threshold = 0.0f,
+        .foam_decay_rate = 0.0375f,
+        .foam_add = 0.1f,
+        .foam_threshold = 0.005f,
     };
 
     std::array<wave_spectrum, 8> wave_spectrums = {
@@ -389,6 +389,7 @@ void fft_water_demo()
         .layers{4},
         .fmt{graphics::resource_format::RGBA16_FLOAT},
         .type{graphics::image_type::IMAGE_2D_ARRAY},
+        .persistent{true},
         .name{"Water FFT Displacement Textures"},
     });
 
@@ -467,7 +468,7 @@ void fft_water_demo()
         .camera{
             .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.1f)},
             .view{math::look_at(math::vec3<float>(-16.0f, 6.0f, 0.0f), math::vec3<float>(0.0f, 6.0f, 0.0f),
-                                    math::vec3<float>(0.0f, 1.0, 0.0f))},
+                                math::vec3<float>(0.0f, 1.0, 0.0f))},
             .view_proj{1.0f},
             .position{-16.0f, 6.0f, 0.0f},
         },
@@ -553,8 +554,11 @@ void fft_water_demo()
                 .add_constant_buffer(constants_buffer, 0, 0)
                 .add_structured_buffer(spectrum_parameter_buffer, graphics::resource_access_type::READ_WRITE, 0, 5)
                 .add_storage_image(initial_spectrum_textures, graphics::resource_access_type::READ_WRITE, 0, 2)
+                .add_transfer_target(displacement_textures)
                 .on_execute([&](graphics::command_list& cmds) {
-                    cmds.use_pipeline(fft_state_init).dispatch(spectrum_texture_dim / 8, spectrum_texture_dim / 8, 1);
+                    cmds.use_pipeline(fft_state_init)
+                        .dispatch(spectrum_texture_dim / 8, spectrum_texture_dim / 8, 1)
+                        .clear_color(displacement_textures, 0, 0, 0, 1);
                 });
         });
 

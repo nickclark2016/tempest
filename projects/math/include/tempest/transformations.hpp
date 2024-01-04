@@ -106,24 +106,28 @@ namespace tempest::math
     inline constexpr mat4<T> as_mat4(const quat<T>& q)
     {
         mat4 res(static_cast<T>(1));
-        const T n = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-        const T s = n > 0 ? 2 / n : 0;
-        const T x = s * q.x;
-        const T y = s * q.y;
-        const T z = s * q.z;
-        const T xx = x * q.x;
-        const T xy = x * q.y;
-        const T xz = x * q.z;
-        const T xw = x * q.w;
-        const T yy = y * q.y;
-        const T yz = y * q.z;
-        const T yw = y * q.w;
-        const T zz = z * q.z;
-        const T zw = z * q.w;
 
-        res[0] = vec4<T>{static_cast<T>(1) - yy - zz, xy + zw, xz - yw, static_cast<T>(0)};
-        res[1] = vec4<T>{xy - zw, static_cast<T>(1) - xx - zz, yz + xw, static_cast<T>(0)};
-        res[2] = vec4<T>{xz + yw, yz - xw, static_cast<T>(1) - xx - yy, static_cast<T>(0)};
+        const T x = q.x, y = q.y, z = q.z, w = q.w;
+        const T x2 = x + x, y2 = y + y, z2 = z + z;
+        const T xx = x * x2, xy = x * y2, xz = x * z2;
+        const T yy = y * y2, yz = y * z2, zz = z * z2;
+        const T wx = w * x2, wy = w * y2, wz = w * z2;
+
+        auto data = res.data;
+
+        data[0] = (1 - (yy + zz));
+        data[1] = (xy + wz);
+        data[2] = (xz - wy);
+        data[3] = 0;
+        data[4] = (xy - wz);
+        data[5] = (1 - (xx + zz));
+        data[6] = (yz + wx);
+        data[7] = 0;
+        data[8] = (xz + wy);
+        data[9] = (yz - wx);
+        data[10] = (1 - (xx + yy));
+        data[11] = 0;
+        data[15] = 1;
 
         return res;
     }
@@ -306,29 +310,30 @@ namespace tempest::math
     inline constexpr mat4<T> perspective(const T aspect, const T fov, T near)
     {
         const T f = static_cast<T>(1) / std::tan(as_radians(fov / 2));
-        return mat4<T>(f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, -1, 0, 0, near, 0);
+        return mat4<T>(f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, 1, 0, 0, near, 0);
     }
 
     template <typename T>
     mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>& up)
     {
-        const vec3<T> f(normalize(target - eye));
-        const vec3<T> s(normalize(cross(f, up)));
-        const vec3<T> u(cross(s, f));
+        const vec3<T> z = normalize(target - eye);
+        const vec3<T> x = normalize(cross(up, z));
+        const vec3<T> y = cross(z, x);
 
         mat4<T> result(1);
-        result[0][0] = s.x;
-        result[1][0] = s.y;
-        result[2][0] = s.z;
-        result[0][1] = u.x;
-        result[1][1] = u.y;
-        result[2][1] = u.z;
-        result[0][2] = -f.x;
-        result[1][2] = -f.y;
-        result[2][2] = -f.z;
-        result[3][0] = -dot(s, eye);
-        result[3][1] = -dot(u, eye);
-        result[3][2] = dot(f, eye);
+        result[0][0] = x.x;
+        result[1][0] = x.y;
+        result[2][0] = x.z;
+        result[0][1] = y.x;
+        result[1][1] = y.y;
+        result[2][1] = y.z;
+        result[0][2] = z.x;
+        result[1][2] = z.y;
+        result[2][2] = z.z;
+        result[3][0] = -dot(x, eye);
+        result[3][1] = -dot(y, eye);
+        result[3][2] = -dot(z, eye);
+
         return result;
     }
 

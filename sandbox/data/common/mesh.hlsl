@@ -9,7 +9,6 @@ struct Mesh {
     uint uv_offset;
     uint normal_offset;
     uint tangent_offset;
-    uint bitangent_offset;
     uint color_offset;
     uint index_offset;
     uint index_count;
@@ -27,9 +26,17 @@ struct Vertex {
     float3 position;
     float2 uv0;
     float3 normal;
-    float3 tangent;
-    float3 bitangent;
+    float4 tangent;
     float4 color;
+};
+
+struct Material {
+    uint type;
+    uint base_texture;
+    uint normal;
+    uint metallic;
+    uint roughness;
+    uint ao;
 };
 
 #endif // tempest_common_mesh_hlsl

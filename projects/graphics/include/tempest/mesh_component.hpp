@@ -26,7 +26,6 @@ namespace tempest::graphics
         std::uint32_t uvs_offset;
         std::uint32_t normals_offset;
         std::uint32_t tangents_offset = std::numeric_limits<std::uint32_t>::max();
-        std::uint32_t bitangents_offset = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t color_offset = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t index_offset;
         std::uint32_t index_count;
@@ -35,7 +34,8 @@ namespace tempest::graphics
     enum class material_type : std::uint32_t
     {
         OPAQUE = 0,
-        TRASPARENT = 1,
+        TRANSPARENT = 1,
+        MASK = 2,
     };
 
     struct material_payload
@@ -53,8 +53,10 @@ namespace tempest::graphics
     {
         math::mat4<float> transform;
         math::mat4<float> inv_transform;
-        std::uint32_t mesh_id{~0u};
-        std::uint32_t material_id{~0u};
+        std::uint32_t mesh_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t material_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t parent_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t self_id{std::numeric_limits<std::uint32_t>::max()};
     };
 } // namespace tempest::graphics
 

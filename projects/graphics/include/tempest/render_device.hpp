@@ -83,7 +83,8 @@ namespace tempest::graphics
         static std::vector<image_resource_handle> upload_textures(render_device& dev,
                                                                   std::span<texture_data_descriptor> textures,
                                                                   buffer_resource_handle staging_buffer,
-                                                                  bool use_entire_buffer = false);
+                                                                  bool use_entire_buffer = false,
+                                                                  bool generate_mip_maps = false);
     };
 } // namespace tempest::graphics
 

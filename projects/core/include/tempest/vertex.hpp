@@ -3,25 +3,29 @@
 
 #include "memory.hpp"
 
+#include <tempest/vec2.hpp>
+#include <tempest/vec3.hpp>
+#include <tempest/vec4.hpp>
+
 #include <array>
 #include <span>
+#include <string>
 
 namespace tempest::core
 {
     struct vertex
     {
-        std::array<float, 3> position;
-        std::array<float, 2> uv;
-        std::array<float, 3> normal;
-        std::array<float, 3> tangent;
-        std::array<float, 3> bitangent;
-        std::array<float, 4> color;
+        math::vec3<float> position;
+        math::vec2<float> uv;
+        math::vec3<float> normal;
+        math::vec4<float> tangent;
+        math::vec4<float> color;
     };
 
     struct mesh_view
     {
-        std::span<vertex> vertices;
-        std::span<std::uint32_t> indices;
+        std::span<const vertex> vertices;
+        std::span<const std::uint32_t> indices;
 
         bool has_tangents;
         bool has_bitangents;
@@ -31,11 +35,33 @@ namespace tempest::core
         [[nodiscard]] std::size_t size_bytes() const noexcept;
     };
 
+    struct mesh
+    {
+        std::vector<vertex> vertices;
+        std::vector<std::uint32_t> indices;
+        std::string name;
+
+        bool has_normals;
+        bool has_tangents;
+        bool has_colors;
+
+        void flip_winding_order();
+
+        void compute_normals();
+        void compute_tangents();
+
+        bool validate() const;
+
+        vertex& operator[](std::size_t idx) noexcept;
+        const vertex& operator[](std::size_t idx) const noexcept;
+
+        std::size_t num_triangles() const noexcept;
+    };
+
     inline std::size_t mesh_view::bytes_per_vertex() const noexcept
     {
         std::size_t bpv = (3 + 2 + 3) * sizeof(float);
-        bpv += (has_tangents ? 3 : 0) * sizeof(float);
-        bpv += (has_bitangents ? 3 : 0) * sizeof(float);
+        bpv += (has_tangents ? 4 : 0) * sizeof(float);
         bpv += (has_colors ? 4 : 0) * sizeof(float);
         return bpv;
     }
