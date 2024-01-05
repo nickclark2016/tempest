@@ -8,6 +8,10 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tinygltf/tiny_gltf.h>
 
+#include <string_view>
+
+#undef OPAQUE
+
 namespace tempest::assets
 {
     namespace
@@ -87,6 +91,24 @@ namespace tempest::assets
         {
             return {read_float(data), read_float(data + sizeof(float)), read_float(data + 2 * sizeof(float)),
                     read_float(data + 3 * sizeof(float))};
+        }
+
+        material_type get_material_type(std::string_view type)
+        {
+            if (type == "OPAQUE")
+            {
+                return material_type::OPAQUE;
+            }
+            else if (type == "MASK")
+            {
+                return material_type::MASK;
+            }
+            else if (type == "BLEND")
+            {
+                return material_type::BLEND;
+            }
+
+            return material_type::OPAQUE;
         }
     } // namespace
 
@@ -363,6 +385,8 @@ namespace tempest::assets
                 mat.emissive_map_texture =
                     static_cast<std::uint32_t>(root.textures[material.emissiveTexture.index].source);
             }
+
+            mat.type = get_material_type(material.alphaMode);
 
             asset.materials.push_back(mat);
         }

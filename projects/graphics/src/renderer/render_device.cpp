@@ -131,4 +131,140 @@ namespace tempest::graphics
 
         return images;
     }
+    std::vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, std::span<core::mesh> meshes,
+                                                               buffer_resource_handle target)
+    {
+        std::size_t bytes_written = 0;
+        std::size_t staging_buffer_bytes_written = 0;
+        std::size_t last_write_index = 0;
+        std::vector<graphics::mesh_layout> result;
+        result.reserve(meshes.size());
+
+        auto staging_buffer = device.get_staging_buffer();
+        auto staging_buffer_ptr = device.map_buffer(staging_buffer);
+        auto dst = staging_buffer_ptr.data();
+
+        auto& executor = device.get_command_executor();
+
+        for (auto& mesh : meshes)
+        {
+            graphics::mesh_layout layout = {
+                .mesh_start_offset = static_cast<std::uint32_t>(bytes_written),
+                .positions_offset = 0,
+                .interleave_offset = 3 * static_cast<std::uint32_t>(sizeof(float) * mesh.vertices.size()),
+                .uvs_offset = 0,
+                .normals_offset = static_cast<std::uint32_t>(2 * sizeof(float)),
+            };
+
+            std::uint32_t last_offset = 5 * sizeof(float);
+
+            if (mesh.has_tangents)
+            {
+                layout.tangents_offset = last_offset;
+                last_offset += static_cast<std::uint32_t>(4 * sizeof(float));
+            }
+
+            if (mesh.has_colors)
+            {
+                layout.color_offset = last_offset;
+                last_offset += static_cast<std::uint32_t>(4 * sizeof(float));
+            }
+
+            layout.interleave_stride = last_offset;
+            layout.index_offset =
+                layout.interleave_offset + layout.interleave_stride * static_cast<std::uint32_t>(mesh.vertices.size());
+            layout.index_count = static_cast<std::uint32_t>(mesh.indices.size());
+
+            result.push_back(layout);
+
+            // upload the data
+
+            if (staging_buffer_bytes_written + mesh.vertices.size() * 3 * sizeof(float) > staging_buffer_ptr.size())
+            {
+                auto& cmds = executor.get_commands();
+                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                executor.submit_and_wait();
+                staging_buffer_bytes_written = 0;
+                last_write_index = bytes_written;
+            }
+
+            std::size_t vertices_written = 0;
+            for (const auto& vertex : mesh.vertices)
+            {
+                std::memcpy(dst + staging_buffer_bytes_written + vertices_written * 3 * sizeof(float), &vertex.position,
+                            3 * sizeof(float));
+
+                ++vertices_written;
+            }
+
+            bytes_written += layout.interleave_offset;
+            staging_buffer_bytes_written += layout.interleave_offset;
+
+            if (bytes_written + mesh.vertices.size() * layout.interleave_stride > staging_buffer_ptr.size())
+            {
+                auto& cmds = executor.get_commands();
+                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                executor.submit_and_wait();
+                staging_buffer_bytes_written = 0;
+                last_write_index = bytes_written;
+            }
+
+            vertices_written = 0;
+            for (const auto& vertex : mesh.vertices)
+            {
+                std::memcpy(dst + staging_buffer_bytes_written + layout.uvs_offset +
+                                vertices_written * layout.interleave_stride,
+                            &vertex.uv, 2 * sizeof(float));
+                std::memcpy(dst + staging_buffer_bytes_written + layout.normals_offset +
+                                vertices_written * layout.interleave_stride,
+                            &vertex.normal, 3 * sizeof(float));
+
+                if (mesh.has_tangents)
+                {
+                    std::memcpy(dst + staging_buffer_bytes_written + layout.tangents_offset +
+                                    vertices_written * layout.interleave_stride,
+                                &vertex.tangent, 4 * sizeof(float));
+                }
+
+                if (mesh.has_colors)
+                {
+                    std::memcpy(dst + staging_buffer_bytes_written + layout.tangents_offset +
+                                    vertices_written * layout.interleave_stride,
+                                &vertex.tangent, 4 * sizeof(float));
+                }
+
+                ++vertices_written;
+            }
+
+            bytes_written += mesh.vertices.size() * layout.interleave_stride;
+            staging_buffer_bytes_written += mesh.vertices.size() * layout.interleave_stride;
+
+            if (staging_buffer_bytes_written + layout.index_count * sizeof(std::uint32_t) > staging_buffer_ptr.size())
+            {
+                auto& cmds = executor.get_commands();
+                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                executor.submit_and_wait();
+                staging_buffer_bytes_written = 0;
+                last_write_index = bytes_written;
+            }
+
+            std::memcpy(dst + staging_buffer_bytes_written, mesh.indices.data(),
+                        layout.index_count * sizeof(std::uint32_t));
+
+            bytes_written += layout.index_count * sizeof(std::uint32_t);
+            staging_buffer_bytes_written += layout.index_count * sizeof(std::uint32_t);
+        }
+
+        if (staging_buffer_bytes_written > 0)
+        {
+            auto& cmds = executor.get_commands();
+            cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+            executor.submit_and_wait();
+            staging_buffer_bytes_written = 0;
+        }
+
+        device.unmap_buffer(staging_buffer);
+
+        return result;
+    }
 } // namespace tempest::graphics
