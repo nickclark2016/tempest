@@ -120,7 +120,10 @@ namespace tempest::graphics::vk
                            std::uint32_t first_index = 0) override;
         command_list& draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
                            std::uint32_t stride) override;
+        command_list& draw_indexed(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
+                           std::uint32_t stride) override;
         command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) override;
+        command_list& use_index_buffer(buffer_resource_handle buf, std::uint32_t offset) override;
 
         command_list& blit(image_resource_handle src, image_resource_handle dst) override;
         command_list& copy(buffer_resource_handle src, buffer_resource_handle dst, std::size_t src_offset = 0,

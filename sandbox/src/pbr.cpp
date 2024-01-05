@@ -103,6 +103,13 @@ void pbr_demo()
         .per_frame_memory = false,
     });
 
+    auto index_buffer = rgc->create_buffer({
+        .size = 1024 * 1024 * 512,
+        .location = graphics::memory_location::DEVICE,
+        .name = "Index Buffer",
+        .per_frame_memory = false,
+    });
+
     auto mesh_layout_buffer = rgc->create_buffer({
         .size = sizeof(graphics::mesh_layout) * 4096,
         .location = graphics::memory_location::DEVICE,
@@ -148,7 +155,7 @@ void pbr_demo()
     });
 
     auto indirect_commands = rgc->create_buffer({
-        .size = sizeof(graphics::indirect_command) * 4096,
+        .size = sizeof(graphics::indexed_indirect_command) * 4096,
         .location = graphics::memory_location::HOST,
         .name = "Indirect Arguments",
         .per_frame_memory = true,
@@ -178,7 +185,7 @@ void pbr_demo()
 
     auto textures = graphics::renderer_utilities::upload_textures(graphics_device, cube_scene_texture_decs,
                                                                   graphics_device.get_staging_buffer(), true, true);
-    textures.resize(1024);
+    textures.resize(512);
     auto default_sampler = graphics_device.create_sampler({
         .mag = graphics::filter::LINEAR,
         .min = graphics::filter::LINEAR,
@@ -206,7 +213,7 @@ void pbr_demo()
     std::vector<graphics::object_payload> objects;
     std::vector<graphics::mesh_layout> mesh_layouts;
     std::vector<graphics::material_payload> materials;
-    std::vector<graphics::indirect_command> indirect_draw_commands;
+    std::vector<graphics::indexed_indirect_command> indirect_draw_commands;
     std::vector<std::uint32_t> instances;
 
     for (auto& node : scene->nodes)
@@ -310,13 +317,16 @@ void pbr_demo()
                 .add_structured_buffer(mesh_layout_buffer, graphics::resource_access_type::READ, 0, 3)
                 .add_structured_buffer(object_data_buffer, graphics::resource_access_type::READ, 0, 4)
                 .add_structured_buffer(instance_data_buffer, graphics::resource_access_type::READ, 0, 5)
+                .add_index_buffer(index_buffer)
                 .on_execute([&](graphics::command_list& cmds) {
                     cmds.set_scissor_region(0, 0, 1920, 1080)
                         .set_viewport(0, 0, 1920, 1080)
                         .use_pipeline(z_pass)
-                        .draw(indirect_commands,
-                              static_cast<std::uint32_t>(graphics_device.get_buffer_frame_offset(indirect_commands)),
-                              static_cast<std::uint32_t>(opaque_count), sizeof(graphics::indirect_command));
+                        .use_index_buffer(index_buffer, 0)
+                        .draw_indexed(
+                            indirect_commands,
+                            static_cast<std::uint32_t>(graphics_device.get_buffer_frame_offset(indirect_commands)),
+                            static_cast<std::uint32_t>(opaque_count), sizeof(graphics::indexed_indirect_command));
                 });
         });
 
@@ -338,14 +348,17 @@ void pbr_demo()
                 .add_sampler(default_sampler, 0, 7, graphics::pipeline_stage::FRAGMENT)
                 .add_external_sampled_images(textures, 0, 8, graphics::pipeline_stage::FRAGMENT)
                 .add_indirect_argument_buffer(indirect_commands)
+                .add_index_buffer(index_buffer)
                 .on_execute([&](graphics::command_list& cmds) {
                     cmds.set_scissor_region(0, 0, 1920, 1080)
                         .set_viewport(0, 0, 1920, 1080)
                         .use_pipeline(pbr_opaque)
-                        .draw(indirect_commands,
-                              static_cast<std::uint32_t>(graphics_device.get_buffer_frame_offset(indirect_commands)),
-                              static_cast<std::uint32_t>(opaque_count + mask_count),
-                              sizeof(graphics::indirect_command));
+                        .use_index_buffer(index_buffer, 0)
+                        .draw_indexed(
+                            indirect_commands,
+                            static_cast<std::uint32_t>(graphics_device.get_buffer_frame_offset(indirect_commands)),
+                            static_cast<std::uint32_t>(opaque_count + mask_count),
+                            sizeof(graphics::indexed_indirect_command));
                 });
         });
 
@@ -376,7 +389,8 @@ void pbr_demo()
 
         scene->meshes.clear();
 
-        mesh_layouts = graphics::renderer_utilities::upload_meshes(graphics_device, meshes, vertex_pull_buffer);
+        mesh_layouts =
+            graphics::renderer_utilities::upload_meshes(graphics_device, meshes, vertex_pull_buffer, index_buffer);
         auto& executor = graphics_device.get_command_executor();
 
         {
@@ -422,9 +436,10 @@ void pbr_demo()
         auto& mesh = mesh_layouts[object.mesh_id];
 
         indirect_draw_commands.push_back({
-            .vertex_count = mesh.index_count,
+            .index_count = mesh.index_count,
             .instance_count = 1,
-            .first_vertex = 0,
+            .first_index = mesh.index_offset,
+            .vertex_offset = 0,
             .first_instance = object.self_id,
         });
     }
@@ -603,7 +618,7 @@ graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render
         {
             .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
             .binding_index = 8,
-            .binding_count = 1024,
+            .binding_count = 512,
         },
     };
 

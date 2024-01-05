@@ -132,11 +132,14 @@ namespace tempest::graphics
         return images;
     }
     std::vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, std::span<core::mesh> meshes,
-                                                               buffer_resource_handle target)
+                                                               buffer_resource_handle target,
+                                                               buffer_resource_handle indices)
     {
+        std::size_t indices_bytes_written = 0;
         std::size_t bytes_written = 0;
         std::size_t staging_buffer_bytes_written = 0;
         std::size_t last_write_index = 0;
+        std::size_t last_index_write_index = 0;
         std::vector<graphics::mesh_layout> result;
         result.reserve(meshes.size());
 
@@ -171,8 +174,6 @@ namespace tempest::graphics
             }
 
             layout.interleave_stride = last_offset;
-            layout.index_offset =
-                layout.interleave_offset + layout.interleave_stride * static_cast<std::uint32_t>(mesh.vertices.size());
             layout.index_count = static_cast<std::uint32_t>(mesh.indices.size());
 
             result.push_back(layout);
@@ -238,27 +239,43 @@ namespace tempest::graphics
 
             bytes_written += mesh.vertices.size() * layout.interleave_stride;
             staging_buffer_bytes_written += mesh.vertices.size() * layout.interleave_stride;
-
-            if (staging_buffer_bytes_written + layout.index_count * sizeof(std::uint32_t) > staging_buffer_ptr.size())
-            {
-                auto& cmds = executor.get_commands();
-                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
-                executor.submit_and_wait();
-                staging_buffer_bytes_written = 0;
-                last_write_index = bytes_written;
-            }
-
-            std::memcpy(dst + staging_buffer_bytes_written, mesh.indices.data(),
-                        layout.index_count * sizeof(std::uint32_t));
-
-            bytes_written += layout.index_count * sizeof(std::uint32_t);
-            staging_buffer_bytes_written += layout.index_count * sizeof(std::uint32_t);
         }
 
         if (staging_buffer_bytes_written > 0)
         {
             auto& cmds = executor.get_commands();
             cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+            executor.submit_and_wait();
+            staging_buffer_bytes_written = 0;
+        }
+
+        std::size_t mesh_idx = 0;
+        std::uint32_t indices_written = 0;
+        for (auto& mesh : meshes)
+        {
+            if (staging_buffer_bytes_written + mesh.indices.size() * sizeof(std::uint32_t) > staging_buffer_ptr.size())
+            {
+                auto& cmds = executor.get_commands();
+                cmds.copy(staging_buffer, indices, 0, last_index_write_index, staging_buffer_bytes_written);
+                executor.submit_and_wait();
+                staging_buffer_bytes_written = 0;
+                last_index_write_index = indices_bytes_written;
+            }
+
+            std::memcpy(dst + staging_buffer_bytes_written, mesh.indices.data(),
+                        mesh.indices.size() * sizeof(std::uint32_t));
+
+            indices_bytes_written += mesh.indices.size() * sizeof(std::uint32_t);
+            staging_buffer_bytes_written += mesh.indices.size() * sizeof(std::uint32_t);
+
+            result[mesh_idx++].index_offset = indices_written;
+            indices_written += static_cast<std::uint32_t>(mesh.indices.size());
+        }
+
+        if (staging_buffer_bytes_written > 0)
+        {
+            auto& cmds = executor.get_commands();
+            cmds.copy(staging_buffer, indices, 0, last_index_write_index, staging_buffer_bytes_written);
             executor.submit_and_wait();
             staging_buffer_bytes_written = 0;
         }
