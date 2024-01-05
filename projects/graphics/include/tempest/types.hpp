@@ -497,7 +497,10 @@ namespace tempest::graphics
                                    std::uint32_t first_vertex = 0, std::uint32_t first_index = 0) = 0;
         virtual command_list& draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
                                    std::uint32_t stride) = 0;
+        virtual command_list& draw_indexed(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
+                                   std::uint32_t stride) = 0;
         virtual command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) = 0;
+        virtual command_list& use_index_buffer(buffer_resource_handle buf, std::uint32_t offset) = 0;
 
         virtual command_list& blit(image_resource_handle src, image_resource_handle dst) = 0;
         virtual command_list& copy(buffer_resource_handle src, buffer_resource_handle dst, std::size_t src_offset = 0,
@@ -531,6 +534,15 @@ namespace tempest::graphics
         std::uint32_t vertex_count;
         std::uint32_t instance_count;
         std::uint32_t first_vertex;
+        std::uint32_t first_instance;
+    };
+
+    struct indexed_indirect_command
+    {
+        std::uint32_t index_count;
+        std::uint32_t instance_count;
+        std::uint32_t first_index;
+        std::int32_t vertex_offset;
         std::uint32_t first_instance;
     };
 

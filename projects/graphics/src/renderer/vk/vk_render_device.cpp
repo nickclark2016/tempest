@@ -1873,7 +1873,9 @@ namespace tempest::graphics::vk
                                                        .require_present()
                                                        .set_minimum_version(1, 3)
                                                        .set_required_features({
+#ifdef _DEBUG
                                                            .robustBufferAccess{VK_TRUE},
+#endif
                                                            .independentBlend{VK_TRUE},
                                                            .logicOp{VK_TRUE},
                                                            .multiDrawIndirect = VK_TRUE,
@@ -1942,6 +1944,11 @@ namespace tempest::graphics::vk
         {
             for (std::size_t i = 0; i < selection->size(); ++i)
             {
+                if ((*selection)[i].properties.limits.maxPerStageDescriptorSampledImages < 512)
+                {
+                    continue;
+                }
+
                 devices.push_back(physical_device_context{
                     .id{static_cast<std::uint32_t>(i)},
                     .name{(*selection)[i].name},
@@ -2049,10 +2056,26 @@ namespace tempest::graphics::vk
         return *this;
     }
 
+    command_list& command_list::draw_indexed(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
+                                             std::uint32_t stride)
+    {
+        _dispatch->cmdDrawIndexedIndirect(_cmds, _device->access_buffer(buf)->buffer, offset, count, stride);
+
+        return *this;
+    }
+
     command_list& command_list::use_pipeline(graphics_pipeline_resource_handle pipeline)
     {
         auto vk_pipeline = _device->access_graphics_pipeline(pipeline);
         _dispatch->cmdBindPipeline(_cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline->pipeline);
+
+        return *this;
+    }
+
+    command_list& command_list::use_index_buffer(buffer_resource_handle buf, std::uint32_t offset)
+    {
+        auto vk_buf = _device->access_buffer(buf);
+        _dispatch->cmdBindIndexBuffer(_cmds, vk_buf->buffer, offset, VK_INDEX_TYPE_UINT32);
 
         return *this;
     }

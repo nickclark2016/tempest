@@ -90,7 +90,7 @@ namespace tempest::graphics
                                                                   bool generate_mip_maps = false);
 
         static std::vector<mesh_layout> upload_meshes(render_device& device, std::span<core::mesh> meshes,
-                                                      buffer_resource_handle target);
+                                                      buffer_resource_handle target, buffer_resource_handle indices);
     };
 } // namespace tempest::graphics
 
