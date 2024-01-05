@@ -16,10 +16,11 @@ struct Mesh {
 
 struct ObjectData {
     float4x4 model_matrix;
-    float4x4 inv_model_matrix;
+    float4x4 transpose_inv_model_matrix;
     uint mesh_id;
     uint material_id;
-    uint _pad0, _pad1;
+    uint parent_id;
+    uint self_id;
 };
 
 struct Vertex {

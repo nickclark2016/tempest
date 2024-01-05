@@ -1148,20 +1148,13 @@ namespace tempest::graphics::vk
             .pCode{reinterpret_cast<std::uint32_t*>(ci.fragment_shader.bytes.data())},
         };
 
-        VkShaderModule vertex_module, fragment_module;
-        auto vertex_module_result = _dispatch.createShaderModule(&vertex_ci, nullptr, &vertex_module);
-        auto fragment_module_result = _dispatch.createShaderModule(&fragment_ci, nullptr, &fragment_module);
+        std::uint32_t shader_count = 1;
 
-        if (vertex_module_result != VK_SUCCESS || fragment_module_result != VK_SUCCESS)
-        {
-            logger->error("Failed to create VkShaderModules for pipeline.");
-            return graphics_pipeline_resource_handle();
-        }
+        VkShaderModule vertex_module = VK_NULL_HANDLE, fragment_module = VK_NULL_HANDLE;
+        auto vertex_module_result = _dispatch.createShaderModule(&vertex_ci, nullptr, &vertex_module);
 
         name_object(_dispatch, std::bit_cast<std::uint64_t>(vertex_module), VK_OBJECT_TYPE_SHADER_MODULE,
                     ci.vertex_shader.name.c_str());
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(fragment_module), VK_OBJECT_TYPE_SHADER_MODULE,
-                    ci.fragment_shader.name.c_str());
 
         VkPipelineShaderStageCreateInfo vertex_stage_ci = {
             .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
@@ -1173,15 +1166,33 @@ namespace tempest::graphics::vk
             .pSpecializationInfo{nullptr},
         };
 
-        VkPipelineShaderStageCreateInfo fragment_stage_ci = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{},
-            .stage{VK_SHADER_STAGE_FRAGMENT_BIT},
-            .module{fragment_module},
-            .pName{ci.fragment_shader.entrypoint.data()},
-            .pSpecializationInfo{nullptr},
-        };
+        VkPipelineShaderStageCreateInfo fragment_stage_ci = {};
+        bool has_fragment_shader = fragment_ci.codeSize > 0;
+
+        if (has_fragment_shader)
+        {
+            auto fragment_module_result = _dispatch.createShaderModule(&fragment_ci, nullptr, &fragment_module);
+            if (vertex_module_result != VK_SUCCESS || fragment_module_result != VK_SUCCESS)
+            {
+                logger->error("Failed to create VkShaderModules for pipeline.");
+                return graphics_pipeline_resource_handle();
+            }
+
+            name_object(_dispatch, std::bit_cast<std::uint64_t>(fragment_module), VK_OBJECT_TYPE_SHADER_MODULE,
+                        ci.fragment_shader.name.c_str());
+
+            fragment_stage_ci = {
+                .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
+                .pNext{nullptr},
+                .flags{},
+                .stage{VK_SHADER_STAGE_FRAGMENT_BIT},
+                .module{fragment_module},
+                .pName{ci.fragment_shader.entrypoint.data()},
+                .pSpecializationInfo{nullptr},
+            };
+
+            ++shader_count;
+        }
 
         VkPipelineShaderStageCreateInfo stages_ci[] = {
             vertex_stage_ci,
@@ -1333,16 +1344,16 @@ namespace tempest::graphics::vk
             .sType{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO},
             .pNext{&dynamic_render},
             .flags{0},
-            .stageCount{2},
+            .stageCount{shader_count},
             .pStages{stages_ci},
             .pVertexInputState{&vertex_input_state},
             .pInputAssemblyState{&input_assembly_state},
             .pTessellationState{nullptr},
             .pViewportState{&viewport},
             .pRasterizationState{&raster_state},
-            .pMultisampleState{&multisample_state},
+            .pMultisampleState{has_fragment_shader ? &multisample_state : nullptr},
             .pDepthStencilState{&depth_stencil_state},
-            .pColorBlendState{&color_blend_state},
+            .pColorBlendState{has_fragment_shader ? &color_blend_state : nullptr},
             .pDynamicState{&dynamic_state},
             .layout{pipeline_layout},
             .renderPass{VK_NULL_HANDLE},
@@ -1879,7 +1890,6 @@ namespace tempest::graphics::vk
                                                            .shaderInt64{VK_FALSE},
                                                        })
                                                        .set_required_features_12({
-                                                           .drawIndirectCount{VK_TRUE},
                                                            .shaderUniformBufferArrayNonUniformIndexing{VK_TRUE},
                                                            .shaderSampledImageArrayNonUniformIndexing{VK_TRUE},
                                                            .shaderStorageBufferArrayNonUniformIndexing{VK_TRUE},

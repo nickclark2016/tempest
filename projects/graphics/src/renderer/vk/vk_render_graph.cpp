@@ -1050,6 +1050,16 @@ namespace tempest::graphics::vk
                             },
                         };
 
+                        area.offset = {
+                            .x{0},
+                            .y{0},
+                        };
+
+                        area.extent = {
+                            .width{vk_img->img_info.extent.width},
+                            .height{vk_img->img_info.extent.height},
+                        };
+
                         has_depth = true;
                     }
                 }

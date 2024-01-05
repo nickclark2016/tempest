@@ -1,9 +1,11 @@
 #ifndef tempest_graphics_render_device_hpp
 #define tempest_graphics_render_device_hpp
 
+#include "mesh_component.hpp"
 #include "types.hpp"
 
 #include <tempest/memory.hpp>
+#include <tempest/vertex.hpp>
 
 #include <compare>
 #include <cstdint>
@@ -47,7 +49,8 @@ namespace tempest::graphics
         virtual buffer_resource_handle create_buffer(const buffer_create_info& ci) = 0;
         virtual void release_buffer(buffer_resource_handle handle) = 0;
         virtual std::span<std::byte> map_buffer(buffer_resource_handle handle) = 0;
-        virtual std::span<std::byte> map_buffer_frame(buffer_resource_handle handle, std::uint64_t frame_offset = 0) = 0;
+        virtual std::span<std::byte> map_buffer_frame(buffer_resource_handle handle,
+                                                      std::uint64_t frame_offset = 0) = 0;
         virtual std::size_t get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset = 0) = 0;
         virtual void unmap_buffer(buffer_resource_handle handle) = 0;
 
@@ -85,6 +88,9 @@ namespace tempest::graphics
                                                                   buffer_resource_handle staging_buffer,
                                                                   bool use_entire_buffer = false,
                                                                   bool generate_mip_maps = false);
+
+        static std::vector<mesh_layout> upload_meshes(render_device& device, std::span<core::mesh> meshes,
+                                                      buffer_resource_handle target);
     };
 } // namespace tempest::graphics
 
