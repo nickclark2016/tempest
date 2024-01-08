@@ -230,7 +230,7 @@ namespace tempest::math
         const auto translating = translate(translation);
         const auto scaling = tempest::math::scale(scale);
         const auto rotating = as_mat4(quat(rotation));
-        return translating * rotating * scaling;
+        return scaling * rotating * translating;
     }
 
     template <typename T>
@@ -310,56 +310,44 @@ namespace tempest::math
     inline constexpr mat4<T> perspective(const T aspect, const T fov, T near)
     {
         const T f = static_cast<T>(1) / std::tan(as_radians(fov / 2));
-        return mat4<T>(f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, 1, 0, 0, near, 0);
+        return mat4<T>{f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, -1, 0, 0, near, 0};
+    }
+
+    template <typename T>
+    inline constexpr mat4<T> perspective(const T aspect, const T fov, T near, const T far)
+    {
+        T fov_rad = as_radians(fov);
+        T focal_length = static_cast<T>(1) / std::tan(fov_rad / 2);
+
+        T x = focal_length / aspect;
+        T y = focal_length;
+        T A = near / (far - near);
+        T B = far * A;
+
+        return transpose(mat4<T>{
+            x, 0, 0, 0,
+            0, y, 0, 0,
+            0, 0, A, B,
+            0, 0, -1, 0
+        });
     }
 
     template <typename T>
     mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>& up)
     {
-        const vec3<T> z = normalize(target - eye);
-        const vec3<T> x = normalize(cross(up, z));
-        const vec3<T> y = cross(z, x);
+        const auto dir = target - eye;
+        const auto f = normalize(dir);
+        const auto s = cross(f, up);
+        const auto u = cross(s, f);
 
-        mat4<T> result(1);
-        result[0][0] = x.x;
-        result[1][0] = x.y;
-        result[2][0] = x.z;
-        result[0][1] = y.x;
-        result[1][1] = y.y;
-        result[2][1] = y.z;
-        result[0][2] = z.x;
-        result[1][2] = z.y;
-        result[2][2] = z.z;
-        result[3][0] = -dot(x, eye);
-        result[3][1] = -dot(y, eye);
-        result[3][2] = -dot(z, eye);
+        mat4<T> result{
+            vec4<T>{s.x, u.x, -f.x, 0},
+            vec4<T>{s.y, u.y, -f.y, 0},
+            vec4<T>{s.z, u.z, -f.z, 0},
+            vec4<T>{-dot(eye, s), -dot(eye, u), dot(eye, f), 1},
+        };
 
         return result;
-    }
-
-    template <typename T>
-    inline constexpr mat4<T> look_direction(const vec3<T>& eye, const vec3<T>& forwards, const vec3<T>& up)
-    {
-        const auto fwd = normalize(forwards);
-        const auto side = normalize(cross(up, fwd));
-        const auto u = cross(fwd, side);
-
-        mat4 look(static_cast<T>(1));
-
-        look[0][0] = side.x;
-        look[1][0] = side.y;
-        look[2][0] = side.z;
-        look[0][1] = u.x;
-        look[1][1] = u.y;
-        look[2][1] = u.z;
-        look[0][2] = fwd.x;
-        look[1][2] = fwd.y;
-        look[2][2] = fwd.z;
-        look[3][0] = -dot(side, eye);
-        look[3][1] = -dot(up, eye);
-        look[3][2] = -dot(fwd, eye);
-
-        return look;
     }
 
     template <typename T>

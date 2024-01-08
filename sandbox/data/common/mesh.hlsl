@@ -38,6 +38,8 @@ struct Material {
     uint metallic;
     uint roughness;
     uint ao;
+    uint _pad0, _pad1;
+    float4 base_texture_factor;
 };
 
 #endif // tempest_common_mesh_hlsl

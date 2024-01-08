@@ -169,6 +169,8 @@ namespace tempest::graphics::vk
         {
             switch (fmt)
             {
+            case resource_format::R8_UNORM:
+                return VK_FORMAT_R8_UNORM;
             case resource_format::RGBA8_UINT:
                 return VK_FORMAT_R8G8B8A8_UINT;
             case resource_format::RGBA8_UNORM:
@@ -181,6 +183,8 @@ namespace tempest::graphics::vk
                 return VK_FORMAT_R16G16B16A16_SFLOAT;
             case resource_format::RG16_FLOAT:
                 return VK_FORMAT_R16G16_SFLOAT;
+            case resource_format::R32_FLOAT:
+                return VK_FORMAT_R32_SFLOAT;
             case resource_format::RG32_FLOAT:
                 return VK_FORMAT_R32G32_SFLOAT;
             case resource_format::RG32_UINT:
@@ -201,31 +205,7 @@ namespace tempest::graphics::vk
 
         constexpr std::size_t get_format_size(resource_format fmt)
         {
-            switch (fmt)
-            {
-            case resource_format::RGBA8_SRGB:
-            case resource_format::BGRA8_SRGB:
-                return 4;
-            case resource_format::RG16_FLOAT:
-                return 2 * sizeof(short);
-            case resource_format::RG32_FLOAT:
-                return 2 * sizeof(float);
-            case resource_format::RG32_UINT:
-                return 2 * sizeof(std::uint32_t);
-            case resource_format::RGB32_FLOAT:
-                return 3 * sizeof(float);
-            case resource_format::RGBA16_FLOAT:
-                return 4 * sizeof(short);
-            case resource_format::RGBA32_FLOAT:
-                return 4 * sizeof(float);
-            case resource_format::D32_FLOAT:
-                return sizeof(float);
-            case resource_format::UNKNOWN:
-                return 0;
-            }
-
-            logger->critical("Logic Error: Failed to determine proper VkFormat. Forcing exit.");
-            std::exit(EXIT_FAILURE);
+            return bytes_per_element(fmt);
         }
 
         constexpr VkSampleCountFlagBits to_vulkan(sample_count samples)
@@ -338,6 +318,10 @@ namespace tempest::graphics::vk
         {
             switch (fmt)
             {
+            case resource_format::R8_UNORM:
+                [[fallthrough]];
+            case resource_format::R32_FLOAT:
+                return VK_COLOR_COMPONENT_R_BIT;
             case resource_format::RG16_FLOAT:
                 [[fallthrough]];
             case resource_format::RG32_FLOAT:
@@ -346,6 +330,10 @@ namespace tempest::graphics::vk
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT;
             case resource_format::RGB32_FLOAT:
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+            case resource_format::RGBA8_UNORM:
+                [[fallthrough]];
+            case resource_format::RGBA8_UINT:
+                [[fallthrough]];
             case resource_format::RGBA8_SRGB:
                 [[fallthrough]];
             case resource_format::BGRA8_SRGB:
@@ -839,7 +827,7 @@ namespace tempest::graphics::vk
         name_object(_dispatch, std::bit_cast<std::uint64_t>(img), VK_OBJECT_TYPE_IMAGE, ci.name.c_str());
 
         VkImageAspectFlags aspect = 0;
-        aspect |= (ci.color_attachment || ci.sampled || ci.storage) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
+        aspect |= (ci.color_attachment || (ci.sampled && !ci.depth_attachment) || ci.storage) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
         aspect |= ci.depth_attachment ? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
 
         VkImageViewCreateInfo view_ci = {
@@ -1277,7 +1265,7 @@ namespace tempest::graphics::vk
             .rasterizerDiscardEnable{VK_FALSE},
             .polygonMode{VK_POLYGON_MODE_FILL},
             .cullMode{VK_CULL_MODE_BACK_BIT},
-            .frontFace{VK_FRONT_FACE_CLOCKWISE},
+            .frontFace{VK_FRONT_FACE_COUNTER_CLOCKWISE},
             .depthBiasEnable{ci.depth_testing.enable_depth_bias ? VK_TRUE : VK_FALSE},
             .depthBiasConstantFactor{ci.depth_testing.depth_bias_constant_factor},
             .depthBiasClamp{ci.depth_testing.depth_bias_clamp},
@@ -2005,13 +1993,13 @@ namespace tempest::graphics::vk
     }
 
     command_list& command_list::set_viewport(float x, float y, float width, float height, float min_depth,
-                                             float max_depth, std::uint32_t viewport_id)
+                                             float max_depth, std::uint32_t viewport_id, bool flip)
     {
         VkViewport vp = {
             .x{x},
-            .y{height - y},
+            .y{flip ? height - y : y},
             .width{width},
-            .height{-height},
+            .height{flip ? -height : height},
             .minDepth{min_depth},
             .maxDepth{max_depth},
         };
