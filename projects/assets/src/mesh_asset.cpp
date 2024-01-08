@@ -189,7 +189,8 @@ namespace tempest::assets
                 for (std::size_t i = 0; i < positions_accessor.count; ++i)
                 {
                     auto read_offset = positions_accessor.byteOffset + i * stride + positions_buffer_view.byteOffset;
-                    m.mesh.vertices[i].position = read_float_3(positions_buffer.data.data() + read_offset);
+                    auto position = read_float_3(positions_buffer.data.data() + read_offset);
+                    m.mesh.vertices[i].position = position;
                 }
 
                 const auto& uvs_accessor = root.accessors[uvs_accessor_it->second];
@@ -217,7 +218,8 @@ namespace tempest::assets
                     for (std::size_t i = 0; i < normals_accessor.count; ++i)
                     {
                         auto read_offset = normals_accessor.byteOffset + i * stride + normals_buffer_view.byteOffset;
-                        m.mesh.vertices[i].normal = read_float_3(normals_buffer.data.data() + read_offset);
+                        auto normal = read_float_3(normals_buffer.data.data() + read_offset);
+                        m.mesh.vertices[i].normal = normal;
                     }
                 }
 
@@ -233,7 +235,8 @@ namespace tempest::assets
                     for (std::size_t i = 0; i < tangents_accessor.count; ++i)
                     {
                         auto read_offset = tangents_accessor.byteOffset + i * stride + tangents_buffer_view.byteOffset;
-                        m.mesh.vertices[i].tangent = read_float_4(tangents_buffer.data.data() + read_offset);
+                        auto tangent = read_float_4(tangents_buffer.data.data() + read_offset);
+                        m.mesh.vertices[i].tangent = tangent;
                     }
                 }
 
@@ -277,10 +280,10 @@ namespace tempest::assets
             else if (node.rotation.size() == 4)
             {
                 math::quat<float> quat_rot = {
+                    static_cast<float>(node.rotation[0]),
                     static_cast<float>(node.rotation[1]),
                     static_cast<float>(node.rotation[2]),
                     static_cast<float>(node.rotation[3]),
-                    static_cast<float>(node.rotation[0]),
                 };
 
                 auto m = math::as_mat4(quat_rot);
@@ -387,6 +390,12 @@ namespace tempest::assets
             }
 
             mat.type = get_material_type(material.alphaMode);
+            mat.base_color_factor = {
+                static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[0]),
+                static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[1]),
+                static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[2]),
+                static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[3]),
+            };
 
             asset.materials.push_back(mat);
         }
@@ -405,6 +414,35 @@ namespace tempest::assets
             std::memcpy(tex.data.data(), image.image.data(), image.image.size());
 
             asset.textures.push_back(std::move(tex));
+        }
+
+        for (auto& material : root.materials)
+        {
+            if (material.pbrMetallicRoughness.baseColorTexture.index >= 0)
+            {
+                asset.textures[root.textures[material.pbrMetallicRoughness.baseColorTexture.index].source].linear = false;
+            }
+
+            if (material.normalTexture.index != -1)
+            {
+                asset.textures[root.textures[material.normalTexture.index].source].linear = true;
+            }
+
+            if (material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
+            {
+                asset.textures[root.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source]
+                    .linear = true;
+            }
+
+            if (material.occlusionTexture.index != -1)
+            {
+                asset.textures[root.textures[material.occlusionTexture.index].source].linear = true;
+            }
+
+            if (material.emissiveTexture.index != -1)
+            {
+                asset.textures[root.textures[material.emissiveTexture.index].source].linear = false;
+            }
         }
 
         return asset;

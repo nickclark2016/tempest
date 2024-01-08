@@ -55,6 +55,9 @@ namespace tempest::core
         vertex& operator[](std::size_t idx) noexcept;
         const vertex& operator[](std::size_t idx) const noexcept;
 
+        std::tuple<vertex&, std::uint32_t> get_tri_and_ind(std::size_t idx) noexcept;
+        std::tuple<const vertex&, std::uint32_t> get_tri_and_ind(std::size_t idx) const noexcept;
+
         std::size_t num_triangles() const noexcept;
     };
 

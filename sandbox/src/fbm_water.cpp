@@ -157,8 +157,6 @@ void fbm_water_demo()
 
     camera_data cameras = {
         .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.01f)},
-        .view{math::look_direction(math::vec3<float>(0.0f, 10.0f, 0.0f), math::vec3<float>(15.0f, 2.0f, 15.0f),
-                            math::vec3<float>(0.0f, 1.0, 0.0f))},
         .view_proj{1.0f},
         .position{0.0f, 10.0f, 0.0f},
     };

@@ -25,7 +25,7 @@ namespace tempest::math
 
         constexpr quat();
         constexpr quat(const T scalar);
-        constexpr quat(const T w, const T x, const T y, const T z);
+        constexpr quat(const T x, const T y, const T z, const T w);
         constexpr quat(const vec3<T>& euler);
 
         constexpr T& operator[](const std::size_t index) noexcept;
@@ -51,7 +51,7 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr quat<T>::quat(const T w, const T x, const T y, const T z) : w(w), x(x), y(y), z(z)
+    inline constexpr quat<T>::quat(const T x, const T y, const T z, const T w) : w(w), x(x), y(y), z(z)
     {
     }
 

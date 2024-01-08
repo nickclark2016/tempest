@@ -15,6 +15,7 @@ namespace tempest::assets
         std::uint32_t width;
         std::uint32_t height;
         std::uint32_t bit_depth;
+        bool linear;
     };
 
     std::optional<texture_asset> load_texture(const std::filesystem::path& path);

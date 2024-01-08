@@ -1,12 +1,15 @@
 #ifndef tempest_math_vec2_hpp__
 #define tempest_math_vec2_hpp__
 
+#include "math_utils.hpp"
+
 #include <cstddef>
 #include <type_traits>
 
 namespace tempest::math
 {
-    template <typename T> struct alignas(sizeof(T) * 2) vec2
+    template <typename T>
+    struct alignas(sizeof(T) * 2) vec2
     {
         union {
             T data[2];
@@ -40,104 +43,131 @@ namespace tempest::math
         vec2& operator/=(const vec2& rhs) noexcept;
     };
 
-    template <typename T> vec2(const T) -> vec2<T>;
+    template <typename T>
+    vec2(const T) -> vec2<T>;
 
-    template <typename T> vec2(const T, const T, const T, const T) -> vec2<T>;
+    template <typename T>
+    vec2(const T, const T, const T, const T) -> vec2<T>;
 
-    template <typename T> vec2(const vec2<T>&) -> vec2<T>;
+    template <typename T>
+    vec2(const vec2<T>&) -> vec2<T>;
 
-    template <typename T> vec2(vec2<T>&&) -> vec2<T>;
+    template <typename T>
+    vec2(vec2<T>&&) -> vec2<T>;
 
     // Implementation
 
-    template <typename T> inline constexpr vec2<T>::vec2() : vec2(T())
+    template <typename T>
+    inline constexpr vec2<T>::vec2() : vec2(T())
     {
     }
 
-    template <typename T> inline constexpr vec2<T>::vec2(const T scalar) : vec2(scalar, scalar)
+    template <typename T>
+    inline constexpr vec2<T>::vec2(const T scalar) : vec2(scalar, scalar)
     {
     }
 
-    template <typename T> inline constexpr vec2<T>::vec2(const T x, const T y) : x(x), y(y)
+    template <typename T>
+    inline constexpr vec2<T>::vec2(const T x, const T y) : x(x), y(y)
     {
     }
 
-    template <typename T> inline constexpr T& vec2<T>::operator[](const std::size_t index) noexcept
+    template <typename T>
+    inline constexpr T& vec2<T>::operator[](const std::size_t index) noexcept
     {
         return data[index];
     }
 
-    template <typename T> inline constexpr const T& vec2<T>::operator[](const std::size_t index) const noexcept
+    template <typename T>
+    inline constexpr const T& vec2<T>::operator[](const std::size_t index) const noexcept
     {
         return data[index];
     }
 
-    template <typename T> inline vec2<T>& vec2<T>::operator+=(const vec2& rhs) noexcept
+    template <typename T>
+    inline vec2<T>& vec2<T>::operator+=(const vec2& rhs) noexcept
     {
         x += rhs.x;
         y += rhs.y;
         return *this;
     }
 
-    template <typename T> inline vec2<T>& vec2<T>::operator-=(const vec2& rhs) noexcept
+    template <typename T>
+    inline vec2<T>& vec2<T>::operator-=(const vec2& rhs) noexcept
     {
         x -= rhs.x;
         y -= rhs.y;
         return *this;
     }
 
-    template <typename T> inline vec2<T>& vec2<T>::operator*=(const vec2& rhs) noexcept
+    template <typename T>
+    inline vec2<T>& vec2<T>::operator*=(const vec2& rhs) noexcept
     {
         x *= rhs.x;
         y *= rhs.y;
         return *this;
     }
 
-    template <typename T> inline vec2<T>& vec2<T>::operator/=(const vec2& rhs) noexcept
+    template <typename T>
+    inline vec2<T>& vec2<T>::operator/=(const vec2& rhs) noexcept
     {
         x /= rhs.x;
         y /= rhs.y;
         return *this;
     }
 
-    template <typename T> inline bool operator==(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
+    template <typename T>
+    inline bool operator==(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
     {
         return lhs[0] == rhs[0] && lhs[1] == rhs[1];
     }
 
-    template <typename T> inline constexpr bool operator!=(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr bool operator!=(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
     {
         return lhs[0] != rhs[0] || lhs[1] != rhs[1];
     }
 
-    template <typename T> inline constexpr vec2<T> operator+(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr vec2<T> operator+(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
     {
         const vec2<T> result = {lhs[0] + rhs[0], lhs[1] + rhs[1]};
         return result;
     }
 
-    template <typename T> inline constexpr vec2<T> operator-(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr vec2<T> operator-(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
     {
         const vec2<T> result = {lhs[0] - rhs[0], lhs[1] - rhs[1]};
         return result;
     }
 
-    template <typename T> inline constexpr vec2<T> operator*(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr vec2<T> operator*(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
     {
         const vec2<T> result = {lhs[0] * rhs[0], lhs[1] * rhs[1]};
         return result;
     }
 
-    template <typename T> inline constexpr vec2<T> operator*(const T scalar, const vec2<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr vec2<T> operator*(const T scalar, const vec2<T>& rhs) noexcept
     {
         const vec2<T> result = {scalar * rhs[0], scalar * rhs[1]};
         return result;
     }
 
-    template <typename T> inline constexpr vec2<T> operator/(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr vec2<T> operator/(const vec2<T>& lhs, const vec2<T>& rhs) noexcept
     {
         const vec2<T> result = {lhs[0] / rhs[0], lhs[1] / rhs[1]};
         return result;
+    }
+
+    template <typename T>
+    inline constexpr vec2<T> normalize(const vec2<T>& v)
+    {
+        const T mag_squared = v.x * v.x + v.y * v.y;
+        return fast_inv_sqrt(mag_squared) * v;
     }
 } // namespace tempest::math
 

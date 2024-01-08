@@ -35,6 +35,8 @@ namespace tempest::graphics
     enum class resource_format
     {
         UNKNOWN,
+        R8_UNORM,
+        R32_FLOAT,
         RGBA8_SRGB,
         BGRA8_SRGB,
         RGBA8_UINT,
@@ -48,10 +50,14 @@ namespace tempest::graphics
         D32_FLOAT,
     };
 
-    inline std::size_t bytes_per_element(resource_format fmt)
+    inline constexpr std::size_t bytes_per_element(resource_format fmt)
     {
         switch (fmt)
         {
+        case resource_format::R8_UNORM:
+            return 1;
+        case resource_format::R32_FLOAT:
+            [[fallthrough]];
         case resource_format::D32_FLOAT:
             [[fallthrough]];
         case resource_format::RGBA8_SRGB:
@@ -490,7 +496,7 @@ namespace tempest::graphics
         virtual ~command_list() = default;
 
         virtual command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
-                                           float max_depth = 1.0f, std::uint32_t viewport_id = 0) = 0;
+                                           float max_depth = 1.0f, std::uint32_t viewport_id = 0, bool flip = true) = 0;
         virtual command_list& set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,
                                                  std::uint32_t height) = 0;
         virtual command_list& draw(std::uint32_t vertex_count, std::uint32_t instance_count = 1,
