@@ -389,6 +389,8 @@ namespace tempest::graphics
         float mip_lod_bias;
         float min_lod{0.0f};
         float max_lod{1000.0f};
+        bool enable_aniso;
+        float max_anisotropy;
         std::string name;
     };
 

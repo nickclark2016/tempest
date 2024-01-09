@@ -31,19 +31,20 @@ float3 calculate_view_position(float2 coords)
     return view_pos.xyz;
 }
 
-float4 PSMain(FSQuadOut input) : SV_Target0
+float PSMain(FSQuadOut input) : SV_Target0
 {
     float2 uv = input.uv;
     float3 world_pos = calculate_view_position(uv);
 
-    float3 decoded_normal = normal_buffer.Sample(image_smp, uv).rgb;
-    float3 view_normal = mul((float3x3) transpose(inv_view_matrix), decoded_normal);
+    float3 decoded_normal = normal_buffer.Sample(image_smp, uv).rgb * 2.0 - 1.0;
+    float3 view_normal = normalize(mul((float3x3) transpose(inv_view_matrix), decoded_normal));
+    view_normal.y *= -1;
     float2 scaled_noise_uv = uv * noise_scale;
-    float3 random_vec = normalize(random_buffer.Sample(image_smp, scaled_noise_uv).rgb);
+    float3 random_vec = normalize(random_buffer.Sample(image_smp, scaled_noise_uv).rgb) * 2.0 - 1.0;
 
     float3 tangent = normalize(random_vec - view_normal * dot(random_vec, view_normal));
-    float3 bitan = cross(view_normal, tangent);
-    float3x3 tbn = float3x3(tangent, bitan, view_normal);
+    float3 bitan = cross(tangent, view_normal);
+    float3x3 tbn = transpose(float3x3(tangent, bitan, view_normal));
 
     float occlusion = 0.0;
 
@@ -56,16 +57,17 @@ float4 PSMain(FSQuadOut input) : SV_Target0
         offset.xyz = offset.xyz * 0.5 + 0.5;
 
         float sample_depth = calculate_view_position(offset.xy).z;
+        float depth_delta = abs(world_pos.z - sample_depth);
 
-        float range_check = smoothstep(0.0, 1.0, radius / abs(sample_pos.z - sample_depth));
+        float range_check = smoothstep(0.0, 1.0, radius / depth_delta);
         occlusion += (sample_depth >= sample_pos.z + bias ? 1.0 : 0.0) * range_check;
     }
 
-    float3 output = 1.0 - (occlusion / 64);
-    return float4(decoded_normal, 1.0);
+    float output = 1.0 - (occlusion / 64);
+    return output;
 }
 
-float4 BlurMain(FSQuadOut input) : SV_Target0 {
+float BlurMain(FSQuadOut input) : SV_Target0 {
     uint width, height;
     ssao_buffer.GetDimensions(width, height);
     float2 texel_size = 1.0 / float2(width, height);
@@ -78,6 +80,6 @@ float4 BlurMain(FSQuadOut input) : SV_Target0 {
         }
     }
 
-    float3 average = blur_factor / 16;
-    return float4(average, 1.0);
+    float average = blur_factor / 16;
+    return average;
 }

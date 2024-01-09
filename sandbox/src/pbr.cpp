@@ -28,6 +28,7 @@ struct pbr_scene_constants
 {
     graphics::render_camera camera;
     graphics::directional_light sun;
+    math::vec2<float> screen_size;
 };
 
 struct ssao_constants
@@ -172,7 +173,7 @@ void pbr_demo()
     auto ssao_buffer = rgc->create_image({
         .width{1920},
         .height{1080},
-        .fmt{graphics::resource_format::RGBA32_FLOAT},
+        .fmt{graphics::resource_format::R8_UNORM},
         .type{graphics::image_type::IMAGE_2D},
         .name{"SSAO Buffer Target"},
     });
@@ -180,7 +181,7 @@ void pbr_demo()
     auto ssao_blur_buffer = rgc->create_image({
         .width{1920},
         .height{1080},
-        .fmt{graphics::resource_format::RGBA32_FLOAT},
+        .fmt{graphics::resource_format::R8_UNORM},
         .type{graphics::image_type::IMAGE_2D},
         .name{"SSAO Blurred Buffer Target"},
     });
@@ -188,7 +189,7 @@ void pbr_demo()
     auto normals_buffer = rgc->create_image({
         .width = 1920,
         .height = 1080,
-        .fmt = graphics::resource_format::RGBA32_FLOAT,
+        .fmt = graphics::resource_format::RGBA8_UNORM,
         .type = graphics::image_type::IMAGE_2D,
         .name = "Encoded Normals",
     });
@@ -234,11 +235,20 @@ void pbr_demo()
     auto textures = graphics::renderer_utilities::upload_textures(graphics_device, cube_scene_texture_decs,
                                                                   graphics_device.get_staging_buffer(), true, true);
     textures.resize(512);
+    
     auto linear_sampler = graphics_device.create_sampler({
         .mag = graphics::filter::LINEAR,
         .min = graphics::filter::LINEAR,
         .mipmap = graphics::mipmap_mode::LINEAR,
-        .mip_lod_bias = 0.0f,
+        .enable_aniso = true,
+        .max_anisotropy{16.0f},
+    });
+
+    auto linear_no_aniso_sampler = graphics_device.create_sampler({
+        .mag = graphics::filter::LINEAR,
+        .min = graphics::filter::LINEAR,
+        .mipmap = graphics::mipmap_mode::LINEAR,
+        .enable_aniso = false,
     });
 
     unsigned int noise_size = 4;
@@ -262,7 +272,11 @@ void pbr_demo()
         },
         .sun{
             .light_direction{0.0f, -1.0f, 0.0f},
-            .color_illum{1.0f, 1.0f, 1.0f, 25000.0f},
+            .color_illum{1.0f, 1.0f, 1.0f, 1.0f},
+        },
+        .screen_size{
+            1920.0f,
+            1080.0f,
         },
     };
 
@@ -276,15 +290,15 @@ void pbr_demo()
         .bias = 0.025f,
     };
 
+    std::default_random_engine engine(0);
     std::uniform_real_distribution<float> float_generator(0.0f, 1.0f);
-    std::default_random_engine engine{0};
 
     auto our_lerp = [](auto a, auto b, auto f) { return a + f * (b - a); };
 
     for (auto i : std::ranges::iota_view(0u, kernel_size))
     {
-        float x = 2.0f * float_generator(engine) - 1.0f;
-        float y = 2.0f * float_generator(engine) - 1.0f;
+        float x = float_generator(engine) * 2.0f - 1.0f;
+        float y = float_generator(engine) * 2.0f - 1.0f;
         float z = float_generator(engine);
 
         auto sample = math::normalize(math::vec3(x, y, z));
@@ -450,8 +464,8 @@ void pbr_demo()
                 .add_structured_buffer(object_data_buffer, graphics::resource_access_type::READ, 0, 4)
                 .add_structured_buffer(instance_data_buffer, graphics::resource_access_type::READ, 0, 5)
                 .add_structured_buffer(material_buffer, graphics::resource_access_type::READ, 0, 6)
-                .add_sampler(linear_sampler, 0, 7, graphics::pipeline_stage::FRAGMENT)
-                .add_external_sampled_images(textures, 0, 8, graphics::pipeline_stage::FRAGMENT)
+                .add_sampler(linear_no_aniso_sampler, 0, 7, graphics::pipeline_stage::FRAGMENT)
+                .add_external_sampled_images(textures, 0, 9, graphics::pipeline_stage::FRAGMENT)
                 .add_index_buffer(vertex_pull_buffer)
                 .add_indirect_argument_buffer(indirect_commands)
                 .on_execute([&](graphics::command_list& cmds) {
@@ -462,7 +476,8 @@ void pbr_demo()
                         .draw_indexed(
                             indirect_commands,
                             static_cast<std::uint32_t>(graphics_device.get_buffer_frame_offset(indirect_commands)),
-                            static_cast<std::uint32_t>(opaque_count + mask_count), sizeof(graphics::indexed_indirect_command));
+                            static_cast<std::uint32_t>(opaque_count + mask_count),
+                            sizeof(graphics::indexed_indirect_command));
                 });
         });
 
@@ -475,7 +490,7 @@ void pbr_demo()
                 .add_external_sampled_image(noise_texture_handle, 0, 2, graphics::pipeline_stage::FRAGMENT)
                 .add_sampled_image(normals_buffer, 0, 4)
                 .add_sampler(nearest_sampler, 0, 5, graphics::pipeline_stage::FRAGMENT)
-                .add_sampler(linear_sampler, 0, 6, graphics::pipeline_stage::FRAGMENT)
+                .add_sampler(linear_no_aniso_sampler, 0, 6, graphics::pipeline_stage::FRAGMENT)
                 .on_execute([&](graphics::command_list& cmds) {
                     cmds.set_scissor_region(0, 0, 1920, 1080)
                         .set_viewport(0, 0, 1920, 1080, 0, 1, 0, false)
@@ -489,7 +504,7 @@ void pbr_demo()
             bldr.depends_on(ssao_pass)
                 .add_color_attachment(ssao_blur_buffer, graphics::resource_access_type::WRITE)
                 .add_sampled_image(ssao_buffer, 0, 3)
-                .add_sampler(linear_sampler, 0, 5, graphics::pipeline_stage::FRAGMENT)
+                .add_sampler(linear_no_aniso_sampler, 0, 5, graphics::pipeline_stage::FRAGMENT)
                 .on_execute([&](graphics::command_list& cmds) {
                     cmds.set_scissor_region(0, 0, 1920, 1080)
                         .set_viewport(0, 0, 1920, 1080, 0, 1, 0, false)
@@ -515,7 +530,8 @@ void pbr_demo()
                 .add_structured_buffer(instance_data_buffer, graphics::resource_access_type::READ, 0, 5)
                 .add_structured_buffer(material_buffer, graphics::resource_access_type::READ, 0, 6)
                 .add_sampler(linear_sampler, 0, 7, graphics::pipeline_stage::FRAGMENT)
-                .add_external_sampled_images(textures, 0, 8, graphics::pipeline_stage::FRAGMENT)
+                .add_sampled_image(ssao_blur_buffer, 0, 8)
+                .add_external_sampled_images(textures, 0, 9, graphics::pipeline_stage::FRAGMENT)
                 .add_indirect_argument_buffer(indirect_commands)
                 .add_index_buffer(vertex_pull_buffer)
                 .on_execute([&](graphics::command_list& cmds) {
@@ -534,11 +550,11 @@ void pbr_demo()
     std::ignore =
         rgc->add_graph_pass("Swapchain Blit Graph Pass", graphics::queue_operation_type::GRAPHICS_AND_TRANSFER,
                             [&](graphics::graph_pass_builder& bldr) {
-                                bldr.add_blit_source(ssao_buffer)
+                                bldr.add_blit_source(color_buffer)
                                     .add_external_blit_target(swapchain)
                                     .depends_on(pbr_opaque_pass)
                                     .on_execute([&](graphics::command_list& cmds) {
-                                        cmds.blit(ssao_buffer, graphics_device.fetch_current_image(swapchain));
+                                        cmds.blit(color_buffer, graphics_device.fetch_current_image(swapchain));
                                     });
                             });
 
@@ -652,6 +668,7 @@ void pbr_demo()
     graphics_device.release_image(noise_texture_handle);
     graphics_device.release_sampler(nearest_sampler);
     graphics_device.release_sampler(linear_sampler);
+    graphics_device.release_sampler(linear_no_aniso_sampler);
     graphics_device.release_graphics_pipeline(ssao_blur_pipeline);
     graphics_device.release_graphics_pipeline(ssao_pipeline);
     graphics_device.release_graphics_pipeline(z_pass);
@@ -717,7 +734,7 @@ graphics::graphics_pipeline_resource_handle create_z_pass_pipeline(graphics::ren
         },
         {
             .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
-            .binding_index = 8,
+            .binding_index = 9,
             .binding_count = 512,
         },
     };
@@ -730,7 +747,7 @@ graphics::graphics_pipeline_resource_handle create_z_pass_pipeline(graphics::ren
     };
 
     graphics::resource_format color_attachment_formats[] = {
-        graphics::resource_format::RGBA32_FLOAT,
+        graphics::resource_format::RGBA8_UNORM,
     };
 
     graphics::color_blend_attachment_state blending[] = {
@@ -820,7 +837,7 @@ graphics::graphics_pipeline_resource_handle create_ssao_pipeline(graphics::rende
         },
     };
 
-    graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA32_FLOAT};
+    graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::R8_UNORM};
 
     return device.create_graphics_pipeline({
         .layout{
@@ -882,7 +899,7 @@ graphics::graphics_pipeline_resource_handle create_ssao_blur_pipeline(graphics::
         },
     };
 
-    graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA32_FLOAT};
+    graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::R8_UNORM};
 
     return device.create_graphics_pipeline({
         .layout{
@@ -962,6 +979,11 @@ graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render
         {
             .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
             .binding_index = 8,
+            .binding_count = 1,
+        },
+        {
+            .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
+            .binding_index = 9,
             .binding_count = 512,
         },
     };

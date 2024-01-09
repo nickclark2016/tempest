@@ -8,6 +8,7 @@ cbuffer Constants
 {
     CameraData camera_data;
     DirectionalLight sun;
+    float2 screen_size;
 };
 
 [[vk::binding(1, 0)]]
@@ -19,7 +20,8 @@ StructuredBuffer<PointLight> point_lights;
 [[vk::binding(5, 0)]] StructuredBuffer<uint> instance_buffer;
 [[vk::binding(6, 0)]] StructuredBuffer<Material> materials;
 [[vk::binding(7, 0)]] SamplerState bindless_sampler;
-[[vk::binding(8, 0)]] Texture2D bindless_textures[];
+[[vk::binding(8, 0)]] Texture2D ssao;
+[[vk::binding(9, 0)]] Texture2D bindless_textures[];
 
 struct PSInput {
     float4 position : SV_Position;
@@ -30,6 +32,18 @@ struct PSInput {
     float3 bitangent : Bitangent;
     uint material_id : Material;
 };
+
+// From http://filmicgames.com/archives/75
+float3 Uncharted2Tonemap(float3 x)
+{
+	float A = 0.15;
+	float B = 0.50;
+	float C = 0.10;
+	float D = 0.20;
+	float E = 0.02;
+	float F = 0.30;
+	return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
+}
 
 float4 get_color(Material mat, float2 uv)
 {
@@ -65,7 +79,7 @@ float get_roughness(uint tex_id, SamplerState s, float2 uv)
     {
         return 0.0;
     } 
-    return bindless_textures[tex_id].Sample(s, uv).r;
+    return bindless_textures[tex_id].Sample(s, uv).g;
 }
 
 float get_ao(uint tex_id, SamplerState s, float2 uv)
@@ -83,7 +97,7 @@ float get_metallic(uint tex_id, SamplerState s, float2 uv)
     {
         return 0.0;
     } 
-    return bindless_textures[tex_id].Sample(s, uv).r;
+    return bindless_textures[tex_id].Sample(s, uv).b;
 }
 
 float distribution_ggx(float3 normal, float3 half_vec, float roughness)
@@ -118,6 +132,11 @@ float geometry_smith(float3 normal, float3 view, float3 light , float roughness)
 float3 fresnel_schlick(float cos_theta, float3 f0)
 {
     return f0 + (1.0 - f0) * pow(clamp(1.0 - cos_theta, 0, 1), 5);
+}
+
+float3 fresnel_schlick_rough(float cos_theta, float3 f0, float r)
+{
+    return f0 + (max((1.0 - f0).rrr, f0) - f0) * pow(clamp(1.0 - cos_theta, 0, 1), 5);
 }
 
 PSInput VSMain(uint index_id : SV_VertexID, uint instance_id : SV_InstanceID)
@@ -172,7 +191,6 @@ float4 PSMain(PSInput input) : SV_Target
 {
     Material mat = materials[input.material_id];
 
-
     float4 base_alpha = get_color(mat, input.uv);
     float3 base = base_alpha.rgb;
 
@@ -181,11 +199,14 @@ float4 PSMain(PSInput input) : SV_Target
     }
 
     float3 albedo = pow(base, 2.2);
-    float3 metallic = get_metallic(mat.metallic, bindless_sampler, input.uv); 
+    float metallic = get_metallic(mat.metallic, bindless_sampler, input.uv); 
     float3 normal = normal_from_map(mat.normal, bindless_sampler, input.uv, input.tangent, input.bitangent, input.normal).rgb;
     float3 view = normalize(camera_data.position - input.world_pos);
-    float roughness = get_roughness(mat.roughness, bindless_sampler, input.uv);
-    float ao = get_ao(mat.ao, bindless_sampler, input.uv);
+    float roughness = 0.0; // todo: fix roughness
+    
+    float2 screen_coord = float2(input.position.x, input.position.y) / screen_size;
+    float ao = ssao.Sample(bindless_sampler, screen_coord).r;
+    // float ao = get_ao(mat.ao, bindless_sampler, input.uv);
     
     float3 f0 = 0.04;
     f0 = lerp(f0, albedo, metallic);
@@ -196,7 +217,7 @@ float4 PSMain(PSInput input) : SV_Target
     {
         float3 light_dir = -sun.direction.rgb;
         float3 half_vec = normalize(view + light_dir);
-        float3 radiance = sun.color_illum.rgb;
+        float3 radiance = sun.color_illum.rgb * sun.color_illum.a;
         float ndf = distribution_ggx(normal, half_vec, roughness);   
         float g = geometry_smith(normal, view, light_dir, roughness);      
         float3 f = fresnel_schlick(max(dot(half_vec, view), 0.0), f0);
@@ -210,13 +231,13 @@ float4 PSMain(PSInput input) : SV_Target
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
     }
 
-    float3 ambient = 0.03 * albedo * ao; 
+    float3 ambient = 0.05 * albedo * pow(ao, 7);    
     float3 color = ambient + Lo;
 
-    // HDR tonemapping
-    color = color / (color + 1.0);
-    // gamma correct
-    color = pow(color, 1.0 / 2.2);
+    color = Uncharted2Tonemap(color * 4.5);
+	color = color * (1.0f / Uncharted2Tonemap((11.2f).xxx));
+	// Gamma correction
+    color = pow(color, 1 / 2.2);
 
     return float4(color, 1.0);
 }
@@ -238,5 +259,5 @@ float4 ZPSMain(PSInput input) : SV_Target0
 
     float4 shading_normal = normal_from_map(mat.normal, bindless_sampler, input.uv, input.tangent, input.bitangent, input.normal);
 
-    return float4(shading_normal);
+    return float4(shading_normal.xyz * 0.5 + 0.5, 1.0);
 }
