@@ -1,0 +1,4 @@
+#ifndef tempest_sandbox_fps_controller_hpp
+#define tempest_sandbox_fps_controller_hpp
+
+#endif // tempest_sandbox_fps_controller_hpp

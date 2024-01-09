@@ -400,6 +400,9 @@ namespace tempest::graphics::vk
         sync_primitive_recycler _sync_prim_recycler{};
 
         buffer_resource_handle _staging_buffer;
+
+        bool _supports_aniso_filtering{false};
+        float _max_aniso{1.0f};
     };
 
     class render_context : public graphics::render_context

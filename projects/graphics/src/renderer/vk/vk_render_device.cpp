@@ -519,6 +519,9 @@ namespace tempest::graphics::vk
             .transfer_source{true},
             .name{"Staging Buffer"},
         });
+
+        _supports_aniso_filtering = physical.features.samplerAnisotropy;
+        _max_aniso = physical.properties.limits.maxSamplerAnisotropy;
     }
 
     render_device::~render_device()
@@ -947,8 +950,8 @@ namespace tempest::graphics::vk
             .addressModeV{VK_SAMPLER_ADDRESS_MODE_REPEAT},
             .addressModeW{VK_SAMPLER_ADDRESS_MODE_REPEAT},
             .mipLodBias{ci.mip_lod_bias},
-            .anisotropyEnable{VK_FALSE},
-            .maxAnisotropy{0.0f},
+            .anisotropyEnable{ci.enable_aniso & _supports_aniso_filtering ? VK_TRUE : VK_FALSE},
+            .maxAnisotropy{std::clamp(ci.max_anisotropy, 1.0f, _max_aniso)},
             .compareEnable{VK_FALSE},
             .compareOp{VK_COMPARE_OP_NEVER},
             .minLod{ci.min_lod},
