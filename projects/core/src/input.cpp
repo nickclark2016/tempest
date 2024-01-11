@@ -2,9 +2,9 @@
 
 #include <GLFW/glfw3.h>
 
-namespace tempest::input
+namespace tempest::core
 {
-    void poll()
+    void input::poll()
     {
         glfwPollEvents();
     }

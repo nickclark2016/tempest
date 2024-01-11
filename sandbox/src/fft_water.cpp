@@ -696,7 +696,7 @@ void fft_water_demo()
 
     while (!win->should_close())
     {
-        input::poll();
+        core::input::poll();
         draw_gui(fft_state);
 
         graph->execute();

@@ -265,7 +265,7 @@ void fbm_water_demo()
 
     while (!win->should_close())
     {
-        input::poll();
+        core::input::poll();
 
         draw_gui(water_sim_state, last_fps);
 

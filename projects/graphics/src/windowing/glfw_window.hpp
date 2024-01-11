@@ -48,6 +48,11 @@ namespace tempest::graphics::glfw
             glfwShowWindow(_win);
         }
 
+        void register_keyboard_callback(std::function<void(const core::key_state&)>&& cb) override
+        {
+            _keyboard_callbacks.push_back(std::move(cb));
+        }
+
         GLFWwindow* raw() const noexcept
         {
             return _win;
@@ -57,6 +62,8 @@ namespace tempest::graphics::glfw
         GLFWwindow* _win{};
         std::uint32_t _width{};
         std::uint32_t _height{};
+
+        std::vector<std::function<void(const core::key_state&)>> _keyboard_callbacks;
 
         void _release();
     };
