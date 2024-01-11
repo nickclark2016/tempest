@@ -1,3 +1,5 @@
+#include "fps_controller.hpp"
+
 #include <tempest/files.hpp>
 #include <tempest/imgui_context.hpp>
 #include <tempest/input.hpp>
@@ -235,7 +237,7 @@ void pbr_demo()
     auto textures = graphics::renderer_utilities::upload_textures(graphics_device, cube_scene_texture_decs,
                                                                   graphics_device.get_staging_buffer(), true, true);
     textures.resize(512);
-    
+
     auto linear_sampler = graphics_device.create_sampler({
         .mag = graphics::filter::LINEAR,
         .min = graphics::filter::LINEAR,
@@ -271,7 +273,7 @@ void pbr_demo()
             .eye_position = {4.0f, 2.5f, 0.0f},
         },
         .sun{
-            .light_direction{0.0f, -1.0f, 0.0f},
+            .light_direction{1.0f, -1.0f, 1.5f},
             .color_illum{1.0f, 1.0f, 1.0f, 1.0f},
         },
         .screen_size{
@@ -287,7 +289,7 @@ void pbr_demo()
         .inv_view = math::inverse(scene_data.camera.view),
         .noise_scale = {1920.0f / noise_size, 1080.0f / noise_size},
         .radius = 0.5f,
-        .bias = 0.025f,
+        .bias = 0.05f,
     };
 
     std::default_random_engine engine(0);
@@ -639,11 +641,14 @@ void pbr_demo()
 
     scene = std::nullopt;
 
+    core::keyboard kb;
+    win->register_keyboard_callback([&](const core::key_state& state) { kb.set(state); });
+
+    fps_controller controller;
+    controller.set_position({0.0f, 1.0f, 0.0f});
+
     while (!win->should_close())
     {
-        input::poll();
-        graph->execute();
-
         auto current_time = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> time_since_tick = current_time - last_tick_time;
         std::chrono::duration<double> frame_time = current_time - last_frame_time;
@@ -658,6 +663,17 @@ void pbr_demo()
             last_tick_time = current_time;
             std::cout << last_fps << std::endl;
         }
+
+        core::input::poll();
+
+        controller.update(kb, static_cast<float>(frame_time.count()));
+
+        scene_data.camera.eye_position = controller.eye_position();
+        scene_data.camera.view = controller.view();
+        ssao_consts.view_matrix = controller.view();
+        ssao_consts.inv_view = controller.inv_view();
+
+        graph->execute();
     }
 
     for (auto& texture : textures)

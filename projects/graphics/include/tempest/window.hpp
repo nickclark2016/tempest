@@ -1,6 +1,8 @@
 #ifndef tempest_window_hpp
 #define tempest_window_hpp
 
+#include <tempest/keyboard.hpp>
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -22,6 +24,8 @@ namespace tempest::graphics
         virtual std::uint32_t height() const noexcept = 0;
 
         virtual bool minimized() const noexcept = 0;
+
+        virtual void register_keyboard_callback(std::function<void(const core::key_state&)>&& cb) = 0;
 
         virtual void show() = 0;
     };

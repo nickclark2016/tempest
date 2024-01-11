@@ -145,7 +145,7 @@ void simple_triangle_demo()
 
     while (!win->should_close())
     {
-        input::poll();
+        core::input::poll();
 
         graph->execute();
 

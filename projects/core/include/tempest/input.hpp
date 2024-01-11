@@ -1,9 +1,12 @@
 #ifndef tempest_input_hpp
 #define tempest_input_hpp
 
-namespace tempest::input
+namespace tempest::core
 {
-    void poll();
+    struct input
+    {
+        static void poll();
+    };
 }
 
 #endif // tempest_input_hpp
