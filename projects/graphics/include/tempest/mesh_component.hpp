@@ -48,7 +48,8 @@ namespace tempest::graphics
         std::uint32_t roughness_map_id{std::numeric_limits<std::uint32_t>::max()};
         std::uint32_t ao_map_id{std::numeric_limits<std::uint32_t>::max()};
 
-        std::uint32_t _pad0, _pad1;
+        float alpha_cutoff;
+        float reflectance;
 
         math::vec4<float> base_color_factor;
     };

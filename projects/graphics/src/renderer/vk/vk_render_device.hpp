@@ -104,7 +104,7 @@ namespace tempest::graphics::vk
         VkQueueFlags flags;
     };
 
-    class command_list : public graphics::command_list
+    class command_list final : public graphics::command_list
     {
       public:
         command_list(VkCommandBuffer buffer, vkb::DispatchTable* dispatch, render_device* device);

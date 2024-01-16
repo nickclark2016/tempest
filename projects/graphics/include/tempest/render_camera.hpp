@@ -9,9 +9,10 @@ namespace tempest::graphics
     struct render_camera
     {
         math::mat4<float> proj;
+        math::mat4<float> inv_proj;
         math::mat4<float> view;
-        math::mat4<float> view_proj;
-        math::vec3<float> eye_position;
+        math::mat4<float> inv_view;
+        math::vec4<float> eye_position;
     };
 }
 
