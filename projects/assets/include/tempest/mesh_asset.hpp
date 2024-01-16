@@ -46,6 +46,7 @@ namespace tempest::assets
         std::uint32_t metallic_roughness_texture = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t occlusion_map_texture = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t emissive_map_texture = std::numeric_limits<std::uint32_t>::max();
+        float alpha_cutoff;
         math::vec4<float> base_color_factor;
     };
 

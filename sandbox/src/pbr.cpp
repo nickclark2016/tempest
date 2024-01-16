@@ -172,38 +172,6 @@ void pbr_demo()
         .name{"Color Buffer Target"},
     });
 
-    auto ssao_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::R8_UNORM},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"SSAO Buffer Target"},
-    });
-
-    auto ssao_blur_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::R8_UNORM},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"SSAO Blurred Buffer Target"},
-    });
-
-    auto normals_buffer = rgc->create_image({
-        .width = 1920,
-        .height = 1080,
-        .fmt = graphics::resource_format::RGBA8_UNORM,
-        .type = graphics::image_type::IMAGE_2D,
-        .name = "Encoded Normals",
-    });
-
-    auto specular_smoothness_buffer = rgc->create_image({
-        .width = 1920,
-        .height = 1080,
-        .fmt = graphics::resource_format::RGBA8_UNORM,
-        .type = graphics::image_type::IMAGE_2D,
-        .name = "Encoded Specular Smoothness",
-    });
-
     auto depth_buffer = rgc->create_image({
         .width{1920},
         .height{1080},
@@ -243,23 +211,7 @@ void pbr_demo()
         .min = graphics::filter::LINEAR,
         .mipmap = graphics::mipmap_mode::LINEAR,
         .enable_aniso = true,
-        .max_anisotropy{16.0f},
-    });
-
-    auto linear_no_aniso_sampler = graphics_device.create_sampler({
-        .mag = graphics::filter::LINEAR,
-        .min = graphics::filter::LINEAR,
-        .mipmap = graphics::mipmap_mode::LINEAR,
-        .enable_aniso = false,
-    });
-
-    unsigned int noise_size = 4;
-    unsigned int kernel_size = 64;
-
-    auto nearest_sampler = graphics_device.create_sampler({
-        .mag = graphics::filter::NEAREST,
-        .min = graphics::filter::NEAREST,
-        .mipmap = graphics::mipmap_mode::NEAREST,
+        .max_anisotropy{8.0f},
     });
 
     cube_scene_texture_decs.clear();
@@ -269,11 +221,10 @@ void pbr_demo()
             .proj = math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.1f),
             .view = math::look_at(math::vec3<float>(4.0f, 2.5f, 0.0f), math::vec3<float>(-1.0f, 2.5f, 0.0f),
                                   math::vec3<float>(0.0f, 1.0, 0.0f)),
-            .view_proj = 1.0f,
-            .eye_position = {4.0f, 2.5f, 0.0f},
+            .eye_position = {4.0f, 2.5f, 0.0f, 0.0f},
         },
         .sun{
-            .light_direction{1.0f, -1.0f, 1.5f},
+            .light_direction{0.0f, -1.0f, 1.0f},
             .color_illum{1.0f, 1.0f, 1.0f, 1.0f},
         },
         .screen_size{
@@ -282,63 +233,8 @@ void pbr_demo()
         },
     };
 
-    ssao_constants ssao_consts{
-        .projection = scene_data.camera.proj,
-        .inv_projection = math::inverse(scene_data.camera.proj),
-        .view_matrix = scene_data.camera.view,
-        .inv_view = math::inverse(scene_data.camera.view),
-        .noise_scale = {1920.0f / noise_size, 1080.0f / noise_size},
-        .radius = 0.5f,
-        .bias = 0.05f,
-    };
-
-    std::default_random_engine engine(0);
-    std::uniform_real_distribution<float> float_generator(0.0f, 1.0f);
-
-    auto our_lerp = [](auto a, auto b, auto f) { return a + f * (b - a); };
-
-    for (auto i : std::ranges::iota_view(0u, kernel_size))
-    {
-        float x = float_generator(engine) * 2.0f - 1.0f;
-        float y = float_generator(engine) * 2.0f - 1.0f;
-        float z = float_generator(engine);
-
-        auto sample = math::normalize(math::vec3(x, y, z));
-        sample *= float_generator(engine);
-        auto scale = static_cast<float>(i) / kernel_size;
-        scale = our_lerp(0.1f, 1.0f, scale * scale);
-        sample *= scale;
-
-        ssao_consts.kernel[i] = math::vec4(sample.x, sample.y, sample.z, 1.0f);
-    }
-
-    std::vector<std::byte> noise_bytes(sizeof(float) * 2 * noise_size * noise_size);
-    for (std::size_t i = 0; i < noise_bytes.size() / sizeof(float); i += 2)
-    {
-        float r = float_generator(engine) * 2.0f - 1.0f;
-        float g = float_generator(engine) * 2.0f - 1.0f;
-        math::vec2<float> rgba = math::vec2(r, g);
-        std::memcpy(noise_bytes.data() + 4 * i, &rgba, sizeof(rgba));
-    }
-
-    std::vector<graphics::texture_mip_descriptor> noise_tex_mip_desc = {
-        {
-            .width = noise_size,
-            .height = noise_size,
-            .bytes = noise_bytes,
-        },
-    };
-
-    graphics::texture_data_descriptor noise_tex_data_desc[] = {
-        {
-            .fmt = graphics::resource_format::RG32_FLOAT,
-            .mips = noise_tex_mip_desc,
-            .name = "SSAO Noise Texture",
-        },
-    };
-
-    auto noise_texture_handle = graphics::renderer_utilities::upload_textures(
-        graphics_device, noise_tex_data_desc, graphics_device.get_staging_buffer(), true)[0];
+    scene_data.camera.inv_proj = math::inverse(scene_data.camera.proj);
+    scene_data.camera.inv_view = math::inverse(scene_data.camera.view);
 
     std::vector<graphics::object_payload> objects;
     std::vector<graphics::mesh_layout> mesh_layouts;
@@ -390,6 +286,8 @@ void pbr_demo()
             .metallic_map_id = mat.metallic_roughness_texture,
             .roughness_map_id = mat.metallic_roughness_texture,
             .ao_map_id = mat.occlusion_map_texture,
+            .alpha_cutoff = mat.alpha_cutoff,
+            .reflectance = 0.0f,
             .base_color_factor = mat.base_color_factor,
         });
     }
@@ -398,9 +296,6 @@ void pbr_demo()
     std::size_t mask_count = 0;
 
     auto pbr_opaque = create_pbr_pipeline(graphics_device);
-    auto z_pass = create_z_pass_pipeline(graphics_device);
-    auto ssao_pipeline = create_ssao_pipeline(graphics_device);
-    auto ssao_blur_pipeline = create_ssao_blur_pipeline(graphics_device);
 
     auto upload_pass = rgc->add_graph_pass(
         "Upload Pass", graphics::queue_operation_type::TRANSFER, [&](graphics::graph_pass_builder& bldr) {
@@ -438,13 +333,6 @@ void pbr_demo()
 
                     write_offset += sizeof(std::uint32_t) * instances.size();
 
-                    std::memcpy(staging_buffer_ptr.data() + write_offset, &ssao_consts, sizeof(ssao_constants));
-                    cmds.copy(staging_buffer, ssao_constants_buffer,
-                              graphics_device.get_buffer_frame_offset(staging_buffer) + write_offset,
-                              graphics_device.get_buffer_frame_offset(ssao_constants_buffer), sizeof(ssao_constants));
-
-                    write_offset += sizeof(ssao_constants);
-
                     graphics_device.unmap_buffer(staging_buffer);
 
                     auto cmds_ptr = graphics_device.map_buffer_frame(indirect_commands);
@@ -454,76 +342,13 @@ void pbr_demo()
                 });
         });
 
-    auto depth_pre_pass = rgc->add_graph_pass(
-        "Z Pre Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
-            bldr.depends_on(upload_pass)
-                .add_color_attachment(normals_buffer, graphics::resource_access_type::WRITE)
-                .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
-                                      graphics::load_op::CLEAR, graphics::store_op::STORE, 0.0f)
-                .add_constant_buffer(constants_buffer, 0, 0)
-                .add_structured_buffer(vertex_pull_buffer, graphics::resource_access_type::READ, 0, 2)
-                .add_structured_buffer(mesh_layout_buffer, graphics::resource_access_type::READ, 0, 3)
-                .add_structured_buffer(object_data_buffer, graphics::resource_access_type::READ, 0, 4)
-                .add_structured_buffer(instance_data_buffer, graphics::resource_access_type::READ, 0, 5)
-                .add_structured_buffer(material_buffer, graphics::resource_access_type::READ, 0, 6)
-                .add_sampler(linear_no_aniso_sampler, 0, 7, graphics::pipeline_stage::FRAGMENT)
-                .add_external_sampled_images(textures, 0, 9, graphics::pipeline_stage::FRAGMENT)
-                .add_index_buffer(vertex_pull_buffer)
-                .add_indirect_argument_buffer(indirect_commands)
-                .on_execute([&](graphics::command_list& cmds) {
-                    cmds.set_scissor_region(0, 0, 1920, 1080)
-                        .set_viewport(0, 0, 1920, 1080)
-                        .use_pipeline(z_pass)
-                        .use_index_buffer(vertex_pull_buffer, 0)
-                        .draw_indexed(
-                            indirect_commands,
-                            static_cast<std::uint32_t>(graphics_device.get_buffer_frame_offset(indirect_commands)),
-                            static_cast<std::uint32_t>(opaque_count + mask_count),
-                            sizeof(graphics::indexed_indirect_command));
-                });
-        });
-
-    auto ssao_pass = rgc->add_graph_pass(
-        "SSAO Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
-            bldr.depends_on(depth_pre_pass)
-                .add_color_attachment(ssao_buffer, graphics::resource_access_type::WRITE)
-                .add_constant_buffer(ssao_constants_buffer, 0, 0)
-                .add_sampled_image(depth_buffer, 0, 1)
-                .add_external_sampled_image(noise_texture_handle, 0, 2, graphics::pipeline_stage::FRAGMENT)
-                .add_sampled_image(normals_buffer, 0, 4)
-                .add_sampler(nearest_sampler, 0, 5, graphics::pipeline_stage::FRAGMENT)
-                .add_sampler(linear_no_aniso_sampler, 0, 6, graphics::pipeline_stage::FRAGMENT)
-                .on_execute([&](graphics::command_list& cmds) {
-                    cmds.set_scissor_region(0, 0, 1920, 1080)
-                        .set_viewport(0, 0, 1920, 1080, 0, 1, 0, false)
-                        .use_pipeline(ssao_pipeline)
-                        .draw(3, 1, 0, 0);
-                });
-        });
-
-    auto ssao_blur_pass = rgc->add_graph_pass(
-        "SSAO Blur Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
-            bldr.depends_on(ssao_pass)
-                .add_color_attachment(ssao_blur_buffer, graphics::resource_access_type::WRITE)
-                .add_sampled_image(ssao_buffer, 0, 3)
-                .add_sampler(linear_no_aniso_sampler, 0, 5, graphics::pipeline_stage::FRAGMENT)
-                .on_execute([&](graphics::command_list& cmds) {
-                    cmds.set_scissor_region(0, 0, 1920, 1080)
-                        .set_viewport(0, 0, 1920, 1080, 0, 1, 0, false)
-                        .use_pipeline(ssao_blur_pipeline)
-                        .draw(3, 1, 0, 0);
-                });
-        });
-
     auto pbr_opaque_pass = rgc->add_graph_pass(
         "PBR Opaque Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
-            bldr.depends_on(ssao_blur_pass)
+            bldr.depends_on(upload_pass)
                 .add_color_attachment(color_buffer, graphics::resource_access_type::READ_WRITE,
                                       graphics::load_op::CLEAR, graphics::store_op::STORE, {0.0f, 0.0f, 0.0f, 1.0f})
-                .add_color_attachment(specular_smoothness_buffer, graphics::resource_access_type::READ_WRITE,
-                                      graphics::load_op::CLEAR, graphics::store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
-                .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ, graphics::load_op::LOAD,
-                                      graphics::store_op::DONT_CARE)
+                .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ, graphics::load_op::CLEAR,
+                                      graphics::store_op::DONT_CARE, 0.0f)
                 .add_constant_buffer(constants_buffer, 0, 0)
                 .add_structured_buffer(point_lights_buffer, graphics::resource_access_type::READ, 0, 1)
                 .add_structured_buffer(vertex_pull_buffer, graphics::resource_access_type::READ, 0, 2)
@@ -532,8 +357,7 @@ void pbr_demo()
                 .add_structured_buffer(instance_data_buffer, graphics::resource_access_type::READ, 0, 5)
                 .add_structured_buffer(material_buffer, graphics::resource_access_type::READ, 0, 6)
                 .add_sampler(linear_sampler, 0, 7, graphics::pipeline_stage::FRAGMENT)
-                .add_sampled_image(ssao_blur_buffer, 0, 8)
-                .add_external_sampled_images(textures, 0, 9, graphics::pipeline_stage::FRAGMENT)
+                .add_external_sampled_images(textures, 0, 8, graphics::pipeline_stage::FRAGMENT)
                 .add_indirect_argument_buffer(indirect_commands)
                 .add_index_buffer(vertex_pull_buffer)
                 .on_execute([&](graphics::command_list& cmds) {
@@ -668,10 +492,10 @@ void pbr_demo()
 
         controller.update(kb, static_cast<float>(frame_time.count()));
 
-        scene_data.camera.eye_position = controller.eye_position();
+        auto camera_eye = controller.eye_position();
+        scene_data.camera.eye_position = math::vec4(camera_eye.x, camera_eye.y, camera_eye.z, 0.0f);
         scene_data.camera.view = controller.view();
-        ssao_consts.view_matrix = controller.view();
-        ssao_consts.inv_view = controller.inv_view();
+        scene_data.camera.inv_view = controller.inv_view();
 
         graph->execute();
     }
@@ -681,13 +505,7 @@ void pbr_demo()
         graphics_device.release_image(texture);
     }
 
-    graphics_device.release_image(noise_texture_handle);
-    graphics_device.release_sampler(nearest_sampler);
     graphics_device.release_sampler(linear_sampler);
-    graphics_device.release_sampler(linear_no_aniso_sampler);
-    graphics_device.release_graphics_pipeline(ssao_blur_pipeline);
-    graphics_device.release_graphics_pipeline(ssao_pipeline);
-    graphics_device.release_graphics_pipeline(z_pass);
     graphics_device.release_graphics_pipeline(pbr_opaque);
     graphics_device.release_swapchain(swapchain);
 }
@@ -948,8 +766,8 @@ graphics::graphics_pipeline_resource_handle create_ssao_blur_pipeline(graphics::
 
 graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render_device& device)
 {
-    auto vertex_shader = core::read_bytes("data/pbr/pbr.vx.spv");
-    auto fragment_shader = core::read_bytes("data/pbr/pbr.px.spv");
+    auto vertex_shader = core::read_bytes("assets/shaders/pbr.vert.spv");
+    auto fragment_shader = core::read_bytes("assets/shaders/pbr.frag.spv");
 
     graphics::descriptor_binding_info set0_bindings[] = {
         {
@@ -995,11 +813,6 @@ graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render
         {
             .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
             .binding_index = 8,
-            .binding_count = 1,
-        },
-        {
-            .type = graphics::descriptor_binding_type::SAMPLED_IMAGE,
-            .binding_index = 9,
             .binding_count = 512,
         },
     };
@@ -1011,12 +824,8 @@ graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render
         },
     };
 
-    graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB,
-                                                    graphics::resource_format::RGBA8_UNORM};
+    graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
     graphics::color_blend_attachment_state blending[] = {
-        {
-            .enabled{false},
-        },
         {
             .enabled{false},
         },
@@ -1032,17 +841,17 @@ graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render
         },
         .vertex_shader{
             .bytes = vertex_shader,
-            .entrypoint = "VSMain",
+            .entrypoint = "main",
             .name = "PBR Opaque Shader Module",
         },
         .fragment_shader{
             .bytes = fragment_shader,
-            .entrypoint = "PSMain",
+            .entrypoint = "main",
             .name = "PBR Opaque Shader Module",
         },
         .depth_testing{
             .enable_test = true,
-            .enable_write = false,
+            .enable_write = true,
             .depth_test_op = graphics::compare_operation::GREATER_OR_EQUALS,
         },
         .blending{

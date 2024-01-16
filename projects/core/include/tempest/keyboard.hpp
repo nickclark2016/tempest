@@ -142,6 +142,7 @@ namespace tempest::core
 
     enum class key_modifier
     {
+        NONE = 0x00,
         SHIFT = 0x01,
         CONTROL = 0x02,
         ALT = 0x04,
@@ -152,9 +153,9 @@ namespace tempest::core
 
     struct key_state
     {
-        key k;
+        key k = key::UNKNOWN;
         key_action action = key_action::RELEASE;
-        key_modifier modifiers;
+        key_modifier modifiers = key_modifier::NONE;
     };
 
     inline constexpr bool test_modifier(key_state s, std::same_as<key_modifier> auto... modifiers) noexcept

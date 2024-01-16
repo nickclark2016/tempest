@@ -397,6 +397,15 @@ namespace tempest::assets
                 static_cast<float>(material.pbrMetallicRoughness.baseColorFactor[3]),
             };
 
+            if (mat.type == material_type::MASK)
+            {
+                mat.alpha_cutoff = static_cast<float>(material.alphaCutoff);
+            }
+            else
+            {
+                material.alphaCutoff = 1.0f;
+            }
+
             asset.materials.push_back(mat);
         }
 
@@ -420,7 +429,8 @@ namespace tempest::assets
         {
             if (material.pbrMetallicRoughness.baseColorTexture.index >= 0)
             {
-                asset.textures[root.textures[material.pbrMetallicRoughness.baseColorTexture.index].source].linear = false;
+                asset.textures[root.textures[material.pbrMetallicRoughness.baseColorTexture.index].source].linear =
+                    false;
             }
 
             if (material.normalTexture.index != -1)
