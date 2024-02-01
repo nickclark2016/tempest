@@ -152,7 +152,7 @@ float4 FSMain(VertexOutput input) {
 
     float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position);
     color.rgb = uncharted_2_tonemap(color.rgb * 4.5);
-	color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
+    color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
 
     return color;
 }
