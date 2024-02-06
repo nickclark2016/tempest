@@ -40,6 +40,7 @@ namespace tempest::ecs
     } // namespace detail
 
     template <typename T>
+        requires std::is_trivial_v<T>
     class basic_entity_traits
     {
         static constexpr auto length = std::popcount(T::entity_mask);
@@ -83,7 +84,7 @@ namespace tempest::ecs
         [[nodiscard]] static constexpr value_type combine_entities(const entity_type lhs,
                                                                    const entity_type rhs) noexcept
         {
-            return value_type{(lhs & entity_mask) & (rhs & (version_mask << length))};
+            return value_type{(lhs & entity_mask) | (rhs & (version_mask << length))};
         }
     };
 

@@ -18,7 +18,7 @@ namespace tempest::math
 
         template <typename T>
         constexpr T inv_pi = static_cast<T>(1) / pi<T>;
-    };
+    }; // namespace constants
 
     namespace detail
     {
@@ -31,7 +31,7 @@ namespace tempest::math
         {
             return std::bit_cast<float>(v);
         }
-    }
+    } // namespace detail
 
     template <typename T>
     inline constexpr T fast_inv_sqrt(T value) noexcept
@@ -80,11 +80,18 @@ namespace tempest::math
         return static_cast<std::uint16_t>(std::round(clamp(value, -1.0f, +1.0f) * 32767.0f));
     }
 
-    inline constexpr float inflate_to_float(const std::uint16_t value) { // IEEE-754 16-bit floating-point format (without infinity): 1-5-10, exp-15, +-131008.0, +-6.1035156E-5, +-5.9604645E-8, 3.311 digits
+    inline constexpr float inflate_to_float(const std::uint16_t value)
+    {
+        // IEEE-754 16-bit floating-point format (without infinity): 1-5-10, exp-15, +-131008.0, +-6.1035156E-5,
+        // +-5.9604645E-8, 3.311 digits
         const std::uint32_t e = (value & 0x7C00) >> 10; // exponent
         const std::uint32_t m = (value & 0x03FF) << 13; // mantissa
-        const std::uint32_t v = detail::as_u32_t_bits(static_cast<float>(m)) >> 23; // evil log2 bit hack to count leading zeros in denormalized format
-        return detail::as_float_bits((value & 0x8000) << 16 | (e != 0) * ((e + 112) << 23 | m) | ((e == 0) & (m != 0)) * ((v - 37) << 23 | ((m << (150 - v)) & 0x007FE000))); // sign : normalized : denormalized
+        const std::uint32_t v = detail::as_u32_t_bits(static_cast<float>(m)) >>
+                                23; // evil log2 bit hack to count leading zeros in denormalized format
+        return detail::as_float_bits(
+            (value & 0x8000) << 16 | (e != 0) * ((e + 112) << 23 | m) |
+            ((e == 0) & (m != 0)) *
+                ((v - 37) << 23 | ((m << (150 - v)) & 0x007FE000))); // sign : normalized : denormalized
     }
 
     template <typename T>
@@ -100,11 +107,22 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr T reproject(const T value, const T old_min, const T old_max, const T new_min = static_cast<T>(-1), const T new_max = static_cast<T>(1))
+    inline constexpr T reproject(const T value, const T old_min, const T old_max, const T new_min = static_cast<T>(-1),
+                                 const T new_max = static_cast<T>(1))
     {
         const auto t = inverse_lerp(value, old_min, old_max);
         return lerp(new_min, new_max, t);
     }
-}
+
+    template <std::integral T>
+    inline constexpr T div_ceil(T x, T y)
+    {
+        if (x != 0)
+        {
+            return 1 + ((x - 1) / y);
+        }
+        return 0;
+    }
+} // namespace tempest::math
 
 #endif // tempest_math_math_utils_hpp__
