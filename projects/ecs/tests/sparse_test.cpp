@@ -110,3 +110,12 @@ TEST(sparse_set, iterator)
 
     ASSERT_EQ(it, s.end());
 }
+
+TEST(sparse_map, default_construct)
+{
+    sparse_map<int> s;
+
+    ASSERT_TRUE(s.empty());
+    ASSERT_EQ(s.size(), 0);
+    ASSERT_EQ(s.capacity(), 0);
+}
