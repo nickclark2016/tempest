@@ -45,6 +45,36 @@ namespace tempest::core
     {
         return value & (mod - 1);
     }
+
+    template <std::integral T>
+    [[nodiscard]] inline constexpr bool is_bit_set(T n, T k) noexcept
+    {
+        return (n >> k) & static_cast<T>(1);
+    }
+
+    template <std::integral T>
+    [[nodiscard]] inline constexpr T set_bit(T n, T k) noexcept
+    {
+        return n | (static_cast<T>(1) << k);
+    }
+
+    template <std::integral T>
+    [[nodiscard]] inline constexpr T set_bit(T n, T k, bool x) noexcept
+    {
+        return (n & ~(static_cast<T>(1) << k)) | (static_cast<T>(1) << k);
+    }
+
+    template <std::integral T>
+    [[nodiscard]] inline constexpr T clear_bit(T n, T k) noexcept
+    {
+        return n & ~(static_cast<T>(1) << k);
+    }
+
+    template <std::integral T>
+    [[nodiscard]] inline constexpr T toggle_bit(T n, T k) noexcept
+    {
+        return n ^ (static_cast<T>(1) << k);
+    }
 } // namespace tempest::core
 
 #endif // tempest_core_algorithm_hpp
