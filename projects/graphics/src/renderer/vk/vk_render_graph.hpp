@@ -22,7 +22,7 @@ namespace tempest::graphics::vk
     struct render_graph_buffer_state
     {
         VkPipelineStageFlags2 stage_mask{0};
-        VkAccessFlags access_mask{0};
+        VkAccessFlags2 access_mask{0};
         VkBuffer buffer{VK_NULL_HANDLE};
         VkDeviceSize offset{0};
         VkDeviceSize size{0};
@@ -33,7 +33,7 @@ namespace tempest::graphics::vk
     {
         bool persistent{false};
         VkPipelineStageFlags2 stage_mask{0};
-        VkAccessFlags access_mask{0};
+        VkAccessFlags2 access_mask{0};
         VkImageLayout image_layout{VK_IMAGE_LAYOUT_UNDEFINED};
         VkImage image{VK_NULL_HANDLE};
         VkImageAspectFlags aspect{0};
@@ -49,7 +49,7 @@ namespace tempest::graphics::vk
         swapchain_resource_handle swapchain;
         VkImageLayout image_layout{VK_IMAGE_LAYOUT_UNDEFINED};
         VkPipelineStageFlags2 stage_mask{0};
-        VkAccessFlags access_mask{0};
+        VkAccessFlags2 access_mask{0};
     };
 
     struct external_image_state
