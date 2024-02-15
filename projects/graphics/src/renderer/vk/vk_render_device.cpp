@@ -61,14 +61,14 @@ namespace tempest::graphics::vk
                 .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
                 .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
                 .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-                .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
                 .add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
                 .add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
                 .add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
                 .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT)
-                .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT)
-                .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT)
-                .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
+                .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+#ifdef TEMPEST_ENABLE_GPU_ASSISTED_VALDATION
+            bldr.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
+#endif
 #endif
 
             auto result = bldr.build();
@@ -831,7 +831,8 @@ namespace tempest::graphics::vk
         name_object(_dispatch, std::bit_cast<std::uint64_t>(img), VK_OBJECT_TYPE_IMAGE, ci.name.c_str());
 
         VkImageAspectFlags aspect = 0;
-        aspect |= (ci.color_attachment || (ci.sampled && !ci.depth_attachment) || ci.storage) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
+        aspect |=
+            (ci.color_attachment || (ci.sampled && !ci.depth_attachment) || ci.storage) ? VK_IMAGE_ASPECT_COLOR_BIT : 0;
         aspect |= ci.depth_attachment ? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
 
         VkImageViewCreateInfo view_ci = {

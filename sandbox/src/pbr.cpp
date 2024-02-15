@@ -169,6 +169,7 @@ void pbr_demo()
         .height{1080},
         .fmt{graphics::resource_format::RGBA8_SRGB},
         .type{graphics::image_type::IMAGE_2D},
+        .persistent{true},
         .name{"Color Buffer Target"},
     });
 
@@ -177,6 +178,7 @@ void pbr_demo()
         .height{1080},
         .fmt{graphics::resource_format::D32_FLOAT},
         .type{graphics::image_type::IMAGE_2D},
+        .persistent{true},
         .name{"Depth Buffer Target"},
     });
 
@@ -347,8 +349,8 @@ void pbr_demo()
             bldr.depends_on(upload_pass)
                 .add_color_attachment(color_buffer, graphics::resource_access_type::READ_WRITE,
                                       graphics::load_op::CLEAR, graphics::store_op::STORE, {0.0f, 0.0f, 0.0f, 1.0f})
-                .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ, graphics::load_op::CLEAR,
-                                      graphics::store_op::DONT_CARE, 0.0f)
+                .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
+                                      graphics::load_op::CLEAR, graphics::store_op::DONT_CARE, 0.0f)
                 .add_constant_buffer(constants_buffer, 0, 0)
                 .add_structured_buffer(point_lights_buffer, graphics::resource_access_type::READ, 0, 1)
                 .add_structured_buffer(vertex_pull_buffer, graphics::resource_access_type::READ, 0, 2)

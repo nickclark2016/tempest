@@ -50,7 +50,7 @@ namespace tempest::graphics::vk
                 case resource_access_type::READ_WRITE:
                     [[fallthrough]];
                 case resource_access_type::READ:
-                    return VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
                 case resource_access_type::WRITE:
                     return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
                 }
@@ -112,8 +112,8 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        VkAccessFlags compute_image_access_mask(resource_access_type type, image_resource_usage usage,
-                                                queue_operation_type ops)
+        VkAccessFlags2 compute_image_access_mask(resource_access_type type, image_resource_usage usage,
+                                                 queue_operation_type ops)
         {
             switch (usage)
             {
@@ -121,11 +121,11 @@ namespace tempest::graphics::vk
                 switch (type)
                 {
                 case resource_access_type::READ:
-                    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+                    return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
                 case resource_access_type::WRITE:
-                    return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    return VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
                 case resource_access_type::READ_WRITE:
-                    return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
                 }
                 break;
             }
@@ -133,41 +133,42 @@ namespace tempest::graphics::vk
                 switch (type)
                 {
                 case resource_access_type::READ:
-                    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+                    return VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
                 case resource_access_type::WRITE:
-                    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    return VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
                 case resource_access_type::READ_WRITE:
-                    return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    return VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                           VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
                 }
                 break;
             }
             case image_resource_usage::SAMPLED:
-                return VK_ACCESS_SHADER_READ_BIT;
+                return VK_ACCESS_2_SHADER_READ_BIT;
             case image_resource_usage::STORAGE: {
                 switch (type)
                 {
                 case resource_access_type::READ:
-                    return VK_ACCESS_SHADER_READ_BIT;
+                    return VK_ACCESS_2_SHADER_READ_BIT;
                 case resource_access_type::WRITE:
-                    return VK_ACCESS_SHADER_WRITE_BIT;
+                    return VK_ACCESS_2_SHADER_WRITE_BIT;
                 case resource_access_type::READ_WRITE:
-                    return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                    return VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
                 }
                 break;
             }
             case image_resource_usage::TRANSFER_DESTINATION:
-                return VK_ACCESS_TRANSFER_WRITE_BIT;
+                return VK_ACCESS_2_TRANSFER_WRITE_BIT;
             case image_resource_usage::TRANSFER_SOURCE:
-                return VK_ACCESS_TRANSFER_READ_BIT;
+                return VK_ACCESS_2_TRANSFER_READ_BIT;
             case image_resource_usage::PRESENT:
-                return VK_ACCESS_NONE;
+                return VK_ACCESS_2_NONE;
             }
 
             logger->critical("Failed to determine VkAccessFlags for image access.");
             std::exit(EXIT_FAILURE);
         }
 
-        VkAccessFlags compute_buffer_access_mask(resource_access_type type, buffer_resource_usage usage)
+        VkAccessFlags2 compute_buffer_access_mask(resource_access_type type, buffer_resource_usage usage)
         {
             switch (usage)
             {
@@ -175,26 +176,26 @@ namespace tempest::graphics::vk
                 switch (type)
                 {
                 case resource_access_type::READ:
-                    return VK_ACCESS_SHADER_READ_BIT;
+                    return VK_ACCESS_2_SHADER_READ_BIT;
                 case resource_access_type::WRITE:
-                    return VK_ACCESS_SHADER_WRITE_BIT;
+                    return VK_ACCESS_2_SHADER_WRITE_BIT;
                 case resource_access_type::READ_WRITE:
-                    return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                    return VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
                 }
                 break;
             }
             case buffer_resource_usage::CONSTANT:
-                return VK_ACCESS_SHADER_READ_BIT;
+                return VK_ACCESS_2_SHADER_READ_BIT;
             case buffer_resource_usage::VERTEX:
-                return VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+                return VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
             case buffer_resource_usage::INDEX:
-                return VK_ACCESS_INDEX_READ_BIT;
+                return VK_ACCESS_2_INDEX_READ_BIT;
             case buffer_resource_usage::INDIRECT_ARGUMENT:
-                return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+                return VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
             case buffer_resource_usage::TRANSFER_DESTINATION:
-                return VK_ACCESS_TRANSFER_WRITE_BIT;
+                return VK_ACCESS_2_TRANSFER_WRITE_BIT;
             case buffer_resource_usage::TRANSFER_SOURCE:
-                return VK_ACCESS_TRANSFER_READ_BIT;
+                return VK_ACCESS_2_TRANSFER_READ_BIT;
             }
 
             logger->critical("Failed to determine VkAccessFlags for buffer access.");
@@ -737,7 +738,7 @@ namespace tempest::graphics::vk
             }
 
             image_acquired_sems.push_back(signal_sem);
-            wait_stages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+            wait_stages.push_back(VK_PIPELINE_STAGE_TRANSFER_BIT);
             render_complete_sems.push_back(render_complete_sem);
             swapchains.push_back(swap->sc.swapchain);
             image_indices.push_back(swap->image_index);
@@ -801,6 +802,11 @@ namespace tempest::graphics::vk
 
                     img_barrier_2.srcStageMask = last_state.stage_mask;
                     img_barrier_2.dstStageMask = next_state.stage_mask;
+                }
+                else
+                {
+                    img_barrier_2.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    img_barrier_2.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
                 }
 
                 if (img_barrier_2.oldLayout != img_barrier_2.newLayout || has_write_mask(img_barrier_2.srcAccessMask) ||
@@ -923,6 +929,7 @@ namespace tempest::graphics::vk
                 _last_known_state.buffers[buf.buf.as_uint64()] = next_state;
             }
 
+#if 1
             if (!image_barriers_2.empty() || !buffer_barriers_2.empty())
             {
                 VkDependencyInfo dep_info = {
@@ -938,6 +945,41 @@ namespace tempest::graphics::vk
                 };
                 cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
             }
+#else
+            for (const auto& img : image_barriers_2)
+            {
+                VkDependencyInfo dep_info = {
+                    .sType{VK_STRUCTURE_TYPE_DEPENDENCY_INFO},
+                    .pNext{nullptr},
+                    .dependencyFlags{},
+                    .memoryBarrierCount{0},
+                    .pMemoryBarriers{nullptr},
+                    .bufferMemoryBarrierCount{0},
+                    .pBufferMemoryBarriers{nullptr},
+                    .imageMemoryBarrierCount{1},
+                    .pImageMemoryBarriers{&img},
+                };
+
+                cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
+            }
+
+            for (const auto& buf : buffer_barriers_2)
+            {
+                VkDependencyInfo dep_info = {
+                    .sType{VK_STRUCTURE_TYPE_DEPENDENCY_INFO},
+                    .pNext{nullptr},
+                    .dependencyFlags{},
+                    .memoryBarrierCount{0},
+                    .pMemoryBarriers{nullptr},
+                    .bufferMemoryBarrierCount{1},
+                    .pBufferMemoryBarriers{&buf},
+                    .imageMemoryBarrierCount{0},
+                    .pImageMemoryBarriers{nullptr},
+                };
+
+                cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
+            }
+#endif
 
             if (pass_ref.operation_type() == queue_operation_type::GRAPHICS)
             {
