@@ -1,9 +1,11 @@
 #ifndef tempest_ecs_registry_hpp
 #define tempest_ecs_registry_hpp
 
+#include "sparse.hpp"
 #include "traits.hpp"
 
 #include <tempest/algorithm.hpp>
+#include <tempest/meta.hpp>
 
 #include <array>
 #include <cassert>
@@ -12,15 +14,33 @@
 #include <concepts>
 #include <cstddef>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace tempest::ecs
 {
     namespace detail
     {
+        /**
+         * @brief A bidirectional iterator for basic entity stores.
+         *
+         * @tparam T The type of the value the iterator points to.
+         * @tparam EPC The number of entities per chunk.
+         * @tparam EPB The number of entities per block.
+         * @tparam BPC The number of blocks per chunk.
+         *
+         * This struct defines a basic iterator for entity stores in an ECS (Entity Component System). It provides
+         * the functionality to iterate over entities in a chunked storage system, where entities are stored in blocks,
+         * and blocks are grouped into chunks.
+         *
+         * The iterator supports bidirectional iteration, meaning it can increment and decrement.
+         *
+         * @see tempest::ecs::basic_entity_store
+         */
         template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
         struct basic_entity_store_iterator
         {
+            // Iterator traits
             using value_type = T::value_type;
             using pointer = value_type*;
             using const_pointer = const value_type*;
@@ -29,25 +49,74 @@ namespace tempest::ecs
             using difference_type = std::ptrdiff_t;
             using iterator_category = std::bidirectional_iterator_tag;
 
+            // Named constants
             static constexpr std::size_t entities_per_chunk = EPC;
             static constexpr std::size_t entities_per_block = EPB;
             static constexpr std::size_t blocks_per_chunk = BPC;
 
+            /**
+             * @brief Default constructor.
+             */
             constexpr basic_entity_store_iterator() noexcept = default;
+
+            /**
+             * @brief Construct a new basic entity store iterator object.
+             *
+             * @param chunks A pointer to the chunks in the entity store.
+             * @param index The index of the entity the iterator points to.
+             * @param end The end index of the entity store.  This is equivalent to the total number of entities in the
+             * store.
+             */
             constexpr basic_entity_store_iterator(T* chunks, std::size_t index, std::size_t end) noexcept;
 
+            /**
+             * @brief Dereference operator.
+             */
             [[nodiscard]] constexpr reference operator*() noexcept;
+
+            /**
+             * @brief Dereference operator.
+             */
             [[nodiscard]] constexpr const_reference operator*() const noexcept;
 
+            /**
+             * @brief Dereference operator.
+             */
             [[nodiscard]] constexpr pointer operator->() const noexcept;
 
+            /**
+             * @brief Pre-increment operator.
+             */
             constexpr basic_entity_store_iterator& operator++() noexcept;
+
+            /**
+             * @brief Post-increment operator.
+             */
             constexpr basic_entity_store_iterator operator++(int) noexcept;
+
+            /**
+             * @brief Pre-decrement operator.
+             */
             constexpr basic_entity_store_iterator& operator--() noexcept;
+
+            /**
+             * @brief Post-decrement operator.
+             */
             constexpr basic_entity_store_iterator operator--(int) noexcept;
 
+            /**
+             * Pointer to an array of chunks.
+             */
             T* chunks{nullptr};
+
+            /**
+             * The index of the entity the iterator points to.
+             */
             std::size_t index{0};
+
+            /**
+             * The end index of the entity store.
+             */
             std::size_t end{0};
         };
 
@@ -164,6 +233,21 @@ namespace tempest::ecs
             return self;
         }
 
+        /**
+         * @brief Equality operator.
+         *
+         * @tparam T The type of the value the iterator points to.
+         * @tparam EPC The number of entities per chunk.
+         * @tparam EPB The number of entities per block.
+         * @tparam BPC The number of blocks per chunk.
+         *
+         * Checks for equality of two iterators by the index they point to. If the iterators were generated from
+         * different basic_entity_stores, this function is undefined.
+         *
+         * @param lhs The left hand side iterator.
+         * @param rhs The right hand side iterator.
+         * @return true if the iterators point to the same index, false otherwise.
+         */
         template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
         [[nodiscard]] inline constexpr bool operator==(
             const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
@@ -172,6 +256,21 @@ namespace tempest::ecs
             return lhs.index == rhs.index;
         }
 
+        /**
+         * @brief Three-way comparison operator.
+         *
+         * @tparam T The type of the value the iterator points to.
+         * @tparam EPC The number of entities per chunk.
+         * @tparam EPB The number of entities per block.
+         * @tparam BPC The number of blocks per chunk.
+         *
+         * Compares two iterators by the index they point to. If the iterators were generated from different
+         * basic_entity_stores, this function is undefined.
+         * 
+         * @param lhs The left hand side iterator.
+         * @param rhs The right hand side iterator.
+         * @return std::strong_ordering representing the comparison result of the indices.
+         */
         template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
         [[nodiscard]] inline constexpr auto operator<=>(
             const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
@@ -229,8 +328,8 @@ namespace tempest::ecs
         [[nodiscard]] constexpr const_iterator cend() const noexcept;
 
         [[nodiscard]] constexpr T acquire();
-        constexpr void release(T entity) noexcept;
-        [[nodiscard]] constexpr bool is_valid(T entity) const noexcept;
+        constexpr void release(T e) noexcept;
+        [[nodiscard]] constexpr bool is_valid(T e) const noexcept;
         constexpr void clear() noexcept;
         void reserve(std::size_t new_capacity);
 
@@ -366,9 +465,9 @@ namespace tempest::ecs
     }
 
     template <typename T, std::size_t N, std::integral O>
-    inline constexpr void basic_entity_store<T, N, O>::release(T entity) noexcept
+    inline constexpr void basic_entity_store<T, N, O>::release(T e) noexcept
     {
-        auto index = traits_type::as_entity(entity);
+        auto index = traits_type::as_entity(e);
 
         auto chunk_index = index / entities_per_chunk;
         auto chunk_offset = index % entities_per_chunk;
@@ -385,14 +484,14 @@ namespace tempest::ecs
         to_erase = traits_type::construct(head_index,
                                           traits_type::as_version(to_erase) + 1); // point entity to next, bump version
 
-        _head = entity;
+        _head = e;
         --_count;
     }
 
     template <typename T, std::size_t N, std::integral O>
-    inline constexpr bool basic_entity_store<T, N, O>::is_valid(T entity) const noexcept
+    inline constexpr bool basic_entity_store<T, N, O>::is_valid(T e) const noexcept
     {
-        auto index = traits_type::as_entity(entity);
+        auto index = traits_type::as_entity(e);
 
         auto chunk_index = index / entities_per_chunk;
         auto chunk_offset = index % entities_per_chunk;
@@ -404,7 +503,7 @@ namespace tempest::ecs
         {
             const block& blk = _chunks[chunk_index].blocks[block_index];
             return core::is_bit_set(blk.occupancy, block_offset) &&
-                   traits_type::as_version(blk.entities[block_offset]) == traits_type::as_version(entity);
+                   traits_type::as_version(blk.entities[block_offset]) == traits_type::as_version(e);
         }
 
         return false;
@@ -499,8 +598,30 @@ namespace tempest::ecs
         bool is_valid(E e) const noexcept;
         std::size_t entity_count() const noexcept;
 
+        template <typename T>
+        void assign(E e, const T& value);
+
+        template <typename T>
+        [[nodiscard]] bool has(E e) const noexcept;
+
+        template <typename T>
+        [[nodiscard]] T& get(E e);
+
+        template <typename T>
+        [[nodiscard]] const T& get(E e) const;
+
+        template <typename T>
+        [[nodiscard]] T* try_get(E e) noexcept;
+
+        template <typename T>
+        [[nodiscard]] const T* try_get(E e) const noexcept;
+
+        template <typename T>
+        void remove(E e);
+
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
+        std::unordered_map<std::size_t, std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
     };
 
     template <typename E>
@@ -525,6 +646,121 @@ namespace tempest::ecs
     inline std::size_t basic_registry<E>::entity_count() const noexcept
     {
         return _entities.size();
+    }
+
+    template <typename E>
+    template <typename T>
+    inline void basic_registry<E>::assign(E e, const T& value)
+    {
+        static core::type_info id = core::type_id<T>();
+        auto& store = _component_stores[id.index()];
+        if (!store)
+        {
+            store = std::make_unique<sparse_map<T>>();
+        }
+
+        static_cast<sparse_map<T>*>(store.get())->insert(e, value);
+    }
+
+    template <typename E>
+    template <typename T>
+    inline bool basic_registry<E>::has(E e) const noexcept
+    {
+        static core::type_info id = core::type_id<T>();
+        auto store = _component_stores.find(id.index());
+        if (store == _component_stores.cend())
+        {
+            return false;
+        }
+
+        return static_cast<sparse_map<T>*>(store->second.get())->contains(e);
+    }
+
+    template <typename E>
+    template <typename T>
+    inline T& basic_registry<E>::get(E e)
+    {
+        static core::type_info id = core::type_id<T>();
+        auto store_it = _component_stores.find(id.index());
+        assert(store_it != _component_stores.cend());
+
+        auto& [_, store] = *store_it;
+
+        assert(static_cast<sparse_map<T>*>(store.get())->contains(e));
+
+        return static_cast<sparse_map<T>&>(*store.get())[e];
+    }
+
+    template <typename E>
+    template <typename T>
+    inline const T& basic_registry<E>::get(E e) const
+    {
+        static core::type_info id = core::type_id<T>();
+        auto store_it = _component_stores.find(id.index());
+        assert(store_it != _component_stores.cend());
+
+        const auto& [_, store] = *store_it;
+
+        assert(static_cast<const sparse_map<T>*>(store.get())->contains(e));
+
+        return static_cast<const sparse_map<T>&>(*store.get())[e];
+    }
+
+    template <typename E>
+    template <typename T>
+    inline T* basic_registry<E>::try_get(E e) noexcept
+    {
+        static core::type_info id = core::type_id<T>();
+        auto store_it = _component_stores.find(id.index());
+        if (store_it == _component_stores.cend())
+        {
+            return nullptr;
+        }
+
+        auto& [_, store] = *store_it;
+
+        if (!static_cast<sparse_map<T>*>(store.get())->contains(e))
+        {
+            return nullptr;
+        }
+
+        return &static_cast<sparse_map<T>&>(*store.get())[e];
+    }
+
+    template <typename E>
+    template <typename T>
+    inline const T* basic_registry<E>::try_get(E e) const noexcept
+    {
+        static core::type_info id = core::type_id<T>();
+        auto store_it = _component_stores.find(id.index());
+        if (store_it == _component_stores.cend())
+        {
+            return nullptr;
+        }
+
+        const auto& [_, store] = *store_it;
+
+        if (!static_cast<const sparse_map<T>*>(store.get())->contains(e))
+        {
+            return nullptr;
+        }
+
+        return &static_cast<const sparse_map<T>&>(*store.get())[e];
+    }
+
+    template <typename E>
+    template <typename T>
+    inline void basic_registry<E>::remove(E e)
+    {
+        static core::type_info id = core::type_id<T>();
+        auto store_it = _component_stores.find(id.index());
+        assert(store_it != _component_stores.cend());
+
+        auto& [_, store] = *store_it;
+
+        assert(static_cast<sparse_map<T>*>(store.get())->contains(e));
+
+        static_cast<sparse_map<T>*>(store.get())->erase(e);
     }
 
     using registry = basic_registry<entity>;
