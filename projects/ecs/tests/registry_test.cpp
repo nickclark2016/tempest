@@ -285,7 +285,7 @@ TEST(registry, assign_large_entity_count)
     for (std::size_t i = 0; i < entity_count; ++i)
     {
         const auto entity = reg.acquire_entity();
-        
+
         if (i % 2 == 0)
         {
             reg.assign<int>(entity, 42);
@@ -333,4 +333,42 @@ TEST(registry, assign_large_entity_count)
             ASSERT_EQ(reg.get<char>(entity), 'a');
         }
     }
+}
+
+TEST(registry, has_multiple)
+{
+    registry reg;
+
+    const auto entity = reg.acquire_entity();
+
+    ASSERT_TRUE(reg.is_valid(entity));
+    ASSERT_EQ(reg.entity_count(), 1);
+
+    reg.assign<int>(entity, 42);
+    reg.assign<float>(entity, 3.14f);
+
+    ASSERT_TRUE((reg.has<int, float>(entity)));
+    ASSERT_FALSE((reg.has<int, double>(entity)));
+    ASSERT_FALSE((reg.has<float, double>(entity)));
+    ASSERT_FALSE((reg.has<int, float, double>(entity)));
+
+    auto values = reg.get<int, float>(entity);
+    ASSERT_EQ(std::get<0>(values), 42);
+    ASSERT_EQ(std::get<1>(values), 3.14f);
+
+    auto try_values = reg.try_get<int, float>(entity);
+    ASSERT_NE(std::get<0>(try_values), nullptr);
+    ASSERT_NE(std::get<1>(try_values), nullptr);
+    ASSERT_EQ(*std::get<0>(try_values), 42);
+    ASSERT_EQ(*std::get<1>(try_values), 3.14f);
+
+    auto try_values_with_fail = reg.try_get<int, double>(entity);
+    ASSERT_NE(std::get<0>(try_values_with_fail), nullptr);
+    ASSERT_EQ(std::get<1>(try_values_with_fail), nullptr);
+    ASSERT_EQ(*std::get<0>(try_values_with_fail), 42);
+
+    reg.remove<int>(entity);
+    reg.remove<float>(entity);
+
+    ASSERT_FALSE((reg.has<int, float>(entity)));
 }
