@@ -19,6 +19,9 @@
 
 namespace tempest::ecs
 {
+    template <typename T>
+    class basic_registry;
+
     namespace detail
     {
         /**
@@ -118,6 +121,19 @@ namespace tempest::ecs
              * The end index of the entity store.
              */
             std::size_t end{0};
+        };
+
+        template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC, typename... Ts>
+        struct basic_component_view_iterator
+        {
+            basic_registry<T>* source;
+            basic_entity_store_iterator<T, EPC, EPB, BPC> current;
+        };
+
+        template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC, typename... Ts>
+        struct basic_component_view
+        {
+            basic_registry<T>* source;
         };
 
         template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
@@ -266,7 +282,7 @@ namespace tempest::ecs
          *
          * Compares two iterators by the index they point to. If the iterators were generated from different
          * basic_entity_stores, this function is undefined.
-         * 
+         *
          * @param lhs The left hand side iterator.
          * @param rhs The right hand side iterator.
          * @return std::strong_ordering representing the comparison result of the indices.
@@ -604,17 +620,32 @@ namespace tempest::ecs
         template <typename T>
         [[nodiscard]] bool has(E e) const noexcept;
 
+        template <typename T1, typename T2, typename... Ts>
+        [[nodiscard]] bool has(E e) const noexcept;
+
         template <typename T>
         [[nodiscard]] T& get(E e);
 
         template <typename T>
         [[nodiscard]] const T& get(E e) const;
 
+        template <typename T1, typename T2, typename... Ts>
+        [[nodiscard]] std::tuple<T1&, T2&, Ts&...> get(E e);
+
+        template <typename T1, typename T2, typename... Ts>
+        [[nodiscard]] std::tuple<const T1&, const T2&, const Ts&...> get(E e) const;
+
         template <typename T>
         [[nodiscard]] T* try_get(E e) noexcept;
 
         template <typename T>
         [[nodiscard]] const T* try_get(E e) const noexcept;
+
+        template <typename T1, typename T2, typename... Ts>
+        [[nodiscard]] std::tuple<T1*, T2*, Ts*...> try_get(E e) noexcept;
+
+        template <typename T1, typename T2, typename... Ts>
+        [[nodiscard]] std::tuple<const T1*, const T2*, const Ts*...> try_get(E e) const noexcept;
 
         template <typename T>
         void remove(E e);
@@ -633,6 +664,11 @@ namespace tempest::ecs
     template <typename E>
     inline void basic_registry<E>::release_entity(E e)
     {
+        for (auto& [_, store] : _component_stores)
+        {
+            store->erase(e);
+        }
+
         _entities.release(e);
     }
 
@@ -677,6 +713,13 @@ namespace tempest::ecs
     }
 
     template <typename E>
+    template <typename T1, typename T2, typename... Ts>
+    inline bool basic_registry<E>::has(E e) const noexcept
+    {
+        return has<T1>(e) && has<T2, Ts...>(e);
+    }
+
+    template <typename E>
     template <typename T>
     inline T& basic_registry<E>::get(E e)
     {
@@ -704,6 +747,20 @@ namespace tempest::ecs
         assert(static_cast<const sparse_map<T>*>(store.get())->contains(e));
 
         return static_cast<const sparse_map<T>&>(*store.get())[e];
+    }
+
+    template <typename E>
+    template <typename T1, typename T2, typename... Ts>
+    inline std::tuple<T1&, T2&, Ts&...> basic_registry<E>::get(E e)
+    {
+        return std::make_tuple(std::ref(get<T1>(e)), std::ref(get<T2>(e)), std::ref(get<Ts>(e))...);
+    }
+
+    template <typename E>
+    template <typename T1, typename T2, typename... Ts>
+    inline std::tuple<const T1&, const T2&, const Ts&...> basic_registry<E>::get(E e) const
+    {
+        return std::make_tuple(std::cref(get<T1>(e)), std::cref(get<T2>(e)), std::cref(get<Ts>(e))...);
     }
 
     template <typename E>
@@ -746,6 +803,20 @@ namespace tempest::ecs
         }
 
         return &static_cast<const sparse_map<T>&>(*store.get())[e];
+    }
+
+    template <typename E>
+    template <typename T1, typename T2, typename... Ts>
+    inline std::tuple<T1*, T2*, Ts*...> basic_registry<E>::try_get(E e) noexcept
+    {
+        return std::make_tuple(try_get<T1>(e), try_get<T2>(e), try_get<Ts>(e)...);
+    }
+
+    template <typename E>
+    template <typename T1, typename T2, typename... Ts>
+    inline std::tuple<const T1*, const T2*, const Ts*...> basic_registry<E>::try_get(E e) const noexcept
+    {
+        return std::make_tuple(try_get<T1>(e), try_get<T2>(e), try_get<Ts>(e)...);
     }
 
     template <typename E>
