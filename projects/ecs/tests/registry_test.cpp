@@ -372,3 +372,67 @@ TEST(registry, has_multiple)
 
     ASSERT_FALSE((reg.has<int, float>(entity)));
 }
+
+TEST(registry, stress_test)
+{
+    registry reg;
+
+    const std::size_t entity_count = 1000000; // Adjust this number based on your system's capabilities
+    std::vector<entity> entities;
+    entities.reserve(entity_count);
+
+    // Create a large number of entities and assign them data
+    for(std::size_t i = 0; i < entity_count; ++i)
+    {
+        const auto entity = reg.acquire_entity();
+        reg.assign<int>(entity, static_cast<std::uint32_t>(i));
+        reg.assign<float>(entity, static_cast<float>(i));
+
+        entities.push_back(entity);
+    }
+
+    ASSERT_EQ(reg.entity_count(), entity_count);
+
+    // Check that the data was correctly assigned
+    for(std::size_t i = 0; i < entity_count; ++i)
+    {
+        const auto entity = entities[i];
+        auto values = reg.get<int, float>(entity);
+        ASSERT_EQ(std::get<0>(values), i);
+        ASSERT_EQ(std::get<1>(values), static_cast<float>(i));
+    }
+
+    // Remove the entities and their data
+    for(std::size_t i = 0; i < entity_count; ++i)
+    {
+        const auto entity = entities[i];
+        reg.remove<int>(entity);
+        reg.remove<float>(entity);
+        reg.release_entity(entity);
+    }
+
+    ASSERT_EQ(reg.entity_count(), 0);
+
+    // Reuse slots
+
+    entities.clear();
+
+    for(std::size_t i = 0; i < entity_count; ++i)
+    {
+        const auto entity = reg.acquire_entity();
+        reg.assign<int>(entity, static_cast<std::uint32_t>(i));
+        reg.assign<float>(entity, static_cast<float>(i));
+
+        entities.push_back(entity);
+    }
+
+    ASSERT_EQ(reg.entity_count(), entity_count);
+
+    for(std::size_t i = 0; i < entity_count; ++i)
+    {
+        const auto entity = entities[i];
+        auto values = reg.get<int, float>(entity);
+        ASSERT_EQ(std::get<0>(values), i);
+        ASSERT_EQ(std::get<1>(values), static_cast<float>(i));
+    }
+}
