@@ -489,6 +489,8 @@ namespace tempest::ecs
         [[nodiscard]] virtual constexpr std::size_t capacity() const noexcept = 0;
         [[nodiscard]] virtual constexpr bool contains(T t) const noexcept = 0;
 
+        virtual void reserve(std::size_t new_capacity) = 0;
+
         virtual constexpr void erase(T t) noexcept = 0;
     };
 
@@ -558,6 +560,8 @@ namespace tempest::ecs
 
         template <typename... Ts>
         constexpr iterator emplace(K k, Ts&&... ts);
+
+        void reserve(std::size_t new_capacity) override;
 
       private:
         constexpr void _release_resources();
@@ -1151,9 +1155,55 @@ namespace tempest::ecs
     }
 
     template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V, Allocator>::rbegin()
+        noexcept
+    {
+        return std::make_reverse_iterator(end());
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V, Allocator>::rbegin()
+        const noexcept
+    {
+        return crbegin();
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V, Allocator>::crbegin()
+        const noexcept
+    {
+        return std::make_reverse_iterator(cend());
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V, Allocator>::rend()
+        noexcept
+    {
+        return std::make_reverse_iterator(begin());
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V,
+                                                                                          Allocator>::rend() const noexcept
+    {
+        return crend();
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V,
+        Allocator>::crend() const noexcept
+    {
+        return std::make_reverse_iterator(cbegin());
+    }
+
+    template <typename K, typename V, typename Allocator>
     inline constexpr void basic_sparse_map<K, V, Allocator>::erase(K k) noexcept
     {
         auto it = find(k);
+        if (it == end())
+        {
+            return;
+        }
         auto& self = _sparse_reference(it->first);
         const auto e = traits_type::as_entity(self);
         _sparse_reference(_packed[_packed_count - 1]) =
@@ -1211,6 +1261,17 @@ namespace tempest::ecs
                                                 traits_type::as_integral(k));
 
         return --(end() - position);
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline void basic_sparse_map<K, V, Allocator>::reserve(std::size_t new_capacity)
+    {
+        if (new_capacity <= capacity()) [[unlikely]]
+        {
+            return;
+        }
+
+        _request_storage_resize(new_capacity);
     }
 
     template <typename K, typename V, typename Allocator>

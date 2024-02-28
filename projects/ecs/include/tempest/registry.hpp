@@ -307,7 +307,7 @@ namespace tempest::ecs
         struct block
         {
             O occupancy{0};
-            std::array<T, entities_per_block> entities;
+            std::array<T, entities_per_block> entities{};
         };
 
         struct chunk
@@ -568,12 +568,7 @@ namespace tempest::ecs
         std::size_t current_cap = capacity();
         std::size_t current_chunk_count = _chunks.size();
 
-        _chunks.reserve(new_chunks);
-
-        for (std::size_t i = current_chunk_count; i < new_chunks; ++i)
-        {
-            _chunks.emplace_back();
-        }
+        _chunks.resize(new_chunks);
 
         // build next chain
         auto idx = current_cap;
@@ -607,6 +602,8 @@ namespace tempest::ecs
         using entity_type = E;
         using traits_type = entity_traits<E>;
         using size_type = std::size_t;
+
+        void reserve(std::size_t new_capacity);
 
         E acquire_entity();
         void release_entity(E e);
@@ -652,8 +649,18 @@ namespace tempest::ecs
 
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
-        std::unordered_map<std::size_t, std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
+        std::vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
     };
+
+    template <typename E>
+    inline void basic_registry<E>::reserve(std::size_t new_capacity)
+    {
+        for (auto& store : _component_stores)
+        {
+            store->reserve(new_capacity);
+        }
+        _entities.reserve(new_capacity);
+    }
 
     template <typename E>
     inline E basic_registry<E>::acquire_entity()
@@ -664,7 +671,7 @@ namespace tempest::ecs
     template <typename E>
     inline void basic_registry<E>::release_entity(E e)
     {
-        for (auto& [_, store] : _component_stores)
+        for (auto& store : _component_stores)
         {
             store->erase(e);
         }
@@ -689,11 +696,18 @@ namespace tempest::ecs
     inline void basic_registry<E>::assign(E e, const T& value)
     {
         static core::type_info id = core::type_id<T>();
-        auto& store = _component_stores[id.index()];
-        if (!store)
+
+        if (_component_stores.size() <= id.index())
         {
-            store = std::make_unique<sparse_map<T>>();
+            _component_stores.resize(id.index() + 1);
         }
+
+        if (_component_stores[id.index()] == nullptr)
+        {
+            _component_stores[id.index()] = std::make_unique<sparse_map<T>>();
+        }
+
+        auto& store = _component_stores[id.index()];
 
         static_cast<sparse_map<T>*>(store.get())->insert(e, value);
     }
@@ -703,13 +717,19 @@ namespace tempest::ecs
     inline bool basic_registry<E>::has(E e) const noexcept
     {
         static core::type_info id = core::type_id<T>();
-        auto store = _component_stores.find(id.index());
-        if (store == _component_stores.cend())
+
+        if (_component_stores.size() <= id.index())
         {
             return false;
         }
 
-        return static_cast<sparse_map<T>*>(store->second.get())->contains(e);
+        auto& store = _component_stores[id.index()];
+        if (store == nullptr)
+        {
+            return false;
+        }
+
+        return static_cast<const sparse_map<T>*>(store.get())->contains(e);
     }
 
     template <typename E>
@@ -724,10 +744,10 @@ namespace tempest::ecs
     inline T& basic_registry<E>::get(E e)
     {
         static core::type_info id = core::type_id<T>();
-        auto store_it = _component_stores.find(id.index());
-        assert(store_it != _component_stores.cend());
+        assert(id.index() < _component_stores.size());
 
-        auto& [_, store] = *store_it;
+        auto& store = _component_stores[id.index()];
+        assert(store != nullptr);
 
         assert(static_cast<sparse_map<T>*>(store.get())->contains(e));
 
@@ -739,10 +759,10 @@ namespace tempest::ecs
     inline const T& basic_registry<E>::get(E e) const
     {
         static core::type_info id = core::type_id<T>();
-        auto store_it = _component_stores.find(id.index());
-        assert(store_it != _component_stores.cend());
+        assert(id.index() < _component_stores.size());
 
-        const auto& [_, store] = *store_it;
+        const auto& store = _component_stores[id.index()];
+        assert(store != nullptr);
 
         assert(static_cast<const sparse_map<T>*>(store.get())->contains(e));
 
@@ -768,13 +788,17 @@ namespace tempest::ecs
     inline T* basic_registry<E>::try_get(E e) noexcept
     {
         static core::type_info id = core::type_id<T>();
-        auto store_it = _component_stores.find(id.index());
-        if (store_it == _component_stores.cend())
+
+        if (id.index() >= _component_stores.size())
         {
             return nullptr;
         }
 
-        auto& [_, store] = *store_it;
+        auto& store = _component_stores[id.index()];
+        if (store == nullptr)
+        {
+            return nullptr;
+        }
 
         if (!static_cast<sparse_map<T>*>(store.get())->contains(e))
         {
@@ -789,13 +813,17 @@ namespace tempest::ecs
     inline const T* basic_registry<E>::try_get(E e) const noexcept
     {
         static core::type_info id = core::type_id<T>();
-        auto store_it = _component_stores.find(id.index());
-        if (store_it == _component_stores.cend())
+
+        if (id.index() >= _component_stores.size())
         {
             return nullptr;
         }
 
-        const auto& [_, store] = *store_it;
+        const auto& store = _component_stores[id.index()];
+        if (store == nullptr)
+        {
+            return nullptr;
+        }
 
         if (!static_cast<const sparse_map<T>*>(store.get())->contains(e))
         {
@@ -824,14 +852,14 @@ namespace tempest::ecs
     inline void basic_registry<E>::remove(E e)
     {
         static core::type_info id = core::type_id<T>();
-        auto store_it = _component_stores.find(id.index());
-        assert(store_it != _component_stores.cend());
-
-        auto& [_, store] = *store_it;
-
-        assert(static_cast<sparse_map<T>*>(store.get())->contains(e));
-
-        static_cast<sparse_map<T>*>(store.get())->erase(e);
+        if (id.index() < _component_stores.size())
+        {
+            auto& store = _component_stores[id.index()];
+            if (store != nullptr)
+            {
+                static_cast<sparse_map<T>*>(store.get())->erase(e);
+            }
+        }
     }
 
     using registry = basic_registry<entity>;
