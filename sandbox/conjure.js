@@ -12,4 +12,6 @@ project('sandbox', (_) => {
     uses([
         'tempest:engine'
     ]);
+
+    dependsOn(['tempest']);
 });
