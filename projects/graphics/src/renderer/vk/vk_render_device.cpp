@@ -1921,7 +1921,7 @@ namespace tempest::graphics::vk
         vkb::PhysicalDeviceSelector selector = select_device(_instance);
 
         auto selection = selector.select_devices();
-        _devices[idx] = std::make_unique<render_device>(_alloc, _instance, (*selection)[idx]);
+        _devices[idx] = std::make_unique<render_device>(_alloc, _instance, (*selection)[devices[idx].id]);
 
         return *(_devices[idx]);
     }
