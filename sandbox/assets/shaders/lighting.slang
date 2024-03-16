@@ -1,16 +1,20 @@
 #ifndef tempest_lighting_slang
 #define tempest_lighting_slang
 
-struct DirectionalLight {
-    float4 direction;
-    float4 color_intensity;
+enum LightType
+{
+    DIRECTIONAL,
+    POINT,
+    SPOT
 };
 
-struct PointLight {
-    float4 location;
-    float4 color;
-    float range;
-    float intensity;
+struct Light
+{
+    float4 color_intensity;
+    float4 position;
+    float4 direction;
+    float4 attenuation;
+    LightType type;
 };
 
 #endif // tempest_lighting_slang

@@ -185,28 +185,6 @@ void pbr_demo()
     rgc->enable_imgui();
 
     auto scene = assets::load_scene("assets/glTF-Sample-Assets/Models/Sponza/GLTF/Sponza.gltf");
-    std::vector<graphics::texture_data_descriptor> cube_scene_texture_decs;
-    for (auto& tex_asset : scene->textures)
-    {
-        graphics::texture_data_descriptor desc{
-            .fmt = tex_asset.linear ? graphics::resource_format::RGBA8_UNORM : graphics::resource_format::RGBA8_SRGB,
-            .mips{
-                {
-                    {
-                        .width = tex_asset.width,
-                        .height = tex_asset.height,
-                        .bytes = tex_asset.data,
-                    },
-                },
-            },
-        };
-
-        cube_scene_texture_decs.push_back(desc);
-    }
-
-    auto textures = graphics::renderer_utilities::upload_textures(graphics_device, cube_scene_texture_decs,
-                                                                  graphics_device.get_staging_buffer(), true, true);
-    textures.resize(512);
 
     auto linear_sampler = graphics_device.create_sampler({
         .mag = graphics::filter::LINEAR,
@@ -215,8 +193,6 @@ void pbr_demo()
         .enable_aniso = true,
         .max_anisotropy{8.0f},
     });
-
-    cube_scene_texture_decs.clear();
 
     pbr_scene_constants scene_data{
         .camera{
@@ -359,7 +335,7 @@ void pbr_demo()
                 .add_structured_buffer(instance_data_buffer, graphics::resource_access_type::READ, 0, 5)
                 .add_structured_buffer(material_buffer, graphics::resource_access_type::READ, 0, 6)
                 .add_sampler(linear_sampler, 0, 7, graphics::pipeline_stage::FRAGMENT)
-                .add_external_sampled_images(textures, 0, 8, graphics::pipeline_stage::FRAGMENT)
+                .add_external_sampled_images(512, 0, 8, graphics::pipeline_stage::FRAGMENT)
                 .add_indirect_argument_buffer(indirect_commands)
                 .add_index_buffer(vertex_pull_buffer)
                 .on_execute([&](graphics::command_list& cmds) {
@@ -402,7 +378,8 @@ void pbr_demo()
 
         scene->meshes.clear();
 
-        mesh_layouts = graphics::renderer_utilities::upload_meshes(graphics_device, meshes, vertex_pull_buffer);
+        std::uint32_t offset = 0;
+        mesh_layouts = graphics::renderer_utilities::upload_meshes(graphics_device, meshes, vertex_pull_buffer, offset);
         auto& executor = graphics_device.get_command_executor();
 
         {
@@ -423,6 +400,30 @@ void pbr_demo()
 
         graphics_device.unmap_buffer(staging_buffer);
     }
+
+    std::vector<graphics::texture_data_descriptor> texture_descriptors;
+    for (auto& tex_asset : scene->textures)
+    {
+        graphics::texture_data_descriptor desc{
+            .fmt = tex_asset.linear ? graphics::resource_format::RGBA8_UNORM : graphics::resource_format::RGBA8_SRGB,
+            .mips{
+                {
+                    {
+                        .width = tex_asset.width,
+                        .height = tex_asset.height,
+                        .bytes = tex_asset.data,
+                    },
+                },
+            },
+        };
+
+        texture_descriptors.push_back(desc);
+    }
+
+    auto textures = graphics::renderer_utilities::upload_textures(graphics_device, texture_descriptors,
+                                                                  graphics_device.get_staging_buffer(), true, true);
+
+    graph->update_external_sampled_images(pbr_opaque_pass, textures, 0, 8, graphics::pipeline_stage::FRAGMENT);
 
     auto end_opaque = std::stable_partition(std::begin(instances), std::end(instances), [&](std::uint32_t instance) {
         auto& mat = materials[objects[instance].material_id];

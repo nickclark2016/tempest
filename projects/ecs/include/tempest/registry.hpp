@@ -647,6 +647,16 @@ namespace tempest::ecs
         template <typename T>
         void remove(E e);
 
+        entity_store& entities() noexcept
+        {
+            return _entities;
+        }
+
+        const entity_store& entities() const noexcept
+        {
+            return _entities;
+        }
+
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
         std::vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;

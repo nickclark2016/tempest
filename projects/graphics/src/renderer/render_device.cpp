@@ -132,9 +132,9 @@ namespace tempest::graphics
         return images;
     }
     std::vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, std::span<core::mesh> meshes,
-                                                               buffer_resource_handle target)
+                                                               buffer_resource_handle target, std::uint32_t& offset)
     {
-        std::size_t bytes_written = 0;
+        std::size_t bytes_written = offset;
         std::size_t staging_buffer_bytes_written = 0;
         std::size_t last_write_index = 0;
         std::vector<graphics::mesh_layout> result;
@@ -269,6 +269,8 @@ namespace tempest::graphics
         }
 
         device.unmap_buffer(staging_buffer);
+
+        offset = static_cast<std::uint32_t>(bytes_written);
 
         return result;
     }

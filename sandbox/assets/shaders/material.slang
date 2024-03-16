@@ -12,15 +12,22 @@ enum class MaterialType : uint {
 };
 
 struct Material {
-    MaterialType type;
-    uint base_texture_id;
-    uint normal_map_id;
-    uint metallic_map_id;
-    uint roughness_map_id;
-    uint ao_map_id;
+    float4 base_texture_factor;
+    float4 emissive_factor;
+    
+    float normal_scale;
+    float metallic_factor;
+    float roughness_factor;
     float alpha_cutoff;
     float reflectance;
-    float4 base_texture_factor;
+
+    int base_texture_id;
+    int normal_map_id;
+    int metallic_roughness_map_id;
+    int emissive_texture_id;
+    int occlusion_texture_id;
+
+    MaterialType type;
 };
 
 struct MaterialState {
@@ -30,8 +37,7 @@ struct MaterialState {
 };
 
 struct LightingState {
-    DirectionalLight sun;
-    StructuredBuffer<PointLight> point_lights;
+    Light sun;
 };
 
 struct PixelData {
@@ -96,7 +102,7 @@ float3 fresnel_schlick(const float3 f0, float v_dot_h) {
     return f + f0 * (1.0 - f);
 }
 
-float3 isotropic_lobe(const PixelData px, const DirectionalLight light, const float3 h, const float n_dot_v, const float n_dot_l, const float n_dot_h, const float l_dot_h) {
+float3 isotropic_lobe(const PixelData px, const Light light, const float3 h, const float n_dot_v, const float n_dot_l, const float n_dot_h, const float l_dot_h) {
     float d = ggx(px.roughness, n_dot_h, h);
     float v = smith_ggx(px.roughness, n_dot_v, n_dot_l);
     float3 f = fresnel_schlick(px.f0, l_dot_h);
@@ -104,7 +110,7 @@ float3 isotropic_lobe(const PixelData px, const DirectionalLight light, const fl
     return (d * v) * f;
 }
 
-float3 specular_lobe(const PixelData px, const DirectionalLight light, const float3 h, const float n_dot_v, const float n_dot_l, const float n_dot_h, const float l_dot_h) {
+float3 specular_lobe(const PixelData px, const Light light, const float3 h, const float n_dot_v, const float n_dot_l, const float n_dot_h, const float l_dot_h) {
     return isotropic_lobe(px, light, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
 }
 
@@ -131,10 +137,10 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
 }
 
 float fetch_metallic(const MaterialState mat_state, float2 uv) {
-    if (mat_state.mat.metallic_map_id == MAX_UINT) {
+    if (mat_state.mat.metallic_roughness_map_id < 0) {
         return 0.0;
     }
-    return mat_state.textures[mat_state.mat.metallic_map_id].Sample(mat_state.linear_sampler, uv).b;
+    return mat_state.textures[mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b;
 }
 
 float3 compute_diffuse(const float3 base, float metallic) {
@@ -143,7 +149,7 @@ float3 compute_diffuse(const float3 base, float metallic) {
 
 void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
     float4 texture_factor = mat_state.mat.base_texture_factor;
-    if (mat_state.mat.base_texture_id == MAX_UINT) {
+    if (mat_state.mat.base_texture_id < 0) {
         pixel.diffuse = texture_factor.rgb;
         return;
     }
@@ -164,10 +170,10 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
 }
 
 void fetch_roughness(const MaterialState mat_state, inout PixelData pixel) {
-    if (mat_state.mat.roughness_map_id == MAX_UINT) {
+    if (mat_state.mat.metallic_roughness_map_id < 0) {
         pixel.roughness = 0.0;
     } else {
-        pixel.roughness = mat_state.textures[mat_state.mat.metallic_map_id].Sample(mat_state.linear_sampler, pixel.uv).g;
+        pixel.roughness = mat_state.textures[mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g;
     }
 }
 

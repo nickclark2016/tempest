@@ -6,6 +6,8 @@
 #include <tempest/window.hpp>
 
 #include <chrono>
+#include <functional>
+#include <string_view>
 #include <unordered_map>
 
 namespace tempest
@@ -13,6 +15,7 @@ namespace tempest
     class engine
     {
         engine();
+
       public:
         static engine initialize();
 
@@ -41,11 +44,26 @@ namespace tempest
             _should_close = true;
         }
 
+        void on_initialize(std::function<void(engine&)>&& callback)
+        {
+            _initialize_callbacks.push_back(std::move(callback));
+        }
+
+        void on_close(std::function<void(engine&)>&& callback)
+        {
+            _close_callbacks.push_back(std::move(callback));
+        }
+
+        ecs::entity load_asset(std::string_view path);
+
         [[noreturn]] void run();
 
       private:
         ecs::registry _entity_registry;
         std::vector<std::unique_ptr<graphics::iwindow>> _windows;
+
+        std::vector<std::function<void(engine&)>> _initialize_callbacks;
+        std::vector<std::function<void(engine&)>> _close_callbacks;
 
         std::chrono::steady_clock::time_point _last_frame_time;
         std::chrono::duration<float> _delta_time;

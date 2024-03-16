@@ -310,14 +310,19 @@ namespace tempest::graphics::vk
             return _queue;
         }
 
-        size_t frame_in_flight() const noexcept override
+        std::size_t frame_in_flight() const noexcept override
         {
             return _current_frame % _frames_in_flight;
         }
 
-        size_t frames_in_flight() const noexcept override
+        std::size_t frames_in_flight() const noexcept override
         {
             return _frames_in_flight;
+        }
+
+        std::size_t current_frame() const noexcept override
+        {
+            return _current_frame;
         }
 
         command_buffer_allocator acquire_frame_local_command_buffer_allocator();
