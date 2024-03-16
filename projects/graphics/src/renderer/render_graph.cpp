@@ -149,6 +149,7 @@ namespace tempest::graphics
             .usage{image_resource_usage::SAMPLED},
             .images{handle},
             .stages{usage},
+            .count{1},
             .set{set},
             .binding{binding},
         });
@@ -160,11 +161,32 @@ namespace tempest::graphics
                                                                         std::uint32_t set, std::uint32_t binding,
                                                                         pipeline_stage usage)
     {
+        _external_image_states.clear();
+
         _external_image_states.push_back(external_image_resource_state{
             .type{resource_access_type::READ},
             .usage{image_resource_usage::SAMPLED},
             .images{handles.begin(), handles.end()},
             .stages{usage},
+            .count{static_cast<std::uint32_t>(handles.size())},
+            .set{set},
+            .binding{binding},
+        });
+
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_external_sampled_images(std::uint32_t count, std::uint32_t set,
+                                                                        std::uint32_t binding, pipeline_stage usage)
+    {
+        _external_image_states.clear();
+
+        _external_image_states.push_back(external_image_resource_state{
+            .type{resource_access_type::READ},
+            .usage{image_resource_usage::SAMPLED},
+            .images{},
+            .stages{usage},
+            .count{count},
             .set{set},
             .binding{binding},
         });
@@ -180,6 +202,7 @@ namespace tempest::graphics
             .usage{image_resource_usage::STORAGE},
             .images{handle},
             .stages{usage},
+            .count{1},
             .set{set},
             .binding{binding},
         });

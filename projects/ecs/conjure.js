@@ -16,8 +16,9 @@ project('ecs', (prj) => {
         ]);
 
         uses([
-            'core:public'
-        ])
+            'core:public',
+            'math:public',
+        ]);
     });
 
     uses([

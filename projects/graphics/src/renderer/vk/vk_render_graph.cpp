@@ -563,17 +563,20 @@ namespace tempest::graphics::vk
 
     render_graph::~render_graph()
     {
-        for (auto& write : _descriptor_set_states[0].writes)
+        for (auto& state : _descriptor_set_states)
         {
-            if (write.descriptorCount == 1)
+            for (auto& write : state.writes)
             {
-                delete write.pBufferInfo;
-                delete write.pImageInfo;
-            }
-            else
-            {
-                delete[] write.pBufferInfo;
-                delete[] write.pImageInfo;
+                if (write.descriptorCount == 1)
+                {
+                    delete write.pBufferInfo;
+                    delete write.pImageInfo;
+                }
+                else
+                {
+                    delete[] write.pBufferInfo;
+                    delete[] write.pImageInfo;
+                }
             }
         }
 
@@ -608,6 +611,58 @@ namespace tempest::graphics::vk
                 _device->dispatch().destroyPipelineLayout(desc_set_state.layout, nullptr);
             }
         }
+    }
+
+    void render_graph::update_external_sampled_images(graph_pass_handle pass, std::span<image_resource_handle> images,
+                                                      std::uint32_t set, std::uint32_t binding, pipeline_stage stage)
+    {
+        auto pass_idx = _pass_index_map[pass.as_uint64()];
+        _all_passes[pass_idx].add_external_sampled_images(images, set, binding, stage);
+
+        auto image_writes = new VkDescriptorImageInfo[images.size()];
+
+        std::uint32_t images_written = 0;
+
+        for (; images_written < images.size(); ++images_written)
+        {
+            if (images[images_written])
+            {
+                auto img = _device->access_image(images[images_written]);
+                image_writes[images_written] = {
+                    .sampler{VK_NULL_HANDLE},
+                    .imageView{img->view},
+                    .imageLayout{VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                };
+            }
+        }
+
+        auto vk_set = _descriptor_set_states[pass_idx].per_frame_descriptors[0].descriptor_sets[set];
+
+        VkWriteDescriptorSet write = {
+            .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+            .pNext{nullptr},
+            .dstSet{vk_set},
+            .dstBinding{binding},
+            .dstArrayElement{0},
+            .descriptorCount{images_written},
+            .descriptorType{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
+            .pImageInfo{image_writes},
+        };
+
+        auto& write_info = *std::find_if(
+            begin(_descriptor_set_states[pass_idx].writes), end(_descriptor_set_states[pass_idx].writes),
+            [&](const auto& write) {
+                return write.dstBinding == binding &&
+                       std::any_of(begin(_descriptor_set_states[pass_idx].vk_set_to_set_index),
+                                   end(_descriptor_set_states[pass_idx].vk_set_to_set_index),
+                                   [&](const auto& vk_index_pair) { return vk_index_pair.second == set; });
+            });
+
+        delete[] write_info.pImageInfo;
+
+        write_info = write;
+
+        _descriptor_set_states[pass_idx].last_update_frame = _device->current_frame();
     }
 
     void render_graph::execute()
@@ -757,6 +812,29 @@ namespace tempest::graphics::vk
             auto& pass_ref = pass_ref_wrapper.get();
             begin_marked_region(_device->dispatch(), cmds, pass_ref.name());
 
+            // for the updated passes, update the descriptor sets
+            auto desc_set_state = _descriptor_set_states[_pass_index_map[pass_ref.handle().as_uint64()]];
+            if (desc_set_state.last_update_frame + _device->frames_in_flight() > _device->current_frame())
+            {
+                auto& per_frame_desc = desc_set_state.per_frame_descriptors[_device->frame_in_flight()];
+                auto& writes = desc_set_state.writes;
+
+                for (auto& write : writes)
+                {
+                    auto set_index = desc_set_state.vk_set_to_set_index[write.dstSet];
+                    auto set = per_frame_desc.descriptor_sets[set_index];
+
+                    write.dstSet = set;
+                }
+
+                auto write_copy = writes;
+                std::erase_if(write_copy, [](const auto& write) { return write.descriptorCount == 0; });
+
+                dispatch->updateDescriptorSets(static_cast<std::uint32_t>(write_copy.size()), write_copy.data(), 0,
+                                               nullptr);
+            }
+
+            // apply barriers
             std::vector<VkImageMemoryBarrier2> image_barriers_2;
             std::vector<VkBufferMemoryBarrier2> buffer_barriers_2;
 
@@ -929,7 +1007,6 @@ namespace tempest::graphics::vk
                 _last_known_state.buffers[buf.buf.as_uint64()] = next_state;
             }
 
-#if 1
             if (!image_barriers_2.empty() || !buffer_barriers_2.empty())
             {
                 VkDependencyInfo dep_info = {
@@ -945,41 +1022,6 @@ namespace tempest::graphics::vk
                 };
                 cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
             }
-#else
-            for (const auto& img : image_barriers_2)
-            {
-                VkDependencyInfo dep_info = {
-                    .sType{VK_STRUCTURE_TYPE_DEPENDENCY_INFO},
-                    .pNext{nullptr},
-                    .dependencyFlags{},
-                    .memoryBarrierCount{0},
-                    .pMemoryBarriers{nullptr},
-                    .bufferMemoryBarrierCount{0},
-                    .pBufferMemoryBarriers{nullptr},
-                    .imageMemoryBarrierCount{1},
-                    .pImageMemoryBarriers{&img},
-                };
-
-                cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
-            }
-
-            for (const auto& buf : buffer_barriers_2)
-            {
-                VkDependencyInfo dep_info = {
-                    .sType{VK_STRUCTURE_TYPE_DEPENDENCY_INFO},
-                    .pNext{nullptr},
-                    .dependencyFlags{},
-                    .memoryBarrierCount{0},
-                    .pMemoryBarriers{nullptr},
-                    .bufferMemoryBarrierCount{1},
-                    .pBufferMemoryBarriers{&buf},
-                    .imageMemoryBarrierCount{0},
-                    .pImageMemoryBarriers{nullptr},
-                };
-
-                cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
-            }
-#endif
 
             if (pass_ref.operation_type() == queue_operation_type::GRAPHICS)
             {
@@ -1358,13 +1400,11 @@ namespace tempest::graphics::vk
             {
                 if (external_img.usage == image_resource_usage::SAMPLED)
                 {
-                    sizes[VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE].descriptorCount +=
-                        static_cast<std::uint32_t>(external_img.images.size());
+                    sizes[VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE].descriptorCount += external_img.count;
                 }
                 else if (external_img.usage == image_resource_usage::STORAGE)
                 {
-                    sizes[VK_DESCRIPTOR_TYPE_STORAGE_IMAGE].descriptorCount +=
-                        static_cast<std::uint32_t>(external_img.images.size());
+                    sizes[VK_DESCRIPTOR_TYPE_STORAGE_IMAGE].descriptorCount += external_img.count;
                 }
 
                 sets.insert(external_img.set);
@@ -1502,39 +1542,40 @@ namespace tempest::graphics::vk
                 bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
                     .binding{img.binding},
                     .descriptorType{type},
-                    .descriptorCount{img_count},
+                    .descriptorCount{img.count},
                     .stageFlags{compute_accessible_stages(pass.operation_type())},
                     .pImmutableSamplers{nullptr},
                 });
 
-                for (std::uint32_t i = 0; i < img_count; ++i)
+                auto images = new VkDescriptorImageInfo[img_count];
+
+                for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(img.images.size()); ++i)
                 {
                     VkImageView view = VK_NULL_HANDLE;
                     if (img.images[i])
                     {
                         view = _device->access_image(img.images[i])->view;
-                        auto image = new VkDescriptorImageInfo[1];
-                        *image = {
-                            .sampler{VK_NULL_HANDLE},
-                            .imageView{view},
-                            .imageLayout{compute_layout(img.usage)},
+                        images[i] = {
+                            .sampler = VK_NULL_HANDLE,
+                            .imageView = view,
+                            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                         };
-
-                        binding_writes[img.set].push_back(VkWriteDescriptorSet{
-                            .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
-                            .pNext{nullptr},
-                            .dstBinding{img.binding},
-                            .dstArrayElement{i},
-                            .descriptorCount{1},
-                            .descriptorType{type},
-                            .pImageInfo{image},
-                            .pBufferInfo{nullptr},
-                            .pTexelBufferView{nullptr},
-                        });
                     }
                 }
 
-                binding_flags[img.set].push_back(img_count > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
+                binding_writes[img.set].push_back(VkWriteDescriptorSet{
+                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
+                    .pNext{nullptr},
+                    .dstBinding{img.binding},
+                    .dstArrayElement{0},
+                    .descriptorCount{static_cast<std::uint32_t>(img.images.size())},
+                    .descriptorType{type},
+                    .pImageInfo{images},
+                    .pBufferInfo{nullptr},
+                    .pTexelBufferView{nullptr},
+                });
+
+                binding_flags[img.set].push_back(img.count > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
             }
 
             for (auto& smp : pass.external_samplers())
@@ -1645,6 +1686,7 @@ namespace tempest::graphics::vk
                         write.dstSet =
                             _descriptor_set_states[pass_index].per_frame_descriptors[i].descriptor_sets[set_id];
                         _descriptor_set_states[pass_index].writes.push_back(write);
+                        _descriptor_set_states[pass_index].vk_set_to_set_index[write.dstSet] = set_id;
                     }
                 }
 
@@ -1659,11 +1701,16 @@ namespace tempest::graphics::vk
                     }
                 }
 
-                _device->dispatch().updateDescriptorSets(
-                    static_cast<std::uint32_t>(_descriptor_set_states[pass_index].writes.size()),
-                    _descriptor_set_states[pass_index].writes.data(), 0, nullptr);
+                auto writes = _descriptor_set_states[pass_index].writes;
+                std::erase_if(writes, [](const VkWriteDescriptorSet& write) { return write.descriptorCount == 0; });
 
-                _descriptor_set_states[pass_index].writes.clear();
+                _device->dispatch().updateDescriptorSets(static_cast<std::uint32_t>(writes.size()), writes.data(), 0,
+                                                         nullptr);
+
+                if (i < _device->frames_in_flight() - 1)
+                {
+                    _descriptor_set_states[pass_index].writes.clear();
+                }
             }
 
             ++pass_index;

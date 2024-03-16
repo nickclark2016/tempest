@@ -71,8 +71,9 @@ namespace tempest::graphics
         virtual void recreate_swapchain(swapchain_resource_handle handle) = 0;
         virtual image_resource_handle fetch_current_image(swapchain_resource_handle handle) = 0;
 
-        virtual size_t frame_in_flight() const noexcept = 0;
-        virtual size_t frames_in_flight() const noexcept = 0;
+        virtual std::size_t frame_in_flight() const noexcept = 0;
+        virtual std::size_t frames_in_flight() const noexcept = 0;
+        virtual std::size_t current_frame() const noexcept = 0;
 
         virtual buffer_resource_handle get_staging_buffer() = 0;
         virtual command_execution_service& get_command_executor() = 0;
@@ -90,7 +91,7 @@ namespace tempest::graphics
                                                                   bool generate_mip_maps = false);
 
         static std::vector<mesh_layout> upload_meshes(render_device& device, std::span<core::mesh> meshes,
-                                                      buffer_resource_handle target);
+                                                      buffer_resource_handle target, std::uint32_t& offset);
     };
 } // namespace tempest::graphics
 

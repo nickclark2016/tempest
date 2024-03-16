@@ -85,6 +85,7 @@ namespace tempest::graphics::vk
 
     struct descriptor_set_state
     {
+        std::unordered_map<VkDescriptorSet, std::uint32_t> vk_set_to_set_index;
         std::vector<VkDescriptorSetLayout> set_layouts;
         VkPipelineLayout layout{VK_NULL_HANDLE};
         std::vector<descriptor_set_frame_state> per_frame_descriptors;
@@ -121,6 +122,11 @@ namespace tempest::graphics::vk
                               std::span<graphics::graph_pass_builder> pass_builders,
                               std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled);
         ~render_graph() override;
+
+        void update_external_sampled_images(graph_pass_handle pass, std::span<image_resource_handle> images,
+                                            std::uint32_t set,
+                                   std::uint32_t binding, pipeline_stage stage) override;
+
         void execute() override;
 
       private:

@@ -10,13 +10,6 @@
 
 namespace tempest::graphics
 {
-    struct mesh_component
-    {
-        std::uint32_t index_count;
-        std::uint32_t first_index;
-        std::int32_t vertex_offset;
-    };
-
     struct mesh_layout
     {
         std::uint32_t mesh_start_offset;
@@ -62,6 +55,13 @@ namespace tempest::graphics
         std::uint32_t material_id{std::numeric_limits<std::uint32_t>::max()};
         std::uint32_t parent_id{std::numeric_limits<std::uint32_t>::max()};
         std::uint32_t self_id{std::numeric_limits<std::uint32_t>::max()};
+    };
+
+    struct renderable_component
+    {
+        std::uint32_t mesh_id;
+        std::uint32_t material_id;
+        std::uint32_t object_id;
     };
 } // namespace tempest::graphics
 

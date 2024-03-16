@@ -63,7 +63,8 @@ namespace tempest::graphics
         image_resource_usage usage;
         std::vector<image_resource_handle> images;
         pipeline_stage stages;
-
+        
+        std::uint32_t count;
         std::uint32_t set;
         std::uint32_t binding;
     };
@@ -124,6 +125,8 @@ namespace tempest::graphics
                                                        std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_external_sampled_images(std::span<image_resource_handle> handles, std::uint32_t set,
                                                         std::uint32_t binding, pipeline_stage usage);
+        graph_pass_builder& add_external_sampled_images(std::uint32_t count, std::uint32_t set, std::uint32_t binding,
+                                                        pipeline_stage usage);
         graph_pass_builder& add_external_storage_image(image_resource_handle handle, resource_access_type access,
                                                        std::uint32_t set, std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_blit_target(image_resource_handle handle,
@@ -262,6 +265,9 @@ namespace tempest::graphics
     class render_graph
     {
       public:
+        virtual void update_external_sampled_images(graph_pass_handle pass, std::span<image_resource_handle> images,
+                                           std::uint32_t set, std::uint32_t binding, pipeline_stage stage) = 0;
+
         virtual ~render_graph() = default;
         virtual void execute() = 0;
     };

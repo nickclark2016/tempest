@@ -6,7 +6,7 @@
 
 struct SceneGlobals {
     Camera camera;
-    DirectionalLight light;
+    Light light;
     float2 screen_size;
 };
 
@@ -65,14 +65,13 @@ bool has_attribute(uint attribute_offset) {
 }
 
 [vk_binding(0, 0)] ConstantBuffer<SceneGlobals> scene;
-[vk_binding(1, 0)] StructuredBuffer<PointLight> point_lights;
-[vk_binding(2, 0)] StructuredBuffer<uint> vertex_pull_buffer;
-[vk_binding(3, 0)] StructuredBuffer<Mesh> meshes;
-[vk_binding(4, 0)] StructuredBuffer<ObjectData> objects;
-[vk_binding(5, 0)] StructuredBuffer<uint> instance_buffer;
-[vk_binding(6, 0)] StructuredBuffer<Material> materials;
-[vk_binding(7, 0)] SamplerState linear_sampler;
-[vk_binding(8, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
+[vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
+[vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
+[vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;
+[vk_binding(4, 0)] StructuredBuffer<uint> instance_buffer;
+[vk_binding(5, 0)] StructuredBuffer<Material> materials;
+[vk_binding(6, 0)] SamplerState linear_sampler;
+[vk_binding(7, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
 
 Vertex pull_vertex(StructuredBuffer<uint> src, const Mesh mesh, const uint vertex_id) {
     uint mesh_byte_offset = mesh.mesh_start_offset;
@@ -135,7 +134,6 @@ float3 uncharted_2_tonemap(float3 x)
 float4 FSMain(VertexOutput input) {
     LightingState lighting;
     lighting.sun = scene.light;
-    lighting.point_lights = point_lights;
 
     MaterialState material;
     material.mat = materials[input.material_id];
