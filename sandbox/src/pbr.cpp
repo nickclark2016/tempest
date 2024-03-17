@@ -1,11 +1,11 @@
 #include "fps_controller.hpp"
 
 #include <tempest/files.hpp>
+#include <tempest/graphics_components.hpp>
 #include <tempest/imgui_context.hpp>
 #include <tempest/input.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/mesh_asset.hpp>
-#include <tempest/mesh_component.hpp>
 #include <tempest/render_camera.hpp>
 #include <tempest/render_device.hpp>
 #include <tempest/render_graph.hpp>

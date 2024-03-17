@@ -169,11 +169,12 @@ namespace tempest::graphics
 
         graph_pass_handle _pbr_opaque_pass;
 
-        void create_pbr_opaque_pipeline();
-
         gpu_scene_data _scene_data;
+        ecs::entity _camera_entity{ecs::tombstone};
 
         std::size_t _last_updated_frame{0};
+
+        void create_pbr_opaque_pipeline();
     };
 } // namespace tempest::graphics
 

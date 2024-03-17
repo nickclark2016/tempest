@@ -46,15 +46,25 @@ namespace tempest
         _render_system.render();
     }
 
-    void engine::add_window(std::unique_ptr<graphics::iwindow> window)
+    core::input_group engine::add_window(std::unique_ptr<graphics::iwindow> window)
     {
         log->info("Adding window to engine");
-        _windows.push_back(std::move(window));
 
-        _render_system.register_window(*_windows.back());
+        window_payload payload{
+            .window = std::move(window),
+            .keyboard = std::make_unique<core::keyboard>(),
+        };
+
+        _render_system.register_window(*payload.window);
+        _windows.push_back(std::move(payload));
+
+        _windows.back().window->register_keyboard_callback(
+            [&](const auto& key_state) { _windows.back().keyboard->set(key_state); });
+
+        return core::input_group{_windows.back().keyboard.get()};
     }
 
-    void engine::update()
+    void engine::update(float dt)
     {
         auto current_time = std::chrono::steady_clock::now();
         auto delta = std::chrono::duration_cast<std::chrono::duration<float>>(current_time - _last_frame_time);
@@ -63,13 +73,18 @@ namespace tempest
 
         core::input::poll();
 
-        _windows.erase(
-            std::remove_if(_windows.begin(), _windows.end(), [](const auto& window) { return window->should_close(); }),
-            _windows.end());
+        _windows.erase(std::remove_if(_windows.begin(), _windows.end(),
+                                      [](const auto& window_payload) { return window_payload.window->should_close(); }),
+                       _windows.end());
 
         if (_windows.empty())
         {
             _should_close = true;
+        }
+
+        for (auto& cb : _update_callbacks)
+        {
+            cb(*this, dt);
         }
     }
 
@@ -238,7 +253,7 @@ namespace tempest
                 std::cout << "FPS: " << last_fps << std::endl;
             }
 
-            update();
+            update(static_cast<float>(frame_time.count()));
             if (_should_close)
             {
                 break;

@@ -1,7 +1,9 @@
-#ifndef tempest_graphics_mesh_component_hpp
-#define tempest_graphics_mesh_component_hpp
+#ifndef tempest_graphics_graphics_components_hpp
+#define tempest_graphics_graphics_components_hpp
 
 #include <tempest/mat4.hpp>
+#include <tempest/vec3.hpp>
+#include <tempest/vec4.hpp>
 
 #include <cstdint>
 #include <limits>
@@ -63,6 +65,13 @@ namespace tempest::graphics
         std::uint32_t material_id;
         std::uint32_t object_id;
     };
+
+    struct camera_component
+    {
+        math::vec3<float> position;
+        math::vec3<float> forward;
+        math::vec3<float> up;
+    };
 } // namespace tempest::graphics
 
-#endif // tempest_graphics_mesh_component_hpp
+#endif // tempest_graphics_graphics_components_hpp
