@@ -66,6 +66,9 @@ void fps_controller::update(const tempest::core::keyboard& kb, float dt)
     _position_xyz += move_dir * dt;
     _rotation_pyr += rot_dir * dt;
 
+    _forward = forward;
+    _up = up;
+
     _rotation_pyr.x =
         tempest::math::clamp(_rotation_pyr.x, tempest::math::as_radians(-89.0f), tempest::math::as_radians(89.0f));
 
@@ -88,4 +91,14 @@ const tempest::math::mat4<float>& fps_controller::inv_view() const noexcept
 tempest::math::vec3<float> fps_controller::eye_position() const noexcept
 {
     return _position_xyz;
+}
+
+tempest::math::vec3<float> fps_controller::eye_direction() const noexcept
+{
+    return _forward;
+}
+
+tempest::math::vec3<float> fps_controller::up_direction() const noexcept
+{
+    return _up;
 }

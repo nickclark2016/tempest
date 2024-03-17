@@ -243,6 +243,16 @@ namespace tempest::graphics
                         }
 
                         // upload scene data
+                        if (_camera_entity != ecs::tombstone)
+                        {
+                            auto camera_data = _registry->get<camera_component>(_camera_entity);
+                            auto camera_view = math::look_at(
+                                camera_data.position, camera_data.position + camera_data.forward, camera_data.up);
+
+                            _scene_data.camera.view = camera_view;
+                            _scene_data.camera.inv_view = math::inverse(camera_view);
+                        }
+
                         std::memcpy(staging_buffer_data.data() + bytes_written, &_scene_data, sizeof(gpu_scene_data));
                         cmds.copy(staging_buffer, _scene_buffer, bytes_written,
                                   _device->get_buffer_frame_offset(_scene_buffer), sizeof(gpu_scene_data));
@@ -327,6 +337,16 @@ namespace tempest::graphics
         create_pbr_opaque_pipeline();
 
         _last_updated_frame = _device->current_frame();
+
+        // find camera
+        for (ecs::entity ent : _registry->entities())
+        {
+            if (_registry->has<camera_component>(ent))
+            {
+                _camera_entity = ent;
+                break;
+            }
+        }
     }
 
     void render_system::render()

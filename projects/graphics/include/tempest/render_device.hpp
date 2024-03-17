@@ -1,7 +1,7 @@
 #ifndef tempest_graphics_render_device_hpp
 #define tempest_graphics_render_device_hpp
 
-#include "mesh_component.hpp"
+#include "graphics_components.hpp"
 #include "types.hpp"
 
 #include <tempest/memory.hpp>

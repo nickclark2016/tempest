@@ -2,7 +2,7 @@
 #include <tempest/imgui_context.hpp>
 #include <tempest/input.hpp>
 #include <tempest/memory.hpp>
-#include <tempest/mesh_component.hpp>
+#include <tempest/graphics_components.hpp>
 #include <tempest/render_device.hpp>
 #include <tempest/render_graph.hpp>
 #include <tempest/transformations.hpp>
