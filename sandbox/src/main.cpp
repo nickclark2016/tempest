@@ -7,16 +7,16 @@ int main()
     auto eng = tempest::engine::initialize();
 
     auto input_group = eng.add_window(tempest::graphics::window_factory::create({
-        .title{"Tempest"},
-        .width{1920},
-        .height{1080},
+        .title = "Tempest",
+        .width = 1920,
+        .height = 1080,
     }));
 
     auto camera = eng.get_registry().acquire_entity();
     eng.get_registry().assign(camera, tempest::graphics::camera_component{
-                                          .position{5.0f, 4.0f, 0.0f},
-                                          .forward{-1.0f, 0.0f, 0.0f},
-                                          .up{0.0f, 1.0f, 0.0f},
+                                          .position = {5.0f, 6.0f, 0.0f},
+                                          .forward = {-1.0f, 0.0f, 0.0f},
+                                          .up = {0.0f, 1.0f, 0.0f},
                                       });
 
     eng.on_initialize([](tempest::engine& eng) {
@@ -24,6 +24,7 @@ int main()
     });
 
     fps_controller fps_ctrl;
+    fps_ctrl.set_position({5.0f, 6.0f, 0.0f});
 
     eng.on_update([&](tempest::engine& eng, float dt) {
         fps_ctrl.update(*input_group.kb, dt);

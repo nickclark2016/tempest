@@ -7,8 +7,6 @@ project('core-tests', (prj) => {
         './tests/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     dependsOn([
         'googletest',
     ]);

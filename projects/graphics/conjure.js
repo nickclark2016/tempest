@@ -19,8 +19,6 @@ project('graphics', (_) => {
         'vma',
     ]);
 
-    toolset('msc:143');
-
     externalWarnings('Off');
 
     block('graphics:public', (_) => {

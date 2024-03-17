@@ -13,8 +13,8 @@ namespace tempest::logger::spd
         _logger = spdlog::stdout_color_mt(_prefix);
 
         std::time_t t = std::time(0);
-        struct tm now;
-        gmtime_s(&now, &t);
+        tm now;
+        gmtime_r(&t, &now);
 
         std::ostringstream oss;
         oss << std::put_time(&now, "%y%m%d-%H%M%S");

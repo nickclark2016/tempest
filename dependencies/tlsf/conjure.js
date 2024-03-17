@@ -1,7 +1,6 @@
 project('tlsf', (prj) => {
     kind('StaticLib');
     language('C');
-    toolset('msc:143');
     languageVersion('C11');
 
     when({}, (ctx) => {
@@ -42,5 +41,13 @@ project('tlsf', (prj) => {
         externalIncludeDirs([
             './include'
         ]);
+    });
+
+    when('system:windows', () => {
+        toolset('msc:143');
+    });
+
+    when('system:linux', () => {
+        toolset('clang');
     });
 });

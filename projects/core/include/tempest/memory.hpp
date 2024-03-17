@@ -3,6 +3,7 @@
 
 #include <tempest/range.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <source_location>
@@ -87,10 +88,6 @@ namespace tempest::core
         std::size_t _allocated_bytes{0};
     };
 
-    class linear_allocator final : public allocator
-    {
-    };
-
     class heap_allocator final : public allocator
     {
       public:
@@ -122,7 +119,11 @@ namespace tempest::core
 
     template <typename T, std::size_t N = 2> struct cacheline_aligned_storage
     {
-        alignas(N* std::hardware_constructive_interference_size) T data;
+#ifdef __cpp_lib_hardware_interference_size
+        alignas(N * std::hardware_constructive_interference_size) T data;
+#else
+        alignas(N * 64) T data;
+#endif
     };
 
     template <typename T>
@@ -215,7 +216,7 @@ namespace tempest::core
 
     template <typename T> inline void best_fit_scheme<T>::release(range<T>&& rng)
     {
-        auto free_iter = std::find_if(_free.begin(), _free.end(), [](range<T>& r) { return r.start > rng.start; });
+        auto free_iter = std::find_if(_free.begin(), _free.end(), [&rng](range<T>& r) { return r.start > rng.start; });
         const std::size_t idx = std::distance(_free.begin(), free_iter);
 
         if (idx > 0 && rng.start == _free[idx - 1].end)

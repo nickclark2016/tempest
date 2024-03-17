@@ -245,7 +245,7 @@ namespace tempest::core
         class basic_hash_string : hash_string_base<C>
         {
             using base_type = hash_string_base<C>;
-            using hash_traits_type = fnv1a_traits<base_type::hash_type>;
+            using hash_traits_type = fnv1a_traits<typename base_type::hash_type>;
 
             struct const_str_wrapper
             {
@@ -394,7 +394,7 @@ namespace tempest::core
         using hash_string = basic_hash_string<char>;
 
         template <typename T>
-        [[nodiscard]] std::size_t get_type_hash() noexcept
+        [[nodiscard]] constexpr std::size_t get_type_hash() noexcept
         {
             std::string_view type_name = get_type_name<T>();
             return hash_string::from(type_name.data(), type_name.size());
@@ -418,7 +418,7 @@ namespace tempest::core
     {
         static constexpr std::size_t value() noexcept
         {
-            static const auto v = detail::get_type_hash<T>();
+            constexpr auto v = detail::get_type_hash<T>();
             return v;
         }
     };

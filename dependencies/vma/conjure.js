@@ -2,7 +2,6 @@ project('vma', (prj) => {
     kind('StaticLib');
     language('C++');
     languageVersion('C++20');
-    toolset('msc:143');
 
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
@@ -53,4 +52,12 @@ project('vma', (prj) => {
     ]);
 
     warnings('Off');
+
+    when('system:windows', () => {
+        toolset('msc:143');
+    });
+
+    when('system:linux', () => {
+        toolset('clang');
+    });
 });

@@ -8,8 +8,6 @@ project('logger', (prj) => {
         './src/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     dependsOn([
         'spdlog',
     ]);

@@ -57,7 +57,7 @@ namespace tempest::core
             }
         };
 
-        inline static constexpr key invalid_key = {.index{~0u}, .generation{~0u}};
+        inline static constexpr key invalid_key = {.index = ~0u, .generation = ~0u};
 
         generational_object_pool(allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size);
         generational_object_pool(const object_pool&) = delete;

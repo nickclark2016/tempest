@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <random>
 #include <ranges>
@@ -184,14 +185,14 @@ void pbr_demo()
 
     rgc->enable_imgui();
 
-    auto scene = assets::load_scene("assets/glTF-Sample-Assets/Models/Sponza/GLTF/Sponza.gltf");
+    auto scene = assets::load_scene("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
 
     auto linear_sampler = graphics_device.create_sampler({
         .mag = graphics::filter::LINEAR,
         .min = graphics::filter::LINEAR,
         .mipmap = graphics::mipmap_mode::LINEAR,
         .enable_aniso = true,
-        .max_anisotropy{8.0f},
+        .max_anisotropy = 8.0f,
     });
 
     pbr_scene_constants scene_data{
@@ -578,8 +579,8 @@ graphics::graphics_pipeline_resource_handle create_z_pass_pipeline(graphics::ren
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
@@ -589,7 +590,7 @@ graphics::graphics_pipeline_resource_handle create_z_pass_pipeline(graphics::ren
 
     graphics::color_blend_attachment_state blending[] = {
         {
-            .enabled{false},
+            .enabled = false,
         },
     };
 
@@ -663,14 +664,14 @@ graphics::graphics_pipeline_resource_handle create_ssao_pipeline(graphics::rende
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     graphics::color_blend_attachment_state blending[] = {
         {
-            .enabled{false},
+            .enabled = false,
         },
     };
 
@@ -725,14 +726,14 @@ graphics::graphics_pipeline_resource_handle create_ssao_blur_pipeline(graphics::
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     graphics::color_blend_attachment_state blending[] = {
         {
-            .enabled{false},
+            .enabled = false,
         },
     };
 
@@ -822,15 +823,15 @@ graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
     graphics::color_blend_attachment_state blending[] = {
         {
-            .enabled{false},
+            .enabled = false,
         },
     };
 

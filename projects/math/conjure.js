@@ -8,8 +8,6 @@ project('math', (prj) => {
         './src/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     block('math:public', (_) => {
         includeDirs([
             './include'

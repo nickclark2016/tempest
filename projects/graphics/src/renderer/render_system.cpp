@@ -4,6 +4,8 @@
 #include <tempest/logger.hpp>
 #include <tempest/transform_component.hpp>
 
+#include <cstring>
+
 namespace tempest::graphics
 {
     namespace
@@ -122,7 +124,7 @@ namespace tempest::graphics
             .min = graphics::filter::LINEAR,
             .mipmap = graphics::mipmap_mode::LINEAR,
             .enable_aniso = true,
-            .max_anisotropy{8.0f},
+            .max_anisotropy = 8.0f,
         });
         _samplers.push_back(_linear_sampler);
 
@@ -248,9 +250,9 @@ namespace tempest::graphics
                             auto camera_data = _registry->get<camera_component>(_camera_entity);
                             auto camera_view = math::look_at(
                                 camera_data.position, camera_data.position + camera_data.forward, camera_data.up);
-
                             _scene_data.camera.view = camera_view;
                             _scene_data.camera.inv_view = math::inverse(camera_view);
+                            _scene_data.camera.position = camera_data.position;
                         }
 
                         std::memcpy(staging_buffer_data.data() + bytes_written, &_scene_data, sizeof(gpu_scene_data));
@@ -503,15 +505,15 @@ namespace tempest::graphics
 
         graphics::descriptor_set_layout_create_info layouts[] = {
             {
-                .set{0},
-                .bindings{set0_bindings},
+                .set = 0,
+                .bindings = set0_bindings,
             },
         };
 
         graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
         graphics::color_blend_attachment_state blending[] = {
             {
-                .enabled{false},
+                .enabled = false,
             },
         };
 

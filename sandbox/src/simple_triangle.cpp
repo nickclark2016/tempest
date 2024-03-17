@@ -9,6 +9,7 @@
 #include <tempest/window.hpp>
 
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <numbers>
 #include <random>
@@ -178,50 +179,48 @@ graphics::graphics_pipeline_resource_handle create_triangle_pipeline(graphics::r
     graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
     graphics::color_blend_attachment_state blending[] = {
         {
-            .enabled{false},
+            .enabled = false,
         },
     };
 
     graphics::descriptor_binding_info buffer_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::STRUCTURED_BUFFER},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding_index = 0,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{buffer_bindings},
+            .set = 0,
+            .bindings = buffer_bindings,
         },
     };
 
     graphics::graphics_pipeline_create_info quad_pipeline_ci = {
         .layout{
-            .set_layouts{
-                layouts,
-            },
+            .set_layouts = layouts,
         },
         .target{
-            .color_attachment_formats{color_buffer_fmt},
-            .depth_attachment_format{graphics::resource_format::D32_FLOAT},
+            .color_attachment_formats = color_buffer_fmt,
+            .depth_attachment_format = graphics::resource_format::D32_FLOAT,
         },
         .vertex_shader{
-            .bytes{vertex_shader_bytes},
-            .entrypoint{"VSMain"},
-            .name{"Triangle Vertex Shader"},
+            .bytes = vertex_shader_bytes,
+            .entrypoint = "VSMain",
+            .name = "Triangle Vertex Shader",
         },
         .fragment_shader{
-            .bytes{fragment_shader_bytes},
-            .entrypoint{"PSMain"},
-            .name{"Triangle Fragment Shader"},
+            .bytes = fragment_shader_bytes,
+            .entrypoint = "PSMain",
+            .name = "Triangle Fragment Shader",
         },
         .vertex_layout{},
         .depth_testing{
-            .enable_test{true},
-            .enable_write{true},
-            .depth_test_op{graphics::compare_operation::LESS},
+            .enable_test = true,
+            .enable_write = true,
+            .depth_test_op = graphics::compare_operation::LESS,
         },
 
         .blending{.attachment_blend_ops{blending}},

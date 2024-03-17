@@ -2613,21 +2613,21 @@ namespace tempest::graphics::vk
         : _dispatch{&dispatch}, _device{&device}
     {
         VkCommandPoolCreateInfo create_info = {
-            .sType{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT},
-            .queueFamilyIndex{device.get_queue().queue_family_index},
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .queueFamilyIndex = device.get_queue().queue_family_index,
         };
 
         auto res = _dispatch->createCommandPool(&create_info, nullptr, &_pool);
         assert(res == VK_SUCCESS);
 
         VkCommandBufferAllocateInfo alloc_ci = {
-            .sType{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO},
-            .pNext{nullptr},
-            .commandPool{_pool},
-            .level{VK_COMMAND_BUFFER_LEVEL_PRIMARY},
-            .commandBufferCount{1},
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .commandPool = _pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
         };
 
         VkCommandBuffer buf;
@@ -2647,10 +2647,9 @@ namespace tempest::graphics::vk
         if (!_is_recording)
         {
             VkCommandBufferBeginInfo begin = {
-                .sType{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO},
-                .pNext{nullptr},
-                .flags{},
-                .pInheritanceInfo{nullptr},
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                .pNext = nullptr,
+                .pInheritanceInfo = nullptr,
             };
             VkCommandBuffer buf = _cmds.value();
             auto res = _dispatch->beginCommandBuffer(buf, &begin);
@@ -2672,15 +2671,15 @@ namespace tempest::graphics::vk
         _dispatch->endCommandBuffer(cmds);
 
         VkSubmitInfo submit = {
-            .sType{VK_STRUCTURE_TYPE_SUBMIT_INFO},
-            .pNext{nullptr},
-            .waitSemaphoreCount{0},
-            .pWaitSemaphores{nullptr},
-            .pWaitDstStageMask{nullptr},
-            .commandBufferCount{1},
-            .pCommandBuffers{&cmds},
-            .signalSemaphoreCount{0},
-            .pSignalSemaphores{0},
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = nullptr,
+            .waitSemaphoreCount = 0,
+            .pWaitSemaphores = nullptr,
+            .pWaitDstStageMask = nullptr,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmds,
+            .signalSemaphoreCount = 0,
+            .pSignalSemaphores = 0,
         };
 
         VkFence fence = _device->acquire_fence();

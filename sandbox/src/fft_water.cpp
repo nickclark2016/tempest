@@ -1,8 +1,8 @@
 #include <tempest/files.hpp>
+#include <tempest/graphics_components.hpp>
 #include <tempest/imgui_context.hpp>
 #include <tempest/input.hpp>
 #include <tempest/memory.hpp>
-#include <tempest/graphics_components.hpp>
 #include <tempest/render_device.hpp>
 #include <tempest/render_graph.hpp>
 #include <tempest/transformations.hpp>
@@ -10,7 +10,9 @@
 #include <tempest/window.hpp>
 
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <format>
 #include <iostream>
 #include <string>
@@ -215,9 +217,9 @@ void fft_water_demo()
 
     auto& graphics_device = graphics_ctx->create_device(id);
     auto win = graphics::window_factory::create({
-        .title{"Tempest Render Graph Demo"},
-        .width{1920},
-        .height{1080},
+        .title = "Tempest Render Graph Demo",
+        .width = 1920,
+        .height = 1080,
     });
 
     ocean_fft_state fft_state = {
@@ -343,81 +345,81 @@ void fft_water_demo()
     };
 
     graphics::imgui_context::initialize_for_window(*win);
-    auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});
+    auto swapchain = graphics_device.create_swapchain({.win = win.get(), .desired_frame_count = 3});
 
     auto rgc = graphics::render_graph_compiler::create_compiler(&global_allocator, &graphics_device);
     rgc->enable_imgui();
 
     auto color_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::RGBA8_SRGB},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"Color Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::RGBA8_SRGB,
+        .type = graphics::image_type::IMAGE_2D,
+        .name = "Color Buffer Target",
     });
 
     auto depth_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::D32_FLOAT},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"Depth Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::D32_FLOAT,
+        .type = graphics::image_type::IMAGE_2D,
+        .name = "Depth Buffer Target",
     });
 
     auto spectrum_parameter_buffer = rgc->create_buffer({
         .size = sizeof(wave_spectrums),
-        .location{graphics::memory_location::DEVICE},
-        .name{"Water FFT Spectrum Buffer"},
-        .per_frame_memory{true},
+        .location = graphics::memory_location::DEVICE,
+        .name = "Water FFT Spectrum Buffer",
+        .per_frame_memory = true,
     });
 
     auto initial_spectrum_textures = rgc->create_image({
-        .width{spectrum_texture_dim},
-        .height{spectrum_texture_dim},
-        .depth{1},
-        .layers{4},
-        .fmt{graphics::resource_format::RGBA16_FLOAT},
-        .type{graphics::image_type::IMAGE_2D_ARRAY},
-        .persistent{true},
-        .name{"Initial Water FFT Spectrum Textures"},
+        .width = spectrum_texture_dim,
+        .height = spectrum_texture_dim,
+        .depth = 1,
+        .layers = 4,
+        .fmt = graphics::resource_format::RGBA16_FLOAT,
+        .type = graphics::image_type::IMAGE_2D_ARRAY,
+        .persistent = true,
+        .name = "Initial Water FFT Spectrum Textures",
     });
 
     auto displacement_textures = rgc->create_image({
-        .width{spectrum_texture_dim},
-        .height{spectrum_texture_dim},
-        .depth{1},
-        .layers{4},
-        .fmt{graphics::resource_format::RGBA16_FLOAT},
-        .type{graphics::image_type::IMAGE_2D_ARRAY},
-        .persistent{true},
-        .name{"Water FFT Displacement Textures"},
+        .width = spectrum_texture_dim,
+        .height = spectrum_texture_dim,
+        .depth = 1,
+        .layers = 4,
+        .fmt = graphics::resource_format::RGBA16_FLOAT,
+        .type = graphics::image_type::IMAGE_2D_ARRAY,
+        .persistent = true,
+        .name = "Water FFT Displacement Textures",
     });
 
     auto slope_textures = rgc->create_image({
-        .width{spectrum_texture_dim},
-        .height{spectrum_texture_dim},
-        .depth{1},
-        .layers{4},
-        .fmt{graphics::resource_format::RG16_FLOAT},
-        .type{graphics::image_type::IMAGE_2D_ARRAY},
-        .name{"Water FFT Slope Textures"},
+        .width = spectrum_texture_dim,
+        .height = spectrum_texture_dim,
+        .depth = 1,
+        .layers = 4,
+        .fmt = graphics::resource_format::RG16_FLOAT,
+        .type = graphics::image_type::IMAGE_2D_ARRAY,
+        .name = "Water FFT Slope Textures",
     });
 
     auto spectrum_textures = rgc->create_image({
-        .width{spectrum_texture_dim},
-        .height{spectrum_texture_dim},
-        .depth{1},
-        .layers{8},
-        .fmt{graphics::resource_format::RGBA16_FLOAT},
-        .type{graphics::image_type::IMAGE_2D_ARRAY},
-        .name{"Water FFT Spectrum Textures"},
+        .width = spectrum_texture_dim,
+        .height = spectrum_texture_dim,
+        .depth = 1,
+        .layers = 8,
+        .fmt = graphics::resource_format::RGBA16_FLOAT,
+        .type = graphics::image_type::IMAGE_2D_ARRAY,
+        .name = "Water FFT Spectrum Textures",
     });
 
     auto constants_buffer = rgc->create_buffer({
-        .size{sizeof(water_fft_constants)},
-        .location{graphics::memory_location::DEVICE},
-        .name{"Water FFT Constant Buffer"},
-        .per_frame_memory{true},
+        .size = sizeof(water_fft_constants),
+        .location = graphics::memory_location::DEVICE,
+        .name = "Water FFT Constant Buffer",
+        .per_frame_memory = true,
     });
 
     auto gfx_constants_buffer = rgc->create_buffer({
@@ -466,11 +468,11 @@ void fft_water_demo()
     std::vector<graphics::object_payload> objects;
     water_gfx_constants gfx_constants = {
         .camera{
-            .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.1f)},
-            .view{math::look_at(math::vec3<float>(-16.0f, 6.0f, 0.0f), math::vec3<float>(0.0f, 6.0f, 0.0f),
-                                math::vec3<float>(0.0f, 1.0, 0.0f))},
-            .view_proj{1.0f},
-            .position{-16.0f, 6.0f, 0.0f},
+            .proj = math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.1f),
+            .view = math::look_at(math::vec3<float>(-16.0f, 6.0f, 0.0f), math::vec3<float>(0.0f, 6.0f, 0.0f),
+                                  math::vec3<float>(0.0f, 1.0, 0.0f)),
+            .view_proj = 1.0f,
+            .position = {-16.0f, 6.0f, 0.0f},
         },
         .sun{
             .light_direction{-1.29f, -1.0f, 4.86f},
@@ -954,32 +956,32 @@ graphics::compute_pipeline_resource_handle create_fft_init_pipeline(graphics::re
 
     graphics::descriptor_binding_info set0_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC},
-            .binding_index{5},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .binding_index = 5,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{2},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 2,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     return device.create_compute_pipeline({
         .layout{
-            .set_layouts{layouts},
+            .set_layouts = layouts,
         },
         .compute_shader{
             .bytes = compute_shader,
@@ -996,27 +998,27 @@ graphics::compute_pipeline_resource_handle create_fft_pack_spectrum_pipeline(gra
 
     graphics::descriptor_binding_info set0_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{2},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 2,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     return device.create_compute_pipeline({
         .layout{
-            .set_layouts{layouts},
+            .set_layouts = layouts,
         },
         .compute_shader{
             .bytes = compute_shader,
@@ -1033,32 +1035,32 @@ graphics::compute_pipeline_resource_handle create_fft_update_spectrum_for_fft(gr
 
     graphics::descriptor_binding_info set0_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{1},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 1,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{2},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 2,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     return device.create_compute_pipeline({
         .layout{
-            .set_layouts{layouts},
+            .set_layouts = layouts,
         },
         .compute_shader{
             .bytes = compute_shader,
@@ -1075,27 +1077,27 @@ graphics::compute_pipeline_resource_handle create_horizontal_fft(graphics::rende
 
     graphics::descriptor_binding_info set0_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{1},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 1,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     return device.create_compute_pipeline({
         .layout{
-            .set_layouts{layouts},
+            .set_layouts = layouts,
         },
         .compute_shader{
             .bytes = compute_shader,
@@ -1112,27 +1114,27 @@ graphics::compute_pipeline_resource_handle create_vertical_fft(graphics::render_
 
     graphics::descriptor_binding_info set0_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{1},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 1,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     return device.create_compute_pipeline({
         .layout{
-            .set_layouts{layouts},
+            .set_layouts = layouts,
         },
         .compute_shader{
             .bytes = compute_shader,
@@ -1149,31 +1151,31 @@ graphics::compute_pipeline_resource_handle create_map_assembly(graphics::render_
 
     graphics::descriptor_binding_info set0_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{1},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 1,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{3},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 3,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::STORAGE_IMAGE},
-            .binding_index{4},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::STORAGE_IMAGE,
+            .binding_index = 4,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
@@ -1235,15 +1237,15 @@ graphics::graphics_pipeline_resource_handle create_water_graphics(graphics::rend
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{set0_bindings},
+            .set = 0,
+            .bindings = set0_bindings,
         },
     };
 
     graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
     graphics::color_blend_attachment_state blending[] = {
         {
-            .enabled{false},
+            .enabled = false,
         },
     };
 
@@ -1357,12 +1359,12 @@ namespace
 {
     float jonswap_alpha(float gravity, float fetch, float wind_speed)
     {
-        return 0.076f * std::powf(gravity * fetch / wind_speed / wind_speed, -0.22f);
+        return 0.076f * powf(gravity * fetch / wind_speed / wind_speed, -0.22f);
     }
 
     float jonswap_frequency(float gravity, float fetch, float wind_speed)
     {
-        return 22 * std::powf(wind_speed * fetch / gravity / gravity, -0.33f);
+        return 22 * powf(wind_speed * fetch / gravity / gravity, -0.33f);
     }
 } // namespace
 

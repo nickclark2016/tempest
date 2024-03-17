@@ -7,8 +7,6 @@ project('assets-tests', (prj) => {
         './tests/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     dependsOn([
         'googletest',
         'assets'
@@ -19,4 +17,8 @@ project('assets-tests', (prj) => {
         'googletest:public',
         'assets:public',
     ]);
+
+    when('system:linux', (_) => {
+        linksStatic(['dl', 'X11', 'pthread']);
+     });
 });

@@ -34,6 +34,8 @@ namespace tempest::graphics::vk
                 return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             case image_resource_usage::TRANSFER_SOURCE:
                 return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            case image_resource_usage::UNDEFINED:
+                break;
             }
             logger->critical("Failed to compute expected image layout.");
             std::exit(EXIT_FAILURE);
@@ -69,6 +71,8 @@ namespace tempest::graphics::vk
                 return VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT;
             case image_resource_usage::PRESENT:
                 return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            case image_resource_usage::UNDEFINED:
+                break;
             }
 
             logger->critical("Failed to determine VkPipelineStageFlags for image access.");
@@ -93,6 +97,8 @@ namespace tempest::graphics::vk
                     [[fallthrough]];
                 case queue_operation_type::COMPUTE_AND_TRANSFER:
                     return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                default:
+                    break;
                 }
                 break;
             }
@@ -162,6 +168,8 @@ namespace tempest::graphics::vk
                 return VK_ACCESS_2_TRANSFER_READ_BIT;
             case image_resource_usage::PRESENT:
                 return VK_ACCESS_2_NONE;
+            default:
+                break;
             }
 
             logger->critical("Failed to determine VkAccessFlags for image access.");
@@ -233,6 +241,8 @@ namespace tempest::graphics::vk
                 [[fallthrough]];
             case queue_operation_type::GRAPHICS:
                 return VK_SHADER_STAGE_ALL_GRAPHICS;
+            default:
+                break;
             }
 
             logger->critical("Failed to determine VkPipelineStageFlags for resource access.");
@@ -248,6 +258,8 @@ namespace tempest::graphics::vk
             }
             case buffer_resource_usage::CONSTANT:
                 return per_frame ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            default:
+                break;
             }
 
             return VK_DESCRIPTOR_TYPE_MAX_ENUM;
@@ -263,6 +275,8 @@ namespace tempest::graphics::vk
             case image_resource_usage::STORAGE: {
                 return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             }
+            default:
+                break;
             }
 
             return VK_DESCRIPTOR_TYPE_MAX_ENUM;
@@ -272,9 +286,9 @@ namespace tempest::graphics::vk
         {
 #ifdef _DEBUG
             VkDebugUtilsLabelEXT label = {
-                .sType{VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT},
-                .pNext{nullptr},
-                .pLabelName{name.data()},
+                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+                .pNext = nullptr,
+                .pLabelName = name.data(),
             };
             dispatch.cmdBeginDebugUtilsLabelEXT(buf, &label);
 #endif
@@ -316,16 +330,16 @@ namespace tempest::graphics::vk
         auto handle = _device->allocate_image();
 
         image_create_info ci = {
-            .type{desc.type},
-            .width{desc.width},
-            .height{desc.height},
-            .depth{desc.depth},
-            .layers{desc.layers},
-            .mip_count{1},
-            .format{desc.fmt},
-            .samples{desc.samples},
-            .persistent{desc.persistent},
-            .name{std::string(desc.name)},
+            .type = desc.type,
+            .width = desc.width,
+            .height = desc.height,
+            .depth = desc.depth,
+            .layers = desc.layers,
+            .mip_count = 1,
+            .format = desc.fmt,
+            .samples = desc.samples,
+            .persistent = desc.persistent,
+            .name = std::string(desc.name),
         };
 
         _images_to_compile.push_back(deferred_image_create_info{
@@ -368,6 +382,8 @@ namespace tempest::graphics::vk
                 image_it->info.transfer_destination = true;
                 break;
             }
+            default:
+                break;
             }
         }
     }
@@ -386,10 +402,10 @@ namespace tempest::graphics::vk
 
         _buffers_to_compile.push_back(deferred_buffer_create_info{
             .info{
-                .per_frame{desc.per_frame_memory},
-                .loc{desc.location},
-                .size{aligned_size * (desc.per_frame_memory ? _device->frames_in_flight() : 1)},
-                .name{std::string(desc.name)},
+                .per_frame = desc.per_frame_memory,
+                .loc = desc.location,
+                .size = aligned_size * (desc.per_frame_memory ? _device->frames_in_flight() : 1),
+                .name = std::string(desc.name),
             },
             .allocation{handle},
         });
@@ -494,26 +510,26 @@ namespace tempest::graphics::vk
         {
             VkDescriptorPoolSize pool_sizes[] = {
                 {
-                    .type{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
-                    .descriptorCount{1},
+                    .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .descriptorCount = 1,
                 },
             };
 
             VkDescriptorPoolCreateInfo pool_ci = {
-                .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO},
-                .pNext{nullptr},
-                .flags{VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT},
-                .maxSets{1},
-                .poolSizeCount{1},
-                .pPoolSizes{pool_sizes},
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+                .maxSets = 1,
+                .poolSizeCount = 1,
+                .pPoolSizes = pool_sizes,
             };
 
             imgui_render_graph_context ctx = {
-                .instance{_device->instance().instance},
-                .dev{_device->logical_device().device},
-                .instance_proc_addr{_device->instance().fp_vkGetInstanceProcAddr},
-                .dev_proc_addr{_device->logical_device().fp_vkGetDeviceProcAddr},
-                .imgui_desc_pool{VK_NULL_HANDLE},
+                .instance = _device->instance().instance,
+                .dev = _device->logical_device().device,
+                .instance_proc_addr = _device->instance().fp_vkGetInstanceProcAddr,
+                .dev_proc_addr = _device->logical_device().fp_vkGetDeviceProcAddr,
+                .imgui_desc_pool = VK_NULL_HANDLE,
             };
 
             auto res = _device->dispatch().createDescriptorPool(&pool_ci, nullptr, &ctx.imgui_desc_pool);
@@ -524,17 +540,17 @@ namespace tempest::graphics::vk
             }
 
             ImGui_ImplVulkan_InitInfo init_info = {
-                .Instance{_device->instance().instance},
-                .PhysicalDevice{_device->physical_device().physical_device},
-                .Device{_device->logical_device().device},
-                .QueueFamily{_device->get_queue().queue_family_index},
-                .Queue{_device->get_queue().queue},
-                .DescriptorPool{ctx.imgui_desc_pool},
-                .Subpass{0},
-                .MinImageCount{static_cast<std::uint32_t>(_device->frames_in_flight())},
-                .ImageCount{static_cast<std::uint32_t>(_device->frames_in_flight())},
-                .MSAASamples{VK_SAMPLE_COUNT_1_BIT},
-                .UseDynamicRendering{true},
+                .Instance = _device->instance().instance,
+                .PhysicalDevice = _device->physical_device().physical_device,
+                .Device = _device->logical_device().device,
+                .QueueFamily = _device->get_queue().queue_family_index,
+                .Queue = _device->get_queue().queue,
+                .DescriptorPool = ctx.imgui_desc_pool,
+                .Subpass = 0,
+                .MinImageCount = static_cast<std::uint32_t>(_device->frames_in_flight()),
+                .ImageCount = static_cast<std::uint32_t>(_device->frames_in_flight()),
+                .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+                .UseDynamicRendering = true,
                 .CheckVkResultFn{[](VkResult res) {
                     if (res != VK_SUCCESS)
                     {
@@ -629,9 +645,9 @@ namespace tempest::graphics::vk
             {
                 auto img = _device->access_image(images[images_written]);
                 image_writes[images_written] = {
-                    .sampler{VK_NULL_HANDLE},
-                    .imageView{img->view},
-                    .imageLayout{VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                    .sampler = VK_NULL_HANDLE,
+                    .imageView = img->view,
+                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 };
             }
         }
@@ -639,14 +655,13 @@ namespace tempest::graphics::vk
         auto vk_set = _descriptor_set_states[pass_idx].per_frame_descriptors[0].descriptor_sets[set];
 
         VkWriteDescriptorSet write = {
-            .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
-            .pNext{nullptr},
-            .dstSet{vk_set},
-            .dstBinding{binding},
-            .dstArrayElement{0},
-            .descriptorCount{images_written},
-            .descriptorType{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
-            .pImageInfo{image_writes},
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = vk_set,
+            .dstBinding = binding,
+            .dstArrayElement = 0,
+            .descriptorCount = images_written,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .pImageInfo = image_writes,
         };
 
         auto& write_info = *std::find_if(
@@ -802,8 +817,8 @@ namespace tempest::graphics::vk
         auto queue = _device->get_queue();
 
         VkCommandBufferBeginInfo begin = {
-            .sType{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO},
-            .pInheritanceInfo{nullptr},
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pInheritanceInfo = nullptr,
         };
         cmd_buffer_alloc.dispatch->beginCommandBuffer(cmds, &begin);
 
@@ -845,30 +860,30 @@ namespace tempest::graphics::vk
                 auto vk_img = _device->access_image(swapchain->image_handles[swapchain->image_index]);
 
                 swapchain_resource_state next_state = {
-                    .swapchain{swap.swap},
-                    .image_layout{compute_layout(swap.usage)},
-                    .stage_mask{compute_image_stage_access(swap.type, swap.usage, swap.first_access)},
-                    .access_mask{compute_image_access_mask(swap.type, swap.usage, queue_operation_type::GRAPHICS)},
+                    .swapchain = swap.swap,
+                    .image_layout = compute_layout(swap.usage),
+                    .stage_mask = compute_image_stage_access(swap.type, swap.usage, swap.first_access),
+                    .access_mask = compute_image_access_mask(swap.type, swap.usage, queue_operation_type::GRAPHICS),
                 };
 
                 VkImageMemoryBarrier2 img_barrier_2 = {
-                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2},
-                    .pNext{nullptr},
-                    .srcStageMask{VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT},
-                    .srcAccessMask{0},
-                    .dstStageMask{next_state.stage_mask},
-                    .dstAccessMask{next_state.access_mask},
-                    .oldLayout{VK_IMAGE_LAYOUT_UNDEFINED},
-                    .newLayout{next_state.image_layout},
-                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
-                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
-                    .image{vk_img->image},
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    .srcAccessMask = 0,
+                    .dstStageMask = next_state.stage_mask,
+                    .dstAccessMask = next_state.access_mask,
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = next_state.image_layout,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = vk_img->image,
                     .subresourceRange{
-                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
-                        .baseMipLevel{0},
-                        .levelCount{1},
-                        .baseArrayLayer{0},
-                        .layerCount{1},
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
                     },
                 };
 
@@ -902,32 +917,32 @@ namespace tempest::graphics::vk
                 auto vk_img = _device->access_image(img.img);
 
                 render_graph_image_state next_state = {
-                    .persistent{vk_img->persistent},
-                    .stage_mask{compute_image_stage_access(img.type, img.usage, img.first_access)},
-                    .access_mask{compute_image_access_mask(img.type, img.usage, pass_ref.operation_type())},
-                    .image_layout{compute_layout(img.usage)},
-                    .image{vk_img->image},
-                    .aspect{vk_img->view_info.subresourceRange.aspectMask},
-                    .base_mip{vk_img->view_info.subresourceRange.baseMipLevel},
-                    .mip_count{vk_img->view_info.subresourceRange.levelCount},
-                    .base_array_layer{vk_img->view_info.subresourceRange.baseArrayLayer},
-                    .layer_count{vk_img->view_info.subresourceRange.layerCount},
-                    .queue_family{queue.queue_family_index},
+                    .persistent = vk_img->persistent,
+                    .stage_mask = compute_image_stage_access(img.type, img.usage, img.first_access),
+                    .access_mask = compute_image_access_mask(img.type, img.usage, pass_ref.operation_type()),
+                    .image_layout = compute_layout(img.usage),
+                    .image = vk_img->image,
+                    .aspect = vk_img->view_info.subresourceRange.aspectMask,
+                    .base_mip = vk_img->view_info.subresourceRange.baseMipLevel,
+                    .mip_count = vk_img->view_info.subresourceRange.levelCount,
+                    .base_array_layer = vk_img->view_info.subresourceRange.baseArrayLayer,
+                    .layer_count = vk_img->view_info.subresourceRange.layerCount,
+                    .queue_family = queue.queue_family_index,
                 };
 
                 VkImageMemoryBarrier2 img_barrier_2 = {
-                    .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2},
-                    .pNext{nullptr},
-                    .srcStageMask{VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT},
-                    .srcAccessMask{0},
-                    .dstStageMask{next_state.stage_mask},
-                    .dstAccessMask{next_state.access_mask},
-                    .oldLayout{VK_IMAGE_LAYOUT_UNDEFINED},
-                    .newLayout{next_state.image_layout},
-                    .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
-                    .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
-                    .image{vk_img->image},
-                    .subresourceRange{vk_img->view_info.subresourceRange},
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    .srcAccessMask = 0,
+                    .dstStageMask = next_state.stage_mask,
+                    .dstAccessMask = next_state.access_mask,
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = next_state.image_layout,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = vk_img->image,
+                    .subresourceRange = vk_img->view_info.subresourceRange,
                 };
 
                 if (image_state_it != _last_known_state.images.end()) [[likely]]
@@ -961,25 +976,25 @@ namespace tempest::graphics::vk
                 auto offset = vk_buf->per_frame_resource ? size_per_frame * _device->frame_in_flight() : 0;
 
                 render_graph_buffer_state next_state = {
-                    .stage_mask{compute_buffer_stage_access(buf.type, buf.usage, pass_ref.operation_type())},
-                    .access_mask{compute_buffer_access_mask(buf.type, buf.usage)},
-                    .buffer{vk_buf->buffer},
-                    .offset{0},
-                    .size{VK_WHOLE_SIZE}, // TODO: figure out the proper mechanism to get offsets
-                    .queue_family{queue.queue_family_index},
+                    .stage_mask = compute_buffer_stage_access(buf.type, buf.usage, pass_ref.operation_type()),
+                    .access_mask = compute_buffer_access_mask(buf.type, buf.usage),
+                    .buffer = vk_buf->buffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE, // TODO: figure out the proper mechanism to get offsets
+                    .queue_family = queue.queue_family_index,
 
                 };
 
                 VkBufferMemoryBarrier2 buf_barrier_2 = {
-                    .sType{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2},
-                    .pNext{nullptr},
-                    .srcAccessMask{VK_ACCESS_NONE},
-                    .dstAccessMask{next_state.access_mask},
-                    .srcQueueFamilyIndex{queue.queue_family_index},
-                    .dstQueueFamilyIndex{next_state.queue_family},
-                    .buffer{vk_buf->buffer},
-                    .offset{next_state.offset},
-                    .size{next_state.size},
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcAccessMask = VK_ACCESS_NONE,
+                    .dstAccessMask = next_state.access_mask,
+                    .srcQueueFamilyIndex = queue.queue_family_index,
+                    .dstQueueFamilyIndex = next_state.queue_family,
+                    .buffer = vk_buf->buffer,
+                    .offset = next_state.offset,
+                    .size = next_state.size,
                 };
 
                 if ((next_state.access_mask & (VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)) != 0)
@@ -1010,15 +1025,14 @@ namespace tempest::graphics::vk
             if (!image_barriers_2.empty() || !buffer_barriers_2.empty())
             {
                 VkDependencyInfo dep_info = {
-                    .sType{VK_STRUCTURE_TYPE_DEPENDENCY_INFO},
-                    .pNext{nullptr},
-                    .dependencyFlags{},
-                    .memoryBarrierCount{0},
-                    .pMemoryBarriers{nullptr},
-                    .bufferMemoryBarrierCount{static_cast<std::uint32_t>(buffer_barriers_2.size())},
-                    .pBufferMemoryBarriers{buffer_barriers_2.empty() ? nullptr : buffer_barriers_2.data()},
-                    .imageMemoryBarrierCount{static_cast<uint32_t>(image_barriers_2.size())},
-                    .pImageMemoryBarriers{image_barriers_2.empty() ? nullptr : image_barriers_2.data()},
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .memoryBarrierCount = 0,
+                    .pMemoryBarriers = nullptr,
+                    .bufferMemoryBarrierCount = static_cast<std::uint32_t>(buffer_barriers_2.size()),
+                    .pBufferMemoryBarriers = buffer_barriers_2.empty() ? nullptr : buffer_barriers_2.data(),
+                    .imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers_2.size()),
+                    .pImageMemoryBarriers = image_barriers_2.empty() ? nullptr : image_barriers_2.data(),
                 };
                 cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
             }
@@ -1039,26 +1053,25 @@ namespace tempest::graphics::vk
                     if (sc.usage == image_resource_usage::COLOR_ATTACHMENT)
                     {
                         VkRenderingAttachmentInfo info = {
-                            .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
-                            .pNext{nullptr},
-                            .imageView{vk_img->view},
-                            .imageLayout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-                            .resolveMode{VK_RESOLVE_MODE_NONE},
-                            .resolveImageView{VK_NULL_HANDLE},
-                            .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
-                            .loadOp{compute_load_op(sc.load)},
-                            .storeOp{compute_store_op(sc.store)},
-                            .clearValue{},
+                            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                            .pNext = nullptr,
+                            .imageView = vk_img->view,
+                            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            .resolveMode = VK_RESOLVE_MODE_NONE,
+                            .resolveImageView = VK_NULL_HANDLE,
+                            .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                            .loadOp = compute_load_op(sc.load),
+                            .storeOp = compute_store_op(sc.store),
                         };
 
                         area.offset = {
-                            .x{0},
-                            .y{0},
+                            .x = 0,
+                            .y = 0,
                         };
 
                         area.extent = {
-                            .width{vk_img->img_info.extent.width},
-                            .height{vk_img->img_info.extent.height},
+                            .width = vk_img->img_info.extent.width,
+                            .height = vk_img->img_info.extent.height,
                         };
 
                         color_attachments.push_back(info);
@@ -1077,15 +1090,15 @@ namespace tempest::graphics::vk
                     if (img.usage == image_resource_usage::COLOR_ATTACHMENT)
                     {
                         VkRenderingAttachmentInfo info = {
-                            .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
-                            .pNext{nullptr},
-                            .imageView{vk_img->view},
-                            .imageLayout{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-                            .resolveMode{VK_RESOLVE_MODE_NONE},
-                            .resolveImageView{VK_NULL_HANDLE},
-                            .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
-                            .loadOp{compute_load_op(img.load)},
-                            .storeOp{compute_store_op(img.store)},
+                            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                            .pNext = nullptr,
+                            .imageView = vk_img->view,
+                            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            .resolveMode = VK_RESOLVE_MODE_NONE,
+                            .resolveImageView = VK_NULL_HANDLE,
+                            .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                            .loadOp = compute_load_op(img.load),
+                            .storeOp = compute_store_op(img.store),
                             .clearValue{
                                 .color{
                                     .float32{
@@ -1099,13 +1112,13 @@ namespace tempest::graphics::vk
                         };
 
                         area.offset = {
-                            .x{0},
-                            .y{0},
+                            .x = 0,
+                            .y = 0,
                         };
 
                         area.extent = {
-                            .width{vk_img->img_info.extent.width},
-                            .height{vk_img->img_info.extent.height},
+                            .width = vk_img->img_info.extent.width,
+                            .height = vk_img->img_info.extent.height,
                         };
 
                         color_attachments.push_back(info);
@@ -1118,30 +1131,30 @@ namespace tempest::graphics::vk
                     else if (img.usage == image_resource_usage::DEPTH_ATTACHMENT)
                     {
                         depth_attachment = {
-                            .sType{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO},
-                            .pNext{nullptr},
-                            .imageView{vk_img->view},
-                            .imageLayout{VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
-                            .resolveMode{VK_RESOLVE_MODE_NONE},
-                            .resolveImageView{VK_NULL_HANDLE},
-                            .resolveImageLayout{VK_IMAGE_LAYOUT_UNDEFINED},
-                            .loadOp{compute_load_op(img.load)},
-                            .storeOp{compute_store_op(img.store)},
+                            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                            .pNext = nullptr,
+                            .imageView = vk_img->view,
+                            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                            .resolveMode = VK_RESOLVE_MODE_NONE,
+                            .resolveImageView = VK_NULL_HANDLE,
+                            .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                            .loadOp = compute_load_op(img.load),
+                            .storeOp = compute_store_op(img.store),
                             .clearValue{
                                 .depthStencil{
-                                    .depth{img.clear_depth},
+                                    .depth = img.clear_depth,
                                 },
                             },
                         };
 
                         area.offset = {
-                            .x{0},
-                            .y{0},
+                            .x = 0,
+                            .y = 0,
                         };
 
                         area.extent = {
-                            .width{vk_img->img_info.extent.width},
-                            .height{vk_img->img_info.extent.height},
+                            .width = vk_img->img_info.extent.width,
+                            .height = vk_img->img_info.extent.height,
                         };
 
                         has_depth = true;
@@ -1149,14 +1162,14 @@ namespace tempest::graphics::vk
                 }
 
                 VkRenderingInfo render_info = {
-                    .sType{VK_STRUCTURE_TYPE_RENDERING_INFO},
-                    .pNext{nullptr},
-                    .renderArea{area},
-                    .layerCount{1},
-                    .viewMask{0},
-                    .colorAttachmentCount{static_cast<uint32_t>(color_attachments.size())},
-                    .pColorAttachments{color_attachments.empty() ? nullptr : color_attachments.data()},
-                    .pDepthAttachment{has_depth ? &depth_attachment : nullptr},
+                    .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                    .pNext = nullptr,
+                    .renderArea = area,
+                    .layerCount = 1,
+                    .viewMask = 0,
+                    .colorAttachmentCount = static_cast<uint32_t>(color_attachments.size()),
+                    .pColorAttachments = color_attachments.empty() ? nullptr : color_attachments.data(),
+                    .pDepthAttachment = has_depth ? &depth_attachment : nullptr,
                 };
 
                 dispatch->cmdBeginRendering(cmds, &render_info);
@@ -1216,23 +1229,23 @@ namespace tempest::graphics::vk
             auto swapchain = _device->access_swapchain(state.swapchain);
 
             VkImageMemoryBarrier2 barrier = {
-                .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2},
-                .pNext{nullptr},
-                .srcStageMask{state.stage_mask},
-                .srcAccessMask{state.access_mask},
-                .dstStageMask{VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT},
-                .dstAccessMask{VK_ACCESS_NONE},
-                .oldLayout{state.image_layout},
-                .newLayout{VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
-                .srcQueueFamilyIndex{queue.queue_family_index},
-                .dstQueueFamilyIndex{queue.queue_family_index},
-                .image{_device->access_image(swapchain->image_handles[swapchain->image_index])->image},
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = state.stage_mask,
+                .srcAccessMask = state.access_mask,
+                .dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                .dstAccessMask = VK_ACCESS_NONE,
+                .oldLayout = state.image_layout,
+                .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                .srcQueueFamilyIndex = queue.queue_family_index,
+                .dstQueueFamilyIndex = queue.queue_family_index,
+                .image = _device->access_image(swapchain->image_handles[swapchain->image_index])->image,
                 .subresourceRange{
-                    .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
-                    .baseMipLevel{0},
-                    .levelCount{1},
-                    .baseArrayLayer{0},
-                    .layerCount{1},
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
                 },
             };
 
@@ -1241,21 +1254,20 @@ namespace tempest::graphics::vk
             transition_to_present.push_back(std::move(barrier));
 
             _last_known_state.swapchain[state.swapchain.as_uint64()] = {
-                .swapchain{state.swapchain},
-                .image_layout{VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
-                .stage_mask{VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT},
-                .access_mask{VK_ACCESS_NONE},
+                .swapchain = state.swapchain,
+                .image_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                .stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                .access_mask = VK_ACCESS_NONE,
             };
         }
 
         if (!transition_to_present.empty())
         {
             VkDependencyInfo dep_info = {
-                .sType{VK_STRUCTURE_TYPE_DEPENDENCY_INFO},
-                .pNext{nullptr},
-                .dependencyFlags{},
-                .imageMemoryBarrierCount{static_cast<std::uint32_t>(transition_to_present.size())},
-                .pImageMemoryBarriers{transition_to_present.empty() ? nullptr : transition_to_present.data()},
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .imageMemoryBarrierCount = static_cast<std::uint32_t>(transition_to_present.size()),
+                .pImageMemoryBarriers = transition_to_present.empty() ? nullptr : transition_to_present.data(),
             };
 
             cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
@@ -1266,29 +1278,29 @@ namespace tempest::graphics::vk
         VkCommandBuffer to_submit = cmds;
 
         VkSubmitInfo submit_info = {
-            .sType{VK_STRUCTURE_TYPE_SUBMIT_INFO},
-            .pNext{nullptr},
-            .waitSemaphoreCount{static_cast<uint32_t>(image_acquired_sems.size())},
-            .pWaitSemaphores{image_acquired_sems.data()},
-            .pWaitDstStageMask{wait_stages.data()},
-            .commandBufferCount{1},
-            .pCommandBuffers{&to_submit},
-            .signalSemaphoreCount{static_cast<uint32_t>(render_complete_sems.size())},
-            .pSignalSemaphores{render_complete_sems.data()},
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = nullptr,
+            .waitSemaphoreCount = static_cast<uint32_t>(image_acquired_sems.size()),
+            .pWaitSemaphores = image_acquired_sems.data(),
+            .pWaitDstStageMask = wait_stages.data(),
+            .commandBufferCount = 1,
+            .pCommandBuffers = &to_submit,
+            .signalSemaphoreCount = static_cast<uint32_t>(render_complete_sems.size()),
+            .pSignalSemaphores = render_complete_sems.data(),
         };
 
         dispatch->queueSubmit(queue.queue, 1, &submit_info, commands_complete);
 
         std::vector<VkResult> results(swapchains.size(), VK_SUCCESS);
         VkPresentInfoKHR present = {
-            .sType{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR},
-            .pNext{nullptr},
-            .waitSemaphoreCount{submit_info.signalSemaphoreCount},
-            .pWaitSemaphores{submit_info.pSignalSemaphores},
-            .swapchainCount{static_cast<uint32_t>(swapchains.size())},
-            .pSwapchains{swapchains.data()},
-            .pImageIndices{image_indices.data()},
-            .pResults{results.data()},
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext = nullptr,
+            .waitSemaphoreCount = submit_info.signalSemaphoreCount,
+            .pWaitSemaphores = submit_info.pSignalSemaphores,
+            .swapchainCount = static_cast<uint32_t>(swapchains.size()),
+            .pSwapchains = swapchains.data(),
+            .pImageIndices = image_indices.data(),
+            .pResults = results.data(),
         };
 
         dispatch->queuePresentKHR(queue.queue, &present);
@@ -1333,8 +1345,8 @@ namespace tempest::graphics::vk
         for (std::size_t i = 0; i < 11; ++i)
         {
             sizes[i] = {
-                .type{static_cast<VkDescriptorType>(i)},
-                .descriptorCount{0},
+                .type = static_cast<VkDescriptorType>(i),
+                .descriptorCount = 0,
             };
         }
 
@@ -1424,12 +1436,12 @@ namespace tempest::graphics::vk
         auto pool_size_count = std::distance(std::begin(sizes), first_not_sized);
 
         VkDescriptorPoolCreateInfo ci = {
-            .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .maxSets{static_cast<std::uint32_t>(set_count)},
-            .poolSizeCount{static_cast<std::uint32_t>(pool_size_count)},
-            .pPoolSizes{sizes},
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .maxSets = static_cast<std::uint32_t>(set_count),
+            .poolSizeCount = static_cast<std::uint32_t>(pool_size_count),
+            .pPoolSizes = sizes,
         };
 
         if (ci.maxSets == 0)
@@ -1460,11 +1472,11 @@ namespace tempest::graphics::vk
                 }
 
                 bindings[buffer.set].push_back(VkDescriptorSetLayoutBinding{
-                    .binding{buffer.binding},
-                    .descriptorType{type},
-                    .descriptorCount{1},
-                    .stageFlags{compute_accessible_stages(pass.operation_type())},
-                    .pImmutableSamplers{nullptr},
+                    .binding = buffer.binding,
+                    .descriptorType = type,
+                    .descriptorCount = 1,
+                    .stageFlags = compute_accessible_stages(pass.operation_type()),
+                    .pImmutableSamplers = nullptr,
                 });
 
                 binding_flags[buffer.set].push_back(0);
@@ -1474,21 +1486,20 @@ namespace tempest::graphics::vk
                                                               : buf->alloc_info.size;
 
                 binding_writes[buffer.set].push_back(VkWriteDescriptorSet{
-                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
-                    .pNext{nullptr},
-                    .dstBinding{buffer.binding},
-                    .dstArrayElement{0},
-                    .descriptorCount{1},
-                    .descriptorType{type},
-                    .pImageInfo{nullptr},
-                    .pBufferInfo{
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = nullptr,
+                    .dstBinding = buffer.binding,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = type,
+                    .pImageInfo = nullptr,
+                    .pBufferInfo =
                         new VkDescriptorBufferInfo{
-                            .buffer{buf->buffer},
-                            .offset{0},
-                            .range{buffer_size},
+                            .buffer = buf->buffer,
+                            .offset = 0,
+                            .range = buffer_size,
                         },
-                    },
-                    .pTexelBufferView{nullptr},
+                    .pTexelBufferView = nullptr,
                 });
             }
 
@@ -1501,29 +1512,30 @@ namespace tempest::graphics::vk
                 }
 
                 bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
-                    .binding{img.binding},
-                    .descriptorType{type},
-                    .descriptorCount{1},
-                    .stageFlags{compute_accessible_stages(pass.operation_type())},
-                    .pImmutableSamplers{nullptr},
+                    .binding = img.binding,
+                    .descriptorType = type,
+                    .descriptorCount = 1,
+                    .stageFlags = compute_accessible_stages(pass.operation_type()),
+                    .pImmutableSamplers = nullptr,
                 });
 
                 auto vk_img = _device->access_image(img.img);
 
                 binding_writes[img.set].push_back(VkWriteDescriptorSet{
-                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
-                    .pNext{nullptr},
-                    .dstBinding{img.binding},
-                    .dstArrayElement{0},
-                    .descriptorCount{1},
-                    .descriptorType{type},
-                    .pImageInfo{new VkDescriptorImageInfo{
-                        .sampler{VK_NULL_HANDLE},
-                        .imageView{vk_img->view},
-                        .imageLayout{compute_layout(img.usage)},
-                    }},
-                    .pBufferInfo{nullptr},
-                    .pTexelBufferView{nullptr},
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = nullptr,
+                    .dstBinding = img.binding,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = type,
+                    .pImageInfo =
+                        new VkDescriptorImageInfo{
+                            .sampler = VK_NULL_HANDLE,
+                            .imageView = vk_img->view,
+                            .imageLayout = compute_layout(img.usage),
+                        },
+                    .pBufferInfo = nullptr,
+                    .pTexelBufferView = nullptr,
                 });
 
                 binding_flags[img.set].push_back(0);
@@ -1540,11 +1552,11 @@ namespace tempest::graphics::vk
                 auto img_count = static_cast<std::uint32_t>(img.images.size());
 
                 bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
-                    .binding{img.binding},
-                    .descriptorType{type},
-                    .descriptorCount{img.count},
-                    .stageFlags{compute_accessible_stages(pass.operation_type())},
-                    .pImmutableSamplers{nullptr},
+                    .binding = img.binding,
+                    .descriptorType = type,
+                    .descriptorCount = img.count,
+                    .stageFlags = compute_accessible_stages(pass.operation_type()),
+                    .pImmutableSamplers = nullptr,
                 });
 
                 auto images = new VkDescriptorImageInfo[img_count];
@@ -1564,15 +1576,15 @@ namespace tempest::graphics::vk
                 }
 
                 binding_writes[img.set].push_back(VkWriteDescriptorSet{
-                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
-                    .pNext{nullptr},
-                    .dstBinding{img.binding},
-                    .dstArrayElement{0},
-                    .descriptorCount{static_cast<std::uint32_t>(img.images.size())},
-                    .descriptorType{type},
-                    .pImageInfo{images},
-                    .pBufferInfo{nullptr},
-                    .pTexelBufferView{nullptr},
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = nullptr,
+                    .dstBinding = img.binding,
+                    .dstArrayElement = 0,
+                    .descriptorCount = static_cast<std::uint32_t>(img.images.size()),
+                    .descriptorType = type,
+                    .pImageInfo = images,
+                    .pBufferInfo = nullptr,
+                    .pTexelBufferView = nullptr,
                 });
 
                 binding_flags[img.set].push_back(img.count > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
@@ -1581,32 +1593,32 @@ namespace tempest::graphics::vk
             for (auto& smp : pass.external_samplers())
             {
                 bindings[smp.set].push_back(VkDescriptorSetLayoutBinding{
-                    .binding{smp.binding},
-                    .descriptorType{VK_DESCRIPTOR_TYPE_SAMPLER},
-                    .descriptorCount{1},
-                    .stageFlags{compute_accessible_stages(pass.operation_type())},
-                    .pImmutableSamplers{nullptr},
+                    .binding = smp.binding,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                    .descriptorCount = 1,
+                    .stageFlags = compute_accessible_stages(pass.operation_type()),
+                    .pImmutableSamplers = nullptr,
                 });
 
                 auto sampler_count = smp.samplers.size();
                 auto samplers = new VkDescriptorImageInfo[sampler_count];
 
                 binding_writes[smp.set].push_back(VkWriteDescriptorSet{
-                    .sType{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET},
-                    .pNext{nullptr},
-                    .dstBinding{smp.binding},
-                    .dstArrayElement{0},
-                    .descriptorCount{static_cast<std::uint32_t>(sampler_count)},
-                    .descriptorType{VK_DESCRIPTOR_TYPE_SAMPLER},
-                    .pImageInfo{samplers},
-                    .pBufferInfo{nullptr},
-                    .pTexelBufferView{nullptr},
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = nullptr,
+                    .dstBinding = smp.binding,
+                    .dstArrayElement = 0,
+                    .descriptorCount = static_cast<std::uint32_t>(sampler_count),
+                    .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                    .pImageInfo = samplers,
+                    .pBufferInfo = nullptr,
+                    .pTexelBufferView = nullptr,
                 });
 
                 for (std::size_t i = 0; i < sampler_count; ++i)
                 {
                     samplers[i] = {
-                        .sampler{_device->access_sampler(smp.samplers[i])->vk_sampler},
+                        .sampler = _device->access_sampler(smp.samplers[i])->vk_sampler,
                     };
                 }
 
@@ -1632,11 +1644,11 @@ namespace tempest::graphics::vk
                 };
 
                 VkDescriptorSetLayoutCreateInfo layout_ci = {
-                    .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO},
-                    .pNext{&binding_ci},
-                    .flags{0},
-                    .bindingCount{static_cast<std::uint32_t>(binding_arr.size())},
-                    .pBindings{binding_arr.data()},
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                    .pNext = &binding_ci,
+                    .flags = 0,
+                    .bindingCount = static_cast<std::uint32_t>(binding_arr.size()),
+                    .pBindings = binding_arr.data(),
                 };
 
                 VkDescriptorSetLayout layout;
@@ -1647,13 +1659,13 @@ namespace tempest::graphics::vk
             }
 
             VkPipelineLayoutCreateInfo pipeline_layout_ci = {
-                .sType{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO},
-                .pNext{nullptr},
-                .flags{0},
-                .setLayoutCount{static_cast<std::uint32_t>(set_layouts.size())},
-                .pSetLayouts{set_layouts.data()},
-                .pushConstantRangeCount{0},
-                .pPushConstantRanges{nullptr},
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .setLayoutCount = static_cast<std::uint32_t>(set_layouts.size()),
+                .pSetLayouts = set_layouts.data(),
+                .pushConstantRangeCount = 0,
+                .pPushConstantRanges = nullptr,
             };
 
             VkPipelineLayout layout;
@@ -1669,11 +1681,12 @@ namespace tempest::graphics::vk
             {
                 VkDescriptorPool pool = _per_frame[i].desc_pool;
                 VkDescriptorSetAllocateInfo alloc_info = {
-                    .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO},
-                    .pNext{nullptr},
-                    .descriptorPool{pool},
-                    .descriptorSetCount{static_cast<std::uint32_t>(set_state.set_layouts.size())},
-                    .pSetLayouts{set_state.set_layouts.data()}};
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                    .pNext = nullptr,
+                    .descriptorPool = pool,
+                    .descriptorSetCount = static_cast<std::uint32_t>(set_state.set_layouts.size()),
+                    .pSetLayouts = set_state.set_layouts.data(),
+                };
 
                 auto result = _device->dispatch().allocateDescriptorSets(
                     &alloc_info, _descriptor_set_states[pass_index].per_frame_descriptors[i].descriptor_sets.data());

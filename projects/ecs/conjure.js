@@ -8,8 +8,6 @@ project('ecs', (prj) => {
         './src/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     block('ecs:public', (_) => {
         includeDirs([
             './include'
