@@ -8,8 +8,6 @@ project('tempest', (_) => {
         './src/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     externalWarnings('Off');
 
     block('tempest:engine', (_) => {
@@ -28,13 +26,17 @@ project('tempest', (_) => {
         ]);
 
         dependsOn([
+            'graphics',
             'assets',
             'core',
             'ecs',
             'logger',
-            'graphics',
             'math',
         ]);
+
+        when('system:linux', (_) => {
+           linksStatic(['dl', 'X11', 'pthread']);
+        });
     });
 
     uses(['tempest:engine']);

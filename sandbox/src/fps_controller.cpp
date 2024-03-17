@@ -1,5 +1,6 @@
 #include "fps_controller.hpp"
 
+#include <iostream>
 #include <numbers>
 
 void fps_controller::set_position(const tempest::math::vec3<float>& position)

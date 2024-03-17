@@ -10,6 +10,7 @@
 #include <memory>
 #include <span>
 #include <type_traits>
+#include <utility>
 
 namespace tempest::ecs
 {
@@ -507,7 +508,6 @@ namespace tempest::ecs
         using value_type = std::pair<std::add_const_t<K>, V>;
         using size_type = std::size_t;
         using difference_type = std::ptrdiff_t;
-        using traits_type = entity_traits<K>;
         using reference = std::pair<typename std::add_const_t<typename std::add_lvalue_reference_t<K>>,
                                     typename std::add_lvalue_reference_t<V>>;
         using const_reference = std::pair<typename std::add_const_t<typename std::add_lvalue_reference_t<K>>,

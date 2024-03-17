@@ -8,8 +8,6 @@ project('assets', (prj) => {
         './src/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     dependsOn([
         'tinygltf',
         'core',

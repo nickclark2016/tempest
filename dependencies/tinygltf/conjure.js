@@ -7,8 +7,6 @@ project('tinygltf', (prj) => {
         './src/tinygltf.cpp',
     ]);
 
-    toolset('msc:143');
-
     staticRuntime('Off');
 
     when({ configuration: 'Release' }, (_) => {
@@ -42,5 +40,13 @@ project('tinygltf', (prj) => {
         externalIncludeDirs([
             './include'
         ]);
+    });
+
+    when('system:windows', () => {
+        toolset('msc:143');
+    });
+
+    when('system:linux', () => {
+        toolset('clang');
     });
 });

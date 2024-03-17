@@ -13,8 +13,6 @@ project('googletest', (prj) => {
         './include'
     ]);
 
-    toolset('msc:143');
-
     staticRuntime('Off');
 
     when({ configuration: 'Release' }, (_) => {
@@ -46,5 +44,13 @@ project('googletest', (prj) => {
         ]);
 
         externalWarnings('Off');
+    });
+
+    when('system:windows', () => {
+        toolset('msc:143');
+    });
+
+    when('system:linux', () => {
+        toolset('clang');
     });
 });

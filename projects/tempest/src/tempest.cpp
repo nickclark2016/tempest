@@ -105,8 +105,10 @@ namespace tempest
         auto model_result = assets::load_scene(std::string(path));
         if (!model_result)
         {
+            log->error("Failed to load asset: {}", path);
             return ecs::tombstone;
         }
+        
         auto& model = *model_result;
 
         std::unordered_map<std::uint32_t, ecs::entity> node_to_entity;

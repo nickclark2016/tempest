@@ -10,6 +10,8 @@
 #include <tempest/window.hpp>
 
 #include <chrono>
+#include <cmath>
+#include <cstring>
 #include <iostream>
 #include <numbers>
 #include <random>
@@ -107,62 +109,66 @@ void fbm_water_demo()
     rgc->enable_imgui();
 
     auto color_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::RGBA8_SRGB},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"Color Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::RGBA8_SRGB,
+        .type = graphics::image_type::IMAGE_2D,
+        .name = "Color Buffer Target",
     });
 
     auto depth_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::D32_FLOAT},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"Depth Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::D32_FLOAT,
+        .type = graphics::image_type::IMAGE_2D,
+        .name = "Depth Buffer Target",
     });
 
     auto camera_data_buffer = rgc->create_buffer({
-        .size{sizeof(camera_data)},
-        .location{graphics::memory_location::DEVICE},
-        .name{"Camera Data Buffer"},
-        .per_frame_memory{true},
+        .size = sizeof(camera_data),
+        .location = graphics::memory_location::DEVICE,
+        .name = "Camera Data Buffer",
+        .per_frame_memory = true,
     });
 
     auto lighting_data_buffer = rgc->create_buffer({
-        .size{sizeof(graphics::directional_light)},
-        .location{graphics::memory_location::DEVICE},
-        .name{"Lighting Data Buffer"},
-        .per_frame_memory{true},
+        .size = sizeof(graphics::directional_light),
+        .location = graphics::memory_location::DEVICE,
+        .name = "Lighting Data Buffer",
+        .per_frame_memory = true,
     });
 
     auto wave_data_buffer = rgc->create_buffer({
-        .size{sizeof(water_sim_state)},
-        .location{graphics::memory_location::DEVICE},
-        .name{"Simulation Parameter Buffer"},
-        .per_frame_memory{true},
+        .size = sizeof(water_sim_state),
+        .location = graphics::memory_location::DEVICE,
+        .name = "Simulation Parameter Buffer",
+        .per_frame_memory = true,
     });
 
     auto win = graphics::window_factory::create({
-        .title{"Tempest Render Graph Demo"},
-        .width{1920},
-        .height{1080},
+        .title = "Tempest Render Graph Demo",
+        .width = 1920,
+        .height = 1080,
     });
 
     graphics::imgui_context::initialize_for_window(*win);
 
-    auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});
+    auto swapchain = graphics_device.create_swapchain({
+        .win = win.get(),
+        .desired_frame_count = 3,
+    });
 
     auto water_sim_state = generate_water_sim_state(16);
 
     camera_data cameras = {
-        .proj{math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.01f)},
-        .view_proj{1.0f},
-        .position{0.0f, 10.0f, 0.0f},
+        .proj = math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.01f),
+        .view_proj = math::mat4<float>(1.0f),
+        .position = {0.0f, 10.0f, 0.0f},
     };
 
     auto state_upload_pass = rgc->add_graph_pass(
-        "Water Sim State Buffer Upload Graph Pass", graphics::queue_operation_type::TRANSFER, [&](graphics::graph_pass_builder& bldr) {
+        "Water Sim State Buffer Upload Graph Pass", graphics::queue_operation_type::TRANSFER,
+        [&](graphics::graph_pass_builder& bldr) {
             bldr.add_transfer_source_buffer(graphics_device.get_staging_buffer())
                 .add_transfer_destination_buffer(camera_data_buffer)
                 .add_transfer_destination_buffer(wave_data_buffer)
@@ -179,7 +185,8 @@ void fbm_water_demo()
         });
 
     auto water_sim_pass = rgc->add_graph_pass(
-        "Water Simulation Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
+        "Water Simulation Graph Pass", graphics::queue_operation_type::GRAPHICS,
+        [&](graphics::graph_pass_builder& bldr) {
             bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::CLEAR,
                                       graphics::store_op::STORE, math::vec4<float>(0.0f))
                 .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
@@ -196,8 +203,8 @@ void fbm_water_demo()
                 });
         });
 
-    auto imgui_pass =
-        rgc->add_graph_pass("ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
+    auto imgui_pass = rgc->add_graph_pass(
+        "ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
             bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
                                       graphics::store_op::STORE)
                 .draw_imgui()
@@ -237,8 +244,8 @@ void fbm_water_demo()
 
     {
         graphics::directional_light sun = {
-            .light_direction{-1.0, 1.0, -1.0f},
-            .color_illum{1.0f, 1.0f, 1.0f, 25000.0f},
+            .light_direction = {-1.0, 1.0, -1.0f},
+            .color_illum = {1.0f, 1.0f, 1.0f, 25000.0f},
         };
 
         auto staging_buffer_ptr = graphics_device.map_buffer(graphics_device.get_staging_buffer());
@@ -307,66 +314,63 @@ graphics::graphics_pipeline_resource_handle create_water_pipeline(graphics::rend
     graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
     graphics::color_blend_attachment_state blending[] = {
         {
-            .enabled{false},
+            .enabled = false,
         },
     };
 
     graphics::descriptor_binding_info buffer_bindings[] = {
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{0},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{1},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_count = 1,
         },
         {
-            .type{graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC},
-            .binding_index{2},
-            .binding_count{1},
+            .type = graphics::descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 2,
+            .binding_count = 1,
         },
     };
 
     graphics::descriptor_set_layout_create_info layouts[] = {
         {
-            .set{0},
-            .bindings{buffer_bindings},
+            .set = 0,
+            .bindings = buffer_bindings,
         },
     };
 
     graphics::graphics_pipeline_create_info quad_pipeline_ci = {
         .layout{
-            .set_layouts{
-                layouts,
-            },
+            .set_layouts = layouts,
         },
         .target{
-            .color_attachment_formats{color_buffer_fmt},
-            .depth_attachment_format{graphics::resource_format::D32_FLOAT},
+            .color_attachment_formats = color_buffer_fmt,
+            .depth_attachment_format = graphics::resource_format::D32_FLOAT,
         },
         .vertex_shader{
-            .bytes{vertex_shader_bytes},
-            .entrypoint{"VSMain"},
-            .name{"water_vertex_shader"},
+            .bytes = vertex_shader_bytes,
+            .entrypoint = "VSMain",
+            .name = "water_vertex_shader",
         },
         .fragment_shader{
-            .bytes{fragment_shader_bytes},
-            .entrypoint{"PSMain"},
-            .name{"water_fragment_shader"},
+            .bytes = fragment_shader_bytes,
+            .entrypoint = "PSMain",
+            .name = "water_fragment_shader",
         },
         .vertex_layout{},
         .depth_testing{
-            .enable_test{true},
-            .enable_write{true},
-            .depth_test_op{graphics::compare_operation::GREATER_OR_EQUALS},
+            .enable_test = true,
+            .enable_write = true,
+            .depth_test_op = graphics::compare_operation::GREATER_OR_EQUALS,
         },
-
-        .blending{.attachment_blend_ops{blending}},
-        .name{"Water Pipeline"},
+        .blending{
+            .attachment_blend_ops = blending,
+        },
+        .name = "Water Pipeline",
     };
-
     auto handle = device.create_graphics_pipeline(quad_pipeline_ci);
     return handle;
 }
@@ -374,20 +378,20 @@ graphics::graphics_pipeline_resource_handle create_water_pipeline(graphics::rend
 water_sim_state generate_water_sim_state(int num_waves)
 {
     water_sim_state state{
-        .frequency{1.0f},
-        .frequency_multiplier{1.16f},
-        .initial_seed{4.0f},
-        .seed_iter{4.3f},
-        .amplitude{1.0f},
-        .amplitude_multiplier{0.83f},
-        .initial_speed{2.0f},
-        .speed_ramp{1.07f},
-        .drag{0.5f},
-        .height{1.48f},
-        .max_peak{1.0f},
-        .peak_offset{1.14f},
-        .time{0},
-        .num_waves{num_waves},
+        .frequency = 1.0f,
+        .frequency_multiplier = 1.16f,
+        .initial_seed = 4.0f,
+        .seed_iter = 4.3f,
+        .amplitude = 1.0f,
+        .amplitude_multiplier = 0.83f,
+        .initial_speed = 2.0f,
+        .speed_ramp = 1.07f,
+        .drag = 0.5f,
+        .height = 1.48f,
+        .max_peak = 1.0f,
+        .peak_offset = 1.14f,
+        .time = 0,
+        .num_waves = num_waves,
     };
 
     return state;

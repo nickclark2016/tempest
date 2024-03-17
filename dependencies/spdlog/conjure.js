@@ -7,8 +7,6 @@ project('spdlog', (prj) => {
         './src/spdlog.cpp',
     ]);
 
-    toolset('msc:143');
-
     staticRuntime('Off');
 
     when({ configuration: 'Release' }, (_) => {
@@ -42,5 +40,13 @@ project('spdlog', (prj) => {
         externalIncludeDirs([
             './include'
         ]);
+    });
+
+    when('system:windows', () => {
+        toolset('msc:143');
+    });
+
+    when('system:linux', () => {
+        toolset('clang');
     });
 });

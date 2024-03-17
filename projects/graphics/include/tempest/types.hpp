@@ -67,15 +67,21 @@ namespace tempest::graphics
         case resource_format::RGBA8_UNORM:
             [[fallthrough]];
         case resource_format::BGRA8_SRGB:
+            [[fallthrough]];
+        case resource_format::RG16_FLOAT:
             return 4;
         case resource_format::RG32_FLOAT:
             [[fallthrough]];
         case resource_format::RG32_UINT:
+            [[fallthrough]];
+        case resource_format::RGBA16_FLOAT:
             return 8;
         case resource_format::RGB32_FLOAT:
             return 12;
         case resource_format::RGBA32_FLOAT:
             return 16;
+        default:
+            break;
         }
 
         std::exit(EXIT_FAILURE);
@@ -506,7 +512,7 @@ namespace tempest::graphics
         virtual command_list& draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
                                    std::uint32_t stride) = 0;
         virtual command_list& draw_indexed(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
-                                   std::uint32_t stride) = 0;
+                                           std::uint32_t stride) = 0;
         virtual command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) = 0;
         virtual command_list& use_index_buffer(buffer_resource_handle buf, std::uint32_t offset) = 0;
 
@@ -521,8 +527,9 @@ namespace tempest::graphics
 
         virtual command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
                                                image_resource_usage new_usage) = 0;
-        virtual command_list& generate_mip_chain(image_resource_handle img, image_resource_usage usage, std::uint32_t base_mip = 0,
-                                                 std::uint32_t mip_count = std::numeric_limits<std::uint32_t>::max()) = 0;
+        virtual command_list& generate_mip_chain(
+            image_resource_handle img, image_resource_usage usage, std::uint32_t base_mip = 0,
+            std::uint32_t mip_count = std::numeric_limits<std::uint32_t>::max()) = 0;
 
         virtual command_list& use_pipeline(compute_pipeline_resource_handle pipeline) = 0;
         virtual command_list& dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z) = 0;

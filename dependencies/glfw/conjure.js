@@ -2,7 +2,6 @@ project('glfw', (prj) => {
     kind('SharedLib');
     language('C');
     targetName('glfw');
-    toolset('msc:143');
 
     when({}, (ctx) => {
         targetDirectory(`${ctx.pathToWorkspace}/bin/${ctx.platform}/${ctx.configuration}`);
@@ -39,15 +38,36 @@ project('glfw', (prj) => {
             'src/win32_window.c',
             'src/wgl_context.c',
         ]);
+
+        defines([
+            '_GLFW_BUILD_DLL',
+            '_GLFW_WIN32',
+            '_CRT_SECURE_NO_WARNINGS'
+        ]);
+
+        toolset('msc:143');
     });
 
-    defines([
-        '_GLFW_BUILD_DLL',
-        '_GLFW_WIN32',
-        '_CRT_SECURE_NO_WARNINGS'
-    ]);
+    when('system:linux', (_) => {
+        files([
+            'src/glx_context.c',
+            'src/linux_joystick.c',
+            'src/posix_thread.c',
+            'src/posix_time.c',
+            'src/x11_init.c',
+            'src/x11_monitor.c',
+            'src/x11_window.c',
+            'src/xkb_unicode.c',
+        ]);
 
-    staticRuntime('Off');
+        defines([
+            '_GLFW_X11',
+            '_GLFW_BUILD_DLL',
+            'BUILD_SHARED_LIBS'
+        ]);
+
+        toolset('clang');
+    });
 
     when({ configuration: 'Release' }, (_) => {
         optimize('Full');

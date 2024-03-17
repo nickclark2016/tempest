@@ -7,8 +7,6 @@ project('sandbox', (_) => {
         './src/**/*.cpp'
     ]);
 
-    toolset('msc:143');
-
     uses([
         'tempest:engine'
     ]);
