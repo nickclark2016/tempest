@@ -174,6 +174,13 @@ namespace tempest::math
         const vec4<T> result = {lhs[0] / rhs[0], lhs[1] / rhs[1], lhs[2] / rhs[2], lhs[3] / rhs[3]};
         return result;
     }
+
+    template <typename T>
+    inline constexpr vec4<T> operator/(const vec4<T>& lhs, const T scalar) noexcept
+    {
+        const vec4<T> result = {lhs[0] / scalar, lhs[1] / scalar, lhs[2] / scalar, lhs[3] / scalar};
+        return result;
+    }
 } // namespace tempest::math
 
 #endif // tempest_math_vec4_hpp__

@@ -108,9 +108,8 @@ namespace tempest::math
 
     template <typename T> inline constexpr quat<T> normalize(const quat<T>& q)
     {
-        const T mag_squared = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-        const T invSqrt = fast_inv_sqrt(mag_squared);
-        return invSqrt * q;
+        const T magnitude = norm(q);
+        return {q.x / magnitude, q.y / magnitude, q.z / magnitude, q.w / magnitude};
     }
 
     template <typename T> inline constexpr T roll(const quat<T>& q)

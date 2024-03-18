@@ -9,6 +9,7 @@
 #include "vec4.hpp"
 
 #include <cassert>
+#include <iostream>
 
 #undef near
 #undef far
