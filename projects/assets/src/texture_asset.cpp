@@ -17,11 +17,11 @@ namespace tempest::assets
         if (bytes)
         {
             texture_asset asset = {
-                .data{std::vector<std::byte>(reinterpret_cast<std::byte*>(bytes),
-                                             reinterpret_cast<std::byte*>(bytes + (width * height * 4)))},
-                .width{static_cast<std::uint32_t>(width)},
-                .height{static_cast<std::uint32_t>(height)},
-                .bit_depth{is_16_bit ? 16u : 8u},
+                .data = std::vector<std::byte>(reinterpret_cast<std::byte*>(bytes),
+                                               reinterpret_cast<std::byte*>(bytes + (width * height * 4))),
+                .width = static_cast<std::uint32_t>(width),
+                .height = static_cast<std::uint32_t>(height),
+                .bit_depth = is_16_bit ? 16u : 8u,
             };
 
             stbi_image_free(bytes);

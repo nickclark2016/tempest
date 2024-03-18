@@ -81,7 +81,7 @@ namespace tempest::graphics
 
     void imgui_context::label(std::string_view contents)
     {
-        ImGui::Text(contents.data());
+        ImGui::Text("%s", contents.data());
     }
 
     float imgui_context::float_slider(std::string_view name, float min, float max, float current_value)
