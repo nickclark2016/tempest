@@ -35,11 +35,11 @@ workspace('Tempest', (wks) => {
             ]);
         });
 
-        when('system:windows', (_) => {
+        when({ system: 'windows' }, () => {
             toolset('msc:143');
         });
     
-        when('system:linux', (_) => {
+        when({ system: 'linux' }, () => {
             toolset('clang');
         });
 

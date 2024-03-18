@@ -34,7 +34,7 @@ project('tempest', (_) => {
             'math',
         ]);
 
-        when('system:linux', (_) => {
+        when({ system: 'linux' }, (_) => {
            linksStatic(['dl', 'X11', 'pthread']);
         });
     });

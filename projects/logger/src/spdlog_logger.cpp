@@ -14,7 +14,12 @@ namespace tempest::logger::spd
 
         std::time_t t = std::time(0);
         tm now;
+
+#ifdef _MSC_VER
+        gmtime_s(&now, &t);
+#else
         gmtime_r(&t, &now);
+#endif
 
         std::ostringstream oss;
         oss << std::put_time(&now, "%y%m%d-%H%M%S");
