@@ -36,20 +36,11 @@ namespace tempest::math
     template <typename T>
     inline constexpr T fast_inv_sqrt(T value) noexcept
     {
-        if constexpr (std::is_same_v<T, float>)
+        if constexpr (std::is_same_v<T, float> && std::numeric_limits<T>::is_iec559)
         {
             // Quake 3 Fast Inversion Square Root
-            long i;
-            float x2, y;
-            const float three_halves = 1.5f;
-
-            x2 = value * 0.5f;
-            y = value;
-            i = *reinterpret_cast<long*>(&y);
-            i = 0x5f3759df - (i >> 1);
-            y = *reinterpret_cast<float*>(&i);
-            y = y * (three_halves - (x2 * y * y));
-            return static_cast<T>(y);
+            const float y = std::bit_cast<float>(0x5f3759df - (detail::as_u32_t_bits(value) >> 1));
+            return y * (1.5f - 0.5f * value * y * y);
         }
         return static_cast<T>(std::sqrt(value));
     }
