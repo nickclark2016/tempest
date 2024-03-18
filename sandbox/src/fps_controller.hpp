@@ -2,6 +2,7 @@
 #define tempest_sandbox_fps_controller_hpp
 
 #include <tempest/keyboard.hpp>
+#include <tempest/mouse.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/transformations.hpp>
 #include <tempest/vec3.hpp>
@@ -10,7 +11,7 @@ class fps_controller
 {
   public:
     void set_position(const tempest::math::vec3<float>& position);
-    void update(const tempest::core::keyboard& kb, float dt);
+    void update(const tempest::core::keyboard& kb, const tempest::core::mouse& ms, float dt);
 
     const tempest::math::mat4<float>& view() const noexcept;
     const tempest::math::mat4<float>& inv_view() const noexcept;

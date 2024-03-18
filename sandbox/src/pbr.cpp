@@ -472,6 +472,10 @@ void pbr_demo()
     core::keyboard kb;
     win->register_keyboard_callback([&](const core::key_state& state) { kb.set(state); });
 
+    core::mouse ms;
+    win->register_cursor_callback([&](float x, float y) { ms.set_position(x, y); });
+    win->register_mouse_callback([&](const core::mouse_button_state& state) { ms.set(state); });
+
     fps_controller controller;
     controller.set_position({0.0f, 1.0f, 0.0f});
 
@@ -494,7 +498,7 @@ void pbr_demo()
 
         core::input::poll();
 
-        controller.update(kb, static_cast<float>(frame_time.count()));
+        controller.update(kb, ms, static_cast<float>(frame_time.count()));
 
         auto camera_eye = controller.eye_position();
         scene_data.camera.eye_position = math::vec4(camera_eye.x, camera_eye.y, camera_eye.z, 0.0f);

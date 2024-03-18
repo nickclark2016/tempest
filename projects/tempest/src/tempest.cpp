@@ -46,13 +46,14 @@ namespace tempest
         _render_system.render();
     }
 
-    core::input_group engine::add_window(std::unique_ptr<graphics::iwindow> window)
+    std::tuple<graphics::iwindow*, core::input_group> engine::add_window(std::unique_ptr<graphics::iwindow> window)
     {
         log->info("Adding window to engine");
 
         window_payload payload{
             .window = std::move(window),
             .keyboard = std::make_unique<core::keyboard>(),
+            .mouse = std::make_unique<core::mouse>(),
         };
 
         _render_system.register_window(*payload.window);
@@ -60,8 +61,13 @@ namespace tempest
 
         _windows.back().window->register_keyboard_callback(
             [&](const auto& key_state) { _windows.back().keyboard->set(key_state); });
+        _windows.back().window->register_mouse_callback(
+            [&](const auto& mouse_state) { _windows.back().mouse->set(mouse_state); });
+        _windows.back().window->register_cursor_callback(
+            [&](float x, float y) { _windows.back().mouse->set_position(x, y); });
 
-        return core::input_group{_windows.back().keyboard.get()};
+        return std::make_tuple(_windows.back().window.get(),
+                               core::input_group{_windows.back().keyboard.get(), _windows.back().mouse.get()});
     }
 
     void engine::update(float dt)
@@ -70,6 +76,13 @@ namespace tempest
         auto delta = std::chrono::duration_cast<std::chrono::duration<float>>(current_time - _last_frame_time);
         _delta_time = delta;
         _last_frame_time = current_time;
+
+        // Reset mouse deltas
+        for (auto& window : _windows)
+        {
+            window.mouse->reset_mouse_deltas();
+            window.mouse->set_disabled(window.window->is_cursor_disabled());
+        }
 
         core::input::poll();
 
@@ -108,7 +121,7 @@ namespace tempest
             log->error("Failed to load asset: {}", path);
             return ecs::tombstone;
         }
-        
+
         auto& model = *model_result;
 
         std::unordered_map<std::uint32_t, ecs::entity> node_to_entity;

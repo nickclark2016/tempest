@@ -9,6 +9,7 @@
 #include <chrono>
 #include <functional>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 
 namespace tempest
@@ -19,6 +20,7 @@ namespace tempest
         {
             std::unique_ptr<graphics::iwindow> window;
             std::unique_ptr<core::keyboard> keyboard;
+            std::unique_ptr<core::mouse> mouse;
         };
 
         engine();
@@ -26,7 +28,7 @@ namespace tempest
       public:
         static engine initialize();
 
-        core::input_group add_window(std::unique_ptr<graphics::iwindow> window);
+        std::tuple<graphics::iwindow*, core::input_group> add_window(std::unique_ptr<graphics::iwindow> window);
         void update(float dt);
         void render();
         void shutdown();
