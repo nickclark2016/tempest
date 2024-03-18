@@ -172,6 +172,13 @@ namespace tempest::math
     }
 
     template <typename T>
+    inline constexpr vec3<T> operator/(const vec3<T>& lhs, const T scalar) noexcept
+    {
+        const vec3<T> result = {lhs[0] / scalar, lhs[1] / scalar, lhs[2] / scalar};
+        return result;
+    }
+
+    template <typename T>
     inline constexpr T norm(const vec3<T>& v)
     {
         const T mag_squared = v.x * v.x + v.y * v.y + v.z * v.z;
@@ -181,8 +188,7 @@ namespace tempest::math
     template <typename T>
     inline constexpr vec3<T> normalize(const vec3<T>& v)
     {
-        const T mag_squared = v.x * v.x + v.y * v.y + v.z * v.z;
-        return fast_inv_sqrt(mag_squared) * v;
+        return v / norm(v);
     }
 
     template <typename T>

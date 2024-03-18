@@ -13,11 +13,7 @@ int main()
     }));
 
     auto camera = eng.get_registry().acquire_entity();
-    eng.get_registry().assign(camera, tempest::graphics::camera_component{
-                                          .position = {5.0f, 6.0f, 0.0f},
-                                          .forward = {-1.0f, 0.0f, 0.0f},
-                                          .up = {0.0f, 1.0f, 0.0f},
-                                      });
+    eng.get_registry().assign(camera, tempest::graphics::camera_component{});
 
     eng.on_initialize([](tempest::engine& eng) {
         auto sponza = eng.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
