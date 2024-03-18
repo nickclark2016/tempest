@@ -48,7 +48,7 @@ project('glfw', (prj) => {
         toolset('msc:143');
     });
 
-    when('system:linux', (_) => {
+    when({ system: 'linux' }, (_) => {
         files([
             'src/glx_context.c',
             'src/linux_joystick.c',

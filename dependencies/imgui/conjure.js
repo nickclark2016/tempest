@@ -53,11 +53,11 @@ project('imgui', (prj) => {
         'vulkan:public',
     ]);
 
-    when('system:windows', () => {
+    when({ system: 'windows' }, () => {
         toolset('msc:143');
     });
 
-    when('system:linux', () => {
+    when({ system: 'linux' }, () => {
         toolset('clang');
     });
 
