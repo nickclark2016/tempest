@@ -68,35 +68,35 @@ void simple_triangle_demo()
     auto rgc = graphics::render_graph_compiler::create_compiler(&global_allocator, &graphics_device);
 
     auto color_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::RGBA8_SRGB},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"Color Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::RGBA8_SRGB,
+        .type = graphics::image_type::IMAGE_2D,
+        .name = "Color Buffer Target",
     });
 
     auto depth_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::D32_FLOAT},
-        .type{graphics::image_type::IMAGE_2D},
-        .name{"Depth Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::D32_FLOAT,
+        .type = graphics::image_type::IMAGE_2D,
+        .name = "Depth Buffer Target",
     });
 
     auto vertex_buffer = rgc->create_buffer({
-        .size{sizeof(float) * 8 * 3},
-        .location{graphics::memory_location::HOST},
-        .name{"Vertex Buffer"},
-        .per_frame_memory{false},
+        .size = sizeof(float) * 8 * 3,
+        .location = graphics::memory_location::HOST,
+        .name = "Vertex Buffer",
+        .per_frame_memory = false,
     });
 
     auto win = graphics::window_factory::create({
-        .title{"Tempest Render Graph Demo"},
-        .width{1920},
-        .height{1080},
+        .title = "Tempest Render Graph Demo",
+        .width = 1920,
+        .height = 1080,
     });
 
-    auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});
+    auto swapchain = graphics_device.create_swapchain({.win = win.get(), .desired_frame_count = 3});
 
     auto triangle_pass = rgc->add_graph_pass(
         "triangle_pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {

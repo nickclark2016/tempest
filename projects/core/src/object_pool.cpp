@@ -132,8 +132,8 @@ namespace tempest::core
             _erased[trampoline.index] = head;
 
             return key{
-                .index{head},
-                .generation{trampoline.generation},
+                .index = head,
+                .generation = trampoline.generation,
             };
         }
 

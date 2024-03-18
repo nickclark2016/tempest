@@ -99,6 +99,8 @@ namespace tempest::graphics::vk
                 return VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
             case image_resource_usage::TRANSFER_DESTINATION:
                 return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            default:
+                break;
             }
 
             logger->critical("Logic Error: Failed to determine proper VkImageUsageFlagBits. Forcing exit.");
@@ -113,6 +115,8 @@ namespace tempest::graphics::vk
                 return VK_IMAGE_ASPECT_COLOR_BIT;
             case image_resource_usage::DEPTH_ATTACHMENT:
                 return VK_IMAGE_ASPECT_DEPTH_BIT;
+            default:
+                break;
             }
 
             return VK_IMAGE_ASPECT_NONE;
@@ -348,6 +352,8 @@ namespace tempest::graphics::vk
                 logger->critical("Logic Error: Cannot compute color component mask of depth format.");
                 break;
             }
+            case resource_format::UNKNOWN:
+                break;
             }
 
             logger->critical("Logic Error: Failed to determine proper VkColorComponentFlags. Forcing exit.");
@@ -394,11 +400,11 @@ namespace tempest::graphics::vk
         {
 #ifdef _DEBUG
             VkDebugUtilsObjectNameInfoEXT name_info = {
-                .sType{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT},
-                .pNext{nullptr},
-                .objectType{type},
-                .objectHandle{object_handle},
-                .pObjectName{name},
+                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+                .pNext = nullptr,
+                .objectType = type,
+                .objectHandle = object_handle,
+                .pObjectName = name,
             };
 
             dispatch.setDebugUtilsObjectNameEXT(&name_info);
@@ -479,23 +485,23 @@ namespace tempest::graphics::vk
         }
 
         _queue = {
-            .queue_family_index{std::get<1>(*queue_family_info)},
-            .queue_index{std::get<2>(*queue_family_info)},
-            .flags{std::get<0>(*queue_family_info).queueFlags},
+            .queue_family_index = std::get<1>(*queue_family_info),
+            .queue_index = std::get<2>(*queue_family_info),
+            .flags = std::get<0>(*queue_family_info).queueFlags,
         };
         _dispatch.getDeviceQueue(_queue.queue_family_index, _queue.queue_index, &_queue.queue);
 
         VmaVulkanFunctions fns = {
-            .vkGetInstanceProcAddr{_instance.fp_vkGetInstanceProcAddr},
-            .vkGetDeviceProcAddr{_device.fp_vkGetDeviceProcAddr},
+            .vkGetInstanceProcAddr = _instance.fp_vkGetInstanceProcAddr,
+            .vkGetDeviceProcAddr = _device.fp_vkGetDeviceProcAddr,
         };
 
         VmaAllocatorCreateInfo ci = {
-            .physicalDevice{physical.physical_device},
-            .device{_device.device},
-            .pAllocationCallbacks{nullptr},
-            .pVulkanFunctions{&fns},
-            .instance{_instance.instance},
+            .physicalDevice = physical.physical_device,
+            .device = _device.device,
+            .pAllocationCallbacks = nullptr,
+            .pVulkanFunctions = &fns,
+            .instance = _instance.instance,
         };
 
         VmaAllocator allocator;
@@ -503,22 +509,22 @@ namespace tempest::graphics::vk
         _vk_alloc = allocator;
 
         _recycled_cmd_buf_pool = command_buffer_recycler{
-            .frames_in_flight{_frames_in_flight},
-            .queue{_queue},
+            .frames_in_flight = _frames_in_flight,
+            .queue = _queue,
         };
 
         _sync_prim_recycler = sync_primitive_recycler{
-            .frames_in_flight{_frames_in_flight},
+            .frames_in_flight = _frames_in_flight,
         };
 
         _executor.emplace(_dispatch, *this);
 
         _staging_buffer = create_buffer({
-            .per_frame{true},
-            .loc{graphics::memory_location::HOST},
-            .size{64 * 1024 * 1024 * frames_in_flight()},
-            .transfer_source{true},
-            .name{"Staging Buffer"},
+            .per_frame = true,
+            .loc = graphics::memory_location::HOST,
+            .size = 64 * 1024 * 1024 * frames_in_flight(),
+            .transfer_source = true,
+            .name = "Staging Buffer",
         });
 
         _supports_aniso_filtering = physical.features.samplerAnisotropy;
@@ -555,16 +561,16 @@ namespace tempest::graphics::vk
     buffer* render_device::access_buffer(buffer_resource_handle handle) noexcept
     {
         return reinterpret_cast<buffer*>(_buffers->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
     const buffer* render_device::access_buffer(buffer_resource_handle handle) const noexcept
     {
         return reinterpret_cast<const buffer*>(_buffers->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
@@ -601,14 +607,14 @@ namespace tempest::graphics::vk
         }
 
         VkBufferCreateInfo buf_ci = {
-            .sType{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .size{ci.size},
-            .usage{usage},
-            .sharingMode{VK_SHARING_MODE_EXCLUSIVE},
-            .queueFamilyIndexCount{0},
-            .pQueueFamilyIndices{nullptr},
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .size = ci.size,
+            .usage = usage,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
         };
 
         VmaMemoryUsage mem_usage = ([ci]() {
@@ -639,24 +645,24 @@ namespace tempest::graphics::vk
         }
 
         VmaAllocationCreateInfo alloc_ci = {
-            .flags{alloc_flags},
-            .usage{mem_usage},
-            .requiredFlags{required},
-            .preferredFlags{preferred},
+            .flags = alloc_flags,
+            .usage = mem_usage,
+            .requiredFlags = required,
+            .preferredFlags = preferred,
         };
 
         buffer buf{
-            .per_frame_resource{ci.per_frame},
-            .info{buf_ci},
-            .name{std::string{ci.name}},
+            .per_frame_resource = ci.per_frame,
+            .info = buf_ci,
+            .name = std::string{ci.name},
         };
 
         auto result = vmaCreateBuffer(_vk_alloc, &buf_ci, &alloc_ci, &buf.buffer, &buf.allocation, &buf.alloc_info);
         if (result != VK_SUCCESS)
         {
             _buffers->release_resource({
-                .index{handle.id},
-                .generation{handle.generation},
+                .index = handle.id,
+                .generation = handle.generation,
             });
 
             return buffer_resource_handle();
@@ -678,7 +684,7 @@ namespace tempest::graphics::vk
             _delete_queue->add_to_queue(_current_frame, [this, buf, handle]() {
                 vmaDestroyBuffer(_vk_alloc, buf->buffer, buf->allocation);
                 std::destroy_at(buf);
-                _buffers->release_resource({.index{handle.id}, .generation{handle.generation}});
+                _buffers->release_resource({.index = handle.id, .generation = handle.generation});
             });
         }
     }
@@ -741,16 +747,16 @@ namespace tempest::graphics::vk
         }
 
         return reinterpret_cast<image*>(_images->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
     const image* render_device::access_image(image_resource_handle handle) const noexcept
     {
         return reinterpret_cast<const image*>(_images->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
@@ -781,25 +787,25 @@ namespace tempest::graphics::vk
         imgUsage |= ci.depth_attachment ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : 0;
 
         VkImageCreateInfo image_ci = {
-            .sType{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .imageType{to_vulkan(ci.type)},
-            .format{to_vulkan(ci.format)},
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = to_vulkan(ci.type),
+            .format = to_vulkan(ci.format),
             .extent{
-                .width{ci.width},
-                .height{ci.height},
-                .depth{ci.depth},
+                .width = ci.width,
+                .height = ci.height,
+                .depth = ci.depth,
             },
-            .mipLevels{ci.mip_count},
-            .arrayLayers{ci.layers},
-            .samples{to_vulkan(ci.samples)},
-            .tiling{VK_IMAGE_TILING_OPTIMAL},
-            .usage{imgUsage},
-            .sharingMode{VK_SHARING_MODE_EXCLUSIVE},
-            .queueFamilyIndexCount{0},
-            .pQueueFamilyIndices{nullptr},
-            .initialLayout{VK_IMAGE_LAYOUT_UNDEFINED},
+            .mipLevels = ci.mip_count,
+            .arrayLayers = ci.layers,
+            .samples = to_vulkan(ci.samples),
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = imgUsage,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         };
 
         VmaAllocationCreateFlags alloc_flags = 0;
@@ -809,9 +815,9 @@ namespace tempest::graphics::vk
         }
 
         VmaAllocationCreateInfo alloc_create_info = {
-            .flags{alloc_flags},
-            .usage{VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE},
-            .requiredFlags{VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT},
+            .flags = alloc_flags,
+            .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+            .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         };
 
         VkImage img;
@@ -822,8 +828,8 @@ namespace tempest::graphics::vk
         if (img_result != VK_SUCCESS)
         {
             _images->release_resource({
-                .index{handle.id},
-                .generation{handle.generation},
+                .index = handle.id,
+                .generation = handle.generation,
             });
             return image_resource_handle();
         }
@@ -836,24 +842,24 @@ namespace tempest::graphics::vk
         aspect |= ci.depth_attachment ? VK_IMAGE_ASPECT_DEPTH_BIT : 0;
 
         VkImageViewCreateInfo view_ci = {
-            .sType{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .image{img},
-            .viewType{to_vulkan_view(ci.type)},
-            .format{to_vulkan(ci.format)},
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = img,
+            .viewType = to_vulkan_view(ci.type),
+            .format = to_vulkan(ci.format),
             .components{
-                .r{VK_COMPONENT_SWIZZLE_IDENTITY},
-                .g{VK_COMPONENT_SWIZZLE_IDENTITY},
-                .b{VK_COMPONENT_SWIZZLE_IDENTITY},
-                .a{VK_COMPONENT_SWIZZLE_IDENTITY},
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
             },
             .subresourceRange{
-                .aspectMask{aspect},
-                .baseMipLevel{0},
-                .levelCount{ci.mip_count},
-                .baseArrayLayer{0},
-                .layerCount{ci.layers},
+                .aspectMask = aspect,
+                .baseMipLevel = 0,
+                .levelCount = ci.mip_count,
+                .baseArrayLayer = 0,
+                .layerCount = ci.layers,
             },
         };
 
@@ -864,8 +870,8 @@ namespace tempest::graphics::vk
             vmaDestroyImage(_vk_alloc, img, alloc);
 
             _images->release_resource({
-                .index{handle.id},
-                .generation{handle.generation},
+                .index = handle.id,
+                .generation = handle.generation,
             });
 
             return image_resource_handle();
@@ -874,14 +880,14 @@ namespace tempest::graphics::vk
         name_object(_dispatch, std::bit_cast<std::uint64_t>(view), VK_OBJECT_TYPE_IMAGE_VIEW, ci.name.c_str());
 
         image img_info = {
-            .allocation{alloc},
-            .alloc_info{alloc_info},
-            .image{img},
-            .view{view},
-            .img_info{image_ci},
-            .view_info{view_ci},
-            .persistent{ci.persistent},
-            .name{std::string(ci.name)},
+            .allocation = alloc,
+            .alloc_info = alloc_info,
+            .image = img,
+            .view = view,
+            .img_info = image_ci,
+            .view_info = view_ci,
+            .persistent = ci.persistent,
+            .name = std::string(ci.name),
         };
 
         auto image_ptr = access_image(handle);
@@ -902,7 +908,7 @@ namespace tempest::graphics::vk
                 }
                 _dispatch.destroyImageView(img->view, nullptr);
                 std::destroy_at(img);
-                _images->release_resource({.index{handle.id}, .generation{handle.generation}});
+                _images->release_resource({.index = handle.id, .generation = handle.generation});
             });
         }
     }
@@ -910,16 +916,16 @@ namespace tempest::graphics::vk
     sampler* render_device::access_sampler(sampler_resource_handle handle) noexcept
     {
         return reinterpret_cast<sampler*>(_samplers->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
     const sampler* render_device::access_sampler(sampler_resource_handle handle) const noexcept
     {
         return reinterpret_cast<const sampler*>(_samplers->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
@@ -942,24 +948,24 @@ namespace tempest::graphics::vk
         }
 
         VkSamplerCreateInfo create_info = {
-            .sType{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .magFilter{to_vulkan(ci.mag)},
-            .minFilter{to_vulkan(ci.min)},
-            .mipmapMode{to_vulkan(ci.mipmap)},
-            .addressModeU{VK_SAMPLER_ADDRESS_MODE_REPEAT},
-            .addressModeV{VK_SAMPLER_ADDRESS_MODE_REPEAT},
-            .addressModeW{VK_SAMPLER_ADDRESS_MODE_REPEAT},
-            .mipLodBias{ci.mip_lod_bias},
-            .anisotropyEnable{ci.enable_aniso & _supports_aniso_filtering ? VK_TRUE : VK_FALSE},
-            .maxAnisotropy{std::clamp(ci.max_anisotropy, 1.0f, _max_aniso)},
-            .compareEnable{VK_FALSE},
-            .compareOp{VK_COMPARE_OP_NEVER},
-            .minLod{ci.min_lod},
-            .maxLod{ci.max_lod},
-            .borderColor{VK_BORDER_COLOR_MAX_ENUM},
-            .unnormalizedCoordinates{VK_FALSE},
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .magFilter = to_vulkan(ci.mag),
+            .minFilter = to_vulkan(ci.min),
+            .mipmapMode = to_vulkan(ci.mipmap),
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .mipLodBias = ci.mip_lod_bias,
+            .anisotropyEnable = (ci.enable_aniso & _supports_aniso_filtering) ? VK_TRUE : VK_FALSE,
+            .maxAnisotropy = std::clamp(ci.max_anisotropy, 1.0f, _max_aniso),
+            .compareEnable = VK_FALSE,
+            .compareOp = VK_COMPARE_OP_NEVER,
+            .minLod = ci.min_lod,
+            .maxLod = ci.max_lod,
+            .borderColor = VK_BORDER_COLOR_MAX_ENUM,
+            .unnormalizedCoordinates = VK_FALSE,
         };
 
         VkSampler s;
@@ -967,17 +973,17 @@ namespace tempest::graphics::vk
         if (result != VK_SUCCESS)
         {
             _samplers->release_resource({
-                .index{handle.id},
-                .generation{handle.generation},
+                .index = handle.id,
+                .generation = handle.generation,
             });
 
             return sampler_resource_handle();
         }
 
         sampler smp{
-            .vk_sampler{s},
-            .info{create_info},
-            .name{ci.name},
+            .vk_sampler = s,
+            .info = create_info,
+            .name = ci.name,
         };
 
         auto ptr = access_sampler(handle);
@@ -994,7 +1000,7 @@ namespace tempest::graphics::vk
             _delete_queue->add_to_queue(_current_frame, [this, smp, handle] {
                 _dispatch.destroySampler(smp->vk_sampler, nullptr);
                 std::destroy_at(smp);
-                _samplers->release_resource({.index{handle.id}, .generation{handle.generation}});
+                _samplers->release_resource({.index = handle.id, .generation = handle.generation});
             });
         }
     }
@@ -1002,8 +1008,8 @@ namespace tempest::graphics::vk
     graphics_pipeline* render_device::access_graphics_pipeline(graphics_pipeline_resource_handle handle) noexcept
     {
         return reinterpret_cast<graphics_pipeline*>(_graphics_pipelines->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
@@ -1011,8 +1017,8 @@ namespace tempest::graphics::vk
         graphics_pipeline_resource_handle handle) const noexcept
     {
         return reinterpret_cast<const graphics_pipeline*>(_graphics_pipelines->access({
-            .index{handle.id},
-            .generation{handle.generation},
+            .index = handle.id,
+            .generation = handle.generation,
         }));
     }
 
@@ -1047,11 +1053,11 @@ namespace tempest::graphics::vk
             for (const auto& binding : info.bindings)
             {
                 bindings.push_back(VkDescriptorSetLayoutBinding{
-                    .binding{binding.binding_index},
-                    .descriptorType{to_vulkan(binding.type)},
-                    .descriptorCount{binding.binding_count},
-                    .stageFlags{VK_SHADER_STAGE_ALL_GRAPHICS},
-                    .pImmutableSamplers{nullptr},
+                    .binding = binding.binding_index,
+                    .descriptorType = to_vulkan(binding.type),
+                    .descriptorCount = binding.binding_count,
+                    .stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS,
+                    .pImmutableSamplers = nullptr,
                 });
 
                 flags.push_back(binding.binding_count > 1 ? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT : 0);
@@ -1065,10 +1071,10 @@ namespace tempest::graphics::vk
             };
 
             VkDescriptorSetLayoutCreateInfo set_layout_ci = {
-                .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO},
-                .pNext{&binding_flags},
-                .bindingCount{static_cast<std::uint32_t>(bindings.size())},
-                .pBindings{bindings.data()},
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = &binding_flags,
+                .bindingCount = static_cast<std::uint32_t>(bindings.size()),
+                .pBindings = bindings.data(),
             };
 
             VkDescriptorSetLayout layout;
@@ -1085,20 +1091,20 @@ namespace tempest::graphics::vk
         for (const auto& range : ci.layout.push_constants)
         {
             ranges.push_back(VkPushConstantRange{
-                .stageFlags{VK_SHADER_STAGE_ALL},
-                .offset{range.offset},
-                .size{range.range},
+                .stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS,
+                .offset = range.offset,
+                .size = range.range,
             });
         }
 
         VkPipelineLayoutCreateInfo pipeline_layout_ci = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .setLayoutCount{static_cast<std::uint32_t>(set_layouts.size())},
-            .pSetLayouts{set_layouts.empty() ? nullptr : set_layouts.data()},
-            .pushConstantRangeCount{static_cast<std::uint32_t>(ranges.size())},
-            .pPushConstantRanges{ranges.empty() ? nullptr : ranges.data()},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = static_cast<std::uint32_t>(set_layouts.size()),
+            .pSetLayouts = set_layouts.empty() ? nullptr : set_layouts.data(),
+            .pushConstantRangeCount = static_cast<std::uint32_t>(ranges.size()),
+            .pPushConstantRanges = ranges.empty() ? nullptr : ranges.data(),
         };
 
         VkPipelineLayout pipeline_layout;
@@ -1116,29 +1122,29 @@ namespace tempest::graphics::vk
         }
 
         VkPipelineRenderingCreateInfo dynamic_render = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO},
-            .pNext{nullptr},
-            .viewMask{0},
-            .colorAttachmentCount{static_cast<std::uint32_t>(color_formats.size())},
-            .pColorAttachmentFormats{color_formats.empty() ? nullptr : color_formats.data()},
-            .depthAttachmentFormat{to_vulkan(ci.target.depth_attachment_format)},
-            .stencilAttachmentFormat{VK_FORMAT_UNDEFINED},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .pNext = nullptr,
+            .viewMask = 0,
+            .colorAttachmentCount = static_cast<std::uint32_t>(color_formats.size()),
+            .pColorAttachmentFormats = color_formats.empty() ? nullptr : color_formats.data(),
+            .depthAttachmentFormat = to_vulkan(ci.target.depth_attachment_format),
+            .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
         };
 
         VkShaderModuleCreateInfo vertex_ci = {
-            .sType{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .codeSize{ci.vertex_shader.bytes.size()},
-            .pCode{reinterpret_cast<std::uint32_t*>(ci.vertex_shader.bytes.data())},
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .codeSize = ci.vertex_shader.bytes.size(),
+            .pCode = reinterpret_cast<std::uint32_t*>(ci.vertex_shader.bytes.data()),
         };
 
         VkShaderModuleCreateInfo fragment_ci = {
-            .sType{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .codeSize{ci.fragment_shader.bytes.size()},
-            .pCode{reinterpret_cast<std::uint32_t*>(ci.fragment_shader.bytes.data())},
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .codeSize = ci.fragment_shader.bytes.size(),
+            .pCode = reinterpret_cast<std::uint32_t*>(ci.fragment_shader.bytes.data()),
         };
 
         std::uint32_t shader_count = 1;
@@ -1150,13 +1156,12 @@ namespace tempest::graphics::vk
                     ci.vertex_shader.name.c_str());
 
         VkPipelineShaderStageCreateInfo vertex_stage_ci = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{},
-            .stage{VK_SHADER_STAGE_VERTEX_BIT},
-            .module{vertex_module},
-            .pName{ci.vertex_shader.entrypoint.data()},
-            .pSpecializationInfo{nullptr},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vertex_module,
+            .pName = ci.vertex_shader.entrypoint.data(),
+            .pSpecializationInfo = nullptr,
         };
 
         VkPipelineShaderStageCreateInfo fragment_stage_ci = {};
@@ -1175,13 +1180,12 @@ namespace tempest::graphics::vk
                         ci.fragment_shader.name.c_str());
 
             fragment_stage_ci = {
-                .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
-                .pNext{nullptr},
-                .flags{},
-                .stage{VK_SHADER_STAGE_FRAGMENT_BIT},
-                .module{fragment_module},
-                .pName{ci.fragment_shader.entrypoint.data()},
-                .pSpecializationInfo{nullptr},
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = nullptr,
+                .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .module = fragment_module,
+                .pName = ci.fragment_shader.entrypoint.data(),
+                .pSpecializationInfo = nullptr,
             };
 
             ++shader_count;
@@ -1214,145 +1218,146 @@ namespace tempest::graphics::vk
             if (it != std::end(vertex_bindings))
             {
                 VkVertexInputBindingDescription binding = {
-                    .binding{element.binding},
-                    .stride{binding_sizes[element.binding]},
-                    .inputRate{VK_VERTEX_INPUT_RATE_VERTEX},
+                    .binding = element.binding,
+                    .stride = binding_sizes[element.binding],
+                    .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 };
 
                 vertex_bindings.push_back(binding);
             }
 
             VkVertexInputAttributeDescription attrib = {
-                .location{element.location},
-                .binding{element.binding},
-                .format{to_vulkan(element.format)},
-                .offset{element.offset},
+                .location = element.location,
+                .binding = element.binding,
+                .format = to_vulkan(element.format),
+                .offset = element.offset,
             };
 
             vertex_attributes.push_back(attrib);
         }
 
         VkPipelineVertexInputStateCreateInfo vertex_input_state = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .vertexBindingDescriptionCount{static_cast<std::uint32_t>(vertex_bindings.size())},
-            .pVertexBindingDescriptions{vertex_bindings.empty() ? nullptr : vertex_bindings.data()},
-            .vertexAttributeDescriptionCount{static_cast<std::uint32_t>(vertex_attributes.size())},
-            .pVertexAttributeDescriptions{vertex_attributes.empty() ? nullptr : vertex_attributes.data()},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .vertexBindingDescriptionCount = static_cast<std::uint32_t>(vertex_bindings.size()),
+            .pVertexBindingDescriptions = vertex_bindings.empty() ? nullptr : vertex_bindings.data(),
+            .vertexAttributeDescriptionCount = static_cast<std::uint32_t>(vertex_attributes.size()),
+            .pVertexAttributeDescriptions = vertex_attributes.empty() ? nullptr : vertex_attributes.data(),
         };
 
         VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST},
-            .primitiveRestartEnable{VK_FALSE},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .primitiveRestartEnable = VK_FALSE,
         };
 
         VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .depthTestEnable{ci.depth_testing.enable_test ? VK_TRUE : VK_FALSE},
-            .depthWriteEnable{ci.depth_testing.enable_write ? VK_TRUE : VK_FALSE},
-            .depthCompareOp{to_vulkan(ci.depth_testing.depth_test_op)},
-            .stencilTestEnable{VK_FALSE},
-            .minDepthBounds{ci.depth_testing.min_depth_bounds},
-            .maxDepthBounds{ci.depth_testing.max_depth_bounds},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .depthTestEnable = ci.depth_testing.enable_test ? VK_TRUE : VK_FALSE,
+            .depthWriteEnable = ci.depth_testing.enable_write ? VK_TRUE : VK_FALSE,
+            .depthCompareOp = to_vulkan(ci.depth_testing.depth_test_op),
+            .stencilTestEnable = VK_FALSE,
+            .minDepthBounds = ci.depth_testing.min_depth_bounds,
+            .maxDepthBounds = ci.depth_testing.max_depth_bounds,
         };
 
         VkPipelineRasterizationStateCreateInfo raster_state = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .depthClampEnable{ci.depth_testing.clamp_depth ? VK_TRUE : VK_FALSE},
-            .rasterizerDiscardEnable{VK_FALSE},
-            .polygonMode{VK_POLYGON_MODE_FILL},
-            .cullMode{VK_CULL_MODE_BACK_BIT},
-            .frontFace{VK_FRONT_FACE_COUNTER_CLOCKWISE},
-            .depthBiasEnable{ci.depth_testing.enable_depth_bias ? VK_TRUE : VK_FALSE},
-            .depthBiasConstantFactor{ci.depth_testing.depth_bias_constant_factor},
-            .depthBiasClamp{ci.depth_testing.depth_bias_clamp},
-            .depthBiasSlopeFactor{ci.depth_testing.depth_bias_slope_factor},
-            .lineWidth{1.0f},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .depthClampEnable = ci.depth_testing.clamp_depth ? VK_TRUE : VK_FALSE,
+            .rasterizerDiscardEnable = VK_FALSE,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .depthBiasEnable = ci.depth_testing.enable_depth_bias ? VK_TRUE : VK_FALSE,
+            .depthBiasConstantFactor = ci.depth_testing.depth_bias_constant_factor,
+            .depthBiasClamp = ci.depth_testing.depth_bias_clamp,
+            .depthBiasSlopeFactor = ci.depth_testing.depth_bias_slope_factor,
+            .lineWidth = 1.0f,
         };
 
         std::vector<VkPipelineColorBlendAttachmentState> attachment_blends;
         for (const auto& blend_info : ci.blending.attachment_blend_ops)
         {
             VkPipelineColorBlendAttachmentState state = {
-                .blendEnable{blend_info.enabled ? VK_TRUE : VK_FALSE},
-                .srcColorBlendFactor{to_vulkan(blend_info.color.src, true)},
-                .dstColorBlendFactor{to_vulkan(blend_info.color.dst, true)},
-                .colorBlendOp{to_vulkan(blend_info.color.op)},
-                .srcAlphaBlendFactor{to_vulkan(blend_info.alpha.src, false)},
-                .dstAlphaBlendFactor{to_vulkan(blend_info.alpha.dst, false)},
-                .alphaBlendOp{to_vulkan(blend_info.alpha.op)},
-                .colorWriteMask{compute_blend_write_mask(ci.target.color_attachment_formats[attachment_blends.size()])},
+                .blendEnable = blend_info.enabled ? VK_TRUE : VK_FALSE,
+                .srcColorBlendFactor = to_vulkan(blend_info.color.src, true),
+                .dstColorBlendFactor = to_vulkan(blend_info.color.dst, true),
+                .colorBlendOp = to_vulkan(blend_info.color.op),
+                .srcAlphaBlendFactor = to_vulkan(blend_info.alpha.src, false),
+                .dstAlphaBlendFactor = to_vulkan(blend_info.alpha.dst, false),
+                .alphaBlendOp = to_vulkan(blend_info.alpha.op),
+                .colorWriteMask =
+                    compute_blend_write_mask(ci.target.color_attachment_formats[attachment_blends.size()]),
             };
 
             attachment_blends.push_back(state);
         };
 
         VkPipelineColorBlendStateCreateInfo color_blend_state = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .logicOpEnable{VK_FALSE},
-            .logicOp{VK_LOGIC_OP_NO_OP},
-            .attachmentCount{static_cast<std::uint32_t>(attachment_blends.size())},
-            .pAttachments{attachment_blends.empty() ? nullptr : attachment_blends.data()},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .logicOpEnable = VK_FALSE,
+            .logicOp = VK_LOGIC_OP_NO_OP,
+            .attachmentCount = static_cast<std::uint32_t>(attachment_blends.size()),
+            .pAttachments = attachment_blends.empty() ? nullptr : attachment_blends.data(),
         };
 
         VkPipelineDynamicStateCreateInfo dynamic_state = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .dynamicStateCount{static_cast<std::uint32_t>(sizeof(dynamic_states) / sizeof(VkDynamicState))},
-            .pDynamicStates{sizeof(dynamic_states) == 0 ? nullptr : dynamic_states},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .dynamicStateCount = static_cast<std::uint32_t>(sizeof(dynamic_states) / sizeof(VkDynamicState)),
+            .pDynamicStates = sizeof(dynamic_states) == 0 ? nullptr : dynamic_states,
         };
 
         VkPipelineViewportStateCreateInfo viewport = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .viewportCount{0},
-            .pViewports{nullptr},
-            .scissorCount{0},
-            .pScissors{nullptr},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .viewportCount = 0,
+            .pViewports = nullptr,
+            .scissorCount = 0,
+            .pScissors = nullptr,
         };
 
         VkPipelineMultisampleStateCreateInfo multisample_state = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .rasterizationSamples{VK_SAMPLE_COUNT_1_BIT},
-            .sampleShadingEnable{VK_FALSE},
-            .alphaToCoverageEnable{VK_FALSE},
-            .alphaToOneEnable{VK_FALSE},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+            .sampleShadingEnable = VK_FALSE,
+            .alphaToCoverageEnable = VK_FALSE,
+            .alphaToOneEnable = VK_FALSE,
         };
 
         VkGraphicsPipelineCreateInfo pipeline_ci = {
-            .sType{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO},
-            .pNext{&dynamic_render},
-            .flags{0},
-            .stageCount{shader_count},
-            .pStages{stages_ci},
-            .pVertexInputState{&vertex_input_state},
-            .pInputAssemblyState{&input_assembly_state},
-            .pTessellationState{nullptr},
-            .pViewportState{&viewport},
-            .pRasterizationState{&raster_state},
-            .pMultisampleState{has_fragment_shader ? &multisample_state : nullptr},
-            .pDepthStencilState{&depth_stencil_state},
-            .pColorBlendState{has_fragment_shader ? &color_blend_state : nullptr},
-            .pDynamicState{&dynamic_state},
-            .layout{pipeline_layout},
-            .renderPass{VK_NULL_HANDLE},
-            .subpass{0},
-            .basePipelineHandle{VK_NULL_HANDLE},
-            .basePipelineIndex{0},
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &dynamic_render,
+            .flags = 0,
+            .stageCount = shader_count,
+            .pStages = stages_ci,
+            .pVertexInputState = &vertex_input_state,
+            .pInputAssemblyState = &input_assembly_state,
+            .pTessellationState = nullptr,
+            .pViewportState = &viewport,
+            .pRasterizationState = &raster_state,
+            .pMultisampleState = has_fragment_shader ? &multisample_state : nullptr,
+            .pDepthStencilState = &depth_stencil_state,
+            .pColorBlendState = has_fragment_shader ? &color_blend_state : nullptr,
+            .pDynamicState = &dynamic_state,
+            .layout = pipeline_layout,
+            .renderPass = VK_NULL_HANDLE,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = 0,
         };
 
         VkPipeline pipeline;
@@ -1365,12 +1370,12 @@ namespace tempest::graphics::vk
         name_object(_dispatch, std::bit_cast<std::uint64_t>(pipeline), VK_OBJECT_TYPE_PIPELINE, ci.name.c_str());
 
         graphics_pipeline gfx_pipeline = {
-            .vertex_module{vertex_module},
-            .fragment_module{fragment_module},
-            .set_layouts{std::move(set_layouts)},
-            .pipeline{pipeline},
-            .pipeline_layout{pipeline_layout},
-            .name{ci.name},
+            .vertex_module = vertex_module,
+            .fragment_module = fragment_module,
+            .set_layouts = std::move(set_layouts),
+            .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+            .name = ci.name,
         };
 
         auto pipeline_ptr = access_graphics_pipeline(handle);
@@ -1394,7 +1399,7 @@ namespace tempest::graphics::vk
                     _dispatch.destroyDescriptorSetLayout(layout, nullptr);
                 }
                 std::destroy_at(pipeline);
-                _graphics_pipelines->release_resource({.index{handle.id}, .generation{handle.generation}});
+                _graphics_pipelines->release_resource({.index = handle.id, .generation = handle.generation});
             });
         }
     }
@@ -1402,14 +1407,14 @@ namespace tempest::graphics::vk
     compute_pipeline* render_device::access_compute_pipeline(compute_pipeline_resource_handle handle) noexcept
     {
         return reinterpret_cast<compute_pipeline*>(
-            _compute_pipelines->access({.index{handle.id}, .generation{handle.generation}}));
+            _compute_pipelines->access({.index = handle.id, .generation = handle.generation}));
     }
 
     const compute_pipeline* render_device::access_compute_pipeline(
         compute_pipeline_resource_handle handle) const noexcept
     {
         return reinterpret_cast<const compute_pipeline*>(
-            _compute_pipelines->access({.index{handle.id}, .generation{handle.generation}}));
+            _compute_pipelines->access({.index = handle.id, .generation = handle.generation}));
     }
 
     compute_pipeline_resource_handle render_device::allocate_compute_pipeline()
@@ -1442,19 +1447,19 @@ namespace tempest::graphics::vk
             for (const auto& binding : info.bindings)
             {
                 bindings.push_back(VkDescriptorSetLayoutBinding{
-                    .binding{binding.binding_index},
-                    .descriptorType{to_vulkan(binding.type)},
-                    .descriptorCount{binding.binding_count},
-                    .stageFlags{VK_SHADER_STAGE_COMPUTE_BIT},
-                    .pImmutableSamplers{nullptr},
+                    .binding = binding.binding_index,
+                    .descriptorType = to_vulkan(binding.type),
+                    .descriptorCount = binding.binding_count,
+                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .pImmutableSamplers = nullptr,
                 });
             }
 
             VkDescriptorSetLayoutCreateInfo set_layout_ci = {
-                .sType{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO},
-                .pNext{nullptr},
-                .bindingCount{static_cast<std::uint32_t>(bindings.size())},
-                .pBindings{bindings.data()},
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = nullptr,
+                .bindingCount = static_cast<std::uint32_t>(bindings.size()),
+                .pBindings = bindings.data(),
             };
 
             VkDescriptorSetLayout layout;
@@ -1471,20 +1476,20 @@ namespace tempest::graphics::vk
         for (const auto& range : ci.layout.push_constants)
         {
             ranges.push_back(VkPushConstantRange{
-                .stageFlags{VK_SHADER_STAGE_ALL},
-                .offset{range.offset},
-                .size{range.range},
+                .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .offset = range.offset,
+                .size = range.range,
             });
         }
 
         VkPipelineLayoutCreateInfo pipeline_layout_ci = {
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .setLayoutCount{static_cast<std::uint32_t>(set_layouts.size())},
-            .pSetLayouts{set_layouts.empty() ? nullptr : set_layouts.data()},
-            .pushConstantRangeCount{static_cast<std::uint32_t>(ranges.size())},
-            .pPushConstantRanges{ranges.empty() ? nullptr : ranges.data()},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = static_cast<std::uint32_t>(set_layouts.size()),
+            .pSetLayouts = set_layouts.empty() ? nullptr : set_layouts.data(),
+            .pushConstantRangeCount = static_cast<std::uint32_t>(ranges.size()),
+            .pPushConstantRanges = ranges.empty() ? nullptr : ranges.data(),
         };
 
         VkPipelineLayout pipeline_layout;
@@ -1499,11 +1504,11 @@ namespace tempest::graphics::vk
                     ci.name.c_str());
 
         VkShaderModuleCreateInfo compute_module_ci = {
-            .sType{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .codeSize{ci.compute_shader.bytes.size()},
-            .pCode{reinterpret_cast<std::uint32_t*>(ci.compute_shader.bytes.data())},
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .codeSize = ci.compute_shader.bytes.size(),
+            .pCode = reinterpret_cast<std::uint32_t*>(ci.compute_shader.bytes.data()),
         };
 
         VkShaderModule compute_shader_module{VK_NULL_HANDLE};
@@ -1519,30 +1524,30 @@ namespace tempest::graphics::vk
                     ci.compute_shader.name.c_str());
 
         VkPipelineShaderStageCreateInfo compute_stage{
-            .sType{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .stage{VK_SHADER_STAGE_COMPUTE_BIT},
-            .module{compute_shader_module},
-            .pName{ci.compute_shader.entrypoint.data()},
-            .pSpecializationInfo{nullptr},
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+            .module = compute_shader_module,
+            .pName = ci.compute_shader.entrypoint.data(),
+            .pSpecializationInfo = nullptr,
         };
 
         VkComputePipelineCreateInfo compute_ci = {
-            .sType{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO},
-            .pNext{nullptr},
-            .flags{0},
-            .stage{compute_stage},
-            .layout{pipeline_layout},
-            .basePipelineHandle{VK_NULL_HANDLE},
-            .basePipelineIndex{0},
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .stage = compute_stage,
+            .layout = pipeline_layout,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = 0,
         };
 
         compute_pipeline pipeline = {
-            .compute_module{compute_shader_module},
-            .set_layouts{set_layouts},
-            .pipeline_layout{pipeline_layout},
-            .name{ci.name},
+            .compute_module = compute_shader_module,
+            .set_layouts = set_layouts,
+            .pipeline_layout = pipeline_layout,
+            .name = ci.name,
         };
 
         auto compute_result =
@@ -1577,20 +1582,20 @@ namespace tempest::graphics::vk
                     _dispatch.destroyDescriptorSetLayout(layout, nullptr);
                 }
                 std::destroy_at(pipeline);
-                _compute_pipelines->release_resource({.index{handle.id}, .generation{handle.generation}});
+                _compute_pipelines->release_resource({.index = handle.id, .generation = handle.generation});
             });
         }
     }
 
     swapchain* render_device::access_swapchain(swapchain_resource_handle handle) noexcept
     {
-        return reinterpret_cast<swapchain*>(_swapchains->access({.index{handle.id}, .generation{handle.generation}}));
+        return reinterpret_cast<swapchain*>(_swapchains->access({.index = handle.id, .generation = handle.generation}));
     }
 
     const swapchain* render_device::access_swapchain(swapchain_resource_handle handle) const noexcept
     {
         return reinterpret_cast<const swapchain*>(
-            _swapchains->access({.index{handle.id}, .generation{handle.generation}}));
+            _swapchains->access({.index = handle.id, .generation = handle.generation}));
     }
 
     swapchain_resource_handle render_device::allocate_swapchain()
@@ -1634,7 +1639,8 @@ namespace tempest::graphics::vk
                 .set_required_min_image_count(info.desired_frame_count)
                 .set_desired_extent(width, height)
                 .set_desired_present_mode(info.use_vsync ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR)
-                .set_desired_format({.format{VK_FORMAT_B8G8R8A8_SRGB}, .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}});
+                .set_desired_format(
+                    {.format = VK_FORMAT_B8G8R8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR});
 
         auto result = swap_bldr.build();
         if (!result)
@@ -1643,9 +1649,9 @@ namespace tempest::graphics::vk
         }
 
         swapchain sc = {
-            .win{win},
-            .sc{result.value()},
-            .surface{surface},
+            .win = win,
+            .sc = result.value(),
+            .surface = surface,
         };
 
         auto images = sc.sc.get_images().value();
@@ -1655,23 +1661,23 @@ namespace tempest::graphics::vk
         for (std::uint32_t i = 0; i < sc.sc.image_count; ++i)
         {
             image sc_image = {
-                .allocation{nullptr},
-                .image{images[i]},
-                .view{views[i]},
+                .allocation = nullptr,
+                .image = images[i],
+                .view = views[i],
                 .img_info{
                     .extent{
-                        .width{sc.sc.extent.width},
-                        .height{sc.sc.extent.height},
-                        .depth{1},
+                        .width = sc.sc.extent.width,
+                        .height = sc.sc.extent.height,
+                        .depth = 1,
                     },
                 },
                 .view_info{
-                    .image{images[i]},
+                    .image = images[i],
                     .subresourceRange{
-                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     },
                 },
-                .name{std::format("swapchain_image_{}", i)},
+                .name = std::format("swapchain_image_{}", i),
             };
 
             auto sc_image_handle = allocate_image();
@@ -1700,7 +1706,7 @@ namespace tempest::graphics::vk
                 vkb::destroy_swapchain(sc->sc);
                 vkb::destroy_surface(_instance, sc->surface);
                 std::destroy_at(sc);
-                _swapchains->release_resource({.index{handle.id}, .generation{handle.generation}});
+                _swapchains->release_resource({.index = handle.id, .generation = handle.generation});
             });
         }
     }
@@ -1741,7 +1747,8 @@ namespace tempest::graphics::vk
                 .set_required_min_image_count(sc->sc.image_count)
                 .set_desired_extent(width, height)
                 .set_desired_present_mode(old_swap.present_mode)
-                .set_desired_format({.format{VK_FORMAT_B8G8R8A8_SRGB}, .colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}})
+                .set_desired_format(
+                    {.format = VK_FORMAT_B8G8R8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
                 .set_old_swapchain(sc->sc);
 
         auto swap_result = swap_bldr.build();
@@ -1778,23 +1785,23 @@ namespace tempest::graphics::vk
         for (std::uint32_t i = 0; i < sc->sc.image_count; ++i)
         {
             image sc_image = {
-                .allocation{nullptr},
-                .image{images[i]},
-                .view{views[i]},
+                .allocation = nullptr,
+                .image = images[i],
+                .view = views[i],
                 .img_info{
                     .extent{
-                        .width{sc->sc.extent.width},
-                        .height{sc->sc.extent.height},
-                        .depth{1},
+                        .width = sc->sc.extent.width,
+                        .height = sc->sc.extent.height,
+                        .depth = 1,
                     },
                 },
                 .view_info{
-                    .image{images[i]},
+                    .image = images[i],
                     .subresourceRange{
-                        .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     },
                 },
-                .name{std::format("swapchain_image_{}", i)},
+                .name = std::format("swapchain_image_{}", i),
             };
 
             if (i < sc->image_handles.size())
@@ -1867,42 +1874,42 @@ namespace tempest::graphics::vk
                                                        .set_minimum_version(1, 3)
                                                        .set_required_features({
 #ifdef _DEBUG
-                                                           .robustBufferAccess{VK_TRUE},
+                                                           .robustBufferAccess = VK_TRUE,
 #endif
-                                                           .independentBlend{VK_TRUE},
-                                                           .logicOp{VK_TRUE},
+                                                           .independentBlend = VK_TRUE,
+                                                           .logicOp = VK_TRUE,
                                                            .multiDrawIndirect = VK_TRUE,
                                                            .drawIndirectFirstInstance = VK_TRUE,
-                                                           .depthClamp{VK_TRUE},
-                                                           .depthBiasClamp{VK_TRUE},
-                                                           .fillModeNonSolid{VK_TRUE},
-                                                           .depthBounds{VK_TRUE},
-                                                           .samplerAnisotropy{VK_TRUE},
-                                                           .shaderUniformBufferArrayDynamicIndexing{VK_TRUE},
-                                                           .shaderSampledImageArrayDynamicIndexing{VK_TRUE},
-                                                           .shaderStorageBufferArrayDynamicIndexing{VK_TRUE},
-                                                           .shaderStorageImageArrayDynamicIndexing{VK_TRUE},
-                                                           .shaderInt64{VK_FALSE},
+                                                           .depthClamp = VK_TRUE,
+                                                           .depthBiasClamp = VK_TRUE,
+                                                           .fillModeNonSolid = VK_TRUE,
+                                                           .depthBounds = VK_TRUE,
+                                                           .samplerAnisotropy = VK_TRUE,
+                                                           .shaderUniformBufferArrayDynamicIndexing = VK_TRUE,
+                                                           .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+                                                           .shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
+                                                           .shaderStorageImageArrayDynamicIndexing = VK_TRUE,
+                                                           .shaderInt64 = VK_FALSE,
                                                        })
                                                        .set_required_features_12({
-                                                           .shaderUniformBufferArrayNonUniformIndexing{VK_TRUE},
-                                                           .shaderSampledImageArrayNonUniformIndexing{VK_TRUE},
-                                                           .shaderStorageBufferArrayNonUniformIndexing{VK_TRUE},
-                                                           .shaderStorageImageArrayNonUniformIndexing{VK_TRUE},
-                                                           .shaderUniformTexelBufferArrayNonUniformIndexing{VK_TRUE},
-                                                           .shaderStorageTexelBufferArrayNonUniformIndexing{VK_TRUE},
-                                                           .descriptorBindingSampledImageUpdateAfterBind{VK_TRUE},
-                                                           .descriptorBindingStorageImageUpdateAfterBind{VK_TRUE},
-                                                           .descriptorBindingPartiallyBound{VK_TRUE},
-                                                           .descriptorBindingVariableDescriptorCount{VK_TRUE},
+                                                           .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
+                                                           .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+                                                           .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
+                                                           .shaderStorageImageArrayNonUniformIndexing = VK_TRUE,
+                                                           .shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE,
+                                                           .shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE,
+                                                           .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+                                                           .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
+                                                           .descriptorBindingPartiallyBound = VK_TRUE,
+                                                           .descriptorBindingVariableDescriptorCount = VK_TRUE,
                                                            .runtimeDescriptorArray = VK_TRUE,
-                                                           .imagelessFramebuffer{VK_TRUE},
-                                                           .separateDepthStencilLayouts{VK_TRUE},
-                                                           .bufferDeviceAddress{VK_TRUE},
+                                                           .imagelessFramebuffer = VK_TRUE,
+                                                           .separateDepthStencilLayouts = VK_TRUE,
+                                                           .bufferDeviceAddress = VK_TRUE,
                                                        })
                                                        .set_required_features_13({
-                                                           .synchronization2{VK_TRUE},
-                                                           .dynamicRendering{VK_TRUE},
+                                                           .synchronization2 = VK_TRUE,
+                                                           .dynamicRendering = VK_TRUE,
                                                        });
             return selector;
         }
@@ -1943,8 +1950,8 @@ namespace tempest::graphics::vk
                 }
 
                 devices.push_back(physical_device_context{
-                    .id{static_cast<std::uint32_t>(i)},
-                    .name{(*selection)[i].name},
+                    .id = static_cast<std::uint32_t>(i),
+                    .name = (*selection)[i].name,
                 });
             }
         }
@@ -1959,8 +1966,8 @@ namespace tempest::graphics::vk
     void resource_deletion_queue::add_to_queue(std::size_t current_frame, std::function<void()> deleter)
     {
         _queue.push_back(delete_info{
-            .frame{current_frame},
-            .deleter{deleter},
+            .frame = current_frame,
+            .deleter = deleter,
         });
     }
 
@@ -2001,12 +2008,12 @@ namespace tempest::graphics::vk
                                              float max_depth, std::uint32_t viewport_id, bool flip)
     {
         VkViewport vp = {
-            .x{x},
-            .y{flip ? height - y : y},
-            .width{width},
-            .height{flip ? -height : height},
-            .minDepth{min_depth},
-            .maxDepth{max_depth},
+            .x = x,
+            .y = flip ? height - y : y,
+            .width = width,
+            .height = flip ? -height : height,
+            .minDepth = min_depth,
+            .maxDepth = max_depth,
         };
 
         _dispatch->cmdSetViewportWithCount(_cmds, 1, &vp);
@@ -2019,12 +2026,12 @@ namespace tempest::graphics::vk
     {
         VkRect2D scissor = {
             .offset{
-                .x{x},
-                .y{y},
+                .x = x,
+                .y = y,
             },
             .extent{
-                .width{width},
-                .height{height},
+                .width = width,
+                .height = height,
             },
         };
 
@@ -2094,39 +2101,39 @@ namespace tempest::graphics::vk
 
         VkImageBlit region = {
             .srcSubresource{
-                .aspectMask{src_img->view_info.subresourceRange.aspectMask},
-                .mipLevel{0},
-                .baseArrayLayer{0},
-                .layerCount{1},
+                .aspectMask = src_img->view_info.subresourceRange.aspectMask,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
             },
             .srcOffsets{
                 {
-                    .x{0},
-                    .y{0},
-                    .z{0},
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
                 },
                 {
-                    .x{static_cast<int32_t>(src_img->img_info.extent.width)},
-                    .y{static_cast<int32_t>(src_img->img_info.extent.height)},
-                    .z{1},
+                    .x = static_cast<int32_t>(src_img->img_info.extent.width),
+                    .y = static_cast<int32_t>(src_img->img_info.extent.height),
+                    .z = 1,
                 },
             },
             .dstSubresource{
-                .aspectMask{src_img->view_info.subresourceRange.aspectMask},
-                .mipLevel{0},
-                .baseArrayLayer{0},
-                .layerCount{1},
+                .aspectMask = src_img->view_info.subresourceRange.aspectMask,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
             },
             .dstOffsets{
                 {
-                    .x{0},
-                    .y{0},
-                    .z{0},
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
                 },
                 {
-                    .x{static_cast<int32_t>(dst_img->img_info.extent.width)},
-                    .y{static_cast<int32_t>(dst_img->img_info.extent.height)},
-                    .z{1},
+                    .x = static_cast<int32_t>(dst_img->img_info.extent.width),
+                    .y = static_cast<int32_t>(dst_img->img_info.extent.height),
+                    .z = 1,
                 },
             },
         };
@@ -2163,9 +2170,9 @@ namespace tempest::graphics::vk
                "src_offset + byte_count must be less than the size of the source buffer.");
 
         VkBufferCopy copy = {
-            .srcOffset{src_offset},
-            .dstOffset{dst_offset},
-            .size{byte_count},
+            .srcOffset = src_offset,
+            .dstOffset = dst_offset,
+            .size = byte_count,
         };
 
         _dispatch->cmdCopyBuffer(_cmds, src_buf->buffer, dst_buf->buffer, 1, &copy);
@@ -2178,24 +2185,24 @@ namespace tempest::graphics::vk
                                      std::int32_t offset_x, std::int32_t offset_y)
     {
         VkBufferImageCopy copy = {
-            .bufferOffset{buffer_offset},
-            .bufferRowLength{0},
-            .bufferImageHeight{0},
+            .bufferOffset = buffer_offset,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
             .imageSubresource{
-                .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
-                .mipLevel{mip_level},
-                .baseArrayLayer{0},
-                .layerCount{1},
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = mip_level,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
             },
             .imageOffset{
-                .x{offset_x},
-                .y{offset_y},
-                .z{0},
+                .x = offset_x,
+                .y = offset_y,
+                .z = 0,
             },
             .imageExtent{
-                .width{region_width},
-                .height{region_height},
-                .depth{1},
+                .width = region_width,
+                .height = region_height,
+                .depth = 1,
             },
         };
 
@@ -2212,11 +2219,11 @@ namespace tempest::graphics::vk
         };
 
         VkImageSubresourceRange range = {
-            .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
-            .baseMipLevel{0},
-            .levelCount{VK_REMAINING_ARRAY_LAYERS},
-            .baseArrayLayer{0},
-            .layerCount{VK_REMAINING_ARRAY_LAYERS},
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_ARRAY_LAYERS,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
         };
 
         _dispatch->cmdClearColorImage(_cmds, _device->access_image(handle)->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -2244,21 +2251,21 @@ namespace tempest::graphics::vk
         auto vk_img = _device->access_image(img);
 
         VkImageMemoryBarrier img_barrier = {
-            .sType{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER},
-            .pNext{nullptr},
-            .srcAccessMask{VK_ACCESS_NONE},
-            .dstAccessMask{VK_ACCESS_NONE},
-            .oldLayout{compute_layout(old_usage)},
-            .newLayout{compute_layout(new_usage)},
-            .srcQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
-            .dstQueueFamilyIndex{VK_QUEUE_FAMILY_IGNORED},
-            .image{vk_img->image},
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask = VK_ACCESS_NONE,
+            .dstAccessMask = VK_ACCESS_NONE,
+            .oldLayout = compute_layout(old_usage),
+            .newLayout = compute_layout(new_usage),
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = vk_img->image,
             .subresourceRange{
-                .aspectMask{VK_IMAGE_ASPECT_COLOR_BIT},
-                .baseMipLevel{base_mip},
-                .levelCount{mip_count},
-                .baseArrayLayer{0},
-                .layerCount{vk_img->img_info.arrayLayers},
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = base_mip,
+                .levelCount = mip_count,
+                .baseArrayLayer = 0,
+                .layerCount = vk_img->img_info.arrayLayers,
             },
         };
 
@@ -2327,39 +2334,39 @@ namespace tempest::graphics::vk
 
             VkImageBlit region = {
                 .srcSubresource{
-                    .aspectMask{vk_img->view_info.subresourceRange.aspectMask},
-                    .mipLevel{i},
-                    .baseArrayLayer{0},
-                    .layerCount{1},
+                    .aspectMask = vk_img->view_info.subresourceRange.aspectMask,
+                    .mipLevel = i,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
                 },
                 .srcOffsets{
                     {
-                        .x{0},
-                        .y{0},
-                        .z{0},
+                        .x = 0,
+                        .y = 0,
+                        .z = 0,
                     },
                     {
-                        .x{static_cast<int32_t>(src_width)},
-                        .y{static_cast<int32_t>(src_height)},
-                        .z{1},
+                        .x = static_cast<int32_t>(src_width),
+                        .y = static_cast<int32_t>(src_height),
+                        .z = 1,
                     },
                 },
                 .dstSubresource{
-                    .aspectMask{vk_img->view_info.subresourceRange.aspectMask},
-                    .mipLevel{i + 1},
-                    .baseArrayLayer{0},
-                    .layerCount{1},
+                    .aspectMask = vk_img->view_info.subresourceRange.aspectMask,
+                    .mipLevel = i + 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
                 },
                 .dstOffsets{
                     {
-                        .x{0},
-                        .y{0},
-                        .z{0},
+                        .x = 0,
+                        .y = 0,
+                        .z = 0,
                     },
                     {
-                        .x{static_cast<int32_t>(dst_width)},
-                        .y{static_cast<int32_t>(dst_height)},
-                        .z{1},
+                        .x = static_cast<int32_t>(dst_width),
+                        .y = static_cast<int32_t>(dst_height),
+                        .z = 1,
                     },
                 },
             };
@@ -2405,11 +2412,11 @@ namespace tempest::graphics::vk
         {
             VkCommandBuffer buf = VK_NULL_HANDLE;
             VkCommandBufferAllocateInfo alloc_info = {
-                .sType{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO},
-                .pNext{nullptr},
-                .commandPool{pool},
-                .level{VK_COMMAND_BUFFER_LEVEL_PRIMARY},
-                .commandBufferCount{1},
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .commandPool = pool,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = 1,
             };
             VkResult result = dispatch->allocateCommandBuffers(&alloc_info, &buf);
             assert(result == VK_SUCCESS);
@@ -2434,10 +2441,10 @@ namespace tempest::graphics::vk
         if (global_pool.empty())
         {
             VkCommandPoolCreateInfo ci = {
-                .sType{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO},
-                .pNext{nullptr},
-                .flags{0},
-                .queueFamilyIndex{queue.queue_family_index},
+                .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .queueFamilyIndex = queue.queue_family_index,
             };
 
             VkCommandPool pool;
@@ -2446,10 +2453,10 @@ namespace tempest::graphics::vk
             assert(result == VK_SUCCESS);
 
             command_buffer_allocator allocator{
-                .queue{queue},
-                .pool{pool},
-                .dispatch{&dispatch},
-                .device{device},
+                .queue = queue,
+                .pool = pool,
+                .dispatch = &dispatch,
+                .device = device,
             };
             global_pool.push_back(allocator);
         }
@@ -2462,8 +2469,8 @@ namespace tempest::graphics::vk
     void command_buffer_recycler::release(command_buffer_allocator&& allocator, std::size_t current_frame)
     {
         recycle_pool.push_back(command_buffer_recycle_payload{
-            .allocator{std::move(allocator)},
-            .recycled_frame{current_frame},
+            .allocator = std::move(allocator),
+            .recycled_frame = current_frame,
         });
     }
 
@@ -2503,9 +2510,8 @@ namespace tempest::graphics::vk
         if (global_fence_pool.empty())
         {
             VkFenceCreateInfo create = {
-                .sType{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO},
-                .pNext{nullptr},
-                .flags{},
+                .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                .pNext = nullptr,
             };
             VkFence fen{VK_NULL_HANDLE};
             auto result = dispatch.createFence(&create, nullptr, &fen);
@@ -2522,8 +2528,8 @@ namespace tempest::graphics::vk
         if (global_semaphore_pool.empty())
         {
             VkSemaphoreCreateInfo create = {
-                .sType{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO},
-                .pNext{nullptr},
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                .pNext = nullptr,
             };
 
             VkSemaphore sem{VK_NULL_HANDLE};
@@ -2540,8 +2546,8 @@ namespace tempest::graphics::vk
     void sync_primitive_recycler::release(VkFence&& fen, std::size_t current_frame)
     {
         fence_recycle_payload payload{
-            .fence{std::move(fen)},
-            .recycled_frame{current_frame},
+            .fence = std::move(fen),
+            .recycled_frame = current_frame,
         };
 
         recycle_fence_pool.push_back(std::move(payload));
@@ -2550,8 +2556,8 @@ namespace tempest::graphics::vk
     void sync_primitive_recycler::release(VkSemaphore&& sem, std::size_t current_frame)
     {
         semaphore_recycle_payload payload{
-            .sem{std::move(sem)},
-            .recycled_frame{current_frame},
+            .sem = std::move(sem),
+            .recycled_frame = current_frame,
         };
 
         recycle_semaphore_pool.push_back(std::move(payload));

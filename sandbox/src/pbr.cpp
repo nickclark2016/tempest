@@ -93,12 +93,12 @@ void pbr_demo()
     auto& graphics_device = graphics_ctx->create_device(id);
     auto win = graphics::window_factory::create({
         .title{"Tempest Render Graph Demo"},
-        .width{1920},
-        .height{1080},
+        .width = 1920,
+        .height = 1080,
     });
     graphics::imgui_context::initialize_for_window(*win);
 
-    auto swapchain = graphics_device.create_swapchain({.win{win.get()}, .desired_frame_count{3}});
+    auto swapchain = graphics_device.create_swapchain({.win = win.get(), .desired_frame_count = 3});
 
     auto rgc = graphics::render_graph_compiler::create_compiler(&global_allocator, &graphics_device);
 
@@ -166,21 +166,21 @@ void pbr_demo()
     });
 
     auto color_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::RGBA8_SRGB},
-        .type{graphics::image_type::IMAGE_2D},
-        .persistent{true},
-        .name{"Color Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::RGBA8_SRGB,
+        .type = graphics::image_type::IMAGE_2D,
+        .persistent = true,
+        .name = "Color Buffer Target",
     });
 
     auto depth_buffer = rgc->create_image({
-        .width{1920},
-        .height{1080},
-        .fmt{graphics::resource_format::D32_FLOAT},
-        .type{graphics::image_type::IMAGE_2D},
-        .persistent{true},
-        .name{"Depth Buffer Target"},
+        .width = 1920,
+        .height = 1080,
+        .fmt = graphics::resource_format::D32_FLOAT,
+        .type = graphics::image_type::IMAGE_2D,
+        .persistent = true,
+        .name = "Depth Buffer Target",
     });
 
     rgc->enable_imgui();

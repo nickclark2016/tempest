@@ -32,18 +32,18 @@ namespace tempest::graphics
                                  : static_cast<std::uint32_t>(tex_dat.mips.size());
 
             image_create_info ci = {
-                .type{image_type::IMAGE_2D},
-                .width{tex_dat.mips[0].width},
-                .height{tex_dat.mips[0].height},
-                .depth{1},
-                .layers{1},
-                .mip_count{mip_count},
-                .format{tex_dat.fmt},
-                .samples{sample_count::COUNT_1},
-                .transfer_source{true},
-                .transfer_destination{true},
-                .sampled{true},
-                .name{tex_dat.name},
+                .type = image_type::IMAGE_2D,
+                .width = tex_dat.mips[0].width,
+                .height = tex_dat.mips[0].height,
+                .depth = 1,
+                .layers = 1,
+                .mip_count = mip_count,
+                .format = tex_dat.fmt,
+                .samples = sample_count::COUNT_1,
+                .transfer_source = true,
+                .transfer_destination = true,
+                .sampled = true,
+                .name = tex_dat.name,
             };
 
             images.push_back(dev.create_image(ci));
