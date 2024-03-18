@@ -153,8 +153,23 @@ namespace tempest::graphics::glfw
             return actions;
         }
 
+        static consteval std::array<core::mouse_button, GLFW_MOUSE_BUTTON_LAST + 1> build_mouse_button_map()
+        {
+            std::array<core::mouse_button, GLFW_MOUSE_BUTTON_LAST + 1> buttons;
+            buttons[GLFW_MOUSE_BUTTON_1] = core::mouse_button::MB_1;
+            buttons[GLFW_MOUSE_BUTTON_2] = core::mouse_button::MB_2;
+            buttons[GLFW_MOUSE_BUTTON_3] = core::mouse_button::MB_3;
+            buttons[GLFW_MOUSE_BUTTON_4] = core::mouse_button::MB_4;
+            buttons[GLFW_MOUSE_BUTTON_5] = core::mouse_button::MB_5;
+            buttons[GLFW_MOUSE_BUTTON_6] = core::mouse_button::MB_6;
+            buttons[GLFW_MOUSE_BUTTON_7] = core::mouse_button::MB_7;
+            buttons[GLFW_MOUSE_BUTTON_8] = core::mouse_button::MB_8;
+            return buttons;
+        }
+
         static constexpr auto glfw_to_tempest_keys = build_key_map();
         static constexpr auto glfw_to_tempest_key_actions = build_key_action_map();
+        static constexpr auto glfw_to_tempest_mouse_buttons = build_mouse_button_map();
 
     } // namespace
 
@@ -192,6 +207,27 @@ namespace tempest::graphics::glfw
             for (const auto& cb : w->_keyboard_callbacks)
             {
                 cb(state);
+            }
+        });
+
+        glfwSetMouseButtonCallback(_win, [](GLFWwindow* win, int button, int action, int mods) {
+            window* w = reinterpret_cast<window*>(glfwGetWindowUserPointer(win));
+            core::mouse_button_state state = {
+                .button = glfw_to_tempest_mouse_buttons[button],
+                .action = static_cast<core::mouse_action>(action)
+            };
+
+            for (const auto& cb : w->_mouse_callbacks)
+            {
+                cb(state);
+            }
+        });
+
+        glfwSetCursorPosCallback(_win, [](GLFWwindow* win, double xpos, double ypos) {
+            window* w = reinterpret_cast<window*>(glfwGetWindowUserPointer(win));
+            for (const auto& cb : w->_cursor_callbacks)
+            {
+                cb(static_cast<float>(xpos), static_cast<float>(ypos));
             }
         });
     }

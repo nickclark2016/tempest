@@ -2,6 +2,7 @@
 #define tempest_window_hpp
 
 #include <tempest/keyboard.hpp>
+#include <tempest/mouse.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -26,8 +27,12 @@ namespace tempest::graphics
         virtual bool minimized() const noexcept = 0;
 
         virtual void register_keyboard_callback(std::function<void(const core::key_state&)>&& cb) = 0;
+        virtual void register_mouse_callback(std::function<void(const core::mouse_button_state&)>&& cb) = 0;
+        virtual void register_cursor_callback(std::function<void(float, float)> cb) = 0;
 
         virtual void show() = 0;
+        virtual void disable_cursor(bool disable = true) = 0;
+        virtual bool is_cursor_disabled() const = 0;
     };
     
     class window_factory

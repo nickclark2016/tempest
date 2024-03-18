@@ -2,6 +2,7 @@
 #define tempest_input_hpp
 
 #include "keyboard.hpp"
+#include "mouse.hpp"
 
 namespace tempest::core
 {
@@ -13,6 +14,7 @@ namespace tempest::core
     struct input_group
     {
         keyboard* kb;
+        mouse* ms;
     };
 }
 

@@ -8,8 +8,13 @@ void fps_controller::set_position(const tempest::math::vec3<float>& position)
     _position_xyz = position;
 }
 
-void fps_controller::update(const tempest::core::keyboard& kb, float dt)
+void fps_controller::update(const tempest::core::keyboard& kb, const tempest::core::mouse& ms, float dt)
 {
+    if (!ms.is_disabled())
+    {
+        return;
+    }
+
     // compute forward, right, up vectors
     float pitch = _rotation_pyr.x;
     float yaw = -_rotation_pyr.y;
@@ -42,27 +47,15 @@ void fps_controller::update(const tempest::core::keyboard& kb, float dt)
         move_dir -= right;
     }
 
-    float rot_speed = 360.0f / (std::numbers::pi_v<float> * 180.0f);
-
-    if (kb.is_key_down(tempest::core::key::DPAD_LEFT))
+    if (kb.is_key_down(tempest::core::key::LEFT_SHIFT))
     {
-        rot_dir.y += rot_speed;
+        move_dir *= 3.0f;
     }
 
-    if (kb.is_key_down(tempest::core::key::DPAD_RIGHT))
-    {
-        rot_dir.y -= rot_speed;
-    }
+    float rot_speed = 360.0f / (std::numbers::pi_v<float> * 45.0f);
 
-    if (kb.is_key_down(tempest::core::key::DPAD_UP))
-    {
-        rot_dir.x += rot_speed;
-    }
-
-    if (kb.is_key_down(tempest::core::key::DPAD_DOWN))
-    {
-        rot_dir.x -= rot_speed;
-    }
+    rot_dir.y = -(rot_speed * ms.dx());
+    rot_dir.x = -(rot_speed * ms.dy());
 
     _position_xyz += move_dir * dt;
     _rotation_pyr += rot_dir * dt;

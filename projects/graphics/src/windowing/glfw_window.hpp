@@ -48,9 +48,29 @@ namespace tempest::graphics::glfw
             glfwShowWindow(_win);
         }
 
+        void disable_cursor(bool disable = true) override
+        {
+            glfwSetInputMode(_win, GLFW_CURSOR, disable ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        }
+
+        bool is_cursor_disabled() const override
+        {
+            return glfwGetInputMode(_win, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+        }
+
         void register_keyboard_callback(std::function<void(const core::key_state&)>&& cb) override
         {
             _keyboard_callbacks.push_back(std::move(cb));
+        }
+
+        void register_mouse_callback(std::function<void(const core::mouse_button_state&)>&& cb) override
+        {
+            _mouse_callbacks.push_back(std::move(cb));
+        }
+
+        void register_cursor_callback(std::function<void(float, float)> cb) override
+        {
+            _cursor_callbacks.push_back(std::move(cb));
         }
 
         GLFWwindow* raw() const noexcept
@@ -64,6 +84,8 @@ namespace tempest::graphics::glfw
         std::uint32_t _height{};
 
         std::vector<std::function<void(const core::key_state&)>> _keyboard_callbacks;
+        std::vector<std::function<void(const core::mouse_button_state&)>> _mouse_callbacks;
+        std::vector<std::function<void(float, float)>> _cursor_callbacks;
 
         void _release();
     };
