@@ -1,7 +1,9 @@
 # Binaries
 bin/
 bin-int/
+dependencies/slang
 
+# Log folders
 logs/
 
 # Build Tool Files
@@ -15,3 +17,6 @@ Makefile
 *.ninja
 *.ninja_log
 *.ninja_deps
+
+# Caches
+ConjureCache/
