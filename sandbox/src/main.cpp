@@ -24,6 +24,8 @@ int main()
     fps_controller fps_ctrl;
     fps_ctrl.set_position({5.0f, 6.0f, 0.0f});
 
+    bool was_escape_down_last_frame = false;
+
     eng.on_update([&](tempest::engine& eng, float dt) {
         fps_ctrl.update(*input_group.kb, *input_group.ms, dt);
         auto& camera_data = eng.get_registry().get<tempest::graphics::camera_component>(camera);
@@ -33,7 +35,15 @@ int main()
 
         if (input_group.kb->is_key_down(tempest::core::key::ESCAPE))
         {
-            win->disable_cursor(!win->is_cursor_disabled());
+            if (!was_escape_down_last_frame)
+            {
+                win->disable_cursor(!win->is_cursor_disabled());
+            }
+            was_escape_down_last_frame = true;
+        }
+        else
+        {
+            was_escape_down_last_frame = false;
         }
     });
 

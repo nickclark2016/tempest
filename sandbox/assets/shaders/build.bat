@@ -9,5 +9,5 @@ if "%1" == "debug" (
     set debug_flags=-O3 -line-directive-mode none
 )
 
-..\..\..\dependencies\slang\slangc.exe pbr.slang -target spirv -o pbr.vert.spv -entry VSMain %debug_flags%
-..\..\..\dependencies\slang\slangc.exe pbr.slang -target spirv -o pbr.frag.spv -entry FSMain %debug_flags%
+..\..\..\dependencies\slang\windows\slangc.exe pbr.slang -target spirv -o pbr.vert.spv -entry VSMain %debug_flags%
+..\..\..\dependencies\slang\windows\slangc.exe pbr.slang -target spirv -o pbr.frag.spv -entry FSMain %debug_flags%
