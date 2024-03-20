@@ -52,3 +52,34 @@ workspace('Tempest', (wks) => {
         externalWarnings('Off');
     });
 });
+
+onConfigure(() => {
+    when({ system: 'windows' }, (ctx) => {
+        fetchRemoteZip({
+            url: 'https://github.com/shader-slang/slang/releases/download/v2024.1.4/slang-2024.1.4-win64.zip',
+            files: [
+                'bin/windows-x64/release/slangc.exe',
+                'bin/windows-x64/release/gfx.dll',
+                'bin/windows-x64/release/slang.dll',
+                'bin/windows-x64/release/slang-glslang.dll',
+                'bin/windows-x64/release/slang-llvm.dll',
+                'bin/windows-x64/release/slang-rt.dll'
+            ],
+            destination: './dependencies/slang/windows'
+        });
+    });
+
+    when({ system: 'linux' }, (ctx) => {
+        fetchRemoteZip({
+            url: 'https://github.com/shader-slang/slang/releases/download/v2024.1.4/slang-2024.1.4-linux-x86_64.zip',
+            files: [
+                'bin/linux-x64/release/slangc',
+                'bin/linux-x64/release/libgfx.so',
+                'bin/linux-x64/release/libslang.so',
+                'bin/linux-x64/release/libslang-glslang.so',
+                'bin/linux-x64/release/libslang-llvm.so'
+            ],
+            destination: './dependencies/slang/linux'
+        });
+    });
+});
