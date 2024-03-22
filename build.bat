@@ -1,31 +1,28 @@
-@REM @echo off
-
-@REM .\dependencies\conjure\conjure.exe ninja
-
-@REM for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
-@REM     set InstallDir=%%i
-@REM )
-
-@REM if exist "%InstallDir%\Common7\Tools\vsdevcmd.bat" (
-@REM     set "build_type=%~1"
-@REM     if "%build_type%"=="debug" (
-@REM         "%InstallDir%\Common7\Tools\vsdevcmd.bat" -arch=x64 -host_arch=x64
-@REM         ninja -f Tempest.ninja Debug_x64
-@REM     ) else if "%build_type%"=="release" (
-@REM         "%InstallDir%\Common7\Tools\vsdevcmd.bat" -arch=x64 -host_arch=x64
-@REM         ninja -f Tempest.ninja Release_x64
-@REM     ) else (
-@REM         "%InstallDir%\Common7\Tools\vsdevcmd.bat" -arch=x64 -host_arch=x64
-@REM         ninja -f Tempest.ninja Debug_x64
-@REM         ninja -f Tempest.ninja Release_x64
-@REM     )
-@REM ) else (
-@REM     echo "Faied to find vswhere"
-@REM )
-
 @echo off
 
-.\dependencies\conjure\conjure.exe ninja
+:: Check if any argument is --no-config
+set "no_config=0"
+
+for %%i in (%*) do (
+    if /I "%%i"=="--no-config" (
+        set "no_config=1"
+    )
+)
+
+:: Check if any argument is debug or release
+set "build_type=debug"
+
+for %%i in (%*) do (
+    if /I "%%i"=="debug" (
+        set "build_type=debug"
+    ) else if /I "%%i"=="release" (
+        set "build_type=release"
+    )
+)
+
+if %no_config%==0 (
+    .\dependencies\conjure\conjure.exe ninja
+)
 
 call :findInstallDir
 
@@ -46,10 +43,10 @@ if not defined InstallDir (
 exit /b
 
 :buildTempest
-if "%~1"=="debug" (
+if "%1"=="debug" (
     "%InstallDir%\Common7\Tools\vsdevcmd.bat" -arch=x64 -host_arch=x64
     ninja -f Tempest.ninja Debug_x64
-) else if "%~1"=="release" (
+) else if "%1"=="release" (
     "%InstallDir%\Common7\Tools\vsdevcmd.bat" -arch=x64 -host_arch=x64
     ninja -f Tempest.ninja Release_x64
 ) else (
