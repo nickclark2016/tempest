@@ -18,7 +18,11 @@ project('assets-tests', (prj) => {
         'assets:public',
     ]);
 
-    when('system:linux', (_) => {
+    when({ system: 'linux' }, (_) => {
         linksStatic(['dl', 'X11', 'pthread']);
-     });
+    });
+
+    when({ system: 'windows' }, (_) => {
+        defines(['_CRT_SECURE_NO_WARNINGS']);
+    });
 });

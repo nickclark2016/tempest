@@ -4,10 +4,15 @@ project('spdlog', (prj) => {
     languageVersion('C++20');
     
     files([
-        './src/spdlog.cpp',
+        './include/**',
+        './src/**',
     ]);
 
     staticRuntime('Off');
+
+    defines([
+        'SPDLOG_COMPILED_LIB',
+    ]);
 
     when({ configuration: 'Release' }, (_) => {
         optimize('Speed');
@@ -36,10 +41,22 @@ project('spdlog', (prj) => {
         './include'
     ]);
 
+    when({ system: 'windows' }, (_) => {
+        defines([
+            '_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS'
+        ]);
+    });
+
     block('spdlog:public', (_) => {
         externalIncludeDirs([
             './include'
         ]);
+
+        when({ system: 'windows' }, (_) => {
+            defines([
+                '_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS'
+            ]);
+        });
     });
 
     when({ system: 'windows' }, () => {
@@ -49,4 +66,6 @@ project('spdlog', (prj) => {
     when({ system: 'linux' }, () => {
         toolset('clang');
     });
+
+    warnings('Off');
 });
