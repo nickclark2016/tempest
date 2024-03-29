@@ -65,6 +65,8 @@ namespace tempest
             [&](const auto& mouse_state) { _windows.back().mouse->set(mouse_state); });
         _windows.back().window->register_cursor_callback(
             [&](float x, float y) { _windows.back().mouse->set_position(x, y); });
+        _windows.back().window->register_scroll_callback(
+            [&](float x, float y) { _windows.back().mouse->set_scroll(x, y); });
 
         return std::make_tuple(_windows.back().window.get(),
                                core::input_group{_windows.back().keyboard.get(), _windows.back().mouse.get()});

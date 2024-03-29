@@ -28,7 +28,8 @@ namespace tempest::graphics
 
         virtual void register_keyboard_callback(std::function<void(const core::key_state&)>&& cb) = 0;
         virtual void register_mouse_callback(std::function<void(const core::mouse_button_state&)>&& cb) = 0;
-        virtual void register_cursor_callback(std::function<void(float, float)> cb) = 0;
+        virtual void register_cursor_callback(std::function<void(float, float)>&& cb) = 0;
+        virtual void register_scroll_callback(std::function<void(float, float)>&& cb) = 0;
 
         virtual void show() = 0;
         virtual void disable_cursor(bool disable = true) = 0;

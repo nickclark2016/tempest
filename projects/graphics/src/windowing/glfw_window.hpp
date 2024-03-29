@@ -68,9 +68,14 @@ namespace tempest::graphics::glfw
             _mouse_callbacks.push_back(std::move(cb));
         }
 
-        void register_cursor_callback(std::function<void(float, float)> cb) override
+        void register_cursor_callback(std::function<void(float, float)>&& cb) override
         {
             _cursor_callbacks.push_back(std::move(cb));
+        }
+
+        void register_scroll_callback(std::function<void(float, float)>&& cb) override
+        {
+            _scroll_callbacks.push_back(std::move(cb));
         }
 
         GLFWwindow* raw() const noexcept
@@ -86,6 +91,7 @@ namespace tempest::graphics::glfw
         std::vector<std::function<void(const core::key_state&)>> _keyboard_callbacks;
         std::vector<std::function<void(const core::mouse_button_state&)>> _mouse_callbacks;
         std::vector<std::function<void(float, float)>> _cursor_callbacks;
+        std::vector<std::function<void(float, float)>> _scroll_callbacks;
 
         void _release();
     };
