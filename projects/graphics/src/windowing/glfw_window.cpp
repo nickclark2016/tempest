@@ -230,6 +230,14 @@ namespace tempest::graphics::glfw
                 cb(static_cast<float>(xpos), static_cast<float>(ypos));
             }
         });
+
+        glfwSetScrollCallback(_win, [](GLFWwindow* win, double xoffset, double yoffset) {
+            window* w = reinterpret_cast<window*>(glfwGetWindowUserPointer(win));
+            for (const auto& cb : w->_scroll_callbacks)
+            {
+                cb(static_cast<float>(xoffset), static_cast<float>(yoffset));
+            }
+        });
     }
 
     window::window(window&& other) noexcept
