@@ -2,6 +2,7 @@
 
 #include <tempest/files.hpp>
 #include <tempest/logger.hpp>
+#include <tempest/relationship_component.hpp>
 #include <tempest/transform_component.hpp>
 
 #include <cstring>
@@ -181,6 +182,15 @@ namespace tempest::graphics
                                         .self_id = static_cast<std::uint32_t>(renderable.object_id),
                                     });
 
+                                    if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
+                                    {
+                                        if (const auto parent_transform = _registry->try_get<ecs::transform_component>(relationship->parent))
+                                        {
+                                            object.model = parent_transform->matrix() * object.model;
+                                            object.inv_tranpose_model = math::transpose(math::inverse(object.model));
+                                        }
+                                    }
+
                                     _objects[renderable.object_id] = object;
 
                                     _instances[renderable.object_id] = renderable.object_id;
@@ -268,7 +278,7 @@ namespace tempest::graphics
             "PBR Opaque Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
                 bldr.depends_on(upload_pass)
                     .add_color_attachment(color_buffer, graphics::resource_access_type::READ_WRITE,
-                                          graphics::load_op::CLEAR, graphics::store_op::STORE, {0.0f, 0.0f, 0.0f, 1.0f})
+                                          graphics::load_op::CLEAR, graphics::store_op::STORE, {0.5f, 1.0f, 1.0f, 1.0f})
                     .add_depth_attachment(depth_buffer, graphics::resource_access_type::READ_WRITE,
                                           graphics::load_op::CLEAR, graphics::store_op::DONT_CARE, 0.0f)
                     .add_constant_buffer(_scene_buffer, 0, 0)
@@ -301,7 +311,6 @@ namespace tempest::graphics
                     builder.add_blit_source(color_buffer)
                         .add_external_blit_target(sc_handle)
                         .depends_on(_pbr_opaque_pass)
-                        // .should_execute([&, sc_handle]() { return _swapchains.contains(win); })
                         .on_execute([&, sc_handle, color_buffer](command_list& cmds) {
                             cmds.blit(color_buffer, _device->fetch_current_image(sc_handle));
                         });
@@ -430,25 +439,27 @@ namespace tempest::graphics
     {
         auto mat = gpu_material_data{
             .base_color_factor = material.base_color_factor,
-            .emissive_factor = math::vec3<float>(0.0f),
-            .normal_scale = 1.0f,
-            .metallic_factor = 1.0f,
-            .roughness_factor = 1.0f,
+            .emissive_factor = math::vec4<float>(material.emissive_factor.x, material.emissive_factor.y, material.emissive_factor.z, 1.0f),
+            .normal_scale = material.normal_scale,
+            .metallic_factor = material.metallic_factor,
+            .roughness_factor = material.roughness_factor,
             .alpha_cutoff = material.alpha_cutoff,
             .base_color_texture_id = material.albedo_map_id == std::numeric_limits<std::uint32_t>::max()
-                                         ? -1
-                                         : static_cast<std::int32_t>(texture_count() + material.albedo_map_id),
+                                         ? gpu_material_data::INVALID_TEXTURE_ID
+                                         : static_cast<std::int16_t>(texture_count() + material.albedo_map_id),
             .normal_texture_id = material.normal_map_id == std::numeric_limits<std::uint32_t>::max()
-                                     ? -1
-                                     : static_cast<std::int32_t>(texture_count() + material.normal_map_id),
+                                     ? gpu_material_data::INVALID_TEXTURE_ID
+                                     : static_cast<std::int16_t>(texture_count() + material.normal_map_id),
             .metallic_roughness_texture_id =
                 material.metallic_map_id == std::numeric_limits<std::uint32_t>::max()
-                    ? -1
-                    : static_cast<std::int32_t>(texture_count() + material.metallic_map_id),
-            .emissive_texture_id = -1,
+                    ? gpu_material_data::INVALID_TEXTURE_ID
+                    : static_cast<std::int16_t>(texture_count() + material.metallic_map_id),
+            .emissive_texture_id = material.emissive_map_id == std::numeric_limits<std::uint32_t>::max()
+                                       ? gpu_material_data::INVALID_TEXTURE_ID
+                                       : static_cast<std::int16_t>(texture_count() + material.emissive_map_id),
             .occlusion_texture_id = material.ao_map_id == std::numeric_limits<std::uint32_t>::max()
-                                        ? -1
-                                        : static_cast<std::int32_t>(texture_count() + material.ao_map_id),
+                                        ? gpu_material_data::INVALID_TEXTURE_ID
+                                        : static_cast<std::int16_t>(texture_count() + material.ao_map_id),
             .material_type = static_cast<gpu_material_type>(material.type),
         };
 

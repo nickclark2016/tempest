@@ -47,7 +47,14 @@ namespace tempest::assets
         std::uint32_t occlusion_map_texture = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t emissive_map_texture = std::numeric_limits<std::uint32_t>::max();
         float alpha_cutoff;
+
+        float roughness_factor;
+        float metallic_factor;
+        float normal_scale;
+
         math::vec4<float> base_color_factor;
+        math::vec3<float> emissive_factor;
+        bool double_sided;
     };
 
     struct scene_asset

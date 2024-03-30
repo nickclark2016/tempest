@@ -1890,6 +1890,10 @@ namespace tempest::graphics::vk
                                                            .shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
                                                            .shaderStorageImageArrayDynamicIndexing = VK_TRUE,
                                                            .shaderInt64 = VK_FALSE,
+                                                           .shaderInt16 = VK_TRUE,
+                                                       })
+                                                       .set_required_features_11({
+                                                           .uniformAndStorageBuffer16BitAccess = VK_TRUE,
                                                        })
                                                        .set_required_features_12({
                                                            .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,

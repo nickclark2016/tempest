@@ -42,11 +42,16 @@ namespace tempest::graphics
         std::uint32_t metallic_map_id{std::numeric_limits<std::uint32_t>::max()};
         std::uint32_t roughness_map_id{std::numeric_limits<std::uint32_t>::max()};
         std::uint32_t ao_map_id{std::numeric_limits<std::uint32_t>::max()};
+        std::uint32_t emissive_map_id{std::numeric_limits<std::uint32_t>::max()};
 
         float alpha_cutoff;
+        float metallic_factor;
+        float roughness_factor;
         float reflectance;
+        float normal_scale;
 
         math::vec4<float> base_color_factor;
+        math::vec3<float> emissive_factor;
     };
 
     struct object_payload

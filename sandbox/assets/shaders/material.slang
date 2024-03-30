@@ -21,11 +21,11 @@ struct Material {
     float alpha_cutoff;
     float reflectance;
 
-    int base_texture_id;
-    int normal_map_id;
-    int metallic_roughness_map_id;
-    int emissive_texture_id;
-    int occlusion_texture_id;
+    int16_t base_texture_id;
+    int16_t normal_map_id;
+    int16_t metallic_roughness_map_id;
+    int16_t emissive_texture_id;
+    int16_t occlusion_texture_id;
 
     MaterialType type;
 };
@@ -45,7 +45,7 @@ struct PixelData {
     float3 geom_bitangent;
     float3 geom_normal;
     float3 f0;
-    float3 diffuse;
+    float4 diffuse;
     float3 shading_normal;
     float2 uv;
     float roughness;
@@ -102,6 +102,10 @@ float3 fresnel_schlick(const float3 f0, float v_dot_h) {
     return f + f0 * (1.0 - f);
 }
 
+float fresnel_schlick(float f0, float f90, float v_dot_h) {
+    return f0 + (f90 - f0) * pow(1.0 - v_dot_h, 5.0);
+}
+
 float3 isotropic_lobe(const PixelData px, const Light light, const float3 h, const float n_dot_v, const float n_dot_l, const float n_dot_h, const float l_dot_h) {
     float d = ggx(px.roughness, n_dot_h, h);
     float v = smith_ggx(px.roughness, n_dot_v, n_dot_l);
@@ -114,8 +118,23 @@ float3 specular_lobe(const PixelData px, const Light light, const float3 h, cons
     return isotropic_lobe(px, light, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
 }
 
+float diffuse_lambert() {
+    return 1.0 / PI;
+}
+
+float diffuse_burley(float roughness, float n_dot_v, float n_dot_l, float l_dot_h) {
+    float f90 = 0.5 + 2.0 * roughness * l_dot_h * l_dot_h;
+    float view_scatter = fresnel_schlick(1.0, f90, n_dot_v);
+    float light_scatter = fresnel_schlick(1.0, f90, n_dot_l);
+    return light_scatter * view_scatter * diffuse_lambert();
+}
+
+float diffuse(float roughness, float n_dot_v, float n_dot_l, float l_dot_h) {
+    return diffuse_burley(roughness, n_dot_v, n_dot_l, l_dot_h);
+}
+
 float3 diffuse_lobe(const PixelData px, float n_dot_v, float n_dot_l, float l_dot_h) {
-    return px.diffuse / PI; // TODO: Investigate other diffuse models (burley?)
+    return px.diffuse.rgb * diffuse(px.roughness, n_dot_v, n_dot_l, l_dot_h);
 }
 
 void evaluate_directional_light(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout float3 color) {
@@ -140,7 +159,7 @@ float fetch_metallic(const MaterialState mat_state, float2 uv) {
     if (mat_state.mat.metallic_roughness_map_id < 0) {
         return 0.0;
     }
-    return mat_state.textures[mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b;
+    return mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b;
 }
 
 float3 compute_diffuse(const float3 base, float metallic) {
@@ -150,11 +169,11 @@ float3 compute_diffuse(const float3 base, float metallic) {
 void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
     float4 texture_factor = mat_state.mat.base_texture_factor;
     if (mat_state.mat.base_texture_id < 0) {
-        pixel.diffuse = texture_factor.rgb;
+        pixel.diffuse = texture_factor;
         return;
     }
 
-    float4 texture_color = mat_state.textures[mat_state.mat.base_texture_id].Sample(mat_state.linear_sampler, pixel.uv);
+    float4 texture_color = mat_state.textures[(int) mat_state.mat.base_texture_id].Sample(mat_state.linear_sampler, pixel.uv);
 
     if (texture_color.a < mat_state.mat.alpha_cutoff) {
         discard;
@@ -165,7 +184,8 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
 
     float reflectance = compute_dielectric_f0(mat_state.mat.reflectance);
 
-    pixel.diffuse = compute_diffuse(color.rgb, metallic);
+    pixel.diffuse.rgb = compute_diffuse(color.rgb, metallic);
+    pixel.diffuse.a = color.a;
     pixel.f0 = compute_f0(color, metallic, reflectance);
 }
 
@@ -173,13 +193,13 @@ void fetch_roughness(const MaterialState mat_state, inout PixelData pixel) {
     if (mat_state.mat.metallic_roughness_map_id < 0) {
         pixel.roughness = 0.0;
     } else {
-        pixel.roughness = mat_state.textures[mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g;
+        pixel.roughness = mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g;
     }
 }
 
 void fetch_normal(const MaterialState mat_state, inout PixelData pixel)
 {
-    if (mat_state.mat.normal_map_id == MAX_UINT)
+    if (mat_state.mat.normal_map_id < 0)
     {
         pixel.shading_normal = pixel.geom_normal;
         return;
@@ -187,9 +207,25 @@ void fetch_normal(const MaterialState mat_state, inout PixelData pixel)
 
     // map rg [0, 1] -> [-1, 1]
     // map b (0.5, 1] -> [0, 1]
-    float3 tan_normal = mat_state.textures[mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb * 2.0 - 1.0;
+    float3 tan_normal = mat_state.textures[(int) mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb * 2.0 - 1.0;
+
+    tan_normal.rg *= mat_state.mat.normal_scale;
+
     float3 normal = tan_normal.x * pixel.geom_tangent + tan_normal.y * pixel.geom_bitangent + tan_normal.z * pixel.geom_normal;
     pixel.shading_normal = normal;
+}
+
+void apply_emissive(const MaterialState mat_state, inout float4 color, const float2 uv) {
+    float4 emissive = mat_state.mat.emissive_factor;
+    
+    if (mat_state.mat.emissive_texture_id >= 0) {
+        emissive *= mat_state.textures[(int) mat_state.mat.emissive_texture_id].Sample(mat_state.linear_sampler, uv);
+    }
+
+    float attenuation = lerp(1.0, 5.0, emissive.w);
+    attenuation *= color.a;
+
+    color.rgb += emissive.rgb * attenuation;
 }
 
 void fetch_pixel_data(const MaterialState mat_state, inout PixelData pixel) {
@@ -199,11 +235,12 @@ void fetch_pixel_data(const MaterialState mat_state, inout PixelData pixel) {
 }
 
 float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos) {
-    float3 color = px.diffuse * 0.1;
+    float4 color = px.diffuse * 0.1;
 
-    evaluate_directional_light(px, mat_state, lighting, camera, world_pos, color);
+    evaluate_directional_light(px, mat_state, lighting, camera, world_pos, color.rgb);
+    apply_emissive(mat_state, color, px.uv);
 
-    return float4(color, 1);
+    return color;
 }
 
 #endif // tempest_material_slang

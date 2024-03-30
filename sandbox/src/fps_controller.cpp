@@ -8,6 +8,13 @@ void fps_controller::set_position(const tempest::math::vec3<float>& position)
     _position_xyz = position;
 }
 
+void fps_controller::set_rotation(const tempest::math::vec3<float>& rotation)
+{
+    _rotation_pyr = tempest::math::vec3<float>(tempest::math::as_radians(rotation.x),
+                                               tempest::math::as_radians(rotation.y),
+                                               tempest::math::as_radians(rotation.z));
+}
+
 void fps_controller::update(const tempest::core::keyboard& kb, const tempest::core::mouse& ms, float dt)
 {
     if (!ms.is_disabled())

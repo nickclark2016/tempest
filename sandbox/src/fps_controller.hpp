@@ -11,6 +11,7 @@ class fps_controller
 {
   public:
     void set_position(const tempest::math::vec3<float>& position);
+    void set_rotation(const tempest::math::vec3<float>& rotation);
     void update(const tempest::core::keyboard& kb, const tempest::core::mouse& ms, float dt);
 
     const tempest::math::mat4<float>& view() const noexcept;

@@ -369,6 +369,7 @@ namespace tempest::assets
             if (material.normalTexture.index != -1)
             {
                 mat.normal_map_texture = static_cast<std::uint32_t>(root.textures[material.normalTexture.index].source);
+                mat.normal_scale = static_cast<float>(material.normalTexture.scale);
             }
 
             if (material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
@@ -405,6 +406,16 @@ namespace tempest::assets
             {
                 material.alphaCutoff = 1.0f;
             }
+
+            mat.roughness_factor = static_cast<float>(material.pbrMetallicRoughness.roughnessFactor);
+            mat.metallic_factor = static_cast<float>(material.pbrMetallicRoughness.metallicFactor);
+            mat.emissive_factor = {
+                static_cast<float>(material.emissiveFactor[0]),
+                static_cast<float>(material.emissiveFactor[1]),
+                static_cast<float>(material.emissiveFactor[2]),
+            };
+
+            mat.double_sided = material.doubleSided;
 
             asset.materials.push_back(mat);
         }
