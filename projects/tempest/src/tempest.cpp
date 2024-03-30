@@ -132,6 +132,7 @@ namespace tempest
 
         std::uint32_t node_id = 0;
         std::uint32_t renderable_count = 0;
+
         for (auto& node : model.nodes)
         {
             auto ent = _entity_registry.acquire_entity();
@@ -144,24 +145,18 @@ namespace tempest
 
             _entity_registry.assign(ent, transform);
 
+            ++node_id;
+        }
+
+        for (auto& [node_id, ent] : node_to_entity)
+        {
+            auto& node = model.nodes[node_id];
+
             ecs::relationship_component<ecs::entity> relationship{
                 .parent = node.parent == std::numeric_limits<std::uint32_t>::max() ? root : node_to_entity[node.parent],
                 .next_sibling = ecs::tombstone,
                 .first_child = ecs::tombstone,
             };
-
-            if (relationship.parent != root)
-            {
-                auto& parent_relationship =
-                    _entity_registry.get<ecs::relationship_component<ecs::entity>>(relationship.parent);
-
-                relationship.next_sibling = parent_relationship.first_child;
-
-                if (parent_relationship.first_child == ecs::tombstone)
-                {
-                    parent_relationship.first_child = ent;
-                }
-            }
 
             _entity_registry.assign(ent, relationship);
 
@@ -175,11 +170,34 @@ namespace tempest
 
                 _entity_registry.assign(ent, renderable);
             }
-
-            ++node_id;
         }
 
-        // TODO: Load assets to renderer
+        for (auto& [_, ent] : node_to_entity)
+        {
+            auto& relationship = _entity_registry.get<ecs::relationship_component<ecs::entity>>(ent);
+            if (relationship.parent != root)
+            {
+                auto& parent_relationship =
+                    _entity_registry.get<ecs::relationship_component<ecs::entity>>(relationship.parent);
+                if (parent_relationship.first_child == ecs::tombstone)
+                {
+                    parent_relationship.first_child = ent;
+                }
+                else
+                {
+                    auto sibling = parent_relationship.first_child;
+                    while (_entity_registry.get<ecs::relationship_component<ecs::entity>>(sibling).next_sibling !=
+                           ecs::tombstone)
+                    {
+                        sibling = _entity_registry.get<ecs::relationship_component<ecs::entity>>(sibling).next_sibling;
+                    }
+
+                    auto& sibling_relationship =
+                        _entity_registry.get<ecs::relationship_component<ecs::entity>>(sibling);
+                    sibling_relationship.next_sibling = ent;
+                }
+            }
+        }
 
         std::vector<core::mesh> meshes;
         meshes.reserve(model.meshes.size());
@@ -199,9 +217,13 @@ namespace tempest
                 .normal_map_id = material.normal_map_texture,
                 .metallic_map_id = material.metallic_roughness_texture,
                 .ao_map_id = material.occlusion_map_texture,
+                .emissive_map_id = material.emissive_map_texture,
                 .alpha_cutoff = material.alpha_cutoff,
+                .metallic_factor = material.metallic_factor,
+                .roughness_factor = material.roughness_factor,
                 .reflectance = 0.0f,
                 .base_color_factor = material.base_color_factor,
+                .emissive_factor = material.emissive_factor,
             };
 
             _render_system.load_material(payload);

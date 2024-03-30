@@ -231,7 +231,7 @@ namespace tempest::math
         const auto translating = translate(translation);
         const auto scaling = tempest::math::scale(scale);
         const auto rotating = as_mat4(quat(rotation));
-        return scaling * rotating * translating;
+        return translating * rotating * scaling;
     }
 
     template <typename T>

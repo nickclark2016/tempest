@@ -46,8 +46,11 @@ namespace tempest::core
 
         void set_position(float x, float y)
         {
-            _dx = x - _x;
-            _dy = y - _y;
+            if (_x != -1.0f && _y != -1.0f) [[likely]]
+            {
+                _dx = x - _x;
+                _dy = y - _y;
+            }
 
             _x = x;
             _y = y;
@@ -135,8 +138,8 @@ namespace tempest::core
         std::array<mouse_button_state, static_cast<std::underlying_type_t<mouse_button>>(mouse_button::LAST)>
             _button_states;
 
-        float _x = 0.0f;
-        float _y = 0.0f;
+        float _x = -1.0f;
+        float _y = -1.0f;
         float _dx = 0.0f;
         float _dy = 0.0f;
         float _scroll_x = 0.0f;

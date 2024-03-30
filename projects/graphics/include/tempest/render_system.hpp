@@ -37,8 +37,10 @@ namespace tempest::graphics
 
         struct gpu_material_data
         {
+            static constexpr std::int16_t INVALID_TEXTURE_ID = -1;
+
             math::vec4<float> base_color_factor;
-            math::vec3<float> emissive_factor;
+            math::vec4<float> emissive_factor;
 
             float normal_scale;
             float metallic_factor;
@@ -46,11 +48,11 @@ namespace tempest::graphics
             float alpha_cutoff;
             float reflectance;
 
-            std::int32_t base_color_texture_id;
-            std::int32_t normal_texture_id;
-            std::int32_t metallic_roughness_texture_id;
-            std::int32_t emissive_texture_id;
-            std::int32_t occlusion_texture_id;
+            std::int16_t base_color_texture_id;
+            std::int16_t normal_texture_id;
+            std::int16_t metallic_roughness_texture_id;
+            std::int16_t emissive_texture_id;
+            std::int16_t occlusion_texture_id;
 
             gpu_material_type material_type;
         };
