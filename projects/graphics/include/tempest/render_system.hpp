@@ -85,8 +85,9 @@ namespace tempest::graphics
         struct gpu_scene_data
         {
             gpu_camera_data camera;
-            gpu_light sun;
             math::vec2<float> screen_size;
+            math::vec3<float> ambient_light;
+            gpu_light sun;
         };
 
       public:
@@ -165,9 +166,11 @@ namespace tempest::graphics
         sampler_resource_handle _closest_sampler;
 
         graphics_pipeline_resource_handle _pbr_opaque_pipeline;
+        graphics_pipeline_resource_handle _pbr_transparencies_pipeline;
 
         std::size_t _opaque_object_count{0};
         std::size_t _mask_object_count{0};
+        std::size_t _blend_object_count{0};
 
         graph_pass_handle _pbr_opaque_pass;
 
@@ -176,7 +179,7 @@ namespace tempest::graphics
 
         std::size_t _last_updated_frame{0};
 
-        void create_pbr_opaque_pipeline();
+        graphics_pipeline_resource_handle create_pbr_pipeline(bool enable_blend);
     };
 } // namespace tempest::graphics
 

@@ -6,8 +6,9 @@
 
 struct SceneGlobals {
     Camera camera;
-    Light light;
     float2 screen_size;
+    float4 ambient_light;
+    Light sun;
 };
 
 struct VertexOutput {
@@ -133,7 +134,8 @@ float3 uncharted_2_tonemap(float3 x)
 [shader("fragment")]
 float4 FSMain(VertexOutput input) {
     LightingState lighting;
-    lighting.sun = scene.light;
+    lighting.sun = scene.sun;
+    lighting.ambient_color_factor = scene.ambient_light.rgb;
 
     MaterialState material;
     material.mat = materials[input.material_id];
