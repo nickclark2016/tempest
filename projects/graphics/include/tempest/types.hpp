@@ -245,10 +245,14 @@ namespace tempest::graphics
     {
         ZERO,
         ONE,
-        SRC,
-        ONE_MINUS_SRC,
-        DST,
-        ONE_MINUS_DST
+        SRC_COLOR,
+        ONE_MINUS_SRC_COLOR,
+        SRC_ALPHA,
+        ONE_MINUS_SRC_ALPHA,
+        DST_COLOR,
+        ONE_MINUS_DST_COLOR,
+        DST_ALPHA,
+        ONE_MINUS_DST_ALPHA,
     };
 
     enum class blend_operation

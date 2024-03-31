@@ -38,6 +38,7 @@ struct MaterialState {
 
 struct LightingState {
     Light sun;
+    float3 ambient_color_factor;
 };
 
 struct PixelData {
@@ -155,6 +156,10 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
     color += (base.rgb * lighting.sun.color_intensity.rgb) * (lighting.sun.color_intensity.w * n_dot_l); 
 }
 
+void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout float3 color) {
+    evaluate_directional_light(px, mat_state, lighting, camera, world_pos, color);
+}
+
 float fetch_metallic(const MaterialState mat_state, float2 uv) {
     if (mat_state.mat.metallic_roughness_map_id < 0) {
         return 0.0;
@@ -235,9 +240,13 @@ void fetch_pixel_data(const MaterialState mat_state, inout PixelData pixel) {
 }
 
 float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos) {
-    float4 color = px.diffuse * 0.1;
+    float4 color = px.diffuse * float4(lighting.ambient_color_factor.rgb, 1);
 
-    evaluate_directional_light(px, mat_state, lighting, camera, world_pos, color.rgb);
+    evaluate_lights(px, mat_state, lighting, camera, world_pos, color.rgb);
+
+    // premultiply alpha
+    color.rgb *= px.diffuse.a;
+
     apply_emissive(mat_state, color, px.uv);
 
     return color;

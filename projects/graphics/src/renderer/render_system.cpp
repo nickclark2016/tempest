@@ -144,6 +144,7 @@ namespace tempest::graphics
             .light_type = gpu_light_type::DIRECTIONAL,
         };
         _scene_data.screen_size = math::vec2<float>(1920.0f, 1080.0f);
+        _scene_data.ambient_light = math::vec3<float>(0.1f, 0.1f, 0.1f);
 
         auto upload_pass =
             rgc->add_graph_pass("Upload Pass", queue_operation_type::TRANSFER, [&](graph_pass_builder& builder) {
@@ -182,9 +183,11 @@ namespace tempest::graphics
                                         .self_id = static_cast<std::uint32_t>(renderable.object_id),
                                     });
 
-                                    if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
+                                    if (const auto relationship =
+                                            _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
                                     {
-                                        if (const auto parent_transform = _registry->try_get<ecs::transform_component>(relationship->parent))
+                                        if (const auto parent_transform =
+                                                _registry->try_get<ecs::transform_component>(relationship->parent))
                                         {
                                             object.model = parent_transform->matrix() * object.model;
                                             object.inv_tranpose_model = math::transpose(math::inverse(object.model));
@@ -212,6 +215,14 @@ namespace tempest::graphics
                                 });
 
                             _mask_object_count = std::distance(end_opaque, end_mask);
+
+                            auto end_blends =
+                                std::stable_partition(end_mask, std::end(_instances), [&](std::uint32_t instance) {
+                                    auto& mat = _materials[_objects[instance].material_id];
+                                    return mat.material_type == gpu_material_type::PBR_BLEND;
+                                });
+
+                            _blend_object_count = std::distance(end_opaque, end_mask);
 
                             for (auto instance : _instances)
                             {
@@ -292,15 +303,32 @@ namespace tempest::graphics
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
                     .on_execute([&](graphics::command_list& cmds) {
+                        auto opaque_objects = _opaque_object_count + _mask_object_count;
+
                         cmds.set_scissor_region(0, 0, 1920, 1080)
                             .set_viewport(0, 0, 1920, 1080)
-                            .use_pipeline(_pbr_opaque_pipeline)
-                            .use_index_buffer(_vertex_pull_buffer, 0)
-                            .draw_indexed(
-                                _indirect_buffer,
-                                static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
-                                static_cast<std::uint32_t>(_opaque_object_count + _mask_object_count),
-                                sizeof(graphics::indexed_indirect_command));
+                            .use_index_buffer(_vertex_pull_buffer, 0);
+
+                        if (opaque_objects > 0)
+                        {
+                            cmds.use_pipeline(_pbr_opaque_pipeline)
+                                .draw_indexed(
+                                    _indirect_buffer,
+                                    static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
+                                    static_cast<std::uint32_t>(opaque_objects),
+                                    sizeof(graphics::indexed_indirect_command));
+                        }
+
+                        if (_blend_object_count > 0)
+                        {
+                            cmds.use_pipeline(_pbr_transparencies_pipeline)
+                                .draw_indexed(_indirect_buffer,
+                                              static_cast<std::uint32_t>(
+                                                  _device->get_buffer_frame_offset(_indirect_buffer) +
+                                                  opaque_objects * sizeof(graphics::indexed_indirect_command)),
+                                              static_cast<std::uint32_t>(_blend_object_count),
+                                              sizeof(graphics::indexed_indirect_command));
+                        }
                     });
             });
 
@@ -345,7 +373,8 @@ namespace tempest::graphics
 
         _graph->update_external_sampled_images(_pbr_opaque_pass, _images, 0, 7, graphics::pipeline_stage::FRAGMENT);
 
-        create_pbr_opaque_pipeline();
+        _pbr_opaque_pipeline = create_pbr_pipeline(false);
+        _pbr_transparencies_pipeline = create_pbr_pipeline(true);
 
         _last_updated_frame = _device->current_frame();
 
@@ -439,7 +468,8 @@ namespace tempest::graphics
     {
         auto mat = gpu_material_data{
             .base_color_factor = material.base_color_factor,
-            .emissive_factor = math::vec4<float>(material.emissive_factor.x, material.emissive_factor.y, material.emissive_factor.z, 1.0f),
+            .emissive_factor = math::vec4<float>(material.emissive_factor.x, material.emissive_factor.y,
+                                                 material.emissive_factor.z, 1.0f),
             .normal_scale = material.normal_scale,
             .metallic_factor = material.metallic_factor,
             .roughness_factor = material.roughness_factor,
@@ -466,7 +496,7 @@ namespace tempest::graphics
         _materials.push_back(mat);
     }
 
-    void render_system::create_pbr_opaque_pipeline()
+    graphics_pipeline_resource_handle render_system::create_pbr_pipeline(bool enable_blend)
     {
         auto vertex_shader_source = core::read_bytes("assets/shaders/pbr.vert.spv");
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr.frag.spv");
@@ -522,13 +552,25 @@ namespace tempest::graphics
         };
 
         graphics::resource_format color_buffer_fmt[] = {graphics::resource_format::RGBA8_SRGB};
+
         graphics::color_blend_attachment_state blending[] = {
             {
                 .enabled = false,
             },
         };
 
-        _pbr_opaque_pipeline = _device->create_graphics_pipeline({
+        if (enable_blend)
+        {
+            blending[0].enabled = true;
+            blending[0].color.src = graphics::blend_factor::ONE;
+            blending[0].color.dst = graphics::blend_factor::ONE_MINUS_SRC_ALPHA;
+            blending[0].color.op = graphics::blend_operation::ADD;
+            blending[0].alpha.src = graphics::blend_factor::ONE;
+            blending[0].alpha.dst = graphics::blend_factor::ONE_MINUS_SRC_ALPHA;
+            blending[0].alpha.op = graphics::blend_operation::ADD;
+        }
+
+        auto pipeline = _device->create_graphics_pipeline({
             .layout{
                 .set_layouts = layouts,
             },
@@ -539,12 +581,12 @@ namespace tempest::graphics
             .vertex_shader{
                 .bytes = vertex_shader_source,
                 .entrypoint = "main",
-                .name = "PBR Opaque Shader Module",
+                .name = "PBR Shader Module",
             },
             .fragment_shader{
                 .bytes = fragment_shader_source,
                 .entrypoint = "main",
-                .name = "PBR Opaque Shader Module",
+                .name = "PBR Shader Module",
             },
             .depth_testing{
                 .enable_test = true,
@@ -554,9 +596,11 @@ namespace tempest::graphics
             .blending{
                 .attachment_blend_ops = blending,
             },
-            .name = "PBR Opaque Graphics Pipeline",
+            .name = "PBR Graphics Pipeline",
         });
 
-        _graphics_pipelines.push_back(_pbr_opaque_pipeline);
+        _graphics_pipelines.push_back(pipeline);
+
+        return pipeline;
     }
 } // namespace tempest::graphics

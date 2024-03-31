@@ -297,7 +297,7 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        constexpr VkBlendFactor to_vulkan(blend_factor factor, bool is_color)
+        constexpr VkBlendFactor to_vulkan(blend_factor factor)
         {
             switch (factor)
             {
@@ -305,14 +305,22 @@ namespace tempest::graphics::vk
                 return VK_BLEND_FACTOR_ZERO;
             case blend_factor::ONE:
                 return VK_BLEND_FACTOR_ONE;
-            case blend_factor::SRC:
-                return is_color ? VK_BLEND_FACTOR_SRC_COLOR : VK_BLEND_FACTOR_SRC_ALPHA;
-            case blend_factor::ONE_MINUS_SRC:
-                return is_color ? VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            case blend_factor::DST:
-                return is_color ? VK_BLEND_FACTOR_DST_COLOR : VK_BLEND_FACTOR_DST_ALPHA;
-            case blend_factor::ONE_MINUS_DST:
-                return is_color ? VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR : VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+            case blend_factor::SRC_COLOR:
+                return VK_BLEND_FACTOR_SRC_COLOR;
+            case blend_factor::ONE_MINUS_SRC_COLOR:
+                return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+            case blend_factor::DST_COLOR:
+                return VK_BLEND_FACTOR_DST_COLOR;
+            case blend_factor::ONE_MINUS_DST_COLOR:
+                return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+            case blend_factor::SRC_ALPHA:
+                return VK_BLEND_FACTOR_SRC_ALPHA;
+            case blend_factor::ONE_MINUS_SRC_ALPHA:
+                return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            case blend_factor::DST_ALPHA:
+                return VK_BLEND_FACTOR_DST_ALPHA;
+            case blend_factor::ONE_MINUS_DST_ALPHA:
+                return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
             }
 
             logger->critical("Logic Error: Failed to determine proper VkBlendFactor. Forcing exit.");
@@ -1287,11 +1295,11 @@ namespace tempest::graphics::vk
         {
             VkPipelineColorBlendAttachmentState state = {
                 .blendEnable = blend_info.enabled ? VK_TRUE : VK_FALSE,
-                .srcColorBlendFactor = to_vulkan(blend_info.color.src, true),
-                .dstColorBlendFactor = to_vulkan(blend_info.color.dst, true),
+                .srcColorBlendFactor = to_vulkan(blend_info.color.src),
+                .dstColorBlendFactor = to_vulkan(blend_info.color.dst),
                 .colorBlendOp = to_vulkan(blend_info.color.op),
-                .srcAlphaBlendFactor = to_vulkan(blend_info.alpha.src, false),
-                .dstAlphaBlendFactor = to_vulkan(blend_info.alpha.dst, false),
+                .srcAlphaBlendFactor = to_vulkan(blend_info.alpha.src),
+                .dstAlphaBlendFactor = to_vulkan(blend_info.alpha.dst),
                 .alphaBlendOp = to_vulkan(blend_info.alpha.op),
                 .colorWriteMask =
                     compute_blend_write_mask(ci.target.color_attachment_formats[attachment_blends.size()]),
@@ -1893,6 +1901,7 @@ namespace tempest::graphics::vk
                                                            .shaderInt16 = VK_TRUE,
                                                        })
                                                        .set_required_features_11({
+                                                           .storageBuffer16BitAccess = VK_TRUE,
                                                            .uniformAndStorageBuffer16BitAccess = VK_TRUE,
                                                        })
                                                        .set_required_features_12({
