@@ -112,6 +112,9 @@ namespace tempest::graphics::vk
 
         operator VkCommandBuffer() const noexcept;
 
+        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, compute_pipeline_resource_handle handle) override;
+        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, graphics_pipeline_resource_handle handle) override;
+
         command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
                                    float max_depth = 1.0f, std::uint32_t viewport_id = 0, bool flip = true) override;
         command_list& set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,

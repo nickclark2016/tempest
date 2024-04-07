@@ -80,7 +80,7 @@ namespace tempest::graphics
         _resource_lib.add_image_usage(handle, image_resource_usage::COLOR_ATTACHMENT);
         _image_states.push_back(image_resource_state{
             .type = access,
-            .img = handle,
+            .handles = {{handle}},
             .usage = image_resource_usage::COLOR_ATTACHMENT,
             .first_access = first_access,
             .last_access = last_access,
@@ -117,7 +117,7 @@ namespace tempest::graphics
         _resource_lib.add_image_usage(handle, image_resource_usage::DEPTH_ATTACHMENT);
         _image_states.push_back(image_resource_state{
             .type = access,
-            .img = handle,
+            .handles = {{handle}},
             .usage = image_resource_usage::DEPTH_ATTACHMENT,
             .first_access = first_access,
             .last_access = last_access,
@@ -135,7 +135,7 @@ namespace tempest::graphics
         _resource_lib.add_image_usage(handle, image_resource_usage::SAMPLED);
         _image_states.push_back(image_resource_state{
             .type = resource_access_type::READ,
-            .img = handle,
+            .handles = {{handle}},
             .usage = image_resource_usage::SAMPLED,
             .first_access = first_read,
             .last_access = last_read,
@@ -220,7 +220,7 @@ namespace tempest::graphics
         _resource_lib.add_image_usage(handle, image_resource_usage::TRANSFER_DESTINATION);
         _image_states.push_back(image_resource_state{
             .type = resource_access_type::WRITE,
-            .img = handle,
+            .handles = {{handle}},
             .usage = image_resource_usage::TRANSFER_DESTINATION,
             .first_access = first_write,
             .last_access = last_write,
@@ -248,7 +248,7 @@ namespace tempest::graphics
         _resource_lib.add_image_usage(handle, image_resource_usage::TRANSFER_SOURCE);
         _image_states.push_back(image_resource_state{
             .type = resource_access_type::READ,
-            .img = handle,
+            .handles = {{handle}},
             .usage = image_resource_usage::TRANSFER_SOURCE,
             .first_access = first_read,
             .last_access = last_read,
@@ -263,7 +263,29 @@ namespace tempest::graphics
         _resource_lib.add_image_usage(handle, image_resource_usage::STORAGE);
         _image_states.push_back(image_resource_state{
             .type = access,
-            .img = handle,
+            .handles = {{handle}},
+            .usage = image_resource_usage::STORAGE,
+            .first_access = first_access,
+            .last_access = last_access,
+            .set = set,
+            .binding = binding,
+        });
+        return *this;
+    }
+
+    graph_pass_builder& graph_pass_builder::add_storage_image(std::span<image_resource_handle> handle,
+                                                              resource_access_type access, std::uint32_t set,
+                                                              std::uint32_t binding, pipeline_stage first_access,
+                                                              pipeline_stage last_access)
+    {
+        for (auto hnd : handle)
+        {
+            _resource_lib.add_image_usage(hnd, image_resource_usage::STORAGE);
+        }
+
+        _image_states.push_back(image_resource_state{
+            .type = access,
+            .handles = {handle.begin(), handle.end()},
             .usage = image_resource_usage::STORAGE,
             .first_access = first_access,
             .last_access = last_access,

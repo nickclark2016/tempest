@@ -1,6 +1,5 @@
 #include "camera.slang"
 #include "consts.slang"
-#include "lighting.slang"
 #include "material.slang"
 #include "mesh.slang"
 #include "vertex_pull.slang"
@@ -13,13 +12,16 @@ struct SceneGlobals {
 };
 
 struct VertexOutput {
-    float4 position       : SV_Position;
-    float3 world_position : Position;
-    float2 uv             : UV0;
-    float3 normal         : Normal;
-    float3 tangent        : Tangent;
-    float3 bitangent      : Bitangent;
-    uint material_id      : Material;
+    float4 position  : SV_Position;
+    float2 uv        : UV0;
+    float3 normal    : Normal;
+    float3 tangent   : Tangent;
+    float3 bitangent : Bitangent;
+    uint material_id;
+};
+
+struct FragmentOutput {
+    float2 encoded_normal : SV_Target0;
 };
 
 [vk_binding(0, 0)] ConstantBuffer<SceneGlobals> scene;
@@ -49,35 +51,20 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     float3 geom_tangent = normalize(mul(model_3x3, v.tangent.xyz));
     float3 geom_bitan = normalize(cross(geom_normal, geom_tangent)) * v.tangent.w;
 
-    VertexOutput result;
+    VertexOutput output;
+    output.position = clip_pos;
+    output.uv = v.uv0;
+    output.normal = geom_normal;
+    output.tangent = geom_tangent;
+    output.bitangent = geom_bitan;
+    output.material_id = instance.material_id;
 
-    result.position = clip_pos;
-    result.world_position = world_pos.xyz;
-    result.uv = v.uv0;
-    result.normal = geom_normal;
-    result.tangent = geom_tangent;
-    result.bitangent = geom_bitan;
-    result.material_id = instance.material_id;
-
-    return result;
-}
-
-float3 uncharted_2_tonemap(float3 x)
-{
-	float A = 0.15;
-	float B = 0.50;
-	float C = 0.10;
-	float D = 0.20;
-	float E = 0.02;
-	float F = 0.30;
-	return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+    return output;
 }
 
 [shader("fragment")]
-float4 FSMain(VertexOutput input) {
-    LightingState lighting;
-    lighting.sun = scene.sun;
-    lighting.ambient_color_factor = scene.ambient_light.rgb;
+FragmentOutput FSMain(VertexOutput input) {
+    FragmentOutput output;
 
     MaterialState material;
     material.mat = materials[input.material_id];
@@ -92,9 +79,11 @@ float4 FSMain(VertexOutput input) {
 
     fetch_pixel_data(material, pd);
 
-    float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position);
-    color.rgb = uncharted_2_tonemap(color.rgb * 4.5);
-    color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
+    if (pd.diffuse.w < material.mat.alpha_cutoff) {
+        discard;
+    }
 
-    return color;
+    output.encoded_normal = encode_normal(pd.shading_normal);
+
+    return output;
 }

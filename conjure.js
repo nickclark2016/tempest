@@ -56,7 +56,7 @@ workspace('Tempest', (wks) => {
 onConfigure(() => {
     when({ system: 'windows' }, (_) => {
         fetchRemoteZip({
-            url: 'https://github.com/shader-slang/slang/releases/download/v2024.1.4/slang-2024.1.4-win64.zip',
+            url: 'https://github.com/shader-slang/slang/releases/download/v2024.1.6/slang-2024.1.6-win64.zip',
             files: [
                 'bin/windows-x64/release/slangc.exe',
                 'bin/windows-x64/release/gfx.dll',
@@ -71,7 +71,7 @@ onConfigure(() => {
 
     when({ system: 'linux' }, (_) => {
         fetchRemoteZip({
-            url: 'https://github.com/shader-slang/slang/releases/download/v2024.1.4/slang-2024.1.4-linux-x86_64.zip',
+            url: 'https://github.com/shader-slang/slang/releases/download/v2024.1.6/slang-2024.1.6-linux-x86_64.zip',
             files: [
                 'bin/linux-x64/release/slangc',
                 'bin/linux-x64/release/libgfx.so',

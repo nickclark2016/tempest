@@ -1905,6 +1905,7 @@ namespace tempest::graphics::vk
                                                            .uniformAndStorageBuffer16BitAccess = VK_TRUE,
                                                        })
                                                        .set_required_features_12({
+                                                           .shaderFloat16 = VK_TRUE,
                                                            .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
                                                            .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
                                                            .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
@@ -2015,6 +2016,26 @@ namespace tempest::graphics::vk
     command_list::operator VkCommandBuffer() const noexcept
     {
         return _cmds;
+    }
+
+    command_list& command_list::push_constants(std::uint32_t offset, std::span<const std::byte> data,
+                                               compute_pipeline_resource_handle handle)
+    {
+        auto pipeline = _device->access_compute_pipeline(handle);
+        _dispatch->cmdPushConstants(_cmds, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, offset,
+                                    static_cast<std::uint32_t>(data.size()), data.data());
+
+        return *this;
+    }
+
+    command_list& command_list::push_constants(std::uint32_t offset, std::span<const std::byte> data,
+                                               graphics_pipeline_resource_handle handle)
+    {
+        auto pipeline = _device->access_graphics_pipeline(handle);
+        _dispatch->cmdPushConstants(_cmds, pipeline->pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS, offset,
+                                    static_cast<std::uint32_t>(data.size()), data.data());
+
+        return *this;
     }
 
     command_list& command_list::set_viewport(float x, float y, float width, float height, float min_depth,

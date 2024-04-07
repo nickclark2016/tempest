@@ -52,6 +52,27 @@ struct PixelData {
     float roughness;
 };
 
+// Octohedral encoding
+
+float2 octohedral_wrap(float2 v) {
+    return (1 - abs(v.yx)) * select(v.xy >= 0.0, 1.0, -1.0);
+}
+
+float2 encode_normal(float3 normal) {
+    normal /= (abs(normal.x) + abs(normal.y) + abs(normal.z));
+    normal.xy = normal.z >= 0.0 ? normal.xy : octohedral_wrap(normal.xy);
+    normal.xy = normal.xy * 0.5 + 0.5;
+    return normal.xy;
+}
+
+float3 decode_normal(float2 encoded_normal) {
+    float2 f = encoded_normal * 2.0 - 1.0;
+    float3 n = float3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+    float t = saturate(-n.z);
+    n.xy += select(n.xy >= 0.0, -t, t);
+    return normalize(n);
+}
+
 float3 compute_diffuse(const float4 base, float metallic) {
     return base.rgb * (1.0 - metallic);
 }
