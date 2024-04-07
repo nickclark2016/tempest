@@ -18,7 +18,7 @@ namespace tempest::graphics
     {
         resource_access_type type;
 
-        image_resource_handle img;
+        std::vector<image_resource_handle> handles;
         image_resource_usage usage;
         pipeline_stage first_access;
         pipeline_stage last_access;
@@ -145,6 +145,10 @@ namespace tempest::graphics
                                             pipeline_stage first_read = pipeline_stage::INFER,
                                             pipeline_stage last_read = pipeline_stage::INFER);
         graph_pass_builder& add_storage_image(image_resource_handle handle, resource_access_type access,
+                                              std::uint32_t set, std::uint32_t binding,
+                                              pipeline_stage first_access = pipeline_stage::INFER,
+                                              pipeline_stage last_access = pipeline_stage::INFER);
+        graph_pass_builder& add_storage_image(std::span<image_resource_handle> handle, resource_access_type access,
                                               std::uint32_t set, std::uint32_t binding,
                                               pipeline_stage first_access = pipeline_stage::INFER,
                                               pipeline_stage last_access = pipeline_stage::INFER);

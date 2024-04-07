@@ -10,4 +10,7 @@ fi
 # Compile shaders
 ../../../dependencies/slang/linux/slangc pbr.slang -target spirv -o pbr.vert.spv -entry VSMain $DEBUG && \
 ../../../dependencies/slang/linux/slangc pbr.slang -target spirv -o pbr.frag.spv -entry FSMain $DEBUG && \
+../../../dependencies/slang/linux/slangc hzb.clang -target spirv -o hzb.comp.spv -entry CSMain $DEBUG && \
+../../../dependencies/slang/linux/slangc zprepass.clang -target spirv -o zprepass.vert.spv -entry VSMain $DEBUG && \
+../../../dependencies/slang/linux/slangc zprepass.clang -target spirv -o zprepass.frag.spv -entry FSMain $DEBUG && \
 echo "Compiled PBR shaders"

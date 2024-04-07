@@ -156,6 +156,7 @@ namespace tempest::graphics
         std::uint32_t height;
         std::uint32_t depth{1};
         std::uint32_t layers{1};
+        std::uint32_t mips{1};
         resource_format fmt;
         image_type type;
         bool persistent = false;
@@ -506,6 +507,21 @@ namespace tempest::graphics
     {
       public:
         virtual ~command_list() = default;
+
+        template <typename T> requires(!std::is_same_v<T, std::span<const std::byte>>)
+        command_list& push_constants(std::uint32_t offset, const T& data, compute_pipeline_resource_handle handle)
+        {
+            return push_constants(offset, std::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
+        }
+
+        template <typename T> requires(!std::is_same_v<T, std::span<const std::byte>>)
+        command_list& push_constants(std::uint32_t offset, const T& data, graphics_pipeline_resource_handle handle)
+        {
+            return push_constants(offset, std::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
+        }
+
+        virtual command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, compute_pipeline_resource_handle handle) = 0;
+        virtual command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, graphics_pipeline_resource_handle handle) = 0;
 
         virtual command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
                                            float max_depth = 1.0f, std::uint32_t viewport_id = 0, bool flip = true) = 0;

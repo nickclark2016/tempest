@@ -61,7 +61,8 @@ namespace tempest::graphics::vk
             case image_resource_usage::DEPTH_ATTACHMENT:
                 return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
             case image_resource_usage::SAMPLED:
-                return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                       VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
             case image_resource_usage::STORAGE: {
                 return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             }
@@ -335,7 +336,7 @@ namespace tempest::graphics::vk
             .height = desc.height,
             .depth = desc.depth,
             .layers = desc.layers,
-            .mip_count = 1,
+            .mip_count = desc.mips,
             .format = desc.fmt,
             .samples = desc.samples,
             .persistent = desc.persistent,
@@ -913,57 +914,67 @@ namespace tempest::graphics::vk
 
             for (const auto& img : pass_ref.image_usage())
             {
-                auto image_state_it = _last_known_state.images.find(img.img.as_uint64());
-                auto vk_img = _device->access_image(img.img);
-
-                render_graph_image_state next_state = {
-                    .persistent = vk_img->persistent,
-                    .stage_mask = compute_image_stage_access(img.type, img.usage, img.first_access),
-                    .access_mask = compute_image_access_mask(img.type, img.usage, pass_ref.operation_type()),
-                    .image_layout = compute_layout(img.usage),
-                    .image = vk_img->image,
-                    .aspect = vk_img->view_info.subresourceRange.aspectMask,
-                    .base_mip = vk_img->view_info.subresourceRange.baseMipLevel,
-                    .mip_count = vk_img->view_info.subresourceRange.levelCount,
-                    .base_array_layer = vk_img->view_info.subresourceRange.baseArrayLayer,
-                    .layer_count = vk_img->view_info.subresourceRange.layerCount,
-                    .queue_family = queue.queue_family_index,
-                };
-
-                VkImageMemoryBarrier2 img_barrier_2 = {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                    .srcAccessMask = 0,
-                    .dstStageMask = next_state.stage_mask,
-                    .dstAccessMask = next_state.access_mask,
-                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout = next_state.image_layout,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = vk_img->image,
-                    .subresourceRange = vk_img->view_info.subresourceRange,
-                };
-
-                if (image_state_it != _last_known_state.images.end()) [[likely]]
+                for (const auto& img_handle : img.handles)
                 {
-                    render_graph_image_state last_state = image_state_it->second;
+                    auto image_state_it = _last_known_state.images.find(img_handle.as_uint64());
+                    auto vk_img = _device->access_image(img_handle);
 
-                    img_barrier_2.oldLayout = last_state.image_layout;
-                    img_barrier_2.srcAccessMask = last_state.access_mask;
-                    img_barrier_2.srcStageMask = last_state.stage_mask;
+                    render_graph_image_state next_state = {
+                        .persistent = vk_img->persistent,
+                        .stage_mask = compute_image_stage_access(img.type, img.usage, img.first_access),
+                        .access_mask = compute_image_access_mask(img.type, img.usage, pass_ref.operation_type()),
+                        .image_layout = compute_layout(img.usage),
+                        .image = vk_img->image,
+                        .aspect = vk_img->view_info.subresourceRange.aspectMask,
+                        .base_mip = vk_img->view_info.subresourceRange.baseMipLevel,
+                        .mip_count = vk_img->view_info.subresourceRange.levelCount,
+                        .base_array_layer = vk_img->view_info.subresourceRange.baseArrayLayer,
+                        .layer_count = vk_img->view_info.subresourceRange.layerCount,
+                        .queue_family = queue.queue_family_index,
+                    };
+
+                    VkImageMemoryBarrier2 img_barrier_2 = {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                        .pNext = nullptr,
+                        .srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                        .srcAccessMask = 0,
+                        .dstStageMask = next_state.stage_mask,
+                        .dstAccessMask = next_state.access_mask,
+                        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                        .newLayout = next_state.image_layout,
+                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .image = vk_img->image,
+                        .subresourceRange = vk_img->view_info.subresourceRange,
+                    };
+
+                    if (image_state_it != _last_known_state.images.end()) [[likely]]
+                    {
+                        render_graph_image_state last_state = image_state_it->second;
+
+                        img_barrier_2.oldLayout = last_state.image_layout;
+                        img_barrier_2.srcAccessMask = last_state.access_mask;
+                        img_barrier_2.srcStageMask = last_state.stage_mask;
+
+                        if (pass_ref.operation_type() == queue_operation_type::COMPUTE &&
+                            (vk_img->img_info.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
+                                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                        {
+                            img_barrier_2.srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+                        }
+                    }
+
+                    if (img_barrier_2.oldLayout != img_barrier_2.newLayout ||
+                        img_barrier_2.srcQueueFamilyIndex != img_barrier_2.dstQueueFamilyIndex ||
+                        has_write_mask(img_barrier_2.srcAccessMask) || has_write_mask(img_barrier_2.dstAccessMask))
+                    {
+                        img_barrier_2.dstStageMask |= next_state.stage_mask;
+                        image_barriers_2.push_back(img_barrier_2);
+                    }
+
+                    // write new state for the end of the frame
+                    _last_known_state.images[img_handle.as_uint64()] = next_state;
                 }
-
-                if (img_barrier_2.oldLayout != img_barrier_2.newLayout ||
-                    img_barrier_2.srcQueueFamilyIndex != img_barrier_2.dstQueueFamilyIndex ||
-                    has_write_mask(img_barrier_2.srcAccessMask) || has_write_mask(img_barrier_2.dstAccessMask))
-                {
-                    img_barrier_2.dstStageMask |= next_state.stage_mask;
-                    image_barriers_2.push_back(img_barrier_2);
-                }
-
-                // write new state for the end of the frame
-                _last_known_state.images[img.img.as_uint64()] = next_state;
             }
 
             for (const auto& buf : pass_ref.buffer_usage())
@@ -1085,7 +1096,7 @@ namespace tempest::graphics::vk
 
                 for (const auto& img : pass_ref.image_usage())
                 {
-                    auto vk_img = _device->access_image(img.img);
+                    auto vk_img = _device->access_image(img.handles[0]);
 
                     if (img.usage == image_resource_usage::COLOR_ATTACHMENT)
                     {
@@ -1514,26 +1525,32 @@ namespace tempest::graphics::vk
                 bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
                     .binding = img.binding,
                     .descriptorType = type,
-                    .descriptorCount = 1,
+                    .descriptorCount = static_cast<std::uint32_t>(img.handles.size()),
                     .stageFlags = compute_accessible_stages(pass.operation_type()),
                     .pImmutableSamplers = nullptr,
                 });
 
-                auto vk_img = _device->access_image(img.img);
+                auto img_count = static_cast<std::uint32_t>(img.handles.size());
+                auto images = new VkDescriptorImageInfo[img_count];
+
+                for (std::uint32_t i = 0; i < img_count; ++i)
+                {
+                    auto vk_img = _device->access_image(img.handles[i]);
+                    images[i] = {
+                        .sampler = VK_NULL_HANDLE,
+                        .imageView = vk_img->view,
+                        .imageLayout = compute_layout(img.usage),
+                    };
+                }
 
                 binding_writes[img.set].push_back(VkWriteDescriptorSet{
                     .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                     .pNext = nullptr,
                     .dstBinding = img.binding,
                     .dstArrayElement = 0,
-                    .descriptorCount = 1,
+                    .descriptorCount = img_count,
                     .descriptorType = type,
-                    .pImageInfo =
-                        new VkDescriptorImageInfo{
-                            .sampler = VK_NULL_HANDLE,
-                            .imageView = vk_img->view,
-                            .imageLayout = compute_layout(img.usage),
-                        },
+                    .pImageInfo = images,
                     .pBufferInfo = nullptr,
                     .pTexelBufferView = nullptr,
                 });

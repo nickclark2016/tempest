@@ -90,6 +90,12 @@ namespace tempest::graphics
             gpu_light sun;
         };
 
+        struct hi_z_data
+        {
+            math::vec2<std::uint32_t> size;
+            std::uint32_t mip_count; 
+        };
+
       public:
         render_system(ecs::registry& entities);
 
@@ -152,6 +158,7 @@ namespace tempest::graphics
         buffer_resource_handle _instance_buffer;
         buffer_resource_handle _object_buffer;
         buffer_resource_handle _indirect_buffer;
+        buffer_resource_handle _hi_z_buffer_constants;
 
         std::uint32_t _mesh_bytes{0};
 
@@ -167,19 +174,25 @@ namespace tempest::graphics
 
         graphics_pipeline_resource_handle _pbr_opaque_pipeline;
         graphics_pipeline_resource_handle _pbr_transparencies_pipeline;
+        graphics_pipeline_resource_handle _z_prepass_pipeline;
+        compute_pipeline_resource_handle _hzb_build_pipeline;
 
         std::size_t _opaque_object_count{0};
         std::size_t _mask_object_count{0};
         std::size_t _blend_object_count{0};
 
         graph_pass_handle _pbr_opaque_pass;
+        graph_pass_handle _z_prepass_pass;
 
         gpu_scene_data _scene_data;
+        hi_z_data _hi_z_data;
         ecs::entity _camera_entity{ecs::tombstone};
 
         std::size_t _last_updated_frame{0};
 
         graphics_pipeline_resource_handle create_pbr_pipeline(bool enable_blend);
+        graphics_pipeline_resource_handle create_z_prepass_pipeline();
+        compute_pipeline_resource_handle create_hzb_build_pipeline();
     };
 } // namespace tempest::graphics
 
