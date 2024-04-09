@@ -380,9 +380,11 @@ namespace tempest::ecs
         }
 
         template <typename K, typename V1, typename V2>
-        inline constexpr bool operator==(const basic_sparse_map_iterator<K, V1>& lhs, const basic_sparse_map_iterator<K, V2>& rhs) noexcept
+        inline constexpr bool operator==(const basic_sparse_map_iterator<K, V1>& lhs,
+                                         const basic_sparse_map_iterator<K, V2>& rhs) noexcept
         {
-            static_assert(std::is_same_v<std::remove_cvref_t<V1>, std::remove_cvref_t<V2>>, "V1 and V2 must have the same type with topmost CV-qualifiers and reference removed");
+            static_assert(std::is_same_v<std::remove_cvref_t<V1>, std::remove_cvref_t<V2>>,
+                          "V1 and V2 must have the same type with topmost CV-qualifiers and reference removed");
             return lhs.get_index() == rhs.get_index();
         }
 
@@ -556,12 +558,19 @@ namespace tempest::ecs
         constexpr void erase(K k) noexcept override;
         constexpr iterator insert(K k, const V& v);
         constexpr iterator insert(K k, V&& v);
+        constexpr iterator insert_or_replace(K k, const V& v);
         constexpr void clear();
 
         template <typename... Ts>
         constexpr iterator emplace(K k, Ts&&... ts);
 
+        template <typename... Ts>
+        constexpr iterator emplace_or_replace(K k, Ts&&... ts);
+
         void reserve(std::size_t new_capacity) override;
+
+        K* keys() const noexcept;
+        V* values() const noexcept;
 
       private:
         constexpr void _release_resources();
@@ -603,7 +612,7 @@ namespace tempest::ecs
     {
         _request_storage_resize(rhs._packed_capacity);
         std::uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
-        for (std::size_t page_idx; page_idx < _sparse_page_count; ++page_idx)
+        for (std::size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
         {
             std::copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
         }
@@ -639,7 +648,7 @@ namespace tempest::ecs
 
         _request_storage_resize(rhs._packed_capacity);
         std::uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
-        for (std::size_t page_idx; page_idx < _sparse_page_count; ++page_idx)
+        for (std::size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
         {
             std::copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
         }
@@ -975,7 +984,7 @@ namespace tempest::ecs
         std::uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
         std::uninitialized_copy_n(rhs._values, rhs._packed_count, _values);
 
-        for (std::size_t page_idx; page_idx < _sparse_page_count; ++page_idx)
+        for (std::size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
         {
             std::copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
         }
@@ -1017,7 +1026,7 @@ namespace tempest::ecs
         std::uninitialized_copy_n(rhs._packed, rhs._packed_count, _packed);
         std::uninitialized_copy_n(rhs._values, rhs._packed_count, _values);
 
-        for (std::size_t page_idx; page_idx < _sparse_page_count; ++page_idx)
+        for (std::size_t page_idx = 0; page_idx < _sparse_page_count; ++page_idx)
         {
             std::copy_n(rhs._sparse[page_idx], traits_type::page_size, _sparse[page_idx]);
         }
@@ -1100,14 +1109,15 @@ namespace tempest::ecs
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::mapped_type& basic_sparse_map<K, V, Allocator>::operator[](K k) noexcept
+    inline constexpr basic_sparse_map<K, V, Allocator>::mapped_type& basic_sparse_map<K, V, Allocator>::operator[](
+        K k) noexcept
     {
         return _values[_index(k)];
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr const basic_sparse_map<K, V, Allocator>::mapped_type& basic_sparse_map<K, V, Allocator>::operator[](
-        K k) const noexcept
+    inline constexpr const basic_sparse_map<K, V, Allocator>::mapped_type& basic_sparse_map<
+        K, V, Allocator>::operator[](K k) const noexcept
     {
         return _values[_index(k)];
     }
@@ -1124,7 +1134,8 @@ namespace tempest::ecs
         const noexcept
     {
         const auto position = static_cast<typename iterator::difference_type>(_packed_count);
-        return const_iterator{std::span<const K>(_packed, _packed_count), std::span<const V>(_values, _packed_count), position};
+        return const_iterator{std::span<const K>(_packed, _packed_count), std::span<const V>(_values, _packed_count),
+                              position};
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1144,7 +1155,8 @@ namespace tempest::ecs
     inline constexpr basic_sparse_map<K, V, Allocator>::const_iterator basic_sparse_map<K, V, Allocator>::end()
         const noexcept
     {
-        return const_iterator{std::span<const K>(_packed, _packed_count), std::span<const V>(_values, _packed_count), {}};
+        return const_iterator{
+            std::span<const K>(_packed, _packed_count), std::span<const V>(_values, _packed_count), {}};
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1155,43 +1167,43 @@ namespace tempest::ecs
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V, Allocator>::rbegin()
-        noexcept
+    inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V,
+                                                                                          Allocator>::rbegin() noexcept
     {
         return std::make_reverse_iterator(end());
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V, Allocator>::rbegin()
-        const noexcept
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<
+        K, V, Allocator>::rbegin() const noexcept
     {
         return crbegin();
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V, Allocator>::crbegin()
-        const noexcept
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<
+        K, V, Allocator>::crbegin() const noexcept
     {
         return std::make_reverse_iterator(cend());
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V, Allocator>::rend()
-        noexcept
+    inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V,
+                                                                                          Allocator>::rend() noexcept
     {
         return std::make_reverse_iterator(begin());
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V,
-                                                                                          Allocator>::rend() const noexcept
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V, Allocator>::rend()
+        const noexcept
     {
         return crend();
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<K, V,
-        Allocator>::crend() const noexcept
+    inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<
+        K, V, Allocator>::crend() const noexcept
     {
         return std::make_reverse_iterator(cbegin());
     }
@@ -1224,7 +1236,8 @@ namespace tempest::ecs
     }
 
     template <typename K, typename V, typename Allocator>
-    inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::insert(K k, const V& v)
+    inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::insert(K k,
+                                                                                                           const V& v)
     {
         return emplace(k, v);
     }
@@ -1233,6 +1246,13 @@ namespace tempest::ecs
     inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::insert(K k, V&& v)
     {
         return emplace(k, std::move(v));
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::insert_or_replace(
+        K k, const V& v)
+    {
+        return emplace_or_replace(k, v);
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1249,10 +1269,34 @@ namespace tempest::ecs
 
     template <typename K, typename V, typename Allocator>
     template <typename... Ts>
-    inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::emplace(K k, Ts&&... ts)
+    inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::emplace(K k,
+                                                                                                            Ts&&... ts)
     {
         auto& element = _assure(k);
         auto position = size();
+
+        _packed[_packed_count] = k;
+        std::construct_at(_values + _packed_count, std::forward<Ts>(ts)...);
+        _packed_count++;
+        element = traits_type::combine_entities(static_cast<typename traits_type::entity_type>(_packed_count - 1),
+                                                traits_type::as_integral(k));
+
+        return --(end() - position);
+    }
+
+    template <typename K, typename V, typename Allocator>
+    template <typename... Ts>
+    inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::emplace_or_replace(
+        K k, Ts&&... ts)
+    {
+        auto& element = _assure(k);
+        auto position = size();
+
+        if (traits_type::as_entity(element) < _packed_count)
+        {
+            _values[traits_type::as_entity(element)] = V(std::forward<Ts>(ts)...);
+            return --(end() - position);
+        }
 
         _packed[_packed_count] = k;
         std::construct_at(_values + _packed_count, std::forward<Ts>(ts)...);
@@ -1272,6 +1316,18 @@ namespace tempest::ecs
         }
 
         _request_storage_resize(new_capacity);
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline K* basic_sparse_map<K, V, Allocator>::keys() const noexcept
+    {
+        return _packed;
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline V* basic_sparse_map<K, V, Allocator>::values() const noexcept
+    {
+        return _values;
     }
 
     template <typename K, typename V, typename Allocator>

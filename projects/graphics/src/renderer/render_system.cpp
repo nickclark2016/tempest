@@ -200,105 +200,43 @@ namespace tempest::graphics
 
                         if (_last_updated_frame + _device->frames_in_flight() > _device->current_frame())
                         {
-                            _objects.resize(_object_count);
-                            _instances.resize(_object_count);
-                            _indirect_draw_commands.clear();
+                            std::uint32_t instances_written = 0;
 
-                            for (ecs::entity ent : _registry->entities())
+                            for (const auto& [key, batch] : _draw_batches)
                             {
-                                if (_registry->has<ecs::transform_component, renderable_component>(ent))
-                                {
-                                    auto& transform = _registry->get<ecs::transform_component>(ent);
-                                    auto& renderable = _registry->get<renderable_component>(ent);
+                                std::memcpy(staging_buffer_data.data() + bytes_written, batch.objects.values(),
+                                            batch.objects.size() * sizeof(gpu_object_data));
+                                cmds.copy(staging_buffer, _object_buffer, bytes_written,
+                                          _device->get_buffer_frame_offset(_object_buffer) +
+                                              static_cast<std::uint32_t>(instances_written * sizeof(gpu_object_data)),
+                                          static_cast<std::uint32_t>(batch.objects.size() * sizeof(gpu_object_data)));
+                                bytes_written +=
+                                    static_cast<std::uint32_t>(batch.objects.size() * sizeof(gpu_object_data));
 
-                                    auto& object = _objects.emplace_back(gpu_object_data{
-                                        .model = transform.matrix(),
-                                        .inv_tranpose_model = math::transpose(math::inverse(transform.matrix())),
-                                        .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
-                                        .material_id = static_cast<std::uint32_t>(renderable.material_id),
-                                        .self_id = static_cast<std::uint32_t>(renderable.object_id),
-                                    });
+                                std::memcpy(staging_buffer_data.data() + bytes_written, batch.commands.data(),
+                                            batch.commands.size() * sizeof(indexed_indirect_command));
+                                cmds.copy(staging_buffer, _indirect_buffer, bytes_written,
+                                          _device->get_buffer_frame_offset(_indirect_buffer) +
+                                              static_cast<std::uint32_t>(instances_written *
+                                                                         sizeof(indexed_indirect_command)),
+                                          static_cast<std::uint32_t>(batch.commands.size() *
+                                                                     sizeof(indexed_indirect_command)));
+                                bytes_written += static_cast<std::uint32_t>(batch.commands.size() *
+                                                                            sizeof(indexed_indirect_command));
 
-                                    if (const auto relationship =
-                                            _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
-                                    {
-                                        if (const auto parent_transform =
-                                                _registry->try_get<ecs::transform_component>(relationship->parent))
-                                        {
-                                            object.model = parent_transform->matrix() * object.model;
-                                            object.inv_tranpose_model = math::transpose(math::inverse(object.model));
-                                        }
-                                    }
+                                std::iota(reinterpret_cast<std::uint32_t*>(staging_buffer_data.data() + bytes_written),
+                                          reinterpret_cast<std::uint32_t*>(staging_buffer_data.data() + bytes_written) +
+                                              batch.objects.size(),
+                                          instances_written);
+                                cmds.copy(staging_buffer, _instance_buffer, bytes_written,
+                                          _device->get_buffer_frame_offset(_instance_buffer) +
+                                              instances_written * sizeof(std::uint32_t),
+                                          static_cast<std::uint32_t>(batch.objects.size() * sizeof(std::uint32_t)));
 
-                                    _objects[renderable.object_id] = object;
-
-                                    _instances[renderable.object_id] = renderable.object_id;
-                                }
+                                instances_written += static_cast<std::uint32_t>(batch.objects.size());
+                                bytes_written +=
+                                    static_cast<std::uint32_t>(batch.objects.size() * sizeof(std::uint32_t));
                             }
-
-                            auto end_opaque = std::stable_partition(
-                                std::begin(_instances), std::end(_instances), [&](std::uint32_t instance) {
-                                    auto& mat = _materials[_objects[instance].material_id];
-                                    return mat.material_type == gpu_material_type::PBR_OPAQUE;
-                                });
-
-                            _opaque_object_count = std::distance(std::begin(_instances), end_opaque);
-
-                            auto end_mask =
-                                std::stable_partition(end_opaque, std::end(_instances), [&](std::uint32_t instance) {
-                                    auto& mat = _materials[_objects[instance].material_id];
-                                    return mat.material_type == gpu_material_type::PBR_MASK;
-                                });
-
-                            _mask_object_count = std::distance(end_opaque, end_mask);
-
-                            auto end_blends =
-                                std::stable_partition(end_mask, std::end(_instances), [&](std::uint32_t instance) {
-                                    auto& mat = _materials[_objects[instance].material_id];
-                                    return mat.material_type == gpu_material_type::PBR_BLEND;
-                                });
-
-                            _blend_object_count = std::distance(end_opaque, end_mask);
-
-                            for (auto instance : _instances)
-                            {
-                                auto& object = _objects[instance];
-
-                                auto& mesh = _meshes[object.mesh_id];
-
-                                _indirect_draw_commands.push_back({
-                                    .index_count = mesh.index_count,
-                                    .instance_count = 1,
-                                    .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
-                                    .vertex_offset = 0,
-                                    .first_instance = object.self_id,
-                                });
-                            }
-
-                            std::sort(std::begin(_instances), std::end(_instances));
-
-                            std::memcpy(staging_buffer_data.data(), _objects.data(),
-                                        _objects.size() * sizeof(gpu_object_data));
-                            cmds.copy(staging_buffer, _object_buffer, bytes_written,
-                                      _device->get_buffer_frame_offset(_object_buffer),
-                                      static_cast<std::uint32_t>(_objects.size() * sizeof(gpu_object_data)));
-                            bytes_written += static_cast<std::uint32_t>(_objects.size() * sizeof(gpu_object_data));
-
-                            std::memcpy(staging_buffer_data.data() + bytes_written, _instances.data(),
-                                        _instances.size() * sizeof(std::uint32_t));
-                            cmds.copy(staging_buffer, _instance_buffer, bytes_written,
-                                      _device->get_buffer_frame_offset(_instance_buffer),
-                                      static_cast<std::uint32_t>(_instances.size() * sizeof(std::uint32_t)));
-                            bytes_written += static_cast<std::uint32_t>(_instances.size() * sizeof(std::uint32_t));
-
-                            std::memcpy(staging_buffer_data.data() + bytes_written, _indirect_draw_commands.data(),
-                                        _indirect_draw_commands.size() * sizeof(indexed_indirect_command));
-                            cmds.copy(staging_buffer, _indirect_buffer, bytes_written,
-                                      _device->get_buffer_frame_offset(_indirect_buffer),
-                                      static_cast<std::uint32_t>(_indirect_draw_commands.size() *
-                                                                 sizeof(indexed_indirect_command)));
-                            bytes_written += static_cast<std::uint32_t>(_indirect_draw_commands.size() *
-                                                                        sizeof(indexed_indirect_command));
                         }
 
                         // upload scene data
@@ -344,19 +282,21 @@ namespace tempest::graphics
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
                     .on_execute([&](command_list& cmds) {
-                        auto opaque_objects = _opaque_object_count + _mask_object_count;
-
                         cmds.set_scissor_region(0, 0, 1920, 1080)
                             .set_viewport(0, 0, 1920, 1080)
                             .use_index_buffer(_vertex_pull_buffer, 0);
 
-                        if (opaque_objects > 0)
+                        for (auto& [key, batch] : _draw_batches)
                         {
-                            cmds.use_pipeline(_z_prepass_pipeline)
-                                .draw_indexed(
-                                    _indirect_buffer,
-                                    static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
-                                    static_cast<std::uint32_t>(opaque_objects), sizeof(indexed_indirect_command));
+                            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+                            {
+                                cmds.use_pipeline(_z_prepass_pipeline)
+                                    .draw_indexed(
+                                        _indirect_buffer,
+                                        static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
+                                        static_cast<std::uint32_t>(batch.objects.size()),
+                                        sizeof(indexed_indirect_command));
+                            }
                         }
                     });
             });
@@ -375,7 +315,7 @@ namespace tempest::graphics
             });
 
         _pbr_opaque_pass =
-            rgc->add_graph_pass("PBR Opaque Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+            rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(build_hi_z_pass)
                     .depends_on(upload_pass)
                     .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
@@ -393,29 +333,30 @@ namespace tempest::graphics
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
                     .on_execute([&](command_list& cmds) {
-                        auto opaque_objects = _opaque_object_count + _mask_object_count;
-
                         cmds.set_scissor_region(0, 0, 1920, 1080)
                             .set_viewport(0, 0, 1920, 1080)
                             .use_index_buffer(_vertex_pull_buffer, 0);
 
-                        if (opaque_objects > 0)
-                        {
-                            cmds.use_pipeline(_pbr_opaque_pipeline)
-                                .draw_indexed(
-                                    _indirect_buffer,
-                                    static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
-                                    static_cast<std::uint32_t>(opaque_objects), sizeof(indexed_indirect_command));
-                        }
+                        std::uint32_t draw_calls_issued = 0;
 
-                        if (_blend_object_count > 0)
+                        for (auto& [key, batch] : _draw_batches)
                         {
-                            cmds.use_pipeline(_pbr_transparencies_pipeline)
-                                .draw_indexed(
-                                    _indirect_buffer,
-                                    static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                                                               opaque_objects * sizeof(indexed_indirect_command)),
-                                    static_cast<std::uint32_t>(_blend_object_count), sizeof(indexed_indirect_command));
+                            graphics_pipeline_resource_handle pipeline;
+                            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+                            {
+                                pipeline = _pbr_opaque_pipeline;
+                            }
+                            else if (key.alpha_type == alpha_behavior::TRANSPARENT)
+                            {
+                                pipeline = _pbr_transparencies_pipeline;
+                            }
+
+                            cmds.use_pipeline(pipeline).draw_indexed(
+                                _indirect_buffer,
+                                static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) + draw_calls_issued * sizeof(indexed_indirect_command)),
+                                static_cast<std::uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
+
+                            draw_calls_issued += static_cast<std::uint32_t>(batch.commands.size());
                         }
                     });
             });
@@ -482,6 +423,67 @@ namespace tempest::graphics
 
     void render_system::render()
     {
+        for (auto& [_, batch] : _draw_batches)
+        {
+            batch.commands.clear();
+        }
+
+        for (ecs::entity ent : _registry->entities())
+        {
+            if (_registry->has<ecs::transform_component, renderable_component>(ent))
+            {
+                auto& transform = _registry->get<ecs::transform_component>(ent);
+                auto& renderable = _registry->get<renderable_component>(ent);
+
+                gpu_object_data object_payload = {
+                    .model = transform.matrix(),
+                    .inv_tranpose_model = math::transpose(math::inverse(transform.matrix())),
+                    .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
+                    .material_id = static_cast<std::uint32_t>(renderable.material_id),
+                    .self_id = static_cast<std::uint32_t>(renderable.object_id),
+                };
+
+                if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
+                {
+                    if (const auto parent_transform =
+                            _registry->try_get<ecs::transform_component>(relationship->parent))
+                    {
+                        object_payload.model = parent_transform->matrix() * object_payload.model;
+                        object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
+                    }
+                }
+
+                draw_batch_key key = {
+                    .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
+                };
+
+                auto& draw_batch = _draw_batches[key];
+                auto& mesh = _meshes[renderable.mesh_id];
+
+                draw_batch.objects.insert_or_replace(ent, object_payload);
+                draw_batch.commands.push_back({
+                    .index_count = mesh.index_count,
+                    .instance_count = 1,
+                    .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
+                    .vertex_offset = 0,
+                    .first_instance = static_cast<std::uint32_t>(draw_batch.objects.size() - 1),
+                });
+            }
+        }
+
+        // Iterate through the draw batches and update first instance based on the number of instances in the previous
+        // batches
+        std::uint32_t instances_written = 0;
+        for (auto& [_, batch] : _draw_batches)
+        {
+            for (auto& cmd : batch.commands)
+            {
+                cmd.first_instance += instances_written;
+            }
+
+            instances_written += static_cast<std::uint32_t>(batch.objects.size());
+        }
+
         _graph->execute();
     }
 

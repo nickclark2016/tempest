@@ -9,6 +9,7 @@
 #include <tempest/registry.hpp>
 #include <tempest/vertex.hpp>
 
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,8 +32,8 @@ namespace tempest::graphics
         enum class gpu_material_type : std::uint32_t
         {
             PBR_OPAQUE = 0,
-            PBR_BLEND = 1,
-            PBR_MASK = 2,
+            PBR_MASK = 1,
+            PBR_BLEND = 2,
         };
 
         struct gpu_material_data
@@ -94,6 +95,20 @@ namespace tempest::graphics
         {
             math::vec2<std::uint32_t> size;
             std::uint32_t mip_count; 
+        };
+
+        struct draw_batch_key
+        {
+            alpha_behavior alpha_type;
+
+            constexpr auto operator<=>(const draw_batch_key&) const noexcept = default;
+        };
+
+        struct draw_batch_payload
+        {
+            graphics_pipeline_resource_handle pipeline;
+            std::vector<indexed_indirect_command> commands;
+            ecs::sparse_map<gpu_object_data> objects;
         };
 
       public:
@@ -164,10 +179,9 @@ namespace tempest::graphics
 
         std::vector<mesh_layout> _meshes;
         std::vector<gpu_material_data> _materials;
-        std::vector<gpu_object_data> _objects;
-        std::vector<indexed_indirect_command> _indirect_draw_commands;
-        std::vector<std::uint32_t> _instances;
         std::uint32_t _object_count{0};
+
+        std::map<draw_batch_key, draw_batch_payload> _draw_batches;
 
         sampler_resource_handle _linear_sampler;
         sampler_resource_handle _closest_sampler;
@@ -176,10 +190,6 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle _pbr_transparencies_pipeline;
         graphics_pipeline_resource_handle _z_prepass_pipeline;
         compute_pipeline_resource_handle _hzb_build_pipeline;
-
-        std::size_t _opaque_object_count{0};
-        std::size_t _mask_object_count{0};
-        std::size_t _blend_object_count{0};
 
         graph_pass_handle _pbr_opaque_pass;
         graph_pass_handle _z_prepass_pass;

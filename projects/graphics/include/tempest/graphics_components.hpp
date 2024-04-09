@@ -26,16 +26,16 @@ namespace tempest::graphics
         std::uint32_t index_count;
     };
 
-    enum class material_type : std::uint32_t
+    enum class alpha_behavior : std::uint32_t
     {
         OPAQUE = 0,
-        TRANSPARENT = 1,
-        MASK = 2,
+        MASK = 1,
+        TRANSPARENT = 2,
     };
 
     struct material_payload
     {
-        material_type type{material_type::OPAQUE};
+        alpha_behavior type{alpha_behavior::OPAQUE};
 
         std::uint32_t albedo_map_id{std::numeric_limits<std::uint32_t>::max()};
         std::uint32_t normal_map_id{std::numeric_limits<std::uint32_t>::max()};
