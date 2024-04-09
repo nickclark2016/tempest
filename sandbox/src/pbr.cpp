@@ -46,7 +46,7 @@ struct ssao_constants
     float bias;
 };
 
-graphics::material_type convert_material_type(assets::material_type type);
+graphics::alpha_behavior convert_material_type(assets::material_type type);
 graphics::graphics_pipeline_resource_handle create_z_pass_pipeline(graphics::render_device& device);
 graphics::graphics_pipeline_resource_handle create_ssao_pipeline(graphics::render_device& device);
 graphics::graphics_pipeline_resource_handle create_ssao_blur_pipeline(graphics::render_device& device);
@@ -428,21 +428,21 @@ void pbr_demo()
 
     auto end_opaque = std::stable_partition(std::begin(instances), std::end(instances), [&](std::uint32_t instance) {
         auto& mat = materials[objects[instance].material_id];
-        return mat.type == graphics::material_type::OPAQUE;
+        return mat.type == graphics::alpha_behavior::OPAQUE;
     });
 
     opaque_count = std::distance(std::begin(instances), end_opaque);
 
     auto end_mask = std::stable_partition(end_opaque, std::end(instances), [&](std::uint32_t instance) {
         auto& mat = materials[objects[instance].material_id];
-        return mat.type == graphics::material_type::MASK;
+        return mat.type == graphics::alpha_behavior::MASK;
     });
 
     mask_count = std::distance(end_opaque, end_mask);
 
     std::stable_partition(end_mask, std::end(instances), [&](std::uint32_t instance) {
         auto& mat = materials[objects[instance].material_id];
-        return mat.type == graphics::material_type::TRANSPARENT;
+        return mat.type == graphics::alpha_behavior::TRANSPARENT;
     });
 
     for (auto instance : instances)
@@ -518,16 +518,16 @@ void pbr_demo()
     graphics_device.release_swapchain(swapchain);
 }
 
-graphics::material_type convert_material_type(assets::material_type type)
+graphics::alpha_behavior convert_material_type(assets::material_type type)
 {
     switch (type)
     {
     case assets::material_type::OPAQUE:
-        return graphics::material_type::OPAQUE;
+        return graphics::alpha_behavior::OPAQUE;
     case assets::material_type::BLEND:
-        return graphics::material_type::TRANSPARENT;
+        return graphics::alpha_behavior::TRANSPARENT;
     case assets::material_type::MASK:
-        return graphics::material_type::MASK;
+        return graphics::alpha_behavior::MASK;
     }
 
     std::exit(EXIT_FAILURE);

@@ -15,16 +15,16 @@ namespace tempest
     {
         auto log = logger::logger_factory::create({.prefix{"tempest::engine"}});
 
-        graphics::material_type convert_material_type(assets::material_type type)
+        graphics::alpha_behavior convert_material_type(assets::material_type type)
         {
             switch (type)
             {
             case assets::material_type::OPAQUE:
-                return graphics::material_type::OPAQUE;
+                return graphics::alpha_behavior::OPAQUE;
             case assets::material_type::BLEND:
-                return graphics::material_type::TRANSPARENT;
+                return graphics::alpha_behavior::TRANSPARENT;
             case assets::material_type::MASK:
-                return graphics::material_type::MASK;
+                return graphics::alpha_behavior::MASK;
             }
 
             std::exit(EXIT_FAILURE);
