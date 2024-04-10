@@ -162,15 +162,6 @@ namespace tempest::graphics
             .per_frame_memory = true,
         });
 
-        gpu_camera_data camera;
-        camera.position = math::vec3<float>(-5.0f, 2.0f, 0.0f);
-        camera.view =
-            math::look_at(camera.position, math::vec3<float>(0.0f, 2.0f, 0.0f), math::vec3<float>(0.0f, 1.0f, 0.0f));
-        camera.inv_view = math::inverse(camera.view);
-        camera.proj = math::perspective(16.0f / 9.0f, 90.0f * 9.0f / 16.0f, 0.1f);
-        camera.inv_proj = math::inverse(camera.proj);
-
-        _scene_data.camera = camera;
         _scene_data.sun = gpu_light{
             .color = math::vec4<float>(1.0f, 1.0f, 1.0f, 1.0f),
             .direction = math::vec3<float>(0.0f, -1.0f, 0.0f),
@@ -245,8 +236,12 @@ namespace tempest::graphics
                             auto camera_data = _registry->get<camera_component>(_camera_entity);
                             auto camera_view = math::look_at(
                                 camera_data.position, camera_data.position + camera_data.forward, camera_data.up);
+                            auto camera_projection = math::perspective(
+                                camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, 0.1f);
                             _scene_data.camera.view = camera_view;
                             _scene_data.camera.inv_view = math::inverse(camera_view);
+                            _scene_data.camera.proj = camera_projection;
+                            _scene_data.camera.inv_proj = math::inverse(camera_projection);
                             _scene_data.camera.position = camera_data.position;
                         }
 
@@ -353,7 +348,8 @@ namespace tempest::graphics
 
                             cmds.use_pipeline(pipeline).draw_indexed(
                                 _indirect_buffer,
-                                static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) + draw_calls_issued * sizeof(indexed_indirect_command)),
+                                static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                                                           draw_calls_issued * sizeof(indexed_indirect_command)),
                                 static_cast<std::uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
 
                             draw_calls_issued += static_cast<std::uint32_t>(batch.commands.size());

@@ -76,6 +76,8 @@ namespace tempest::graphics
         math::vec3<float> position;
         math::vec3<float> forward;
         math::vec3<float> up;
+        float aspect_ratio;
+        float vertical_fov;
     };
 } // namespace tempest::graphics
 

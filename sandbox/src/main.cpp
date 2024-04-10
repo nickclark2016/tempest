@@ -33,6 +33,8 @@ int main()
         camera_data.forward = fps_ctrl.eye_direction();
         camera_data.position = fps_ctrl.eye_position();
         camera_data.up = fps_ctrl.up_direction();
+        camera_data.aspect_ratio = 16.0f / 9.0f;
+        camera_data.vertical_fov = 90.0f;
 
         if (input_group.kb->is_key_down(tempest::core::key::ESCAPE))
         {
