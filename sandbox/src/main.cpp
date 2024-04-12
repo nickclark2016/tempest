@@ -1,5 +1,7 @@
 #include <tempest/tempest.hpp>
 
+#include <tempest/transform_component.hpp>
+
 #include "fps_controller.hpp"
 
 int main()
@@ -19,6 +21,12 @@ int main()
 
     eng.on_initialize([](tempest::engine& eng) {
         auto sponza = eng.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
+        auto lantern = eng.load_asset("assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf");
+
+        tempest::ecs::transform_component lantern_scalar;
+        lantern_scalar.scale({0.1f});
+
+        eng.get_registry().assign(lantern, lantern_scalar);
     });
 
     fps_controller fps_ctrl;
@@ -33,7 +41,7 @@ int main()
         camera_data.forward = fps_ctrl.eye_direction();
         camera_data.position = fps_ctrl.eye_position();
         camera_data.up = fps_ctrl.up_direction();
-        camera_data.aspect_ratio = 16.0f / 9.0f;
+        camera_data.aspect_ratio = static_cast<float>(win->width()) / static_cast<float>(win->height());
         camera_data.vertical_fov = 90.0f;
 
         if (input_group.kb->is_key_down(tempest::core::key::ESCAPE))
