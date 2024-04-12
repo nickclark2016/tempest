@@ -136,7 +136,7 @@ namespace tempest::graphics
     {
         std::size_t bytes_written = offset;
         std::size_t staging_buffer_bytes_written = 0;
-        std::size_t last_write_index = 0;
+        std::size_t last_write_index = offset;
         std::vector<graphics::mesh_layout> result;
         result.reserve(meshes.size());
 

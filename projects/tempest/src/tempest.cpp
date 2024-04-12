@@ -92,9 +92,10 @@ namespace tempest
                                       [](const auto& window_payload) { return window_payload.window->should_close(); }),
                        _windows.end());
 
-        if (_windows.empty())
+        if (_windows.empty()) [[unlikely]]
         {
             _should_close = true;
+            return;
         }
 
         for (auto& cb : _update_callbacks)
