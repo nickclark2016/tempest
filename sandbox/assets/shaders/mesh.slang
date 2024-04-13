@@ -17,6 +17,7 @@ struct Mesh {
 struct ObjectData {
     float4x4 model_matrix;
     float4x4 transpose_inv_model_matrix;
+    float4x4 prev_model_matrix;
     uint mesh_id;
     uint material_id;
     uint parent_id;

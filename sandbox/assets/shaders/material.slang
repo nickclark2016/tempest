@@ -42,14 +42,14 @@ struct LightingState {
 };
 
 struct PixelData {
-    float3 geom_tangent;
-    float3 geom_bitangent;
-    float3 geom_normal;
-    float3 f0;
-    float4 diffuse;
-    float3 shading_normal;
-    float2 uv;
-    float roughness;
+    half3 geom_tangent;
+    half3 geom_bitangent;
+    half3 geom_normal;
+    half3 f0;
+    half4 diffuse;
+    half3 shading_normal;
+    half2 uv;
+    half roughness;
 };
 
 // Octohedral encoding
@@ -73,142 +73,142 @@ float3 decode_normal(float2 encoded_normal) {
     return normalize(n);
 }
 
-float3 compute_diffuse(const float4 base, float metallic) {
-    return base.rgb * (1.0 - metallic);
+half3 compute_diffuse(const half4 base, half metallic) {
+    return base.rgb * (1.0h - metallic);
 }
 
-float3 compute_f0(const float4 base, float metallic, float reflectance) {
-    return base.rgb * metallic + (reflectance * (1.0 - metallic));
+half3 compute_f0(const half4 base, half metallic, half reflectance) {
+    return base.rgb * metallic + (reflectance * (1.0h - metallic));
 }
 
-float compute_dielectric_f0(float reflectance) {
-    return 0.16 * reflectance * reflectance; 
+half compute_dielectric_f0(half reflectance) {
+    return 0.16h * reflectance * reflectance; 
 }
 
-float compute_metallic_from_specular(const float3 specular) {
+half compute_metallic_from_specular(const half3 specular) {
     return max(specular.x, max(specular.y, specular.z));
 }
 
-float perceptual_roughness_to_alpha_roughness(float perceptual) {
+half perceptual_roughness_to_alpha_roughness(half perceptual) {
     return perceptual * perceptual;
 }
 
-float index_of_refraction_to_f0(float transmitted, float incident) {
-    float base = (transmitted - incident) / (transmitted + incident);
+half index_of_refraction_to_f0(half transmitted, half incident) {
+    half base = (transmitted - incident) / (transmitted + incident);
     return base * base;
 }
 
-float f0_to_index_of_refraction(float f0) {
-    float r = sqrt(f0);
-    return (1 + r) / (1 - r);
+half f0_to_index_of_refraction(half f0) {
+    half r = sqrt(f0);
+    return (1.0h + r) / (1.0h - r);
 }
 
-float ggx(float roughness, float n_dot_h, float3 h) {
-    float one_minus_noh2 = 1.0 - n_dot_h * n_dot_h;
-    float alpha = n_dot_h * roughness;
-    float k = roughness / (one_minus_noh2 + alpha * alpha);
-    float d = k * k * (1.0 / PI);
+half ggx(half roughness, half n_dot_h, half3 h) {
+    half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
+    half alpha = n_dot_h * roughness;
+    half k = roughness / (one_minus_noh2 + alpha * alpha);
+    half d = k * k * (1.0h / half(PI));
     return saturate(d);
 }
 
-float smith_ggx(float roughness, float n_dot_v, float n_dot_l) {
-    float a2 = roughness * roughness;
-    float l_v = n_dot_l * sqrt((n_dot_v - a2 * n_dot_v) * n_dot_v + a2);
-    float l_l = n_dot_v * sqrt((n_dot_l - a2 * n_dot_l) * n_dot_l + a2);
-    float v = 0.5 / (l_v + l_l);
+half smith_ggx(half roughness, half n_dot_v, half n_dot_l) {
+    half a2 = roughness * roughness;
+    half l_v = n_dot_l * sqrt((n_dot_v - a2 * n_dot_v) * n_dot_v + a2);
+    half l_l = n_dot_v * sqrt((n_dot_l - a2 * n_dot_l) * n_dot_l + a2);
+    half v = 0.5h / (l_v + l_l);
     return saturate(v);
 }
 
-float3 fresnel_schlick(const float3 f0, float v_dot_h) {
-    float f = pow(1.0 - v_dot_h, 5.0);
-    return f + f0 * (1.0 - f);
+half3 fresnel_schlick(const half3 f0, half v_dot_h) {
+    half f = pow(1.0h - v_dot_h, 5.0h);
+    return f + f0 * (1.0h - f);
 }
 
-float fresnel_schlick(float f0, float f90, float v_dot_h) {
-    return f0 + (f90 - f0) * pow(1.0 - v_dot_h, 5.0);
+half fresnel_schlick(half f0, half f90, half v_dot_h) {
+    return f0 + (f90 - f0) * pow(1.0h - v_dot_h, 5.0h);
 }
 
-float3 isotropic_lobe(const PixelData px, const Light light, const float3 h, const float n_dot_v, const float n_dot_l, const float n_dot_h, const float l_dot_h) {
-    float d = ggx(px.roughness, n_dot_h, h);
-    float v = smith_ggx(px.roughness, n_dot_v, n_dot_l);
-    float3 f = fresnel_schlick(px.f0, l_dot_h);
+half3 isotropic_lobe(const PixelData px, const Light light, const half3 h, const half n_dot_v, const half n_dot_l, const half n_dot_h, const half l_dot_h) {
+    half d = ggx(px.roughness, n_dot_h, h);
+    half v = smith_ggx(px.roughness, n_dot_v, n_dot_l);
+    half3 f = fresnel_schlick(px.f0, l_dot_h);
 
     return (d * v) * f;
 }
 
-float3 specular_lobe(const PixelData px, const Light light, const float3 h, const float n_dot_v, const float n_dot_l, const float n_dot_h, const float l_dot_h) {
+half3 specular_lobe(const PixelData px, const Light light, const half3 h, const half n_dot_v, const half n_dot_l, const half n_dot_h, const half l_dot_h) {
     return isotropic_lobe(px, light, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
 }
 
-float diffuse_lambert() {
-    return 1.0 / PI;
+half diffuse_lambert() {
+    return 1.0h / half(PI);
 }
 
-float diffuse_burley(float roughness, float n_dot_v, float n_dot_l, float l_dot_h) {
-    float f90 = 0.5 + 2.0 * roughness * l_dot_h * l_dot_h;
-    float view_scatter = fresnel_schlick(1.0, f90, n_dot_v);
-    float light_scatter = fresnel_schlick(1.0, f90, n_dot_l);
+half diffuse_burley(half roughness, half n_dot_v, half n_dot_l, half l_dot_h) {
+    half f90 = 0.5h + 2.0h * roughness * l_dot_h * l_dot_h;
+    half view_scatter = fresnel_schlick(1.0h, f90, n_dot_v);
+    half light_scatter = fresnel_schlick(1.0h, f90, n_dot_l);
     return light_scatter * view_scatter * diffuse_lambert();
 }
 
-float diffuse(float roughness, float n_dot_v, float n_dot_l, float l_dot_h) {
+half diffuse(half roughness, half n_dot_v, half n_dot_l, half l_dot_h) {
     return diffuse_burley(roughness, n_dot_v, n_dot_l, l_dot_h);
 }
 
-float3 diffuse_lobe(const PixelData px, float n_dot_v, float n_dot_l, float l_dot_h) {
+half3 diffuse_lobe(const PixelData px, half n_dot_v, half n_dot_l, half l_dot_h) {
     return px.diffuse.rgb * diffuse(px.roughness, n_dot_v, n_dot_l, l_dot_h);
 }
 
-void evaluate_directional_light(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout float3 color) {
-    float3 v = normalize(camera.eye.xyz - world_pos);
-    float3 l = -lighting.sun.direction.xyz;
-    float3 h = normalize(v + l);
-    float n_dot_v = saturate(dot(px.shading_normal, v));
-    float n_dot_l = saturate(dot(px.shading_normal, l));
-    float n_dot_h = saturate(dot(px.shading_normal, h));
-    float l_dot_h = saturate(dot(l, h));
+void evaluate_directional_light(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout half3 color) {
+    half3 v = half3(normalize(camera.eye.xyz - world_pos));
+    half3 l = half3(-lighting.sun.direction.xyz);
+    half3 h = normalize(v + l);
+    half n_dot_v = saturate(dot(px.shading_normal, v));
+    half n_dot_l = saturate(dot(px.shading_normal, l));
+    half n_dot_h = saturate(dot(px.shading_normal, h));
+    half l_dot_h = saturate(dot(l, h));
 
-    float3 fr = specular_lobe(px, lighting.sun, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
-    float3 fd = diffuse_lobe(px, n_dot_v, n_dot_l, l_dot_h);
+    half3 fr = specular_lobe(px, lighting.sun, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
+    half3 fd = diffuse_lobe(px, n_dot_v, n_dot_l, l_dot_h);
 
-    float3 dr = fd + fr;
+    half3 dr = fd + fr;
 
-    float3 base = dr;
-    color += (base.rgb * lighting.sun.color_intensity.rgb) * (lighting.sun.color_intensity.w * n_dot_l); 
+    half3 base = dr;
+    color += (base.rgb * half3(lighting.sun.color_intensity.rgb)) * (half(lighting.sun.color_intensity.w) * n_dot_l); 
 }
 
-void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout float3 color) {
+void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout half3 color) {
     evaluate_directional_light(px, mat_state, lighting, camera, world_pos, color);
 }
 
-float fetch_metallic(const MaterialState mat_state, float2 uv) {
+half fetch_metallic(const MaterialState mat_state, float2 uv) {
     if (mat_state.mat.metallic_roughness_map_id < 0) {
-        return 0.0;
+        return 0.0h;
     }
-    return mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b;
+    return half(mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b);
 }
 
-float3 compute_diffuse(const float3 base, float metallic) {
-    return base * (1.0 - metallic);
+half3 compute_diffuse(const half3 base, half metallic) {
+    return base * (1.0h - metallic);
 }
 
 void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
-    float4 texture_factor = mat_state.mat.base_texture_factor;
+    half4 texture_factor = half4(mat_state.mat.base_texture_factor);
     if (mat_state.mat.base_texture_id < 0) {
         pixel.diffuse = texture_factor;
         return;
     }
 
-    float4 texture_color = mat_state.textures[(int) mat_state.mat.base_texture_id].Sample(mat_state.linear_sampler, pixel.uv);
+    half4 texture_color = half4(mat_state.textures[(int) mat_state.mat.base_texture_id].Sample(mat_state.linear_sampler, pixel.uv));
 
     if (texture_color.a < mat_state.mat.alpha_cutoff) {
         discard;
     }
 
-    float4 color = texture_color * texture_factor;
-    float metallic = fetch_metallic(mat_state, pixel.uv);
-
-    float reflectance = compute_dielectric_f0(mat_state.mat.reflectance);
+    half4 color = texture_color * texture_factor;
+    
+    half metallic = fetch_metallic(mat_state, pixel.uv);
+    half reflectance = compute_dielectric_f0(half(mat_state.mat.reflectance));
 
     pixel.diffuse.rgb = compute_diffuse(color.rgb, metallic);
     pixel.diffuse.a = color.a;
@@ -217,9 +217,9 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
 
 void fetch_roughness(const MaterialState mat_state, inout PixelData pixel) {
     if (mat_state.mat.metallic_roughness_map_id < 0) {
-        pixel.roughness = 0.0;
+        pixel.roughness = 0.0h;
     } else {
-        pixel.roughness = mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g;
+        pixel.roughness = half(mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g);
     }
 }
 
@@ -233,22 +233,22 @@ void fetch_normal(const MaterialState mat_state, inout PixelData pixel)
 
     // map rg [0, 1] -> [-1, 1]
     // map b (0.5, 1] -> [0, 1]
-    float3 tan_normal = mat_state.textures[(int) mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb * 2.0 - 1.0;
+    half3 tan_normal = half3(mat_state.textures[(int) mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb) * 2.0h - 1.0h;
 
-    tan_normal.rg *= mat_state.mat.normal_scale;
+    tan_normal.rg *= half(mat_state.mat.normal_scale);
 
-    float3 normal = tan_normal.x * pixel.geom_tangent + tan_normal.y * pixel.geom_bitangent + tan_normal.z * pixel.geom_normal;
+    half3 normal = tan_normal.x * pixel.geom_tangent + tan_normal.y * pixel.geom_bitangent + tan_normal.z * pixel.geom_normal;
     pixel.shading_normal = normal;
 }
 
-void apply_emissive(const MaterialState mat_state, inout float4 color, const float2 uv) {
-    float4 emissive = mat_state.mat.emissive_factor;
+void apply_emissive(const MaterialState mat_state, inout half4 color, const half2 uv) {
+    half4 emissive = half4(mat_state.mat.emissive_factor);
     
     if (mat_state.mat.emissive_texture_id >= 0) {
-        emissive *= mat_state.textures[(int) mat_state.mat.emissive_texture_id].Sample(mat_state.linear_sampler, uv);
+        emissive *= half4(mat_state.textures[(int) mat_state.mat.emissive_texture_id].Sample(mat_state.linear_sampler, uv));
     }
 
-    float attenuation = lerp(1.0, 5.0, emissive.w);
+    half attenuation = lerp(1.0h, 5.0h, emissive.w);
     attenuation *= color.a;
 
     color.rgb += emissive.rgb * attenuation;
@@ -261,7 +261,7 @@ void fetch_pixel_data(const MaterialState mat_state, inout PixelData pixel) {
 }
 
 float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos) {
-    float4 color = px.diffuse * float4(lighting.ambient_color_factor.rgb, 1);
+    half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h);
 
     evaluate_lights(px, mat_state, lighting, camera, world_pos, color.rgb);
 

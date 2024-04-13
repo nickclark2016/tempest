@@ -22,6 +22,7 @@ namespace tempest::graphics
         {
             math::mat4<float> model;
             math::mat4<float> inv_tranpose_model;
+            math::mat4<float> prev_model;
 
             std::uint32_t mesh_id;
             std::uint32_t material_id;
@@ -62,8 +63,10 @@ namespace tempest::graphics
         {
             math::mat4<float> proj;
             math::mat4<float> inv_proj;
+            math::mat4<float> prev_proj;
             math::mat4<float> view;
             math::mat4<float> inv_view;
+            math::mat4<float> prev_view;
             math::vec3<float> position;
         };
 
@@ -88,6 +91,7 @@ namespace tempest::graphics
             gpu_camera_data camera;
             math::vec2<float> screen_size;
             math::vec3<float> ambient_light;
+            math::vec4<float> jitter;
             gpu_light sun;
         };
 
@@ -184,14 +188,15 @@ namespace tempest::graphics
         std::map<draw_batch_key, draw_batch_payload> _draw_batches;
 
         sampler_resource_handle _linear_sampler;
-        sampler_resource_handle _closest_sampler;
+        sampler_resource_handle _point_sampler;
 
         graphics_pipeline_resource_handle _pbr_opaque_pipeline;
         graphics_pipeline_resource_handle _pbr_transparencies_pipeline;
         graphics_pipeline_resource_handle _z_prepass_pipeline;
         compute_pipeline_resource_handle _hzb_build_pipeline;
+        graphics_pipeline_resource_handle _taa_resolve_handle;
 
-        graph_pass_handle _pbr_opaque_pass;
+        graph_pass_handle _pbr_pass;
         graph_pass_handle _z_prepass_pass;
 
         gpu_scene_data _scene_data;
@@ -203,6 +208,7 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle create_pbr_pipeline(bool enable_blend);
         graphics_pipeline_resource_handle create_z_prepass_pipeline();
         compute_pipeline_resource_handle create_hzb_build_pipeline();
+        graphics_pipeline_resource_handle create_taa_resolve_pipeline();
     };
 } // namespace tempest::graphics
 

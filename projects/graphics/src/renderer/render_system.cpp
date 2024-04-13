@@ -12,7 +12,26 @@ namespace tempest::graphics
     namespace
     {
         auto log = logger::logger_factory::create({"tempest::render_system"});
-    }
+
+        static std::array<math::vec2<float>, 16> jitter = {{
+            {0.5f, 0.333333f},
+            {0.25f, 0.666667f},
+            {0.75f, 0.111111f},
+            {0.125000f, 0.444444f},
+            {0.625000f, 0.777778f},
+            {0.375000f, 0.222222f},
+            {0.875000f, 0.555556f},
+            {0.062500f, 0.888889f},
+            {0.562500f, 0.037037f},
+            {0.312500f, 0.370370f},
+            {0.812500f, 0.703704f},
+            {0.187500f, 0.148148f},
+            {0.687500f, 0.481481f},
+            {0.437500f, 0.814815f},
+            {0.937500f, 0.259259f},
+            {0.031250f, 0.592593f},
+        }};
+    } // namespace
 
     render_system::render_system(ecs::registry& entities) : _allocator{64 * 1024 * 1024}, _registry{&entities}
     {
@@ -64,6 +83,24 @@ namespace tempest::graphics
             .name = "Color Buffer",
         });
 
+        auto resolved_color_buffer = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::RGBA8_SRGB,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "Resolved Color Buffer",
+        });
+
+        auto history_color_buffer = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::RGBA8_SRGB,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "History Color Buffer",
+        });
+
         auto depth_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
@@ -71,6 +108,15 @@ namespace tempest::graphics
             .type = image_type::IMAGE_2D,
             .persistent = true,
             .name = "Depth Buffer",
+        });
+
+        auto velocity_buffer = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::RG32_FLOAT,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "Velocity Buffer",
         });
 
         std::vector<image_resource_handle> hi_z_images;
@@ -155,6 +201,15 @@ namespace tempest::graphics
         });
         _samplers.push_back(_linear_sampler);
 
+        _point_sampler = _device->create_sampler({
+            .mag = filter::NEAREST,
+            .min = filter::NEAREST,
+            .mipmap = mipmap_mode::NEAREST,
+            .enable_aniso = true,
+            .max_anisotropy = 8.0f,
+        });
+        _samplers.push_back(_point_sampler);
+
         _hi_z_buffer_constants = rgc->create_buffer({
             .size = sizeof(hi_z_data),
             .location = memory_location::DEVICE,
@@ -174,6 +229,14 @@ namespace tempest::graphics
             .size = math::vec2<std::uint32_t>(1920, 1080),
             .mip_count = 5,
         };
+
+        for (int i = 0; i < 16; ++i)
+        {
+            math::vec2<float>& result = jitter[i];
+
+            result.x = ((result.x - 0.5f) / _scene_data.screen_size.x) * 2;
+            result.y = ((result.y - 0.5f) / _scene_data.screen_size.y) * 2;
+        }
 
         auto upload_pass =
             rgc->add_graph_pass("Upload Pass", queue_operation_type::TRANSFER, [&](graph_pass_builder& builder) {
@@ -238,12 +301,22 @@ namespace tempest::graphics
                                 camera_data.position, camera_data.position + camera_data.forward, camera_data.up);
                             auto camera_projection = math::perspective(
                                 camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, 0.1f);
+
+                            _scene_data.camera.prev_proj = _scene_data.camera.proj;
+                            _scene_data.camera.prev_view = _scene_data.camera.view;
+
                             _scene_data.camera.view = camera_view;
                             _scene_data.camera.inv_view = math::inverse(camera_view);
                             _scene_data.camera.proj = camera_projection;
                             _scene_data.camera.inv_proj = math::inverse(camera_projection);
                             _scene_data.camera.position = camera_data.position;
                         }
+
+                        auto jitter_value = jitter[_device->current_frame() % 16];
+                        _scene_data.jitter.x = jitter_value.x;
+                        _scene_data.jitter.y = jitter_value.y;
+                        _scene_data.jitter.z = 0.0f;
+                        _scene_data.jitter.w = 0.0f;
 
                         std::memcpy(staging_buffer_data.data() + bytes_written, &_scene_data, sizeof(gpu_scene_data));
                         cmds.copy(staging_buffer, _scene_buffer, bytes_written,
@@ -309,63 +382,92 @@ namespace tempest::graphics
                     });
             });
 
-        _pbr_opaque_pass =
-            rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
-                bldr.depends_on(build_hi_z_pass)
-                    .depends_on(upload_pass)
-                    .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
-                                          store_op::STORE, {0.5f, 1.0f, 1.0f, 1.0f})
-                    .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD,
-                                          store_op::DONT_CARE)
-                    .add_constant_buffer(_scene_buffer, 0, 0)
-                    .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
-                    .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
-                    .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
-                    .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
-                    .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
-                    .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
-                    .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
-                    .add_indirect_argument_buffer(_indirect_buffer)
-                    .add_index_buffer(_vertex_pull_buffer)
-                    .on_execute([&](command_list& cmds) {
-                        cmds.set_scissor_region(0, 0, 1920, 1080)
-                            .set_viewport(0, 0, 1920, 1080)
-                            .use_index_buffer(_vertex_pull_buffer, 0);
+        _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+            bldr.depends_on(build_hi_z_pass)
+                .depends_on(upload_pass)
+                .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR, store_op::STORE,
+                                      {0.5f, 1.0f, 1.0f, 1.0f})
+                .add_color_attachment(velocity_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
+                                      store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
+                .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD,
+                                      store_op::DONT_CARE)
+                .add_constant_buffer(_scene_buffer, 0, 0)
+                .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
+                .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
+                .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
+                .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
+                .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
+                .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
+                .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
+                .add_indirect_argument_buffer(_indirect_buffer)
+                .add_index_buffer(_vertex_pull_buffer)
+                .on_execute([&](command_list& cmds) {
+                    cmds.set_scissor_region(0, 0, 1920, 1080)
+                        .set_viewport(0, 0, 1920, 1080)
+                        .use_index_buffer(_vertex_pull_buffer, 0);
 
-                        std::uint32_t draw_calls_issued = 0;
+                    std::uint32_t draw_calls_issued = 0;
 
-                        for (auto& [key, batch] : _draw_batches)
+                    for (auto& [key, batch] : _draw_batches)
+                    {
+                        graphics_pipeline_resource_handle pipeline;
+                        if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
                         {
-                            graphics_pipeline_resource_handle pipeline;
-                            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
-                            {
-                                pipeline = _pbr_opaque_pipeline;
-                            }
-                            else if (key.alpha_type == alpha_behavior::TRANSPARENT)
-                            {
-                                pipeline = _pbr_transparencies_pipeline;
-                            }
-
-                            cmds.use_pipeline(pipeline).draw_indexed(
-                                _indirect_buffer,
-                                static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                                                           draw_calls_issued * sizeof(indexed_indirect_command)),
-                                static_cast<std::uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
-
-                            draw_calls_issued += static_cast<std::uint32_t>(batch.commands.size());
+                            pipeline = _pbr_opaque_pipeline;
                         }
+                        else if (key.alpha_type == alpha_behavior::TRANSPARENT)
+                        {
+                            pipeline = _pbr_transparencies_pipeline;
+                        }
+
+                        cmds.use_pipeline(pipeline).draw_indexed(
+                            _indirect_buffer,
+                            static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                                                       draw_calls_issued * sizeof(indexed_indirect_command)),
+                            static_cast<std::uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
+
+                        draw_calls_issued += static_cast<std::uint32_t>(batch.commands.size());
+                    }
+                });
+        });
+
+        auto first_frame_taa_copy_pass = rgc->add_graph_pass(
+            "TAA Build Initial History", queue_operation_type::GRAPHICS_AND_TRANSFER, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(_pbr_pass)
+                    .add_blit_target(history_color_buffer)
+                    .add_blit_source(color_buffer)
+                    .should_execute([&]() { return _device->current_frame() == 0; })
+                    .on_execute([history_color_buffer, color_buffer](command_list& cmds) {
+                        cmds.blit(color_buffer, history_color_buffer);
                     });
+            });
+
+        auto taa_resolve_pass =
+            rgc->add_graph_pass("TAA Resolve", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(_pbr_pass)
+                    .depends_on(first_frame_taa_copy_pass)
+                    .add_color_attachment(resolved_color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
+                                          store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
+                    .add_sampled_image(color_buffer, 0, 0)
+                    .add_sampled_image(history_color_buffer, 0, 1)
+                    .add_sampled_image(velocity_buffer, 0, 2)
+                    .add_sampler(_point_sampler, 0, 3, pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler, 0, 4, pipeline_stage::FRAGMENT)
+                    .on_execute([&](command_list& cmds) { cmds.use_pipeline(_taa_resolve_handle).draw(3, 1, 0, 0); });
             });
 
         for (auto& [win, sc_handle] : _swapchains)
         {
             auto resolve_pass = rgc->add_graph_pass(
                 "Resolve Pass", queue_operation_type::GRAPHICS_AND_TRANSFER, [&](graph_pass_builder& builder) {
-                    builder.add_blit_source(color_buffer)
+                    builder.add_blit_source(resolved_color_buffer)
                         .add_external_blit_target(sc_handle)
-                        .depends_on(_pbr_opaque_pass)
-                        .on_execute([&, sc_handle, color_buffer](command_list& cmds) {
-                            cmds.blit(color_buffer, _device->fetch_current_image(sc_handle));
+                        .add_blit_target(history_color_buffer)
+                        .depends_on(taa_resolve_pass)
+                        .on_execute([&, sc_handle, color_buffer, resolved_color_buffer,
+                                     history_color_buffer](command_list& cmds) {
+                            cmds.blit(resolved_color_buffer, _device->fetch_current_image(sc_handle));
+                            cmds.blit(resolved_color_buffer, history_color_buffer);
                         });
                 });
         }
@@ -396,13 +498,14 @@ namespace tempest::graphics
 
         _device->unmap_buffer(staging_buffer);
 
-        _graph->update_external_sampled_images(_pbr_opaque_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_pbr_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
         _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
 
         _pbr_opaque_pipeline = create_pbr_pipeline(false);
         _pbr_transparencies_pipeline = create_pbr_pipeline(true);
         _z_prepass_pipeline = create_z_prepass_pipeline();
         _hzb_build_pipeline = create_hzb_build_pipeline();
+        _taa_resolve_handle = create_taa_resolve_pipeline();
 
         _last_updated_frame = _device->current_frame();
 
@@ -451,7 +554,20 @@ namespace tempest::graphics
             auto& draw_batch = _draw_batches[key];
             auto& mesh = _meshes[renderable.mesh_id];
 
-            draw_batch.objects.insert_or_replace(ent, object_payload);
+            auto object_data_it = draw_batch.objects.find(ent);
+            if (object_data_it == draw_batch.objects.end()) [[unlikely]]
+            {
+                object_payload.prev_model = object_payload.model;
+
+                draw_batch.objects.insert(ent, object_payload);
+            }
+            else
+            {
+                const auto& prev_data = draw_batch.objects[ent];
+                object_payload.prev_model = prev_data.model;
+                draw_batch.objects[ent] = object_payload;
+            }
+
             draw_batch.commands.push_back({
                 .index_count = mesh.index_count,
                 .instance_count = 1,
@@ -634,13 +750,19 @@ namespace tempest::graphics
             },
         };
 
-        resource_format color_buffer_fmt[] = {resource_format::RGBA8_SRGB};
-
-        color_blend_attachment_state blending[] = {
-            {
-                .enabled = false,
-            },
+        resource_format color_buffer_fmt[] = {
+            resource_format::RGBA8_SRGB,
+            resource_format::RG32_FLOAT,
         };
+
+        color_blend_attachment_state blending[] = {{
+                                                       // Color Buffer
+                                                       .enabled = false,
+                                                   },
+                                                   {
+                                                       // Velocity Buffer
+                                                       .enabled = false,
+                                                   }};
 
         if (enable_blend)
         {
@@ -831,6 +953,86 @@ namespace tempest::graphics
         });
 
         _compute_pipelines.push_back(pipeline);
+
+        return pipeline;
+    }
+
+    graphics_pipeline_resource_handle render_system::create_taa_resolve_pipeline()
+    {
+        auto vertex_shader_source = core::read_bytes("assets/shaders/taa.vert.spv");
+        auto fragment_shader_source = core::read_bytes("assets/shaders/taa.frag.spv");
+
+        descriptor_binding_info set0_bindings[] = {
+            {
+                .type = descriptor_binding_type::SAMPLED_IMAGE,
+                .binding_index = 0,
+                .binding_count = 1,
+            },
+            {
+                .type = descriptor_binding_type::SAMPLED_IMAGE,
+                .binding_index = 1,
+                .binding_count = 1,
+            },
+            {
+                .type = descriptor_binding_type::SAMPLED_IMAGE,
+                .binding_index = 2,
+                .binding_count = 1,
+            },
+            {
+                .type = descriptor_binding_type::SAMPLER,
+                .binding_index = 3,
+                .binding_count = 1,
+            },
+            {
+                .type = descriptor_binding_type::SAMPLER,
+                .binding_index = 4,
+                .binding_count = 1,
+            },
+        };
+
+        descriptor_set_layout_create_info layouts[] = {
+            {
+                .set = 0,
+                .bindings = set0_bindings,
+            },
+        };
+
+        resource_format color_buffer_fmt[] = {resource_format::RGBA8_SRGB};
+
+        color_blend_attachment_state blending[] = {
+            {
+                .enabled = false,
+            },
+        };
+
+        auto pipeline = _device->create_graphics_pipeline({
+            .layout{
+                .set_layouts = layouts,
+            },
+            .target{
+                .color_attachment_formats = color_buffer_fmt,
+            },
+            .vertex_shader{
+                .bytes = vertex_shader_source,
+                .entrypoint = "main",
+                .name = "TAA Resolve Vertex Shader Module",
+            },
+            .fragment_shader{
+                .bytes = fragment_shader_source,
+                .entrypoint = "main",
+                .name = "TAA Resolve Fragment Shader Module",
+            },
+            .depth_testing{
+                .enable_test = false,
+                .enable_write = false,
+            },
+            .blending{
+                .attachment_blend_ops = blending,
+            },
+            .name = "TAA Resolve Pipeline",
+        });
+
+        _graphics_pipelines.push_back(pipeline);
 
         return pipeline;
     }
