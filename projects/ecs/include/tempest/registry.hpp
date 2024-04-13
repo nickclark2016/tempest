@@ -75,17 +75,7 @@ namespace tempest::ecs
             /**
              * @brief Dereference operator.
              */
-            [[nodiscard]] constexpr reference operator*() noexcept;
-
-            /**
-             * @brief Dereference operator.
-             */
-            [[nodiscard]] constexpr const_reference operator*() const noexcept;
-
-            /**
-             * @brief Dereference operator.
-             */
-            [[nodiscard]] constexpr pointer operator->() const noexcept;
+            [[nodiscard]] constexpr value_type operator*() const noexcept;
 
             /**
              * @brief Pre-increment operator.
@@ -123,19 +113,6 @@ namespace tempest::ecs
             std::size_t end{0};
         };
 
-        template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC, typename... Ts>
-        struct basic_component_view_iterator
-        {
-            basic_registry<T>* source;
-            basic_entity_store_iterator<T, EPC, EPB, BPC> current;
-        };
-
-        template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC, typename... Ts>
-        struct basic_component_view
-        {
-            basic_registry<T>* source;
-        };
-
         template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
         inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::basic_entity_store_iterator(
             T* chunks, std::size_t index, std::size_t end) noexcept
@@ -144,20 +121,7 @@ namespace tempest::ecs
         }
 
         template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
-        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::reference basic_entity_store_iterator<
-            T, EPC, EPB, BPC>::operator*() noexcept
-        {
-            auto chunk_index = index / entities_per_chunk;
-            auto chunk_offset = index % entities_per_chunk;
-
-            auto block_index = chunk_offset / entities_per_block;
-            auto block_offset = chunk_offset % entities_per_block;
-
-            return chunks[chunk_index].blocks[block_index].entities[block_offset];
-        }
-
-        template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
-        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::const_reference basic_entity_store_iterator<
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::value_type basic_entity_store_iterator<
             T, EPC, EPB, BPC>::operator*() const noexcept
         {
             auto chunk_index = index / entities_per_chunk;
@@ -167,19 +131,6 @@ namespace tempest::ecs
             auto block_offset = chunk_offset % entities_per_block;
 
             return chunks[chunk_index].blocks[block_index].entities[block_offset];
-        }
-
-        template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
-        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::pointer basic_entity_store_iterator<
-            T, EPC, EPB, BPC>::operator->() const noexcept
-        {
-            auto chunk_index = index / entities_per_chunk;
-            auto chunk_offset = index % entities_per_chunk;
-
-            auto block_index = chunk_offset / entities_per_block;
-            auto block_offset = chunk_offset % entities_per_block;
-
-            return chunks[chunk_index].blocks[block_index].entities.data() + block_offset;
         }
 
         template <typename T, std::size_t EPC, std::size_t EPB, std::size_t BPC>
@@ -593,6 +544,85 @@ namespace tempest::ecs
         _head = traits_type::construct(current_cap, 0);
     }
 
+    namespace detail
+    {
+        template <typename E, typename... Ts>
+        struct basic_component_view_iterator
+        {
+            basic_registry<E>* source;
+            basic_registry<E>::store_type::iterator current;
+            basic_registry<E>::store_type::iterator end;
+
+            using reference = std::tuple<E, Ts&...>;
+            using const_reference = std::tuple<E, const Ts&...>;
+
+            reference operator*() noexcept;
+            const_reference operator*() const noexcept;
+
+            basic_component_view_iterator& operator++() noexcept;
+            basic_component_view_iterator operator++(int) noexcept;
+            basic_component_view_iterator& operator--() noexcept;
+            basic_component_view_iterator operator--(int) noexcept;
+        };
+
+        template <typename E, typename... Ts>
+        struct basic_component_view
+        {
+            basic_registry<E>* source;
+
+            basic_component_view(basic_registry<E>* source) noexcept;
+
+            using iterator = basic_component_view_iterator<E, Ts...>;
+            using const_iterator = basic_component_view_iterator<E, const Ts...>;
+
+            iterator begin() noexcept;
+            const_iterator begin() const noexcept;
+            const_iterator cbegin() const noexcept;
+
+            iterator end() noexcept;
+            const_iterator end() const noexcept;
+            const_iterator cend() const noexcept;
+        };
+
+        template <typename E, typename... Ts>
+        struct basic_component_const_view_iterator
+        {
+            const basic_registry<E>* source;
+            basic_registry<E>::store_type::const_iterator current;
+            basic_registry<E>::store_type::const_iterator end;
+
+            using reference = std::tuple<E, Ts&...>;
+            using const_reference = std::tuple<E, const Ts&...>;
+
+            reference operator*() noexcept;
+            const_reference operator*() const noexcept;
+
+            basic_component_const_view_iterator& operator++() noexcept;
+            basic_component_const_view_iterator operator++(int) noexcept;
+            basic_component_const_view_iterator& operator--() noexcept;
+            basic_component_const_view_iterator operator--(int) noexcept;
+        };
+
+        template <typename E, typename... Ts>
+        struct basic_component_const_view
+        {
+            const basic_registry<E>* source;
+
+            basic_component_const_view(const basic_registry<E>* source) noexcept;
+
+            using iterator = basic_component_const_view_iterator<E, Ts...>;
+            using const_iterator = basic_component_const_view_iterator<E, const Ts...>;
+
+            iterator begin() noexcept;
+            const_iterator begin() const noexcept;
+            const_iterator cbegin() const noexcept;
+
+            iterator end() noexcept;
+            const_iterator end() const noexcept;
+            const_iterator cend() const noexcept;
+        };
+    } // namespace detail
+
     using entity_store = basic_entity_store<entity, 4096, std::uint64_t>;
 
     template <typename E>
@@ -602,6 +632,7 @@ namespace tempest::ecs
         using entity_type = E;
         using traits_type = entity_traits<E>;
         using size_type = std::size_t;
+        using store_type = entity_store;
 
         void reserve(std::size_t new_capacity);
 
@@ -657,6 +688,12 @@ namespace tempest::ecs
             return _entities;
         }
 
+        template <typename... Ts>
+        detail::basic_component_view<E, Ts...> view();
+
+        template <typename... Ts>
+        detail::basic_component_const_view<E, Ts...> view() const;
+
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
         std::vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
@@ -705,7 +742,9 @@ namespace tempest::ecs
     template <typename T>
     inline void basic_registry<E>::assign(E e, const T& value)
     {
-        static core::type_info id = core::type_id<T>();
+        using type = std::remove_cv_t<T>;
+
+        static core::type_info id = core::type_id<type>();
 
         if (_component_stores.size() <= id.index())
         {
@@ -714,19 +753,21 @@ namespace tempest::ecs
 
         if (_component_stores[id.index()] == nullptr)
         {
-            _component_stores[id.index()] = std::make_unique<sparse_map<T>>();
+            _component_stores[id.index()] = std::make_unique<sparse_map<type>>();
         }
 
         auto& store = _component_stores[id.index()];
 
-        static_cast<sparse_map<T>*>(store.get())->insert(e, value);
+        static_cast<sparse_map<type>*>(store.get())->insert(e, value);
     }
 
     template <typename E>
     template <typename T>
     inline bool basic_registry<E>::has(E e) const noexcept
     {
-        static core::type_info id = core::type_id<T>();
+        using type = std::remove_cv_t<T>;
+
+        static core::type_info id = core::type_id<type>();
 
         if (_component_stores.size() <= id.index())
         {
@@ -739,7 +780,7 @@ namespace tempest::ecs
             return false;
         }
 
-        return static_cast<const sparse_map<T>*>(store.get())->contains(e);
+        return static_cast<const sparse_map<type>*>(store.get())->contains(e);
     }
 
     template <typename E>
@@ -753,30 +794,34 @@ namespace tempest::ecs
     template <typename T>
     inline T& basic_registry<E>::get(E e)
     {
-        static core::type_info id = core::type_id<T>();
+        using type = std::remove_cv_t<T>;
+
+        static core::type_info id = core::type_id<type>();
         assert(id.index() < _component_stores.size());
 
         auto& store = _component_stores[id.index()];
         assert(store != nullptr);
 
-        assert(static_cast<sparse_map<T>*>(store.get())->contains(e));
+        assert(static_cast<sparse_map<type>*>(store.get())->contains(e));
 
-        return static_cast<sparse_map<T>&>(*store.get())[e];
+        return static_cast<sparse_map<type>&>(*store.get())[e];
     }
 
     template <typename E>
     template <typename T>
     inline const T& basic_registry<E>::get(E e) const
     {
-        static core::type_info id = core::type_id<T>();
+        using type = std::remove_cv_t<T>;
+
+        static core::type_info id = core::type_id<type>();
         assert(id.index() < _component_stores.size());
 
         const auto& store = _component_stores[id.index()];
         assert(store != nullptr);
 
-        assert(static_cast<const sparse_map<T>*>(store.get())->contains(e));
+        assert(static_cast<const sparse_map<type>*>(store.get())->contains(e));
 
-        return static_cast<const sparse_map<T>&>(*store.get())[e];
+        return static_cast<const sparse_map<type>&>(*store.get())[e];
     }
 
     template <typename E>
@@ -797,7 +842,9 @@ namespace tempest::ecs
     template <typename T>
     inline T* basic_registry<E>::try_get(E e) noexcept
     {
-        static core::type_info id = core::type_id<T>();
+        using type = std::remove_cv_t<T>;
+
+        static core::type_info id = core::type_id<type>();
 
         if (id.index() >= _component_stores.size())
         {
@@ -810,19 +857,21 @@ namespace tempest::ecs
             return nullptr;
         }
 
-        if (!static_cast<sparse_map<T>*>(store.get())->contains(e))
+        if (!static_cast<sparse_map<type>*>(store.get())->contains(e))
         {
             return nullptr;
         }
 
-        return &static_cast<sparse_map<T>&>(*store.get())[e];
+        return &static_cast<sparse_map<type>&>(*store.get())[e];
     }
 
     template <typename E>
     template <typename T>
     inline const T* basic_registry<E>::try_get(E e) const noexcept
     {
-        static core::type_info id = core::type_id<T>();
+        using type = std::remove_cv_t<T>;
+
+        static core::type_info id = core::type_id<type>();
 
         if (id.index() >= _component_stores.size())
         {
@@ -835,12 +884,12 @@ namespace tempest::ecs
             return nullptr;
         }
 
-        if (!static_cast<const sparse_map<T>*>(store.get())->contains(e))
+        if (!static_cast<const sparse_map<type>*>(store.get())->contains(e))
         {
             return nullptr;
         }
 
-        return &static_cast<const sparse_map<T>&>(*store.get())[e];
+        return &static_cast<const sparse_map<type>&>(*store.get())[e];
     }
 
     template <typename E>
@@ -861,16 +910,356 @@ namespace tempest::ecs
     template <typename T>
     inline void basic_registry<E>::remove(E e)
     {
-        static core::type_info id = core::type_id<T>();
+        using type = std::remove_cv_t<T>;
+
+        static core::type_info id = core::type_id<type>();
         if (id.index() < _component_stores.size())
         {
             auto& store = _component_stores[id.index()];
             if (store != nullptr)
             {
-                static_cast<sparse_map<T>*>(store.get())->erase(e);
+                static_cast<sparse_map<type>*>(store.get())->erase(e);
             }
         }
     }
+
+    template <typename E>
+    template <typename... Ts>
+    inline detail::basic_component_view<E, Ts...> basic_registry<E>::view()
+    {
+        return detail::basic_component_view<E, Ts...>(this);
+    }
+
+    template <typename E>
+    template <typename... Ts>
+    inline detail::basic_component_const_view<E, Ts...> basic_registry<E>::view() const
+    {
+        return detail::basic_component_const_view<E, Ts...>(this);
+    }
+
+    namespace detail
+    {
+        template <typename E, typename... Ts>
+        inline typename basic_component_view_iterator<E, Ts...>::reference basic_component_view_iterator<
+            E, Ts...>::operator*() noexcept
+        {
+            auto e = *current;
+            return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_view_iterator<E, Ts...>::const_reference basic_component_view_iterator<
+            E, Ts...>::operator*() const noexcept
+        {
+            auto e = *current;
+            return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+        }
+
+        template <typename T, typename... Ts>
+        inline basic_component_view_iterator<T, Ts...>& basic_component_view_iterator<T, Ts...>::operator++() noexcept
+        {
+            ++current;
+
+            for (; current != end; ++current)
+            {
+                auto e = *current;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+            }
+
+            return *this;
+        }
+
+        template <typename T, typename... Ts>
+        inline basic_component_view_iterator<T, Ts...> basic_component_view_iterator<T, Ts...>::operator++(int) noexcept
+        {
+            auto self = *this;
+            ++(*this);
+            return self;
+        }
+
+        template <typename T, typename... Ts>
+        inline basic_component_view_iterator<T, Ts...>& basic_component_view_iterator<T, Ts...>::operator--() noexcept
+        {
+            for (; current != source->entities().begin(); --current)
+            {
+                auto e = *current;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+            }
+
+            return *this;
+        }
+
+        template <typename T, typename... Ts>
+        inline basic_component_view_iterator<T, Ts...> basic_component_view_iterator<T, Ts...>::operator--(int) noexcept
+        {
+            auto self = *this;
+            --(*this);
+            return self;
+        }
+
+        template <typename T, typename... Ts>
+        inline bool operator==(const basic_component_view_iterator<T, Ts...>& lhs,
+                               const basic_component_view_iterator<T, Ts...>& rhs) noexcept
+        {
+            return lhs.current == rhs.current;
+        }
+
+        template <typename T, typename... Ts>
+        inline bool operator!=(const basic_component_view_iterator<T, Ts...>& lhs,
+                               const basic_component_view_iterator<T, Ts...>& rhs) noexcept
+        {
+            return !(lhs == rhs);
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_view<E, Ts...>::basic_component_view(basic_registry<E>* source) noexcept : source{source}
+        {
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_view<E, Ts...>::iterator basic_component_view<E, Ts...>::begin() noexcept
+        {
+            auto begin = source->entities().begin();
+            while (begin != source->entities().end())
+            {
+                auto e = *begin;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+                ++begin;
+            }
+
+            return {source, begin, source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_view<E, Ts...>::const_iterator basic_component_view<E, Ts...>::begin()
+            const noexcept
+        {
+            // Get first entity that has all components
+            auto begin = source->entities().begin();
+            while (begin != source->entities().end())
+            {
+                auto e = *begin;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+                ++begin;
+            }
+
+            return {source, begin, source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_view<E, Ts...>::const_iterator basic_component_view<E, Ts...>::cbegin()
+            const noexcept
+        {
+            auto begin = source->entities().begin();
+            while (begin != source->entities().end())
+            {
+                auto e = *begin;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+                ++begin;
+            }
+
+            return {source, begin, source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_view<E, Ts...>::iterator basic_component_view<E, Ts...>::end() noexcept
+        {
+            return {source, source->entities().end(), source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_view<E, Ts...>::const_iterator basic_component_view<E, Ts...>::end()
+            const noexcept
+        {
+            return {source, source->entities().end(), source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_view<E, Ts...>::const_iterator basic_component_view<E, Ts...>::cend()
+            const noexcept
+        {
+            return {source, source->entities().end(), source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_const_view_iterator<E, Ts...>::reference basic_component_const_view_iterator<
+            E, Ts...>::operator*() noexcept
+        {
+            auto e = *current;
+            return std::tuple_cat(std::make_tuple(e), source->get<typename std::remove_reference_t<Ts>...>(e));
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_const_view_iterator<E, Ts...>::const_reference basic_component_const_view_iterator<
+            E, Ts...>::operator*() const noexcept
+        {
+            auto e = *current;
+            return std::tuple_cat(std::make_tuple(e), source->get<typename std::remove_reference_t<Ts>...>(e));
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_const_view_iterator<E, Ts...>& basic_component_const_view_iterator<
+            E, Ts...>::operator++() noexcept
+        {
+            ++current;
+
+            for (; current != end; ++current)
+            {
+                auto e = *current;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+            }
+
+            return *this;
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_const_view_iterator<E, Ts...> basic_component_const_view_iterator<E, Ts...>::operator++(
+            int) noexcept
+        {
+            auto self = *this;
+            ++(*this);
+            return self;
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_const_view_iterator<E, Ts...>& basic_component_const_view_iterator<
+            E, Ts...>::operator--() noexcept
+        {
+            for (; current != source->entities().begin(); --current)
+            {
+                auto e = *current;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+            }
+
+            return *this;
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_const_view_iterator<E, Ts...> basic_component_const_view_iterator<E, Ts...>::operator--(
+            int) noexcept
+        {
+            auto self = *this;
+            --(*this);
+            return self;
+        }
+
+        template <typename E, typename... Ts>
+        inline bool operator==(const basic_component_const_view_iterator<E, Ts...>& lhs,
+                               const basic_component_const_view_iterator<E, Ts...>& rhs) noexcept
+        {
+            return lhs.current == rhs.current;
+        }
+
+        template <typename E, typename... Ts>
+        inline bool operator!=(const basic_component_const_view_iterator<E, Ts...>& lhs,
+                               const basic_component_const_view_iterator<E, Ts...>& rhs) noexcept
+        {
+            return !(lhs == rhs);
+        }
+
+        template <typename E, typename... Ts>
+        inline basic_component_const_view<E, Ts...>::basic_component_const_view(
+            const basic_registry<E>* source) noexcept
+            : source{source}
+        {
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_const_view<E, Ts...>::iterator basic_component_const_view<
+            E, Ts...>::begin() noexcept
+        {
+            auto begin = source->entities().cbegin();
+            while (begin != source->entities().cend())
+            {
+                const auto e = *begin;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+                ++begin;
+            }
+
+            return {&*source, begin, source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_const_view<E, Ts...>::const_iterator basic_component_const_view<
+            E, Ts...>::begin() const noexcept
+        {
+            auto begin = source->entities().cbegin();
+            while (begin != source->entities().cend())
+            {
+                const auto e = *begin;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+                ++begin;
+            }
+
+            return {&*source, begin, source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_const_view<E, Ts...>::const_iterator basic_component_const_view<
+            E, Ts...>::cbegin() const noexcept
+        {
+            auto begin = source->entities().cbegin();
+            while (begin != source->entities().cend())
+            {
+                const auto e = *begin;
+                if ((source->has<Ts>(e) && ...))
+                {
+                    break;
+                }
+                ++begin;
+            }
+
+            return {&*source, begin, source->entities().end()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_const_view<E, Ts...>::iterator basic_component_const_view<E,
+                                                                                                  Ts...>::end() noexcept
+        {
+            return {&*source, source->entities().cend(), source->entities().cend()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_const_view<E, Ts...>::const_iterator basic_component_const_view<E, Ts...>::end()
+            const noexcept
+        {
+            return {&*source, source->entities().cend(), source->entities().cend()};
+        }
+
+        template <typename E, typename... Ts>
+        inline typename basic_component_const_view<E, Ts...>::const_iterator basic_component_const_view<
+            E, Ts...>::cend() const noexcept
+        {
+            return {&*source, source->entities().cend(), source->entities().cend()};
+        }
+    } // namespace detail
 
     using registry = basic_registry<entity>;
 } // namespace tempest::ecs
