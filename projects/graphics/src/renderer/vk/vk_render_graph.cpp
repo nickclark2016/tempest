@@ -194,7 +194,7 @@ namespace tempest::graphics::vk
                 break;
             }
             case buffer_resource_usage::CONSTANT:
-                return VK_ACCESS_2_SHADER_READ_BIT;
+                return VK_ACCESS_2_UNIFORM_READ_BIT;
             case buffer_resource_usage::VERTEX:
                 return VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
             case buffer_resource_usage::INDEX:
@@ -990,10 +990,9 @@ namespace tempest::graphics::vk
                     .stage_mask = compute_buffer_stage_access(buf.type, buf.usage, pass_ref.operation_type()),
                     .access_mask = compute_buffer_access_mask(buf.type, buf.usage),
                     .buffer = vk_buf->buffer,
-                    .offset = 0,
-                    .size = VK_WHOLE_SIZE, // TODO: figure out the proper mechanism to get offsets
+                    .offset = offset,
+                    .size = size_per_frame,
                     .queue_family = queue.queue_family_index,
-
                 };
 
                 VkBufferMemoryBarrier2 buf_barrier_2 = {

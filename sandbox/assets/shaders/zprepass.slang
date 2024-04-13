@@ -8,6 +8,7 @@ struct SceneGlobals {
     Camera camera;
     float2 screen_size;
     float4 ambient_light;
+    float4 jitter_offset;
     Light sun;
 };
 
@@ -52,7 +53,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     float3 geom_bitan = normalize(cross(geom_normal, geom_tangent)) * v.tangent.w;
 
     VertexOutput output;
-    output.position = clip_pos;
+    output.position = clip_pos + scene.jitter_offset;
     output.uv = v.uv0;
     output.normal = geom_normal;
     output.tangent = geom_tangent;
@@ -72,10 +73,10 @@ FragmentOutput FSMain(VertexOutput input) {
     material.textures = bindless_textures;
 
     PixelData pd;
-    pd.uv = input.uv;
-    pd.geom_tangent = input.tangent;
-    pd.geom_bitangent = input.bitangent;
-    pd.geom_normal = input.normal;
+    pd.uv = half2(input.uv);
+    pd.geom_tangent = half3(input.tangent);
+    pd.geom_bitangent = half3(input.bitangent);
+    pd.geom_normal = half3(input.normal);
 
     fetch_pixel_data(material, pd);
 
