@@ -436,3 +436,80 @@ TEST(registry, stress_test)
         ASSERT_EQ(std::get<1>(values), static_cast<float>(i));
     }
 }
+
+TEST(registry, view_test)
+{
+    registry reg;
+
+    const std::size_t entity_count = 1000;
+    std::vector<entity> entities;
+    entities.reserve(entity_count);
+
+    for (std::size_t i = 0; i < entity_count; ++i)
+    {
+        const auto entity = reg.acquire_entity();
+        reg.assign<int>(entity, static_cast<std::uint32_t>(i));
+        reg.assign<float>(entity, static_cast<float>(i));
+
+        entities.push_back(entity);
+    }
+
+    ASSERT_EQ(reg.entity_count(), entity_count);
+
+    auto view = reg.view<int, float>();
+
+    for (auto [e, int_val, float_val] : view)
+    {
+        ASSERT_EQ(int_val, entity_traits<entity>::as_integral(e));
+        ASSERT_EQ(float_val, static_cast<float>(entity_traits<entity>::as_integral(e)));
+    }
+
+    for (auto [entity, int_val, float_val] : view)
+    {
+        reg.remove<int>(entity);
+        reg.remove<float>(entity);
+    }
+
+    // Check to make sure no entities are found in the view
+    ASSERT_EQ(view.begin(), view.end());
+}
+
+TEST(registry, const_view_test)
+{
+    registry reg;
+
+    const std::size_t entity_count = 1000;
+    std::vector<entity> entities;
+    entities.reserve(entity_count);
+
+    for (std::size_t i = 0; i < entity_count; ++i)
+    {
+        const auto entity = reg.acquire_entity();
+        reg.assign<int>(entity, static_cast<std::uint32_t>(i));
+        reg.assign<float>(entity, static_cast<float>(i));
+
+        entities.push_back(entity);
+    }
+
+    ASSERT_EQ(reg.entity_count(), entity_count);
+
+    // Get const reference to the registry
+    const auto& const_reg = reg;
+
+    const auto view = const_reg.view<int, float>();
+
+    for (const auto [e, int_val, float_val] : view)
+    {
+        ASSERT_EQ(int_val, entity_traits<entity>::as_integral(e));
+        ASSERT_EQ(float_val, static_cast<float>(entity_traits<entity>::as_integral(e)));
+    }
+
+    for (const auto [entity, int_val, float_val] : view)
+    {
+        reg.remove<int>(entity);
+        reg.remove<float>(entity);
+    }
+
+    // Check to make sure no entities are found in the view
+    ASSERT_EQ(view.begin(), view.end());
+}

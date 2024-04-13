@@ -424,47 +424,41 @@ namespace tempest::graphics
             batch.commands.clear();
         }
 
-        for (ecs::entity ent : _registry->entities())
+        for (const auto& [ent, transform, renderable] :
+             _registry->view<ecs::transform_component, renderable_component>())
         {
-            if (_registry->has<ecs::transform_component, renderable_component>(ent))
+            gpu_object_data object_payload = {
+                .model = transform.matrix(),
+                .inv_tranpose_model = math::transpose(math::inverse(transform.matrix())),
+                .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
+                .material_id = static_cast<std::uint32_t>(renderable.material_id),
+                .self_id = static_cast<std::uint32_t>(renderable.object_id),
+            };
+
+            if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
             {
-                auto& transform = _registry->get<ecs::transform_component>(ent);
-                auto& renderable = _registry->get<renderable_component>(ent);
-
-                gpu_object_data object_payload = {
-                    .model = transform.matrix(),
-                    .inv_tranpose_model = math::transpose(math::inverse(transform.matrix())),
-                    .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
-                    .material_id = static_cast<std::uint32_t>(renderable.material_id),
-                    .self_id = static_cast<std::uint32_t>(renderable.object_id),
-                };
-
-                if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
+                if (const auto parent_transform = _registry->try_get<ecs::transform_component>(relationship->parent))
                 {
-                    if (const auto parent_transform =
-                            _registry->try_get<ecs::transform_component>(relationship->parent))
-                    {
-                        object_payload.model = parent_transform->matrix() * object_payload.model;
-                        object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
-                    }
+                    object_payload.model = parent_transform->matrix() * object_payload.model;
+                    object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
                 }
-
-                draw_batch_key key = {
-                    .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
-                };
-
-                auto& draw_batch = _draw_batches[key];
-                auto& mesh = _meshes[renderable.mesh_id];
-
-                draw_batch.objects.insert_or_replace(ent, object_payload);
-                draw_batch.commands.push_back({
-                    .index_count = mesh.index_count,
-                    .instance_count = 1,
-                    .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
-                    .vertex_offset = 0,
-                    .first_instance = static_cast<std::uint32_t>(draw_batch.objects.size() - 1),
-                });
             }
+
+            draw_batch_key key = {
+                .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
+            };
+
+            auto& draw_batch = _draw_batches[key];
+            auto& mesh = _meshes[renderable.mesh_id];
+
+            draw_batch.objects.insert_or_replace(ent, object_payload);
+            draw_batch.commands.push_back({
+                .index_count = mesh.index_count,
+                .instance_count = 1,
+                .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
+                .vertex_offset = 0,
+                .first_instance = static_cast<std::uint32_t>(draw_batch.objects.size() - 1),
+            });
         }
 
         // Iterate through the draw batches and update first instance based on the number of instances in the previous
