@@ -104,7 +104,7 @@ namespace tempest::graphics
         auto depth_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
-            .fmt = resource_format::D32_FLOAT,
+            .fmt = resource_format::D24_FLOAT,
             .type = image_type::IMAGE_2D,
             .persistent = true,
             .name = "Depth Buffer",
@@ -139,7 +139,7 @@ namespace tempest::graphics
         auto encoded_normals_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
-            .fmt = resource_format::RG32_FLOAT,
+            .fmt = resource_format::RG16_FLOAT,
             .type = image_type::IMAGE_2D,
             .persistent = true,
             .name = "Encoded Normals Buffer",
@@ -312,9 +312,16 @@ namespace tempest::graphics
                             _scene_data.camera.position = camera_data.position;
                         }
 
-                        auto jitter_value = jitter[_device->current_frame() % 16];
-                        _scene_data.jitter.x = jitter_value.x;
-                        _scene_data.jitter.y = jitter_value.y;
+                        if (_taa_enabled)
+                        {
+                            auto jitter_value = jitter[_device->current_frame() % 16];
+                            _scene_data.jitter.x = jitter_value.x * 0.75f;
+                            _scene_data.jitter.y = jitter_value.y * 0.75f;
+                        }
+                        else
+                        {
+                            _scene_data.jitter = math::vec4<float>(0.0f, 0.0f, 0.0f, 0.0f);
+                        }
                         _scene_data.jitter.z = 0.0f;
                         _scene_data.jitter.w = 0.0f;
 
@@ -436,7 +443,7 @@ namespace tempest::graphics
                 bldr.depends_on(_pbr_pass)
                     .add_blit_target(history_color_buffer)
                     .add_blit_source(color_buffer)
-                    .should_execute([&]() { return _device->current_frame() == 0; })
+                    .should_execute([&]() { return _device->current_frame() == 0 && _taa_enabled; })
                     .on_execute([history_color_buffer, color_buffer](command_list& cmds) {
                         cmds.blit(color_buffer, history_color_buffer);
                     });
@@ -453,23 +460,38 @@ namespace tempest::graphics
                     .add_sampled_image(velocity_buffer, 0, 2)
                     .add_sampler(_point_sampler, 0, 3, pipeline_stage::FRAGMENT)
                     .add_sampler(_linear_sampler, 0, 4, pipeline_stage::FRAGMENT)
+                    .should_execute([this]() { return _taa_enabled; })
                     .on_execute([&](command_list& cmds) { cmds.use_pipeline(_taa_resolve_handle).draw(3, 1, 0, 0); });
             });
 
         for (auto& [win, sc_handle] : _swapchains)
         {
-            auto resolve_pass = rgc->add_graph_pass(
-                "Resolve Pass", queue_operation_type::GRAPHICS_AND_TRANSFER, [&](graph_pass_builder& builder) {
-                    builder.add_blit_source(resolved_color_buffer)
-                        .add_external_blit_target(sc_handle)
-                        .add_blit_target(history_color_buffer)
-                        .depends_on(taa_resolve_pass)
-                        .on_execute([&, sc_handle, color_buffer, resolved_color_buffer,
-                                     history_color_buffer](command_list& cmds) {
-                            cmds.blit(resolved_color_buffer, _device->fetch_current_image(sc_handle));
-                            cmds.blit(resolved_color_buffer, history_color_buffer);
-                        });
-                });
+            rgc->add_graph_pass("Swapchain Resolve", queue_operation_type::GRAPHICS_AND_TRANSFER,
+                                [&](graph_pass_builder& builder) {
+                                    builder.add_blit_source(resolved_color_buffer)
+                                        .add_external_blit_target(sc_handle)
+                                        .add_blit_source(color_buffer)
+                                        .depends_on(_pbr_pass)
+                                        .should_execute([this]() { return !_taa_enabled; })
+                                        .on_execute([&, sc_handle, color_buffer, resolved_color_buffer,
+                                                     history_color_buffer](command_list& cmds) {
+                                            cmds.blit(color_buffer, _device->fetch_current_image(sc_handle));
+                                        });
+                                });
+
+            rgc->add_graph_pass("Swapchain Resolve", queue_operation_type::GRAPHICS_AND_TRANSFER,
+                                [&](graph_pass_builder& builder) {
+                                    builder.add_blit_source(resolved_color_buffer)
+                                        .add_external_blit_target(sc_handle)
+                                        .add_blit_target(history_color_buffer)
+                                        .depends_on(taa_resolve_pass)
+                                        .should_execute([this]() { return _taa_enabled; })
+                                        .on_execute([&, sc_handle, color_buffer, resolved_color_buffer,
+                                                     history_color_buffer](command_list& cmds) {
+                                            cmds.blit(resolved_color_buffer, _device->fetch_current_image(sc_handle));
+                                            cmds.blit(resolved_color_buffer, history_color_buffer);
+                                        });
+                                });
         }
 
         _graph = std::move(*rgc).compile();
@@ -781,7 +803,7 @@ namespace tempest::graphics
             },
             .target{
                 .color_attachment_formats = color_buffer_fmt,
-                .depth_attachment_format = resource_format::D32_FLOAT,
+                .depth_attachment_format = resource_format::D24_FLOAT,
             },
             .vertex_shader{
                 .bytes = vertex_shader_source,
@@ -864,7 +886,7 @@ namespace tempest::graphics
             },
         };
 
-        resource_format color_buffer_fmt[] = {resource_format::RG32_FLOAT};
+        resource_format color_buffer_fmt[] = {resource_format::RG16_FLOAT};
 
         color_blend_attachment_state blending[] = {
             {
@@ -878,7 +900,7 @@ namespace tempest::graphics
             },
             .target{
                 .color_attachment_formats = color_buffer_fmt,
-                .depth_attachment_format = resource_format::D32_FLOAT,
+                .depth_attachment_format = resource_format::D24_FLOAT,
             },
             .vertex_shader{
                 .bytes = vertex_shader_source,

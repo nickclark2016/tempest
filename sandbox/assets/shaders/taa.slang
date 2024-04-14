@@ -40,6 +40,7 @@ float4 FSMain(VertexOutput input) : SV_Target {
 
     history_color = clamp(history_color, box_min, box_max);
 
-    float3 color = lerp(current_color, history_color, 0.9);
+    float3 color = lerp(history_color, current_color, 0.15h);
+
     return float4(color, 1.0);
 }

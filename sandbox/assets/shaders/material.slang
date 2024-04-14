@@ -54,14 +54,14 @@ struct PixelData {
 
 // Octohedral encoding
 
-float2 octohedral_wrap(float2 v) {
-    return (1 - abs(v.yx)) * select(v.xy >= 0.0, 1.0, -1.0);
+half2 octohedral_wrap(half2 v) {
+    return (1.0h - abs(v.yx)) * select(v.xy >= 0.0h, 1.0h, -1.0h);
 }
 
-float2 encode_normal(float3 normal) {
+half2 encode_normal(half3 normal) {
     normal /= (abs(normal.x) + abs(normal.y) + abs(normal.z));
-    normal.xy = normal.z >= 0.0 ? normal.xy : octohedral_wrap(normal.xy);
-    normal.xy = normal.xy * 0.5 + 0.5;
+    normal.xy = normal.z >= 0.0h ? normal.xy : octohedral_wrap(normal.xy);
+    normal.xy = normal.xy * 0.5h + 0.5h;
     return normal.xy;
 }
 

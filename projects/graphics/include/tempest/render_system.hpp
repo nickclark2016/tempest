@@ -196,6 +196,8 @@ namespace tempest::graphics
         compute_pipeline_resource_handle _hzb_build_pipeline;
         graphics_pipeline_resource_handle _taa_resolve_handle;
 
+        bool _taa_enabled{true};
+
         graph_pass_handle _pbr_pass;
         graph_pass_handle _z_prepass_pass;
 
