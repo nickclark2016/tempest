@@ -315,8 +315,8 @@ namespace tempest::graphics
                         if (_taa_enabled)
                         {
                             auto jitter_value = jitter[_device->current_frame() % 16];
-                            _scene_data.jitter.x = jitter_value.x * 0.75f;
-                            _scene_data.jitter.y = jitter_value.y * 0.75f;
+                            _scene_data.jitter.x = jitter_value.x * 0.85f;
+                            _scene_data.jitter.y = jitter_value.y * 0.85f;
                         }
                         else
                         {
