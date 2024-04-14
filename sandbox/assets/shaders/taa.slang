@@ -29,6 +29,9 @@ float4 FSMain(VertexOutput input) : SV_Target {
     half3 current_color = half3(input_color.Sample(point_sampler, velocity_sampler_position).xyz);
     half3 history_color = half3(history_buffer.Sample(linear_sampler, previous_pixel_position).xyz);
 
+    // TODO: Add velocity-based temporal filtering
+    // TODO: Add depth-based temporal filtering
+
     // Get the color history and box filter it
     half3 right_color = half3(input_color.Sample(point_sampler, velocity_sampler_position, int2(1, 0)).xyz);
     half3 left_color = half3(input_color.Sample(point_sampler, velocity_sampler_position, int2(-1, 0)).xyz);
