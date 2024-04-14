@@ -37,6 +37,7 @@ namespace tempest::graphics
         UNKNOWN,
         R8_UNORM,
         R32_FLOAT,
+        R32_UINT,
         RGBA8_SRGB,
         BGRA8_SRGB,
         RGBA8_UINT,
@@ -48,6 +49,8 @@ namespace tempest::graphics
         RGB32_FLOAT,
         RGBA32_FLOAT,
         D32_FLOAT,
+        D24_FLOAT,
+        D24_S8_FLOAT,
     };
 
     inline constexpr std::size_t bytes_per_element(resource_format fmt)
@@ -58,7 +61,13 @@ namespace tempest::graphics
             return 1;
         case resource_format::R32_FLOAT:
             [[fallthrough]];
+        case resource_format::R32_UINT:
+            [[fallthrough]];
         case resource_format::D32_FLOAT:
+            [[fallthrough]];
+        case resource_format::D24_FLOAT:
+            [[fallthrough]];
+        case resource_format::D24_S8_FLOAT:
             [[fallthrough]];
         case resource_format::RGBA8_SRGB:
             [[fallthrough]];

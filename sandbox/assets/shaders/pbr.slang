@@ -39,14 +39,14 @@ struct FragmentOutput {
 [vk_binding(6, 0)] SamplerState linear_sampler;
 [vk_binding(7, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
 
-float2 calculate_velocity(float4 new_position, float4 previous_position) {
+half2 calculate_velocity(half4 new_position, half4 previous_position) {
     previous_position /= previous_position.w;
-    previous_position.xy = (previous_position.xy + 1) * 0.5;
-    previous_position.y = 1 - previous_position.y;
+    previous_position.xy = (previous_position.xy + 1.0h) * 0.5h;
+    previous_position.y = 1.0h - previous_position.y;
 
     new_position /= new_position.w;
-    new_position.xy = (new_position.xy + 1) * 0.5;
-    new_position.y = 1 - new_position.y;
+    new_position.xy = (new_position.xy + 1.0h) * 0.5h;
+    new_position.y = 1.0h - new_position.y;
 
     return (new_position - previous_position).xy;
 }
@@ -124,7 +124,7 @@ FragmentOutput FSMain(VertexOutput input) {
     FragmentOutput output;
 
     output.color = color;
-    output.velocity = calculate_velocity(input.current_position, input.prev_position);
+    output.velocity = calculate_velocity(half4(input.current_position), half4(input.prev_position));
 
     return output;
 }
