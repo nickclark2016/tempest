@@ -2,6 +2,7 @@
 bin/
 bin-int/
 dependencies/slang
+*.spv
 
 # Log folders
 logs/
