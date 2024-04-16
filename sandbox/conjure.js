@@ -14,11 +14,7 @@ project('sandbox', _ => {
     when({}, (ctx) => {
         const slangPath = (() => {
             if (ctx.system === 'windows') {
-                if (ctx.exporter === 'vstudio') { 
-                    return `../dependencies/slang/${ctx.system}/slangc.exe`;
-                } else {
-                    return `./dependencies/slang/${ctx.system}/slangc.exe`;
-                }
+                return `./dependencies/slang/${ctx.system}/slangc.exe`;
             } else if (ctx.system === 'linux') {
                 return `./dependencies/slang/${ctx.system}/slangc`;
             } else {
@@ -26,7 +22,7 @@ project('sandbox', _ => {
             }
         })();
 
-        const shaderBasePath = ctx.exporter === 'vstudio' ? 'assets/shaders'  : 'sandbox/assets/shaders';
+        const shaderBasePath = 'sandbox/assets/shaders';
         const debugFlags = ctx.configuration === 'Debug' ? '-g3 -O1 -line-directive-mode source-map' : '-O3';
 
         const events = [
