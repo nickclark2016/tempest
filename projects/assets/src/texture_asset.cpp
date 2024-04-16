@@ -8,7 +8,12 @@ namespace tempest::assets
     std::optional<texture_asset> load_texture(const std::filesystem::path& path)
     {
         auto fp = path.string();
+#ifdef _WIN32
+        FILE* f;
+        fopen_s(&f, fp.c_str(), "rb");
+#else
         FILE* f = fopen(fp.c_str(), "rb");
+#endif
         int width, height, channels;
         bool is_16_bit = stbi_is_16_bit(fp.c_str());
 
