@@ -210,6 +210,24 @@ namespace tempest::graphics
         });
         _samplers.push_back(_point_sampler);
 
+        _linear_sampler_no_aniso = _device->create_sampler({
+            .mag = filter::LINEAR,
+            .min = filter::LINEAR,
+            .mipmap = mipmap_mode::LINEAR,
+            .enable_aniso = false,
+            .max_anisotropy = 1.0f,
+        });
+        _samplers.push_back(_linear_sampler_no_aniso);
+
+        _point_sampler_no_aniso = _device->create_sampler({
+            .mag = filter::NEAREST,
+            .min = filter::NEAREST,
+            .mipmap = mipmap_mode::NEAREST,
+            .enable_aniso = false,
+            .max_anisotropy = 1.0f,
+        });
+        _samplers.push_back(_point_sampler_no_aniso);
+
         _hi_z_buffer_constants = rgc->create_buffer({
             .size = sizeof(hi_z_data),
             .location = memory_location::DEVICE,
@@ -361,7 +379,7 @@ namespace tempest::graphics
                             .set_viewport(0, 0, 1920, 1080)
                             .use_index_buffer(_vertex_pull_buffer, 0);
 
-                        for (auto& [key, batch] : _draw_batches)
+                        for (auto [key, batch] : _draw_batches)
                         {
                             if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
                             {
@@ -415,7 +433,7 @@ namespace tempest::graphics
 
                     std::uint32_t draw_calls_issued = 0;
 
-                    for (auto& [key, batch] : _draw_batches)
+                    for (auto [key, batch] : _draw_batches)
                     {
                         graphics_pipeline_resource_handle pipeline;
                         if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
@@ -458,8 +476,8 @@ namespace tempest::graphics
                     .add_sampled_image(color_buffer, 0, 0)
                     .add_sampled_image(history_color_buffer, 0, 1)
                     .add_sampled_image(velocity_buffer, 0, 2)
-                    .add_sampler(_point_sampler, 0, 3, pipeline_stage::FRAGMENT)
-                    .add_sampler(_linear_sampler, 0, 4, pipeline_stage::FRAGMENT)
+                    .add_sampler(_point_sampler_no_aniso, 0, 3, pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler_no_aniso, 0, 4, pipeline_stage::FRAGMENT)
                     .should_execute([this]() { return _taa_enabled; })
                     .on_execute([&](command_list& cmds) { cmds.use_pipeline(_taa_resolve_handle).draw(3, 1, 0, 0); });
             });
@@ -544,7 +562,7 @@ namespace tempest::graphics
 
     void render_system::render()
     {
-        for (auto& [_, batch] : _draw_batches)
+        for (auto [_, batch] : _draw_batches)
         {
             batch.commands.clear();
         }
@@ -602,7 +620,7 @@ namespace tempest::graphics
         // Iterate through the draw batches and update first instance based on the number of instances in the previous
         // batches
         std::uint32_t instances_written = 0;
-        for (auto& [_, batch] : _draw_batches)
+        for (auto [_, batch] : _draw_batches)
         {
             for (auto& cmd : batch.commands)
             {

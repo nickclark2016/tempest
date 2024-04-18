@@ -17,7 +17,7 @@ namespace tempest::assets
         int width, height, channels;
         bool is_16_bit = stbi_is_16_bit(fp.c_str());
 
-        auto bytes = stbi_load_from_file(f, &width, &height, &channels, 4);
+        auto bytes = is_16_bit ? reinterpret_cast<std::byte*>(stbi_load_from_file_16(f, &width, &height, &channels, 4)) : reinterpret_cast<std::byte*>(stbi_load_from_file(f, &width, &height, &channels, 4));
 
         if (bytes)
         {
@@ -27,6 +27,8 @@ namespace tempest::assets
                 .width = static_cast<std::uint32_t>(width),
                 .height = static_cast<std::uint32_t>(height),
                 .bit_depth = is_16_bit ? 16u : 8u,
+                .channels = 4u,
+                .mipmaps = 1u,
             };
 
             stbi_image_free(bytes);

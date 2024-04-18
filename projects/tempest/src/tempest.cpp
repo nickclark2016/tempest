@@ -234,8 +234,8 @@ namespace tempest
         for (auto& tex_asset : model.textures)
         {
             graphics::texture_data_descriptor desc{
-                .fmt =
-                    tex_asset.linear ? graphics::resource_format::RGBA8_UNORM : graphics::resource_format::RGBA8_SRGB,
+                .fmt = tex_asset.type == assets::texture_asset_type::LINEAR ? graphics::resource_format::RGBA8_UNORM
+                                                                            : graphics::resource_format::RGBA8_SRGB,
                 .mips{
                     {
                         {
