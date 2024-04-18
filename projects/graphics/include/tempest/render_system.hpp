@@ -5,13 +5,12 @@
 #include "render_graph.hpp"
 #include "window.hpp"
 
+#include <tempest/flat_map.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/registry.hpp>
 #include <tempest/vertex.hpp>
 
-#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace tempest::graphics
@@ -185,10 +184,12 @@ namespace tempest::graphics
         std::vector<gpu_material_data> _materials;
         std::uint32_t _object_count{0};
 
-        std::map<draw_batch_key, draw_batch_payload> _draw_batches;
+        core::flat_map<draw_batch_key, draw_batch_payload> _draw_batches;
 
         sampler_resource_handle _linear_sampler;
         sampler_resource_handle _point_sampler;
+        sampler_resource_handle _linear_sampler_no_aniso;
+        sampler_resource_handle _point_sampler_no_aniso;
 
         graphics_pipeline_resource_handle _pbr_opaque_pipeline;
         graphics_pipeline_resource_handle _pbr_transparencies_pipeline;

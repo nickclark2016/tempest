@@ -440,29 +440,29 @@ namespace tempest::assets
         {
             if (material.pbrMetallicRoughness.baseColorTexture.index >= 0)
             {
-                asset.textures[root.textures[material.pbrMetallicRoughness.baseColorTexture.index].source].linear =
-                    false;
+                asset.textures[root.textures[material.pbrMetallicRoughness.baseColorTexture.index].source].type =
+                    texture_asset_type::SRGB;
             }
 
             if (material.normalTexture.index != -1)
             {
-                asset.textures[root.textures[material.normalTexture.index].source].linear = true;
+                asset.textures[root.textures[material.normalTexture.index].source].type = texture_asset_type::LINEAR;
             }
 
             if (material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
             {
                 asset.textures[root.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source]
-                    .linear = true;
+                    .type = texture_asset_type::LINEAR;
             }
 
             if (material.occlusionTexture.index != -1)
             {
-                asset.textures[root.textures[material.occlusionTexture.index].source].linear = true;
+                asset.textures[root.textures[material.occlusionTexture.index].source].type = texture_asset_type::LINEAR;
             }
 
             if (material.emissiveTexture.index != -1)
             {
-                asset.textures[root.textures[material.emissiveTexture.index].source].linear = false;
+                asset.textures[root.textures[material.emissiveTexture.index].source].type = texture_asset_type::SRGB;
             }
         }
 
