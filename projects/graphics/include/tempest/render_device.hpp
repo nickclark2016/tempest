@@ -78,6 +78,8 @@ namespace tempest::graphics
         virtual buffer_resource_handle get_staging_buffer() = 0;
         virtual command_execution_service& get_command_executor() = 0;
 
+        virtual void idle() = 0;
+
         virtual ~render_device() = default;
     };
 
