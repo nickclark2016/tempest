@@ -290,7 +290,7 @@ namespace tempest
                 last_fps = fps_counter;
                 fps_counter = 0;
                 last_tick_time = current_time;
-                std::cout << "FPS: " << last_fps << std::endl;
+                log->info("FPS: {}", last_fps);
             }
 
             update(static_cast<float>(frame_time.count()));

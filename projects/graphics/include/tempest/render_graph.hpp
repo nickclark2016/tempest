@@ -63,10 +63,19 @@ namespace tempest::graphics
         image_resource_usage usage;
         std::vector<image_resource_handle> images;
         pipeline_stage stages;
-        
+
         std::uint32_t count;
         std::uint32_t set;
         std::uint32_t binding;
+    };
+
+    struct resolve_image_state
+    {
+        image_resource_handle src;
+        image_resource_handle dst;
+
+        pipeline_stage first_access;
+        pipeline_stage last_access;
     };
 
     struct external_sampler_resource_state
@@ -180,6 +189,10 @@ namespace tempest::graphics
 
         graph_pass_builder& depends_on(graph_pass_handle src);
 
+        graph_pass_builder& resolve_image(image_resource_handle src, image_resource_handle dst,
+                                          pipeline_stage first_access = pipeline_stage::INFER,
+                                          pipeline_stage last_access = pipeline_stage::INFER);
+
         graph_pass_builder& on_execute(std::function<void(command_list&)> commands);
         graph_pass_builder& should_execute(std::function<bool()> fn);
 
@@ -242,6 +255,11 @@ namespace tempest::graphics
             return _sampler_states;
         }
 
+        std::span<const resolve_image_state> resolve_images() const noexcept
+        {
+            return _resolve_images;
+        }
+
         queue_operation_type operation_type() const noexcept
         {
             return _op_type;
@@ -258,6 +276,7 @@ namespace tempest::graphics
         std::vector<external_image_resource_state> _external_image_states;
         std::vector<external_sampler_resource_state> _sampler_states;
         std::vector<graph_pass_handle> _depends_on;
+        std::vector<resolve_image_state> _resolve_images;
         graph_pass_handle _self;
         std::string _name;
 
@@ -270,7 +289,7 @@ namespace tempest::graphics
     {
       public:
         virtual void update_external_sampled_images(graph_pass_handle pass, std::span<image_resource_handle> images,
-                                           std::uint32_t set, std::uint32_t binding, pipeline_stage stage) = 0;
+                                                    std::uint32_t set, std::uint32_t binding, pipeline_stage stage) = 0;
 
         virtual ~render_graph() = default;
         virtual void execute() = 0;

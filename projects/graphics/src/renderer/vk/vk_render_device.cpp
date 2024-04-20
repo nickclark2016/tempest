@@ -1215,6 +1215,7 @@ namespace tempest::graphics::vk
         VkDynamicState dynamic_states[] = {
             VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
             VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+            VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT,
         };
 
         std::vector<VkVertexInputBindingDescription> vertex_bindings;
@@ -1883,10 +1884,17 @@ namespace tempest::graphics::vk
     {
         vkb::PhysicalDeviceSelector select_device(vkb::Instance instance)
         {
+            VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT,
+                .pNext = nullptr,
+                .extendedDynamicState3RasterizationSamples = VK_TRUE,
+            };
+
             vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector(instance)
                                                        .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
                                                        .defer_surface_initialization()
                                                        .require_present()
+                                                       .add_required_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)
                                                        .set_minimum_version(1, 3)
                                                        .set_required_features({
 #ifdef _DEBUG
@@ -1932,7 +1940,8 @@ namespace tempest::graphics::vk
                                                        .set_required_features_13({
                                                            .synchronization2 = VK_TRUE,
                                                            .dynamicRendering = VK_TRUE,
-                                                       });
+                                                       })
+                                                       .add_required_extension_features(extended_dynamic_state);
             return selector;
         }
     } // namespace

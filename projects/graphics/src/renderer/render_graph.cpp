@@ -422,6 +422,20 @@ namespace tempest::graphics
         return *this;
     }
 
+    graph_pass_builder& graph_pass_builder::resolve_image(image_resource_handle src, image_resource_handle dst,
+                                                          pipeline_stage first_access, pipeline_stage last_access)
+    {
+        _resource_lib.add_image_usage(src, image_resource_usage::TRANSFER_SOURCE);
+        _resource_lib.add_image_usage(dst, image_resource_usage::TRANSFER_DESTINATION);
+        _resolve_images.push_back(resolve_image_state{
+            .src = src,
+            .dst = dst,
+            .first_access = first_access,
+            .last_access = last_access,
+        });
+        return *this;
+    }
+
     graph_pass_builder& graph_pass_builder::on_execute(std::function<void(command_list&)> commands)
     {
         _commands = commands;

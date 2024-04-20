@@ -15,6 +15,18 @@
 
 namespace tempest::graphics
 {
+    enum class anti_aliasing_mode
+    {
+        NONE,
+        MSAA,
+        TAA
+    };
+
+    struct render_system_settings
+    {
+        anti_aliasing_mode aa_mode{anti_aliasing_mode::TAA};
+    };
+
     class render_system
     {
         struct gpu_object_data
@@ -115,7 +127,7 @@ namespace tempest::graphics
         };
 
       public:
-        render_system(ecs::registry& entities);
+        render_system(ecs::registry& entities, const render_system_settings& settings = {});
 
         void register_window(iwindow& win);
         void unregister_window(iwindow& win);
@@ -196,11 +208,15 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle _z_prepass_pipeline;
         compute_pipeline_resource_handle _hzb_build_pipeline;
         graphics_pipeline_resource_handle _taa_resolve_handle;
+        graphics_pipeline_resource_handle _sharpen_handle;
 
-        bool _taa_enabled{true};
+        render_system_settings _settings;
+        bool _settings_dirty;
 
         graph_pass_handle _pbr_pass;
+        graph_pass_handle _pbr_msaa_pass;
         graph_pass_handle _z_prepass_pass;
+        graph_pass_handle _z_prepass_msaa_pass;
 
         gpu_scene_data _scene_data;
         hi_z_data _hi_z_data;
@@ -212,6 +228,9 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle create_z_prepass_pipeline();
         compute_pipeline_resource_handle create_hzb_build_pipeline();
         graphics_pipeline_resource_handle create_taa_resolve_pipeline();
+        graphics_pipeline_resource_handle create_sharpen_pipeline();
+
+        void draw_imgui();
     };
 } // namespace tempest::graphics
 

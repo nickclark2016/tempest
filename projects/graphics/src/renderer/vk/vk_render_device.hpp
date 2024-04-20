@@ -361,7 +361,7 @@ namespace tempest::graphics::vk
             return _dispatch;
         }
 
-        void idle()
+        void idle() override
         {
             _dispatch.deviceWaitIdle();
         }

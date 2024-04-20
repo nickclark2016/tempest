@@ -2,8 +2,8 @@
 
 #include "../windowing/glfw_window.hpp"
 
-#include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
+#include <imgui.h>
 
 namespace tempest::graphics
 {
@@ -91,7 +91,8 @@ namespace tempest::graphics
         return value;
     }
 
-    math::vec2<float> imgui_context::float2_slider(std::string_view name, float min, float max, math::vec2<float> current_value)
+    math::vec2<float> imgui_context::float2_slider(std::string_view name, float min, float max,
+                                                   math::vec2<float> current_value)
     {
         ImGui::SliderFloat2(name.data(), current_value.data, min, max);
         return current_value;
@@ -115,8 +116,21 @@ namespace tempest::graphics
         return ImGui::Button(label.data());
     }
 
+    int imgui_context::combo_box(std::string_view label, int current_item, std::span<std::string_view> items)
+    {
+        std::vector<const char*> item_ptrs;
+        for (auto& item : items)
+        {
+            item_ptrs.push_back(item.data());
+        }
+
+        ImGui::Combo(label.data(), &current_item, item_ptrs.data(), item_ptrs.size());
+
+        return current_item;
+    }
+
     void imgui_context::shutdown()
     {
         ImGui_ImplGlfw_Shutdown();
     }
-}
+} // namespace tempest::graphics

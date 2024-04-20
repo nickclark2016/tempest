@@ -708,6 +708,8 @@ namespace tempest::graphics::vk
                     continue;
                 }
 
+                _descriptor_set_states[i].last_update_frame = _device->current_frame();
+
                 pass_graph.add_graph_pass(pass.handle().as_uint64());
 
                 for (auto& dep : pass.depends_on())
@@ -1093,9 +1095,20 @@ namespace tempest::graphics::vk
                     }
                 }
 
+                std::vector<VkImageMemoryBarrier2> resolve_barriers;
+
+                VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+
                 for (const auto& img : pass_ref.image_usage())
                 {
                     auto vk_img = _device->access_image(img.handles[0]);
+
+                    samples = vk_img->img_info.samples;
+
+                    // find the resolve attachment if it exists
+                    auto resolve_target =
+                        std::find_if(std::begin(pass_ref.resolve_images()), std::end(pass_ref.resolve_images()),
+                                     [img](const auto& resolve) { return resolve.src == img.handles[0]; });
 
                     if (img.usage == image_resource_usage::COLOR_ATTACHMENT)
                     {
@@ -1104,9 +1117,15 @@ namespace tempest::graphics::vk
                             .pNext = nullptr,
                             .imageView = vk_img->view,
                             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                            .resolveMode = VK_RESOLVE_MODE_NONE,
-                            .resolveImageView = VK_NULL_HANDLE,
-                            .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                            .resolveMode = resolve_target == std::end(pass_ref.resolve_images())
+                                               ? VK_RESOLVE_MODE_NONE
+                                               : VK_RESOLVE_MODE_AVERAGE_BIT,
+                            .resolveImageView = resolve_target == std::end(pass_ref.resolve_images())
+                                                    ? VK_NULL_HANDLE
+                                                    : _device->access_image(resolve_target->dst)->view,
+                            .resolveImageLayout = resolve_target == std::end(pass_ref.resolve_images())
+                                                      ? VK_IMAGE_LAYOUT_UNDEFINED
+                                                      : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                             .loadOp = compute_load_op(img.load),
                             .storeOp = compute_store_op(img.store),
                             .clearValue{
@@ -1145,9 +1164,15 @@ namespace tempest::graphics::vk
                             .pNext = nullptr,
                             .imageView = vk_img->view,
                             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                            .resolveMode = VK_RESOLVE_MODE_NONE,
-                            .resolveImageView = VK_NULL_HANDLE,
-                            .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                            .resolveMode = resolve_target == std::end(pass_ref.resolve_images())
+                                               ? VK_RESOLVE_MODE_NONE
+                                               : VK_RESOLVE_MODE_MIN_BIT,
+                            .resolveImageView = resolve_target == std::end(pass_ref.resolve_images())
+                                                    ? VK_NULL_HANDLE
+                                                    : _device->access_image(resolve_target->dst)->view,
+                            .resolveImageLayout = resolve_target == std::end(pass_ref.resolve_images())
+                                                      ? VK_IMAGE_LAYOUT_UNDEFINED
+                                                      : VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                             .loadOp = compute_load_op(img.load),
                             .storeOp = compute_store_op(img.store),
                             .clearValue{
@@ -1169,6 +1194,82 @@ namespace tempest::graphics::vk
 
                         has_depth = true;
                     }
+
+                    // check if resolve target requires a barrier
+                    if (resolve_target != std::end(pass_ref.resolve_images()))
+                    {
+                        auto resolve_img = _device->access_image(resolve_target->dst);
+
+                        // fetch prior usages
+                        auto prior_usage = _last_known_state.images.find(resolve_target->dst.as_uint64());
+
+                        VkImageAspectFlagBits aspect_mask = img.usage == image_resource_usage::COLOR_ATTACHMENT
+                                                                ? VK_IMAGE_ASPECT_COLOR_BIT
+                                                                : VK_IMAGE_ASPECT_DEPTH_BIT;
+
+                        auto src_stage_mask = prior_usage == _last_known_state.images.end()
+                                                  ? VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+                                                  : prior_usage->second.stage_mask;
+
+                        auto dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+                        VkImageMemoryBarrier2 resolve_barrier = {
+                            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                            .pNext = nullptr,
+                            .srcStageMask = static_cast<VkPipelineStageFlags2>(src_stage_mask),
+                            .srcAccessMask = prior_usage == _last_known_state.images.end()
+                                                 ? VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT
+                                                 : prior_usage->second.access_mask,
+                            .dstStageMask = static_cast<VkPipelineStageFlags2>(dst_stage_mask),
+                            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                            .newLayout = img.usage == image_resource_usage::COLOR_ATTACHMENT
+                                             ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                             : VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+                            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                            .image = resolve_img->image,
+                            .subresourceRange{
+                                .aspectMask = static_cast<VkImageAspectFlags>(aspect_mask),
+                                .baseMipLevel = 0,
+                                .levelCount = 1,
+                                .baseArrayLayer = 0,
+                                .layerCount = 1,
+                            },
+                        };
+
+                        resolve_barriers.push_back(resolve_barrier);
+
+                        // write new state for the next pass
+                        _last_known_state.images[resolve_target->dst.as_uint64()] = {
+                            .persistent = resolve_img->persistent,
+                            .stage_mask = resolve_barrier.dstStageMask,
+                            .access_mask = resolve_barrier.dstAccessMask,
+                            .image_layout = resolve_barrier.newLayout,
+                            .image = resolve_img->image,
+                            .aspect = static_cast<VkImageAspectFlags>(aspect_mask),
+                            .base_mip = 0,
+                            .mip_count = 1,
+                            .base_array_layer = 0,
+                            .layer_count = 1,
+                            .queue_family = resolve_barrier.dstQueueFamilyIndex,
+                        };
+                    }
+                }
+
+                if (!resolve_barriers.empty())
+                {
+                    VkDependencyInfo dep_info = {
+                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                        .pNext = nullptr,
+                        .memoryBarrierCount = 0,
+                        .pMemoryBarriers = nullptr,
+                        .bufferMemoryBarrierCount = 0,
+                        .pBufferMemoryBarriers = nullptr,
+                        .imageMemoryBarrierCount = static_cast<uint32_t>(resolve_barriers.size()),
+                        .pImageMemoryBarriers = resolve_barriers.empty() ? nullptr : resolve_barriers.data(),
+                    };
+                    cmd_buffer_alloc.dispatch->cmdPipelineBarrier2(cmds, &dep_info);
                 }
 
                 VkRenderingInfo render_info = {
@@ -1199,6 +1300,8 @@ namespace tempest::graphics::vk
                     ImDrawData* data = ImGui::GetDrawData();
                     ImGui_ImplVulkan_RenderDrawData(data, cmds);
                 }
+
+                dispatch->cmdSetRasterizationSamplesEXT(cmds, samples);
             }
 
             std::size_t pass_idx = _pass_index_map[pass_ref.handle().as_uint64()];
