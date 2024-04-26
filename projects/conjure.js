@@ -1,6 +1,7 @@
 include('./assets/conjure.js');
 include('./core/conjure.js');
 include('./ecs/conjure.js');
+include('./editor/conjure.js');
 include('./graphics/conjure.js');
 include('./logger/conjure.js');
 include('./math/conjure.js');

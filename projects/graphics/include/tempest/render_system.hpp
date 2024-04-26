@@ -1,6 +1,7 @@
 #ifndef tempest_graphcis_render_system_hpp
 #define tempest_graphcis_render_system_hpp
 
+#include "imgui_context.hpp"
 #include "render_device.hpp"
 #include "render_graph.hpp"
 #include "window.hpp"
@@ -24,6 +25,8 @@ namespace tempest::graphics
 
     struct render_system_settings
     {
+        bool should_show_settings{false};
+        bool enable_imgui{false};
         anti_aliasing_mode aa_mode{anti_aliasing_mode::TAA};
     };
 
@@ -109,7 +112,7 @@ namespace tempest::graphics
         struct hi_z_data
         {
             math::vec2<std::uint32_t> size;
-            std::uint32_t mip_count; 
+            std::uint32_t mip_count;
         };
 
         struct draw_batch_key
@@ -136,6 +139,13 @@ namespace tempest::graphics
         void after_initialize();
         void render();
         void on_close();
+
+        void update_settings(const render_system_settings& settings);
+
+        [[nodiscard]] inline const render_system_settings& settings() const noexcept
+        {
+            return _settings;
+        }
 
         std::vector<mesh_layout> load_mesh(std::span<core::mesh> meshes);
         void load_textures(std::span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
@@ -164,6 +174,12 @@ namespace tempest::graphics
         inline void allocate_entities(std::uint32_t count)
         {
             _object_count += count;
+        }
+
+        template <typename Fn>
+        inline void draw_imgui(Fn&& fn)
+        {
+            _create_imgui_hierarchy = std::forward<Fn>(fn);
         }
 
       private:
@@ -224,13 +240,13 @@ namespace tempest::graphics
 
         std::size_t _last_updated_frame{0};
 
+        std::function<void()> _create_imgui_hierarchy;
+
         graphics_pipeline_resource_handle create_pbr_pipeline(bool enable_blend);
         graphics_pipeline_resource_handle create_z_prepass_pipeline();
         compute_pipeline_resource_handle create_hzb_build_pipeline();
         graphics_pipeline_resource_handle create_taa_resolve_pipeline();
         graphics_pipeline_resource_handle create_sharpen_pipeline();
-
-        void draw_imgui();
     };
 } // namespace tempest::graphics
 

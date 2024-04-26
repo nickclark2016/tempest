@@ -14,6 +14,7 @@
 #include <concepts>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -688,6 +689,9 @@ namespace tempest::ecs
             return _entities;
         }
 
+        [[nodiscard]] std::optional<std::string_view> name(entity e) const;
+        void name(entity e, std::string_view n);
+
         template <typename... Ts>
         detail::basic_component_view<E, Ts...> view();
 
@@ -697,6 +701,8 @@ namespace tempest::ecs
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
         std::vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
+
+        std::unordered_map<entity, std::string> _name;
     };
 
     template <typename E>
@@ -736,6 +742,22 @@ namespace tempest::ecs
     inline std::size_t basic_registry<E>::entity_count() const noexcept
     {
         return _entities.size();
+    }
+
+    template <typename E>
+    inline std::optional<std::string_view> basic_registry<E>::name(entity e) const
+    {
+        if (auto it = _name.find(e); it != _name.end())
+        {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+
+    template <typename E>
+    inline void basic_registry<E>::name(entity e, std::string_view n)
+    {
+        _name[e] = n;
     }
 
     template <typename E>
@@ -944,7 +966,18 @@ namespace tempest::ecs
             E, Ts...>::operator*() noexcept
         {
             auto e = *current;
-            return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+            if constexpr (sizeof...(Ts) == 0)
+            {
+                return std::make_tuple(e);
+            }
+            else if constexpr (sizeof...(Ts) == 1)
+            {
+                return std::tuple_cat(std::make_tuple(e), std::tuple<Ts&...>(source->get<Ts...>(e)));
+            }
+            else
+            {
+                return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+            }
         }
 
         template <typename E, typename... Ts>
@@ -952,7 +985,18 @@ namespace tempest::ecs
             E, Ts...>::operator*() const noexcept
         {
             auto e = *current;
-            return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+            if constexpr (sizeof...(Ts) == 0)
+            {
+                return std::make_tuple(e);
+            }
+            else if constexpr (sizeof...(Ts) == 1)
+            {
+                return std::tuple_cat(std::make_tuple(e), std::tuple<Ts&...>(source->get<Ts...>(e)));
+            }
+            else
+            {
+                return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+            }
         }
 
         template <typename T, typename... Ts>

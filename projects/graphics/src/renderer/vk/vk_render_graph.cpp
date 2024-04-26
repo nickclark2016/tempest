@@ -551,6 +551,7 @@ namespace tempest::graphics::vk
                 .MinImageCount = static_cast<std::uint32_t>(_device->frames_in_flight()),
                 .ImageCount = static_cast<std::uint32_t>(_device->frames_in_flight()),
                 .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+                .MemoryAllocator = _device->vma_allocator(),
                 .UseDynamicRendering = true,
                 .CheckVkResultFn{[](VkResult res) {
                     if (res != VK_SUCCESS)

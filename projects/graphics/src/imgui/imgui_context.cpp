@@ -62,13 +62,77 @@ namespace tempest::graphics
         ImGui::TableNextRow();
     }
 
-    void imgui_context::create_tree_node(std::string_view name, std::function<void()> contents)
+    bool imgui_context::create_tree_node(std::string_view name, std::function<void()> contents, bool selected)
     {
-        if (ImGui::TreeNode(name.data()))
+        if (selected)
         {
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImU32 col = ImColor(ImVec4(_tree_node_selected_color.x, _tree_node_selected_color.y,
+                                       _tree_node_selected_color.z, _tree_node_selected_color.w));
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                pos, ImVec2(pos.x + ImGui::GetContentRegionMax().x, pos.y + ImGui::GetTextLineHeight()), col);
+        }
+
+        if (ImGui::TreeNodeEx(name.data(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick))
+        {
+            bool is_clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered();
             contents();
             ImGui::TreePop();
+            return is_clicked;
         }
+        else
+        {
+            return ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered();
+        }
+    }
+
+    bool imgui_context::create_tree_node_leaf(std::string_view name, std::function<void()> contents, bool selected)
+    {
+        if (selected)
+        {
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImU32 col = ImColor(ImVec4(_tree_node_selected_color.x, _tree_node_selected_color.y,
+                                       _tree_node_selected_color.z, _tree_node_selected_color.w));
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                pos, ImVec2(pos.x + ImGui::GetContentRegionMax().x, pos.y + ImGui::GetTextLineHeight()), col);
+        }
+
+        if (ImGui::TreeNodeEx(name.data(), ImGuiTreeNodeFlags_Leaf))
+        {
+            bool is_clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered();
+            contents();
+            ImGui::TreePop();
+            return is_clicked;
+        }
+        else
+        {
+            return ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered();
+        }
+    }
+
+    bool imgui_context::begin_tree_node(std::string_view name)
+    {
+        return ImGui::TreeNode(name.data());
+    }
+
+    void imgui_context::end_tree_node()
+    {
+        ImGui::TreePop();
+    }
+
+    void imgui_context::push_color_text(float red, float green, float blue, float alpha)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(red, green, blue, alpha));
+    }
+
+    void imgui_context::push_color_frame_background(float red, float green, float blue, float alpha)
+    {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(red, green, blue, alpha));
+    }
+
+    void imgui_context::pop_color()
+    {
+        ImGui::PopStyleColor();
     }
 
     void imgui_context::create_header(std::string_view name, std::function<void()> contents)
@@ -127,6 +191,17 @@ namespace tempest::graphics
         ImGui::Combo(label.data(), &current_item, item_ptrs.data(), item_ptrs.size());
 
         return current_item;
+    }
+
+    void imgui_context::start_frame()
+    {
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+    }
+
+    void imgui_context::end_frame()
+    {
+        ImGui::EndFrame();
     }
 
     void imgui_context::shutdown()

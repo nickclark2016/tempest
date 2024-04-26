@@ -130,6 +130,12 @@ namespace tempest
         std::unordered_map<std::uint32_t, ecs::entity> node_to_entity;
 
         auto root = _entity_registry.acquire_entity();
+        auto root_relationship = ecs::relationship_component<ecs::entity>{
+            .parent = ecs::tombstone,
+            .next_sibling = ecs::tombstone,
+            .first_child = ecs::tombstone,
+        };
+        _entity_registry.assign(root, root_relationship);
 
         std::uint32_t node_id = 0;
         std::uint32_t renderable_count = 0;
@@ -146,6 +152,8 @@ namespace tempest
 
             _entity_registry.assign(ent, transform);
 
+            _entity_registry.name(ent, node.name);
+
             ++node_id;
         }
 
@@ -158,6 +166,11 @@ namespace tempest
                 .next_sibling = ecs::tombstone,
                 .first_child = ecs::tombstone,
             };
+
+            auto& parent_relationship =
+                _entity_registry.get<ecs::relationship_component<ecs::entity>>(relationship.parent);
+            relationship.next_sibling = parent_relationship.first_child;
+            parent_relationship.first_child = ent;
 
             _entity_registry.assign(ent, relationship);
 

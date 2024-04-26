@@ -112,8 +112,10 @@ namespace tempest::graphics::vk
 
         operator VkCommandBuffer() const noexcept;
 
-        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, compute_pipeline_resource_handle handle) override;
-        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, graphics_pipeline_resource_handle handle) override;
+        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data,
+                                     compute_pipeline_resource_handle handle) override;
+        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data,
+                                     graphics_pipeline_resource_handle handle) override;
 
         command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
                                    float max_depth = 1.0f, std::uint32_t viewport_id = 0, bool flip = true) override;
@@ -124,7 +126,7 @@ namespace tempest::graphics::vk
         command_list& draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
                            std::uint32_t stride) override;
         command_list& draw_indexed(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
-                           std::uint32_t stride) override;
+                                   std::uint32_t stride) override;
         command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) override;
         command_list& use_index_buffer(buffer_resource_handle buf, std::uint32_t offset) override;
 
@@ -379,6 +381,11 @@ namespace tempest::graphics::vk
         vkb::Device logical_device() const noexcept
         {
             return _device;
+        }
+
+        VmaAllocator vma_allocator() const noexcept
+        {
+            return _vk_alloc;
         }
 
       private:
