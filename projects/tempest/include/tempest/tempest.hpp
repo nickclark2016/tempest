@@ -68,6 +68,16 @@ namespace tempest
             _update_callbacks.push_back(std::move(callback));
         }
 
+        graphics::render_system& get_render_system()
+        {
+            return _render_system;
+        }
+
+        const graphics::render_system& get_render_system() const
+        {
+            return _render_system;
+        }
+
         ecs::entity load_asset(std::string_view path);
 
         [[noreturn]] void run();

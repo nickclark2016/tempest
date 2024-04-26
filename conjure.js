@@ -1,18 +1,18 @@
-workspace('Tempest', (wks) => {
+workspace('Tempest', (_) => {
     platforms(['x64']);
     configurations(['Debug', 'Release']);
 
-    group('Engine', (grp) => {
+    group('Engine', (_) => {
         include('./projects/conjure.js');
     });
 
-    group('Tests', (grp) => {
+    group('Tests', (_) => {
         include('./projects/conjure-test.js');
     });
 
     include('./sandbox/conjure.js');
 
-    group('Dependencies', (grp) => {
+    group('Dependencies', (_) => {
         include('./dependencies/conjure.js');
     });
 
@@ -25,8 +25,8 @@ workspace('Tempest', (wks) => {
                 '_DEBUG'
             ]);
         });
-    
-        when({ configuration: 'Release'}, (_) => {
+
+        when({ configuration: 'Release' }, (_) => {
             optimize('Full');
             runtime('Release');
             symbols('Off');
@@ -38,7 +38,7 @@ workspace('Tempest', (wks) => {
         when({ system: 'windows' }, () => {
             toolset('msc:143');
         });
-    
+
         when({ system: 'linux' }, () => {
             toolset('clang');
         });

@@ -50,6 +50,7 @@ project('imgui', (prj) => {
     uses([
         'glfw:public',
         'imgui:public',
+        'vma:public',
         'vulkan:public',
     ]);
 

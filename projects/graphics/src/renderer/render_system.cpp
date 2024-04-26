@@ -631,7 +631,8 @@ namespace tempest::graphics
                     .draw_imgui()
                     .depends_on(_pbr_pass)
                     .depends_on(_pbr_msaa_pass)
-                    .should_execute([this]() { return _settings.aa_mode != anti_aliasing_mode::TAA; })
+                    .should_execute(
+                        [this]() { return _settings.aa_mode != anti_aliasing_mode::TAA && _settings.enable_imgui; })
                     .on_execute([](auto& cmds) {});
             });
 
@@ -641,7 +642,8 @@ namespace tempest::graphics
                                           graphics::load_op::LOAD, graphics::store_op::STORE)
                     .draw_imgui()
                     .depends_on(sharpening_pass)
-                    .should_execute([this]() { return _settings.aa_mode == anti_aliasing_mode::TAA; })
+                    .should_execute(
+                        [this]() { return _settings.aa_mode == anti_aliasing_mode::TAA && _settings.enable_imgui; })
                     .on_execute([](auto& cmds) {});
             });
 
@@ -675,7 +677,10 @@ namespace tempest::graphics
                 });
         }
 
-        rgc->enable_imgui();
+        if (_settings.enable_imgui)
+        {
+            rgc->enable_imgui();
+        }
 
         _graph = std::move(*rgc).compile();
     }
@@ -798,11 +803,11 @@ namespace tempest::graphics
             instances_written += static_cast<std::uint32_t>(batch.objects.size());
         }
 
-        draw_imgui();
-
-        if (_settings_dirty)
+        if (_create_imgui_hierarchy && _settings.enable_imgui)
         {
-            _device->idle();
+            imgui_context::create_frame([this]() {
+                _create_imgui_hierarchy();
+            });
         }
 
         _graph->execute();
@@ -855,6 +860,12 @@ namespace tempest::graphics
         _graphics_pipelines.clear();
         _compute_pipelines.clear();
         _samplers.clear();
+    }
+
+    void render_system::update_settings(const render_system_settings& settings)
+    {
+        _settings = settings;
+        _settings_dirty = true;
     }
 
     std::vector<mesh_layout> render_system::load_mesh(std::span<core::mesh> meshes)
@@ -1312,36 +1323,5 @@ namespace tempest::graphics
         _graphics_pipelines.push_back(pipeline);
 
         return pipeline;
-    }
-
-    void render_system::draw_imgui()
-    {
-        imgui_context::create_frame([&]() {
-            bool update_settings = false;
-
-            imgui_context::create_window("Render Settings", [&]() {
-                std::string_view aa_modes[] = {
-                    "None",
-                    "MSAA",
-                    "TAA",
-                };
-
-                imgui_context::create_table("##rendersettings", 2, [&]() {
-                    imgui_context::next_row();
-                    imgui_context::next_column();
-
-                    imgui_context::label("Anti Aliasing Mode");
-
-                    imgui_context::next_column();
-
-                    int active_aa_index =
-                        imgui_context::combo_box("##aamode", static_cast<int>(_settings.aa_mode), aa_modes);
-                    update_settings |= active_aa_index != static_cast<int>(_settings.aa_mode);
-                    _settings.aa_mode = static_cast<anti_aliasing_mode>(active_aa_index);
-                });
-            });
-
-            _settings_dirty = update_settings;
-        });
     }
 } // namespace tempest::graphics

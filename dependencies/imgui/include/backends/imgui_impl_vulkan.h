@@ -47,6 +47,7 @@
 #define VK_NO_PROTOTYPES
 #endif
 #include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 
 // Initialization data, for ImGui_ImplVulkan_Init()
 // [Please zero-clear before use!]
@@ -64,6 +65,8 @@ struct ImGui_ImplVulkan_InitInfo
     uint32_t                        ImageCount;             // >= MinImageCount
     VkSampleCountFlagBits           MSAASamples;            // >= VK_SAMPLE_COUNT_1_BIT (0 -> default to VK_SAMPLE_COUNT_1_BIT)
 
+    VmaAllocator                    MemoryAllocator;
+
     // Dynamic Rendering (Optional)
     bool                            UseDynamicRendering;    // Need to explicitly enable VK_KHR_dynamic_rendering extension to use this, even for Vulkan 1.3.
     VkFormat                        ColorAttachmentFormat;  // Required for dynamic rendering
@@ -77,8 +80,8 @@ struct ImGui_ImplVulkan_InitInfo
 // [Please zero-clear before use!]
 struct ImGui_ImplVulkanH_FrameRenderBuffers
 {
-    VkDeviceMemory VertexBufferMemory;
-    VkDeviceMemory IndexBufferMemory;
+    VmaAllocation VertexBufferAllocation;
+    VmaAllocation IndexBufferAllocation;
     VkDeviceSize VertexBufferSize;
     VkDeviceSize IndexBufferSize;
     VkBuffer VertexBuffer;
@@ -110,7 +113,7 @@ struct ImGui_ImplVulkan_Data
 
     // Font data
     VkSampler FontSampler;
-    VkDeviceMemory FontMemory;
+    VmaAllocation FontMemoryAllocation;
     VkImage FontImage;
     VkImageView FontView;
     VkDescriptorSet FontDescriptorSet;
