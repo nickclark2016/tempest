@@ -9,6 +9,7 @@ project('core-tests', (prj) => {
 
     dependsOn([
         'googletest',
+        'core',
     ]);
 
     uses([
