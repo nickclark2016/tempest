@@ -80,6 +80,7 @@ namespace tempest::core
             {
                 return lhs._index == rhs._index;
             }
+
             friend auto operator<=>(const flat_unordered_map_iterator& lhs,
                                     const flat_unordered_map_iterator& rhs) noexcept
             {
@@ -97,6 +98,20 @@ namespace tempest::core
 
             friend class flat_unordered_map<K, V, Hash, KeyEqual, Allocator>;
         };
+
+        template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
+        bool operator==(const flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>& lhs,
+                        const flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, !Const>& rhs) noexcept
+        {
+            return lhs.index() == rhs.index();
+        }
+
+        template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
+        auto operator!=(const flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>& lhs,
+                        const flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, !Const>& rhs) noexcept
+        {
+            return lhs.index() != rhs.index();
+        }
 
         template <typename Iter>
         struct flat_unordered_map_insert_result
@@ -211,8 +226,8 @@ namespace tempest::core
 
         void _release();
 
-        friend class detail::flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, false>;
-        friend class detail::flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, true>;
+        friend struct detail::flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, false>;
+        friend struct detail::flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, true>;
     };
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -433,7 +448,7 @@ namespace tempest::core
                 if ((matches & (1 << j)) != 0)
                 {
                     auto idx = current_page * _page_size + j;
-                    if (key_equal{}(_data_pages[idx][j].first, key))
+                    if (key_equal{}(_data_pages[current_page][j].first, key))
                     {
                         return const_iterator{idx, this};
                     }
@@ -461,7 +476,7 @@ namespace tempest::core
         // Check if we require growth
         if (load_factor() >= _default_load_factor)
         {
-            _request_grow(_compute_default_growth(size() + 1));
+            _request_grow(_compute_default_growth(capacity() + 1));
         }
 
         auto hash = _hash(value.first);
@@ -481,12 +496,12 @@ namespace tempest::core
                 if ((matches & (1 << j)) != 0)
                 {
                     auto idx = current_page * _page_size + j;
-                    if (key_equal{}(_data_pages[idx].first, value.first))
+                    if (key_equal{}(_data_pages[current_page][j].first, value.first))
                     {
                         return {iterator{idx, this}, false};
                     }
                 }
-                else if (!_metadata_strategy.is_full(_metadata_pages[current_page][j]))
+                else if (!_metadata_strategy.is_full(_metadata_pages[current_page].entries[j]))
                 {
                     next_empty = {current_page, j};
                 }
@@ -502,7 +517,7 @@ namespace tempest::core
             assert(i < _page_count);
         }
 
-        _metadata_pages[next_empty.first][next_empty.second] = h2;
+        _metadata_pages[next_empty.first].entries[next_empty.second] = h2;
         std::construct_at(&_data_pages[next_empty.first][next_empty.second], value);
 
         ++_size;
@@ -518,7 +533,7 @@ namespace tempest::core
         // Check if we require growth
         if (load_factor() >= _default_load_factor)
         {
-            _request_grow(_compute_default_growth(size() + 1));
+            _request_grow(_compute_default_growth(capacity() + 1));
         }
 
         auto hash = _hash(value.first);
@@ -538,7 +553,7 @@ namespace tempest::core
                 if ((matches & (1 << j)) != 0)
                 {
                     auto idx = current_page * _page_size + j;
-                    if (key_equal{}(_data_pages[idx][j].first, value.first))
+                    if (key_equal{}(_data_pages[current_page][j].first, value.first))
                     {
                         return {iterator{idx, this}, false};
                     }
@@ -584,7 +599,7 @@ namespace tempest::core
     inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::erase(const K& key)
     {
         auto it = find(key);
-        if (it != cend())
+        if (it != end())
         {
             erase(it);
         }
@@ -680,6 +695,10 @@ namespace tempest::core
         metadata_alloc_traits::deallocate(_metadata_alloc, _metadata_pages, _page_count);
         alloc_traits::deallocate(_alloc, _data_pages, _page_count);
 
+        // Assign the new pages
+        _metadata_pages = new_metadata_pages;
+        _data_pages = new_data_pages;
+
         _page_count = page_count;
     }
 
@@ -698,7 +717,7 @@ namespace tempest::core
             }
         }
 
-        return nullptr;
+        return pages;
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -712,7 +731,8 @@ namespace tempest::core
     inline std::size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_compute_default_growth(
         std::size_t requested) const noexcept
     {
-        if (requested < _page_size) {
+        if (requested < _page_size)
+        {
             return _page_size;
         }
         return std::bit_ceil(requested);
@@ -817,7 +837,7 @@ namespace tempest::core
             {
                 if (!_metadata_strategy.is_full(pages[current_page].entries[j]))
                 {
-                    return std::pair<std::size_t, std::size_t>{i, j};
+                    return std::pair<std::size_t, std::size_t>{current_page, j};
                 }
             }
         }
