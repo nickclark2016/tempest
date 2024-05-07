@@ -264,6 +264,7 @@ TEST(flat_unordered_map, erase_value_that_exists_by_value)
     map.erase(1);
 
     ASSERT_EQ(map.find(1), map.end());
+    ASSERT_NE(map.find(2), map.end());
     ASSERT_EQ(map.size(), 1);
 }
 

@@ -785,7 +785,7 @@ namespace tempest::core
         {
             auto entry = _metadata_pages[page].entries[i];
             auto match = _metadata_strategy.is_full(entry);
-            if (match)
+            if (match && entry == h2)
             {
                 result |= (1 << i);
             }
