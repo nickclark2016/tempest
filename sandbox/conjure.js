@@ -1,6 +1,10 @@
 project('sandbox', _ => {
-    kind('ConsoleApp');
+    kind('Executable');
     language('C++');
+
+    when({ system: 'windows' }, (_) => {
+        subsystem('Console');
+    });
 
     files([
         './src/**/*.hpp',
