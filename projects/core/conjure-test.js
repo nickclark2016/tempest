@@ -1,6 +1,10 @@
-project('core-tests', (prj) => {
-    kind('ConsoleApp');
+project('core-tests', (_) => {
+    kind('Executable');
     language('C++');
+
+    when({ system: 'windows' }, (_) => {
+        subsystem('Console');
+    });
 
     files([
         './tests/**/*.hpp',

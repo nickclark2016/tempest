@@ -1,6 +1,10 @@
-project('editor', (_) => {
-    kind('ConsoleApp');
+project('editor', (prj) => {
+    kind('Executable');
     language('C++');
+
+    when({ system: 'windows' }, (_) => {
+        subsystem('Console');
+    });
 
     files([
         './include/**/*.hpp',
@@ -17,4 +21,6 @@ project('editor', (_) => {
     ]);
 
     uses(['tempest:engine']);
+
+    debugDirectory(`${prj.pathToWorkspace}/sandbox`);
 });

@@ -1,6 +1,10 @@
 project('ecs-tests', (prj) => {
-    kind('ConsoleApp');
+    kind('Executable');
     language('C++');
+
+    when({ system: 'windows' }, (_) => {
+        subsystem('Console');
+    });
 
     files([
         './tests/**/*.hpp',
