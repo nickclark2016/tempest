@@ -175,7 +175,7 @@ namespace tempest::graphics
                 .fmt = resource_format::R32_FLOAT,
                 .type = image_type::IMAGE_2D,
                 .persistent = true,
-                .name = std::format("Hi Z Buffer {}", i),
+                .name = "Hierarchical Z Buffer",
             }));
         }
 
@@ -368,10 +368,15 @@ namespace tempest::graphics
                         if (_camera_entity != ecs::tombstone)
                         {
                             auto camera_data = _registry->get<camera_component>(_camera_entity);
-                            auto camera_view = math::look_at(
-                                camera_data.position, camera_data.position + camera_data.forward, camera_data.up);
+                            auto transform = _registry->get<ecs::transform_component>(_camera_entity);
+
+                            auto quat_rot = math::quat(transform.rotation());
+                            auto f = math::extract_forward(quat_rot);
+                            auto u = math::extract_up(quat_rot);
+
+                            auto camera_view = math::look_at(transform.position(), transform.position() + f, u);
                             auto camera_projection = math::perspective(
-                                camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, 0.1f);
+                                camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, camera_data.near_plane);
 
                             _scene_data.camera.prev_proj = _scene_data.camera.proj;
                             _scene_data.camera.prev_view = _scene_data.camera.view;
@@ -380,7 +385,7 @@ namespace tempest::graphics
                             _scene_data.camera.inv_view = math::inverse(camera_view);
                             _scene_data.camera.proj = camera_projection;
                             _scene_data.camera.inv_proj = math::inverse(camera_projection);
-                            _scene_data.camera.position = camera_data.position;
+                            _scene_data.camera.position = transform.position();
                         }
 
                         if (_settings.aa_mode == anti_aliasing_mode::TAA)
@@ -631,8 +636,10 @@ namespace tempest::graphics
                     .draw_imgui()
                     .depends_on(_pbr_pass)
                     .depends_on(_pbr_msaa_pass)
-                    .should_execute(
-                        [this]() { return _settings.aa_mode != anti_aliasing_mode::TAA && _settings.enable_imgui; })
+                    .should_execute([this]() {
+                        return _settings.aa_mode != anti_aliasing_mode::TAA && _settings.enable_imgui &&
+                               _create_imgui_hierarchy;
+                    })
                     .on_execute([](auto& cmds) {});
             });
 
@@ -642,8 +649,10 @@ namespace tempest::graphics
                                           graphics::load_op::LOAD, graphics::store_op::STORE)
                     .draw_imgui()
                     .depends_on(sharpening_pass)
-                    .should_execute(
-                        [this]() { return _settings.aa_mode == anti_aliasing_mode::TAA && _settings.enable_imgui; })
+                    .should_execute([this]() {
+                        return _settings.aa_mode == anti_aliasing_mode::TAA && _settings.enable_imgui &&
+                               _create_imgui_hierarchy;
+                    })
                     .on_execute([](auto& cmds) {});
             });
 
@@ -786,7 +795,7 @@ namespace tempest::graphics
                 .instance_count = 1,
                 .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
                 .vertex_offset = 0,
-                .first_instance = static_cast<std::uint32_t>(draw_batch.objects.size() - 1),
+                .first_instance = static_cast<std::uint32_t>(draw_batch.objects.index_of(ent)),
             });
         }
 
@@ -805,9 +814,13 @@ namespace tempest::graphics
 
         if (_create_imgui_hierarchy && _settings.enable_imgui)
         {
-            imgui_context::create_frame([this]() {
-                _create_imgui_hierarchy();
-            });
+            imgui_context::create_frame([this]() { _create_imgui_hierarchy(); });
+        }
+
+        if (_static_data_dirty)
+        {
+            _static_data_dirty = false;
+            _last_updated_frame = _device->current_frame() + _device->frames_in_flight();
         }
 
         _graph->execute();
@@ -921,6 +934,11 @@ namespace tempest::graphics
         };
 
         _materials.push_back(mat);
+    }
+
+    void render_system::mark_dirty()
+    {
+        _static_data_dirty = true;
     }
 
     graphics_pipeline_resource_handle render_system::create_pbr_pipeline(bool enable_blend)

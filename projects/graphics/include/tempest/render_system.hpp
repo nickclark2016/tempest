@@ -182,6 +182,8 @@ namespace tempest::graphics
             _create_imgui_hierarchy = std::forward<Fn>(fn);
         }
 
+        void mark_dirty();
+
       private:
         core::heap_allocator _allocator;
         ecs::registry* _registry;
@@ -227,7 +229,8 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle _sharpen_handle;
 
         render_system_settings _settings;
-        bool _settings_dirty;
+        bool _settings_dirty{false};
+        bool _static_data_dirty{true};
 
         graph_pass_handle _pbr_pass;
         graph_pass_handle _pbr_msaa_pass;

@@ -18,6 +18,13 @@ int main()
 
     auto camera = eng.get_registry().acquire_entity();
     eng.get_registry().assign(camera, tempest::graphics::camera_component{});
+    eng.get_registry().assign(camera, tempest::ecs::transform_component{});
+
+    eng.get_render_system().update_settings({
+        .should_show_settings = true,
+        .enable_imgui = true,
+        .aa_mode = tempest::graphics::anti_aliasing_mode::MSAA,
+    });
 
     eng.on_initialize([](tempest::engine& eng) {
         auto sponza = eng.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
@@ -38,11 +45,13 @@ int main()
     eng.on_update([&](tempest::engine& eng, float dt) {
         fps_ctrl.update(*input_group.kb, *input_group.ms, dt);
         auto& camera_data = eng.get_registry().get<tempest::graphics::camera_component>(camera);
-        camera_data.forward = fps_ctrl.eye_direction();
-        camera_data.position = fps_ctrl.eye_position();
-        camera_data.up = fps_ctrl.up_direction();
+        auto& camera_tx = eng.get_registry().get<tempest::ecs::transform_component>(camera);
+
         camera_data.aspect_ratio = static_cast<float>(win->width()) / static_cast<float>(win->height());
         camera_data.vertical_fov = 90.0f;
+
+        camera_tx.position(fps_ctrl.eye_position());
+        camera_tx.rotation(fps_ctrl.eye_rotation());
 
         if (input_group.kb->is_key_down(tempest::core::key::ESCAPE))
         {

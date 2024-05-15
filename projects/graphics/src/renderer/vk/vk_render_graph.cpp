@@ -637,11 +637,13 @@ namespace tempest::graphics::vk
         auto pass_idx = _pass_index_map[pass.as_uint64()];
         _all_passes[pass_idx].add_external_sampled_images(images, set, binding, stage);
 
-        auto image_writes = new VkDescriptorImageInfo[images.size()];
+        auto image_count = images.size();
+
+        auto image_writes = new VkDescriptorImageInfo[image_count];
 
         std::uint32_t images_written = 0;
 
-        for (; images_written < images.size(); ++images_written)
+        for (; images_written < image_count; ++images_written)
         {
             if (images[images_written])
             {

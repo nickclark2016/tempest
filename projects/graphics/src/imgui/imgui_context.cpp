@@ -193,6 +193,12 @@ namespace tempest::graphics
         return current_item;
     }
 
+    float imgui_context::input_float(std::string_view label, float current_value)
+    {
+        ImGui::InputFloat(label.data(), &current_value);
+        return current_value;
+    }
+
     void imgui_context::start_frame()
     {
         ImGui_ImplGlfw_NewFrame();

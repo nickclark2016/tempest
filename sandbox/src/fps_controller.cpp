@@ -30,8 +30,7 @@ void fps_controller::update(const tempest::core::keyboard& kb, const tempest::co
     tempest::math::vec3<float> rot_dir{};
 
     tempest::math::vec3<float> up{0.0f, 1.0f, 0.0f};
-    tempest::math::vec3<float> forward(std::cos(yaw) * std::cos(pitch), std::sin(pitch),
-                                       std::sin(yaw) * std::cos(pitch));
+    tempest::math::vec3<float> forward = tempest::math::extract_forward(tempest::math::quat(_rotation_pyr));
     tempest::math::vec3<float> right = tempest::math::cross(forward, up);
 
     if (kb.is_key_down(tempest::core::key::W))
@@ -59,10 +58,10 @@ void fps_controller::update(const tempest::core::keyboard& kb, const tempest::co
         move_dir *= 3.0f;
     }
 
-    float rot_speed = 360.0f / (std::numbers::pi_v<float> * 45.0f);
+    float rot_speed = 360.0f / (std::numbers::pi_v<float> * 30.0f);
 
     rot_dir.y = -(rot_speed * ms.dx());
-    rot_dir.x = -(rot_speed * ms.dy());
+    rot_dir.x = (rot_speed * ms.dy());
 
     _position_xyz += move_dir * dt;
     _rotation_pyr += rot_dir * dt;
@@ -102,4 +101,9 @@ tempest::math::vec3<float> fps_controller::eye_direction() const noexcept
 tempest::math::vec3<float> fps_controller::up_direction() const noexcept
 {
     return _up;
+}
+
+tempest::math::vec3<float> fps_controller::eye_rotation() const noexcept
+{
+    return _rotation_pyr;
 }

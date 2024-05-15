@@ -21,6 +21,8 @@ class fps_controller
     tempest::math::vec3<float> eye_direction() const noexcept;
     tempest::math::vec3<float> up_direction() const noexcept;
 
+    tempest::math::vec3<float> eye_rotation() const noexcept;
+
   private:
     tempest::math::vec3<float> _position_xyz{0, 0, 0};
     tempest::math::vec3<float> _rotation_pyr{0, 0, 0};

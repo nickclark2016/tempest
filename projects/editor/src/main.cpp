@@ -24,16 +24,18 @@ int main()
         auto camera = engine.get_registry().acquire_entity();
 
         tempest::graphics::camera_component camera_data = {
-            .position = {0.0f, 0.0f, -10.0f},
-            .forward = {0.0f, 0.0f, 1.0f},
-            .up = {0.0f, 1.0f, 0.0f},
             .aspect_ratio = 16.0f / 9.0f,
             .vertical_fov = 90.0f,
+            .near_plane = 0.1f,
         };
+
+        tempest::ecs::transform_component camera_transform;
+        camera_transform.position({0.0f, 0.0f, 0.0f});
 
         engine.get_registry().name(camera, "Camera");
 
         engine.get_registry().assign(camera, camera_data);
+        engine.get_registry().assign(camera, camera_transform);
     });
 
     tempest::editor::editor editor;
