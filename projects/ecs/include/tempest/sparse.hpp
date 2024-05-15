@@ -537,6 +537,7 @@ namespace tempest::ecs
         [[nodiscard]] constexpr bool contains(K k) const noexcept override;
         [[nodiscard]] constexpr bool contains(K k, const V& v) const noexcept;
         [[nodiscard]] constexpr const_iterator find(K k) const noexcept;
+        [[nodiscard]] constexpr size_type index_of(K k) const noexcept;
 
         [[nodiscard]] constexpr mapped_type& operator[](K k) noexcept;
         [[nodiscard]] constexpr const mapped_type& operator[](K k) const noexcept;
@@ -1106,6 +1107,17 @@ namespace tempest::ecs
         K k) const noexcept
     {
         return contains(k) ? _to_iterator(k) : cend();
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr basic_sparse_map<K, V, Allocator>::size_type basic_sparse_map<K, V, Allocator>::index_of(
+        K k) const noexcept
+    {
+        // Get the index of the key in the packed array
+        const auto element = _sparse_pointer(k);
+        constexpr auto max_cap = traits_type::entity_mask;
+        constexpr auto mask = traits_type::as_integral(null) & ~max_cap;
+        return static_cast<size_type>(traits_type::as_entity(*element));
     }
 
     template <typename K, typename V, typename Allocator>

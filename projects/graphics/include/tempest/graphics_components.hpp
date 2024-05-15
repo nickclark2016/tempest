@@ -73,11 +73,9 @@ namespace tempest::graphics
 
     struct camera_component
     {
-        math::vec3<float> position;
-        math::vec3<float> forward;
-        math::vec3<float> up;
         float aspect_ratio;
         float vertical_fov;
+        float near_plane{0.1f};
     };
 } // namespace tempest::graphics
 

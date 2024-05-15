@@ -387,19 +387,19 @@ namespace tempest::math
     template <typename T>
     inline constexpr vec3<T> extract_forward(const quat<T>& rotation)
     {
-        const T x = static_cast<T>(2) * (rotation.x * rotation.z + rotation.w * rotation.y);
-        const T y = static_cast<T>(2) * (rotation.y * rotation.z - rotation.w * rotation.x);
-        const T z = static_cast<T>(1) - static_cast<T>(2) * (rotation.x * rotation.x + rotation.y * rotation.y);
-        return vec3(x, y, z);
+        return rotation * vec3<T>(0, 0, 1);
     }
 
     template <typename T>
     inline constexpr vec3<T> extract_up(const quat<T>& rotation)
     {
-        const T x = static_cast<T>(2) * (rotation.x * rotation.y - rotation.w * rotation.z);
-        const T y = static_cast<T>(1) - static_cast<T>(2) * (rotation.x * rotation.x + rotation.z * rotation.z);
-        const T z = static_cast<T>(2) * (rotation.y * rotation.z + rotation.w * rotation.x);
-        return vec3(x, y, z);
+        return rotation * vec3<T>(0, 1, 0);
+    }
+
+    template <typename T>
+    inline constexpr vec3<T> extract_right(const quat<T>& rotation)
+    {
+        return rotation * vec3<T>(1, 0, 0);
     }
 
     template <typename T>

@@ -45,6 +45,7 @@ namespace tempest::graphics
         static bool checkbox(std::string_view label, bool current_value);
         static bool button(std::string label);
         static int combo_box(std::string_view label, int current_item, std::span<std::string_view> items);
+        static float input_float(std::string_view label, float current_value);
 
         static void start_frame();
         static void end_frame();
