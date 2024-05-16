@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <new>
 #include <optional>
 #include <source_location>
 #include <thread>
@@ -12,6 +13,47 @@
 
 namespace tempest::core
 {
+    template <typename T, typename... Args>
+    [[nodiscard]] inline constexpr T* construct_at(T* ptr, Args&&... args)
+    {
+        return ::new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
+    }
+
+    template <typename T>
+    inline constexpr void destroy_at(T* ptr)
+    {
+        if constexpr (std::is_array_v<T>)
+        {
+            for (auto& elem : *ptr)
+            {
+                destroy_at(std::addressof(elem));
+            }
+        }
+        else
+        {
+            ptr->~T();
+        }
+    }
+
+    template <typename ForwardIt>
+    inline constexpr void destroy(ForwardIt first, ForwardIt last)
+    {
+        for (; first != last; ++first)
+        {
+            destroy_at(std::addressof(*first));
+        }
+    }
+
+    template <typename ForwardIt>
+    inline constexpr void destroy_n(ForwardIt first, std::size_t n)
+    {
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            destroy_at(std::addressof(*first));
+            ++first;
+        }
+    }
+
     class no_copy
     {
       public:
@@ -443,8 +485,10 @@ namespace tempest::core
         using void_pointer = void*;
         using const_void_pointer = const void*;
 
-        using propagate_on_container_copy_assignment = typename detail::propagate_on_container_copy_assignment<Alloc>::type;
-        using propagate_on_container_move_assignment = typename detail::propagate_on_container_move_assignment<Alloc>::type;
+        using propagate_on_container_copy_assignment =
+            typename detail::propagate_on_container_copy_assignment<Alloc>::type;
+        using propagate_on_container_move_assignment =
+            typename detail::propagate_on_container_move_assignment<Alloc>::type;
         using propagate_on_container_swap = typename detail::propagate_on_container_swap<Alloc>::type;
         using is_always_equal = typename detail::is_always_equal<Alloc>::type;
 
@@ -470,7 +514,7 @@ namespace tempest::core
 
     template <typename Alloc>
     inline constexpr allocator_traits<Alloc>::pointer allocator_traits<Alloc>::allocate(allocator_type& alloc,
-                                                                                               size_type n)
+                                                                                        size_type n)
     {
         return alloc.allocate(n);
     }
@@ -485,14 +529,14 @@ namespace tempest::core
     template <typename T, typename... Args>
     inline constexpr void allocator_traits<Alloc>::construct(allocator_type& alloc, T* p, Args&&... args)
     {
-        std::construct_at(p, std::forward<Args>(args)...);
+        (void)construct_at(p, std::forward<Args>(args)...);
     }
 
     template <typename Alloc>
     template <typename T>
     inline constexpr void allocator_traits<Alloc>::destroy(allocator_type& alloc, T* p)
     {
-        std::destroy_at(p);
+        destroy_at(p);
     }
 
     template <typename Alloc>
