@@ -435,7 +435,7 @@ namespace tempest::graphics::vk
         static constexpr std::uint32_t SAMPLER_POOL_SIZE = 128;
     } // namespace
 
-    render_device::render_device(core::allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical)
+    render_device::render_device(core::abstract_allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical)
         : _alloc{alloc}, _instance{instance}, _physical{physical}
     {
         _images.emplace(_alloc, IMAGE_POOL_SIZE, static_cast<std::uint32_t>(sizeof(image)));
@@ -1859,7 +1859,7 @@ namespace tempest::graphics::vk
         _recycled_cmd_buf_pool.release(std::move(allocator), _current_frame);
     }
 
-    render_context::render_context(core::allocator* alloc)
+    render_context::render_context(core::abstract_allocator* alloc)
         : graphics::render_context(alloc), _instance{build_instance()}
     {
     }

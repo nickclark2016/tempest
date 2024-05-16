@@ -309,16 +309,16 @@ namespace tempest::graphics
 
         virtual std::unique_ptr<render_graph> compile() && = 0;
 
-        static std::unique_ptr<render_graph_compiler> create_compiler(core::allocator* alloc, render_device* device);
+        static std::unique_ptr<render_graph_compiler> create_compiler(core::abstract_allocator* alloc, render_device* device);
 
       protected:
         render_device* _device;
-        core::allocator* _alloc;
+        core::abstract_allocator* _alloc;
         std::vector<graph_pass_builder> _builders;
         std::unique_ptr<render_graph_resource_library> _resource_lib;
         bool _imgui_enabled = false;
 
-        explicit render_graph_compiler(core::allocator* alloc, render_device* device);
+        explicit render_graph_compiler(core::abstract_allocator* alloc, render_device* device);
     };
 
     class dependency_graph

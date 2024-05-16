@@ -4,7 +4,7 @@
 
 namespace tempest::core
 {
-    object_pool::object_pool(allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size)
+    object_pool::object_pool(abstract_allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size)
         : _alloc{_alloc}, _pool_size{pool_size}, _resource_size{resource_size}
     {
         auto alloc_size = pool_size * (_resource_size + sizeof(std::uint32_t));
@@ -86,7 +86,7 @@ namespace tempest::core
         return _pool_size;
     }
 
-    generational_object_pool::generational_object_pool(allocator* _alloc, std::uint32_t pool_size,
+    generational_object_pool::generational_object_pool(abstract_allocator* _alloc, std::uint32_t pool_size,
                                                        std::uint32_t resource_size)
         : _alloc{_alloc}, _pool_size{pool_size}, _resource_size{resource_size}, _used_index_count{0}
     {

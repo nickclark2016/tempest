@@ -303,7 +303,7 @@ namespace tempest::graphics::vk
         }
     } // namespace
 
-    render_graph_resource_library::render_graph_resource_library(core::allocator* alloc, render_device* device)
+    render_graph_resource_library::render_graph_resource_library(core::abstract_allocator* alloc, render_device* device)
         : _device{device}
     {
     }
@@ -480,7 +480,7 @@ namespace tempest::graphics::vk
         return true;
     }
 
-    render_graph::render_graph(core::allocator* alloc, render_device* device,
+    render_graph::render_graph(core::abstract_allocator* alloc, render_device* device,
                                std::span<graphics::graph_pass_builder> pass_builders,
                                std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled)
         : _alloc{alloc}, _device{device}, _resource_lib{std::move(resources)}
@@ -1852,7 +1852,7 @@ namespace tempest::graphics::vk
         }
     }
 
-    render_graph_compiler::render_graph_compiler(core::allocator* alloc, graphics::render_device* device)
+    render_graph_compiler::render_graph_compiler(core::abstract_allocator* alloc, graphics::render_device* device)
         : graphics::render_graph_compiler(alloc, device)
 
     {

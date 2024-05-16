@@ -241,7 +241,7 @@ namespace tempest::graphics::vk
     class render_device : public graphics::render_device
     {
       public:
-        explicit render_device(core::allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical);
+        explicit render_device(core::abstract_allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical);
         ~render_device() override;
 
         void start_frame() noexcept override;
@@ -389,7 +389,7 @@ namespace tempest::graphics::vk
         }
 
       private:
-        core::allocator* _alloc;
+        core::abstract_allocator* _alloc;
         vkb::Instance _instance;
         vkb::PhysicalDevice _physical;
         vkb::Device _device;
@@ -423,7 +423,7 @@ namespace tempest::graphics::vk
     class render_context : public graphics::render_context
     {
       public:
-        explicit render_context(core::allocator* alloc);
+        explicit render_context(core::abstract_allocator* alloc);
         ~render_context() override;
 
         bool has_suitable_device() const noexcept override;

@@ -482,7 +482,7 @@ namespace tempest::graphics
         }
     }
 
-    render_graph_compiler::render_graph_compiler(core::allocator* alloc, render_device* device)
+    render_graph_compiler::render_graph_compiler(core::abstract_allocator* alloc, render_device* device)
         : _device{device}, _alloc{alloc}, _resource_lib{std::make_unique<vk::render_graph_resource_library>(
                                               _alloc, static_cast<vk::render_device*>(device))}
     {
@@ -521,7 +521,7 @@ namespace tempest::graphics
         _imgui_enabled = enabled;
     }
 
-    std::unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(core::allocator* alloc,
+    std::unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(core::abstract_allocator* alloc,
                                                                                   render_device* device)
     {
         return std::make_unique<vk::render_graph_compiler>(alloc, device);
