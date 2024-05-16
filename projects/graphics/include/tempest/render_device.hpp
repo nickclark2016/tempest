@@ -32,12 +32,12 @@ namespace tempest::graphics
         virtual render_device& create_device(std::uint32_t idx = 0) = 0;
         virtual std::vector<physical_device_context> enumerate_suitable_devices() = 0;
 
-        static std::unique_ptr<render_context> create(core::allocator* alloc);
+        static std::unique_ptr<render_context> create(core::abstract_allocator* alloc);
 
       protected:
-        core::allocator* _alloc;
+        core::abstract_allocator* _alloc;
 
-        explicit render_context(core::allocator* alloc);
+        explicit render_context(core::abstract_allocator* alloc);
     };
 
     class render_device

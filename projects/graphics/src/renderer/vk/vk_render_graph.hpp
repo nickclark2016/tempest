@@ -118,7 +118,7 @@ namespace tempest::graphics::vk
     class render_graph : public graphics::render_graph
     {
       public:
-        explicit render_graph(core::allocator* alloc, render_device* device,
+        explicit render_graph(core::abstract_allocator* alloc, render_device* device,
                               std::span<graphics::graph_pass_builder> pass_builders,
                               std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled);
         ~render_graph() override;
@@ -144,7 +144,7 @@ namespace tempest::graphics::vk
         std::vector<swapchain_resource_handle> _active_swapchain_set;
         std::unordered_map<std::uint64_t, std::size_t> _pass_index_map;
 
-        core::allocator* _alloc;
+        core::abstract_allocator* _alloc;
         render_device* _device;
 
         render_graph_resource_state _last_known_state;
@@ -158,7 +158,7 @@ namespace tempest::graphics::vk
     class render_graph_resource_library : public graphics::render_graph_resource_library
     {
       public:
-        explicit render_graph_resource_library(core::allocator* alloc, render_device* device);
+        explicit render_graph_resource_library(core::abstract_allocator* alloc, render_device* device);
         ~render_graph_resource_library();
 
         image_resource_handle find_texture(std::string_view name) override;
@@ -196,7 +196,7 @@ namespace tempest::graphics::vk
     class render_graph_compiler : public graphics::render_graph_compiler
     {
       public:
-        explicit render_graph_compiler(core::allocator* alloc, graphics::render_device* device);
+        explicit render_graph_compiler(core::abstract_allocator* alloc, graphics::render_device* device);
         std::unique_ptr<graphics::render_graph> compile() && override;
     };
 } // namespace tempest::graphics::vk

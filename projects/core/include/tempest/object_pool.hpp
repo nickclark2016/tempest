@@ -14,7 +14,7 @@ namespace tempest::core
     class object_pool
     {
       public:
-        object_pool(allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size);
+        object_pool(abstract_allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size);
         object_pool(const object_pool&) = delete;
         object_pool(object_pool&&) noexcept = delete;
         virtual ~object_pool();
@@ -34,7 +34,7 @@ namespace tempest::core
       private:
         std::byte* _memory{nullptr};
         std::uint32_t* _free_indices{nullptr};
-        allocator* _alloc{nullptr}; // non-owning
+        abstract_allocator* _alloc{nullptr}; // non-owning
 
         std::uint32_t _free_index_head{0};
         std::uint32_t _pool_size{0};
@@ -59,7 +59,7 @@ namespace tempest::core
 
         inline static constexpr key invalid_key = {.index = ~0u, .generation = ~0u};
 
-        generational_object_pool(allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size);
+        generational_object_pool(abstract_allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size);
         generational_object_pool(const object_pool&) = delete;
         generational_object_pool(object_pool&&) noexcept = delete;
         ~generational_object_pool();
@@ -77,7 +77,7 @@ namespace tempest::core
         [[nodiscard]] std::size_t size() const noexcept;
 
       private:
-        allocator* _alloc;
+        abstract_allocator* _alloc;
         std::byte* _memory{nullptr};
         std::uint32_t* _erased{nullptr};
         key* _keys{nullptr};
