@@ -376,7 +376,8 @@ namespace tempest::graphics
 
                             auto camera_view = math::look_at(transform.position(), transform.position() + f, u);
                             auto camera_projection = math::perspective(
-                                camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, camera_data.near_plane);
+                                camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio,
+                                camera_data.near_plane);
 
                             _scene_data.camera.prev_proj = _scene_data.camera.proj;
                             _scene_data.camera.prev_view = _scene_data.camera.view;
@@ -744,72 +745,76 @@ namespace tempest::graphics
 
     void render_system::render()
     {
-        for (auto [_, batch] : _draw_batches)
+        if (_last_updated_frame + _device->frames_in_flight() > _device->current_frame())
         {
-            batch.commands.clear();
-        }
-
-        for (const auto& [ent, transform, renderable] :
-             _registry->view<ecs::transform_component, renderable_component>())
-        {
-            gpu_object_data object_payload = {
-                .model = transform.matrix(),
-                .inv_tranpose_model = math::transpose(math::inverse(transform.matrix())),
-                .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
-                .material_id = static_cast<std::uint32_t>(renderable.material_id),
-                .self_id = static_cast<std::uint32_t>(renderable.object_id),
-            };
-
-            if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
+            for (auto [_, batch] : _draw_batches)
             {
-                if (const auto parent_transform = _registry->try_get<ecs::transform_component>(relationship->parent))
+                batch.commands.clear();
+            }
+
+            for (const auto& [ent, transform, renderable] :
+                 _registry->view<ecs::transform_component, renderable_component>())
+            {
+                gpu_object_data object_payload = {
+                    .model = transform.matrix(),
+                    .inv_tranpose_model = math::transpose(math::inverse(transform.matrix())),
+                    .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
+                    .material_id = static_cast<std::uint32_t>(renderable.material_id),
+                    .self_id = static_cast<std::uint32_t>(renderable.object_id),
+                };
+
+                if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
                 {
-                    object_payload.model = parent_transform->matrix() * object_payload.model;
-                    object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
+                    if (const auto parent_transform =
+                            _registry->try_get<ecs::transform_component>(relationship->parent))
+                    {
+                        object_payload.model = parent_transform->matrix() * object_payload.model;
+                        object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
+                    }
                 }
+
+                draw_batch_key key = {
+                    .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
+                };
+
+                auto& draw_batch = _draw_batches[key];
+                auto& mesh = _meshes[renderable.mesh_id];
+
+                auto object_data_it = draw_batch.objects.find(ent);
+                if (object_data_it == draw_batch.objects.end()) [[unlikely]]
+                {
+                    object_payload.prev_model = object_payload.model;
+
+                    draw_batch.objects.insert(ent, object_payload);
+                }
+                else
+                {
+                    const auto& prev_data = draw_batch.objects[ent];
+                    object_payload.prev_model = prev_data.model;
+                    draw_batch.objects[ent] = object_payload;
+                }
+
+                draw_batch.commands.push_back({
+                    .index_count = mesh.index_count,
+                    .instance_count = 1,
+                    .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
+                    .vertex_offset = 0,
+                    .first_instance = static_cast<std::uint32_t>(draw_batch.objects.index_of(ent)),
+                });
             }
 
-            draw_batch_key key = {
-                .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
-            };
-
-            auto& draw_batch = _draw_batches[key];
-            auto& mesh = _meshes[renderable.mesh_id];
-
-            auto object_data_it = draw_batch.objects.find(ent);
-            if (object_data_it == draw_batch.objects.end()) [[unlikely]]
+            // Iterate through the draw batches and update first instance based on the number of instances in the
+            // previous batches
+            std::uint32_t instances_written = 0;
+            for (auto [_, batch] : _draw_batches)
             {
-                object_payload.prev_model = object_payload.model;
+                for (auto& cmd : batch.commands)
+                {
+                    cmd.first_instance += instances_written;
+                }
 
-                draw_batch.objects.insert(ent, object_payload);
+                instances_written += static_cast<std::uint32_t>(batch.objects.size());
             }
-            else
-            {
-                const auto& prev_data = draw_batch.objects[ent];
-                object_payload.prev_model = prev_data.model;
-                draw_batch.objects[ent] = object_payload;
-            }
-
-            draw_batch.commands.push_back({
-                .index_count = mesh.index_count,
-                .instance_count = 1,
-                .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
-                .vertex_offset = 0,
-                .first_instance = static_cast<std::uint32_t>(draw_batch.objects.index_of(ent)),
-            });
-        }
-
-        // Iterate through the draw batches and update first instance based on the number of instances in the previous
-        // batches
-        std::uint32_t instances_written = 0;
-        for (auto [_, batch] : _draw_batches)
-        {
-            for (auto& cmd : batch.commands)
-            {
-                cmd.first_instance += instances_written;
-            }
-
-            instances_written += static_cast<std::uint32_t>(batch.objects.size());
         }
 
         if (_create_imgui_hierarchy && _settings.enable_imgui)
@@ -817,7 +822,7 @@ namespace tempest::graphics
             imgui_context::create_frame([this]() { _create_imgui_hierarchy(); });
         }
 
-        if (_static_data_dirty)
+        if (_static_data_dirty) [[unlikely]]
         {
             _static_data_dirty = false;
             _last_updated_frame = _device->current_frame() + _device->frames_in_flight();

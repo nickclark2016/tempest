@@ -188,7 +188,7 @@ namespace tempest::graphics
             item_ptrs.push_back(item.data());
         }
 
-        ImGui::Combo(label.data(), &current_item, item_ptrs.data(), item_ptrs.size());
+        ImGui::Combo(label.data(), &current_item, item_ptrs.data(), static_cast<int>(item_ptrs.size()));
 
         return current_item;
     }

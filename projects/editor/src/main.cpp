@@ -2,6 +2,8 @@
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
 
+#include <iostream>
+
 int main()
 {
     tempest::engine engine = tempest::engine::initialize();
@@ -10,7 +12,7 @@ int main()
         tempest::graphics::window_factory::create({.title = "Tempest Editor", .width = 1920, .height = 1080}));
 
     auto renderer_settings = engine.get_render_system().settings();
-    renderer_settings.aa_mode = tempest::graphics::anti_aliasing_mode::MSAA;
+    renderer_settings.aa_mode = tempest::graphics::anti_aliasing_mode::NONE;
     renderer_settings.enable_imgui = true;
     engine.get_render_system().update_settings(renderer_settings);
 
@@ -45,7 +47,6 @@ int main()
             using imgui = tempest::graphics::imgui_context;
 
             imgui::create_window("Entities", [&]() { editor.update(engine); });
-
             imgui::create_window("Metrics", [&, dt]() { imgui::label(std::format("FPS: {:.2f}", 1.0f / dt)); });
         });
     });
