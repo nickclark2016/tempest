@@ -529,14 +529,14 @@ namespace tempest::core
     template <typename T, typename... Args>
     inline constexpr void allocator_traits<Alloc>::construct(allocator_type& alloc, T* p, Args&&... args)
     {
-        (void)construct_at(p, std::forward<Args>(args)...);
+        (void)tempest::core::construct_at(p, std::forward<Args>(args)...);
     }
 
     template <typename Alloc>
     template <typename T>
     inline constexpr void allocator_traits<Alloc>::destroy(allocator_type& alloc, T* p)
     {
-        destroy_at(p);
+        tempest::core::destroy_at(p);
     }
 
     template <typename Alloc>

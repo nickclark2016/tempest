@@ -1,7 +1,8 @@
 #ifndef tempest_vertex_hpp
 #define tempest_vertex_hpp
 
-#include "memory.hpp"
+#include <tempest/memory.hpp>
+#include <tempest/vector.hpp>
 
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
@@ -37,8 +38,8 @@ namespace tempest::core
 
     struct mesh
     {
-        std::vector<vertex> vertices;
-        std::vector<std::uint32_t> indices;
+        vector<vertex> vertices;
+        vector<std::uint32_t> indices;
         std::string name;
 
         bool has_normals;

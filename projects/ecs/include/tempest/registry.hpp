@@ -6,6 +6,7 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/meta.hpp>
+#include <tempest/vector.hpp>
 
 #include <array>
 #include <cassert>
@@ -16,7 +17,6 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
-#include <vector>
 
 namespace tempest::ecs
 {
@@ -302,7 +302,7 @@ namespace tempest::ecs
         void reserve(std::size_t new_capacity);
 
       private:
-        std::vector<chunk> _chunks;
+        core::vector<chunk> _chunks;
         T _head = null;
 
         std::size_t _count{0};
@@ -700,7 +700,7 @@ namespace tempest::ecs
 
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
-        std::vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
+        core::vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
 
         std::unordered_map<entity, std::string> _name;
     };

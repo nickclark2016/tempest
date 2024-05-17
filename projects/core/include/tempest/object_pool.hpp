@@ -1,13 +1,12 @@
 #ifndef tempest_core_object_pool_hpp
 #define tempest_core_object_pool_hpp
 
-#include "memory.hpp"
+#include <tempest/memory.hpp>
 
 #include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 namespace tempest::core
 {
