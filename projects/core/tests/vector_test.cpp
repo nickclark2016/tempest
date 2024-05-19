@@ -42,6 +42,25 @@ TEST(vector, copy_constructor)
     }
 }
 
+TEST(vector, copy_constructor_non_trivial_copy)
+{
+    struct non_trivial
+    {
+        int i;
+        non_trivial(int i) : i(i) {}
+        non_trivial(const non_trivial& other) : i(other.i) {}
+    };
+
+    vector<non_trivial> v1(10, 42);
+    vector<non_trivial> v2(v1);
+    EXPECT_EQ(v2.size(), 10);
+    EXPECT_GE(v2.capacity(), 10);
+    for (const auto& i : v2)
+    {
+        EXPECT_EQ(i.i, 42);
+    }
+}
+
 TEST(vector, move_constructor)
 {
     vector<int> v1(10, 42);

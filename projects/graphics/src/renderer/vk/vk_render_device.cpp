@@ -705,16 +705,16 @@ namespace tempest::graphics::vk
         }
     }
 
-    std::span<std::byte> render_device::map_buffer(buffer_resource_handle handle)
+    core::span<std::byte> render_device::map_buffer(buffer_resource_handle handle)
     {
         auto vk_buf = access_buffer(handle);
         void* result;
         auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
         assert(res == VK_SUCCESS);
-        return std::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
+        return core::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
     }
 
-    std::span<std::byte> render_device::map_buffer_frame(buffer_resource_handle handle, std::uint64_t frame_offset)
+    core::span<std::byte> render_device::map_buffer_frame(buffer_resource_handle handle, std::uint64_t frame_offset)
     {
         auto vk_buf = access_buffer(handle);
         void* result;
@@ -726,12 +726,12 @@ namespace tempest::graphics::vk
         if (vk_buf->per_frame_resource)
         {
             std::uint64_t size_per_frame = vk_buf->alloc_info.size / _frames_in_flight;
-            return std::span(reinterpret_cast<std::byte*>(result) + size_per_frame * frame, size_per_frame);
+            return core::span(reinterpret_cast<std::byte*>(result) + size_per_frame * frame, size_per_frame);
         }
 
         logger->warn("Performance Note: Buffer is not a per-frame resource. Use map_buffer instead.");
 
-        return std::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
+        return core::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
     }
 
     std::size_t render_device::get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset)
@@ -1058,13 +1058,13 @@ namespace tempest::graphics::vk
         }
 
         // TODO: Cache Descriptor Set Layouts and Pipeline Layouts
-        std::vector<VkDescriptorSetLayout> set_layouts;
-        std::vector<VkPushConstantRange> ranges;
+        core::vector<VkDescriptorSetLayout> set_layouts;
+        core::vector<VkPushConstantRange> ranges;
 
         for (const auto& info : ci.layout.set_layouts)
         {
-            std::vector<VkDescriptorSetLayoutBinding> bindings;
-            std::vector<VkDescriptorBindingFlags> flags;
+            core::vector<VkDescriptorSetLayoutBinding> bindings;
+            core::vector<VkDescriptorBindingFlags> flags;
 
             for (const auto& binding : info.bindings)
             {
@@ -1131,7 +1131,7 @@ namespace tempest::graphics::vk
             return graphics_pipeline_resource_handle();
         }
 
-        std::vector<VkFormat> color_formats;
+        core::vector<VkFormat> color_formats;
         for (auto fmt : ci.target.color_attachment_formats)
         {
             color_formats.push_back(to_vulkan(fmt));
@@ -1218,8 +1218,8 @@ namespace tempest::graphics::vk
             VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT,
         };
 
-        std::vector<VkVertexInputBindingDescription> vertex_bindings;
-        std::vector<VkVertexInputAttributeDescription> vertex_attributes;
+        core::vector<VkVertexInputBindingDescription> vertex_bindings;
+        core::vector<VkVertexInputAttributeDescription> vertex_attributes;
 
         std::unordered_map<std::size_t, std::uint32_t> binding_sizes;
 
@@ -1299,7 +1299,7 @@ namespace tempest::graphics::vk
             .lineWidth = 1.0f,
         };
 
-        std::vector<VkPipelineColorBlendAttachmentState> attachment_blends;
+        core::vector<VkPipelineColorBlendAttachmentState> attachment_blends;
         for (const auto& blend_info : ci.blending.attachment_blend_ops)
         {
             VkPipelineColorBlendAttachmentState state = {
@@ -1454,12 +1454,12 @@ namespace tempest::graphics::vk
         }
 
         // TODO: Cache Descriptor Set Layouts and Pipeline Layouts
-        std::vector<VkDescriptorSetLayout> set_layouts;
-        std::vector<VkPushConstantRange> ranges;
+        core::vector<VkDescriptorSetLayout> set_layouts;
+        core::vector<VkPushConstantRange> ranges;
 
         for (const auto& info : ci.layout.set_layouts)
         {
-            std::vector<VkDescriptorSetLayoutBinding> bindings;
+            core::vector<VkDescriptorSetLayoutBinding> bindings;
 
             for (const auto& binding : info.bindings)
             {
@@ -1964,12 +1964,12 @@ namespace tempest::graphics::vk
         return *(_devices[idx]);
     }
 
-    std::vector<physical_device_context> render_context::enumerate_suitable_devices()
+    core::vector<physical_device_context> render_context::enumerate_suitable_devices()
     {
         vkb::PhysicalDeviceSelector selector = select_device(_instance);
 
         auto selection = selector.select_devices();
-        std::vector<physical_device_context> devices;
+        core::vector<physical_device_context> devices;
 
         if (selection)
         {
@@ -2035,7 +2035,7 @@ namespace tempest::graphics::vk
         return _cmds;
     }
 
-    command_list& command_list::push_constants(std::uint32_t offset, std::span<const std::byte> data,
+    command_list& command_list::push_constants(std::uint32_t offset, core::span<const std::byte> data,
                                                compute_pipeline_resource_handle handle)
     {
         auto pipeline = _device->access_compute_pipeline(handle);
@@ -2045,7 +2045,7 @@ namespace tempest::graphics::vk
         return *this;
     }
 
-    command_list& command_list::push_constants(std::uint32_t offset, std::span<const std::byte> data,
+    command_list& command_list::push_constants(std::uint32_t offset, core::span<const std::byte> data,
                                                graphics_pipeline_resource_handle handle)
     {
         auto pipeline = _device->access_graphics_pipeline(handle);

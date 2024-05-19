@@ -4,11 +4,11 @@
 #include "traits.hpp"
 
 #include <tempest/algorithm.hpp>
+#include <tempest/span.hpp>
 
 #include <algorithm>
 #include <cstdint>
 #include <memory>
-#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -28,7 +28,7 @@ namespace tempest::ecs
             using iterator_cateogry = std::random_access_iterator_tag;
 
             constexpr basic_sparse_set_iterator() noexcept;
-            constexpr basic_sparse_set_iterator(std::span<const T> data, difference_type idx) noexcept;
+            constexpr basic_sparse_set_iterator(core::span<const T> data, difference_type idx) noexcept;
             constexpr basic_sparse_set_iterator& operator++() noexcept;
             constexpr basic_sparse_set_iterator operator++(int) noexcept;
             constexpr basic_sparse_set_iterator& operator--() noexcept;
@@ -43,7 +43,7 @@ namespace tempest::ecs
             [[nodiscard]] constexpr const_pointer data() const noexcept;
             [[nodiscard]] constexpr difference_type get_index() const noexcept;
 
-            std::span<const T> packed;
+            core::span<const T> packed;
             difference_type offset;
         };
 
@@ -70,7 +70,7 @@ namespace tempest::ecs
             using iterator_cateogry = std::random_access_iterator_tag;
 
             constexpr basic_sparse_map_iterator() noexcept;
-            constexpr basic_sparse_map_iterator(std::span<const K> keys, std::span<V> values,
+            constexpr basic_sparse_map_iterator(core::span<const K> keys, core::span<V> values,
                                                 difference_type idx) noexcept;
             constexpr basic_sparse_map_iterator& operator++() noexcept;
             constexpr basic_sparse_map_iterator operator++(int) noexcept;
@@ -88,8 +88,8 @@ namespace tempest::ecs
             [[nodiscard]] constexpr const_reference operator*() const noexcept;
             [[nodiscard]] constexpr difference_type get_index() const noexcept;
 
-            std::span<const K> keys;
-            std::span<V> values;
+            core::span<const K> keys;
+            core::span<V> values;
             difference_type offset;
         };
 
@@ -99,7 +99,7 @@ namespace tempest::ecs
         }
 
         template <typename T>
-        inline constexpr basic_sparse_set_iterator<T>::basic_sparse_set_iterator(std::span<const T> data,
+        inline constexpr basic_sparse_set_iterator<T>::basic_sparse_set_iterator(core::span<const T> data,
                                                                                  difference_type idx) noexcept
             : packed{data}, offset{idx}
         {
@@ -242,8 +242,8 @@ namespace tempest::ecs
         }
 
         template <typename K, typename V>
-        inline constexpr basic_sparse_map_iterator<K, V>::basic_sparse_map_iterator(std::span<const K> keys,
-                                                                                    std::span<V> values,
+        inline constexpr basic_sparse_map_iterator<K, V>::basic_sparse_map_iterator(core::span<const K> keys,
+                                                                                    core::span<V> values,
                                                                                     difference_type idx) noexcept
             : keys{keys}, values{values}, offset{idx}
         {
@@ -737,7 +737,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_set<T, Allocator>::iterator basic_sparse_set<T, Allocator>::begin() const noexcept
     {
         const auto position = static_cast<typename iterator::difference_type>(_packed_count);
-        return iterator{std::span<const T>(_packed, _packed_count), position};
+        return iterator{core::span<const T>(_packed, _packed_count), position};
     }
 
     template <typename T, typename Allocator>
@@ -750,7 +750,7 @@ namespace tempest::ecs
     template <typename T, typename Allocator>
     inline constexpr basic_sparse_set<T, Allocator>::iterator basic_sparse_set<T, Allocator>::end() const noexcept
     {
-        return iterator{std::span<const T>(_packed, _packed_count), {}};
+        return iterator{core::span<const T>(_packed, _packed_count), {}};
     }
 
     template <typename T, typename Allocator>
@@ -1138,7 +1138,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::begin() noexcept
     {
         const auto position = static_cast<typename iterator::difference_type>(_packed_count);
-        return iterator{std::span<const K>(_packed, _packed_count), std::span<V>(_values, _packed_count), position};
+        return iterator{core::span<const K>(_packed, _packed_count), core::span<V>(_values, _packed_count), position};
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1146,7 +1146,7 @@ namespace tempest::ecs
         const noexcept
     {
         const auto position = static_cast<typename iterator::difference_type>(_packed_count);
-        return const_iterator{std::span<const K>(_packed, _packed_count), std::span<const V>(_values, _packed_count),
+        return const_iterator{core::span<const K>(_packed, _packed_count), core::span<const V>(_values, _packed_count),
                               position};
     }
 
@@ -1160,7 +1160,7 @@ namespace tempest::ecs
     template <typename K, typename V, typename Allocator>
     inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::end() noexcept
     {
-        return iterator{std::span<const K>(_packed, _packed_count), std::span<V>(_values, _packed_count), {}};
+        return iterator{core::span<const K>(_packed, _packed_count), core::span<V>(_values, _packed_count), {}};
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1168,7 +1168,7 @@ namespace tempest::ecs
         const noexcept
     {
         return const_iterator{
-            std::span<const K>(_packed, _packed_count), std::span<const V>(_values, _packed_count), {}};
+            core::span<const K>(_packed, _packed_count), core::span<const V>(_values, _packed_count), {}};
     }
 
     template <typename K, typename V, typename Allocator>

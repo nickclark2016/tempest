@@ -13,13 +13,11 @@ namespace tempest::graphics
     {
     }
 
-    std::vector<image_resource_handle> renderer_utilities::upload_textures(render_device& dev,
-                                                                           std::span<texture_data_descriptor> textures,
-                                                                           buffer_resource_handle staging_buffer,
-                                                                           bool use_entire_buffer,
-                                                                           bool generate_mip_maps)
+    core::vector<image_resource_handle> renderer_utilities::upload_textures(
+        render_device& dev, core::span<texture_data_descriptor> textures, buffer_resource_handle staging_buffer,
+        bool use_entire_buffer, bool generate_mip_maps)
     {
-        std::vector<image_resource_handle> images;
+        core::vector<image_resource_handle> images;
 
         auto& cmd_executor = dev.get_command_executor();
         auto* cmds = &cmd_executor.get_commands();
@@ -131,13 +129,14 @@ namespace tempest::graphics
 
         return images;
     }
-    std::vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, std::span<core::mesh> meshes,
-                                                               buffer_resource_handle target, std::uint32_t& offset)
+
+    core::vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, core::span<core::mesh> meshes,
+                                                                buffer_resource_handle target, std::uint32_t& offset)
     {
         std::size_t bytes_written = offset;
         std::size_t staging_buffer_bytes_written = 0;
         std::size_t last_write_index = offset;
-        std::vector<graphics::mesh_layout> result;
+        core::vector<graphics::mesh_layout> result;
         result.reserve(meshes.size());
 
         auto staging_buffer = device.get_staging_buffer();

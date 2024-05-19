@@ -5,11 +5,12 @@
 #include "types.hpp"
 
 #include <tempest/memory.hpp>
+#include <tempest/span.hpp>
 #include <tempest/vec4.hpp>
+#include <tempest/vector.hpp>
 
 #include <cstdint>
 #include <functional>
-#include <span>
 #include <string>
 
 namespace tempest::graphics
@@ -18,7 +19,7 @@ namespace tempest::graphics
     {
         resource_access_type type;
 
-        std::vector<image_resource_handle> handles;
+        core::vector<image_resource_handle> handles;
         image_resource_usage usage;
         pipeline_stage first_access;
         pipeline_stage last_access;
@@ -61,7 +62,7 @@ namespace tempest::graphics
     {
         resource_access_type type;
         image_resource_usage usage;
-        std::vector<image_resource_handle> images;
+        core::vector<image_resource_handle> images;
         pipeline_stage stages;
 
         std::uint32_t count;
@@ -80,7 +81,7 @@ namespace tempest::graphics
 
     struct external_sampler_resource_state
     {
-        std::vector<sampler_resource_handle> samplers;
+        core::vector<sampler_resource_handle> samplers;
         pipeline_stage stages;
 
         std::uint32_t set;
@@ -132,7 +133,7 @@ namespace tempest::graphics
                                               pipeline_stage last_read = pipeline_stage::INFER);
         graph_pass_builder& add_external_sampled_image(image_resource_handle handle, std::uint32_t set,
                                                        std::uint32_t binding, pipeline_stage usage);
-        graph_pass_builder& add_external_sampled_images(std::span<image_resource_handle> handles, std::uint32_t set,
+        graph_pass_builder& add_external_sampled_images(core::span<image_resource_handle> handles, std::uint32_t set,
                                                         std::uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_external_sampled_images(std::uint32_t count, std::uint32_t set, std::uint32_t binding,
                                                         pipeline_stage usage);
@@ -157,7 +158,7 @@ namespace tempest::graphics
                                               std::uint32_t set, std::uint32_t binding,
                                               pipeline_stage first_access = pipeline_stage::INFER,
                                               pipeline_stage last_access = pipeline_stage::INFER);
-        graph_pass_builder& add_storage_image(std::span<image_resource_handle> handle, resource_access_type access,
+        graph_pass_builder& add_storage_image(core::span<image_resource_handle> handle, resource_access_type access,
                                               std::uint32_t set, std::uint32_t binding,
                                               pipeline_stage first_access = pipeline_stage::INFER,
                                               pipeline_stage last_access = pipeline_stage::INFER);
@@ -215,7 +216,7 @@ namespace tempest::graphics
             return _self;
         }
 
-        inline std::span<const graph_pass_handle> depends_on() const noexcept
+        inline core::span<const graph_pass_handle> depends_on() const noexcept
         {
             return _depends_on;
         }
@@ -230,32 +231,32 @@ namespace tempest::graphics
             return _should_execute();
         }
 
-        std::span<const image_resource_state> image_usage() const noexcept
+        core::span<const image_resource_state> image_usage() const noexcept
         {
             return _image_states;
         }
 
-        std::span<const buffer_resource_state> buffer_usage() const noexcept
+        core::span<const buffer_resource_state> buffer_usage() const noexcept
         {
             return _buffer_states;
         }
 
-        std::span<const swapchain_resource_state> external_swapchain_usage() const noexcept
+        core::span<const swapchain_resource_state> external_swapchain_usage() const noexcept
         {
             return _external_swapchain_states;
         }
 
-        std::span<const external_image_resource_state> external_images() const noexcept
+        core::span<const external_image_resource_state> external_images() const noexcept
         {
             return _external_image_states;
         }
 
-        std::span<const external_sampler_resource_state> external_samplers() const noexcept
+        core::span<const external_sampler_resource_state> external_samplers() const noexcept
         {
             return _sampler_states;
         }
 
-        std::span<const resolve_image_state> resolve_images() const noexcept
+        core::span<const resolve_image_state> resolve_images() const noexcept
         {
             return _resolve_images;
         }
@@ -270,13 +271,13 @@ namespace tempest::graphics
         queue_operation_type _op_type;
         std::function<void(command_list&)> _commands;
         std::function<bool()> _should_execute = []() { return true; };
-        std::vector<image_resource_state> _image_states;
-        std::vector<buffer_resource_state> _buffer_states;
-        std::vector<swapchain_resource_state> _external_swapchain_states;
-        std::vector<external_image_resource_state> _external_image_states;
-        std::vector<external_sampler_resource_state> _sampler_states;
-        std::vector<graph_pass_handle> _depends_on;
-        std::vector<resolve_image_state> _resolve_images;
+        core::vector<image_resource_state> _image_states;
+        core::vector<buffer_resource_state> _buffer_states;
+        core::vector<swapchain_resource_state> _external_swapchain_states;
+        core::vector<external_image_resource_state> _external_image_states;
+        core::vector<external_sampler_resource_state> _sampler_states;
+        core::vector<graph_pass_handle> _depends_on;
+        core::vector<resolve_image_state> _resolve_images;
         graph_pass_handle _self;
         std::string _name;
 
@@ -288,7 +289,7 @@ namespace tempest::graphics
     class render_graph
     {
       public:
-        virtual void update_external_sampled_images(graph_pass_handle pass, std::span<image_resource_handle> images,
+        virtual void update_external_sampled_images(graph_pass_handle pass, core::span<image_resource_handle> images,
                                                     std::uint32_t set, std::uint32_t binding, pipeline_stage stage) = 0;
 
         virtual ~render_graph() = default;
@@ -314,7 +315,7 @@ namespace tempest::graphics
       protected:
         render_device* _device;
         core::abstract_allocator* _alloc;
-        std::vector<graph_pass_builder> _builders;
+        core::vector<graph_pass_builder> _builders;
         std::unique_ptr<render_graph_resource_library> _resource_lib;
         bool _imgui_enabled = false;
 
@@ -326,10 +327,10 @@ namespace tempest::graphics
       public:
         void add_graph_pass(std::uint64_t pass_id);
         void add_graph_dependency(std::uint64_t src_pass, std::uint64_t dst_pass);
-        std::vector<std::uint64_t> toposort() const noexcept;
+        core::vector<std::uint64_t> toposort() const noexcept;
 
       private:
-        std::unordered_map<std::uint64_t, std::vector<std::uint64_t>> _adjacency_list;
+        std::unordered_map<std::uint64_t, core::vector<std::uint64_t>> _adjacency_list;
     };
 } // namespace tempest::graphics
 

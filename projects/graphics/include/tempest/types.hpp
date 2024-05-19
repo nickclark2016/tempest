@@ -4,12 +4,13 @@
 #include "window.hpp"
 
 #include <tempest/mat4.hpp>
+#include <tempest/span.hpp>
 #include <tempest/vec3.hpp>
+#include <tempest/vector.hpp>
 
 #include <compare>
 #include <cstddef>
 #include <numeric>
-#include <span>
 #include <string>
 
 namespace tempest::graphics
@@ -236,7 +237,7 @@ namespace tempest::graphics
     struct descriptor_set_layout_create_info
     {
         std::uint32_t set;
-        std::span<descriptor_binding_info> bindings;
+        core::span<descriptor_binding_info> bindings;
     };
 
     struct push_constant_layout
@@ -247,8 +248,8 @@ namespace tempest::graphics
 
     struct pipeline_layout_create_info
     {
-        std::span<descriptor_set_layout_create_info> set_layouts;
-        std::span<push_constant_layout> push_constants;
+        core::span<descriptor_set_layout_create_info> set_layouts;
+        core::span<push_constant_layout> push_constants;
     };
 
     enum class blend_factor
@@ -305,7 +306,7 @@ namespace tempest::graphics
 
     struct color_blend_state
     {
-        std::span<color_blend_attachment_state> attachment_blend_ops;
+        core::span<color_blend_attachment_state> attachment_blend_ops;
     };
 
     struct vertex_input_element
@@ -318,12 +319,12 @@ namespace tempest::graphics
 
     struct vertex_input_layout
     {
-        std::span<vertex_input_element> elements;
+        core::span<vertex_input_element> elements;
     };
 
     struct render_target_layout
     {
-        std::span<resource_format> color_attachment_formats;
+        core::span<resource_format> color_attachment_formats;
         resource_format depth_attachment_format{resource_format::UNKNOWN};
     };
 
@@ -344,7 +345,7 @@ namespace tempest::graphics
 
     struct shader_create_info
     {
-        std::span<std::byte> bytes;
+        core::span<std::byte> bytes;
         std::string_view entrypoint;
         std::string name;
     };
@@ -379,13 +380,13 @@ namespace tempest::graphics
     {
         std::uint32_t width;
         std::uint32_t height;
-        std::span<std::byte> bytes;
+        core::span<std::byte> bytes;
     };
 
     struct texture_data_descriptor
     {
         resource_format fmt;
-        std::vector<texture_mip_descriptor> mips;
+        core::vector<texture_mip_descriptor> mips;
         std::string name;
     };
 
@@ -517,20 +518,20 @@ namespace tempest::graphics
       public:
         virtual ~command_list() = default;
 
-        template <typename T> requires(!std::is_same_v<T, std::span<const std::byte>>)
+        template <typename T> requires(!std::is_same_v<T, core::span<const std::byte>>)
         command_list& push_constants(std::uint32_t offset, const T& data, compute_pipeline_resource_handle handle)
         {
-            return push_constants(offset, std::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
+            return push_constants(offset, core::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
         }
 
-        template <typename T> requires(!std::is_same_v<T, std::span<const std::byte>>)
+        template <typename T> requires(!std::is_same_v<T, core::span<const std::byte>>)
         command_list& push_constants(std::uint32_t offset, const T& data, graphics_pipeline_resource_handle handle)
         {
-            return push_constants(offset, std::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
+            return push_constants(offset, core::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
         }
 
-        virtual command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, compute_pipeline_resource_handle handle) = 0;
-        virtual command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data, graphics_pipeline_resource_handle handle) = 0;
+        virtual command_list& push_constants(std::uint32_t offset, core::span<const std::byte> data, compute_pipeline_resource_handle handle) = 0;
+        virtual command_list& push_constants(std::uint32_t offset, core::span<const std::byte> data, graphics_pipeline_resource_handle handle) = 0;
 
         virtual command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
                                            float max_depth = 1.0f, std::uint32_t viewport_id = 0, bool flip = true) = 0;

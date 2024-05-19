@@ -7,6 +7,7 @@
 #include <bit>
 #include <cassert>
 #include <cstddef>
+#include <initializer_list>
 #include <iterator>
 
 namespace tempest::core
@@ -32,6 +33,10 @@ namespace tempest::core
         explicit constexpr vector(const Allocator& alloc) noexcept(noexcept(Allocator()));
         constexpr vector(size_type count, const T& value, const Allocator& alloc = Allocator());
         explicit constexpr vector(size_type count, const Allocator& alloc = Allocator());
+        constexpr vector(std::initializer_list<T> init, const Allocator& alloc = Allocator());
+
+        template <std::input_iterator It>
+        constexpr vector(It first, It last, const Allocator& alloc = Allocator());
 
         constexpr vector(const vector& other);
         constexpr vector(const vector& other, const Allocator& alloc);
@@ -115,9 +120,8 @@ namespace tempest::core
         constexpr void resize(size_type count);
         constexpr void resize(size_type count, const T& value);
 
-        constexpr void swap(vector& other) noexcept(
-            allocator_traits<Allocator>::propagate_on_container_swap::value ||
-            allocator_traits<Allocator>::is_always_equal::value);
+        constexpr void swap(vector& other) noexcept(allocator_traits<Allocator>::propagate_on_container_swap::value ||
+                                                    allocator_traits<Allocator>::is_always_equal::value);
 
       private:
         Allocator _alloc;
@@ -127,6 +131,8 @@ namespace tempest::core
         T* _capacity_end{nullptr};
 
         constexpr size_type _compute_next_capacity(size_type requested_capacity) const noexcept;
+        constexpr void _emplace_one_at_back(const T& value);
+        constexpr void _emplace_one_at_back(T&& value);
     };
 
     template <typename T, typename Allocator>
@@ -164,6 +170,29 @@ namespace tempest::core
     constexpr vector<T, Allocator>::vector(size_type count, const Allocator& alloc) : _alloc{alloc}
     {
         resize(count);
+    }
+
+    template <typename T, typename Allocator>
+    inline constexpr vector<T, Allocator>::vector(std::initializer_list<T> init, const Allocator& alloc) : _alloc{alloc}
+    {
+        reserve(init.size());
+
+        for (const auto& value : init)
+        {
+            push_back(value);
+        }
+    }
+
+    template <typename T, typename Allocator>
+    template <std::input_iterator It>
+    inline constexpr vector<T, Allocator>::vector(It first, It last, const Allocator& alloc) : _alloc{alloc}
+    {
+        reserve(std::distance(first, last));
+
+        for (auto it = first; it != last; ++it)
+        {
+            push_back(*it);
+        }
     }
 
     template <typename T, typename Allocator>
@@ -278,7 +307,7 @@ namespace tempest::core
 
         return *this;
     }
-    
+
     template <typename T, typename Allocator>
     constexpr void vector<T, Allocator>::assign(size_type count, const T& value)
     {
@@ -562,7 +591,8 @@ namespace tempest::core
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, size_type count, const T& value)
+    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, size_type count,
+                                                                                   const T& value)
     {
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
@@ -584,7 +614,8 @@ namespace tempest::core
 
     template <typename T, typename Allocator>
     template <typename InputIt>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, InputIt first, InputIt last)
+    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, InputIt first,
+                                                                                   InputIt last)
     {
         auto index = pos - begin();
         auto count = std::distance(first, last);
@@ -642,7 +673,8 @@ namespace tempest::core
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(const_iterator first, const_iterator last)
+    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(const_iterator first,
+                                                                                  const_iterator last)
     {
         auto index = first - begin();
         auto count = last - first;
@@ -671,20 +703,21 @@ namespace tempest::core
     template <typename T, typename Allocator>
     constexpr void vector<T, Allocator>::push_back(const T& value)
     {
-        insert(end(), value);
+        _emplace_one_at_back(value);
     }
 
     template <typename T, typename Allocator>
     constexpr void vector<T, Allocator>::push_back(T&& value)
     {
-        insert(end(), std::move(value));
+        _emplace_one_at_back(std::move(value));
     }
 
     template <typename T, typename Allocator>
     template <typename... Args>
     constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::emplace_back(Args&&... args)
     {
-        return *emplace(end(), std::forward<Args>(args)...);
+        _emplace_one_at_back(std::forward<Args>(args)...);
+        return back();
     }
 
     template <typename T, typename Allocator>
@@ -747,9 +780,24 @@ namespace tempest::core
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::size_type vector<T, Allocator>::_compute_next_capacity(size_type requested_capacity) const noexcept
+    constexpr typename vector<T, Allocator>::size_type vector<T, Allocator>::_compute_next_capacity(
+        size_type requested_capacity) const noexcept
     {
         return std::bit_ceil(requested_capacity);
+    }
+
+    template <typename T, typename Allocator>
+    inline constexpr void vector<T, Allocator>::_emplace_one_at_back(const T& value)
+    {
+        reserve(_compute_next_capacity(size() + 1));
+        allocator_traits<Allocator>::construct(_alloc, _end++, value);
+    }
+
+    template <typename T, typename Allocator>
+    inline constexpr void vector<T, Allocator>::_emplace_one_at_back(T&& value)
+    {
+        reserve(_compute_next_capacity(size() + 1));
+        allocator_traits<Allocator>::construct(_alloc, _end++, std::move(value));
     }
 
     template <typename T, typename Allocator>

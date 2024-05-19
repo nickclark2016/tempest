@@ -2,6 +2,8 @@
 
 #include "../windowing/glfw_window.hpp"
 
+#include <tempest/vector.hpp>
+
 #include <backends/imgui_impl_glfw.h>
 #include <imgui.h>
 
@@ -180,9 +182,9 @@ namespace tempest::graphics
         return ImGui::Button(label.data());
     }
 
-    int imgui_context::combo_box(std::string_view label, int current_item, std::span<std::string_view> items)
+    int imgui_context::combo_box(std::string_view label, int current_item, core::span<std::string_view> items)
     {
-        std::vector<const char*> item_ptrs;
+        core::vector<const char*> item_ptrs;
         for (auto& item : items)
         {
             item_ptrs.push_back(item.data());

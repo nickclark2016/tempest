@@ -2,6 +2,7 @@
 #define tempest_vertex_hpp
 
 #include <tempest/memory.hpp>
+#include <tempest/span.hpp>
 #include <tempest/vector.hpp>
 
 #include <tempest/vec2.hpp>
@@ -9,7 +10,6 @@
 #include <tempest/vec4.hpp>
 
 #include <array>
-#include <span>
 #include <string>
 
 namespace tempest::core
@@ -25,8 +25,8 @@ namespace tempest::core
 
     struct mesh_view
     {
-        std::span<const vertex> vertices;
-        std::span<const std::uint32_t> indices;
+        span<const vertex> vertices;
+        span<const std::uint32_t> indices;
 
         bool has_tangents;
         bool has_bitangents;

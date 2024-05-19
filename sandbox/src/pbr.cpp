@@ -215,11 +215,11 @@ void pbr_demo()
     scene_data.camera.inv_proj = math::inverse(scene_data.camera.proj);
     scene_data.camera.inv_view = math::inverse(scene_data.camera.view);
 
-    std::vector<graphics::object_payload> objects;
-    std::vector<graphics::mesh_layout> mesh_layouts;
-    std::vector<graphics::material_payload> materials;
-    std::vector<graphics::indexed_indirect_command> indirect_draw_commands;
-    std::vector<std::uint32_t> instances;
+    core::vector<graphics::object_payload> objects;
+    core::vector<graphics::mesh_layout> mesh_layouts;
+    core::vector<graphics::material_payload> materials;
+    core::vector<graphics::indexed_indirect_command> indirect_draw_commands;
+    core::vector<std::uint32_t> instances;
 
     for (auto& node : scene->nodes)
     {

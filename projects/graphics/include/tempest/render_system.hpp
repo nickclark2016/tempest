@@ -147,8 +147,8 @@ namespace tempest::graphics
             return _settings;
         }
 
-        std::vector<mesh_layout> load_mesh(std::span<core::mesh> meshes);
-        void load_textures(std::span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
+        core::vector<mesh_layout> load_mesh(core::span<core::mesh> meshes);
+        void load_textures(core::span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
         void load_material(graphics::material_payload& material);
 
         [[nodiscard]] inline std::uint32_t mesh_count() const noexcept

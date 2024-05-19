@@ -75,6 +75,30 @@ namespace tempest::core
     {
         return n ^ (static_cast<T>(1) << k);
     }
+
+    template <typename T>
+    [[nodiscard]] auto begin(T& container) -> decltype(container.begin())
+    {
+        return container.begin();
+    }
+
+    template <typename T>
+    [[nodiscard]] auto begin(const T& container) -> decltype(container.begin())
+    {
+        return container.begin();
+    }
+
+    template <typename T>
+    [[nodiscard]] auto end(T& container) -> decltype(container.end())
+    {
+        return container.end();
+    }
+
+    template <typename T>
+    [[nodiscard]] auto end(const T& container) -> decltype(container.end())
+    {
+        return container.end();
+    }
 } // namespace tempest::core
 
 #endif // tempest_core_algorithm_hpp
