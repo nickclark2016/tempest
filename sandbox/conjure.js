@@ -27,7 +27,8 @@ project('sandbox', _ => {
         })();
 
         const shaderBasePath = 'sandbox/assets/shaders';
-        const debugFlags = ctx.configuration === 'Debug' ? '-g3 -O1 -line-directive-mode source-map' : '-O3';
+        // const debugFlags = ctx.configuration === 'Debug' ? '-g3 -O1 -line-directive-mode source-map' : '-O3';
+        const debugFlags = '-O3';
 
         const events = [
             `${slangPath} ${shaderBasePath}/pbr.slang -target spirv -o ${shaderBasePath}/pbr.vert.spv -entry VSMain ${debugFlags}`,
@@ -41,8 +42,10 @@ project('sandbox', _ => {
             `${slangPath} ${shaderBasePath}/sharpen.slang -target spirv -o ${shaderBasePath}/sharpen.frag.spv -entry FSMain ${debugFlags}`
         ];
 
-        for (let i = 0; i < events.length; i++) {
-            events[i] = events[i].replaceAll('/', '\\');
+        if (ctx.system === 'windows') {
+            for (let i = 0; i < events.length; i++) {
+                events[i] = events[i].replaceAll('/', '\\');
+            }
         }
 
         postBuildEvents(events);

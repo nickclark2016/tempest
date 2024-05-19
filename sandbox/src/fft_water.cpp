@@ -521,7 +521,7 @@ void fft_water_demo()
                 .add_transfer_target(initial_spectrum_textures)
                 .on_execute([&](graphics::command_list& cmds) {
                     auto staging = graphics_device.get_staging_buffer();
-                    std::span<std::byte> src_ptr = graphics_device.map_buffer_frame(staging);
+                    core::span<std::byte> src_ptr = graphics_device.map_buffer_frame(staging);
                     std::memcpy(src_ptr.data(), &fft_constants, sizeof(water_fft_constants));
                     std::memcpy(src_ptr.data() + sizeof(water_fft_constants), wave_spectrums.data(),
                                 sizeof(wave_spectrums));

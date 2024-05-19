@@ -161,7 +161,7 @@ namespace tempest::graphics
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::add_external_sampled_images(std::span<image_resource_handle> handles,
+    graph_pass_builder& graph_pass_builder::add_external_sampled_images(core::span<image_resource_handle> handles,
                                                                         std::uint32_t set, std::uint32_t binding,
                                                                         pipeline_stage usage)
     {
@@ -273,7 +273,7 @@ namespace tempest::graphics
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::add_storage_image(std::span<image_resource_handle> handle,
+    graph_pass_builder& graph_pass_builder::add_storage_image(core::span<image_resource_handle> handle,
                                                               resource_access_type access, std::uint32_t set,
                                                               std::uint32_t binding, pipeline_stage first_access,
                                                               pipeline_stage last_access)
@@ -546,8 +546,8 @@ namespace tempest::graphics
 
     namespace
     {
-        void dfs(const std::unordered_map<std::uint64_t, std::vector<std::uint64_t>>& adjacency_list,
-                 std::unordered_set<std::uint64_t>& visited, std::uint64_t node, std::vector<std::uint64_t>& results)
+        void dfs(const std::unordered_map<std::uint64_t, core::vector<std::uint64_t>>& adjacency_list,
+                 std::unordered_set<std::uint64_t>& visited, std::uint64_t node, core::vector<std::uint64_t>& results)
         {
             visited.insert(node);
 
@@ -566,10 +566,10 @@ namespace tempest::graphics
         }
     } // namespace
 
-    std::vector<std::uint64_t> dependency_graph::toposort() const noexcept
+    core::vector<std::uint64_t> dependency_graph::toposort() const noexcept
     {
         std::unordered_set<std::uint64_t> visited;
-        std::vector<std::uint64_t> result;
+        core::vector<std::uint64_t> result;
         result.reserve(_adjacency_list.size());
 
         for (std::size_t node : std::ranges::views::keys(_adjacency_list))

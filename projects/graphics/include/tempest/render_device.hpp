@@ -5,6 +5,8 @@
 #include "types.hpp"
 
 #include <tempest/memory.hpp>
+#include <tempest/span.hpp>
+#include <tempest/vector.hpp>
 #include <tempest/vertex.hpp>
 
 #include <compare>
@@ -30,7 +32,7 @@ namespace tempest::graphics
         virtual bool has_suitable_device() const noexcept = 0;
         virtual std::uint32_t device_count() const noexcept = 0;
         virtual render_device& create_device(std::uint32_t idx = 0) = 0;
-        virtual std::vector<physical_device_context> enumerate_suitable_devices() = 0;
+        virtual core::vector<physical_device_context> enumerate_suitable_devices() = 0;
 
         static std::unique_ptr<render_context> create(core::abstract_allocator* alloc);
 
@@ -48,8 +50,8 @@ namespace tempest::graphics
 
         virtual buffer_resource_handle create_buffer(const buffer_create_info& ci) = 0;
         virtual void release_buffer(buffer_resource_handle handle) = 0;
-        virtual std::span<std::byte> map_buffer(buffer_resource_handle handle) = 0;
-        virtual std::span<std::byte> map_buffer_frame(buffer_resource_handle handle,
+        virtual core::span<std::byte> map_buffer(buffer_resource_handle handle) = 0;
+        virtual core::span<std::byte> map_buffer_frame(buffer_resource_handle handle,
                                                       std::uint64_t frame_offset = 0) = 0;
         virtual std::size_t get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset = 0) = 0;
         virtual void unmap_buffer(buffer_resource_handle handle) = 0;
@@ -86,13 +88,13 @@ namespace tempest::graphics
     class renderer_utilities
     {
       public:
-        static std::vector<image_resource_handle> upload_textures(render_device& dev,
-                                                                  std::span<texture_data_descriptor> textures,
+        static core::vector<image_resource_handle> upload_textures(render_device& dev,
+                                                                  core::span<texture_data_descriptor> textures,
                                                                   buffer_resource_handle staging_buffer,
                                                                   bool use_entire_buffer = false,
                                                                   bool generate_mip_maps = false);
 
-        static std::vector<mesh_layout> upload_meshes(render_device& device, std::span<core::mesh> meshes,
+        static core::vector<mesh_layout> upload_meshes(render_device& device, core::span<core::mesh> meshes,
                                                       buffer_resource_handle target, std::uint32_t& offset);
     };
 } // namespace tempest::graphics

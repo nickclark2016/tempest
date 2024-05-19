@@ -58,7 +58,7 @@ namespace tempest::graphics::vk
         std::uint32_t binding{0};
         std::uint32_t set{0};
         
-        std::vector<VkDescriptorImageInfo> images;
+        core::vector<VkDescriptorImageInfo> images;
     };
 
     struct external_sampler_state
@@ -67,7 +67,7 @@ namespace tempest::graphics::vk
         std::uint32_t binding{0};
         std::uint32_t set{0};
 
-        std::vector<VkDescriptorImageInfo> samplers;
+        core::vector<VkDescriptorImageInfo> samplers;
     };
 
     struct per_frame_data
@@ -78,7 +78,7 @@ namespace tempest::graphics::vk
 
     struct descriptor_set_frame_state
     {
-        std::vector<std::uint32_t> dynamic_offsets{};
+        core::vector<std::uint32_t> dynamic_offsets{};
         std::array<VkDescriptorSet, 8> descriptor_sets{};
         std::size_t last_frame_changed{0};
     };
@@ -86,10 +86,10 @@ namespace tempest::graphics::vk
     struct descriptor_set_state
     {
         std::unordered_map<VkDescriptorSet, std::uint32_t> vk_set_to_set_index;
-        std::vector<VkDescriptorSetLayout> set_layouts;
+        core::vector<VkDescriptorSetLayout> set_layouts;
         VkPipelineLayout layout{VK_NULL_HANDLE};
-        std::vector<descriptor_set_frame_state> per_frame_descriptors;
-        std::vector<VkWriteDescriptorSet> writes;
+        core::vector<descriptor_set_frame_state> per_frame_descriptors;
+        core::vector<VkWriteDescriptorSet> writes;
         std::size_t last_update_frame{0};
     };
 
@@ -99,8 +99,8 @@ namespace tempest::graphics::vk
         std::unordered_map<std::uint64_t, render_graph_image_state> images;
         std::unordered_map<std::uint64_t, swapchain_resource_state> swapchain;
 
-        std::vector<external_image_state> external_images;
-        std::vector<external_sampler_state> external_samplers;
+        core::vector<external_image_state> external_images;
+        core::vector<external_sampler_state> external_samplers;
     };
 
     struct imgui_render_graph_context
@@ -119,11 +119,11 @@ namespace tempest::graphics::vk
     {
       public:
         explicit render_graph(core::abstract_allocator* alloc, render_device* device,
-                              std::span<graphics::graph_pass_builder> pass_builders,
+                              core::span<graphics::graph_pass_builder> pass_builders,
                               std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled);
         ~render_graph() override;
 
-        void update_external_sampled_images(graph_pass_handle pass, std::span<image_resource_handle> images,
+        void update_external_sampled_images(graph_pass_handle pass, core::span<image_resource_handle> images,
                                             std::uint32_t set,
                                    std::uint32_t binding, pipeline_stage stage) override;
 
@@ -136,12 +136,12 @@ namespace tempest::graphics::vk
 
         std::unique_ptr<render_graph_resource_library> _resource_lib;
 
-        std::vector<per_frame_data> _per_frame;
-        std::vector<graph_pass_builder> _all_passes;
+        core::vector<per_frame_data> _per_frame;
+        core::vector<graph_pass_builder> _all_passes;
 
         pass_active_mask _active_passes;
-        std::vector<std::reference_wrapper<graph_pass_builder>> _active_pass_set;
-        std::vector<swapchain_resource_handle> _active_swapchain_set;
+        core::vector<std::reference_wrapper<graph_pass_builder>> _active_pass_set;
+        core::vector<swapchain_resource_handle> _active_swapchain_set;
         std::unordered_map<std::uint64_t, std::size_t> _pass_index_map;
 
         core::abstract_allocator* _alloc;
@@ -150,7 +150,7 @@ namespace tempest::graphics::vk
         render_graph_resource_state _last_known_state;
         bool _recreated_sc_last_frame{false};
 
-        std::vector<descriptor_set_state> _descriptor_set_states;
+        core::vector<descriptor_set_state> _descriptor_set_states;
 
         std::optional<imgui_render_graph_context> _imgui_ctx;
     };
@@ -186,11 +186,11 @@ namespace tempest::graphics::vk
             buffer_resource_handle allocation;
         };
 
-        std::vector<deferred_image_create_info> _images_to_compile;
-        std::vector<image_resource_handle> _compiled_images;
+        core::vector<deferred_image_create_info> _images_to_compile;
+        core::vector<image_resource_handle> _compiled_images;
 
-        std::vector<deferred_buffer_create_info> _buffers_to_compile;
-        std::vector<buffer_resource_handle> _compiled_buffers;
+        core::vector<deferred_buffer_create_info> _buffers_to_compile;
+        core::vector<buffer_resource_handle> _compiled_buffers;
     };
 
     class render_graph_compiler : public graphics::render_graph_compiler

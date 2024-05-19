@@ -213,7 +213,7 @@ namespace tempest
             }
         }
 
-        std::vector<core::mesh> meshes;
+        core::vector<core::mesh> meshes;
         meshes.reserve(model.meshes.size());
         for (auto& mesh : model.meshes)
         {
@@ -243,7 +243,7 @@ namespace tempest
             _render_system.load_material(payload);
         }
 
-        std::vector<graphics::texture_data_descriptor> texture_descriptors;
+        core::vector<graphics::texture_data_descriptor> texture_descriptors;
         for (auto& tex_asset : model.textures)
         {
             graphics::texture_data_descriptor desc{

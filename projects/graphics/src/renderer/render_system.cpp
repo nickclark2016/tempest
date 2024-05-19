@@ -886,7 +886,7 @@ namespace tempest::graphics
         _settings_dirty = true;
     }
 
-    std::vector<mesh_layout> render_system::load_mesh(std::span<core::mesh> meshes)
+    core::vector<mesh_layout> render_system::load_mesh(core::span<core::mesh> meshes)
     {
         auto mesh_layouts = renderer_utilities::upload_meshes(*_device, meshes, _vertex_pull_buffer, _mesh_bytes);
 
@@ -898,7 +898,7 @@ namespace tempest::graphics
         return mesh_layouts;
     }
 
-    void render_system::load_textures(std::span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
+    void render_system::load_textures(core::span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
     {
         auto textures = renderer_utilities::upload_textures(*_device, texture_sources, _device->get_staging_buffer(),
                                                             true, generate_mip_maps);

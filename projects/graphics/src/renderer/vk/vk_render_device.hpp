@@ -3,12 +3,13 @@
 
 #include <tempest/object_pool.hpp>
 #include <tempest/render_device.hpp>
+#include <tempest/span.hpp>
+#include <tempest/vector.hpp>
 
 #include <array>
 #include <deque>
 #include <functional>
 #include <optional>
-#include <vector>
 
 #include <VkBootstrap.h>
 #include <vk_mem_alloc.h>
@@ -45,7 +46,7 @@ namespace tempest::graphics::vk
     {
         VkShaderModule vertex_module;
         VkShaderModule fragment_module;
-        std::vector<VkDescriptorSetLayout> set_layouts;
+        core::vector<VkDescriptorSetLayout> set_layouts;
         VkPipeline pipeline;
         VkPipelineLayout pipeline_layout;
         std::string name;
@@ -54,7 +55,7 @@ namespace tempest::graphics::vk
     struct compute_pipeline
     {
         VkShaderModule compute_module;
-        std::vector<VkDescriptorSetLayout> set_layouts;
+        core::vector<VkDescriptorSetLayout> set_layouts;
         VkPipeline pipeline;
         VkPipelineLayout pipeline_layout;
         std::string name;
@@ -66,7 +67,7 @@ namespace tempest::graphics::vk
         std::uint32_t image_index;
         vkb::Swapchain sc;
         VkSurfaceKHR surface;
-        std::vector<image_resource_handle> image_handles;
+        core::vector<image_resource_handle> image_handles;
     };
 
     struct sampler
@@ -92,7 +93,7 @@ namespace tempest::graphics::vk
             std::function<void()> deleter;
         };
 
-        std::vector<delete_info> _queue;
+        core::vector<delete_info> _queue;
         std::size_t _frames_in_flight;
     };
 
@@ -112,9 +113,9 @@ namespace tempest::graphics::vk
 
         operator VkCommandBuffer() const noexcept;
 
-        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data,
+        command_list& push_constants(std::uint32_t offset, core::span<const std::byte> data,
                                      compute_pipeline_resource_handle handle) override;
-        command_list& push_constants(std::uint32_t offset, std::span<const std::byte> data,
+        command_list& push_constants(std::uint32_t offset, core::span<const std::byte> data,
                                      graphics_pipeline_resource_handle handle) override;
 
         command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
@@ -160,7 +161,7 @@ namespace tempest::graphics::vk
         queue_info queue;
         VkCommandPool pool;
 
-        std::vector<VkCommandBuffer> cached_commands;
+        core::vector<VkCommandBuffer> cached_commands;
         std::size_t command_buffer_index{0};
 
         vkb::DispatchTable* dispatch;
@@ -181,7 +182,7 @@ namespace tempest::graphics::vk
 
         std::size_t frames_in_flight;
         queue_info queue;
-        std::vector<command_buffer_allocator> global_pool;
+        core::vector<command_buffer_allocator> global_pool;
         std::deque<command_buffer_recycle_payload> recycle_pool;
 
         command_buffer_allocator acquire(vkb::DispatchTable& dispatch, render_device* device);
@@ -204,9 +205,9 @@ namespace tempest::graphics::vk
             std::size_t recycled_frame;
         };
 
-        std::vector<VkFence> global_fence_pool;
+        core::vector<VkFence> global_fence_pool;
         std::deque<fence_recycle_payload> recycle_fence_pool;
-        std::vector<VkSemaphore> global_semaphore_pool;
+        core::vector<VkSemaphore> global_semaphore_pool;
         std::deque<semaphore_recycle_payload> recycle_semaphore_pool;
 
         std::size_t frames_in_flight;
@@ -254,8 +255,8 @@ namespace tempest::graphics::vk
         buffer_resource_handle create_buffer(const buffer_create_info& ci, buffer_resource_handle handle);
         void release_buffer(buffer_resource_handle handle) override;
 
-        std::span<std::byte> map_buffer(buffer_resource_handle handle) override;
-        std::span<std::byte> map_buffer_frame(buffer_resource_handle handlee, std::uint64_t frame_offset) override;
+        core::span<std::byte> map_buffer(buffer_resource_handle handle) override;
+        core::span<std::byte> map_buffer_frame(buffer_resource_handle handlee, std::uint64_t frame_offset) override;
         std::size_t get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset) override;
         void unmap_buffer(buffer_resource_handle handle) override;
 
@@ -429,10 +430,10 @@ namespace tempest::graphics::vk
         bool has_suitable_device() const noexcept override;
         std::uint32_t device_count() const noexcept override;
         graphics::render_device& create_device(std::uint32_t idx) override;
-        std::vector<physical_device_context> enumerate_suitable_devices() override;
+        core::vector<physical_device_context> enumerate_suitable_devices() override;
 
       private:
-        std::vector<std::unique_ptr<render_device>> _devices;
+        core::vector<std::unique_ptr<render_device>> _devices;
 
         vkb::Instance _instance;
     };

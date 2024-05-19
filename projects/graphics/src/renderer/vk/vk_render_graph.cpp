@@ -481,7 +481,7 @@ namespace tempest::graphics::vk
     }
 
     render_graph::render_graph(core::abstract_allocator* alloc, render_device* device,
-                               std::span<graphics::graph_pass_builder> pass_builders,
+                               core::span<graphics::graph_pass_builder> pass_builders,
                                std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled)
         : _alloc{alloc}, _device{device}, _resource_lib{std::move(resources)}
     {
@@ -631,7 +631,7 @@ namespace tempest::graphics::vk
         }
     }
 
-    void render_graph::update_external_sampled_images(graph_pass_handle pass, std::span<image_resource_handle> images,
+    void render_graph::update_external_sampled_images(graph_pass_handle pass, core::span<image_resource_handle> images,
                                                       std::uint32_t set, std::uint32_t binding, pipeline_stage stage)
     {
         auto pass_idx = _pass_index_map[pass.as_uint64()];
@@ -849,7 +849,7 @@ namespace tempest::graphics::vk
                 }
 
                 auto write_copy = writes;
-                std::erase_if(write_copy, [](const auto& write) { return write.descriptorCount == 0; });
+                core::erase_if(write_copy, [](const auto& write) { return write.descriptorCount == 0; });
 
                 dispatch->updateDescriptorSets(static_cast<std::uint32_t>(write_copy.size()), write_copy.data(), 0,
                                                nullptr);
@@ -1753,7 +1753,7 @@ namespace tempest::graphics::vk
                 continue;
             }
 
-            std::vector<VkDescriptorSetLayout> set_layouts;
+            core::vector<VkDescriptorSetLayout> set_layouts;
             for (auto& [id, binding_arr] : bindings)
             {
                 auto& bind_flags = binding_flags[id];
@@ -1837,7 +1837,7 @@ namespace tempest::graphics::vk
                 }
 
                 auto writes = _descriptor_set_states[pass_index].writes;
-                std::erase_if(writes, [](const VkWriteDescriptorSet& write) { return write.descriptorCount == 0; });
+                core::erase_if(writes, [](const VkWriteDescriptorSet& write) { return write.descriptorCount == 0; });
 
                 _device->dispatch().updateDescriptorSets(static_cast<std::uint32_t>(writes.size()), writes.data(), 0,
                                                          nullptr);
