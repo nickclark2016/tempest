@@ -8,6 +8,7 @@
 #include <bit>
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <memory>
 
 namespace tempest::core

@@ -13,7 +13,6 @@ project('core', (prj) => {
     dependsOn([
         'math',
         'tlsf',
-        'glfw',
     ])
 
     block('core:public', (_) => {
@@ -24,7 +23,6 @@ project('core', (prj) => {
 
     uses([
         'tempest:common',
-        'glfw:public',
         'tlsf:public',
         'core:public',
         'math:public',

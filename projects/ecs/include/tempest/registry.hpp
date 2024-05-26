@@ -972,11 +972,11 @@ namespace tempest::ecs
             }
             else if constexpr (sizeof...(Ts) == 1)
             {
-                return std::tuple_cat(std::make_tuple(e), std::tuple<Ts&...>(source->get<Ts...>(e)));
+                return std::tuple_cat(std::make_tuple(e), std::tuple<Ts&...>(source->template get<Ts...>(e)));
             }
             else
             {
-                return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+                return std::tuple_cat(std::make_tuple(e), source->template get<Ts...>(e));
             }
         }
 
@@ -991,11 +991,11 @@ namespace tempest::ecs
             }
             else if constexpr (sizeof...(Ts) == 1)
             {
-                return std::tuple_cat(std::make_tuple(e), std::tuple<Ts&...>(source->get<Ts...>(e)));
+                return std::tuple_cat(std::make_tuple(e), std::tuple<Ts&...>(source->template get<Ts...>(e)));
             }
             else
             {
-                return std::tuple_cat(std::make_tuple(e), source->get<Ts...>(e));
+                return std::tuple_cat(std::make_tuple(e), source->template get<Ts...>(e));
             }
         }
 
@@ -1007,7 +1007,7 @@ namespace tempest::ecs
             for (; current != end; ++current)
             {
                 auto e = *current;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1030,7 +1030,7 @@ namespace tempest::ecs
             for (; current != source->entities().begin(); --current)
             {
                 auto e = *current;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1073,7 +1073,7 @@ namespace tempest::ecs
             while (begin != source->entities().end())
             {
                 auto e = *begin;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1092,7 +1092,7 @@ namespace tempest::ecs
             while (begin != source->entities().end())
             {
                 auto e = *begin;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1110,7 +1110,7 @@ namespace tempest::ecs
             while (begin != source->entities().end())
             {
                 auto e = *begin;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1145,7 +1145,7 @@ namespace tempest::ecs
             E, Ts...>::operator*() noexcept
         {
             auto e = *current;
-            return std::tuple_cat(std::make_tuple(e), source->get<typename std::remove_reference_t<Ts>...>(e));
+            return std::tuple_cat(std::make_tuple(e), source->template get<typename std::remove_reference_t<Ts>...>(e));
         }
 
         template <typename E, typename... Ts>
@@ -1153,7 +1153,7 @@ namespace tempest::ecs
             E, Ts...>::operator*() const noexcept
         {
             auto e = *current;
-            return std::tuple_cat(std::make_tuple(e), source->get<typename std::remove_reference_t<Ts>...>(e));
+            return std::tuple_cat(std::make_tuple(e), source->template get<typename std::remove_reference_t<Ts>...>(e));
         }
 
         template <typename E, typename... Ts>
@@ -1165,7 +1165,7 @@ namespace tempest::ecs
             for (; current != end; ++current)
             {
                 auto e = *current;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1190,7 +1190,7 @@ namespace tempest::ecs
             for (; current != source->entities().begin(); --current)
             {
                 auto e = *current;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1237,7 +1237,7 @@ namespace tempest::ecs
             while (begin != source->entities().cend())
             {
                 const auto e = *begin;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1255,7 +1255,7 @@ namespace tempest::ecs
             while (begin != source->entities().cend())
             {
                 const auto e = *begin;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
@@ -1273,7 +1273,7 @@ namespace tempest::ecs
             while (begin != source->entities().cend())
             {
                 const auto e = *begin;
-                if ((source->has<Ts>(e) && ...))
+                if ((source->template has<Ts>(e) && ...))
                 {
                     break;
                 }
