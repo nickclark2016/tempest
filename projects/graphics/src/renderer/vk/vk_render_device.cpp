@@ -370,6 +370,8 @@ namespace tempest::graphics::vk
             }
             case resource_format::UNKNOWN:
                 break;
+            default:
+                break;
             }
 
             logger->critical("Logic Error: Failed to determine proper VkColorComponentFlags. Forcing exit.");

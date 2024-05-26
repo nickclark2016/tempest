@@ -286,7 +286,7 @@ namespace tempest::core
     {
         static_assert(Count <= Extent, "Count must be less than or equal to the extent of the span.");
 
-        return {_start, _start + Count};
+        return span{_start, _start + Count};
     }
 
     template <typename T, std::size_t Extent>
@@ -301,7 +301,7 @@ namespace tempest::core
     {
         static_assert(Count <= Extent, "Count must be less than or equal to the extent of the span.");
 
-        return {_end - Count, _end};
+        return span{_end - Count, _end};
     }
 
     template <typename T, std::size_t Extent>
