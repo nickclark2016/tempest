@@ -21,4 +21,8 @@ project('core-tests', (_) => {
         'googletest:public',
         'core:public',
     ]);
+
+    when({ system: 'linux' }, (_) => {
+        linksStatic(['dl', 'X11', 'pthread']);
+    });
 });
