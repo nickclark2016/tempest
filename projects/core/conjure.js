@@ -11,6 +11,7 @@ project('core', (prj) => {
     toolset('msc:143');
 
     dependsOn([
+        'glfw',
         'math',
         'tlsf',
     ])
@@ -26,5 +27,6 @@ project('core', (prj) => {
         'tlsf:public',
         'core:public',
         'math:public',
+        'glfw:public',
     ]);
 });
