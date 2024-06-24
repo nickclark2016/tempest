@@ -1,7 +1,7 @@
 #ifndef tempest_core_functional_hpp
 #define tempest_core_functional_hpp
 
-namespace tempest::core
+namespace tempest
 {
     template <typename T = void>
     struct equal_to;
@@ -74,6 +74,6 @@ namespace tempest::core
             return lhs <= rhs;
         }
     };
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_functional_hpp

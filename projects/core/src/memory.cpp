@@ -6,19 +6,19 @@
 #include <cstdlib>
 #include <utility>
 
-namespace tempest::core
+namespace tempest
 {
     namespace
     {
-        std::size_t align_memory(std::size_t sz, std::size_t align)
+        size_t align_memory(size_t sz, size_t align)
         {
             const auto _mask = align - 1;
             return (sz + _mask) & ~_mask;
         }
     } // namespace
 
-    stack_allocator::stack_allocator(std::size_t bytes)
-        : _buffer{reinterpret_cast<std::byte*>(std::malloc(bytes))}, _capacity{bytes}
+    stack_allocator::stack_allocator(size_t bytes)
+        : _buffer{reinterpret_cast<byte*>(std::malloc(bytes))}, _capacity{bytes}
     {
     }
 
@@ -52,7 +52,7 @@ namespace tempest::core
     }
 
     // TODO: Investigate bump down allocation instead of bump up
-    void* stack_allocator::allocate(std::size_t size, std::size_t alignment, std::source_location loc)
+    void* stack_allocator::allocate(size_t size, size_t alignment, std::source_location loc)
     {
         assert(size > 0 && "Size must be non-zero.");
         const auto start = align_memory(_allocated_bytes, alignment);
@@ -72,16 +72,16 @@ namespace tempest::core
         assert(ptr < _buffer + _capacity);        // Tried to release memory from past allocated region
         assert(ptr < _buffer + _allocated_bytes); // Tried to release unallocated memory inside the allocated region
 
-        const auto size_at_ptr = reinterpret_cast<std::byte*>(ptr) - _buffer;
+        const auto size_at_ptr = reinterpret_cast<byte*>(ptr) - _buffer;
         _allocated_bytes = size_at_ptr;
     }
 
-    std::size_t stack_allocator::get_marker() const noexcept
+    size_t stack_allocator::get_marker() const noexcept
     {
         return _allocated_bytes;
     }
 
-    void stack_allocator::free_marker(std::size_t marker)
+    void stack_allocator::free_marker(size_t marker)
     {
         const auto diff = marker - _allocated_bytes;
         if (diff > 0)
@@ -101,8 +101,8 @@ namespace tempest::core
         }
     }
 
-    heap_allocator::heap_allocator(std::size_t bytes)
-        : _memory{reinterpret_cast<std::byte*>(std::malloc(bytes))}, _max_size{bytes}, _allocated_size{0}
+    heap_allocator::heap_allocator(size_t bytes)
+        : _memory{reinterpret_cast<byte*>(std::malloc(bytes))}, _max_size{bytes}, _allocated_size{0}
     {
         _tlsf_handle = tlsf_create_with_pool(_memory, _max_size);
     }
@@ -137,7 +137,7 @@ namespace tempest::core
         return *this;
     }
 
-    void* heap_allocator::allocate(std::size_t size, std::size_t alignment, std::source_location loc)
+    void* heap_allocator::allocate(size_t size, size_t alignment, std::source_location loc)
     {
         return tlsf_malloc(_tlsf_handle, size);
     }
@@ -158,4 +158,4 @@ namespace tempest::core
             _memory = nullptr;
         }
     }
-} // namespace tempest::core
+} // namespace tempest

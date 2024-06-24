@@ -44,7 +44,7 @@ namespace tempest::graphics
         static int int_slider(std::string_view name, int min, int max, int current_value);
         static bool checkbox(std::string_view label, bool current_value);
         static bool button(std::string label);
-        static int combo_box(std::string_view label, int current_item, core::span<std::string_view> items);
+        static int combo_box(std::string_view label, int current_item, span<std::string_view> items);
         static float input_float(std::string_view label, float current_value);
 
         static void start_frame();

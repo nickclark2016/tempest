@@ -11,7 +11,7 @@
 #include <limits>
 #include <memory>
 
-namespace tempest::core
+namespace tempest
 {
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     class flat_unordered_map;
@@ -129,8 +129,8 @@ namespace tempest::core
     ///             the hash function should distribute bits uniformly across the std::size_t range.
     /// @tparam KeyEqual Key equality function. The key equality function must match the signature of std::equal_to.
     /// @tparam Allocator Allocator type conforming to the C++17 Allocator concept.
-    template <typename K, typename V, typename Hash = tempest::core::hash<K>,
-              typename KeyEqual = tempest::core::equal_to<K>,
+    template <typename K, typename V, typename Hash = tempest::hash<K>,
+              typename KeyEqual = tempest::equal_to<K>,
               typename Allocator = std::allocator<std::pair<const K, V>>>
     class flat_unordered_map
     {
@@ -948,6 +948,6 @@ namespace tempest::core
             return &_map->_data_pages[_index / _map->_page_size][_index % _map->_page_size];
         }
     } // namespace detail
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_flat_unordered_map_hpp

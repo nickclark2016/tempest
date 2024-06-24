@@ -32,14 +32,14 @@ namespace tempest::graphics
         virtual bool has_suitable_device() const noexcept = 0;
         virtual std::uint32_t device_count() const noexcept = 0;
         virtual render_device& create_device(std::uint32_t idx = 0) = 0;
-        virtual core::vector<physical_device_context> enumerate_suitable_devices() = 0;
+        virtual vector<physical_device_context> enumerate_suitable_devices() = 0;
 
-        static std::unique_ptr<render_context> create(core::abstract_allocator* alloc);
+        static std::unique_ptr<render_context> create(abstract_allocator* alloc);
 
       protected:
-        core::abstract_allocator* _alloc;
+        abstract_allocator* _alloc;
 
-        explicit render_context(core::abstract_allocator* alloc);
+        explicit render_context(abstract_allocator* alloc);
     };
 
     class render_device
@@ -50,9 +50,8 @@ namespace tempest::graphics
 
         virtual buffer_resource_handle create_buffer(const buffer_create_info& ci) = 0;
         virtual void release_buffer(buffer_resource_handle handle) = 0;
-        virtual core::span<std::byte> map_buffer(buffer_resource_handle handle) = 0;
-        virtual core::span<std::byte> map_buffer_frame(buffer_resource_handle handle,
-                                                      std::uint64_t frame_offset = 0) = 0;
+        virtual span<byte> map_buffer(buffer_resource_handle handle) = 0;
+        virtual span<byte> map_buffer_frame(buffer_resource_handle handle, std::uint64_t frame_offset = 0) = 0;
         virtual std::size_t get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset = 0) = 0;
         virtual void unmap_buffer(buffer_resource_handle handle) = 0;
 
@@ -73,9 +72,9 @@ namespace tempest::graphics
         virtual void recreate_swapchain(swapchain_resource_handle handle) = 0;
         virtual image_resource_handle fetch_current_image(swapchain_resource_handle handle) = 0;
 
-        virtual std::size_t frame_in_flight() const noexcept = 0;
-        virtual std::size_t frames_in_flight() const noexcept = 0;
-        virtual std::size_t current_frame() const noexcept = 0;
+        virtual size_t frame_in_flight() const noexcept = 0;
+        virtual size_t frames_in_flight() const noexcept = 0;
+        virtual size_t current_frame() const noexcept = 0;
 
         virtual buffer_resource_handle get_staging_buffer() = 0;
         virtual command_execution_service& get_command_executor() = 0;
@@ -88,14 +87,13 @@ namespace tempest::graphics
     class renderer_utilities
     {
       public:
-        static core::vector<image_resource_handle> upload_textures(render_device& dev,
-                                                                  core::span<texture_data_descriptor> textures,
-                                                                  buffer_resource_handle staging_buffer,
-                                                                  bool use_entire_buffer = false,
-                                                                  bool generate_mip_maps = false);
+        static vector<image_resource_handle> upload_textures(render_device& dev, span<texture_data_descriptor> textures,
+                                                             buffer_resource_handle staging_buffer,
+                                                             bool use_entire_buffer = false,
+                                                             bool generate_mip_maps = false);
 
-        static core::vector<mesh_layout> upload_meshes(render_device& device, core::span<core::mesh> meshes,
-                                                      buffer_resource_handle target, std::uint32_t& offset);
+        static vector<mesh_layout> upload_meshes(render_device& device, span<core::mesh> meshes,
+                                                 buffer_resource_handle target, uint32_t& offset);
     };
 } // namespace tempest::graphics
 

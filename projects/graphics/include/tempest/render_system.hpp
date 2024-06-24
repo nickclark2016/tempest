@@ -147,8 +147,8 @@ namespace tempest::graphics
             return _settings;
         }
 
-        core::vector<mesh_layout> load_mesh(core::span<core::mesh> meshes);
-        void load_textures(core::span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
+        vector<mesh_layout> load_mesh(span<core::mesh> meshes);
+        void load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
         void load_material(graphics::material_payload& material);
 
         [[nodiscard]] inline std::uint32_t mesh_count() const noexcept
@@ -185,7 +185,7 @@ namespace tempest::graphics
         void mark_dirty();
 
       private:
-        core::heap_allocator _allocator;
+        heap_allocator _allocator;
         ecs::registry* _registry;
 
         std::unique_ptr<render_context> _context;
@@ -214,7 +214,7 @@ namespace tempest::graphics
         std::vector<gpu_material_data> _materials;
         std::uint32_t _object_count{0};
 
-        core::flat_map<draw_batch_key, draw_batch_payload> _draw_batches;
+        flat_map<draw_batch_key, draw_batch_payload> _draw_batches;
 
         sampler_resource_handle _linear_sampler;
         sampler_resource_handle _point_sampler;

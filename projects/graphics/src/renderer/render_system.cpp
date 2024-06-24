@@ -317,6 +317,7 @@ namespace tempest::graphics
                     .add_transfer_destination_buffer(_indirect_buffer)
                     .add_transfer_destination_buffer(_hi_z_buffer_constants)
                     .add_transfer_source_buffer(_device->get_staging_buffer())
+                    .add_host_write_buffer(_device->get_staging_buffer())
                     .on_execute([&](command_list& cmds) {
                         auto staging_buffer = _device->get_staging_buffer();
                         auto staging_buffer_data = _device->map_buffer_frame(staging_buffer);
@@ -664,6 +665,8 @@ namespace tempest::graphics
                                     builder.add_external_blit_target(sc_handle)
                                         .add_blit_source(color_buffer)
                                         .depends_on(imgui_pass)
+                                        .depends_on(_pbr_msaa_pass)
+                                        .depends_on(_pbr_pass)
                                         .should_execute([this]() {
                                             return _settings.aa_mode == anti_aliasing_mode::NONE ||
                                                    _settings.aa_mode == anti_aliasing_mode::MSAA;
@@ -886,7 +889,7 @@ namespace tempest::graphics
         _settings_dirty = true;
     }
 
-    core::vector<mesh_layout> render_system::load_mesh(core::span<core::mesh> meshes)
+    vector<mesh_layout> render_system::load_mesh(span<core::mesh> meshes)
     {
         auto mesh_layouts = renderer_utilities::upload_meshes(*_device, meshes, _vertex_pull_buffer, _mesh_bytes);
 
@@ -898,7 +901,7 @@ namespace tempest::graphics
         return mesh_layouts;
     }
 
-    void render_system::load_textures(core::span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
+    void render_system::load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
     {
         auto textures = renderer_utilities::upload_textures(*_device, texture_sources, _device->get_staging_buffer(),
                                                             true, generate_mip_maps);

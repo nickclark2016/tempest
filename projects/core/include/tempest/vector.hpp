@@ -1,7 +1,8 @@
 #ifndef tempest_core_vector_hpp
 #define tempest_core_vector_hpp
 
-#include "memory.hpp"
+#include <tempest/memory.hpp>
+#include <tempest/utility.hpp>
 
 #include <algorithm>
 #include <bit>
@@ -10,7 +11,7 @@
 #include <initializer_list>
 #include <iterator>
 
-namespace tempest::core
+namespace tempest
 {
     template <typename T, typename Allocator = allocator<T>>
     class vector
@@ -648,7 +649,7 @@ namespace tempest::core
             *it = std::move(*(it - 1));
         }
 
-        allocator_traits<Allocator>::construct(_alloc, _data + index, std::forward<Args>(args)...);
+        allocator_traits<Allocator>::construct(_alloc, _data + index, tempest::forward<Args>(args)...);
         ++_end;
 
         return begin() + index;
@@ -716,7 +717,7 @@ namespace tempest::core
     template <typename... Args>
     constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::emplace_back(Args&&... args)
     {
-        _emplace_one_at_back(std::forward<Args>(args)...);
+        _emplace_one_at_back(tempest::forward<Args>(args)...);
         return back();
     }
 
@@ -835,6 +836,6 @@ namespace tempest::core
         c.erase(it, c.end());
         return count;
     }
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_vector_hpp

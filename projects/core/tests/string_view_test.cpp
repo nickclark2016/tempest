@@ -4,7 +4,7 @@
 
 TEST(string_view, construct_from_cstring)
 {
-    tempest::core::string_view sv("hello");
+    tempest::string_view sv("hello");
 
     EXPECT_EQ(sv.length(), 5);
     EXPECT_EQ(sv.size(), 5);
@@ -21,7 +21,7 @@ TEST(string_view, construct_from_cstring)
 
 TEST(string_view, construct_with_literal)
 {
-    using namespace tempest::core::literals;
+    using namespace tempest::literals;
 
     auto sv = "hello"_sv;
 
@@ -41,7 +41,7 @@ TEST(string_view, construct_with_literal)
 TEST(string_view, construct_from_string)
 {
     std::string s = "hello";
-    tempest::core::string_view sv(s);
+    tempest::string_view sv(s);
 
     EXPECT_EQ(sv.length(), 5);
     EXPECT_EQ(sv.size(), 5);
@@ -58,8 +58,8 @@ TEST(string_view, construct_from_string)
 
 TEST(string_view, construct_from_string_view)
 {
-    tempest::core::string_view sv1("hello");
-    tempest::core::string_view sv2(sv1);
+    tempest::string_view sv1("hello");
+    tempest::string_view sv2(sv1);
 
     EXPECT_EQ(sv2.length(), 5);
     EXPECT_EQ(sv2.size(), 5);
@@ -77,7 +77,7 @@ TEST(string_view, construct_from_string_view)
 TEST(string_view, construct_from_iterators)
 {
     std::string s = "hello";
-    tempest::core::string_view sv(s.begin(), s.end());
+    tempest::string_view sv(s.begin(), s.end());
 
     EXPECT_EQ(sv.length(), 5);
     EXPECT_EQ(sv.size(), 5);
@@ -95,7 +95,7 @@ TEST(string_view, construct_from_iterators)
 TEST(string_view, construct_from_pointer_and_size)
 {
     const char* s = "hello";
-    tempest::core::string_view sv(s, 5);
+    tempest::string_view sv(s, 5);
 
     EXPECT_EQ(sv.length(), 5);
     EXPECT_EQ(sv.size(), 5);
@@ -113,7 +113,7 @@ TEST(string_view, construct_from_pointer_and_size)
 TEST(string_view, construct_from_pointer)
 {
     const char* s = "hello";
-    tempest::core::string_view sv(s);
+    tempest::string_view sv(s);
 
     EXPECT_EQ(sv.length(), 5);
     EXPECT_EQ(sv.size(), 5);
@@ -130,326 +130,326 @@ TEST(string_view, construct_from_pointer)
 
 TEST(string_view, empty)
 {
-    tempest::core::string_view sv;
+    tempest::string_view sv;
 
     EXPECT_TRUE(sv.empty());
 }
 
 TEST(string_view, not_empty)
 {
-    tempest::core::string_view sv("hello");
+    tempest::string_view sv("hello");
 
     EXPECT_FALSE(sv.empty());
 }
 
 TEST(string_view, search_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("ell");
+    tempest::string_view s("hello");
+    tempest::string_view t("ell");
 
-    EXPECT_EQ(tempest::core::search(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search(s, t), s.begin() + 1);
 }
 
 TEST(string_view, search_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("ell");
+    tempest::string_view s("hello");
+    tempest::string_view t("ell");
 
-    EXPECT_EQ(tempest::core::search(s, t.begin(), t.end()), s.begin() + 1);
+    EXPECT_EQ(tempest::search(s, t.begin(), t.end()), s.begin() + 1);
 }
 
 TEST(string_view, search_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'e';
 
-    EXPECT_EQ(tempest::core::search(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search(s, t), s.begin() + 1);
 }
 
 TEST(string_view, search_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "ell";
 
-    EXPECT_EQ(tempest::core::search(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search(s, t), s.begin() + 1);
 }
 
 TEST(string_view, reverse_search_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("ell");
+    tempest::string_view s("hello");
+    tempest::string_view t("ell");
 
-    EXPECT_EQ(tempest::core::reverse_search(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::reverse_search(s, t), s.begin() + 1);
 }
 
 TEST(string_view, reverse_search_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("ell");
+    tempest::string_view s("hello");
+    tempest::string_view t("ell");
 
-    EXPECT_EQ(tempest::core::reverse_search(s, t.begin(), t.end()), s.begin() + 1);
+    EXPECT_EQ(tempest::reverse_search(s, t.begin(), t.end()), s.begin() + 1);
 }
 
 TEST(string_view, reverse_search_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'e';
 
-    EXPECT_EQ(tempest::core::reverse_search(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::reverse_search(s, t), s.begin() + 1);
 }
 
 TEST(string_view, reverse_search_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "ell";
 
-    EXPECT_EQ(tempest::core::reverse_search(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::reverse_search(s, t), s.begin() + 1);
 }
 
 TEST(string_view, starts_with_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("he");
+    tempest::string_view s("hello");
+    tempest::string_view t("he");
 
-    EXPECT_TRUE(tempest::core::starts_with(s, t));
+    EXPECT_TRUE(tempest::starts_with(s, t));
 }
 
 TEST(string_view, starts_with_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("he");
+    tempest::string_view s("hello");
+    tempest::string_view t("he");
 
-    EXPECT_TRUE(tempest::core::starts_with(s, t.begin(), t.end()));
+    EXPECT_TRUE(tempest::starts_with(s, t.begin(), t.end()));
 }
 
 TEST(string_view, starts_with_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'h';
 
-    EXPECT_TRUE(tempest::core::starts_with(s, t));
+    EXPECT_TRUE(tempest::starts_with(s, t));
 }
 
 TEST(string_view, starts_with_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "he";
 
-    EXPECT_TRUE(tempest::core::starts_with(s, t));
+    EXPECT_TRUE(tempest::starts_with(s, t));
 }
 
 TEST(string_view, ends_with_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("lo");
+    tempest::string_view s("hello");
+    tempest::string_view t("lo");
 
-    EXPECT_TRUE(tempest::core::ends_with(s, t));
+    EXPECT_TRUE(tempest::ends_with(s, t));
 }
 
 TEST(string_view, ends_with_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("lo");
+    tempest::string_view s("hello");
+    tempest::string_view t("lo");
 
-    EXPECT_TRUE(tempest::core::ends_with(s, t.begin(), t.end()));
+    EXPECT_TRUE(tempest::ends_with(s, t.begin(), t.end()));
 }
 
 TEST(string_view, ends_with_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'o';
 
-    EXPECT_TRUE(tempest::core::ends_with(s, t));
+    EXPECT_TRUE(tempest::ends_with(s, t));
 }
 
 TEST(string_view, ends_with_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "lo";
 
-    EXPECT_TRUE(tempest::core::ends_with(s, t));
+    EXPECT_TRUE(tempest::ends_with(s, t));
 }
 
 TEST(string_view, search_first_of_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("el");
+    tempest::string_view s("hello");
+    tempest::string_view t("el");
 
-    EXPECT_EQ(tempest::core::search_first_of(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search_first_of(s, t), s.begin() + 1);
 }
 
 TEST(string_view, search_first_of_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("el");
+    tempest::string_view s("hello");
+    tempest::string_view t("el");
 
-    EXPECT_EQ(tempest::core::search_first_of(s, t.begin(), t.end()), s.begin() + 1);
+    EXPECT_EQ(tempest::search_first_of(s, t.begin(), t.end()), s.begin() + 1);
 }
 
 TEST(string_view, search_first_of_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'e';
 
-    EXPECT_EQ(tempest::core::search_first_of(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search_first_of(s, t), s.begin() + 1);
 }
 
 TEST(string_view, search_first_of_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "el";
 
-    EXPECT_EQ(tempest::core::search_first_of(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search_first_of(s, t), s.begin() + 1);
 }
 
 TEST(string_view, search_last_of_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("el");
+    tempest::string_view s("hello");
+    tempest::string_view t("el");
 
-    EXPECT_EQ(tempest::core::search_last_of(s, t), s.begin() + 3);
+    EXPECT_EQ(tempest::search_last_of(s, t), s.begin() + 3);
 }
 
 TEST(string_view, search_last_of_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("el");
+    tempest::string_view s("hello");
+    tempest::string_view t("el");
 
-    EXPECT_EQ(tempest::core::search_last_of(s, t.begin(), t.end()), s.begin() + 3);
+    EXPECT_EQ(tempest::search_last_of(s, t.begin(), t.end()), s.begin() + 3);
 }
 
 TEST(string_view, search_last_of_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'e';
 
-    EXPECT_EQ(tempest::core::search_last_of(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search_last_of(s, t), s.begin() + 1);
 }
 
 TEST(string_view, search_last_of_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "el";
 
-    EXPECT_EQ(tempest::core::search_last_of(s, t), s.begin() + 3);
+    EXPECT_EQ(tempest::search_last_of(s, t), s.begin() + 3);
 }
 
 TEST(string_view, search_first_not_of_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("he");
+    tempest::string_view s("hello");
+    tempest::string_view t("he");
 
-    EXPECT_EQ(tempest::core::search_first_not_of(s, t), s.begin() + 2);
+    EXPECT_EQ(tempest::search_first_not_of(s, t), s.begin() + 2);
 }
 
 TEST(string_view, search_first_not_of_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("he");
+    tempest::string_view s("hello");
+    tempest::string_view t("he");
 
-    EXPECT_EQ(tempest::core::search_first_not_of(s, t.begin(), t.end()), s.begin() + 2);
+    EXPECT_EQ(tempest::search_first_not_of(s, t.begin(), t.end()), s.begin() + 2);
 }
 
 TEST(string_view, search_first_not_of_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'h';
 
-    EXPECT_EQ(tempest::core::search_first_not_of(s, t), s.begin() + 1);
+    EXPECT_EQ(tempest::search_first_not_of(s, t), s.begin() + 1);
 }
 
 TEST(string_view, search_first_not_of_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "he";
 
-    EXPECT_EQ(tempest::core::search_first_not_of(s, t), s.begin() + 2);
+    EXPECT_EQ(tempest::search_first_not_of(s, t), s.begin() + 2);
 }
 
 TEST(string_view, search_last_not_of_sv)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("he");
+    tempest::string_view s("hello");
+    tempest::string_view t("he");
 
-    EXPECT_EQ(tempest::core::search_last_not_of(s, t), s.begin() + 4);
+    EXPECT_EQ(tempest::search_last_not_of(s, t), s.begin() + 4);
 }
 
 TEST(string_view, search_last_not_of_sv_iterator)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("he");
+    tempest::string_view s("hello");
+    tempest::string_view t("he");
 
-    EXPECT_EQ(tempest::core::search_last_not_of(s, t.begin(), t.end()), s.begin() + 4);
+    EXPECT_EQ(tempest::search_last_not_of(s, t.begin(), t.end()), s.begin() + 4);
 }
 
 TEST(string_view, search_last_not_of_sv_char)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     char t = 'h';
 
-    EXPECT_EQ(tempest::core::search_last_not_of(s, t), s.begin() + 4);
+    EXPECT_EQ(tempest::search_last_not_of(s, t), s.begin() + 4);
 }
 
 TEST(string_view, search_last_not_of_sv_cstring)
 {
-    tempest::core::string_view s("hello");
+    tempest::string_view s("hello");
     const char* t = "he";
 
-    EXPECT_EQ(tempest::core::search_last_not_of(s, t), s.begin() + 4);
+    EXPECT_EQ(tempest::search_last_not_of(s, t), s.begin() + 4);
 }
 
 TEST(string_view, equality)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("hello");
+    tempest::string_view s("hello");
+    tempest::string_view t("hello");
 
     EXPECT_TRUE(s == t);
 }
 
 TEST(string_view, inequality)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("world");
+    tempest::string_view s("hello");
+    tempest::string_view t("world");
 
     EXPECT_TRUE(s != t);
 }
 
 TEST(string_view, less_than)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("world");
+    tempest::string_view s("hello");
+    tempest::string_view t("world");
 
     EXPECT_TRUE(s < t);
 }
 
 TEST(string_view, less_than_or_equal)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("hello");
+    tempest::string_view s("hello");
+    tempest::string_view t("hello");
 
     EXPECT_TRUE(s <= t);
 }
 
 TEST(string_view, greater_than)
 {
-    tempest::core::string_view s("world");
-    tempest::core::string_view t("hello");
+    tempest::string_view s("world");
+    tempest::string_view t("hello");
 
     EXPECT_TRUE(s > t);
 }
 
 TEST(string_view, greater_than_or_equal)
 {
-    tempest::core::string_view s("world");
-    tempest::core::string_view t("world");
+    tempest::string_view s("world");
+    tempest::string_view t("world");
 
     EXPECT_TRUE(s >= t);
 }
 
 TEST(string_view, compare)
 {
-    tempest::core::string_view s("hello");
-    tempest::core::string_view t("world");
+    tempest::string_view s("hello");
+    tempest::string_view t("world");
 
-    EXPECT_TRUE(tempest::core::compare(s, t) < 0);
+    EXPECT_TRUE(tempest::compare(s, t) < 0);
 }

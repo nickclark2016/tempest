@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace tempest::core
+namespace tempest
 {
     namespace detail
     {
@@ -847,6 +847,6 @@ namespace tempest::core
     {
         return std::lexicographical_compare_three_way(std::begin(lhs), std::end(lhs), std::begin(rhs), std::end(rhs));
     }
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_flat_map_hpp

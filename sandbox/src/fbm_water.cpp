@@ -65,7 +65,7 @@ void draw_gui(water_sim_state& state, std::uint32_t fps);
 
 void fbm_water_demo()
 {
-    auto global_allocator = core::heap_allocator(global_memory_allocator_size);
+    auto global_allocator = heap_allocator(global_memory_allocator_size);
 
     auto graphics_ctx = graphics::render_context::create(&global_allocator);
 

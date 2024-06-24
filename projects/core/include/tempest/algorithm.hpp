@@ -5,7 +5,7 @@
 #include <memory>
 #include <type_traits>
 
-namespace tempest::core
+namespace tempest
 {
     template <typename IdxType, IdxType StartIdx, IdxType EndIdx, IdxType StepSize, bool Validate = (StartIdx < EndIdx)>
     struct loop_unroller
@@ -99,6 +99,6 @@ namespace tempest::core
     {
         return container.end();
     }
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_algorithm_hpp

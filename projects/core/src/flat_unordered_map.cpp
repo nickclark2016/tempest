@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace tempest::core
+namespace tempest
 {
     namespace detail
     {
@@ -69,4 +69,4 @@ namespace tempest::core
                                [](std::uint8_t entry) { return is_empty(entry) || is_deleted(entry); });
         }
     } // namespace detail
-} // namespace tempest::core
+} // namespace tempest

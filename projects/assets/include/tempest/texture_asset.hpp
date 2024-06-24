@@ -1,6 +1,9 @@
 #ifndef tempest_assets_texture_asset_hpp
 #define tempest_assets_texture_asset_hpp
 
+#include <tempest/int.hpp>
+#include <tempest/vector.hpp>
+
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -18,12 +21,12 @@ namespace tempest::assets
 
     struct texture_asset
     {
-        std::vector<std::byte> data;
-        std::uint32_t width;
-        std::uint32_t height;
-        std::uint32_t bit_depth;
-        std::uint32_t channels;
-        std::uint32_t mipmaps;
+        vector<byte> data;
+        uint32_t width;
+        uint32_t height;
+        uint32_t bit_depth;
+        uint32_t channels;
+        uint32_t mipmaps;
         texture_asset_type type;
     };
 
