@@ -332,7 +332,8 @@ namespace tempest::graphics
                             {
                                 std::memcpy(staging_buffer_data.data() + bytes_written, batch.objects.values(),
                                             batch.objects.size() * sizeof(gpu_object_data));
-                                cmds.copy(staging_buffer, _object_buffer, bytes_written,
+                                cmds.copy(staging_buffer, _object_buffer,
+                                          _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
                                           _device->get_buffer_frame_offset(_object_buffer) +
                                               static_cast<std::uint32_t>(instances_written * sizeof(gpu_object_data)),
                                           static_cast<std::uint32_t>(batch.objects.size() * sizeof(gpu_object_data)));
@@ -341,7 +342,8 @@ namespace tempest::graphics
 
                                 std::memcpy(staging_buffer_data.data() + bytes_written, batch.commands.data(),
                                             batch.commands.size() * sizeof(indexed_indirect_command));
-                                cmds.copy(staging_buffer, _indirect_buffer, bytes_written,
+                                cmds.copy(staging_buffer, _indirect_buffer,
+                                          _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
                                           _device->get_buffer_frame_offset(_indirect_buffer) +
                                               static_cast<std::uint32_t>(instances_written *
                                                                          sizeof(indexed_indirect_command)),
@@ -354,7 +356,8 @@ namespace tempest::graphics
                                           reinterpret_cast<std::uint32_t*>(staging_buffer_data.data() + bytes_written) +
                                               batch.objects.size(),
                                           instances_written);
-                                cmds.copy(staging_buffer, _instance_buffer, bytes_written,
+                                cmds.copy(staging_buffer, _instance_buffer,
+                                          _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
                                           _device->get_buffer_frame_offset(_instance_buffer) +
                                               instances_written * sizeof(std::uint32_t),
                                           static_cast<std::uint32_t>(batch.objects.size() * sizeof(std::uint32_t)));
@@ -404,12 +407,14 @@ namespace tempest::graphics
                         _scene_data.jitter.w = 0.0f;
 
                         std::memcpy(staging_buffer_data.data() + bytes_written, &_scene_data, sizeof(gpu_scene_data));
-                        cmds.copy(staging_buffer, _scene_buffer, bytes_written,
+                        cmds.copy(staging_buffer, _scene_buffer,
+                                  _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
                                   _device->get_buffer_frame_offset(_scene_buffer), sizeof(gpu_scene_data));
                         bytes_written += static_cast<std::uint32_t>(sizeof(gpu_scene_data));
 
                         std::memcpy(staging_buffer_data.data() + bytes_written, &_hi_z_data, sizeof(hi_z_data));
-                        cmds.copy(staging_buffer, _hi_z_buffer_constants, bytes_written,
+                        cmds.copy(staging_buffer, _hi_z_buffer_constants,
+                                  _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
                                   _device->get_buffer_frame_offset(_hi_z_buffer_constants), sizeof(hi_z_data));
                         bytes_written += static_cast<std::uint32_t>(sizeof(hi_z_data));
 
