@@ -38,7 +38,7 @@ int main()
 
     fps_controller fps_ctrl;
     fps_ctrl.set_position({10.0f, 4.0f, 0.0f});
-    fps_ctrl.set_rotation({0.0f, 180.0f, 0.0f});
+    fps_ctrl.set_rotation({0.0f, 270.0f, 0.0f});
 
     bool was_escape_down_last_frame = false;
 
