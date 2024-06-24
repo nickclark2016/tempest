@@ -17,15 +17,16 @@ namespace tempest::assets
         int width, height, channels;
         bool is_16_bit = stbi_is_16_bit(fp.c_str());
 
-        auto bytes = is_16_bit ? reinterpret_cast<std::byte*>(stbi_load_from_file_16(f, &width, &height, &channels, 4)) : reinterpret_cast<std::byte*>(stbi_load_from_file(f, &width, &height, &channels, 4));
+        auto bytes = is_16_bit ? reinterpret_cast<byte*>(stbi_load_from_file_16(f, &width, &height, &channels, 4))
+                               : reinterpret_cast<byte*>(stbi_load_from_file(f, &width, &height, &channels, 4));
 
         if (bytes)
         {
             texture_asset asset = {
-                .data = std::vector<std::byte>(reinterpret_cast<std::byte*>(bytes),
-                                               reinterpret_cast<std::byte*>(bytes + (width * height * 4))),
-                .width = static_cast<std::uint32_t>(width),
-                .height = static_cast<std::uint32_t>(height),
+                .data =
+                    vector<byte>(reinterpret_cast<byte*>(bytes), reinterpret_cast<byte*>(bytes + (width * height * 4))),
+                .width = static_cast<uint32_t>(width),
+                .height = static_cast<uint32_t>(height),
                 .bit_depth = is_16_bit ? 16u : 8u,
                 .channels = 4u,
                 .mipmaps = 1u,

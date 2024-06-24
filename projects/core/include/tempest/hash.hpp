@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace tempest::core
+namespace tempest
 {
     namespace detail
     {
@@ -200,6 +200,6 @@ namespace tempest::core
             }
         }
     };
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_hash_hpp

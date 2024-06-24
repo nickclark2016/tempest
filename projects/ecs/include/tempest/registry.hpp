@@ -149,7 +149,7 @@ namespace tempest::ecs
                 auto block_index = chunk_offset / entities_per_block;
                 auto block_offset = chunk_offset % entities_per_block;
 
-                if (core::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
+                if (tempest::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
                 {
                     break;
                 }
@@ -183,7 +183,7 @@ namespace tempest::ecs
                 auto block_index = chunk_offset / entities_per_block;
                 auto block_offset = chunk_offset % entities_per_block;
 
-                if (core::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
+                if (tempest::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
                 {
                     break;
                 }
@@ -302,7 +302,7 @@ namespace tempest::ecs
         void reserve(std::size_t new_capacity);
 
       private:
-        core::vector<chunk> _chunks;
+        vector<chunk> _chunks;
         T _head = null;
 
         std::size_t _count{0};
@@ -341,7 +341,7 @@ namespace tempest::ecs
             {
                 for (std::size_t block_offset = 0; block_offset < entities_per_block; ++block_offset)
                 {
-                    if (core::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
+                    if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
                     {
                         return iterator(_chunks.data(),
                                         chunk_idx * entities_per_chunk + block_idx * entities_per_block + block_offset,
@@ -362,7 +362,7 @@ namespace tempest::ecs
             {
                 for (std::size_t block_offset = 0; block_offset < entities_per_block; ++block_offset)
                 {
-                    if (core::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
+                    if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
                     {
                         return const_iterator(
                             _chunks.data(),
@@ -422,7 +422,7 @@ namespace tempest::ecs
         assert(next != null);
         _head = next;
 
-        blk.occupancy = core::set_bit(blk.occupancy, block_offset);
+        blk.occupancy = tempest::set_bit(blk.occupancy, block_offset);
 
         auto result = traits_type::construct(traits_type::as_entity(ent), traits_type::as_version(next));
         blk.entities[block_offset] = result;
@@ -445,7 +445,7 @@ namespace tempest::ecs
 
         block& blk = _chunks[chunk_index].blocks[block_index];
 
-        blk.occupancy = core::clear_bit(blk.occupancy, block_offset);
+        blk.occupancy = tempest::clear_bit(blk.occupancy, block_offset);
 
         auto head_index = traits_type::as_entity(_head);
         T& to_erase = blk.entities[block_offset];
@@ -470,7 +470,7 @@ namespace tempest::ecs
         if (chunk_index < _chunks.size())
         {
             const block& blk = _chunks[chunk_index].blocks[block_index];
-            return core::is_bit_set(blk.occupancy, block_offset) &&
+            return tempest::is_bit_set(blk.occupancy, block_offset) &&
                    traits_type::as_version(blk.entities[block_offset]) == traits_type::as_version(e);
         }
 
@@ -700,7 +700,7 @@ namespace tempest::ecs
 
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
-        core::vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
+        vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
 
         std::unordered_map<entity, std::string> _name;
     };

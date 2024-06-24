@@ -7,15 +7,15 @@
 
 TEST(span, default_construct_dynamic)
 {
-    tempest::core::span<int> s;
+    tempest::span<int> s;
     EXPECT_EQ(s.size(), 0);
     EXPECT_EQ(s.data(), nullptr);
 }
 
 TEST(span, construct_from_vector)
 {
-    tempest::core::vector<int> v(10, 42);
-    tempest::core::span<int> s(v);
+    tempest::vector<int> v(10, 42);
+    tempest::span<int> s(v);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), v.data());
 
@@ -27,8 +27,8 @@ TEST(span, construct_from_vector)
 
 TEST(span, construct_from_pointer)
 {
-    tempest::core::vector<int> v(10, 42);
-    tempest::core::span<int> s(v.data(), v.size());
+    tempest::vector<int> v(10, 42);
+    tempest::span<int> s(v.data(), v.size());
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), v.data());
 
@@ -43,7 +43,7 @@ TEST(span, construct_from_array)
     int arr[10];
     std::fill(std::begin(arr), std::end(arr), 42);
 
-    tempest::core::span<int> s(arr);
+    tempest::span<int> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr);
 
@@ -57,7 +57,7 @@ TEST(span, construct_from_const_array)
 {
     const int arr[10] = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
     
-    tempest::core::span<const int> s(arr);
+    tempest::span<const int> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr);
 
@@ -72,7 +72,7 @@ TEST(span, construct_from_std_array)
     std::array<int, 10> arr;
     std::fill(arr.begin(), arr.end(), 42);
 
-    tempest::core::span<int> s(arr);
+    tempest::span<int> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr.data());
 
@@ -86,7 +86,7 @@ TEST(span, construct_from_const_std_array)
 {
     const std::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
-    tempest::core::span<const int> s(arr);
+    tempest::span<const int> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr.data());
 
@@ -101,7 +101,7 @@ TEST(span, static_length_from_array)
     int arr[10];
     std::fill(std::begin(arr), std::end(arr), 42);
 
-    tempest::core::span<int, 10> s(arr);
+    tempest::span<int, 10> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr);
 
@@ -115,7 +115,7 @@ TEST(span, static_length_from_const_array)
 {
     const int arr[10] = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
-    tempest::core::span<const int, 10> s(arr);
+    tempest::span<const int, 10> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr);
 
@@ -130,7 +130,7 @@ TEST(span, static_length_from_std_array)
     std::array<int, 10> arr;
     std::fill(arr.begin(), arr.end(), 42);
 
-    tempest::core::span<int, 10> s(arr);
+    tempest::span<int, 10> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr.data());
 
@@ -144,7 +144,7 @@ TEST(span, static_length_from_const_std_array)
 {
     const std::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
-    tempest::core::span<const int, 10> s(arr);
+    tempest::span<const int, 10> s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr.data());
 
@@ -159,7 +159,7 @@ TEST(span, template_deduction_from_array)
     int arr[10];
     std::fill(std::begin(arr), std::end(arr), 42);
 
-    tempest::core::span s(arr);
+    tempest::span s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr);
 
@@ -173,7 +173,7 @@ TEST(span, template_deduction_from_const_array)
 {
     const int arr[10] = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
-    tempest::core::span s(arr);
+    tempest::span s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr);
 
@@ -188,7 +188,7 @@ TEST(span, template_deduction_from_std_array)
     std::array<int, 10> arr;
     std::fill(arr.begin(), arr.end(), 42);
 
-    tempest::core::span s(arr);
+    tempest::span s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr.data());
 
@@ -202,7 +202,7 @@ TEST(span, template_deduction_from_const_std_array)
 {
     const std::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
-    tempest::core::span s(arr);
+    tempest::span s(arr);
     EXPECT_EQ(s.size(), 10);
     EXPECT_EQ(s.data(), arr.data());
 
@@ -214,8 +214,8 @@ TEST(span, template_deduction_from_const_std_array)
 
 TEST(span, front_and_back)
 {
-    tempest::core::vector<int> v(10, 42);
-    tempest::core::span<int> s(v);
+    tempest::vector<int> v(10, 42);
+    tempest::span<int> s(v);
     EXPECT_EQ(s.front(), 42);
     EXPECT_EQ(s.back(), 42);
 }
@@ -223,14 +223,14 @@ TEST(span, front_and_back)
 TEST(span, subspan)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int> sub = s.subspan(2, 5);
+    tempest::span<int> sub = s.subspan(2, 5);
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 5);
@@ -245,14 +245,14 @@ TEST(span, subspan)
 TEST(span, subspan_static)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int, 5> sub = s.subspan<2, 5>();
+    tempest::span<int, 5> sub = s.subspan<2, 5>();
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 5);
@@ -267,14 +267,14 @@ TEST(span, subspan_static)
 TEST(span, subspan_static_dynamic)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int, 8> sub = s.subspan<2>();
+    tempest::span<int, 8> sub = s.subspan<2>();
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 8);
@@ -289,14 +289,14 @@ TEST(span, subspan_static_dynamic)
 TEST(span, subspan_dynamic_static)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int, 8> sub = s.subspan(2);
+    tempest::span<int, 8> sub = s.subspan(2);
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 8);
@@ -311,14 +311,14 @@ TEST(span, subspan_dynamic_static)
 TEST(span, first_dynamic)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int> sub = s.first(5);
+    tempest::span<int> sub = s.first(5);
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 5);
@@ -333,14 +333,14 @@ TEST(span, first_dynamic)
 TEST(span, first_static)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int, 5> sub = s.first<5>();
+    tempest::span<int, 5> sub = s.first<5>();
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 5);
@@ -355,14 +355,14 @@ TEST(span, first_static)
 TEST(span, last_dynamic)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int> sub = s.last(5);
+    tempest::span<int> sub = s.last(5);
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 5);
@@ -377,14 +377,14 @@ TEST(span, last_dynamic)
 TEST(span, last_static)
 {
     // fill vector with increasing values
-    tempest::core::vector<int> v(10);
+    tempest::vector<int> v(10);
     std::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
-    tempest::core::span<int> s(v);
+    tempest::span<int> s(v);
 
     // create a subspan from the span
-    tempest::core::span<int, 5> sub = s.last<5>();
+    tempest::span<int, 5> sub = s.last<5>();
 
     // check the size of the subspan
     EXPECT_EQ(sub.size(), 5);

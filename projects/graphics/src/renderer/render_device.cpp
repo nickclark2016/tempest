@@ -4,20 +4,20 @@
 
 namespace tempest::graphics
 {
-    std::unique_ptr<render_context> render_context::create(core::abstract_allocator* alloc)
+    std::unique_ptr<render_context> render_context::create(abstract_allocator* alloc)
     {
         return std::make_unique<vk::render_context>(alloc);
     }
 
-    render_context::render_context(core::abstract_allocator* alloc) : _alloc{alloc}
+    render_context::render_context(abstract_allocator* alloc) : _alloc{alloc}
     {
     }
 
-    core::vector<image_resource_handle> renderer_utilities::upload_textures(
-        render_device& dev, core::span<texture_data_descriptor> textures, buffer_resource_handle staging_buffer,
+    vector<image_resource_handle> renderer_utilities::upload_textures(
+        render_device& dev, span<texture_data_descriptor> textures, buffer_resource_handle staging_buffer,
         bool use_entire_buffer, bool generate_mip_maps)
     {
-        core::vector<image_resource_handle> images;
+        vector<image_resource_handle> images;
 
         auto& cmd_executor = dev.get_command_executor();
         auto* cmds = &cmd_executor.get_commands();
@@ -130,13 +130,13 @@ namespace tempest::graphics
         return images;
     }
 
-    core::vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, core::span<core::mesh> meshes,
+    vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, span<core::mesh> meshes,
                                                                 buffer_resource_handle target, std::uint32_t& offset)
     {
         std::size_t bytes_written = offset;
         std::size_t staging_buffer_bytes_written = 0;
         std::size_t last_write_index = offset;
-        core::vector<graphics::mesh_layout> result;
+        vector<graphics::mesh_layout> result;
         result.reserve(meshes.size());
 
         auto staging_buffer = device.get_staging_buffer();

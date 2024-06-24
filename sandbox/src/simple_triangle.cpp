@@ -25,7 +25,7 @@ graphics::graphics_pipeline_resource_handle create_triangle_pipeline(graphics::r
 
 void simple_triangle_demo()
 {
-    auto global_allocator = core::heap_allocator(global_memory_allocator_size);
+    auto global_allocator = heap_allocator(global_memory_allocator_size);
 
     auto graphics_ctx = graphics::render_context::create(&global_allocator);
 

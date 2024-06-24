@@ -1,9 +1,13 @@
 #ifndef tempest_core_string_view_hpp
 #define tempest_core_string_view_hpp
 
-#include <tempest/string.hpp>
+#include <tempest/char_traits.hpp>
+#include <tempest/int.hpp>
 
-namespace tempest::core
+#include <iterator>
+#include <limits>
+
+namespace tempest
 {
     template <typename CharT, typename Traits = char_traits<CharT>>
     class basic_string_view
@@ -15,7 +19,7 @@ namespace tempest::core
         using const_pointer = const CharT*;
         using reference = CharT&;
         using const_reference = const CharT&;
-        using size_type = std::size_t;
+        using size_type = size_t;
         using difference_type = std::ptrdiff_t;
         using iterator = pointer;
         using const_iterator = const_pointer;
@@ -250,20 +254,6 @@ namespace tempest::core
         return search(sv.begin(), sv.end(), str.begin(), str.end());
     }
 
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search(basic_string_view<CharT, Traits> sv,
-                          const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return search(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search(const basic_string<CharT, Traits, Allocator>& str,
-                          basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return search(str.begin(), str.end(), sv.begin(), sv.end());
-    }
-
     template <typename CharT, typename Traits, typename It>
     constexpr auto search(basic_string_view<CharT, Traits> sv, It first, It last) noexcept
     {
@@ -294,20 +284,6 @@ namespace tempest::core
         return reverse_search(sv.begin(), sv.end(), str.begin(), str.end());
     }
 
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto reverse_search(basic_string_view<CharT, Traits> sv,
-                                  const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return reverse_search(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto reverse_search(const basic_string<CharT, Traits, Allocator>& str,
-                                  basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return reverse_search(str.begin(), str.end(), sv.begin(), sv.end());
-    }
-
     template <typename CharT, typename Traits, typename It>
     constexpr auto reverse_search(basic_string_view<CharT, Traits> sv, It first, It last) noexcept
     {
@@ -336,20 +312,6 @@ namespace tempest::core
     constexpr auto search_first_of(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept
     {
         return search_first_of(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_first_of(basic_string_view<CharT, Traits> sv,
-                                   const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return search_first_of(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_first_of(const basic_string<CharT, Traits, Allocator>& str,
-                                   basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return search_first_of(str.begin(), str.end(), sv.begin(), sv.end());
     }
 
     template <typename CharT, typename Traits, typename It>
@@ -384,20 +346,6 @@ namespace tempest::core
         return search_first_not_of(sv.begin(), sv.end(), str.begin(), str.end());
     }
 
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_first_not_of(basic_string_view<CharT, Traits> sv,
-                                       const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return search_first_not_of(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_first_not_of(const basic_string<CharT, Traits, Allocator>& str,
-                                       basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return search_first_not_of(str.begin(), str.end(), sv.begin(), sv.end());
-    }
-
     template <typename CharT, typename Traits, typename It>
     constexpr auto search_first_not_of(basic_string_view<CharT, Traits> sv, It first, It last) noexcept
     {
@@ -426,20 +374,6 @@ namespace tempest::core
     constexpr auto search_last_of(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept
     {
         return search_last_of(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_last_of(basic_string_view<CharT, Traits> sv,
-                                  const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return search_last_of(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_last_of(const basic_string<CharT, Traits, Allocator>& str,
-                                  basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return search_last_of(str.begin(), str.end(), sv.begin(), sv.end());
     }
 
     template <typename CharT, typename Traits, typename It>
@@ -471,20 +405,6 @@ namespace tempest::core
                                       basic_string_view<CharT, Traits> str) noexcept
     {
         return search_last_not_of(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_last_not_of(basic_string_view<CharT, Traits> sv,
-                                      const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return search_last_not_of(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto search_last_not_of(const basic_string<CharT, Traits, Allocator>& str,
-                                      basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return search_last_not_of(str.begin(), str.end(), sv.begin(), sv.end());
     }
 
     template <typename CharT, typename Traits, typename It>
@@ -541,20 +461,6 @@ namespace tempest::core
         return starts_with(sv.begin(), sv.end(), str.begin(), str.end());
     }
 
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr bool starts_with(basic_string_view<CharT, Traits> sv,
-                               const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return starts_with(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr bool starts_with(const basic_string<CharT, Traits, Allocator>& str,
-                               basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return starts_with(str.begin(), str.end(), sv.begin(), sv.end());
-    }
-
     template <typename CharT, typename Traits, typename It>
     constexpr bool starts_with(basic_string_view<CharT, Traits> sv, It first, It last) noexcept
     {
@@ -579,20 +485,6 @@ namespace tempest::core
         return ends_with(sv.begin(), sv.end(), str.begin(), str.end());
     }
 
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr bool ends_with(basic_string_view<CharT, Traits> sv,
-                             const basic_string<CharT, Traits, Allocator>& str) noexcept
-    {
-        return ends_with(sv.begin(), sv.end(), str.begin(), str.end());
-    }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr bool ends_with(const basic_string<CharT, Traits, Allocator>& str,
-                             basic_string_view<CharT, Traits> sv) noexcept
-    {
-        return ends_with(str.begin(), str.end(), sv.begin(), sv.end());
-    }
-
     template <typename CharT, typename Traits, typename It>
     constexpr bool ends_with(basic_string_view<CharT, Traits> sv, It first, It last) noexcept
     {
@@ -604,13 +496,6 @@ namespace tempest::core
     {
         return basic_string_view<CharT, Traits>(sv.begin() + pos, count);
     }
-
-    template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto substr(const basic_string<CharT, Traits, Allocator>& str, std::size_t pos,
-                          std::size_t count) noexcept
-    {
-        return basic_string_view<CharT, Traits>(str.begin() + pos, count);
-    }
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_string_view_hpp

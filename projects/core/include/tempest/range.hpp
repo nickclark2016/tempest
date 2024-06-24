@@ -1,7 +1,7 @@
 #ifndef tempest_core_range_hpp
 #define tempest_core_range_hpp
 
-namespace tempest::core
+namespace tempest
 {
     template <typename T>
     struct range
@@ -9,6 +9,6 @@ namespace tempest::core
         T start;
         T end;
     };
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_range_hpp

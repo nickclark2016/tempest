@@ -9,7 +9,7 @@
 #include <iterator>
 #include <type_traits>
 
-namespace tempest::core
+namespace tempest
 {
     inline constexpr std::size_t dynamic_extent = static_cast<std::size_t>(-1);
 
@@ -151,8 +151,8 @@ namespace tempest::core
     template <typename T, std::size_t Extent>
     template <typename R>
     inline constexpr span<T, Extent>::span(R&& r)
-        : _start{std::addressof(*tempest::core::begin(r))},
-          _end{_start + (std::distance(tempest::core::begin(r), tempest::core::end(r)))}
+        : _start{std::addressof(*::tempest::begin(r))},
+          _end{_start + (std::distance(::tempest::begin(r), ::tempest::end(r)))}
     {
     }
 
@@ -330,6 +330,6 @@ namespace tempest::core
 
         return {_start + offset, _start + offset + count};
     }
-} // namespace tempest::core
+} // namespace tempest
 
 #endif // tempest_core_span_hpp

@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 
 template <typename T>
-using vector = tempest::core::vector<T>;
+using vector = tempest::vector<T>;
 
 TEST(vector, default_constructor)
 {

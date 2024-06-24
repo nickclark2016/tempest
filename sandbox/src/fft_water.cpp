@@ -181,7 +181,7 @@ void fft_water_demo()
 {
     auto start_time = std::chrono::steady_clock::now();
 
-    auto global_allocator = core::heap_allocator(global_memory_allocator_size);
+    auto global_allocator = heap_allocator(global_memory_allocator_size);
     auto graphics_ctx = graphics::render_context::create(&global_allocator);
     auto devices = graphics_ctx->enumerate_suitable_devices();
 
@@ -521,7 +521,7 @@ void fft_water_demo()
                 .add_transfer_target(initial_spectrum_textures)
                 .on_execute([&](graphics::command_list& cmds) {
                     auto staging = graphics_device.get_staging_buffer();
-                    core::span<std::byte> src_ptr = graphics_device.map_buffer_frame(staging);
+                    span<byte> src_ptr = graphics_device.map_buffer_frame(staging);
                     std::memcpy(src_ptr.data(), &fft_constants, sizeof(water_fft_constants));
                     std::memcpy(src_ptr.data() + sizeof(water_fft_constants), wave_spectrums.data(),
                                 sizeof(wave_spectrums));

@@ -182,9 +182,9 @@ namespace tempest::graphics
         return ImGui::Button(label.data());
     }
 
-    int imgui_context::combo_box(std::string_view label, int current_item, core::span<std::string_view> items)
+    int imgui_context::combo_box(std::string_view label, int current_item, span<std::string_view> items)
     {
-        core::vector<const char*> item_ptrs;
+        vector<const char*> item_ptrs;
         for (auto& item : items)
         {
             item_ptrs.push_back(item.data());

@@ -4,17 +4,17 @@
 
 namespace tempest::core
 {
-    object_pool::object_pool(abstract_allocator* _alloc, std::uint32_t pool_size, std::uint32_t resource_size)
+    object_pool::object_pool(abstract_allocator* _alloc, uint32_t pool_size, uint32_t resource_size)
         : _alloc{_alloc}, _pool_size{pool_size}, _resource_size{resource_size}
     {
         auto alloc_size = pool_size * (_resource_size + sizeof(std::uint32_t));
-        _memory = reinterpret_cast<std::byte*>(_alloc->allocate(alloc_size, 1));
-        std::fill_n(_memory, alloc_size, static_cast<std::byte>(0));
+        _memory = reinterpret_cast<byte*>(_alloc->allocate(alloc_size, 1));
+        std::fill_n(_memory, alloc_size, static_cast<byte>(0));
 
         _free_indices = reinterpret_cast<std::uint32_t*>(_memory + pool_size * resource_size);
         _free_index_head = 0;
 
-        for (std::uint32_t i = 0; i < _pool_size; ++i)
+        for (uint32_t i = 0; i < _pool_size; ++i)
         {
             _free_indices[i] = i;
         }
@@ -43,10 +43,10 @@ namespace tempest::core
         }
 
         assert(false);
-        return std::numeric_limits<std::uint32_t>::max();
+        return std::numeric_limits<uint32_t>::max();
     }
 
-    void object_pool::release_resource(std::uint32_t index)
+    void object_pool::release_resource(uint32_t index)
     {
         _free_indices[--_free_index_head] = index;
         --_used_index_count;
@@ -57,24 +57,24 @@ namespace tempest::core
         _free_index_head = 0;
         _used_index_count = 0;
 
-        for (std::uint32_t i = 0; i < _pool_size; ++i)
+        for (uint32_t i = 0; i < _pool_size; ++i)
         {
             _free_indices[i] = i;
         }
     }
 
-    void* object_pool::access(std::uint32_t index)
+    void* object_pool::access(uint32_t index)
     {
-        if (index != std::numeric_limits<std::uint32_t>::max()) [[likely]]
+        if (index != std::numeric_limits<uint32_t>::max()) [[likely]]
         {
             return _memory + (index * _resource_size);
         }
         return nullptr;
     }
 
-    const void* object_pool::access(std::uint32_t index) const
+    const void* object_pool::access(uint32_t index) const
     {
-        if (index != std::numeric_limits<std::uint32_t>::max()) [[likely]]
+        if (index != std::numeric_limits<uint32_t>::max()) [[likely]]
         {
             return _memory + (index * _resource_size);
         }
@@ -86,21 +86,21 @@ namespace tempest::core
         return _pool_size;
     }
 
-    generational_object_pool::generational_object_pool(abstract_allocator* _alloc, std::uint32_t pool_size,
-                                                       std::uint32_t resource_size)
+    generational_object_pool::generational_object_pool(abstract_allocator* _alloc, uint32_t pool_size,
+                                                       uint32_t resource_size)
         : _alloc{_alloc}, _pool_size{pool_size}, _resource_size{resource_size}, _used_index_count{0}
     {
-        auto per_element = (resource_size + sizeof(key) + sizeof(std::uint32_t));
+        auto per_element = (resource_size + sizeof(key) + sizeof(uint32_t));
         auto total_size = _pool_size * per_element;
 
-        _memory = reinterpret_cast<std::byte*>(_alloc->allocate(total_size, 16));
-        std::fill_n(_memory, total_size, std::byte(0));
+        _memory = reinterpret_cast<byte*>(_alloc->allocate(total_size, 16));
+        std::fill_n(_memory, total_size, byte(0));
 
         _keys = reinterpret_cast<key*>(_memory);
-        _erased = reinterpret_cast<std::uint32_t*>(_memory + (_pool_size * sizeof(key)));
-        _payload = _memory + _pool_size * (sizeof(std::uint32_t) + sizeof(key));
+        _erased = reinterpret_cast<uint32_t*>(_memory + (_pool_size * sizeof(key)));
+        _payload = _memory + _pool_size * (sizeof(uint32_t) + sizeof(key));
 
-        for (std::uint32_t i = 0; i < _pool_size; ++i)
+        for (uint32_t i = 0; i < _pool_size; ++i)
         {
             auto& k = _keys[i];
             k.index = i + 1;
@@ -167,9 +167,9 @@ namespace tempest::core
         _used_index_count = 0;
         _free_index_head = 0;
 
-        for (std::size_t i = 0; i < _pool_size; ++i)
+        for (size_t i = 0; i < _pool_size; ++i)
         {
-            _keys[i].index = static_cast<std::uint32_t>(i) + 1;
+            _keys[i].index = static_cast<uint32_t>(i) + 1;
             _keys[i].generation++;
         }
     }

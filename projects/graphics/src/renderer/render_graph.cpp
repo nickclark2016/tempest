@@ -161,7 +161,7 @@ namespace tempest::graphics
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::add_external_sampled_images(core::span<image_resource_handle> handles,
+    graph_pass_builder& graph_pass_builder::add_external_sampled_images(span<image_resource_handle> handles,
                                                                         std::uint32_t set, std::uint32_t binding,
                                                                         pipeline_stage usage)
     {
@@ -273,7 +273,7 @@ namespace tempest::graphics
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::add_storage_image(core::span<image_resource_handle> handle,
+    graph_pass_builder& graph_pass_builder::add_storage_image(span<image_resource_handle> handle,
                                                               resource_access_type access, std::uint32_t set,
                                                               std::uint32_t binding, pipeline_stage first_access,
                                                               pipeline_stage last_access)
@@ -403,6 +403,19 @@ namespace tempest::graphics
         return *this;
     }
 
+    graph_pass_builder& graph_pass_builder::add_host_write_buffer(buffer_resource_handle handle,
+                                                                  pipeline_stage first_write, pipeline_stage last_write)
+    {
+        _buffer_states.push_back(buffer_resource_state{
+            .type = resource_access_type::WRITE,
+            .buf = handle,
+            .usage = buffer_resource_usage::HOST_WRITE,
+            .first_access = first_write,
+            .last_access = last_write,
+        });
+        return *this;
+    }
+
     graph_pass_builder& graph_pass_builder::add_sampler(sampler_resource_handle handle, std::uint32_t set,
                                                         std::uint32_t binding, pipeline_stage usage)
     {
@@ -482,7 +495,7 @@ namespace tempest::graphics
         }
     }
 
-    render_graph_compiler::render_graph_compiler(core::abstract_allocator* alloc, render_device* device)
+    render_graph_compiler::render_graph_compiler(abstract_allocator* alloc, render_device* device)
         : _device{device}, _alloc{alloc}, _resource_lib{std::make_unique<vk::render_graph_resource_library>(
                                               _alloc, static_cast<vk::render_device*>(device))}
     {
@@ -521,7 +534,7 @@ namespace tempest::graphics
         _imgui_enabled = enabled;
     }
 
-    std::unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(core::abstract_allocator* alloc,
+    std::unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(abstract_allocator* alloc,
                                                                                   render_device* device)
     {
         return std::make_unique<vk::render_graph_compiler>(alloc, device);
@@ -546,8 +559,8 @@ namespace tempest::graphics
 
     namespace
     {
-        void dfs(const std::unordered_map<std::uint64_t, core::vector<std::uint64_t>>& adjacency_list,
-                 std::unordered_set<std::uint64_t>& visited, std::uint64_t node, core::vector<std::uint64_t>& results)
+        void dfs(const std::unordered_map<std::uint64_t, vector<std::uint64_t>>& adjacency_list,
+                 std::unordered_set<std::uint64_t>& visited, std::uint64_t node, vector<std::uint64_t>& results)
         {
             visited.insert(node);
 
@@ -566,10 +579,10 @@ namespace tempest::graphics
         }
     } // namespace
 
-    core::vector<std::uint64_t> dependency_graph::toposort() const noexcept
+    vector<std::uint64_t> dependency_graph::toposort() const noexcept
     {
         std::unordered_set<std::uint64_t> visited;
-        core::vector<std::uint64_t> result;
+        vector<std::uint64_t> result;
         result.reserve(_adjacency_list.size());
 
         for (std::size_t node : std::ranges::views::keys(_adjacency_list))
@@ -580,7 +593,7 @@ namespace tempest::graphics
             }
         }
 
-        std::reverse(std::begin(result), std::end(result));
+        std::reverse(tempest::begin(result), tempest::end(result));
 
         return result;
     }

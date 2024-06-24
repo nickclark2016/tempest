@@ -1,15 +1,15 @@
 #ifndef tempest_core_files_hpp
 #define tempest_core_files_hpp
 
+#include <tempest/int.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
-
-#include <string>
-#include <string_view>
 
 namespace tempest::core
 {
-    vector<std::byte> read_bytes(std::string_view path);
-    std::string read_text(std::string_view path);
-}
+    vector<byte> read_bytes(string_view path);
+    string read_text(string_view path);
+} // namespace tempest::core
 
 #endif // tempest_core_files_hpp

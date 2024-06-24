@@ -1,6 +1,8 @@
 #include "vk_render_graph.hpp"
 
 #include <tempest/logger.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -113,6 +115,8 @@ namespace tempest::graphics::vk
                 [[fallthrough]];
             case buffer_resource_usage::TRANSFER_SOURCE:
                 return VK_PIPELINE_STAGE_2_COPY_BIT;
+            case buffer_resource_usage::HOST_WRITE:
+                return VK_PIPELINE_STAGE_2_HOST_BIT;
             }
 
             logger->critical("Failed to determine VkPipelineStageFlags for buffer access.");
@@ -205,6 +209,8 @@ namespace tempest::graphics::vk
                 return VK_ACCESS_2_TRANSFER_WRITE_BIT;
             case buffer_resource_usage::TRANSFER_SOURCE:
                 return VK_ACCESS_2_TRANSFER_READ_BIT;
+            case buffer_resource_usage::HOST_WRITE:
+                return VK_ACCESS_2_HOST_WRITE_BIT;
             }
 
             logger->critical("Failed to determine VkAccessFlags for buffer access.");
@@ -303,7 +309,7 @@ namespace tempest::graphics::vk
         }
     } // namespace
 
-    render_graph_resource_library::render_graph_resource_library(core::abstract_allocator* alloc, render_device* device)
+    render_graph_resource_library::render_graph_resource_library(abstract_allocator* alloc, render_device* device)
         : _device{device}
     {
     }
@@ -340,7 +346,7 @@ namespace tempest::graphics::vk
             .format = desc.fmt,
             .samples = desc.samples,
             .persistent = desc.persistent,
-            .name = std::string(desc.name),
+            .name = string{desc.name},
         };
 
         _images_to_compile.push_back(deferred_image_create_info{
@@ -406,7 +412,7 @@ namespace tempest::graphics::vk
                 .per_frame = desc.per_frame_memory,
                 .loc = desc.location,
                 .size = aligned_size * (desc.per_frame_memory ? _device->frames_in_flight() : 1),
-                .name = std::string(desc.name),
+                .name = string{desc.name},
             },
             .allocation{handle},
         });
@@ -480,8 +486,8 @@ namespace tempest::graphics::vk
         return true;
     }
 
-    render_graph::render_graph(core::abstract_allocator* alloc, render_device* device,
-                               core::span<graphics::graph_pass_builder> pass_builders,
+    render_graph::render_graph(abstract_allocator* alloc, render_device* device,
+                               span<graphics::graph_pass_builder> pass_builders,
                                std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled)
         : _alloc{alloc}, _device{device}, _resource_lib{std::move(resources)}
     {
@@ -631,7 +637,7 @@ namespace tempest::graphics::vk
         }
     }
 
-    void render_graph::update_external_sampled_images(graph_pass_handle pass, core::span<image_resource_handle> images,
+    void render_graph::update_external_sampled_images(graph_pass_handle pass, span<image_resource_handle> images,
                                                       std::uint32_t set, std::uint32_t binding, pipeline_stage stage)
     {
         auto pass_idx = _pass_index_map[pass.as_uint64()];
@@ -672,8 +678,8 @@ namespace tempest::graphics::vk
             begin(_descriptor_set_states[pass_idx].writes), end(_descriptor_set_states[pass_idx].writes),
             [&](const auto& write) {
                 return write.dstBinding == binding &&
-                       std::any_of(begin(_descriptor_set_states[pass_idx].vk_set_to_set_index),
-                                   end(_descriptor_set_states[pass_idx].vk_set_to_set_index),
+                       std::any_of(tempest::begin(_descriptor_set_states[pass_idx].vk_set_to_set_index),
+                                   tempest::end(_descriptor_set_states[pass_idx].vk_set_to_set_index),
                                    [&](const auto& vk_index_pair) { return vk_index_pair.second == set; });
             });
 
@@ -849,7 +855,7 @@ namespace tempest::graphics::vk
                 }
 
                 auto write_copy = writes;
-                core::erase_if(write_copy, [](const auto& write) { return write.descriptorCount == 0; });
+                tempest::erase_if(write_copy, [](const auto& write) { return write.descriptorCount == 0; });
 
                 dispatch->updateDescriptorSets(static_cast<std::uint32_t>(write_copy.size()), write_copy.data(), 0,
                                                nullptr);
@@ -1753,7 +1759,7 @@ namespace tempest::graphics::vk
                 continue;
             }
 
-            core::vector<VkDescriptorSetLayout> set_layouts;
+            vector<VkDescriptorSetLayout> set_layouts;
             for (auto& [id, binding_arr] : bindings)
             {
                 auto& bind_flags = binding_flags[id];
@@ -1837,7 +1843,7 @@ namespace tempest::graphics::vk
                 }
 
                 auto writes = _descriptor_set_states[pass_index].writes;
-                core::erase_if(writes, [](const VkWriteDescriptorSet& write) { return write.descriptorCount == 0; });
+                tempest::erase_if(writes, [](const VkWriteDescriptorSet& write) { return write.descriptorCount == 0; });
 
                 _device->dispatch().updateDescriptorSets(static_cast<std::uint32_t>(writes.size()), writes.data(), 0,
                                                          nullptr);
@@ -1852,7 +1858,7 @@ namespace tempest::graphics::vk
         }
     }
 
-    render_graph_compiler::render_graph_compiler(core::abstract_allocator* alloc, graphics::render_device* device)
+    render_graph_compiler::render_graph_compiler(abstract_allocator* alloc, graphics::render_device* device)
         : graphics::render_graph_compiler(alloc, device)
 
     {

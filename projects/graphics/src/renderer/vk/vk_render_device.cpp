@@ -214,7 +214,7 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        constexpr std::size_t get_format_size(resource_format fmt)
+        constexpr size_t get_format_size(resource_format fmt)
         {
             return bytes_per_element(fmt);
         }
@@ -413,7 +413,7 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        void name_object(const vkb::DispatchTable& dispatch, std::uint64_t object_handle, VkObjectType type,
+        void name_object(const vkb::DispatchTable& dispatch, uint64_t object_handle, VkObjectType type,
                          const char* name)
         {
 #ifdef _DEBUG
@@ -429,35 +429,34 @@ namespace tempest::graphics::vk
 #endif
         }
 
-        static constexpr std::uint32_t IMAGE_POOL_SIZE = 4096;
-        static constexpr std::uint32_t BUFFER_POOL_SIZE = 512;
-        static constexpr std::uint32_t GRAPHICS_PIPELINE_POOL_SIZE = 256;
-        static constexpr std::uint32_t COMPUTE_PIPELINE_POOL_SIZE = 128;
-        static constexpr std::uint32_t SWAPCHAIN_POOL_SIZE = 8;
-        static constexpr std::uint32_t SAMPLER_POOL_SIZE = 128;
+        static constexpr uint32_t IMAGE_POOL_SIZE = 4096;
+        static constexpr uint32_t BUFFER_POOL_SIZE = 512;
+        static constexpr uint32_t GRAPHICS_PIPELINE_POOL_SIZE = 256;
+        static constexpr uint32_t COMPUTE_PIPELINE_POOL_SIZE = 128;
+        static constexpr uint32_t SWAPCHAIN_POOL_SIZE = 8;
+        static constexpr uint32_t SAMPLER_POOL_SIZE = 128;
     } // namespace
 
-    render_device::render_device(core::abstract_allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical)
+    render_device::render_device(abstract_allocator* alloc, vkb::Instance instance, vkb::PhysicalDevice physical)
         : _alloc{alloc}, _instance{instance}, _physical{physical}
     {
-        _images.emplace(_alloc, IMAGE_POOL_SIZE, static_cast<std::uint32_t>(sizeof(image)));
-        _buffers.emplace(_alloc, BUFFER_POOL_SIZE, static_cast<std::uint32_t>(sizeof(buffer)));
+        _images.emplace(_alloc, IMAGE_POOL_SIZE, static_cast<uint32_t>(sizeof(image)));
+        _buffers.emplace(_alloc, BUFFER_POOL_SIZE, static_cast<uint32_t>(sizeof(buffer)));
         _graphics_pipelines.emplace(_alloc, GRAPHICS_PIPELINE_POOL_SIZE,
-                                    static_cast<std::uint32_t>(sizeof(graphics_pipeline)));
-        _compute_pipelines.emplace(_alloc, COMPUTE_PIPELINE_POOL_SIZE,
-                                   static_cast<std::uint32_t>(sizeof(compute_pipeline)));
-        _swapchains.emplace(_alloc, SWAPCHAIN_POOL_SIZE, static_cast<std::uint32_t>(sizeof(swapchain)));
-        _samplers.emplace(_alloc, SAMPLER_POOL_SIZE, static_cast<std::uint32_t>(sizeof(sampler)));
+                                    static_cast<uint32_t>(sizeof(graphics_pipeline)));
+        _compute_pipelines.emplace(_alloc, COMPUTE_PIPELINE_POOL_SIZE, static_cast<uint32_t>(sizeof(compute_pipeline)));
+        _swapchains.emplace(_alloc, SWAPCHAIN_POOL_SIZE, static_cast<uint32_t>(sizeof(swapchain)));
+        _samplers.emplace(_alloc, SAMPLER_POOL_SIZE, static_cast<uint32_t>(sizeof(sampler)));
         _delete_queue.emplace(_frames_in_flight);
 
         auto queue_families = _physical.get_queue_families();
-        std::unordered_map<std::uint32_t, std::uint32_t> queues_allocated;
+        std::unordered_map<uint32_t, uint32_t> queues_allocated;
 
-        auto family_matcher = [&](VkQueueFlags flags)
-            -> std::optional<std::tuple<VkQueueFamilyProperties, std::uint32_t, std::uint32_t>> {
-            std::optional<std::tuple<VkQueueFamilyProperties, std::uint32_t, std::uint32_t>> best_match;
+        auto family_matcher =
+            [&](VkQueueFlags flags) -> std::optional<std::tuple<VkQueueFamilyProperties, uint32_t, uint32_t>> {
+            std::optional<std::tuple<VkQueueFamilyProperties, uint32_t, uint32_t>> best_match;
 
-            std::uint32_t family_idx = 0;
+            uint32_t family_idx = 0;
             for (const auto& family : queue_families)
             {
                 if (family.queueFlags == flags)
@@ -672,7 +671,7 @@ namespace tempest::graphics::vk
         buffer buf{
             .per_frame_resource = ci.per_frame,
             .info = buf_ci,
-            .name = std::string{ci.name},
+            .name = string{ci.name},
         };
 
         auto result = vmaCreateBuffer(_vk_alloc, &buf_ci, &alloc_ci, &buf.buffer, &buf.allocation, &buf.alloc_info);
@@ -686,7 +685,7 @@ namespace tempest::graphics::vk
             return buffer_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(buf.buffer), VK_OBJECT_TYPE_BUFFER, ci.name.c_str());
+        name_object(_dispatch, std::bit_cast<uint64_t>(buf.buffer), VK_OBJECT_TYPE_BUFFER, ci.name.c_str());
 
         buffer* buf_ptr = access_buffer(handle);
         std::construct_at(buf_ptr, buf);
@@ -707,44 +706,44 @@ namespace tempest::graphics::vk
         }
     }
 
-    core::span<std::byte> render_device::map_buffer(buffer_resource_handle handle)
+    span<byte> render_device::map_buffer(buffer_resource_handle handle)
     {
         auto vk_buf = access_buffer(handle);
         void* result;
         auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
         assert(res == VK_SUCCESS);
-        return core::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
+        return span(reinterpret_cast<byte*>(result), vk_buf->info.size);
     }
 
-    core::span<std::byte> render_device::map_buffer_frame(buffer_resource_handle handle, std::uint64_t frame_offset)
+    span<byte> render_device::map_buffer_frame(buffer_resource_handle handle, uint64_t frame_offset)
     {
         auto vk_buf = access_buffer(handle);
         void* result;
         auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
         assert(res == VK_SUCCESS);
 
-        std::uint64_t frame = (_current_frame + frame_offset) % _frames_in_flight;
+        uint64_t frame = (_current_frame + frame_offset) % _frames_in_flight;
 
         if (vk_buf->per_frame_resource)
         {
-            std::uint64_t size_per_frame = vk_buf->alloc_info.size / _frames_in_flight;
-            return core::span(reinterpret_cast<std::byte*>(result) + size_per_frame * frame, size_per_frame);
+            uint64_t size_per_frame = vk_buf->alloc_info.size / _frames_in_flight;
+            return span(reinterpret_cast<byte*>(result) + size_per_frame * frame, size_per_frame);
         }
 
         logger->warn("Performance Note: Buffer is not a per-frame resource. Use map_buffer instead.");
 
-        return core::span(reinterpret_cast<std::byte*>(result), vk_buf->info.size);
+        return span(reinterpret_cast<byte*>(result), vk_buf->info.size);
     }
 
-    std::size_t render_device::get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset)
+    size_t render_device::get_buffer_frame_offset(buffer_resource_handle handle, uint64_t frame_offset)
     {
         auto vk_buf = access_buffer(handle);
 
-        std::uint64_t frame = (_current_frame + frame_offset) % _frames_in_flight;
+        uint64_t frame = (_current_frame + frame_offset) % _frames_in_flight;
 
         if (vk_buf->per_frame_resource)
         {
-            std::uint64_t size_per_frame = vk_buf->alloc_info.size / _frames_in_flight;
+            uint64_t size_per_frame = vk_buf->alloc_info.size / _frames_in_flight;
             return frame * size_per_frame;
         }
 
@@ -852,7 +851,7 @@ namespace tempest::graphics::vk
             return image_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(img), VK_OBJECT_TYPE_IMAGE, ci.name.c_str());
+        name_object(_dispatch, std::bit_cast<uint64_t>(img), VK_OBJECT_TYPE_IMAGE, ci.name.c_str());
 
         VkImageAspectFlags aspect = 0;
         aspect |=
@@ -895,7 +894,7 @@ namespace tempest::graphics::vk
             return image_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(view), VK_OBJECT_TYPE_IMAGE_VIEW, ci.name.c_str());
+        name_object(_dispatch, std::bit_cast<uint64_t>(view), VK_OBJECT_TYPE_IMAGE_VIEW, ci.name.c_str());
 
         image img_info = {
             .allocation = alloc,
@@ -905,7 +904,7 @@ namespace tempest::graphics::vk
             .img_info = image_ci,
             .view_info = view_ci,
             .persistent = ci.persistent,
-            .name = std::string(ci.name),
+            .name = string(ci.name),
         };
 
         auto image_ptr = access_image(handle);
@@ -1060,13 +1059,13 @@ namespace tempest::graphics::vk
         }
 
         // TODO: Cache Descriptor Set Layouts and Pipeline Layouts
-        core::vector<VkDescriptorSetLayout> set_layouts;
-        core::vector<VkPushConstantRange> ranges;
+        vector<VkDescriptorSetLayout> set_layouts;
+        vector<VkPushConstantRange> ranges;
 
         for (const auto& info : ci.layout.set_layouts)
         {
-            core::vector<VkDescriptorSetLayoutBinding> bindings;
-            core::vector<VkDescriptorBindingFlags> flags;
+            vector<VkDescriptorSetLayoutBinding> bindings;
+            vector<VkDescriptorBindingFlags> flags;
 
             for (const auto& binding : info.bindings)
             {
@@ -1084,14 +1083,14 @@ namespace tempest::graphics::vk
             VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
                 .pNext = nullptr,
-                .bindingCount = static_cast<std::uint32_t>(flags.size()),
+                .bindingCount = static_cast<uint32_t>(flags.size()),
                 .pBindingFlags = flags.empty() ? nullptr : flags.data(),
             };
 
             VkDescriptorSetLayoutCreateInfo set_layout_ci = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags,
-                .bindingCount = static_cast<std::uint32_t>(bindings.size()),
+                .bindingCount = static_cast<uint32_t>(bindings.size()),
                 .pBindings = bindings.data(),
             };
 
@@ -1119,9 +1118,9 @@ namespace tempest::graphics::vk
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .setLayoutCount = static_cast<std::uint32_t>(set_layouts.size()),
+            .setLayoutCount = static_cast<uint32_t>(set_layouts.size()),
             .pSetLayouts = set_layouts.empty() ? nullptr : set_layouts.data(),
-            .pushConstantRangeCount = static_cast<std::uint32_t>(ranges.size()),
+            .pushConstantRangeCount = static_cast<uint32_t>(ranges.size()),
             .pPushConstantRanges = ranges.empty() ? nullptr : ranges.data(),
         };
 
@@ -1133,7 +1132,7 @@ namespace tempest::graphics::vk
             return graphics_pipeline_resource_handle();
         }
 
-        core::vector<VkFormat> color_formats;
+        vector<VkFormat> color_formats;
         for (auto fmt : ci.target.color_attachment_formats)
         {
             color_formats.push_back(to_vulkan(fmt));
@@ -1143,7 +1142,7 @@ namespace tempest::graphics::vk
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
             .pNext = nullptr,
             .viewMask = 0,
-            .colorAttachmentCount = static_cast<std::uint32_t>(color_formats.size()),
+            .colorAttachmentCount = static_cast<uint32_t>(color_formats.size()),
             .pColorAttachmentFormats = color_formats.empty() ? nullptr : color_formats.data(),
             .depthAttachmentFormat = to_vulkan(ci.target.depth_attachment_format),
             .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
@@ -1154,7 +1153,7 @@ namespace tempest::graphics::vk
             .pNext = nullptr,
             .flags = 0,
             .codeSize = ci.vertex_shader.bytes.size(),
-            .pCode = reinterpret_cast<std::uint32_t*>(ci.vertex_shader.bytes.data()),
+            .pCode = reinterpret_cast<uint32_t*>(ci.vertex_shader.bytes.data()),
         };
 
         VkShaderModuleCreateInfo fragment_ci = {
@@ -1162,15 +1161,15 @@ namespace tempest::graphics::vk
             .pNext = nullptr,
             .flags = 0,
             .codeSize = ci.fragment_shader.bytes.size(),
-            .pCode = reinterpret_cast<std::uint32_t*>(ci.fragment_shader.bytes.data()),
+            .pCode = reinterpret_cast<uint32_t*>(ci.fragment_shader.bytes.data()),
         };
 
-        std::uint32_t shader_count = 1;
+        uint32_t shader_count = 1;
 
         VkShaderModule vertex_module = VK_NULL_HANDLE, fragment_module = VK_NULL_HANDLE;
         auto vertex_module_result = _dispatch.createShaderModule(&vertex_ci, nullptr, &vertex_module);
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(vertex_module), VK_OBJECT_TYPE_SHADER_MODULE,
+        name_object(_dispatch, std::bit_cast<uint64_t>(vertex_module), VK_OBJECT_TYPE_SHADER_MODULE,
                     ci.vertex_shader.name.c_str());
 
         VkPipelineShaderStageCreateInfo vertex_stage_ci = {
@@ -1194,7 +1193,7 @@ namespace tempest::graphics::vk
                 return graphics_pipeline_resource_handle();
             }
 
-            name_object(_dispatch, std::bit_cast<std::uint64_t>(fragment_module), VK_OBJECT_TYPE_SHADER_MODULE,
+            name_object(_dispatch, std::bit_cast<uint64_t>(fragment_module), VK_OBJECT_TYPE_SHADER_MODULE,
                         ci.fragment_shader.name.c_str());
 
             fragment_stage_ci = {
@@ -1220,14 +1219,14 @@ namespace tempest::graphics::vk
             VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT,
         };
 
-        core::vector<VkVertexInputBindingDescription> vertex_bindings;
-        core::vector<VkVertexInputAttributeDescription> vertex_attributes;
+        vector<VkVertexInputBindingDescription> vertex_bindings;
+        vector<VkVertexInputAttributeDescription> vertex_attributes;
 
-        std::unordered_map<std::size_t, std::uint32_t> binding_sizes;
+        std::unordered_map<size_t, uint32_t> binding_sizes;
 
         for (const auto& element : ci.vertex_layout.elements)
         {
-            binding_sizes[element.binding] += static_cast<std::uint32_t>(get_format_size(element.format));
+            binding_sizes[element.binding] += static_cast<uint32_t>(get_format_size(element.format));
         }
 
         for (const auto& element : ci.vertex_layout.elements)
@@ -1259,9 +1258,9 @@ namespace tempest::graphics::vk
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .vertexBindingDescriptionCount = static_cast<std::uint32_t>(vertex_bindings.size()),
+            .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_bindings.size()),
             .pVertexBindingDescriptions = vertex_bindings.empty() ? nullptr : vertex_bindings.data(),
-            .vertexAttributeDescriptionCount = static_cast<std::uint32_t>(vertex_attributes.size()),
+            .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attributes.size()),
             .pVertexAttributeDescriptions = vertex_attributes.empty() ? nullptr : vertex_attributes.data(),
         };
 
@@ -1301,7 +1300,7 @@ namespace tempest::graphics::vk
             .lineWidth = 1.0f,
         };
 
-        core::vector<VkPipelineColorBlendAttachmentState> attachment_blends;
+        vector<VkPipelineColorBlendAttachmentState> attachment_blends;
         for (const auto& blend_info : ci.blending.attachment_blend_ops)
         {
             VkPipelineColorBlendAttachmentState state = {
@@ -1325,7 +1324,7 @@ namespace tempest::graphics::vk
             .flags = 0,
             .logicOpEnable = VK_FALSE,
             .logicOp = VK_LOGIC_OP_NO_OP,
-            .attachmentCount = static_cast<std::uint32_t>(attachment_blends.size()),
+            .attachmentCount = static_cast<uint32_t>(attachment_blends.size()),
             .pAttachments = attachment_blends.empty() ? nullptr : attachment_blends.data(),
         };
 
@@ -1333,7 +1332,7 @@ namespace tempest::graphics::vk
             .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .dynamicStateCount = static_cast<std::uint32_t>(sizeof(dynamic_states) / sizeof(VkDynamicState)),
+            .dynamicStateCount = static_cast<uint32_t>(sizeof(dynamic_states) / sizeof(VkDynamicState)),
             .pDynamicStates = sizeof(dynamic_states) == 0 ? nullptr : dynamic_states,
         };
 
@@ -1386,7 +1385,7 @@ namespace tempest::graphics::vk
             return graphics_pipeline_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(pipeline), VK_OBJECT_TYPE_PIPELINE, ci.name.c_str());
+        name_object(_dispatch, std::bit_cast<uint64_t>(pipeline), VK_OBJECT_TYPE_PIPELINE, ci.name.c_str());
 
         graphics_pipeline gfx_pipeline = {
             .vertex_module = vertex_module,
@@ -1456,12 +1455,12 @@ namespace tempest::graphics::vk
         }
 
         // TODO: Cache Descriptor Set Layouts and Pipeline Layouts
-        core::vector<VkDescriptorSetLayout> set_layouts;
-        core::vector<VkPushConstantRange> ranges;
+        vector<VkDescriptorSetLayout> set_layouts;
+        vector<VkPushConstantRange> ranges;
 
         for (const auto& info : ci.layout.set_layouts)
         {
-            core::vector<VkDescriptorSetLayoutBinding> bindings;
+            vector<VkDescriptorSetLayoutBinding> bindings;
 
             for (const auto& binding : info.bindings)
             {
@@ -1477,7 +1476,7 @@ namespace tempest::graphics::vk
             VkDescriptorSetLayoutCreateInfo set_layout_ci = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
-                .bindingCount = static_cast<std::uint32_t>(bindings.size()),
+                .bindingCount = static_cast<uint32_t>(bindings.size()),
                 .pBindings = bindings.data(),
             };
 
@@ -1505,9 +1504,9 @@ namespace tempest::graphics::vk
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .setLayoutCount = static_cast<std::uint32_t>(set_layouts.size()),
+            .setLayoutCount = static_cast<uint32_t>(set_layouts.size()),
             .pSetLayouts = set_layouts.empty() ? nullptr : set_layouts.data(),
-            .pushConstantRangeCount = static_cast<std::uint32_t>(ranges.size()),
+            .pushConstantRangeCount = static_cast<uint32_t>(ranges.size()),
             .pPushConstantRanges = ranges.empty() ? nullptr : ranges.data(),
         };
 
@@ -1519,7 +1518,7 @@ namespace tempest::graphics::vk
             return compute_pipeline_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(pipeline_layout), VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+        name_object(_dispatch, std::bit_cast<uint64_t>(pipeline_layout), VK_OBJECT_TYPE_PIPELINE_LAYOUT,
                     ci.name.c_str());
 
         VkShaderModuleCreateInfo compute_module_ci = {
@@ -1527,7 +1526,7 @@ namespace tempest::graphics::vk
             .pNext = nullptr,
             .flags = 0,
             .codeSize = ci.compute_shader.bytes.size(),
-            .pCode = reinterpret_cast<std::uint32_t*>(ci.compute_shader.bytes.data()),
+            .pCode = reinterpret_cast<uint32_t*>(ci.compute_shader.bytes.data()),
         };
 
         VkShaderModule compute_shader_module{VK_NULL_HANDLE};
@@ -1539,7 +1538,7 @@ namespace tempest::graphics::vk
             return compute_pipeline_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(compute_shader_module), VK_OBJECT_TYPE_SHADER_MODULE,
+        name_object(_dispatch, std::bit_cast<uint64_t>(compute_shader_module), VK_OBJECT_TYPE_SHADER_MODULE,
                     ci.compute_shader.name.c_str());
 
         VkPipelineShaderStageCreateInfo compute_stage{
@@ -1578,7 +1577,7 @@ namespace tempest::graphics::vk
             return compute_pipeline_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<std::uint64_t>(pipeline.pipeline), VK_OBJECT_TYPE_PIPELINE,
+        name_object(_dispatch, std::bit_cast<uint64_t>(pipeline.pipeline), VK_OBJECT_TYPE_PIPELINE,
                     pipeline.name.c_str());
 
         auto compute_ptr = access_compute_pipeline(handle);
@@ -1634,8 +1633,8 @@ namespace tempest::graphics::vk
         VkSurfaceKHR surface = VK_NULL_HANDLE;
         glfw::window* win = dynamic_cast<glfw::window*>(info.win);
 
-        std::uint32_t width = info.win->width();
-        std::uint32_t height = info.win->height();
+        uint32_t width = info.win->width();
+        uint32_t height = info.win->height();
 
         if (win)
         {
@@ -1648,8 +1647,8 @@ namespace tempest::graphics::vk
 
             int w, h;
             glfwGetFramebufferSize(win->raw(), &w, &h);
-            width = static_cast<std::uint32_t>(w);
-            height = static_cast<std::uint32_t>(h);
+            width = static_cast<uint32_t>(w);
+            height = static_cast<uint32_t>(h);
         }
 
         vkb::SwapchainBuilder swap_bldr =
@@ -1677,7 +1676,7 @@ namespace tempest::graphics::vk
         auto views = sc.sc.get_image_views().value();
         sc.image_handles.reserve(views.size());
 
-        for (std::uint32_t i = 0; i < sc.sc.image_count; ++i)
+        for (uint32_t i = 0; i < sc.sc.image_count; ++i)
         {
             image sc_image = {
                 .allocation = nullptr,
@@ -1696,7 +1695,7 @@ namespace tempest::graphics::vk
                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     },
                 },
-                .name = std::format("swapchain_image_{}", i),
+                .name = std::format("swapchain_image_{}", i).c_str(),
             };
 
             auto sc_image_handle = allocate_image();
@@ -1746,8 +1745,8 @@ namespace tempest::graphics::vk
         {
             int w, h;
             glfwGetFramebufferSize(win->raw(), &w, &h);
-            width = static_cast<std::uint32_t>(w);
-            height = static_cast<std::uint32_t>(h);
+            width = static_cast<uint32_t>(w);
+            height = static_cast<uint32_t>(h);
         }
 
         if (width == 0 || height == 0)
@@ -1794,14 +1793,14 @@ namespace tempest::graphics::vk
 
         if (views.size() < sc->image_handles.size())
         {
-            for (std::size_t i = views.size(); i < sc->image_handles.size(); ++i)
+            for (size_t i = views.size(); i < sc->image_handles.size(); ++i)
             {
                 release_image(sc->image_handles[i]);
             }
             sc->image_handles.erase(sc->image_handles.begin() + views.size(), sc->image_handles.end());
         }
 
-        for (std::uint32_t i = 0; i < sc->sc.image_count; ++i)
+        for (uint32_t i = 0; i < sc->sc.image_count; ++i)
         {
             image sc_image = {
                 .allocation = nullptr,
@@ -1820,7 +1819,7 @@ namespace tempest::graphics::vk
                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     },
                 },
-                .name = std::format("swapchain_image_{}", i),
+                .name = std::format("swapchain_image_{}", i).c_str(),
             };
 
             if (i < sc->image_handles.size())
@@ -1861,8 +1860,8 @@ namespace tempest::graphics::vk
         _recycled_cmd_buf_pool.release(std::move(allocator), _current_frame);
     }
 
-    render_context::render_context(core::abstract_allocator* alloc)
-        : graphics::render_context(alloc), _instance{build_instance()}
+    render_context::render_context(abstract_allocator* alloc)
+        : graphics::render_context{alloc}, _instance{build_instance()}
     {
     }
 
@@ -1877,9 +1876,9 @@ namespace tempest::graphics::vk
         return !_devices.empty();
     }
 
-    std::uint32_t render_context::device_count() const noexcept
+    uint32_t render_context::device_count() const noexcept
     {
-        return static_cast<std::uint32_t>(_devices.size());
+        return static_cast<uint32_t>(_devices.size());
     }
 
     namespace
@@ -1892,63 +1891,64 @@ namespace tempest::graphics::vk
                 .extendedDynamicState3RasterizationSamples = VK_TRUE,
             };
 
-            vkb::PhysicalDeviceSelector selector = vkb::PhysicalDeviceSelector(instance)
-                                                       .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
-                                                       .defer_surface_initialization()
-                                                       .require_present()
-                                                       .add_required_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)
-                                                       .set_minimum_version(1, 3)
-                                                       .set_required_features({
+            vkb::PhysicalDeviceSelector selector =
+                vkb::PhysicalDeviceSelector(instance)
+                    .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
+                    .defer_surface_initialization()
+                    .require_present()
+                    .add_required_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)
+                    .set_minimum_version(1, 3)
+                    .set_required_features({
 #ifdef _DEBUG
-                                                           .robustBufferAccess = VK_TRUE,
+                        .robustBufferAccess = VK_TRUE,
 #endif
-                                                           .independentBlend = VK_TRUE,
-                                                           .logicOp = VK_TRUE,
-                                                           .multiDrawIndirect = VK_TRUE,
-                                                           .drawIndirectFirstInstance = VK_TRUE,
-                                                           .depthClamp = VK_TRUE,
-                                                           .depthBiasClamp = VK_TRUE,
-                                                           .fillModeNonSolid = VK_TRUE,
-                                                           .depthBounds = VK_TRUE,
-                                                           .samplerAnisotropy = VK_TRUE,
-                                                           .shaderUniformBufferArrayDynamicIndexing = VK_TRUE,
-                                                           .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
-                                                           .shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
-                                                           .shaderStorageImageArrayDynamicIndexing = VK_TRUE,
-                                                           .shaderInt64 = VK_FALSE,
-                                                           .shaderInt16 = VK_TRUE,
-                                                       })
-                                                       .set_required_features_11({
-                                                           .storageBuffer16BitAccess = VK_TRUE,
-                                                           .uniformAndStorageBuffer16BitAccess = VK_TRUE,
-                                                       })
-                                                       .set_required_features_12({
-                                                           .shaderFloat16 = VK_TRUE,
-                                                           .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
-                                                           .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-                                                           .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
-                                                           .shaderStorageImageArrayNonUniformIndexing = VK_TRUE,
-                                                           .shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE,
-                                                           .shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE,
-                                                           .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
-                                                           .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
-                                                           .descriptorBindingPartiallyBound = VK_TRUE,
-                                                           .descriptorBindingVariableDescriptorCount = VK_TRUE,
-                                                           .runtimeDescriptorArray = VK_TRUE,
-                                                           .imagelessFramebuffer = VK_TRUE,
-                                                           .separateDepthStencilLayouts = VK_TRUE,
-                                                           .bufferDeviceAddress = VK_TRUE,
-                                                       })
-                                                       .set_required_features_13({
-                                                           .synchronization2 = VK_TRUE,
-                                                           .dynamicRendering = VK_TRUE,
-                                                       })
-                                                       .add_required_extension_features(extended_dynamic_state);
+                        .independentBlend = VK_TRUE,
+                        .logicOp = VK_TRUE,
+                        .multiDrawIndirect = VK_TRUE,
+                        .drawIndirectFirstInstance = VK_TRUE,
+                        .depthClamp = VK_TRUE,
+                        .depthBiasClamp = VK_TRUE,
+                        .fillModeNonSolid = VK_TRUE,
+                        .depthBounds = VK_TRUE,
+                        .samplerAnisotropy = VK_TRUE,
+                        .shaderUniformBufferArrayDynamicIndexing = VK_TRUE,
+                        .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+                        .shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
+                        .shaderStorageImageArrayDynamicIndexing = VK_TRUE,
+                        .shaderInt64 = VK_FALSE,
+                        .shaderInt16 = VK_TRUE,
+                    })
+                    .set_required_features_11({
+                        .storageBuffer16BitAccess = VK_TRUE,
+                        .uniformAndStorageBuffer16BitAccess = VK_TRUE,
+                    })
+                    .set_required_features_12({
+                        .shaderFloat16 = VK_TRUE,
+                        .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
+                        .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+                        .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
+                        .shaderStorageImageArrayNonUniformIndexing = VK_TRUE,
+                        .shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE,
+                        .shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE,
+                        .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+                        .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
+                        .descriptorBindingPartiallyBound = VK_TRUE,
+                        .descriptorBindingVariableDescriptorCount = VK_TRUE,
+                        .runtimeDescriptorArray = VK_TRUE,
+                        .imagelessFramebuffer = VK_TRUE,
+                        .separateDepthStencilLayouts = VK_TRUE,
+                        .bufferDeviceAddress = VK_TRUE,
+                    })
+                    .set_required_features_13({
+                        .synchronization2 = VK_TRUE,
+                        .dynamicRendering = VK_TRUE,
+                    })
+                    .add_required_extension_features(extended_dynamic_state);
             return selector;
         }
     } // namespace
 
-    graphics::render_device& render_context::create_device(std::uint32_t idx)
+    graphics::render_device& render_context::create_device(uint32_t idx)
     {
         auto devices = enumerate_suitable_devices();
         assert(idx < devices.size() && "Device query index out of bounds.");
@@ -1966,16 +1966,16 @@ namespace tempest::graphics::vk
         return *(_devices[idx]);
     }
 
-    core::vector<physical_device_context> render_context::enumerate_suitable_devices()
+    vector<physical_device_context> render_context::enumerate_suitable_devices()
     {
         vkb::PhysicalDeviceSelector selector = select_device(_instance);
 
         auto selection = selector.select_devices();
-        core::vector<physical_device_context> devices;
+        vector<physical_device_context> devices;
 
         if (selection)
         {
-            for (std::size_t i = 0; i < selection->size(); ++i)
+            for (size_t i = 0; i < selection->size(); ++i)
             {
                 if ((*selection)[i].properties.limits.maxPerStageDescriptorSampledImages < 512)
                 {
@@ -1983,7 +1983,7 @@ namespace tempest::graphics::vk
                 }
 
                 devices.push_back(physical_device_context{
-                    .id = static_cast<std::uint32_t>(i),
+                    .id = static_cast<uint32_t>(i),
                     .name = (*selection)[i].name,
                 });
             }
@@ -1992,11 +1992,11 @@ namespace tempest::graphics::vk
         return devices;
     }
 
-    resource_deletion_queue::resource_deletion_queue(std::size_t frames_in_flight) : _frames_in_flight{frames_in_flight}
+    resource_deletion_queue::resource_deletion_queue(size_t frames_in_flight) : _frames_in_flight{frames_in_flight}
     {
     }
 
-    void resource_deletion_queue::add_to_queue(std::size_t current_frame, std::function<void()> deleter)
+    void resource_deletion_queue::add_to_queue(size_t current_frame, std::function<void()> deleter)
     {
         _queue.push_back(delete_info{
             .frame = current_frame,
@@ -2004,7 +2004,7 @@ namespace tempest::graphics::vk
         });
     }
 
-    void resource_deletion_queue::flush_frame(std::size_t current_frame)
+    void resource_deletion_queue::flush_frame(size_t current_frame)
     {
         std::for_each(std::begin(_queue), std::end(_queue), [this, current_frame](const delete_info& info) {
             if (info.frame + _frames_in_flight >= current_frame)
@@ -2037,28 +2037,28 @@ namespace tempest::graphics::vk
         return _cmds;
     }
 
-    command_list& command_list::push_constants(std::uint32_t offset, core::span<const std::byte> data,
+    command_list& command_list::push_constants(uint32_t offset, span<const byte> data,
                                                compute_pipeline_resource_handle handle)
     {
         auto pipeline = _device->access_compute_pipeline(handle);
         _dispatch->cmdPushConstants(_cmds, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, offset,
-                                    static_cast<std::uint32_t>(data.size()), data.data());
+                                    static_cast<uint32_t>(data.size()), data.data());
 
         return *this;
     }
 
-    command_list& command_list::push_constants(std::uint32_t offset, core::span<const std::byte> data,
+    command_list& command_list::push_constants(uint32_t offset, span<const byte> data,
                                                graphics_pipeline_resource_handle handle)
     {
         auto pipeline = _device->access_graphics_pipeline(handle);
         _dispatch->cmdPushConstants(_cmds, pipeline->pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS, offset,
-                                    static_cast<std::uint32_t>(data.size()), data.data());
+                                    static_cast<uint32_t>(data.size()), data.data());
 
         return *this;
     }
 
     command_list& command_list::set_viewport(float x, float y, float width, float height, float min_depth,
-                                             float max_depth, std::uint32_t viewport_id, bool flip)
+                                             float max_depth, uint32_t viewport_id, bool flip)
     {
         VkViewport vp = {
             .x = x,
@@ -2074,8 +2074,7 @@ namespace tempest::graphics::vk
         return *this;
     }
 
-    command_list& command_list::set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,
-                                                   std::uint32_t height)
+    command_list& command_list::set_scissor_region(int32_t x, int32_t y, uint32_t width, uint32_t height)
     {
         VkRect2D scissor = {
             .offset{
@@ -2093,24 +2092,23 @@ namespace tempest::graphics::vk
         return *this;
     }
 
-    command_list& command_list::draw(std::uint32_t vertex_count, std::uint32_t instance_count,
-                                     std::uint32_t first_vertex, std::uint32_t first_index)
+    command_list& command_list::draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex,
+                                     uint32_t first_index)
     {
         _dispatch->cmdDraw(_cmds, vertex_count, instance_count, first_vertex, first_index);
 
         return *this;
     }
 
-    command_list& command_list::draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
-                                     std::uint32_t stride)
+    command_list& command_list::draw(buffer_resource_handle buf, uint32_t offset, uint32_t count, uint32_t stride)
     {
         _dispatch->cmdDrawIndirect(_cmds, _device->access_buffer(buf)->buffer, offset, count, stride);
 
         return *this;
     }
 
-    command_list& command_list::draw_indexed(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
-                                             std::uint32_t stride)
+    command_list& command_list::draw_indexed(buffer_resource_handle buf, uint32_t offset, uint32_t count,
+                                             uint32_t stride)
     {
         _dispatch->cmdDrawIndexedIndirect(_cmds, _device->access_buffer(buf)->buffer, offset, count, stride);
 
@@ -2125,7 +2123,7 @@ namespace tempest::graphics::vk
         return *this;
     }
 
-    command_list& command_list::use_index_buffer(buffer_resource_handle buf, std::uint32_t offset)
+    command_list& command_list::use_index_buffer(buffer_resource_handle buf, uint32_t offset)
     {
         auto vk_buf = _device->access_buffer(buf);
         _dispatch->cmdBindIndexBuffer(_cmds, vk_buf->buffer, offset, VK_INDEX_TYPE_UINT32);
@@ -2141,7 +2139,7 @@ namespace tempest::graphics::vk
         return *this;
     }
 
-    command_list& command_list::dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z)
+    command_list& command_list::dispatch(uint32_t x, uint32_t y, uint32_t z)
     {
         _dispatch->cmdDispatch(_cmds, x, y, z);
         return *this;
@@ -2197,8 +2195,8 @@ namespace tempest::graphics::vk
         return *this;
     }
 
-    command_list& command_list::copy(buffer_resource_handle src, buffer_resource_handle dst, std::size_t src_offset,
-                                     std::size_t dst_offset, std::size_t byte_count)
+    command_list& command_list::copy(buffer_resource_handle src, buffer_resource_handle dst, size_t src_offset,
+                                     size_t dst_offset, size_t byte_count)
     {
         auto src_buf = _device->access_buffer(src);
         auto dst_buf = _device->access_buffer(dst);
@@ -2208,11 +2206,11 @@ namespace tempest::graphics::vk
         assert(dst_buf->info.size > dst_offset &&
                "Buffer copy source size must be larger than the source copy offset.");
 
-        if (byte_count == std::numeric_limits<std::size_t>::max())
+        if (byte_count == std::numeric_limits<size_t>::max())
         {
-            std::size_t src_bytes_available = src_buf->info.size - src_offset;
-            std::size_t dst_bytes_available = dst_buf->info.size - dst_offset;
-            std::size_t bytes_available = std::min(src_bytes_available, dst_bytes_available);
+            size_t src_bytes_available = src_buf->info.size - src_offset;
+            size_t dst_bytes_available = dst_buf->info.size - dst_offset;
+            size_t bytes_available = std::min(src_bytes_available, dst_bytes_available);
 
             byte_count = bytes_available;
         }
@@ -2233,9 +2231,9 @@ namespace tempest::graphics::vk
         return *this;
     }
 
-    command_list& command_list::copy(buffer_resource_handle src, image_resource_handle dst, std::size_t buffer_offset,
-                                     std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level,
-                                     std::int32_t offset_x, std::int32_t offset_y)
+    command_list& command_list::copy(buffer_resource_handle src, image_resource_handle dst, size_t buffer_offset,
+                                     uint32_t region_width, uint32_t region_height, uint32_t mip_level,
+                                     int32_t offset_x, int32_t offset_y)
     {
         VkBufferImageCopy copy = {
             .bufferOffset = buffer_offset,
@@ -2293,8 +2291,7 @@ namespace tempest::graphics::vk
     }
 
     command_list& command_list::transition_image(image_resource_handle img, image_resource_usage old_usage,
-                                                 image_resource_usage new_usage, std::uint32_t base_mip,
-                                                 std::uint32_t mip_count)
+                                                 image_resource_usage new_usage, uint32_t base_mip, uint32_t mip_count)
     {
         if (old_usage == new_usage)
         {
@@ -2371,19 +2368,19 @@ namespace tempest::graphics::vk
     }
 
     command_list& command_list::generate_mip_chain(image_resource_handle img, image_resource_usage usage,
-                                                   std::uint32_t base_mip, std::uint32_t mip_count)
+                                                   uint32_t base_mip, uint32_t mip_count)
     {
         auto vk_img = _device->access_image(img);
         auto img_mip_count = vk_img->img_info.mipLevels;
         auto mips_to_generate = std::min(mip_count, img_mip_count) - 1;
 
-        std::uint32_t src_width = vk_img->img_info.extent.width;
-        std::uint32_t src_height = vk_img->img_info.extent.height;
+        uint32_t src_width = vk_img->img_info.extent.width;
+        uint32_t src_height = vk_img->img_info.extent.height;
 
-        for (std::uint32_t i = base_mip; i < base_mip + mips_to_generate; ++i)
+        for (uint32_t i = base_mip; i < base_mip + mips_to_generate; ++i)
         {
-            std::uint32_t dst_width = src_width / 2;
-            std::uint32_t dst_height = src_height / 2;
+            uint32_t dst_width = src_width / 2;
+            uint32_t dst_height = src_height / 2;
 
             VkImageBlit region = {
                 .srcSubresource{
@@ -2483,8 +2480,7 @@ namespace tempest::graphics::vk
     {
         if (!cached_commands.empty())
         {
-            dispatch->freeCommandBuffers(pool, static_cast<std::uint32_t>(cached_commands.size()),
-                                         cached_commands.data());
+            dispatch->freeCommandBuffers(pool, static_cast<uint32_t>(cached_commands.size()), cached_commands.data());
         }
         dispatch->destroyCommandPool(pool, nullptr);
     }
@@ -2519,7 +2515,7 @@ namespace tempest::graphics::vk
         return last;
     }
 
-    void command_buffer_recycler::release(command_buffer_allocator&& allocator, std::size_t current_frame)
+    void command_buffer_recycler::release(command_buffer_allocator&& allocator, size_t current_frame)
     {
         recycle_pool.push_back(command_buffer_recycle_payload{
             .allocator = std::move(allocator),
@@ -2527,7 +2523,7 @@ namespace tempest::graphics::vk
         });
     }
 
-    void command_buffer_recycler::recycle(std::size_t current_frame, vkb::DispatchTable& dispatch)
+    void command_buffer_recycler::recycle(size_t current_frame, vkb::DispatchTable& dispatch)
     {
         while (!recycle_pool.empty())
         {
@@ -2596,7 +2592,7 @@ namespace tempest::graphics::vk
         return sem;
     }
 
-    void sync_primitive_recycler::release(VkFence&& fen, std::size_t current_frame)
+    void sync_primitive_recycler::release(VkFence&& fen, size_t current_frame)
     {
         fence_recycle_payload payload{
             .fence = std::move(fen),
@@ -2606,7 +2602,7 @@ namespace tempest::graphics::vk
         recycle_fence_pool.push_back(std::move(payload));
     }
 
-    void sync_primitive_recycler::release(VkSemaphore&& sem, std::size_t current_frame)
+    void sync_primitive_recycler::release(VkSemaphore&& sem, size_t current_frame)
     {
         semaphore_recycle_payload payload{
             .sem = std::move(sem),
@@ -2616,7 +2612,7 @@ namespace tempest::graphics::vk
         recycle_semaphore_pool.push_back(std::move(payload));
     }
 
-    void sync_primitive_recycler::recycle(std::size_t current_frame, vkb::DispatchTable& dispatch)
+    void sync_primitive_recycler::recycle(size_t current_frame, vkb::DispatchTable& dispatch)
     {
         while (!recycle_fence_pool.empty())
         {

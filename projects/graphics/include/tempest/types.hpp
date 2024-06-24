@@ -5,6 +5,8 @@
 
 #include <tempest/mat4.hpp>
 #include <tempest/span.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/vec3.hpp>
 #include <tempest/vector.hpp>
 
@@ -54,7 +56,7 @@ namespace tempest::graphics
         D24_S8_FLOAT,
     };
 
-    inline constexpr std::size_t bytes_per_element(resource_format fmt)
+    inline constexpr size_t bytes_per_element(resource_format fmt)
     {
         switch (fmt)
         {
@@ -125,6 +127,7 @@ namespace tempest::graphics
         INDIRECT_ARGUMENT,
         TRANSFER_SOURCE,
         TRANSFER_DESTINATION,
+        HOST_WRITE,
     };
 
     enum class image_resource_usage
@@ -162,22 +165,22 @@ namespace tempest::graphics
     struct image_desc
     {
         sample_count samples{sample_count::COUNT_1};
-        std::uint32_t width;
-        std::uint32_t height;
-        std::uint32_t depth{1};
-        std::uint32_t layers{1};
-        std::uint32_t mips{1};
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth{1};
+        uint32_t layers{1};
+        uint32_t mips{1};
         resource_format fmt;
         image_type type;
         bool persistent = false;
-        std::string_view name;
+        string_view name;
     };
 
     struct buffer_desc
     {
-        std::size_t size;
+        size_t size;
         memory_location location{memory_location::AUTO};
-        std::string_view name;
+        string_view name;
         bool per_frame_memory{false};
     };
 
@@ -185,7 +188,7 @@ namespace tempest::graphics
     {
         bool per_frame;
         memory_location loc;
-        std::size_t size;
+        size_t size;
         bool transfer_source : 1;
         bool transfer_destination : 1;
         bool uniform_buffer : 1;
@@ -193,17 +196,17 @@ namespace tempest::graphics
         bool index_buffer : 1;
         bool vertex_buffer : 1;
         bool indirect_buffer : 1;
-        std::string name;
+        string name;
     };
 
     struct image_create_info
     {
         image_type type;
-        std::uint32_t width;
-        std::uint32_t height;
-        std::uint32_t depth;
-        std::uint32_t layers;
-        std::uint32_t mip_count;
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth;
+        uint32_t layers;
+        uint32_t mip_count;
         resource_format format;
         sample_count samples;
         bool transfer_source : 1;
@@ -213,7 +216,7 @@ namespace tempest::graphics
         bool color_attachment : 1;
         bool depth_attachment : 1;
         bool persistent;
-        std::string name;
+        string name;
     };
 
     enum class descriptor_binding_type
@@ -230,26 +233,26 @@ namespace tempest::graphics
     struct descriptor_binding_info
     {
         descriptor_binding_type type;
-        std::uint32_t binding_index;
-        std::uint32_t binding_count;
+        uint32_t binding_index;
+        uint32_t binding_count;
     };
 
     struct descriptor_set_layout_create_info
     {
-        std::uint32_t set;
-        core::span<descriptor_binding_info> bindings;
+        uint32_t set;
+        span<descriptor_binding_info> bindings;
     };
 
     struct push_constant_layout
     {
-        std::uint32_t offset;
-        std::uint32_t range;
+        uint32_t offset;
+        uint32_t range;
     };
 
     struct pipeline_layout_create_info
     {
-        core::span<descriptor_set_layout_create_info> set_layouts;
-        core::span<push_constant_layout> push_constants;
+        span<descriptor_set_layout_create_info> set_layouts;
+        span<push_constant_layout> push_constants;
     };
 
     enum class blend_factor
@@ -306,25 +309,25 @@ namespace tempest::graphics
 
     struct color_blend_state
     {
-        core::span<color_blend_attachment_state> attachment_blend_ops;
+        span<color_blend_attachment_state> attachment_blend_ops;
     };
 
     struct vertex_input_element
     {
-        std::uint32_t binding;
-        std::uint32_t location;
-        std::uint32_t offset;
+        uint32_t binding;
+        uint32_t location;
+        uint32_t offset;
         resource_format format;
     };
 
     struct vertex_input_layout
     {
-        core::span<vertex_input_element> elements;
+        span<vertex_input_element> elements;
     };
 
     struct render_target_layout
     {
-        core::span<resource_format> color_attachment_formats;
+        span<resource_format> color_attachment_formats;
         resource_format depth_attachment_format{resource_format::UNKNOWN};
     };
 
@@ -345,9 +348,9 @@ namespace tempest::graphics
 
     struct shader_create_info
     {
-        core::span<std::byte> bytes;
-        std::string_view entrypoint;
-        std::string name;
+        span<byte> bytes;
+        string_view entrypoint;
+        string name;
     };
 
     struct graphics_pipeline_create_info
@@ -359,35 +362,35 @@ namespace tempest::graphics
         vertex_input_layout vertex_layout;
         depth_state depth_testing;
         color_blend_state blending;
-        std::string name;
+        string name;
     };
 
     struct compute_pipeline_create_info
     {
         pipeline_layout_create_info layout;
         shader_create_info compute_shader;
-        std::string name;
+        string name;
     };
 
     struct swapchain_create_info
     {
         iwindow* win;
-        std::uint32_t desired_frame_count;
+        uint32_t desired_frame_count;
         bool use_vsync;
     };
 
     struct texture_mip_descriptor
     {
-        std::uint32_t width;
-        std::uint32_t height;
-        core::span<std::byte> bytes;
+        uint32_t width;
+        uint32_t height;
+        span<byte> bytes;
     };
 
     struct texture_data_descriptor
     {
         resource_format fmt;
-        core::vector<texture_mip_descriptor> mips;
-        std::string name;
+        vector<texture_mip_descriptor> mips;
+        string name;
     };
 
     enum class filter
@@ -412,7 +415,7 @@ namespace tempest::graphics
         float max_lod{1000.0f};
         bool enable_aniso;
         float max_anisotropy;
-        std::string name;
+        string name;
     };
 
     enum class resource_access_type
@@ -437,10 +440,10 @@ namespace tempest::graphics
 
     struct gfx_resource_handle
     {
-        std::uint32_t id;
-        std::uint32_t generation;
+        uint32_t id;
+        uint32_t generation;
 
-        constexpr gfx_resource_handle(std::uint32_t id, std::uint32_t generation) : id{id}, generation{generation}
+        constexpr gfx_resource_handle(uint32_t id, uint32_t generation) : id{id}, generation{generation}
         {
         }
 
@@ -449,9 +452,9 @@ namespace tempest::graphics
             return generation != ~0u;
         }
 
-        inline constexpr std::uint64_t as_uint64() const noexcept
+        inline constexpr uint64_t as_uint64() const noexcept
         {
-            return (static_cast<std::uint64_t>(id) << 32) | generation;
+            return (static_cast<uint64_t>(id) << 32) | generation;
         }
 
         constexpr auto operator<=>(const gfx_resource_handle& rhs) const noexcept = default;
@@ -459,7 +462,7 @@ namespace tempest::graphics
 
     struct image_resource_handle : public gfx_resource_handle
     {
-        constexpr image_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+        constexpr image_resource_handle(uint32_t id = ~0u, uint32_t generation = ~0u)
             : gfx_resource_handle(id, generation)
         {
         }
@@ -467,7 +470,7 @@ namespace tempest::graphics
 
     struct buffer_resource_handle : public gfx_resource_handle
     {
-        constexpr buffer_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+        constexpr buffer_resource_handle(uint32_t id = ~0u, uint32_t generation = ~0u)
             : gfx_resource_handle(id, generation)
         {
         }
@@ -475,15 +478,14 @@ namespace tempest::graphics
 
     struct graph_pass_handle : public gfx_resource_handle
     {
-        constexpr graph_pass_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
-            : gfx_resource_handle(id, generation)
+        constexpr graph_pass_handle(uint32_t id = ~0u, uint32_t generation = ~0u) : gfx_resource_handle(id, generation)
         {
         }
     };
 
     struct graphics_pipeline_resource_handle : public gfx_resource_handle
     {
-        constexpr graphics_pipeline_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+        constexpr graphics_pipeline_resource_handle(uint32_t id = ~0u, uint32_t generation = ~0u)
             : gfx_resource_handle(id, generation)
         {
         }
@@ -491,7 +493,7 @@ namespace tempest::graphics
 
     struct compute_pipeline_resource_handle : public gfx_resource_handle
     {
-        constexpr compute_pipeline_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+        constexpr compute_pipeline_resource_handle(uint32_t id = ~0u, uint32_t generation = ~0u)
             : gfx_resource_handle(id, generation)
         {
         }
@@ -499,7 +501,7 @@ namespace tempest::graphics
 
     struct swapchain_resource_handle : public gfx_resource_handle
     {
-        constexpr swapchain_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+        constexpr swapchain_resource_handle(uint32_t id = ~0u, uint32_t generation = ~0u)
             : gfx_resource_handle(id, generation)
         {
         }
@@ -507,7 +509,7 @@ namespace tempest::graphics
 
     struct sampler_resource_handle : public gfx_resource_handle
     {
-        constexpr sampler_resource_handle(std::uint32_t id = ~0u, std::uint32_t generation = ~0u)
+        constexpr sampler_resource_handle(uint32_t id = ~0u, uint32_t generation = ~0u)
             : gfx_resource_handle(id, generation)
         {
         }
@@ -518,51 +520,52 @@ namespace tempest::graphics
       public:
         virtual ~command_list() = default;
 
-        template <typename T> requires(!std::is_same_v<T, core::span<const std::byte>>)
-        command_list& push_constants(std::uint32_t offset, const T& data, compute_pipeline_resource_handle handle)
+        template <typename T>
+            requires(!is_same_v<T, span<const byte>>)
+        command_list& push_constants(uint32_t offset, const T& data, compute_pipeline_resource_handle handle)
         {
-            return push_constants(offset, core::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
+            return push_constants(offset, span{reinterpret_cast<const byte*>(&data), sizeof(T)}, handle);
         }
 
-        template <typename T> requires(!std::is_same_v<T, core::span<const std::byte>>)
-        command_list& push_constants(std::uint32_t offset, const T& data, graphics_pipeline_resource_handle handle)
+        template <typename T>
+            requires(!is_same_v<T, span<const byte>>)
+        command_list& push_constants(uint32_t offset, const T& data, graphics_pipeline_resource_handle handle)
         {
-            return push_constants(offset, core::span{reinterpret_cast<const std::byte*>(&data), sizeof(T)}, handle);
+            return push_constants(offset, span{reinterpret_cast<const byte*>(&data), sizeof(T)}, handle);
         }
 
-        virtual command_list& push_constants(std::uint32_t offset, core::span<const std::byte> data, compute_pipeline_resource_handle handle) = 0;
-        virtual command_list& push_constants(std::uint32_t offset, core::span<const std::byte> data, graphics_pipeline_resource_handle handle) = 0;
+        virtual command_list& push_constants(uint32_t offset, span<const byte> data,
+                                             compute_pipeline_resource_handle handle) = 0;
+        virtual command_list& push_constants(uint32_t offset, span<const byte> data,
+                                             graphics_pipeline_resource_handle handle) = 0;
 
         virtual command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
-                                           float max_depth = 1.0f, std::uint32_t viewport_id = 0, bool flip = true) = 0;
-        virtual command_list& set_scissor_region(std::int32_t x, std::int32_t y, std::uint32_t width,
-                                                 std::uint32_t height) = 0;
-        virtual command_list& draw(std::uint32_t vertex_count, std::uint32_t instance_count = 1,
-                                   std::uint32_t first_vertex = 0, std::uint32_t first_index = 0) = 0;
-        virtual command_list& draw(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
-                                   std::uint32_t stride) = 0;
-        virtual command_list& draw_indexed(buffer_resource_handle buf, std::uint32_t offset, std::uint32_t count,
-                                           std::uint32_t stride) = 0;
+                                           float max_depth = 1.0f, uint32_t viewport_id = 0, bool flip = true) = 0;
+        virtual command_list& set_scissor_region(int32_t x, int32_t y, uint32_t width, uint32_t height) = 0;
+        virtual command_list& draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0,
+                                   uint32_t first_index = 0) = 0;
+        virtual command_list& draw(buffer_resource_handle buf, uint32_t offset, uint32_t count, uint32_t stride) = 0;
+        virtual command_list& draw_indexed(buffer_resource_handle buf, uint32_t offset, uint32_t count,
+                                           uint32_t stride) = 0;
         virtual command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) = 0;
-        virtual command_list& use_index_buffer(buffer_resource_handle buf, std::uint32_t offset) = 0;
+        virtual command_list& use_index_buffer(buffer_resource_handle buf, uint32_t offset) = 0;
 
         virtual command_list& blit(image_resource_handle src, image_resource_handle dst) = 0;
-        virtual command_list& copy(buffer_resource_handle src, buffer_resource_handle dst, std::size_t src_offset = 0,
-                                   std::size_t dst_offset = 0,
-                                   std::size_t byte_count = std::numeric_limits<std::size_t>::max()) = 0;
-        virtual command_list& copy(buffer_resource_handle src, image_resource_handle dst, std::size_t buffer_offset,
-                                   std::uint32_t region_width, std::uint32_t region_height, std::uint32_t mip_level,
-                                   std::int32_t offset_x = 0, std::int32_t offset_y = 0) = 0;
+        virtual command_list& copy(buffer_resource_handle src, buffer_resource_handle dst, size_t src_offset = 0,
+                                   size_t dst_offset = 0, size_t byte_count = std::numeric_limits<size_t>::max()) = 0;
+        virtual command_list& copy(buffer_resource_handle src, image_resource_handle dst, size_t buffer_offset,
+                                   uint32_t region_width, uint32_t region_height, uint32_t mip_level,
+                                   int32_t offset_x = 0, int32_t offset_y = 0) = 0;
         virtual command_list& clear_color(image_resource_handle handle, float r, float g, float b, float a) = 0;
 
         virtual command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
                                                image_resource_usage new_usage) = 0;
-        virtual command_list& generate_mip_chain(
-            image_resource_handle img, image_resource_usage usage, std::uint32_t base_mip = 0,
-            std::uint32_t mip_count = std::numeric_limits<std::uint32_t>::max()) = 0;
+        virtual command_list& generate_mip_chain(image_resource_handle img, image_resource_usage usage,
+                                                 uint32_t base_mip = 0,
+                                                 uint32_t mip_count = std::numeric_limits<uint32_t>::max()) = 0;
 
         virtual command_list& use_pipeline(compute_pipeline_resource_handle pipeline) = 0;
-        virtual command_list& dispatch(std::uint32_t x, std::uint32_t y, std::uint32_t z) = 0;
+        virtual command_list& dispatch(uint32_t x, uint32_t y, uint32_t z) = 0;
     };
 
     class command_execution_service
@@ -576,19 +579,19 @@ namespace tempest::graphics
 
     struct indirect_command
     {
-        std::uint32_t vertex_count;
-        std::uint32_t instance_count;
-        std::uint32_t first_vertex;
-        std::uint32_t first_instance;
+        uint32_t vertex_count;
+        uint32_t instance_count;
+        uint32_t first_vertex;
+        uint32_t first_instance;
     };
 
     struct indexed_indirect_command
     {
-        std::uint32_t index_count;
-        std::uint32_t instance_count;
-        std::uint32_t first_index;
-        std::int32_t vertex_offset;
-        std::uint32_t first_instance;
+        uint32_t index_count;
+        uint32_t instance_count;
+        uint32_t first_index;
+        int32_t vertex_offset;
+        uint32_t first_instance;
     };
 
     struct camera_data

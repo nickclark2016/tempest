@@ -54,7 +54,7 @@ graphics::graphics_pipeline_resource_handle create_pbr_pipeline(graphics::render
 
 void pbr_demo()
 {
-    auto global_allocator = core::heap_allocator(global_memory_allocator_size);
+    auto global_allocator = heap_allocator(global_memory_allocator_size);
 
     auto graphics_ctx = graphics::render_context::create(&global_allocator);
 
@@ -215,11 +215,11 @@ void pbr_demo()
     scene_data.camera.inv_proj = math::inverse(scene_data.camera.proj);
     scene_data.camera.inv_view = math::inverse(scene_data.camera.view);
 
-    core::vector<graphics::object_payload> objects;
-    core::vector<graphics::mesh_layout> mesh_layouts;
-    core::vector<graphics::material_payload> materials;
-    core::vector<graphics::indexed_indirect_command> indirect_draw_commands;
-    core::vector<std::uint32_t> instances;
+    vector<graphics::object_payload> objects;
+    vector<graphics::mesh_layout> mesh_layouts;
+    vector<graphics::material_payload> materials;
+    vector<graphics::indexed_indirect_command> indirect_draw_commands;
+    vector<std::uint32_t> instances;
 
     for (auto& node : scene->nodes)
     {

@@ -1,6 +1,7 @@
 #include <tempest/vertex.hpp>
 
 #include <algorithm>
+#include <vector>
 
 namespace tempest::core
 {
@@ -51,7 +52,7 @@ namespace tempest::core
 
     void mesh::compute_tangents()
     {
-        std::vector<math::vec3<float>> tangent_dir;
+        vector<math::vec3<float>> tangent_dir;
         tangent_dir.resize(num_triangles() * 3);
 
         for (std::size_t i = 0; i < num_triangles(); ++i)

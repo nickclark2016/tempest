@@ -28,7 +28,7 @@ namespace tempest::ecs
             using iterator_cateogry = std::random_access_iterator_tag;
 
             constexpr basic_sparse_set_iterator() noexcept;
-            constexpr basic_sparse_set_iterator(core::span<const T> data, difference_type idx) noexcept;
+            constexpr basic_sparse_set_iterator(span<const T> data, difference_type idx) noexcept;
             constexpr basic_sparse_set_iterator& operator++() noexcept;
             constexpr basic_sparse_set_iterator operator++(int) noexcept;
             constexpr basic_sparse_set_iterator& operator--() noexcept;
@@ -43,7 +43,7 @@ namespace tempest::ecs
             [[nodiscard]] constexpr const_pointer data() const noexcept;
             [[nodiscard]] constexpr difference_type get_index() const noexcept;
 
-            core::span<const T> packed;
+            span<const T> packed;
             difference_type offset;
         };
 
@@ -70,7 +70,7 @@ namespace tempest::ecs
             using iterator_cateogry = std::random_access_iterator_tag;
 
             constexpr basic_sparse_map_iterator() noexcept;
-            constexpr basic_sparse_map_iterator(core::span<const K> keys, core::span<V> values,
+            constexpr basic_sparse_map_iterator(span<const K> keys, span<V> values,
                                                 difference_type idx) noexcept;
             constexpr basic_sparse_map_iterator& operator++() noexcept;
             constexpr basic_sparse_map_iterator operator++(int) noexcept;
@@ -88,8 +88,8 @@ namespace tempest::ecs
             [[nodiscard]] constexpr const_reference operator*() const noexcept;
             [[nodiscard]] constexpr difference_type get_index() const noexcept;
 
-            core::span<const K> keys;
-            core::span<V> values;
+            span<const K> keys;
+            span<V> values;
             difference_type offset;
         };
 
@@ -99,7 +99,7 @@ namespace tempest::ecs
         }
 
         template <typename T>
-        inline constexpr basic_sparse_set_iterator<T>::basic_sparse_set_iterator(core::span<const T> data,
+        inline constexpr basic_sparse_set_iterator<T>::basic_sparse_set_iterator(span<const T> data,
                                                                                  difference_type idx) noexcept
             : packed{data}, offset{idx}
         {
@@ -242,8 +242,8 @@ namespace tempest::ecs
         }
 
         template <typename K, typename V>
-        inline constexpr basic_sparse_map_iterator<K, V>::basic_sparse_map_iterator(core::span<const K> keys,
-                                                                                    core::span<V> values,
+        inline constexpr basic_sparse_map_iterator<K, V>::basic_sparse_map_iterator(span<const K> keys,
+                                                                                    span<V> values,
                                                                                     difference_type idx) noexcept
             : keys{keys}, values{values}, offset{idx}
         {
@@ -737,7 +737,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_set<T, Allocator>::iterator basic_sparse_set<T, Allocator>::begin() const noexcept
     {
         const auto position = static_cast<typename iterator::difference_type>(_packed_count);
-        return iterator{core::span<const T>(_packed, _packed_count), position};
+        return iterator{span<const T>(_packed, _packed_count), position};
     }
 
     template <typename T, typename Allocator>
@@ -750,7 +750,7 @@ namespace tempest::ecs
     template <typename T, typename Allocator>
     inline constexpr basic_sparse_set<T, Allocator>::iterator basic_sparse_set<T, Allocator>::end() const noexcept
     {
-        return iterator{core::span<const T>(_packed, _packed_count), {}};
+        return iterator{span<const T>(_packed, _packed_count), {}};
     }
 
     template <typename T, typename Allocator>
@@ -938,7 +938,7 @@ namespace tempest::ecs
 
         _request_storage_resize(position + 1);
 
-        return _sparse[page][core::fast_mod(position, traits_type::page_size)];
+        return _sparse[page][tempest::fast_mod(position, traits_type::page_size)];
     }
 
     template <typename T, typename Allocator>
@@ -958,7 +958,7 @@ namespace tempest::ecs
     inline constexpr auto& basic_sparse_set<T, Allocator>::_sparse_reference(T value) const noexcept
     {
         const auto position = static_cast<size_type>(traits_type::as_entity(value));
-        return _sparse[position / traits_type::page_size][core::fast_mod(position, traits_type::page_size)];
+        return _sparse[position / traits_type::page_size][tempest::fast_mod(position, traits_type::page_size)];
     }
 
     template <typename T, typename Allocator>
@@ -967,7 +967,7 @@ namespace tempest::ecs
         const auto position = static_cast<size_type>(traits_type::as_entity(value));
         const auto page = position / traits_type::page_size;
         return (page < _sparse_page_count && _sparse[page])
-                   ? (_sparse[page] + core::fast_mod(position, traits_type::page_size))
+                   ? (_sparse[page] + tempest::fast_mod(position, traits_type::page_size))
                    : nullptr;
     }
 
@@ -1138,7 +1138,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::begin() noexcept
     {
         const auto position = static_cast<typename iterator::difference_type>(_packed_count);
-        return iterator{core::span<const K>(_packed, _packed_count), core::span<V>(_values, _packed_count), position};
+        return iterator{span<const K>(_packed, _packed_count), span<V>(_values, _packed_count), position};
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1146,7 +1146,7 @@ namespace tempest::ecs
         const noexcept
     {
         const auto position = static_cast<typename iterator::difference_type>(_packed_count);
-        return const_iterator{core::span<const K>(_packed, _packed_count), core::span<const V>(_values, _packed_count),
+        return const_iterator{span<const K>(_packed, _packed_count), span<const V>(_values, _packed_count),
                               position};
     }
 
@@ -1160,7 +1160,7 @@ namespace tempest::ecs
     template <typename K, typename V, typename Allocator>
     inline constexpr basic_sparse_map<K, V, Allocator>::iterator basic_sparse_map<K, V, Allocator>::end() noexcept
     {
-        return iterator{core::span<const K>(_packed, _packed_count), core::span<V>(_values, _packed_count), {}};
+        return iterator{span<const K>(_packed, _packed_count), span<V>(_values, _packed_count), {}};
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1168,7 +1168,7 @@ namespace tempest::ecs
         const noexcept
     {
         return const_iterator{
-            core::span<const K>(_packed, _packed_count), core::span<const V>(_values, _packed_count), {}};
+            span<const K>(_packed, _packed_count), span<const V>(_values, _packed_count), {}};
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1459,7 +1459,7 @@ namespace tempest::ecs
 
         _request_storage_resize(position + 1);
 
-        return _sparse[page][core::fast_mod(position, traits_type::page_size)];
+        return _sparse[page][tempest::fast_mod(position, traits_type::page_size)];
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1479,7 +1479,7 @@ namespace tempest::ecs
     inline constexpr auto& basic_sparse_map<K, V, Allocator>::_sparse_reference(K value) const noexcept
     {
         const auto position = static_cast<size_type>(traits_type::as_entity(value));
-        return _sparse[position / traits_type::page_size][core::fast_mod(position, traits_type::page_size)];
+        return _sparse[position / traits_type::page_size][tempest::fast_mod(position, traits_type::page_size)];
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1488,7 +1488,7 @@ namespace tempest::ecs
         const auto position = static_cast<size_type>(traits_type::as_entity(value));
         const auto page = position / traits_type::page_size;
         return (page < _sparse_page_count && _sparse[page])
-                   ? (_sparse[page] + core::fast_mod(position, traits_type::page_size))
+                   ? (_sparse[page] + tempest::fast_mod(position, traits_type::page_size))
                    : nullptr;
     }
 
