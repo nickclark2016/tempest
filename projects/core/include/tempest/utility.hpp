@@ -5,6 +5,17 @@
 
 namespace tempest
 {
+    /// @brief Function used to indicate that an object may be moved from. Produces an xvalue expression from its
+    /// argument.
+    /// @tparam T Type of the object to move.
+    /// @param t Object to move.
+    /// @return Xvalue expression of the object.
+    template <typename T>
+    inline constexpr remove_reference_t<T>&& move(T&& t) noexcept
+    {
+        return static_cast<remove_reference_t<T>&&>(t);
+    }
+
     /// @brief Function used to forward an lvalue as an lvalue or an rvalue reference.
     /// @tparam T Type of the object to forward.
     /// @param t Reference to the object to forward.

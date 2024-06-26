@@ -2,6 +2,7 @@
 #define tempest_core_span_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/int.hpp>
 
 #include <array>
 #include <cassert>
@@ -121,6 +122,18 @@ namespace tempest
 
     template <typename R>
     span(R&&) -> span<std::remove_reference_t<std::ranges::range_reference_t<R>>>;
+
+    template <typename T>
+    inline span<const byte> as_bytes(span<const T> s) noexcept
+    {
+        return {reinterpret_cast<const byte*>(s.data()), s.size_bytes()};
+    }
+
+    template <typename T>
+    inline span<byte> as_writeable_bytes(span<T> s) noexcept
+    {
+        return {reinterpret_cast<byte*>(s.data()), s.size_bytes()};
+    }
 
     template <typename T, std::size_t Extent>
     inline constexpr span<T, Extent>::span() noexcept : _start{nullptr}, _end{nullptr}

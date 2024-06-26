@@ -319,10 +319,7 @@ namespace tempest::graphics
                     .add_transfer_source_buffer(_device->get_staging_buffer())
                     .add_host_write_buffer(_device->get_staging_buffer())
                     .on_execute([&](command_list& cmds) {
-                        auto staging_buffer = _device->get_staging_buffer();
-                        auto staging_buffer_data = _device->map_buffer_frame(staging_buffer);
-
-                        std::uint32_t bytes_written = 0;
+                        staging_buffer_writer writer{*_device};
 
                         if (_last_updated_frame + _device->frames_in_flight() > _device->current_frame())
                         {
@@ -330,41 +327,20 @@ namespace tempest::graphics
 
                             for (const auto& [key, batch] : _draw_batches)
                             {
-                                std::memcpy(staging_buffer_data.data() + bytes_written, batch.objects.values(),
-                                            batch.objects.size() * sizeof(gpu_object_data));
-                                cmds.copy(staging_buffer, _object_buffer,
-                                          _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
-                                          _device->get_buffer_frame_offset(_object_buffer) +
-                                              static_cast<std::uint32_t>(instances_written * sizeof(gpu_object_data)),
-                                          static_cast<std::uint32_t>(batch.objects.size() * sizeof(gpu_object_data)));
-                                bytes_written +=
-                                    static_cast<std::uint32_t>(batch.objects.size() * sizeof(gpu_object_data));
+                                writer.write(cmds,
+                                             span<const gpu_object_data>{batch.objects.values(),
+                                                                         batch.objects.values() + batch.objects.size()},
+                                             _object_buffer, instances_written * sizeof(gpu_object_data));
+                                writer.write(cmds, span<const indexed_indirect_command>{batch.commands},
+                                             _indirect_buffer, instances_written * sizeof(indexed_indirect_command));
 
-                                std::memcpy(staging_buffer_data.data() + bytes_written, batch.commands.data(),
-                                            batch.commands.size() * sizeof(indexed_indirect_command));
-                                cmds.copy(staging_buffer, _indirect_buffer,
-                                          _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
-                                          _device->get_buffer_frame_offset(_indirect_buffer) +
-                                              static_cast<std::uint32_t>(instances_written *
-                                                                         sizeof(indexed_indirect_command)),
-                                          static_cast<std::uint32_t>(batch.commands.size() *
-                                                                     sizeof(indexed_indirect_command)));
-                                bytes_written += static_cast<std::uint32_t>(batch.commands.size() *
-                                                                            sizeof(indexed_indirect_command));
+                                std::vector<std::uint32_t> instances(batch.objects.size());
 
-                                std::iota(reinterpret_cast<std::uint32_t*>(staging_buffer_data.data() + bytes_written),
-                                          reinterpret_cast<std::uint32_t*>(staging_buffer_data.data() + bytes_written) +
-                                              batch.objects.size(),
-                                          instances_written);
-                                cmds.copy(staging_buffer, _instance_buffer,
-                                          _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
-                                          _device->get_buffer_frame_offset(_instance_buffer) +
-                                              instances_written * sizeof(std::uint32_t),
-                                          static_cast<std::uint32_t>(batch.objects.size() * sizeof(std::uint32_t)));
+                                std::iota(instances.begin(), instances.end(), instances_written);
+                                writer.write(cmds, span<const std::uint32_t>{instances}, _instance_buffer,
+                                             instances_written * sizeof(std::uint32_t));
 
                                 instances_written += static_cast<std::uint32_t>(batch.objects.size());
-                                bytes_written +=
-                                    static_cast<std::uint32_t>(batch.objects.size() * sizeof(std::uint32_t));
                             }
                         }
 
@@ -406,19 +382,13 @@ namespace tempest::graphics
                         _scene_data.jitter.z = 0.0f;
                         _scene_data.jitter.w = 0.0f;
 
-                        std::memcpy(staging_buffer_data.data() + bytes_written, &_scene_data, sizeof(gpu_scene_data));
-                        cmds.copy(staging_buffer, _scene_buffer,
-                                  _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
-                                  _device->get_buffer_frame_offset(_scene_buffer), sizeof(gpu_scene_data));
-                        bytes_written += static_cast<std::uint32_t>(sizeof(gpu_scene_data));
+                        writer.write(cmds, span<const gpu_scene_data>{&_scene_data, static_cast<size_t>(1)},
+                                     _scene_buffer);
 
-                        std::memcpy(staging_buffer_data.data() + bytes_written, &_hi_z_data, sizeof(hi_z_data));
-                        cmds.copy(staging_buffer, _hi_z_buffer_constants,
-                                  _device->get_buffer_frame_offset(staging_buffer) + bytes_written,
-                                  _device->get_buffer_frame_offset(_hi_z_buffer_constants), sizeof(hi_z_data));
-                        bytes_written += static_cast<std::uint32_t>(sizeof(hi_z_data));
+                        writer.write(cmds, span<const hi_z_data>{&_hi_z_data, static_cast<size_t>(1)},
+                                     _hi_z_buffer_constants);
 
-                        _device->unmap_buffer(staging_buffer);
+                        writer.finish();
                     });
             });
 

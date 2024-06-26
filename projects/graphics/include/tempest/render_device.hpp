@@ -95,6 +95,35 @@ namespace tempest::graphics
         static vector<mesh_layout> upload_meshes(render_device& device, span<core::mesh> meshes,
                                                  buffer_resource_handle target, uint32_t& offset);
     };
+
+    class staging_buffer_writer
+    {
+      public:
+        explicit staging_buffer_writer(render_device& dev);
+        staging_buffer_writer(render_device& dev, buffer_resource_handle staging_buffer,
+                              uint32_t staging_buffer_offset);
+
+        staging_buffer_writer& write(command_list& cmds, span<const byte> data, buffer_resource_handle target,
+                                     uint32_t write_offset = 0);
+
+        template <typename T>
+        staging_buffer_writer& write(command_list& cmds, span<const T> data, buffer_resource_handle target,
+                                     uint32_t write_offset = 0)
+        {
+            return write(cmds, as_bytes(data), target, write_offset);
+        }
+
+        void finish();
+        void reset(uint32_t staging_buffer_offset = 0);
+        void mark(size_t offset) noexcept;
+
+      private:
+        render_device* _dev;
+        size_t _staging_buffer_offset;
+        size_t _bytes_written{0};
+        buffer_resource_handle _staging_buffer;
+        span<byte> _mapped_buffer{};
+    };
 } // namespace tempest::graphics
 
 #endif // tempest_graphics_render_device_hpp

@@ -1610,16 +1610,6 @@ namespace tempest
         static_assert(false, "declval is not allowed in an evaluated context.");
     }
 
-    /// @brief Function used to indicate that an object can be moved from.
-    /// @tparam T Type of the object to move.
-    /// @param t Object to be moved
-    /// @return xvalue expression of the original reference
-    template <typename T>
-    inline constexpr remove_reference_t<T>&& move(T&& t) noexcept
-    {
-        return static_cast<remove_reference_t<T>&&>(t);
-    }
-
     /// @brief Type trait used to perform the type conversion when a type is passed by value to a function.
     /// @tparam T Type to decay.
     template <typename T>

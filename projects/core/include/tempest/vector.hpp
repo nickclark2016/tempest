@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
-#include <cstddef>
 #include <initializer_list>
 #include <iterator>
 
@@ -19,8 +18,8 @@ namespace tempest
       public:
         using value_type = T;
         using allocator_type = Allocator;
-        using size_type = std::size_t;
-        using difference_type = std::ptrdiff_t;
+        using size_type = size_t;
+        using difference_type = ptrdiff_t;
         using reference = value_type&;
         using const_reference = const value_type&;
         using pointer = typename allocator_traits<Allocator>::pointer;
@@ -220,7 +219,7 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr vector<T, Allocator>::vector(vector&& other) noexcept : _alloc{std::move(other._alloc)}
+    constexpr vector<T, Allocator>::vector(vector&& other) noexcept : _alloc{tempest::move(other._alloc)}
     {
         _data = other._data;
         _end = other._end;
@@ -250,7 +249,7 @@ namespace tempest
 
             for (auto&& value : other)
             {
-                push_back(std::move(value));
+                push_back(tempest::move(value));
             }
         }
     }
@@ -297,7 +296,7 @@ namespace tempest
         clear();
         allocator_traits<Allocator>::deallocate(_alloc, _data, capacity());
 
-        _alloc = std::move(other._alloc);
+        _alloc = tempest::move(other._alloc);
         _data = other._data;
         _end = other._end;
         _capacity_end = other._capacity_end;
@@ -511,7 +510,7 @@ namespace tempest
 
         for (auto it = begin(); it != end(); ++it)
         {
-            allocator_traits<Allocator>::construct(_alloc, new_end++, std::move(*it));
+            allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
         }
 
         clear();
@@ -535,7 +534,7 @@ namespace tempest
 
         for (auto it = begin(); it != end(); ++it)
         {
-            allocator_traits<Allocator>::construct(_alloc, new_end++, std::move(*it));
+            allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
         }
 
         clear();
@@ -565,7 +564,7 @@ namespace tempest
 
         for (auto it = end(); it != begin() + index; --it)
         {
-            *it = std::move(*(it - 1));
+            *it = tempest::move(*(it - 1));
         }
 
         allocator_traits<Allocator>::construct(_alloc, _data + index, value);
@@ -582,10 +581,10 @@ namespace tempest
 
         for (auto it = end(); it != begin() + index; --it)
         {
-            *it = std::move(*(it - 1));
+            *it = tempest::move(*(it - 1));
         }
 
-        allocator_traits<Allocator>::construct(_alloc, _data + index, std::move(value));
+        allocator_traits<Allocator>::construct(_alloc, _data + index, tempest::move(value));
         ++_end;
 
         return begin() + index;
@@ -600,7 +599,7 @@ namespace tempest
 
         for (auto it = end(); it != begin() + index; --it)
         {
-            *it = std::move(*(it - count));
+            *it = tempest::move(*(it - count));
         }
 
         for (size_type i = 0; i < count; ++i)
@@ -624,7 +623,7 @@ namespace tempest
 
         for (auto it = end(); it != begin() + index; --it)
         {
-            *it = std::move(*(it - count));
+            *it = tempest::move(*(it - count));
         }
 
         for (size_type i = 0; i < count; ++i)
@@ -646,7 +645,7 @@ namespace tempest
 
         for (auto it = end(); it != begin() + index; --it)
         {
-            *it = std::move(*(it - 1));
+            *it = tempest::move(*(it - 1));
         }
 
         allocator_traits<Allocator>::construct(_alloc, _data + index, tempest::forward<Args>(args)...);
@@ -662,7 +661,7 @@ namespace tempest
 
         for (auto it = begin() + index; it != end() - 1; ++it)
         {
-            *it = std::move(*(it + 1));
+            *it = tempest::move(*(it + 1));
         }
 
         --_end;
@@ -682,7 +681,7 @@ namespace tempest
 
         for (auto it = begin() + index; it != end() - count; ++it)
         {
-            *it = std::move(*(it + count));
+            *it = tempest::move(*(it + count));
         }
 
         for (auto it = end() - count; it != end(); ++it)
@@ -710,7 +709,7 @@ namespace tempest
     template <typename T, typename Allocator>
     constexpr void vector<T, Allocator>::push_back(T&& value)
     {
-        _emplace_one_at_back(std::move(value));
+        _emplace_one_at_back(tempest::move(value));
     }
 
     template <typename T, typename Allocator>
@@ -774,9 +773,9 @@ namespace tempest
         }
         else
         {
-            vector tmp{std::move(*this)};
-            *this = std::move(other);
-            other = std::move(tmp);
+            vector tmp{tempest::move(*this)};
+            *this = tempest::move(other);
+            other = tempest::move(tmp);
         }
     }
 
@@ -798,7 +797,7 @@ namespace tempest
     inline constexpr void vector<T, Allocator>::_emplace_one_at_back(T&& value)
     {
         reserve(_compute_next_capacity(size() + 1));
-        allocator_traits<Allocator>::construct(_alloc, _end++, std::move(value));
+        allocator_traits<Allocator>::construct(_alloc, _end++, tempest::move(value));
     }
 
     template <typename T, typename Allocator>
