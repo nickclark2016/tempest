@@ -1,9 +1,13 @@
 #ifndef tempest_core_int_hpp
 #define tempest_core_int_hpp
 
-namespace tempest {
+namespace tempest
+{
     /// @brief Unsigned integer type that is the result of the sizeof and alignof operators.
     using size_t = decltype(sizeof(0));
+
+    /// @brief Signed integer type that is the result of subtracting two pointers.
+    using ptrdiff_t = decltype(static_cast<int*>(nullptr) - static_cast<int*>(nullptr));
 
     /// @brief 32 bit floating point type.
     using float32_t = float;
@@ -35,8 +39,10 @@ namespace tempest {
     /// @brief 64 bit unsigned integer type.
     using uint64_t = unsigned long long;
 
-        /// @brief Integer type representing a byte as specified by the C++ language standard.
-    enum class byte : unsigned char {};
+    /// @brief Integer type representing a byte as specified by the C++ language standard.
+    enum class byte : unsigned char
+    {
+    };
 
     /// @brief Converts a byte to an integer type.
     /// @tparam T The integer type to convert to.
@@ -153,6 +159,6 @@ namespace tempest {
     {
         return byte(~to_integer<unsigned int>(b));
     }
-}
+} // namespace tempest
 
 #endif

@@ -395,3 +395,15 @@ TEST(span, last_static)
         EXPECT_EQ(sub[i], i + 5);
     }
 }
+
+TEST(span, span_to_const_span)
+{
+    tempest::vector<int> v(10, 42);
+    tempest::span<int> s(v);
+    tempest::span<const int> cs = s;
+
+    for (const auto& i : cs)
+    {
+        EXPECT_EQ(i, 42);
+    }
+}

@@ -32,6 +32,18 @@ namespace tempest::core
         here.remove_prefix(prefix.size());
         here.remove_suffix(suffix.size());
 
+        auto inner_trim = here.rfind("()::"); // Handle types defined in function scope
+        if (inner_trim != std::string::npos)
+        {
+            here.remove_prefix(inner_trim + 4);
+        }
+
+        inner_trim = here.rfind("<lambda()>::"); // Handle types defined in lambda scope
+        if (inner_trim != std::string::npos)
+        {
+            here.remove_prefix(inner_trim + 12);
+        }
+
         if (here.starts_with("enum "))
         {
             here.remove_prefix(5);

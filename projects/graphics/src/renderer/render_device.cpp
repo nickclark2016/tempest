@@ -13,9 +13,10 @@ namespace tempest::graphics
     {
     }
 
-    vector<image_resource_handle> renderer_utilities::upload_textures(
-        render_device& dev, span<texture_data_descriptor> textures, buffer_resource_handle staging_buffer,
-        bool use_entire_buffer, bool generate_mip_maps)
+    vector<image_resource_handle> renderer_utilities::upload_textures(render_device& dev,
+                                                                      span<texture_data_descriptor> textures,
+                                                                      buffer_resource_handle staging_buffer,
+                                                                      bool use_entire_buffer, bool generate_mip_maps)
     {
         vector<image_resource_handle> images;
 
@@ -131,7 +132,7 @@ namespace tempest::graphics
     }
 
     vector<mesh_layout> renderer_utilities::upload_meshes(render_device& device, span<core::mesh> meshes,
-                                                                buffer_resource_handle target, std::uint32_t& offset)
+                                                          buffer_resource_handle target, std::uint32_t& offset)
     {
         std::size_t bytes_written = offset;
         std::size_t staging_buffer_bytes_written = 0;
@@ -272,5 +273,62 @@ namespace tempest::graphics
         offset = static_cast<std::uint32_t>(bytes_written);
 
         return result;
+    }
+
+    staging_buffer_writer::staging_buffer_writer(render_device& dev)
+        : _dev{&dev}, _staging_buffer_offset{_dev->get_buffer_frame_offset(_dev->get_staging_buffer())},
+          _staging_buffer{_dev->get_staging_buffer()}
+    {
+    }
+
+    staging_buffer_writer::staging_buffer_writer(render_device& dev, buffer_resource_handle staging_buffer,
+                                                 uint32_t staging_buffer_offset)
+        : _dev{&dev}, _staging_buffer_offset{staging_buffer_offset}, _staging_buffer{staging_buffer}
+    {
+    }
+
+    staging_buffer_writer& staging_buffer_writer::write(command_list& cmds, span<const byte> data,
+                                                        buffer_resource_handle target, uint32_t write_offset)
+    {
+        if (_mapped_buffer.empty())
+        {
+            _mapped_buffer = _dev->map_buffer_frame(_staging_buffer);
+        }
+
+        const auto target_offset = _dev->get_buffer_frame_offset(target);
+
+        std::size_t staging_buffer_write_offset = _staging_buffer_offset + _bytes_written;
+        std::size_t bytes_to_write = data.size_bytes();
+
+        if (bytes_to_write + _bytes_written > _mapped_buffer.size_bytes())
+        {
+            // TODO: log error
+        }
+
+        std::memcpy(_mapped_buffer.data() + _bytes_written, data.data(), bytes_to_write);
+        cmds.copy(_staging_buffer, target, staging_buffer_write_offset, target_offset + write_offset, bytes_to_write);
+
+        _bytes_written += bytes_to_write;
+
+        return *this;
+    }
+
+    void staging_buffer_writer::finish()
+    {
+        _dev->unmap_buffer(_staging_buffer);
+        _staging_buffer = {};
+    }
+
+    void staging_buffer_writer::reset(uint32_t staging_buffer_offset)
+    {
+        _staging_buffer_offset = staging_buffer_offset;
+        _bytes_written = 0;
+
+        finish();
+    }
+
+    void staging_buffer_writer::mark(size_t offset) noexcept
+    {
+        _bytes_written = offset;
     }
 } // namespace tempest::graphics
