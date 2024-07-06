@@ -63,6 +63,25 @@ namespace tempest
         }
     }
 
+    template <typename ForwardIt, typename T>
+    inline constexpr void uninitialized_fill(ForwardIt first, ForwardIt last, const T& value)
+    {
+        for (; first != last; ++first)
+        {
+            construct_at(addressof(*first), value);
+        }
+    }
+
+    template <typename ForwardIt, typename Count, typename T>
+    inline constexpr void uninitialized_fill_n(ForwardIt first, Count n, const T& value)
+    {
+        for (Count i = 0; i < n; ++i)
+        {
+            construct_at(addressof(*first), value);
+            ++first;
+        }
+    }
+
     class no_copy
     {
       public:
@@ -157,7 +176,7 @@ namespace tempest
     struct cacheline_aligned_storage
     {
 #ifdef __cpp_lib_hardware_interference_size
-        alignas(N * std::hardware_constructive_interference_size) T data;
+        alignas(N* std::hardware_constructive_interference_size) T data;
 #else
         alignas(N * 64) T data;
 #endif

@@ -99,6 +99,25 @@ namespace tempest
     {
         return container.end();
     }
+
+    template <typename Iter, typename T>
+    constexpr void fill(Iter begin, Iter end, const T& value)
+    {
+        for (auto it = begin; it != end; ++it)
+        {
+            *it = value;
+        }
+    }
+
+    template <typename Iter, typename Count, typename T>
+    constexpr void fill_n(Iter begin, Count count, const T& value)
+    {
+        for (Count i = 0; i < count; ++i)
+        {
+            *begin = value;
+            ++begin;
+        }
+    }
 } // namespace tempest
 
 #endif // tempest_core_algorithm_hpp

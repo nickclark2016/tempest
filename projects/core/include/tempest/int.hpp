@@ -39,6 +39,9 @@ namespace tempest
     /// @brief 64 bit unsigned integer type.
     using uint64_t = unsigned long long;
 
+    /// @brief Unsigned integer type capable of holding a pointer.
+    using uintptr_t = decltype(sizeof(static_cast<void*>(nullptr)));
+
     /// @brief Integer type representing a byte as specified by the C++ language standard.
     enum class byte : unsigned char
     {
