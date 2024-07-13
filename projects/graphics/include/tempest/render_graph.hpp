@@ -214,6 +214,18 @@ namespace tempest::graphics
             return _draw_imgui;
         }
 
+        graph_pass_builder& draw_gpu_profile()
+        {
+            _draw_gpu_profile = true;
+
+            return *this;
+        }
+
+        bool should_draw_gpu_profile() const noexcept
+        {
+            return _draw_gpu_profile;
+        }
+
         inline graph_pass_handle handle() const noexcept
         {
             return _self;
@@ -285,6 +297,7 @@ namespace tempest::graphics
         std::string _name;
 
         bool _draw_imgui{false};
+        bool _draw_gpu_profile{false};
 
         void _infer();
     };
@@ -309,6 +322,7 @@ namespace tempest::graphics
         graph_pass_handle add_graph_pass(std::string_view name, queue_operation_type type,
                                          std::function<void(graph_pass_builder&)> build);
 
+        void enable_gpu_profiling(bool enabled = true);
         void enable_imgui(bool enabled = true);
 
         virtual std::unique_ptr<render_graph> compile() && = 0;
@@ -321,6 +335,7 @@ namespace tempest::graphics
         vector<graph_pass_builder> _builders;
         std::unique_ptr<render_graph_resource_library> _resource_lib;
         bool _imgui_enabled = false;
+        bool _gpu_profiling_enabled = false;
 
         explicit render_graph_compiler(abstract_allocator* alloc, render_device* device);
     };

@@ -13,6 +13,9 @@
 
 #include <array>
 #include <bitset>
+#include <optional>
+#include <unordered_map>
+#include <variant>
 
 namespace tempest::graphics::vk
 {
@@ -57,7 +60,7 @@ namespace tempest::graphics::vk
         std::uint32_t count{0};
         std::uint32_t binding{0};
         std::uint32_t set{0};
-        
+
         vector<VkDescriptorImageInfo> images;
     };
 
@@ -115,17 +118,62 @@ namespace tempest::graphics::vk
         bool initialized{false};
     };
 
+    struct timestamp_query_range
+    {
+        uint64_t begin_timestamp{0};
+        uint64_t end_timestamp{0};
+    };
+
+    struct pipeline_statistic_results
+    {
+        std::uint64_t input_assembly_vertices;
+        std::uint64_t input_assembly_primitives;
+        std::uint64_t vertex_shader_invocations;
+        std::uint64_t tess_control_shader_invocations;
+        std::uint64_t tess_evaluation_shader_invocations;
+        std::uint64_t geometry_shader_invocations;
+        std::uint64_t geometry_shader_primitives;
+        std::uint64_t fragment_shader_invocations;
+        std::uint64_t clipping_invocations;
+        std::uint64_t clipping_primitives;
+        std::uint64_t compute_shader_invocations;
+
+        static constexpr std::size_t statistic_query_count = 11;
+    };
+
+    /// @brief Contains the query results for a single pass.
+    struct gpu_profile_pool_state
+    {
+        VkQueryPool pipeline_stat_queries{VK_NULL_HANDLE};
+        VkQueryPool timestamp_queries{VK_NULL_HANDLE};
+
+        std::optional<pipeline_statistic_results> pipeline_stats;
+        timestamp_query_range timestamp_range;
+    };
+
+    struct gpu_profile_pass_results
+    {
+        graph_pass_handle pass;
+        timestamp_query_range timestamp;
+    };
+
+    struct gpu_profile_results
+    {
+        std::size_t frame_index{0};
+        std::vector<gpu_profile_pass_results> pass_results;
+    };
+
     class render_graph : public graphics::render_graph
     {
       public:
         explicit render_graph(abstract_allocator* alloc, render_device* device,
                               span<graphics::graph_pass_builder> pass_builders,
-                              std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled);
+                              std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled,
+                              bool gpu_profile_enabled);
         ~render_graph() override;
 
         void update_external_sampled_images(graph_pass_handle pass, span<image_resource_handle> images,
-                                            std::uint32_t set,
-                                   std::uint32_t binding, pipeline_stage stage) override;
+                                            std::uint32_t set, std::uint32_t binding, pipeline_stage stage) override;
 
         void execute() override;
 
@@ -153,6 +201,7 @@ namespace tempest::graphics::vk
         vector<descriptor_set_state> _descriptor_set_states;
 
         std::optional<imgui_render_graph_context> _imgui_ctx;
+        std::optional<vector<gpu_profile_pool_state>> _gpu_profile_pools;
     };
 
     class render_graph_resource_library : public graphics::render_graph_resource_library

@@ -1911,6 +1911,7 @@ namespace tempest::graphics::vk
                         .fillModeNonSolid = VK_TRUE,
                         .depthBounds = VK_TRUE,
                         .samplerAnisotropy = VK_TRUE,
+                        .pipelineStatisticsQuery = VK_TRUE,
                         .shaderUniformBufferArrayDynamicIndexing = VK_TRUE,
                         .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
                         .shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
@@ -1937,6 +1938,7 @@ namespace tempest::graphics::vk
                         .runtimeDescriptorArray = VK_TRUE,
                         .imagelessFramebuffer = VK_TRUE,
                         .separateDepthStencilLayouts = VK_TRUE,
+                        .hostQueryReset = VK_TRUE,
                         .bufferDeviceAddress = VK_TRUE,
                     })
                     .set_required_features_13({

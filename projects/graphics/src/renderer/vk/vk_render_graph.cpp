@@ -488,7 +488,8 @@ namespace tempest::graphics::vk
 
     render_graph::render_graph(abstract_allocator* alloc, render_device* device,
                                span<graphics::graph_pass_builder> pass_builders,
-                               std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled)
+                               std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled,
+                               bool gpu_profile_enabled)
         : _alloc{alloc}, _device{device}, _resource_lib{std::move(resources)}
     {
         graphics::dependency_graph pass_graph;
@@ -583,6 +584,59 @@ namespace tempest::graphics::vk
             ImGui_ImplVulkan_Init(&_imgui_ctx->init_info, VK_NULL_HANDLE);
             ImGui_ImplVulkan_CreateFontsTexture();
         }
+
+        if (gpu_profile_enabled)
+        {
+            _gpu_profile_pools.emplace();
+
+            for (const auto& pass : _all_passes)
+            {
+                VkQueryPoolCreateInfo timing_pool_ci = {
+                    .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+                    .queryType = VK_QUERY_TYPE_TIMESTAMP,
+                    .queryCount = 2 * static_cast<uint32_t>(
+                                          _device->frames_in_flight()), // start and end timestamps for each frame
+                };
+
+                VkQueryPoolCreateInfo statistics_pool_ci = {
+                    .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+                    .queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS,
+                };
+
+                statistics_pool_ci.pipelineStatistics =
+                    VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT |
+                    VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
+                statistics_pool_ci.queryCount = static_cast<uint32_t>(
+                    pipeline_statistic_results::statistic_query_count * _device->frames_in_flight());
+
+                // TODO: Check for query pool support
+
+                gpu_profile_pool_state pools = {};
+
+                if (timing_pool_ci.queryCount > 0)
+                {
+                    _device->dispatch().createQueryPool(&timing_pool_ci, nullptr, &pools.timestamp_queries);
+                    _device->dispatch().resetQueryPool(pools.timestamp_queries, 0, timing_pool_ci.queryCount);
+                }
+
+                if (statistics_pool_ci.queryCount > 0)
+                {
+                    _device->dispatch().createQueryPool(&statistics_pool_ci, nullptr, &pools.pipeline_stat_queries);
+                    _device->dispatch().resetQueryPool(pools.pipeline_stat_queries, 0, statistics_pool_ci.queryCount);
+                }
+
+                _gpu_profile_pools->emplace_back(pools);
+            }
+        }
     }
 
     render_graph::~render_graph()
@@ -633,6 +687,19 @@ namespace tempest::graphics::vk
             if (desc_set_state.layout != VK_NULL_HANDLE)
             {
                 _device->dispatch().destroyPipelineLayout(desc_set_state.layout, nullptr);
+            }
+        }
+
+        for (auto& pools : _gpu_profile_pools.value())
+        {
+            if (pools.timestamp_queries != VK_NULL_HANDLE)
+            {
+                _device->dispatch().destroyQueryPool(pools.timestamp_queries, nullptr);
+            }
+
+            if (pools.pipeline_stat_queries != VK_NULL_HANDLE)
+            {
+                _device->dispatch().destroyQueryPool(pools.pipeline_stat_queries, nullptr);
             }
         }
     }
@@ -834,8 +901,73 @@ namespace tempest::graphics::vk
         };
         cmd_buffer_alloc.dispatch->beginCommandBuffer(cmds, &begin);
 
+        bool gpu_profile_enabled = _gpu_profile_pools.has_value();
+
         for (auto pass_ref_wrapper : _active_pass_set)
         {
+            if (gpu_profile_enabled)
+            {
+                // Get pass index
+                auto& pass_ref = pass_ref_wrapper.get();
+                auto pass_idx = _pass_index_map[pass_ref.handle().as_uint64()];
+
+                // Get the pool for this pass
+                auto& pools = _gpu_profile_pools.value()[pass_idx];
+
+                // Get the timestamp query index
+                auto begin_timestamp_query_index = static_cast<uint32_t>(_device->frame_in_flight() * 2);
+                auto end_timestamp_query_index = begin_timestamp_query_index + 1;
+
+                // Check if the queries are ready
+                uint64_t timestamps[2] = {0, 0};
+
+                VkResult result = dispatch->getQueryPoolResults(pools.timestamp_queries, begin_timestamp_query_index, 2,
+                                                                sizeof(uint64_t) * 2, timestamps, sizeof(uint64_t),
+                                                                VK_QUERY_RESULT_64_BIT);
+                // If the queries are ready, log the results
+                if (result == VK_SUCCESS)
+                {
+                    pools.timestamp_range.begin_timestamp = timestamps[0];
+                    pools.timestamp_range.end_timestamp = timestamps[1];
+
+                    // Reset the query
+                    dispatch->cmdResetQueryPool(cmds, pools.timestamp_queries, begin_timestamp_query_index, 2);
+                }
+
+                // std::array<std::uint64_t, pipeline_statistic_results::statistic_query_count> pipeline_statistics =
+                // {}; result = dispatch->getQueryPoolResults(
+                //     pools.pipeline_stat_queries,
+                //     _device->frame_in_flight() * pipeline_statistic_results::statistic_query_count,
+                //     pipeline_statistic_results::statistic_query_count,
+                //     sizeof(uint64_t) * pipeline_statistic_results::statistic_query_count, pipeline_statistics.data(),
+                //     sizeof(uint64_t) * pipeline_statistic_results::statistic_query_count, VK_QUERY_RESULT_64_BIT);
+
+                // if (result == VK_SUCCESS)
+                // {
+                //     pools.pipeline_stats.emplace(pipeline_statistic_results{
+                //         .input_assembly_vertices = pipeline_statistics[0],
+                //         .input_assembly_primitives = pipeline_statistics[1],
+                //         .vertex_shader_invocations = pipeline_statistics[2],
+                //         .tess_control_shader_invocations = pipeline_statistics[8],
+                //         .tess_evaluation_shader_invocations = pipeline_statistics[9],
+                //         .geometry_shader_invocations = pipeline_statistics[3],
+                //         .geometry_shader_primitives = pipeline_statistics[4],
+                //         .fragment_shader_invocations = pipeline_statistics[7],
+                //         .clipping_invocations = pipeline_statistics[5],
+                //         .clipping_primitives = pipeline_statistics[6],
+                //         .compute_shader_invocations = pipeline_statistics[10],
+                //     });
+                // }
+                // else
+                // {
+                //     pools.pipeline_stats = std::nullopt;
+                // }
+
+                // Begin timestamp query
+                cmd_buffer_alloc.dispatch->cmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                                             pools.timestamp_queries, begin_timestamp_query_index);
+            }
+
             auto& pass_ref = pass_ref_wrapper.get();
             begin_marked_region(_device->dispatch(), cmds, pass_ref.name());
 
@@ -1340,6 +1472,17 @@ namespace tempest::graphics::vk
             }
 
             end_marked_region(_device->dispatch(), cmds);
+
+            if (gpu_profile_enabled)
+            {
+                auto& pools = _gpu_profile_pools.value()[pass_idx];
+                auto end_timestamp_query_index = _device->frame_in_flight() * 2 + 1;
+
+                // End timestamp query
+                cmd_buffer_alloc.dispatch->cmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                                             pools.timestamp_queries,
+                                                             static_cast<std::uint32_t>(end_timestamp_query_index));
+            }
         }
 
         VkPipelineStageFlags final_transition_flags{0};
@@ -1872,6 +2015,6 @@ namespace tempest::graphics::vk
             _alloc, static_cast<render_device*>(_device), _builders,
             std::unique_ptr<vk::render_graph_resource_library>(
                 static_cast<vk::render_graph_resource_library*>(_resource_lib.release())),
-            _imgui_enabled);
+            _imgui_enabled, _gpu_profiling_enabled);
     }
 } // namespace tempest::graphics::vk

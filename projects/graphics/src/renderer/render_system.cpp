@@ -670,6 +670,8 @@ namespace tempest::graphics
             rgc->enable_imgui();
         }
 
+        rgc->enable_gpu_profiling();
+
         _graph = std::move(*rgc).compile();
     }
 

@@ -534,6 +534,11 @@ namespace tempest::graphics
         _imgui_enabled = enabled;
     }
 
+    void render_graph_compiler::enable_gpu_profiling(bool enabled)
+    {
+        _gpu_profiling_enabled = enabled;
+    }
+
     std::unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(abstract_allocator* alloc,
                                                                                   render_device* device)
     {
