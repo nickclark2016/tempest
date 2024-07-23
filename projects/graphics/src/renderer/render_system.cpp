@@ -617,7 +617,7 @@ namespace tempest::graphics
                         return _settings.aa_mode != anti_aliasing_mode::TAA && _settings.enable_imgui &&
                                _create_imgui_hierarchy;
                     })
-                    .on_execute([](auto& cmds) {});
+                    .on_execute([]([[maybe_unused]] auto& cmds) {});
             });
 
         auto imgui_pass_with_taa = rgc->add_graph_pass(
@@ -670,7 +670,10 @@ namespace tempest::graphics
             rgc->enable_imgui();
         }
 
-        rgc->enable_gpu_profiling();
+        if (_settings.enable_profiling)
+        {
+            rgc->enable_gpu_profiling();
+        }
 
         _graph = std::move(*rgc).compile();
     }
@@ -799,7 +802,10 @@ namespace tempest::graphics
 
         if (_create_imgui_hierarchy && _settings.enable_imgui)
         {
-            imgui_context::create_frame([this]() { _create_imgui_hierarchy(); });
+            imgui_context::create_frame([this]() {
+                _create_imgui_hierarchy();
+                _graph->show_gpu_profiling();
+            });
         }
 
         if (_static_data_dirty) [[unlikely]]

@@ -27,6 +27,7 @@ namespace tempest::graphics
     {
         bool should_show_settings{false};
         bool enable_imgui{false};
+        bool enable_profiling{false};
         anti_aliasing_mode aa_mode{anti_aliasing_mode::TAA};
     };
 

@@ -14,6 +14,7 @@ int main()
     auto renderer_settings = engine.get_render_system().settings();
     renderer_settings.aa_mode = tempest::graphics::anti_aliasing_mode::NONE;
     renderer_settings.enable_imgui = true;
+    renderer_settings.enable_profiling = true;
     engine.get_render_system().update_settings(renderer_settings);
 
     engine.on_initialize([](tempest::engine& engine) {
