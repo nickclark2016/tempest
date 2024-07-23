@@ -1,5 +1,6 @@
 #include "vk_render_graph.hpp"
 
+#include <tempest/imgui_context.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
@@ -587,7 +588,8 @@ namespace tempest::graphics::vk
 
         if (gpu_profile_enabled)
         {
-            _gpu_profile_pools.emplace();
+            _gpu_profile_state.emplace();
+            _gpu_profile_state->timestamp_period = _device->physical_device().properties.limits.timestampPeriod;
 
             for (const auto& pass : _all_passes)
             {
@@ -620,7 +622,9 @@ namespace tempest::graphics::vk
 
                 // TODO: Check for query pool support
 
-                gpu_profile_pool_state pools = {};
+                gpu_profile_pool_state pools = {
+                    .pass = pass.handle(),
+                };
 
                 if (timing_pool_ci.queryCount > 0)
                 {
@@ -634,7 +638,11 @@ namespace tempest::graphics::vk
                     _device->dispatch().resetQueryPool(pools.pipeline_stat_queries, 0, statistics_pool_ci.queryCount);
                 }
 
-                _gpu_profile_pools->emplace_back(pools);
+                _gpu_profile_state->recording_state.pools.emplace_back(pools);
+
+                _gpu_profile_state->results.pass_results.push_back(gpu_profile_pass_results{
+                    .pass = pass.handle(),
+                });
             }
         }
     }
@@ -690,7 +698,7 @@ namespace tempest::graphics::vk
             }
         }
 
-        for (auto& pools : _gpu_profile_pools.value())
+        for (auto& pools : _gpu_profile_state->recording_state.pools)
         {
             if (pools.timestamp_queries != VK_NULL_HANDLE)
             {
@@ -759,11 +767,22 @@ namespace tempest::graphics::vk
 
     void render_graph::execute()
     {
+        bool gpu_profile_enabled = _gpu_profile_state.has_value();
+
+        if (gpu_profile_enabled)
+        {
+            auto frame_start_time = std::chrono::high_resolution_clock::now();
+            auto frame_start_time_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(frame_start_time).time_since_epoch().count();
+
+            _gpu_profile_state->recording_state.full_frame_cpu_timestamp.begin_timestamp = frame_start_time_ns;
+        }
+
         _device->start_frame();
 
         // first, check to see if the pass states are the same
         bool active_change_detected = false;
-        for (std::size_t i = 0; i < _all_passes.size(); ++i)
+        for (size_t i = 0; i < _all_passes.size(); ++i)
         {
             auto& pass = _all_passes[i];
             auto should_exec = pass.should_execute();
@@ -848,11 +867,19 @@ namespace tempest::graphics::vk
 
         dispatch->resetFences(1, &commands_complete);
 
-        std::vector<VkSemaphore> image_acquired_sems;
-        std::vector<VkSemaphore> render_complete_sems;
-        std::vector<VkPipelineStageFlags> wait_stages;
-        std::vector<VkSwapchainKHR> swapchains;
-        std::vector<uint32_t> image_indices;
+        vector<VkSemaphore> image_acquired_sems;
+        vector<VkSemaphore> render_complete_sems;
+        vector<VkPipelineStageFlags> wait_stages;
+        vector<VkSwapchainKHR> swapchains;
+        vector<uint32_t> image_indices;
+
+        if (gpu_profile_enabled)
+        {
+            auto pre_acquire_time = std::chrono::high_resolution_clock::now();
+            auto pre_acquire_time_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(pre_acquire_time).time_since_epoch().count();
+            _gpu_profile_state->recording_state.image_acquire_cpu_timestamp.begin_timestamp = pre_acquire_time_ns;
+        }
 
         // next, acquire the swapchain image
         for (auto& swapchain : _active_swapchain_set)
@@ -893,6 +920,14 @@ namespace tempest::graphics::vk
             image_indices.push_back(swap->image_index);
         }
 
+        if (gpu_profile_enabled)
+        {
+            auto post_acquire_time = std::chrono::high_resolution_clock::now();
+            auto post_acquire_time_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(post_acquire_time).time_since_epoch().count();
+            _gpu_profile_state->recording_state.image_acquire_cpu_timestamp.end_timestamp = post_acquire_time_ns;
+        }
+
         auto queue = _device->get_queue();
 
         VkCommandBufferBeginInfo begin = {
@@ -901,10 +936,15 @@ namespace tempest::graphics::vk
         };
         cmd_buffer_alloc.dispatch->beginCommandBuffer(cmds, &begin);
 
-        bool gpu_profile_enabled = _gpu_profile_pools.has_value();
+        if (gpu_profile_enabled)
+        {
+            _gpu_profile_state->results.frame_index = _device->current_frame() - _device->frames_in_flight();
+        }
 
         for (auto pass_ref_wrapper : _active_pass_set)
         {
+            auto start_time = std::chrono::high_resolution_clock::now();
+
             if (gpu_profile_enabled)
             {
                 // Get pass index
@@ -912,7 +952,7 @@ namespace tempest::graphics::vk
                 auto pass_idx = _pass_index_map[pass_ref.handle().as_uint64()];
 
                 // Get the pool for this pass
-                auto& pools = _gpu_profile_pools.value()[pass_idx];
+                auto& pools = _gpu_profile_state->recording_state.pools[pass_idx];
 
                 // Get the timestamp query index
                 auto begin_timestamp_query_index = static_cast<uint32_t>(_device->frame_in_flight() * 2);
@@ -927,11 +967,24 @@ namespace tempest::graphics::vk
                 // If the queries are ready, log the results
                 if (result == VK_SUCCESS)
                 {
-                    pools.timestamp_range.begin_timestamp = timestamps[0];
-                    pools.timestamp_range.end_timestamp = timestamps[1];
+                    pools.timestamp.begin_timestamp = timestamps[0];
+                    pools.timestamp.end_timestamp = timestamps[1];
 
                     // Reset the query
                     dispatch->cmdResetQueryPool(cmds, pools.timestamp_queries, begin_timestamp_query_index, 2);
+
+                    logger->debug(
+                        "Successfully queried timestamps for pass {} and frame {}.  Query Results: Begin - {} End - {}",
+                        pass_ref.name(), _device->current_frame() - _device->frames_in_flight(), timestamps[0],
+                        timestamps[1]);
+                }
+                else
+                {
+                    pools.timestamp.begin_timestamp = 0;
+                    pools.timestamp.end_timestamp = 0;
+
+                    logger->warn("Failed to get timestamp query results for pass {} and frame {}.", pass_ref.name(),
+                                 _device->current_frame() - _device->frames_in_flight());
                 }
 
                 // std::array<std::uint64_t, pipeline_statistic_results::statistic_query_count> pipeline_statistics =
@@ -1475,13 +1528,30 @@ namespace tempest::graphics::vk
 
             if (gpu_profile_enabled)
             {
-                auto& pools = _gpu_profile_pools.value()[pass_idx];
+                auto& pools = _gpu_profile_state->recording_state.pools[pass_idx];
                 auto end_timestamp_query_index = _device->frame_in_flight() * 2 + 1;
 
                 // End timestamp query
                 cmd_buffer_alloc.dispatch->cmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                                              pools.timestamp_queries,
                                                              static_cast<std::uint32_t>(end_timestamp_query_index));
+            }
+
+            auto end_time = std::chrono::high_resolution_clock::now();
+
+            if (gpu_profile_enabled)
+            {
+                // Convert start and end time to nanoseconds
+                auto start_ns =
+                    std::chrono::time_point_cast<std::chrono::nanoseconds>(start_time).time_since_epoch().count();
+                auto end_ns =
+                    std::chrono::time_point_cast<std::chrono::nanoseconds>(end_time).time_since_epoch().count();
+
+                auto& pools = _gpu_profile_state->recording_state.pools[pass_idx];
+                pools.cpu_timestamp = {
+                    .begin_timestamp = static_cast<std::uint64_t>(start_ns),
+                    .end_timestamp = static_cast<std::uint64_t>(end_ns),
+                };
             }
         }
 
@@ -1554,7 +1624,24 @@ namespace tempest::graphics::vk
             .pSignalSemaphores = render_complete_sems.data(),
         };
 
-        dispatch->queueSubmit(queue.queue, 1, &submit_info, commands_complete);
+        if (gpu_profile_enabled)
+        {
+            auto time_before_submit = std::chrono::high_resolution_clock::now();
+            auto time_before_submit_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(time_before_submit).time_since_epoch().count();
+            _gpu_profile_state->recording_state.submit_cpu_timestamp.begin_timestamp = time_before_submit_ns;
+
+            dispatch->queueSubmit(queue.queue, 1, &submit_info, commands_complete);
+
+            auto time_after_submit = std::chrono::high_resolution_clock::now();
+            auto time_after_submit_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(time_after_submit).time_since_epoch().count();
+            _gpu_profile_state->recording_state.submit_cpu_timestamp.end_timestamp = time_after_submit_ns;
+        }
+        else
+        {
+            dispatch->queueSubmit(queue.queue, 1, &submit_info, commands_complete);
+        }
 
         std::vector<VkResult> results(swapchains.size(), VK_SUCCESS);
         VkPresentInfoKHR present = {
@@ -1568,7 +1655,24 @@ namespace tempest::graphics::vk
             .pResults = results.data(),
         };
 
-        dispatch->queuePresentKHR(queue.queue, &present);
+        if (gpu_profile_enabled)
+        {
+            auto time_before_present = std::chrono::high_resolution_clock::now();
+            auto time_before_present_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(time_before_present).time_since_epoch().count();
+            _gpu_profile_state->recording_state.present_cpu_timestamp.begin_timestamp = time_before_present_ns;
+
+            dispatch->queuePresentKHR(queue.queue, &present);
+
+            auto time_after_present = std::chrono::high_resolution_clock::now();
+            auto time_after_present_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(time_after_present).time_since_epoch().count();
+            _gpu_profile_state->recording_state.present_cpu_timestamp.end_timestamp = time_after_present_ns;
+        }
+        else
+        {
+            dispatch->queuePresentKHR(queue.queue, &present);
+        }
 
         for (std::size_t i = 0; i < results.size(); ++i)
         {
@@ -1601,6 +1705,134 @@ namespace tempest::graphics::vk
         _last_known_state.swapchain.clear();
 
         _device->end_frame();
+
+        // Copy the profiling results
+        if (gpu_profile_enabled)
+        {
+            _gpu_profile_state->results.frame_index = _device->current_frame() - _device->frames_in_flight();
+            _gpu_profile_state->results.pass_results.clear();
+
+            auto frame_end_time = std::chrono::high_resolution_clock::now();
+            auto frame_end_time_ns =
+                std::chrono::time_point_cast<std::chrono::nanoseconds>(frame_end_time).time_since_epoch().count();
+            _gpu_profile_state->recording_state.full_frame_cpu_timestamp.end_timestamp = frame_end_time_ns;
+
+            for (auto& pools : _gpu_profile_state->recording_state.pools)
+            {
+                gpu_profile_pass_results pass_results = {
+                    .pass = pools.pass,
+                    .pipeline_stats = pools.pipeline_stats,
+                    .timestamp =
+                        {
+                            .begin_timestamp = pools.timestamp.begin_timestamp,
+                            .end_timestamp = pools.timestamp.end_timestamp,
+                        },
+                    .cpu_timestamp =
+                        {
+                            .begin_timestamp = pools.cpu_timestamp.begin_timestamp,
+                            .end_timestamp = pools.cpu_timestamp.end_timestamp,
+                        },
+                };
+
+                _gpu_profile_state->results.pass_results.push_back(pass_results);
+            }
+
+            // Copy over the CPU timestamps
+            _gpu_profile_state->results.submit_cpu_timestamp = _gpu_profile_state->recording_state.submit_cpu_timestamp;
+            _gpu_profile_state->results.present_cpu_timestamp =
+                _gpu_profile_state->recording_state.present_cpu_timestamp;
+            _gpu_profile_state->results.full_frame_cpu_timestamp =
+                _gpu_profile_state->recording_state.full_frame_cpu_timestamp;
+            _gpu_profile_state->results.image_acquire_cpu_timestamp =
+                _gpu_profile_state->recording_state.image_acquire_cpu_timestamp;
+        }
+    }
+
+    void render_graph::show_gpu_profiling() const
+    {
+        if (_gpu_profile_state)
+        {
+            imgui_context::create_window("Render Graph Profile", [this]() {
+                auto frame = _gpu_profile_state->results.frame_index;
+
+                ImGui::Text("Frame: %zu", frame);
+                ImGui::Text("Time to Record: %.2f ms",
+                            (_gpu_profile_state->results.full_frame_cpu_timestamp.end_timestamp -
+                             _gpu_profile_state->results.full_frame_cpu_timestamp.begin_timestamp) /
+                                1000000.0f);
+
+                for (auto pass_result : _gpu_profile_state->results.pass_results)
+                {
+                    auto pass_index = _pass_index_map.at(pass_result.pass.as_uint64());
+                    auto& pass = _all_passes[pass_index];
+                    auto did_exec = _active_passes[pass_index];
+                    if (!did_exec)
+                    {
+                        continue;
+                    }
+                    auto pass_name = pass.name();
+
+                    auto gpu_begin_timestamp = pass_result.timestamp.begin_timestamp;
+                    auto gpu_end_timestamp = pass_result.timestamp.end_timestamp;
+
+                    if (gpu_begin_timestamp == 0 || gpu_end_timestamp == 0)
+                    {
+                        ImGui::Text("Pass timings not available for pass.");
+                        continue;
+                    }
+
+                    auto gpu_pass_duration_ns =
+                        (gpu_end_timestamp - gpu_begin_timestamp) * _gpu_profile_state->timestamp_period;
+                    auto gpu_pass_duration_ms = gpu_pass_duration_ns / 1000000.0f;
+
+                    auto cpu_pass_duration_ns =
+                        pass_result.cpu_timestamp.end_timestamp - pass_result.cpu_timestamp.begin_timestamp;
+                    auto cpu_pass_duration_ms = cpu_pass_duration_ns / 1000000.0f;
+
+                    if (ImGui::TreeNode(pass_name.data()))
+                    {
+                        // Print Pass Type
+                        ImGui::Text("Pass Type: %s",
+                                    pass.operation_type() == queue_operation_type::GRAPHICS  ? "Graphics"
+                                    : pass.operation_type() == queue_operation_type::COMPUTE ? "Compute"
+                                                                                             : "Transfer");
+
+                        ImGui::Text("CPU Duration: %.2f ms", cpu_pass_duration_ms);
+                        ImGui::Text("GPU Duration: %.2f ms", gpu_pass_duration_ms);
+                        ImGui::TreePop();
+                    }
+                }
+
+                if (ImGui::TreeNode("Miscellaneous Timings"))
+                {
+                    auto submit_begin_timestamp = _gpu_profile_state->results.submit_cpu_timestamp.begin_timestamp;
+                    auto submit_end_timestamp = _gpu_profile_state->results.submit_cpu_timestamp.end_timestamp;
+
+                    auto submit_duration_ns = submit_end_timestamp - submit_begin_timestamp;
+                    auto submit_duration_ms = submit_duration_ns / 1000000.0f;
+
+                    auto present_begin_timestamp = _gpu_profile_state->results.present_cpu_timestamp.begin_timestamp;
+                    auto present_end_timestamp = _gpu_profile_state->results.present_cpu_timestamp.end_timestamp;
+
+                    auto present_duration_ns = present_end_timestamp - present_begin_timestamp;
+                    auto present_duration_ms = present_duration_ns / 1000000.0f;
+
+                    auto acquire_begin_timestamp =
+                        _gpu_profile_state->results.image_acquire_cpu_timestamp.begin_timestamp;
+                    auto acquire_end_timestamp = _gpu_profile_state->results.image_acquire_cpu_timestamp.end_timestamp;
+
+                    auto acquire_duration_ns = acquire_end_timestamp - acquire_begin_timestamp;
+                    auto acquire_duration_ms = acquire_duration_ns / 1000000.0f;
+
+                    ImGui::Text("Swapchain Image Acquire Duration: %.2f ms (Count - %zu)", acquire_duration_ms,
+                                _active_swapchain_set.size());
+                    ImGui::Text("Submit Duration: %.2f ms", submit_duration_ms);
+                    ImGui::Text("Present Duration: %.2f ms", present_duration_ms);
+
+                    ImGui::TreePop();
+                }
+            });
+        }
     }
 
     void render_graph::build_descriptor_sets()

@@ -310,6 +310,7 @@ namespace tempest::graphics
 
         virtual ~render_graph() = default;
         virtual void execute() = 0;
+        virtual void show_gpu_profiling() const = 0;
     };
 
     class render_graph_compiler

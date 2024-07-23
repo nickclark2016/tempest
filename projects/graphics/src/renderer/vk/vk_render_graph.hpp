@@ -147,20 +147,45 @@ namespace tempest::graphics::vk
         VkQueryPool pipeline_stat_queries{VK_NULL_HANDLE};
         VkQueryPool timestamp_queries{VK_NULL_HANDLE};
 
+        graph_pass_handle pass;
         std::optional<pipeline_statistic_results> pipeline_stats;
-        timestamp_query_range timestamp_range;
+        timestamp_query_range timestamp;
+        timestamp_query_range cpu_timestamp;
     };
 
     struct gpu_profile_pass_results
     {
         graph_pass_handle pass;
+
+        std::optional<pipeline_statistic_results> pipeline_stats;
         timestamp_query_range timestamp;
+        timestamp_query_range cpu_timestamp;
     };
 
     struct gpu_profile_results
     {
-        std::size_t frame_index{0};
-        std::vector<gpu_profile_pass_results> pass_results;
+        size_t frame_index{0};
+        vector<gpu_profile_pass_results> pass_results;
+        timestamp_query_range submit_cpu_timestamp;
+        timestamp_query_range present_cpu_timestamp;
+        timestamp_query_range full_frame_cpu_timestamp;
+        timestamp_query_range image_acquire_cpu_timestamp;
+    };
+
+    struct gpu_profile_recording_state
+    {
+        vector<gpu_profile_pool_state> pools;
+        timestamp_query_range submit_cpu_timestamp;
+        timestamp_query_range present_cpu_timestamp;
+        timestamp_query_range full_frame_cpu_timestamp;
+        timestamp_query_range image_acquire_cpu_timestamp;
+    };
+
+    struct gpu_profile_state
+    {
+        gpu_profile_recording_state recording_state;
+        gpu_profile_results results;
+        double timestamp_period{0.0};
     };
 
     class render_graph : public graphics::render_graph
@@ -176,6 +201,8 @@ namespace tempest::graphics::vk
                                             std::uint32_t set, std::uint32_t binding, pipeline_stage stage) override;
 
         void execute() override;
+
+        void show_gpu_profiling() const override;
 
       private:
         void build_descriptor_sets();
@@ -201,7 +228,7 @@ namespace tempest::graphics::vk
         vector<descriptor_set_state> _descriptor_set_states;
 
         std::optional<imgui_render_graph_context> _imgui_ctx;
-        std::optional<vector<gpu_profile_pool_state>> _gpu_profile_pools;
+        std::optional<gpu_profile_state> _gpu_profile_state;
     };
 
     class render_graph_resource_library : public graphics::render_graph_resource_library
