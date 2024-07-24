@@ -804,7 +804,6 @@ namespace tempest::graphics
         {
             imgui_context::create_frame([this]() {
                 _create_imgui_hierarchy();
-                _graph->show_gpu_profiling();
             });
         }
 
@@ -930,6 +929,11 @@ namespace tempest::graphics
     void render_system::mark_dirty()
     {
         _static_data_dirty = true;
+    }
+
+    void render_system::draw_profiler()
+    {
+        _graph->show_gpu_profiling();
     }
 
     graphics_pipeline_resource_handle render_system::create_pbr_pipeline(bool enable_blend)

@@ -42,7 +42,9 @@ namespace tempest::editor
                         imgui::next_column();
                         rotation.y = imgui::input_float("##rotation_y", math::as_degrees(rotation.y));
                         imgui::next_column();
-                        rotation.z = imgui::input_float("##rotation_z", math::as_radians(rotation.z));
+                        rotation.z = imgui::input_float("##rotation_z", math::as_degrees(rotation.z));
+
+                        rotation = math::as_radians(rotation);
 
                         imgui::next_row();
 
@@ -56,8 +58,6 @@ namespace tempest::editor
                         scale.z = imgui::input_float("##scale_z", scale.z);
                     });
                 });
-
-                rotation = math::as_radians(rotation);
 
                 // Update the component
                 if (tc->position() != position || tc->rotation() != rotation || tc->scale() != scale)
