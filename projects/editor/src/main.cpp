@@ -8,8 +8,11 @@ int main()
 {
     tempest::engine engine = tempest::engine::initialize();
 
-    auto [win, input_group] = engine.add_window(
-        tempest::graphics::window_factory::create({.title = "Tempest Editor", .width = 1920, .height = 1080}));
+    auto [win, input_group] = engine.add_window(tempest::graphics::window_factory::create({
+        .title = "Tempest Editor",
+        .width = 1920,
+        .height = 1080,
+    }));
 
     auto renderer_settings = engine.get_render_system().settings();
     renderer_settings.aa_mode = tempest::graphics::anti_aliasing_mode::NONE;
@@ -18,11 +21,11 @@ int main()
     engine.get_render_system().update_settings(renderer_settings);
 
     engine.on_initialize([](tempest::engine& engine) {
-        auto lantern = engine.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
-        auto lantern_transform = tempest::ecs::transform_component{};
-        lantern_transform.scale({0.1f});
+        auto sponza = engine.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
+        auto sponza_transform = tempest::ecs::transform_component{};
+        sponza_transform.scale({0.1f});
 
-        engine.get_registry().assign(lantern, lantern_transform);
+        engine.get_registry().assign(sponza, sponza_transform);
 
         auto camera = engine.get_registry().acquire_entity();
 
@@ -49,6 +52,10 @@ int main()
 
             imgui::create_window("Entities", [&]() { editor.update(engine); });
             imgui::create_window("Metrics", [&, dt]() { imgui::label(std::format("FPS: {:.2f}", 1.0f / dt)); });
+
+            if (engine.get_render_system().settings().enable_profiling) {
+                engine.get_render_system().draw_profiler();
+            }
         });
     });
 

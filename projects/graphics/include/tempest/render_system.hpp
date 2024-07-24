@@ -185,6 +185,8 @@ namespace tempest::graphics
 
         void mark_dirty();
 
+        void draw_profiler();
+
       private:
         heap_allocator _allocator;
         ecs::registry* _registry;
