@@ -1558,7 +1558,7 @@ namespace tempest
     {
         auto current_size = size();
         auto erase_pos = first - begin();
-        auto erase_count = last - first;
+        size_type erase_count = last - first;
         auto insert_count = count;
 
         if (erase_count > insert_count)
@@ -1619,7 +1619,7 @@ namespace tempest
     {
         auto current_size = size();
         auto erase_pos = first - begin();
-        auto erase_count = last - first;
+        size_type erase_count = last - first;
         auto insert_count = count;
 
         if (erase_count > insert_count)
@@ -1846,7 +1846,7 @@ namespace tempest
 
         // Shift the remaining capacity 3 bits left
         auto remaining_capacity = small_string_capacity - size - 1;
-        _storage.small.data[small_string_capacity - 1] = remaining_capacity;
+        _storage.small.data[small_string_capacity - 1] = Traits::to_char_type(static_cast<Traits::int_type>(remaining_capacity));
     }
 
     template <typename CharT, typename Traits, typename Allocator>

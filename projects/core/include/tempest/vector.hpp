@@ -131,8 +131,9 @@ namespace tempest
         T* _capacity_end{nullptr};
 
         constexpr size_type _compute_next_capacity(size_type requested_capacity) const noexcept;
-        constexpr void _emplace_one_at_back(const T& value);
-        constexpr void _emplace_one_at_back(T&& value);
+
+        template <typename... Args>
+        constexpr void _emplace_one_at_back(Args&&... args);
     };
 
     template <typename T, typename Allocator>
@@ -787,17 +788,11 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    inline constexpr void vector<T, Allocator>::_emplace_one_at_back(const T& value)
+    template <typename... Args>
+    inline constexpr void vector<T, Allocator>::_emplace_one_at_back(Args&&... args)
     {
         reserve(_compute_next_capacity(size() + 1));
-        allocator_traits<Allocator>::construct(_alloc, _end++, value);
-    }
-
-    template <typename T, typename Allocator>
-    inline constexpr void vector<T, Allocator>::_emplace_one_at_back(T&& value)
-    {
-        reserve(_compute_next_capacity(size() + 1));
-        allocator_traits<Allocator>::construct(_alloc, _end++, tempest::move(value));
+        (void)tempest::construct_at(_end++, tempest::forward<Args>(args)...);
     }
 
     template <typename T, typename Allocator>
