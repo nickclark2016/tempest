@@ -12,10 +12,9 @@
 namespace tempest
 {
     template <typename T>
-    concept character_type =
-        is_same_v<remove_cvref_t<T>, char> || is_same_v<remove_cvref_t<T>, wchar_t> ||
-        is_same_v<remove_cvref_t<T>, char8_t> || is_same_v<remove_cvref_t<T>, char16_t> ||
-        is_same_v<remove_cvref_t<T>, char32_t>;
+    concept character_type = is_same_v<remove_cvref_t<T>, char> || is_same_v<remove_cvref_t<T>, wchar_t> ||
+                             is_same_v<remove_cvref_t<T>, char8_t> || is_same_v<remove_cvref_t<T>, char16_t> ||
+                             is_same_v<remove_cvref_t<T>, char32_t>;
 
     inline void* memmove(void* dst, const void* src, size_t count)
     {
@@ -234,7 +233,7 @@ namespace tempest
 
             for (size_t i = 0; i < size; ++i)
             {
-                table[Traits::to_int_type(str[i]) - Traits::to_int_type(min_val)] = i;
+                table[Traits::to_int_type(str[i]) - Traits::to_int_type(min_val)] = static_cast<Traits::int_type>(i);
             }
 
             return min_val;
@@ -255,7 +254,7 @@ namespace tempest
             for (size_t i = size; i > 0; --i)
             {
                 auto it = i - 1;
-                table[Traits::to_int_type(str[it]) - Traits::to_int_type(min_val)] = it;
+                table[Traits::to_int_type(str[it]) - Traits::to_int_type(min_val)] = static_cast<Traits::int_type>(it);
             }
 
             return min_val;
@@ -269,7 +268,7 @@ namespace tempest
 
             for (int s = 0; s <= (str_len - pattern_len);)
             {
-                int p = pattern_len - 1;
+                ptrdiff_t p = static_cast<ptrdiff_t>(pattern_len) - 1;
 
                 while (p >= 0 && pattern[p] == str[s + p])
                 {
@@ -281,7 +280,8 @@ namespace tempest
                     return str + s;
                 }
 
-                s += std::max(1, p - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
+                s += std::max<typename Traits::int_type>(
+                    1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
 
             return str + str_len;
@@ -293,7 +293,7 @@ namespace tempest
         {
             auto min_value = reverse_bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
 
-            for (int s = str_len - pattern_len; s >= 0;)
+            for (auto s = static_cast<ptrdiff_t>(str_len - pattern_len); s >= 0;)
             {
                 int p = 0;
 
@@ -307,7 +307,8 @@ namespace tempest
                     return str + s;
                 }
 
-                s -= std::max(1, p - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
+                s -= std::max<typename Traits::int_type>(
+                    1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
 
             return str + str_len;
