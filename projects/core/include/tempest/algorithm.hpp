@@ -1,9 +1,8 @@
 #ifndef tempest_core_algorithm_hpp
 #define tempest_core_algorithm_hpp
 
-#include <iterator>
-#include <memory>
-#include <type_traits>
+#include <tempest/concepts.hpp>
+#include <tempest/type_traits.hpp>
 
 namespace tempest
 {
@@ -32,45 +31,43 @@ namespace tempest
     template <auto Start, auto End, auto StepSize, typename Fn>
     inline constexpr void unroll_loop(Fn f)
     {
-        static_assert(std::is_convertible_v<decltype(End), decltype(Start)>,
-                      "End cannot be converted to type of Start.");
-        static_assert(std::is_convertible_v<decltype(StepSize), decltype(Start)>,
+        static_assert(is_convertible_v<decltype(End), decltype(Start)>, "End cannot be converted to type of Start.");
+        static_assert(is_convertible_v<decltype(StepSize), decltype(Start)>,
                       "StepSize cannot be converted to type of Start.");
         loop_unroller<decltype(Start), Start, static_cast<decltype(Start)>(End),
                       static_cast<decltype(Start)>(StepSize)>::evaluate(f);
     }
 
-    [[nodiscard]] inline constexpr std::integral auto fast_mod(const std::integral auto value,
-                                                               const std::integral auto mod) noexcept
+    [[nodiscard]] inline constexpr integral auto fast_mod(const integral auto value, const integral auto mod) noexcept
     {
         return value & (mod - 1);
     }
 
-    template <std::integral T>
+    template <integral T>
     [[nodiscard]] inline constexpr bool is_bit_set(T n, T k) noexcept
     {
         return (n >> k) & static_cast<T>(1);
     }
 
-    template <std::integral T>
+    template <integral T>
     [[nodiscard]] inline constexpr T set_bit(T n, T k) noexcept
     {
         return n | (static_cast<T>(1) << k);
     }
 
-    template <std::integral T>
+    template <integral T>
     [[nodiscard]] inline constexpr T set_bit(T n, T k, bool x) noexcept
     {
         return (n & ~(static_cast<T>(1) << k)) | (static_cast<T>(1) << k);
     }
 
-    template <std::integral T>
+    template <integral T>
     [[nodiscard]] inline constexpr T clear_bit(T n, T k) noexcept
     {
         return n & ~(static_cast<T>(1) << k);
     }
 
-    template <std::integral T>
+    template <integral T>
     [[nodiscard]] inline constexpr T toggle_bit(T n, T k) noexcept
     {
         return n ^ (static_cast<T>(1) << k);

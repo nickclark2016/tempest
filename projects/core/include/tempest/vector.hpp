@@ -830,6 +830,66 @@ namespace tempest
         c.erase(it, c.end());
         return count;
     }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::size_type size(const vector<T, Alloc>& c) noexcept
+    {
+        return c.size();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::pointer data(vector<T, Alloc>& c) noexcept
+    {
+        return c.data();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::const_pointer data(const vector<T, Alloc>& c) noexcept
+    {
+        return c.data();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::iterator begin(vector<T, Alloc>& c) noexcept
+    {
+        return c.begin();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::const_iterator begin(const vector<T, Alloc>& c) noexcept
+    {
+        return c.begin();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::const_iterator cbegin(const vector<T, Alloc>& c) noexcept
+    {
+        return c.cbegin();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::iterator end(vector<T, Alloc>& c) noexcept
+    {
+        return c.end();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::const_iterator end(const vector<T, Alloc>& c) noexcept
+    {
+        return c.end();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr typename vector<T, Alloc>::const_iterator cend(const vector<T, Alloc>& c) noexcept
+    {
+        return c.cend();
+    }
+
+    template <typename T, typename Alloc>
+    constexpr bool empty(const vector<T, Alloc>& c) noexcept
+    {
+        return c.empty();
+    }
 } // namespace tempest
 
 #endif // tempest_core_vector_hpp

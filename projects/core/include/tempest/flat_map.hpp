@@ -1,13 +1,16 @@
 #ifndef tempest_core_flat_map_hpp
 #define tempest_core_flat_map_hpp
 
+#include <tempest/functional.hpp>
+#include <tempest/int.hpp>
+#include <tempest/iterator.hpp>
+#include <tempest/utility.hpp>
+#include <tempest/vector.hpp>
+
 #include <compare>
-#include <cstddef>
-#include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <utility>
-#include <vector>
 
 namespace tempest
 {
@@ -16,45 +19,52 @@ namespace tempest
         template <typename K, typename V>
         struct flat_map_iterator_ptr_adapter
         {
-            std::pair<const K&, V&> pair;
+            pair<const K&, V&> p;
 
             friend auto operator<=>(const flat_map_iterator_ptr_adapter& lhs,
                                     const flat_map_iterator_ptr_adapter& rhs) noexcept = default;
 
-            std::pair<const K&, V&> operator*() noexcept;
-            std::pair<const K&, const V&> operator*() const noexcept;
-            std::pair<const K&, V&>* operator->() noexcept;
-            const std::pair<const K&, V&>* operator->() const noexcept;
+            pair<const K&, V&> operator*() noexcept;
+            pair<const K&, const V&> operator*() const noexcept;
+            pair<const K&, V&>* operator->() noexcept;
+            const pair<const K&, V&>* operator->() const noexcept;
         };
 
         template <typename K, typename V>
-        inline std::pair<const K&, V&> flat_map_iterator_ptr_adapter<K, V>::operator*() noexcept
+        inline pair<const K&, V&> flat_map_iterator_ptr_adapter<K, V>::operator*() noexcept
         {
-            return pair;
+            return p;
         }
 
         template <typename K, typename V>
-        inline std::pair<const K&, const V&> flat_map_iterator_ptr_adapter<K, V>::operator*() const noexcept
+        inline pair<const K&, const V&> flat_map_iterator_ptr_adapter<K, V>::operator*() const noexcept
         {
-            return {pair.first, pair.second};
+            return {p.first, p.second};
         }
 
         template <typename K, typename V>
-        inline std::pair<const K&, V&>* flat_map_iterator_ptr_adapter<K, V>::operator->() noexcept
+        inline pair<const K&, V&>* flat_map_iterator_ptr_adapter<K, V>::operator->() noexcept
         {
-            return &pair;
+            return &p;
         }
 
         template <typename K, typename V>
-        inline const std::pair<const K&, V&>* flat_map_iterator_ptr_adapter<K, V>::operator->() const noexcept
+        inline const pair<const K&, V&>* flat_map_iterator_ptr_adapter<K, V>::operator->() const noexcept
         {
-            return &pair;
+            return &p;
         }
 
         template <typename K, typename V>
         struct flat_map_iterator
         {
-            std::pair<const K*, V*> pair;
+            using value_type = pair<const K, V>;
+            using difference_type = ptrdiff_t;
+            using reference = pair<const K&, V&>;
+            using pointer = flat_map_iterator_ptr_adapter<K, V>;
+            using const_reference = pair<const K&, const V&>;
+            using const_pointer = flat_map_iterator_ptr_adapter<K, const V>;
+
+            pair<const K*, V*> p;
 
             friend auto operator<=>(const flat_map_iterator& lhs, const flat_map_iterator& rhs) noexcept = default;
 
@@ -63,21 +73,21 @@ namespace tempest
             flat_map_iterator& operator--() noexcept;
             flat_map_iterator operator--(int) noexcept;
 
-            flat_map_iterator& operator+=(std::ptrdiff_t n) noexcept;
-            flat_map_iterator& operator-=(std::ptrdiff_t n) noexcept;
-            flat_map_iterator operator+(std::ptrdiff_t n) const noexcept;
-            flat_map_iterator operator-(std::ptrdiff_t n) const noexcept;
+            flat_map_iterator& operator+=(difference_type n) noexcept;
+            flat_map_iterator& operator-=(difference_type n) noexcept;
+            flat_map_iterator operator+(difference_type n) const noexcept;
+            flat_map_iterator operator-(difference_type n) const noexcept;
 
-            std::ptrdiff_t operator-(const flat_map_iterator& other) const noexcept;
+            difference_type operator-(const flat_map_iterator& other) const noexcept;
 
-            std::pair<const K&, V&> operator[](std::ptrdiff_t n) noexcept;
-            std::pair<const K&, const V&> operator[](std::ptrdiff_t n) const noexcept;
+            reference operator[](difference_type n) noexcept;
+            const_reference operator[](difference_type n) const noexcept;
 
-            std::pair<const K&, V&> operator*() noexcept;
-            std::pair<const K&, const V&> operator*() const noexcept;
+            reference operator*() noexcept;
+            const_reference operator*() const noexcept;
 
-            flat_map_iterator_ptr_adapter<K, V> operator->() noexcept;
-            flat_map_iterator_ptr_adapter<K, const V> operator->() const noexcept;
+            pointer operator->() noexcept;
+            const_pointer operator->() const noexcept;
 
             bool operator==(const flat_map_iterator& other) const noexcept;
 
@@ -87,8 +97,8 @@ namespace tempest
         template <typename K, typename V>
         inline flat_map_iterator<K, V>& flat_map_iterator<K, V>::operator++() noexcept
         {
-            ++pair.first;
-            ++pair.second;
+            ++p.first;
+            ++p.second;
             return *this;
         }
 
@@ -103,8 +113,8 @@ namespace tempest
         template <typename K, typename V>
         inline flat_map_iterator<K, V>& flat_map_iterator<K, V>::operator--() noexcept
         {
-            --pair.first;
-            --pair.second;
+            --p.first;
+            --p.second;
             return *this;
         }
 
@@ -117,23 +127,23 @@ namespace tempest
         }
 
         template <typename K, typename V>
-        inline flat_map_iterator<K, V>& flat_map_iterator<K, V>::operator+=(std::ptrdiff_t n) noexcept
+        inline flat_map_iterator<K, V>& flat_map_iterator<K, V>::operator+=(difference_type n) noexcept
         {
-            pair.first += n;
-            pair.second += n;
+            p.first += n;
+            p.second += n;
             return *this;
         }
 
         template <typename K, typename V>
-        inline flat_map_iterator<K, V>& flat_map_iterator<K, V>::operator-=(std::ptrdiff_t n) noexcept
+        inline flat_map_iterator<K, V>& flat_map_iterator<K, V>::operator-=(difference_type n) noexcept
         {
-            pair.first -= n;
-            pair.second -= n;
+            p.first -= n;
+            p.second -= n;
             return *this;
         }
 
         template <typename K, typename V>
-        inline flat_map_iterator<K, V> flat_map_iterator<K, V>::operator+(std::ptrdiff_t n) const noexcept
+        inline flat_map_iterator<K, V> flat_map_iterator<K, V>::operator+(difference_type n) const noexcept
         {
             auto copy = *this;
             copy += n;
@@ -141,7 +151,7 @@ namespace tempest
         }
 
         template <typename K, typename V>
-        inline flat_map_iterator<K, V> flat_map_iterator<K, V>::operator-(std::ptrdiff_t n) const noexcept
+        inline flat_map_iterator<K, V> flat_map_iterator<K, V>::operator-(difference_type n) const noexcept
         {
             auto copy = *this;
             copy -= n;
@@ -149,73 +159,76 @@ namespace tempest
         }
 
         template <typename K, typename V>
-        inline std::ptrdiff_t flat_map_iterator<K, V>::operator-(const flat_map_iterator& other) const noexcept
+        inline typename flat_map_iterator<K, V>::difference_type flat_map_iterator<K, V>::operator-(
+            const flat_map_iterator& other) const noexcept
         {
-            return pair.first - other.pair.first;
+            return p.first - other.p.first;
         }
 
         template <typename K, typename V>
-        inline std::pair<const K&, V&> flat_map_iterator<K, V>::operator[](std::ptrdiff_t n) noexcept
+        inline typename flat_map_iterator<K, V>::reference flat_map_iterator<K, V>::operator[](
+            difference_type n) noexcept
         {
-            return std::pair<const K&, V&>(pair.first[n], pair.second[n]);
+            return pair<const K&, V&>(p.first[n], p.second[n]);
         }
 
         template <typename K, typename V>
-        inline std::pair<const K&, const V&> flat_map_iterator<K, V>::operator[](std::ptrdiff_t n) const noexcept
+        inline typename flat_map_iterator<K, V>::const_reference flat_map_iterator<K, V>::operator[](
+            difference_type n) const noexcept
         {
-            return std::pair<const K&, const V&>(pair.first[n], pair.second[n]);
+            return pair<const K&, const V&>(p.first[n], p.second[n]);
         }
 
         template <typename K, typename V>
-        inline std::pair<const K&, V&> flat_map_iterator<K, V>::operator*() noexcept
+        inline typename flat_map_iterator<K, V>::reference flat_map_iterator<K, V>::operator*() noexcept
         {
-            return std::pair<const K&, V&>(*pair.first, *pair.second);
+            return pair<const K&, V&>(*p.first, *p.second);
         }
 
         template <typename K, typename V>
-        inline std::pair<const K&, const V&> flat_map_iterator<K, V>::operator*() const noexcept
+        inline typename flat_map_iterator<K, V>::const_reference flat_map_iterator<K, V>::operator*() const noexcept
         {
-            return std::pair<const K&, const V&>(*pair.first, *pair.second);
+            return pair<const K&, const V&>(*p.first, *p.second);
         }
 
         template <typename K, typename V>
-        inline flat_map_iterator_ptr_adapter<K, V> flat_map_iterator<K, V>::operator->() noexcept
+        inline typename flat_map_iterator<K, V>::pointer flat_map_iterator<K, V>::operator->() noexcept
         {
-            return {std::pair<const K&, V&>(*pair.first, *pair.second)};
+            return {pair<const K&, V&>(*p.first, *p.second)};
         }
 
         template <typename K, typename V>
-        inline flat_map_iterator_ptr_adapter<K, const V> flat_map_iterator<K, V>::operator->() const noexcept
+        inline typename flat_map_iterator<K, V>::const_pointer flat_map_iterator<K, V>::operator->() const noexcept
         {
-            return {std::pair<const K&, const V&>(*pair.first, *pair.second)};
+            return {pair<const K&, const V&>(*p.first, *p.second)};
         }
 
         template <typename K, typename V>
         inline bool flat_map_iterator<K, V>::operator==(const flat_map_iterator& other) const noexcept
         {
-            return pair.first == other.pair.first;
+            return p.first == other.p.first;
         }
 
         template <typename K, typename V>
         inline flat_map_iterator<K, V>::operator flat_map_iterator<K, const V>() noexcept
         {
-            return {{pair.first, pair.second}};
+            return {{p.first, p.second}};
         }
     } // namespace detail
 
-    template <typename K, typename V, typename Compare = std::less<K>, typename KeyContainer = std::vector<K>,
-              typename ValueContainer = std::vector<V>>
+    template <typename K, typename V, typename Compare = tempest::less<K>, typename KeyContainer = tempest::vector<K>,
+              typename ValueContainer = tempest::vector<V>>
     class flat_map
     {
       public:
         using key_type = K;
         using mapped_type = V;
         using key_compare = Compare;
-        using value_type = std::pair<K, V>;
-        using reference = std::pair<const K&, V&>;
-        using const_reference = std::pair<const K&, const V&>;
-        using size_type = std::size_t;
-        using difference_type = std::ptrdiff_t;
+        using value_type = pair<K, V>;
+        using reference = pair<const K&, V&>;
+        using const_reference = pair<const K&, const V&>;
+        using size_type = size_t;
+        using difference_type = ptrdiff_t;
         using iterator = detail::flat_map_iterator<K, V>;
         using const_iterator = detail::flat_map_iterator<K, const V>;
         using reverse_iterator = std::reverse_iterator<iterator>;
@@ -271,14 +284,14 @@ namespace tempest
         void reserve(size_type new_capacity);
         void shrink_to_fit();
 
-        std::pair<iterator, bool> insert(const value_type& value);
-        std::pair<iterator, bool> insert(value_type&& value);
+        pair<iterator, bool> insert(const value_type& value);
+        pair<iterator, bool> insert(value_type&& value);
 
         template <typename O>
-        std::pair<iterator, bool> insert_or_assign(const key_type& k, O&& obj);
+        pair<iterator, bool> insert_or_assign(const key_type& k, O&& obj);
 
         template <typename O>
-        std::pair<iterator, bool> insert_or_assign(key_type&& k, O&& obj);
+        pair<iterator, bool> insert_or_assign(key_type&& k, O&& obj);
 
         template <typename InputIt>
         void insert(InputIt first, InputIt last);
@@ -311,8 +324,8 @@ namespace tempest
         iterator upper_bound(const key_type& key);
         const_iterator upper_bound(const key_type& key) const;
 
-        std::pair<iterator, iterator> equal_range(const key_type& key);
-        std::pair<const_iterator, const_iterator> equal_range(const key_type& key) const;
+        pair<iterator, iterator> equal_range(const key_type& key);
+        pair<const_iterator, const_iterator> equal_range(const key_type& key) const;
 
         key_compare key_comp() const;
         value_compare value_comp() const;
@@ -326,6 +339,48 @@ namespace tempest
         key_compare _key_comparator;
         value_compare _value_comparator{_key_comparator};
     };
+
+    template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
+    inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator begin(
+        flat_map<K, V, Compare, KeyContainer, ValueContainer>& map) noexcept
+    {
+        return map.begin();
+    }
+
+    template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
+    inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator begin(
+        const flat_map<K, V, Compare, KeyContainer, ValueContainer>& map) noexcept
+    {
+        return map.begin();
+    }
+
+    template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
+    inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator cbegin(
+        const flat_map<K, V, Compare, KeyContainer, ValueContainer>& map) noexcept
+    {
+        return map.cbegin();
+    }
+
+    template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
+    inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator end(
+        flat_map<K, V, Compare, KeyContainer, ValueContainer>& map) noexcept
+    {
+        return map.end();
+    }
+
+    template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
+    inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator end(
+        const flat_map<K, V, Compare, KeyContainer, ValueContainer>& map) noexcept
+    {
+        return map.end();
+    }
+
+    template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
+    inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator cend(
+        const flat_map<K, V, Compare, KeyContainer, ValueContainer>& map) noexcept
+    {
+        return map.cend();
+    }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::value_compare::value_compare(key_compare c) : comp(c)
@@ -368,42 +423,42 @@ namespace tempest
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<K, V, Compare, KeyContainer,
                                                                                     ValueContainer>::begin() noexcept
     {
-        return {{std::data(_keys), std::data(_values)}};
+        return {{tempest::data(_keys), tempest::data(_values)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::begin() const noexcept
     {
-        return {{std::data(_keys), std::data(_values)}};
+        return {{tempest::data(_keys), tempest::data(_values)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::cbegin() const noexcept
     {
-        return {{std::data(_keys), std::data(_values)}};
+        return {{tempest::data(_keys), tempest::data(_values)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<K, V, Compare, KeyContainer,
                                                                                     ValueContainer>::end() noexcept
     {
-        return {{std::data(_keys) + std::size(_keys), std::data(_values) + std::size(_values)}};
+        return {{tempest::data(_keys) + tempest::size(_keys), tempest::data(_values) + tempest::size(_values)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::end() const noexcept
     {
-        return {{std::data(_keys) + std::size(_keys), std::data(_values) + std::size(_values)}};
+        return {{tempest::data(_keys) + tempest::size(_keys), tempest::data(_values) + tempest::size(_values)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::cend() const noexcept
     {
-        return {{std::data(_keys) + std::size(_keys), std::data(_values) + std::size(_values)}};
+        return {{tempest::data(_keys) + tempest::size(_keys), tempest::data(_values) + tempest::size(_values)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
@@ -451,14 +506,14 @@ namespace tempest
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline bool flat_map<K, V, Compare, KeyContainer, ValueContainer>::empty() const noexcept
     {
-        return std::empty(_keys);
+        return tempest::empty(_keys);
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::size_type flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::size() const noexcept
     {
-        return std::size(_keys);
+        return tempest::size(_keys);
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
@@ -483,17 +538,19 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
-    inline std::pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
+    inline pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::insert(const value_type& value)
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), value.first, key_compare{});
-        if (it != std::end(_keys) && !key_compare{}(value.first, *it))
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), value.first, key_compare{});
+        if (it != tempest::end(_keys) && !key_compare{}(value.first, *it))
         {
-            return {iterator{{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}}, false};
+            return {iterator{
+                        {&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}},
+                    false};
         }
 
-        auto key_it = std::next(std::begin(_keys), std::distance(std::begin(_keys), it));
-        auto value_it = std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+        auto key_it = tempest::next(tempest::begin(_keys), tempest::distance(tempest::begin(_keys), it));
+        auto value_it = tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
 
         key_it = _keys.insert(key_it, value.first);
         value_it = _values.insert(value_it, value.second);
@@ -502,70 +559,72 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
-    inline std::pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
+    inline pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::insert(value_type&& value)
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), value.first, key_compare{});
-        if (it != std::end(_keys) && !key_compare{}(value.first, *it))
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), value.first, key_compare{});
+        if (it != tempest::end(_keys) && !key_compare{}(value.first, *it))
         {
-            return {iterator{{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}}, false};
+            return {iterator{
+                        {&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}},
+                    false};
         }
 
-        auto key_it = std::next(std::begin(_keys), std::distance(std::begin(_keys), it));
-        auto value_it = std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+        auto key_it = tempest::next(tempest::begin(_keys), tempest::distance(tempest::begin(_keys), it));
+        auto value_it = tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
 
-        key_it = _keys.insert(key_it, std::move(value.first));
-        value_it = _values.insert(value_it, std::move(value.second));
+        key_it = _keys.insert(key_it, tempest::move(value.first));
+        value_it = _values.insert(value_it, tempest::move(value.second));
 
         return {iterator{{&*key_it, &*value_it}}, true};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     template <typename O>
-    inline std::pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
+    inline pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::insert_or_assign(const key_type& k, O&& obj)
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), k, key_compare{});
-        if (it != std::end(_keys) && !key_compare{}(k, *it))
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), k, key_compare{});
+        if (it != tempest::end(_keys) && !key_compare{}(k, *it))
         {
-            auto key_it = std::next(std::begin(_keys), std::distance(std::begin(_keys), it));
-            auto value_it = std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+            auto key_it = tempest::next(tempest::begin(_keys), tempest::distance(tempest::begin(_keys), it));
+            auto value_it = tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
 
-            *value_it = std::forward<O>(obj);
+            *value_it = tempest::forward<O>(obj);
 
             return {iterator{{&*key_it, &*value_it}}, false};
         }
 
-        auto key_it = std::next(std::begin(_keys), std::distance(std::begin(_keys), it));
-        auto value_it = std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+        auto key_it = tempest::next(tempest::begin(_keys), tempest::distance(tempest::begin(_keys), it));
+        auto value_it = tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
 
         key_it = _keys.insert(key_it, k);
-        value_it = _values.insert(value_it, std::forward<O>(obj));
+        value_it = _values.insert(value_it, tempest::forward<O>(obj));
 
         return {iterator{{&*key_it, &*value_it}}, true};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     template <typename O>
-    inline std::pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
+    inline pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator, bool> flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::insert_or_assign(key_type&& k, O&& obj)
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), k, key_compare{});
-        if (it != std::end(_keys) && !key_compare{}(k, *it))
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), k, key_compare{});
+        if (it != tempest::end(_keys) && !key_compare{}(k, *it))
         {
-            auto key_it = std::next(std::begin(_keys), std::distance(std::begin(_keys), it));
-            auto value_it = std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+            auto key_it = tempest::next(tempest::begin(_keys), tempest::distance(tempest::begin(_keys), it));
+            auto value_it = tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
 
-            *value_it = std::forward<O>(obj);
+            *value_it = tempest::forward<O>(obj);
 
             return {iterator{{&*key_it, &*value_it}}, false};
         }
 
-        auto key_it = std::next(std::begin(_keys), std::distance(std::begin(_keys), it));
-        auto value_it = std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+        auto key_it = tempest::next(tempest::begin(_keys), tempest::distance(tempest::begin(_keys), it));
+        auto value_it = tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
 
-        key_it = _keys.insert(key_it, std::move(k));
-        value_it = _values.insert(value_it, std::forward<O>(obj));
+        key_it = _keys.insert(key_it, tempest::move(k));
+        value_it = _values.insert(value_it, tempest::forward<O>(obj));
 
         return {iterator{{&*key_it, &*value_it}}, true};
     }
@@ -590,72 +649,72 @@ namespace tempest
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::containers flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::extract() && noexcept
     {
-        return {std::move(_keys), std::move(_values)};
+        return {tempest::move(_keys), tempest::move(_values)};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline void flat_map<K, V, Compare, KeyContainer, ValueContainer>::replace(KeyContainer&& keys,
                                                                                ValueContainer&& values)
     {
-        _keys = std::move(keys);
-        _values = std::move(values);
+        _keys = tempest::move(keys);
+        _values = tempest::move(values);
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::erase(iterator position)
     {
-        const key_type* keys_ptr = std::data(_keys);
+        const key_type* keys_ptr = tempest::data(_keys);
 
-        auto idx = std::distance(keys_ptr, position.pair.first);
+        auto idx = tempest::distance(keys_ptr, position.p.first);
 
-        auto key_it = std::next(std::begin(_keys), idx);
-        auto value_it = std::next(std::begin(_values), idx);
+        auto key_it = tempest::next(tempest::begin(_keys), idx);
+        auto value_it = tempest::next(tempest::begin(_values), idx);
 
         key_it = _keys.erase(key_it);
         value_it = _values.erase(value_it);
 
-        return {{std::data(_keys) + std::distance(std::begin(_keys), key_it),
-                 std::data(_values) + std::distance(std::begin(_values), value_it)}};
+        return {{tempest::data(_keys) + tempest::distance(tempest::begin(_keys), key_it),
+                 tempest::data(_values) + tempest::distance(tempest::begin(_values), value_it)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::erase(const_iterator position)
     {
-        const key_type* keys_ptr = std::data(_keys);
+        const key_type* keys_ptr = tempest::data(_keys);
 
-        auto idx = std::distance(keys_ptr, position.pair.first);
+        auto idx = tempest::distance(keys_ptr, position.p.first);
 
-        auto key_it = std::next(std::begin(_keys), idx);
-        auto value_it = std::next(std::begin(_values), idx);
+        auto key_it = tempest::next(tempest::begin(_keys), idx);
+        auto value_it = tempest::next(tempest::begin(_values), idx);
 
         key_it = _keys.erase(key_it);
         value_it = _values.erase(value_it);
 
-        return {{std::data(_keys) + std::distance(std::begin(_keys), key_it),
-                 std::data(_values) + std::distance(std::begin(_values), value_it)}};
+        return {{tempest::data(_keys) + tempest::distance(tempest::begin(_keys), key_it),
+                 tempest::data(_values) + tempest::distance(tempest::begin(_values), value_it)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::erase(const_iterator first, const_iterator last)
     {
-        const key_type* keys_ptr = std::data(_keys);
+        const key_type* keys_ptr = tempest::data(_keys);
 
-        auto first_idx = std::distance(keys_ptr, first.pair.first);
-        auto last_idx = std::distance(keys_ptr, last.pair.first);
+        auto first_idx = tempest::distance(keys_ptr, first.p.first);
+        auto last_idx = tempest::distance(keys_ptr, last.p.first);
 
-        auto key_first = std::next(std::begin(_keys), first_idx);
-        auto key_last = std::next(std::begin(_keys), last_idx);
-        auto value_first = std::next(std::begin(_values), first_idx);
-        auto value_last = std::next(std::begin(_values), last_idx);
+        auto key_first = tempest::next(tempest::begin(_keys), first_idx);
+        auto key_last = tempest::next(tempest::begin(_keys), last_idx);
+        auto value_first = tempest::next(tempest::begin(_values), first_idx);
+        auto value_last = tempest::next(tempest::begin(_values), last_idx);
 
         key_first = _keys.erase(key_first, key_last);
         value_first = _values.erase(value_first, value_last);
 
-        return {{std::data(_keys) + std::distance(std::begin(_keys), key_first),
-                 std::data(_values) + std::distance(std::begin(_values), value_first)}};
+        return {{tempest::data(_keys) + tempest::distance(tempest::begin(_keys), key_first),
+                 tempest::data(_values) + tempest::distance(tempest::begin(_values), value_first)}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
@@ -676,7 +735,7 @@ namespace tempest
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline void flat_map<K, V, Compare, KeyContainer, ValueContainer>::swap(flat_map& other) noexcept
     {
-        using std::swap;
+        using tempest::swap;
 
         swap(_keys, other._keys);
         swap(_values, other._values);
@@ -693,10 +752,10 @@ namespace tempest
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::find(const key_type& key)
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), key, key_compare{});
-        if (it != std::end(_keys) && !key_compare{}(key, *it))
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), key, key_compare{});
+        if (it != tempest::end(_keys) && !key_compare{}(key, *it))
         {
-            return {{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}};
+            return {{&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}};
         }
 
         return end();
@@ -706,10 +765,10 @@ namespace tempest
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::find(const key_type& key) const
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), key, key_compare{});
-        if (it != std::end(_keys) && !key_compare{}(key, *it))
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), key, key_compare{});
+        if (it != tempest::end(_keys) && !key_compare{}(key, *it))
         {
-            return {{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}};
+            return {{&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}};
         }
 
         return end();
@@ -719,14 +778,14 @@ namespace tempest
     inline flat_map<K, V, Compare, KeyContainer, ValueContainer>::mapped_type& flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::operator[](const key_type& key)
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), key, key_compare{});
-        if (it != std::end(_keys) && !key_compare{}(key, *it))
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), key, key_compare{});
+        if (it != tempest::end(_keys) && !key_compare{}(key, *it))
         {
-            return *std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+            return *tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
         }
 
-        auto key_it = std::next(std::begin(_keys), std::distance(std::begin(_keys), it));
-        auto value_it = std::next(std::begin(_values), std::distance(std::begin(_keys), it));
+        auto key_it = tempest::next(tempest::begin(_keys), tempest::distance(tempest::begin(_keys), it));
+        auto value_it = tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it));
 
         _keys.insert(key_it, key);
         value_it = _values.insert(value_it, mapped_type{});
@@ -751,37 +810,37 @@ namespace tempest
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::lower_bound(const key_type& key)
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), key, key_compare{});
-        return {{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}};
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), key, key_compare{});
+        return {{&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::lower_bound(const key_type& key) const
     {
-        auto it = std::lower_bound(std::begin(_keys), std::end(_keys), key, key_compare{});
-        return {{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}};
+        auto it = std::lower_bound(tempest::begin(_keys), tempest::end(_keys), key, key_compare{});
+        return {{&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::upper_bound(const key_type& key)
     {
-        auto it = std::upper_bound(std::begin(_keys), std::end(_keys), key, key_compare{});
-        return {{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}};
+        auto it = std::upper_bound(tempest::begin(_keys), tempest::end(_keys), key, key_compare{});
+        return {{&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator flat_map<
         K, V, Compare, KeyContainer, ValueContainer>::upper_bound(const key_type& key) const
     {
-        auto it = std::upper_bound(std::begin(_keys), std::end(_keys), key, key_compare{});
-        return {{&*it, &*std::next(std::begin(_values), std::distance(std::begin(_keys), it))}};
+        auto it = std::upper_bound(tempest::begin(_keys), tempest::end(_keys), key, key_compare{});
+        return {{&*it, &*tempest::next(tempest::begin(_values), tempest::distance(tempest::begin(_keys), it))}};
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
-    inline std::pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator,
-                     typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator>
+    inline pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator,
+                typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::iterator>
     flat_map<K, V, Compare, KeyContainer, ValueContainer>::equal_range(const key_type& key)
     {
         auto lower = lower_bound(key);
@@ -790,8 +849,8 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
-    inline std::pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator,
-                     typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator>
+    inline pair<typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator,
+                typename flat_map<K, V, Compare, KeyContainer, ValueContainer>::const_iterator>
     flat_map<K, V, Compare, KeyContainer, ValueContainer>::equal_range(const key_type& key) const
     {
         auto lower = lower_bound(key);
@@ -838,14 +897,15 @@ namespace tempest
     inline bool operator==(const flat_map<K, V, Compare, KeyContainer, ValueContainer>& lhs,
                            const flat_map<K, V, Compare, KeyContainer, ValueContainer>& rhs)
     {
-        return lhs.size() == rhs.size() && std::equal(std::begin(lhs), std::end(lhs), std::begin(rhs));
+        return lhs.size() == rhs.size() && std::equal(tempest::begin(lhs), tempest::end(lhs), tempest::begin(rhs));
     }
 
     template <typename K, typename V, typename Compare, typename KeyContainer, typename ValueContainer>
     inline auto operator<=>(const flat_map<K, V, Compare, KeyContainer, ValueContainer>& lhs,
                             const flat_map<K, V, Compare, KeyContainer, ValueContainer>& rhs)
     {
-        return std::lexicographical_compare_three_way(std::begin(lhs), std::end(lhs), std::begin(rhs), std::end(rhs));
+        return std::lexicographical_compare_three_way(tempest::begin(lhs), tempest::end(lhs), tempest::begin(rhs),
+                                                      tempest::end(rhs));
     }
 } // namespace tempest
 

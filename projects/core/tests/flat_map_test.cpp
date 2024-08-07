@@ -119,7 +119,7 @@ TEST(flat_map, insert_range_from_vector)
 {
     tempest::flat_map<int, int> map;
     
-    std::vector<std::pair<int, int>> vec = {{1, 2}, {3, 4}, {5, 6}};
+    tempest::vector<tempest::pair<int, int>> vec = {{1, 2}, {3, 4}, {5, 6}};
     map.insert(vec.begin(), vec.end());
     
     EXPECT_EQ(map.size(), 3);
@@ -134,7 +134,7 @@ TEST(flat_map, insert_range_from_vector_with_existing_contents)
     tempest::flat_map<int, int> map;
     map.insert({{1, 2}, {3, 4}, {5, 6}});
     
-    std::vector<std::pair<int, int>> vec = {{7, 8}, {9, 10}, {11, 12}};
+    tempest::vector<tempest::pair<int, int>> vec = {{7, 8}, {9, 10}, {11, 12}};
     map.insert(vec.begin(), vec.end());
     
     EXPECT_EQ(map.size(), 6);
@@ -164,7 +164,7 @@ TEST(flat_map, insert_range_from_vector_with_dup_keys)
 {
     tempest::flat_map<int, int> map;
     
-    std::vector<std::pair<int, int>> vec = {{1, 2}, {1, 4}, {1, 6}};
+    tempest::vector<tempest::pair<int, int>> vec = {{1, 2}, {1, 4}, {1, 6}};
     map.insert(vec.begin(), vec.end());
     
     EXPECT_EQ(map.size(), 1);
@@ -331,4 +331,11 @@ TEST(flat_map, iteration_with_out_of_order_insertion)
     }
     
     EXPECT_EQ(count, 3);
+}
+
+TEST(flat_map, iterator_checks)
+{
+    using it = tempest::flat_map<int, int>::iterator;
+
+    EXPECT_TRUE(tempest::input_iterator<it>);
 }
