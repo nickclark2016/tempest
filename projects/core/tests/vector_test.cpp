@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include <tempest/iterator.hpp>
+
 template <typename T>
 using vector = tempest::vector<T>;
 
@@ -47,8 +49,12 @@ TEST(vector, copy_constructor_non_trivial_copy)
     struct non_trivial
     {
         int i;
-        non_trivial(int i) : i(i) {}
-        non_trivial(const non_trivial& other) : i(other.i) {}
+        non_trivial(int i) : i(i)
+        {
+        }
+        non_trivial(const non_trivial& other) : i(other.i)
+        {
+        }
     };
 
     vector<non_trivial> v1(10, 42);
@@ -308,7 +314,6 @@ TEST(vector, erase_range)
     {
         EXPECT_EQ(v[i], 42);
     }
-
 }
 
 TEST(vector, swap)
@@ -409,3 +414,8 @@ TEST(vector, swap_non_member)
     }
 }
 
+TEST(vector, iterator_checks)
+{
+    using vec_it = tempest::vector<int>::iterator;
+    EXPECT_TRUE(tempest::contiguous_iterator<vec_it>);
+}

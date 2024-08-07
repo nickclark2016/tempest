@@ -2,6 +2,7 @@
 #define tempest_core_memory_hpp
 
 #include <tempest/int.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/range.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
@@ -21,6 +22,52 @@ namespace tempest
 
     template <typename T>
     const T* addressof(const T&&) = delete;
+
+    template <typename T>
+    struct pointer_traits;
+
+    template <typename T>
+    struct pointer_traits<T*>
+    {
+        using pointer = T*;
+        using element_type = T;
+        using difference_type = ptrdiff_t;
+
+        template <typename U>
+        using rebind = U*;
+
+        static pointer pointer_to(element_type& p) noexcept
+        {
+            if constexpr (requires { T::pointer_to(p); })
+            {
+                return T::pointer_to(p);
+            }
+            else
+            {
+                return addressof(p);
+            }
+        }
+    };
+
+    template <typename T>
+        requires(!is_function_v<T>)
+    [[nodiscard]] inline constexpr auto to_address(T* p) noexcept
+    {
+        return p;
+    }
+
+    template <typename T>
+    [[nodiscard]] inline constexpr auto to_address(const T& p) noexcept
+    {
+        if constexpr (requires { pointer_traits<T>::to_address(p); })
+        {
+            return pointer_traits<T>::to_address(p);
+        }
+        else
+        {
+            return to_address(p.operator->());
+        }
+    }
 
     template <typename T, typename... Args>
     [[nodiscard]] inline constexpr T* construct_at(T* ptr, Args&&... args)

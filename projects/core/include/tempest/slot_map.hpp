@@ -174,7 +174,7 @@ namespace tempest
 
         vector<key_block, key_block_allocator> _elements;
 
-        size_t _first_free_element = 0;
+        slot_map_traits<key_type>::id_type _first_free_element = 0;
         size_t _size = 0;
 
         [[nodiscard]] key_block& _get_block(key_type key) noexcept;
@@ -545,7 +545,8 @@ namespace tempest
 
         // Create a key where the index is the current free head and the generation is the current generation
         const auto current_generation = get_slot_map_key_generation(key);
-        const auto next_index = _first_free_element & slot_map_traits<key_type>::id_mask;
+        const auto next_index =
+            static_cast<slot_map_traits<key_type>::id_type>(_first_free_element & slot_map_traits<key_type>::id_mask);
         const auto new_key = create_slot_map_key<key_type>(next_index, current_generation);
 
         block.key_table[block_index] = new_key;
@@ -555,7 +556,7 @@ namespace tempest
     template <typename T, typename Allocator>
     bool slot_map<T, Allocator>::_has_free_elements() const noexcept
     {
-        return _first_free_element < capacity();
+        return _first_free_element < static_cast<slot_map_traits<key_type>::id_type>(capacity());
     }
 
     template <typename T, typename Allocator>
@@ -574,7 +575,8 @@ namespace tempest
 
         // Extract the generation from the free list entry
         const auto generation = get_slot_map_key_generation(free_list_entry);
-        const auto next_index = free_list_entry & slot_map_traits<key_type>::id_mask;
+        const auto next_index =
+            static_cast<slot_map_traits<key_type>::id_type>(free_list_entry & slot_map_traits<key_type>::id_mask);
 
         const auto free_key =
             create_slot_map_key<key_type>(free_element_index, generation); // Generation is incremented on erase
@@ -622,7 +624,8 @@ namespace tempest
 
         for (size_t i = 0; i < key_block::value_count; ++i)
         {
-            auto key = create_slot_map_key<key_type>(first_index + i, 0);
+            const auto next = static_cast<slot_map_traits<key_type>::id_type>(first_index + i);
+            const auto key = create_slot_map_key<key_type>(next, 0);
             block.key_table[i] = key;
             _add_to_free_list(key);
         }
