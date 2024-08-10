@@ -1643,7 +1643,8 @@ namespace tempest
     template <bool B, typename T = void>
     using enable_if_t = typename enable_if<B, T>::type;
 
-    template <typename T, enable_if_t<is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>, int> = 0>
+    template <typename T>
+        requires(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
     inline constexpr void swap(T& a,
                                T& b) noexcept(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>);
 
