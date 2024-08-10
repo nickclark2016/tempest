@@ -149,6 +149,8 @@ namespace tempest
         iterator find(key_type key) noexcept;
         const_iterator find(key_type key) const noexcept;
 
+        void swap(slot_map& other) noexcept;
+
       private:
         struct key_block
         {
@@ -477,6 +479,16 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
+    inline void slot_map<T, Allocator>::swap(slot_map& other) noexcept
+    {
+        using tempest::swap;
+
+        swap(_elements, other._elements);
+        swap(_first_free_element, other._first_free_element);
+        swap(_size, other._size);
+    }
+
+    template <typename T, typename Allocator>
     T* slot_map<T, Allocator>::key_block::typed_ptr() noexcept
     {
         return reinterpret_cast<T*>(data);
@@ -786,6 +798,12 @@ namespace tempest
     inline const T* slot_map_iterator<T, Allocator>::operator->() const noexcept
     {
         return &**this;
+    }
+
+    template <typename T, typename Allocator>
+    inline void swap(slot_map<T, Allocator>& lhs, slot_map<T, Allocator>& rhs) noexcept
+    {
+        lhs.swap(rhs);
     }
 } // namespace tempest
 

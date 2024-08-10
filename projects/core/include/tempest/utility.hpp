@@ -16,6 +16,20 @@ namespace tempest
         return static_cast<remove_reference_t<T>&&>(t);
     }
 
+    template <typename T>
+    inline constexpr conditional_t<is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>, T&&, const T&>
+    move_if_noexcept(T& t) noexcept
+    {
+        if constexpr (is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>)
+        {
+            return move(t);
+        }
+        else
+        {
+            return t;
+        }
+    }
+
     /// @brief Function used to forward an lvalue as an lvalue or an rvalue reference.
     /// @tparam T Type of the object to forward.
     /// @param t Reference to the object to forward.
@@ -42,6 +56,7 @@ namespace tempest
     /// @param a First object to swap.
     /// @param b Second object to swap.
     template <typename T>
+        requires(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
     inline constexpr void swap(T& a,
                                T& b) noexcept(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
     {
@@ -59,6 +74,20 @@ namespace tempest
     inline constexpr underlying_type_t<T> to_underlying(T value) noexcept
     {
         return static_cast<underlying_type_t<T>>(value);
+    }
+
+    /// @brief Exchanges the values of two objects.
+    /// @tparam T Type of the objects to exchange.
+    /// @tparam U Type of the new value.
+    /// @param obj Object to exchange.
+    /// @param new_value New value to assign to the object.
+    /// @return Old value of the object.
+    template <typename T, typename U = T>
+    inline constexpr T exchange(T& obj, U&& new_value)
+    {
+        T old_value = tempest::move(obj);
+        obj = tempest::forward<U>(new_value);
+        return old_value;
     }
 
     /// @brief Tuple-like structure that holds two objects.
