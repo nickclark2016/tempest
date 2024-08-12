@@ -2,6 +2,7 @@
 #define tempest_core_algorithm_hpp
 
 #include <tempest/concepts.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/type_traits.hpp>
 
 namespace tempest
@@ -74,31 +75,31 @@ namespace tempest
     }
 
     template <typename T>
-    [[nodiscard]] auto begin(T& container) -> decltype(container.begin())
+    [[nodiscard]] inline auto begin(T& container) -> decltype(container.begin())
     {
         return container.begin();
     }
 
     template <typename T>
-    [[nodiscard]] auto begin(const T& container) -> decltype(container.begin())
+    [[nodiscard]] inline auto begin(const T& container) -> decltype(container.begin())
     {
         return container.begin();
     }
 
     template <typename T>
-    [[nodiscard]] auto end(T& container) -> decltype(container.end())
+    [[nodiscard]] inline auto end(T& container) -> decltype(container.end())
     {
         return container.end();
     }
 
     template <typename T>
-    [[nodiscard]] auto end(const T& container) -> decltype(container.end())
+    [[nodiscard]] inline auto end(const T& container) -> decltype(container.end())
     {
         return container.end();
     }
 
     template <typename Iter, typename T>
-    constexpr void fill(Iter begin, Iter end, const T& value)
+    inline constexpr void fill(Iter begin, Iter end, const T& value)
     {
         for (auto it = begin; it != end; ++it)
         {
@@ -107,13 +108,33 @@ namespace tempest
     }
 
     template <typename Iter, typename Count, typename T>
-    constexpr void fill_n(Iter begin, Count count, const T& value)
+    inline constexpr void fill_n(Iter begin, Count count, const T& value)
     {
         for (Count i = 0; i < count; ++i)
         {
             *begin = value;
             ++begin;
         }
+    }
+
+    template <input_iterator InputIt, output_iterator<typename InputIt::value_type> OutputIt>
+    inline constexpr OutputIt copy(InputIt first, InputIt last, OutputIt d_first)
+    {
+        while (first != last)
+        {
+            *d_first++ = *first++;
+        }
+        return d_first;
+    }
+
+    template <input_iterator InputIt, typename Size, output_iterator<typename InputIt::value_type> OutputIt>
+    inline constexpr OutputIt copy_n(InputIt first, Size count, OutputIt d_first)
+    {
+        for (Size i = 0; i < count; ++i)
+        {
+            *d_first++ = *first++;
+        }
+        return d_first;
     }
 } // namespace tempest
 

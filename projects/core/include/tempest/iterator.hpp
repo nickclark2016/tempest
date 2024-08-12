@@ -180,7 +180,7 @@ namespace tempest
     concept contiguous_iterator =
         random_access_iterator<It> && is_lvalue_reference_v<iter_reference_t<It>> &&
         same_as<iter_value_t<It>, remove_cvref_t<iter_reference_t<It>>> && requires(const It& it) {
-            { to_address(it) } -> same_as<add_pointer_t<iter_reference_t<It>>>;
+            { &*it } -> same_as<add_pointer_t<iter_reference_t<It>>>;
         };
 
     template <typename S, typename I>
