@@ -2,6 +2,7 @@
 #define tempest_core_memory_hpp
 
 #include <tempest/int.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/range.hpp>
 #include <tempest/type_traits.hpp>
@@ -91,7 +92,7 @@ namespace tempest
         }
     }
 
-    template <typename ForwardIt>
+    template <forward_iterator ForwardIt>
     inline constexpr void destroy(ForwardIt first, ForwardIt last)
     {
         for (; first != last; ++first)
@@ -100,7 +101,7 @@ namespace tempest
         }
     }
 
-    template <typename ForwardIt>
+    template <forward_iterator ForwardIt>
     inline constexpr void destroy_n(ForwardIt first, size_t n)
     {
         for (size_t i = 0; i < n; ++i)
@@ -110,23 +111,67 @@ namespace tempest
         }
     }
 
-    template <typename ForwardIt, typename T>
+    template <forward_iterator ForwardIt, typename T>
     inline constexpr void uninitialized_fill(ForwardIt first, ForwardIt last, const T& value)
     {
         for (; first != last; ++first)
         {
-            construct_at(addressof(*first), value);
+            (void)construct_at(addressof(*first), value);
         }
     }
 
-    template <typename ForwardIt, typename Count, typename T>
+    template <forward_iterator ForwardIt, integral Count, typename T>
     inline constexpr void uninitialized_fill_n(ForwardIt first, Count n, const T& value)
     {
         for (Count i = 0; i < n; ++i)
         {
-            construct_at(addressof(*first), value);
+            (void)construct_at(addressof(*first), value);
             ++first;
         }
+    }
+
+    template <input_iterator InputIt, forward_iterator FwdIt>
+    inline constexpr FwdIt uninitialized_copy(InputIt first, InputIt last, FwdIt d_first)
+    {
+        for (; first != last; ++first, ++d_first)
+        {
+            (void)construct_at(addressof(*d_first), *first);
+        }
+        return d_first;
+    }
+
+    template <input_iterator InputIt, integral Size, forward_iterator FwdIt>
+    inline constexpr FwdIt uninitialized_copy_n(InputIt first, Size n, FwdIt d_first)
+    {
+        for (Size i = 0; i < n; ++i)
+        {
+            (void)construct_at(addressof(*d_first), *first);
+            ++first;
+            ++d_first;
+        }
+        return d_first;
+    }
+
+    template <input_iterator InputIt, forward_iterator FwdIt>
+    inline constexpr FwdIt uninitialized_move(InputIt first, InputIt last, FwdIt d_first)
+    {
+        for (; first != last; ++first, ++d_first)
+        {
+            (void)construct_at(addressof(*d_first), tempest::move(*first));
+        }
+        return d_first;
+    }
+
+    template <input_iterator InputIt, integral Size, forward_iterator FwdIt>
+    inline constexpr FwdIt uninitialized_move_n(InputIt first, Size n, FwdIt d_first)
+    {
+        for (Size i = 0; i < n; ++i)
+        {
+            (void)construct_at(addressof(*d_first), tempest::move(*first));
+            ++first;
+            ++d_first;
+        }
+        return d_first;
     }
 
     class no_copy
