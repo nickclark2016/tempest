@@ -1,15 +1,15 @@
 #ifndef tempest_core_flat_unordered_map_hpp
 #define tempest_core_flat_unordered_map_hpp
 
-#include "functional.hpp"
-#include "hash.hpp"
+#include <tempest/array.hpp>
+#include <tempest/functional.hpp>
+#include <tempest/hash.hpp>
+#include <tempest/int.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/utility.hpp>
 
-#include <array>
 #include <bit>
 #include <cassert>
-#include <cstdint>
-#include <limits>
-#include <memory>
 
 namespace tempest
 {
@@ -18,7 +18,7 @@ namespace tempest
 
     namespace detail
     {
-        using metadata_entry = std::uint8_t;
+        using metadata_entry = uint8_t;
 
         constexpr metadata_entry empty_entry = 0b1111'1111;
         constexpr metadata_entry deleted_entry = 0b1000'0000;
@@ -44,12 +44,12 @@ namespace tempest
 
         struct metadata_group
         {
-            static constexpr std::size_t group_size = 16;
+            static constexpr size_t group_size = 16;
 
             metadata_entry entries[group_size]{};
 
             bool any_empty() const noexcept;
-            std::uint16_t match_byte(std::uint8_t h2) const noexcept;
+            uint16_t match_byte(uint8_t h2) const noexcept;
             bool any_empty_or_deleted() const noexcept;
         };
 
@@ -58,18 +58,16 @@ namespace tempest
         template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
         struct flat_unordered_map_iterator
         {
-            using value_type = std::pair<const K, V>;
-            using pointer = std::conditional_t<Const, const value_type*, value_type*>;
-            using reference = std::conditional_t<Const, const value_type&, value_type&>;
-            using difference_type = std::ptrdiff_t;
-            using iterator_category = std::forward_iterator_tag;
+            using value_type = pair<const K, V>;
+            using pointer = conditional_t<Const, const value_type*, value_type*>;
+            using reference = conditional_t<Const, const value_type&, value_type&>;
+            using difference_type = ptrdiff_t;
 
-            using map_type =
-                typename std::conditional_t<Const, const flat_unordered_map<K, V, Hash, KeyEqual, Allocator>,
-                                            flat_unordered_map<K, V, Hash, KeyEqual, Allocator>>;
+            using map_type = typename conditional_t<Const, const flat_unordered_map<K, V, Hash, KeyEqual, Allocator>,
+                                                    flat_unordered_map<K, V, Hash, KeyEqual, Allocator>>;
 
             flat_unordered_map_iterator() noexcept = default;
-            flat_unordered_map_iterator(std::size_t idx, map_type* map) noexcept;
+            flat_unordered_map_iterator(size_t idx, map_type* map) noexcept;
 
             flat_unordered_map_iterator& operator++() noexcept;
             flat_unordered_map_iterator operator++(int) noexcept;
@@ -88,13 +86,13 @@ namespace tempest
                 return lhs._index <=> rhs._index;
             }
 
-            std::size_t index() const noexcept
+            size_t index() const noexcept
             {
                 return _index;
             }
 
           private:
-            std::size_t _index{0};
+            size_t _index{0};
             map_type* _map{nullptr};
 
             friend class flat_unordered_map<K, V, Hash, KeyEqual, Allocator>;
@@ -126,27 +124,26 @@ namespace tempest
     /// @tparam K Key type
     /// @tparam V Value type
     /// @tparam Hash Hash function. The hash function must match the signature of std::hash. For optimal performance
-    ///             the hash function should distribute bits uniformly across the std::size_t range.
+    ///             the hash function should distribute bits uniformly across the size_t range.
     /// @tparam KeyEqual Key equality function. The key equality function must match the signature of std::equal_to.
     /// @tparam Allocator Allocator type conforming to the C++17 Allocator concept.
-    template <typename K, typename V, typename Hash = tempest::hash<K>,
-              typename KeyEqual = tempest::equal_to<K>,
-              typename Allocator = std::allocator<std::pair<const K, V>>>
+    template <typename K, typename V, typename Hash = tempest::hash<K>, typename KeyEqual = tempest::equal_to<K>,
+              typename Allocator = allocator<tempest::pair<const K, V>>>
     class flat_unordered_map
     {
       public:
-        using value_type = std::pair<const K, V>;
+        using value_type = tempest::pair<const K, V>;
         using key_type = K;
         using mapped_type = V;
-        using size_type = std::size_t;
-        using difference_type = std::ptrdiff_t;
+        using size_type = size_t;
+        using difference_type = ptrdiff_t;
         using hasher = Hash;
         using key_equal = KeyEqual;
         using allocator_type = Allocator;
         using reference = value_type&;
         using const_reference = const value_type&;
-        using pointer = typename std::allocator_traits<Allocator>::pointer;
-        using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
+        using pointer = typename allocator_traits<Allocator>::pointer;
+        using const_pointer = typename allocator_traits<Allocator>::const_pointer;
         using iterator = detail::flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, false>;
         using const_iterator = detail::flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, true>;
 
@@ -158,9 +155,9 @@ namespace tempest
         flat_unordered_map& operator=(const flat_unordered_map& other);
         flat_unordered_map& operator=(flat_unordered_map&& other) noexcept;
 
-        std::size_t size() const noexcept;
-        std::size_t capacity() const noexcept;
-        std::size_t max_size() const noexcept;
+        size_t size() const noexcept;
+        size_t capacity() const noexcept;
+        size_t max_size() const noexcept;
         bool empty() const noexcept;
         double load_factor() const noexcept;
 
@@ -188,16 +185,16 @@ namespace tempest
         V& operator[](const K& key);
 
       private:
-        static constexpr std::size_t _page_size{detail::metadata_group::group_size};
+        static constexpr size_t _page_size{detail::metadata_group::group_size};
         static constexpr double _default_load_factor{0.75};
 
         using metadata_page = detail::metadata_group;
-        using data_page = std::array<std::pair<const K, V>, _page_size>;
+        using data_page = array<tempest::pair<const K, V>, _page_size>;
 
-        using alloc_type = typename std::allocator_traits<Allocator>::template rebind_alloc<data_page>;
-        using alloc_traits = std::allocator_traits<alloc_type>;
+        using alloc_type = typename allocator_traits<Allocator>::template rebind_alloc<data_page>;
+        using alloc_traits = allocator_traits<alloc_type>;
         using metadata_alloc_type = typename alloc_traits::template rebind_alloc<metadata_page>;
-        using metadata_alloc_traits = std::allocator_traits<metadata_alloc_type>;
+        using metadata_alloc_traits = allocator_traits<metadata_alloc_type>;
 
         metadata_page* _metadata_pages{nullptr};
         data_page* _data_pages{nullptr};
@@ -209,21 +206,21 @@ namespace tempest
         hasher _hash;
         detail::metadata_entry_strategy _metadata_strategy;
 
-        void _request_grow(std::size_t new_size);
-        metadata_page* _request_empty_metadata_pages(std::size_t count);
-        data_page* _request_empty_data_pages(std::size_t count);
-        std::size_t _compute_default_growth(std::size_t requested) const noexcept;
-        std::size_t _first_occupied_index() const noexcept;
+        void _request_grow(size_t new_size);
+        metadata_page* _request_empty_metadata_pages(size_t count);
+        data_page* _request_empty_data_pages(size_t count);
+        size_t _compute_default_growth(size_t requested) const noexcept;
+        size_t _first_occupied_index() const noexcept;
 
-        std::uint64_t _get_h1(std::size_t hc) const noexcept;
-        std::uint8_t _get_h2(std::size_t hc) const noexcept;
+        uint64_t _get_h1(size_t hc) const noexcept;
+        uint8_t _get_h2(size_t hc) const noexcept;
 
-        std::uint16_t _get_hash_match(std::uint8_t h2, std::size_t page) const noexcept;
-        bool _match_empty(std::size_t page) const noexcept;
-        bool _match_empty_or_deleted(std::size_t page) const noexcept;
-        std::pair<std::size_t, std::size_t> _find_next_empty(std::size_t h1, metadata_page* pages,
-                                                             std::size_t page_count) const noexcept;
-        std::size_t _next_occupied_index(std::size_t search_start) const noexcept;
+        uint16_t _get_hash_match(uint8_t h2, size_t page) const noexcept;
+        bool _match_empty(size_t page) const noexcept;
+        bool _match_empty_or_deleted(size_t page) const noexcept;
+        tempest::pair<size_t, size_t> _find_next_empty(size_t h1, metadata_page* pages,
+                                                       size_t page_count) const noexcept;
+        size_t _next_occupied_index(size_t search_start) const noexcept;
 
         void _release();
 
@@ -242,14 +239,14 @@ namespace tempest
         _data_pages = _request_empty_data_pages(_page_count);
 
         // TODO: investigate if it's worth having separate loops for metadata and data pages
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 _metadata_pages[i].entries[j] = other._metadata_pages[i].entries[j];
                 if (_metadata_strategy.is_full(other._metadata_pages[i].entries[j]))
                 {
-                    std::construct_at(&_data_pages[i][j], other._data_pages[i][j]);
+                    (void)tempest::construct_at(&_data_pages[i][j], other._data_pages[i][j]);
                 }
             }
         }
@@ -259,8 +256,8 @@ namespace tempest
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::flat_unordered_map(flat_unordered_map&& other) noexcept
-        : _metadata_alloc{std::move(other._metadata_alloc)}, _alloc{std::move(other._alloc)},
-          _hash{std::move(other._hash)}, _metadata_strategy{std::move(other._metadata_strategy)}
+        : _metadata_alloc{tempest::move(other._metadata_alloc)}, _alloc{tempest::move(other._alloc)},
+          _hash{tempest::move(other._hash)}, _metadata_strategy{tempest::move(other._metadata_strategy)}
     {
         _metadata_pages = other._metadata_pages;
         _data_pages = other._data_pages;
@@ -302,14 +299,14 @@ namespace tempest
         _data_pages = _request_empty_data_pages(_page_count);
 
         // Copy the metadata and value pages
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 _metadata_pages[i].entries[j] = other._metadata_pages[i].entries[j];
                 if (_metadata_strategy.is_full(other._metadata_pages[i].entries[j]))
                 {
-                    std::construct_at(&_data_pages[i][j], other._data_pages[i][j]);
+                    (void)tempest::construct_at(&_data_pages[i][j], other._data_pages[i][j]);
                 }
             }
         }
@@ -330,10 +327,10 @@ namespace tempest
 
         _release();
 
-        _metadata_alloc = std::move(other._metadata_alloc);
-        _alloc = std::move(other._alloc);
-        _hash = std::move(other._hash);
-        _metadata_strategy = std::move(other._metadata_strategy);
+        _metadata_alloc = tempest::move(other._metadata_alloc);
+        _alloc = tempest::move(other._alloc);
+        _hash = tempest::move(other._hash);
+        _metadata_strategy = tempest::move(other._metadata_strategy);
 
         _metadata_pages = other._metadata_pages;
         _data_pages = other._data_pages;
@@ -349,21 +346,21 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::size() const noexcept
+    inline size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::size() const noexcept
     {
         return _size;
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::capacity() const noexcept
+    inline size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::capacity() const noexcept
     {
         return _page_count * _page_size;
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::max_size() const noexcept
+    inline size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::max_size() const noexcept
     {
-        return std::numeric_limits<size_type>::max();
+        return alloc_traits::max_size(_alloc);
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -439,12 +436,12 @@ namespace tempest
         auto h1 = _get_h1(hash);
 
         // start probing
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
             auto current_page = (h1 + i) % _page_count;
             auto matches = _get_hash_match(_get_h2(hash), current_page);
 
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 if ((matches & (1 << j)) != 0)
                 {
@@ -484,15 +481,15 @@ namespace tempest
         auto h1 = _get_h1(hash);
         auto h2 = _get_h2(hash);
 
-        std::pair<std::uint32_t, std::uint32_t> next_empty{};
+        tempest::pair<uint32_t, uint32_t> next_empty{};
 
         // Find the slot in the map, check for the key already existing
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
             auto current_page = (h1 + i) % _page_count;
             auto matches = _get_hash_match(h2, current_page);
 
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 if ((matches & (1 << j)) != 0)
                 {
@@ -519,7 +516,7 @@ namespace tempest
         }
 
         _metadata_pages[next_empty.first].entries[next_empty.second] = h2;
-        std::construct_at(&_data_pages[next_empty.first][next_empty.second], value);
+        (void)tempest::construct_at(&_data_pages[next_empty.first][next_empty.second], value);
 
         ++_size;
 
@@ -541,15 +538,15 @@ namespace tempest
         auto h1 = _get_h1(hash);
         auto h2 = _get_h2(hash);
 
-        std::pair<std::size_t, std::size_t> next_empty{};
+        tempest::pair<size_t, size_t> next_empty{};
 
         // Find the slot in the map, check for the key already existing
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
             auto current_page = (h1 + i) % _page_count;
             auto matches = _get_hash_match(h2, current_page);
 
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 if ((matches & (1 << j)) != 0)
                 {
@@ -576,7 +573,7 @@ namespace tempest
         }
 
         _metadata_pages[next_empty.first].entries[next_empty.second] = h2;
-        std::construct_at(&_data_pages[next_empty.first][next_empty.second], std::move(value));
+        (void)tempest::construct_at(&_data_pages[next_empty.first][next_empty.second], tempest::move(value));
 
         ++_size;
 
@@ -590,7 +587,7 @@ namespace tempest
         auto page = idx / _page_size;
         auto slot = idx % _page_size;
 
-        std::destroy_at(&_data_pages[page][slot]);
+        destroy_at(&_data_pages[page][slot]);
         _metadata_pages[page].entries[slot] = detail::deleted_entry;
 
         --_size;
@@ -609,13 +606,13 @@ namespace tempest
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::clear() noexcept
     {
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 if (_metadata_strategy.is_full(_metadata_pages[i].entries[j]))
                 {
-                    std::destroy_at(&_data_pages[i][j]);
+                    destroy_at(&_data_pages[i][j]);
                     _metadata_pages[i].entries[j] = detail::empty_entry;
                 }
             }
@@ -627,7 +624,7 @@ namespace tempest
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline V& flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::operator[](const K& key)
     {
-        static_assert(std::is_default_constructible_v<V>, "Value type must be default constructible");
+        static_assert(is_default_constructible_v<V>, "Value type must be default constructible");
 
         auto it = find(key);
         if (it != end())
@@ -650,7 +647,7 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_request_grow(std::size_t new_size)
+    inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_request_grow(size_t new_size)
     {
         assert(std::popcount(new_size) == 1); // Ensure that the new size is a power of 2
 
@@ -660,9 +657,9 @@ namespace tempest
         auto new_data_pages = _request_empty_data_pages(page_count);
 
         // Iterate over the existing pages and copy the data to the new pages
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 auto entry = _metadata_pages[i].entries[j];
                 if (_metadata_strategy.is_full(entry))
@@ -675,19 +672,20 @@ namespace tempest
 
                     // Copy metadata
                     new_metadata_pages[next_empty.first].entries[next_empty.second] = h2;
-                    std::destroy_at(&_metadata_pages[i].entries[j]);
+                    destroy_at(&_metadata_pages[i].entries[j]);
 
                     // Move data is nothrow_move_constructible, else copy
-                    if constexpr (std::is_nothrow_move_constructible_v<V>)
+                    if constexpr (is_nothrow_move_constructible_v<V>)
                     {
-                        std::construct_at(&new_data_pages[next_empty.first][next_empty.second],
-                                          std::move(_data_pages[i][j]));
+                        (void)tempest::construct_at(&new_data_pages[next_empty.first][next_empty.second],
+                                                    tempest::move(_data_pages[i][j]));
                     }
                     else
                     {
-                        std::construct_at(&new_data_pages[next_empty.first][next_empty.second], _data_pages[i][j]);
+                        (void)tempest::construct_at(&new_data_pages[next_empty.first][next_empty.second],
+                                                    _data_pages[i][j]);
                     }
-                    std::destroy_at(&_data_pages[i][j]);
+                    destroy_at(&_data_pages[i][j]);
                 }
             }
         }
@@ -705,16 +703,16 @@ namespace tempest
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::metadata_page* flat_unordered_map<
-        K, V, Hash, KeyEqual, Allocator>::_request_empty_metadata_pages(std::size_t count)
+        K, V, Hash, KeyEqual, Allocator>::_request_empty_metadata_pages(size_t count)
     {
         detail::metadata_group* pages = metadata_alloc_traits::allocate(_metadata_alloc, count);
 
-        for (std::size_t i = 0; i < count; ++i)
+        for (size_t i = 0; i < count; ++i)
         {
-            std::construct_at(&pages[i]);
-            for (std::size_t j = 0; j < _page_size; ++j)
+            (void)tempest::construct_at(&pages[i]);
+            for (size_t j = 0; j < _page_size; ++j)
             {
-                std::construct_at(&pages[i].entries[j], detail::empty_entry);
+                (void)tempest::construct_at(&pages[i].entries[j], detail::empty_entry);
             }
         }
 
@@ -723,14 +721,14 @@ namespace tempest
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline typename flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::data_page* flat_unordered_map<
-        K, V, Hash, KeyEqual, Allocator>::_request_empty_data_pages(std::size_t count)
+        K, V, Hash, KeyEqual, Allocator>::_request_empty_data_pages(size_t count)
     {
         return alloc_traits::allocate(_alloc, count);
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_compute_default_growth(
-        std::size_t requested) const noexcept
+    inline size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_compute_default_growth(
+        size_t requested) const noexcept
     {
         if (requested < _page_size)
         {
@@ -740,12 +738,12 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_first_occupied_index() const noexcept
+    inline size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_first_occupied_index() const noexcept
     {
         // TODO: Evaluate computing this value during insertions
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 if (_metadata_strategy.is_full(_metadata_pages[i].entries[j]))
                 {
@@ -759,30 +757,30 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::uint64_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_get_h1(std::size_t hc) const noexcept
+    inline uint64_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_get_h1(size_t hc) const noexcept
     {
         // get the bottom 57 bits of the hash
         return hc & 0x00'7F'FF'FF'FF'FF'FF'FF;
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::uint8_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_get_h2(std::size_t hc) const noexcept
+    inline uint8_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_get_h2(size_t hc) const noexcept
     {
         // get the upper 7 bits of the hash
-        return static_cast<std::uint8_t>((hc >> 57) & 0x7F);
+        return static_cast<uint8_t>((hc >> 57) & 0x7F);
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::uint16_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_get_hash_match(
-        std::uint8_t h2, std::size_t page) const noexcept
+    inline uint16_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_get_hash_match(uint8_t h2,
+                                                                                         size_t page) const noexcept
     {
         // TODO: SIMD implementation
 
-        std::uint32_t result{0};
+        uint32_t result{0};
 
         // For each entry in the metadata page, check if the hash matches the h2 value in the metadata. If it does,
         // set the nth bit of the result to 1.
-        for (std::size_t i = 0; i < _page_size; ++i)
+        for (size_t i = 0; i < _page_size; ++i)
         {
             auto entry = _metadata_pages[page].entries[i];
             auto match = _metadata_strategy.is_full(entry);
@@ -796,9 +794,9 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline bool flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_match_empty(std::size_t page) const noexcept
+    inline bool flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_match_empty(size_t page) const noexcept
     {
-        for (std::size_t i = 0; i < _page_size; ++i)
+        for (size_t i = 0; i < _page_size; ++i)
         {
             bool empty = _metadata_pages[page].entries[i] == detail::empty_entry;
             if (empty)
@@ -811,10 +809,9 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline bool flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_match_empty_or_deleted(
-        std::size_t page) const noexcept
+    inline bool flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_match_empty_or_deleted(size_t page) const noexcept
     {
-        for (std::size_t i = 0; i < _page_size; ++i)
+        for (size_t i = 0; i < _page_size; ++i)
         {
             bool empty = _metadata_pages[page].entries[i] == detail::empty_entry;
             bool deleted = _metadata_pages[page].entries[i] == detail::deleted_entry;
@@ -828,36 +825,36 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::pair<std::size_t, std::size_t> flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_find_next_empty(
-        std::size_t h1, metadata_page* pages, std::size_t page_count) const noexcept
+    inline tempest::pair<size_t, size_t> flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_find_next_empty(
+        size_t h1, metadata_page* pages, size_t page_count) const noexcept
     {
-        for (std::size_t i = 0; i < page_count; ++i)
+        for (size_t i = 0; i < page_count; ++i)
         {
             auto current_page = (h1 + i) % page_count;
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 if (!_metadata_strategy.is_full(pages[current_page].entries[j]))
                 {
-                    return std::pair<std::size_t, std::size_t>{current_page, j};
+                    return tempest::pair<size_t, size_t>{current_page, j};
                 }
             }
         }
 
         std::abort();
 
-        return std::pair<std::size_t, std::size_t>();
+        return tempest::pair<size_t, size_t>();
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline std::size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_next_occupied_index(
-        std::size_t search_start) const noexcept
+    inline size_t flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_next_occupied_index(
+        size_t search_start) const noexcept
     {
-        std::size_t current_page = search_start / _page_size;
-        std::size_t current_slot = search_start % _page_size;
+        size_t current_page = search_start / _page_size;
+        size_t current_slot = search_start % _page_size;
 
-        for (std::size_t i = current_page; i < _page_count; ++i)
+        for (size_t i = current_page; i < _page_count; ++i)
         {
-            for (std::size_t j = current_slot; j < _page_size; ++j)
+            for (size_t j = current_slot; j < _page_size; ++j)
             {
                 if (_metadata_strategy.is_full(_metadata_pages[i].entries[j]))
                 {
@@ -882,19 +879,19 @@ namespace tempest
         }
 
         // Destroy all values in the value pages if they are present
-        for (std::size_t i = 0; i < _page_count; ++i)
+        for (size_t i = 0; i < _page_count; ++i)
         {
-            for (std::size_t j = 0; j < _page_size; ++j)
+            for (size_t j = 0; j < _page_size; ++j)
             {
                 if (_metadata_strategy.is_full(_metadata_pages[i].entries[j]))
                 {
-                    std::destroy_at(&_data_pages[i][j]);
+                    destroy_at(&_data_pages[i][j]);
                 }
             }
         }
 
         // Destroy all metadata pages
-        std::destroy_n(_metadata_pages, _page_count);
+        destroy_n(_metadata_pages, _page_count);
 
         // Deallocate all memory
         metadata_alloc_traits::deallocate(_metadata_alloc, _metadata_pages, _page_count);
@@ -911,7 +908,7 @@ namespace tempest
     {
         template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
         inline flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>::flat_unordered_map_iterator(
-            std::size_t idx, map_type* map) noexcept
+            size_t idx, map_type* map) noexcept
             : _index{idx}, _map{map}
         {
         }

@@ -5,6 +5,12 @@
 
 namespace tempest
 {
+    template <typename T>
+    struct tuple_size;
+
+    template <size_t I, typename T>
+    struct tuple_element;
+
     /// @brief Function used to indicate that an object may be moved from. Produces an xvalue expression from its
     /// argument.
     /// @tparam T Type of the object to move.
@@ -103,10 +109,10 @@ namespace tempest
         using second_type = T2;
 
         /// @brief First object.
-        T1 first;
+        T1 first{};
 
         /// @brief Second object.
-        T2 second;
+        T2 second{};
 
         /// @brief Default constructor.
         constexpr pair() = default;
@@ -311,6 +317,134 @@ namespace tempest
     void swap(pair<T1, T2>& lhs, pair<T1, T2>& rhs) noexcept(noexcept(lhs.swap(rhs)))
     {
         lhs.swap(rhs);
+    }
+
+    template <typename T>
+    struct tuple_size<const T> : integral_constant<size_t, tuple_size<T>::value>
+    {
+    };
+
+    template <typename T1, typename T2>
+    struct tuple_size<pair<T1, T2>> : integral_constant<size_t, 2>
+    {
+    };
+
+    template <size_t I, typename T1, typename T2>
+    struct tuple_element<I, pair<T1, T2>>
+    {
+        static_assert(I < 2, "Index out of bounds.");
+    };
+
+    template <typename T1, typename T2>
+    struct tuple_element<0, pair<T1, T2>>
+    {
+        using type = T1;
+    };
+
+    template <typename T1, typename T2>
+    struct tuple_element<1, pair<T1, T2>>
+    {
+        using type = T2;
+    };
+
+    template <size_t I, typename T1, typename T2>
+    inline constexpr typename tuple_element<I, pair<T1, T2>>::type& get(pair<T1, T2>& p)
+    {
+        if constexpr (I == 0)
+        {
+            return p.first;
+        }
+        else
+        {
+            return p.second;
+        }
+    }
+
+    template <size_t I, typename T1, typename T2>
+    inline constexpr const typename tuple_element<I, pair<T1, T2>>::type& get(const pair<T1, T2>& p)
+    {
+        if constexpr (I == 0)
+        {
+            return p.first;
+        }
+        else
+        {
+            return p.second;
+        }
+    }
+
+    template <size_t I, typename T1, typename T2>
+    inline constexpr typename tuple_element<I, pair<T1, T2>>::type&& get(pair<T1, T2>&& p) noexcept
+    {
+        if constexpr (I == 0)
+        {
+            return tempest::move(p).first;
+        }
+        else
+        {
+            return tempest::move(p).second;
+        }
+    }
+
+    template <size_t I, typename T1, typename T2>
+    inline constexpr const typename tuple_element<I, pair<T1, T2>>::type&& get(const pair<T1, T2>&& p) noexcept
+    {
+        if constexpr (I == 0)
+        {
+            return tempest::move(p).first;
+        }
+        else
+        {
+            return tempest::move(p).second;
+        }
+    }
+
+    template <typename T, typename U>
+    constexpr T& get(pair<T, U>& p)
+    {
+        return p.first;
+    }
+
+    template <typename T, typename U>
+    constexpr const T& get(const pair<T, U>& p)
+    {
+        return p.first;
+    }
+
+    template <typename T, typename U>
+    constexpr T&& get(pair<T, U>&& p) noexcept
+    {
+        return tempest::move(p).first;
+    }
+
+    template <typename T, typename U>
+    constexpr const T&& get(const pair<T, U>&& p) noexcept
+    {
+        return tempest::move(p).first;
+    }
+
+    template <typename T, typename U>
+    constexpr U& get(pair<T, U>& p)
+    {
+        return p.second;
+    }
+
+    template <typename T, typename U>
+    constexpr const U& get(const pair<T, U>& p)
+    {
+        return p.second;
+    }
+
+    template <typename T, typename U>
+    constexpr U&& get(pair<T, U>&& p) noexcept
+    {
+        return tempest::move(p).second;
+    }
+
+    template <typename T, typename U>
+    constexpr const U&& get(const pair<T, U>&& p) noexcept
+    {
+        return tempest::move(p).second;
     }
 } // namespace tempest
 

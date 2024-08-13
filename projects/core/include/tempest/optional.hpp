@@ -39,6 +39,10 @@ namespace tempest
             requires(is_constructible_v<T, U>)
         constexpr optional(U&& value);
 
+        ~optional()
+            requires is_trivially_destructible_v<T>
+        = default;
+
         ~optional() noexcept(is_nothrow_destructible_v<T>);
 
         optional& operator=(nullopt_t) noexcept(is_nothrow_destructible_v<T>);
