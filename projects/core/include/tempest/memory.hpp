@@ -476,7 +476,7 @@ namespace tempest
 
     template <typename Alloc>
     inline constexpr typename allocator_traits<Alloc>::size_type allocator_traits<Alloc>::max_size(
-        const allocator_type& alloc) noexcept
+        [[maybe_unused]] const allocator_type& alloc) noexcept
     {
         return std::numeric_limits<size_type>::max() / sizeof(value_type);
     }

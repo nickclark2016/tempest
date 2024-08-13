@@ -61,3 +61,45 @@ TEST(pair, move_constructor)
     EXPECT_EQ(p2.first, 1);
     EXPECT_EQ(p2.second, 2);
 }
+
+TEST(pair, structured_binding)
+{
+    tempest::pair<int, int> p{1, 2};
+    auto [first, second] = p;
+
+    EXPECT_EQ(first, 1);
+    EXPECT_EQ(second, 2);
+}
+
+TEST(pair, structured_binding_ref)
+{
+    tempest::pair<int, int> p{1, 2};
+    auto& [first, second] = p;
+
+    EXPECT_EQ(first, 1);
+    EXPECT_EQ(second, 2);
+
+    first = 3;
+    second = 4;
+
+    EXPECT_EQ(p.first, 3);
+    EXPECT_EQ(p.second, 4);
+}
+
+TEST(pair, structured_binding_const_ref)
+{
+    tempest::pair<int, int> p{1, 2};
+    const auto& [first, second] = p;
+
+    EXPECT_EQ(first, 1);
+    EXPECT_EQ(second, 2);
+}
+
+TEST(pair, structured_binding_move)
+{
+    tempest::pair<int, int> p{1, 2};
+    auto [first, second] = move(p);
+
+    EXPECT_EQ(first, 1);
+    EXPECT_EQ(second, 2);
+}
