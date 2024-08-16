@@ -2187,6 +2187,14 @@ namespace tempest
     {
     };
 
+    /// @brief Type trait to get if the function is nothrow invocable with a set of arguments and returns a specific
+    /// type.
+    /// @tparam Ret Return type of the function.
+    /// @tparam Fn Function type to invoke.
+    /// @tparam ...Args Argument types to pass to the function.
+    template <typename Ret, typename Fn, typename... Args>
+    inline constexpr bool is_nothrow_invocable_r_v = is_nothrow_invocable_r<Ret, Fn, Args...>::value;
+
     namespace detail
     {
         template <typename T1, typename T2>
