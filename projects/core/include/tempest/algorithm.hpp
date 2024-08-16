@@ -117,9 +117,23 @@ namespace tempest
         }
     }
 
+    namespace detail
+    {
+        void copy_bytes(const void* src, void* dest, size_t count);
+    }
+
     template <input_iterator InputIt, output_iterator<typename InputIt::value_type> OutputIt>
     inline constexpr OutputIt copy(InputIt first, InputIt last, OutputIt d_first)
     {
+        using value_type = typename InputIt::value_type;
+
+        if constexpr (is_trivial_v<value_type> && contiguous_iterator<InputIt>)
+        {
+            const auto count = last - first;
+            detail::copy_bytes(first, d_first, count * sizeof(value_type));
+            return d_first + count;
+        }
+
         while (first != last)
         {
             *d_first++ = *first++;
@@ -130,6 +144,14 @@ namespace tempest
     template <input_iterator InputIt, typename Size, output_iterator<typename InputIt::value_type> OutputIt>
     inline constexpr OutputIt copy_n(InputIt first, Size count, OutputIt d_first)
     {
+        using value_type = typename InputIt::value_type;
+
+        if constexpr (is_trivial_v<value_type> && contiguous_iterator<InputIt>)
+        {
+            detail::copy_bytes(first, d_first, count * sizeof(value_type));
+            return d_first + count;
+        }
+
         for (Size i = 0; i < count; ++i)
         {
             *d_first++ = *first++;
