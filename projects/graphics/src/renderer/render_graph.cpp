@@ -449,13 +449,13 @@ namespace tempest::graphics
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::on_execute(std::function<void(command_list&)> commands)
+    graph_pass_builder& graph_pass_builder::on_execute(function<void(command_list&)> commands)
     {
         _commands = commands;
         return *this;
     }
 
-    graph_pass_builder& graph_pass_builder::should_execute(std::function<bool()> fn)
+    graph_pass_builder& graph_pass_builder::should_execute(function<bool()> fn)
     {
         _should_execute = fn;
         return *this;
@@ -512,7 +512,7 @@ namespace tempest::graphics
     }
 
     graph_pass_handle render_graph_compiler::add_graph_pass(std::string_view name, queue_operation_type type,
-                                                            std::function<void(graph_pass_builder&)> build)
+                                                            function<void(graph_pass_builder&)> build)
     {
         graph_pass_builder bldr(*_resource_lib, name, type);
 

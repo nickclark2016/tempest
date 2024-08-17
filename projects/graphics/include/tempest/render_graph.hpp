@@ -4,14 +4,15 @@
 #include "render_device.hpp"
 #include "types.hpp"
 
+#include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vec4.hpp>
 #include <tempest/vector.hpp>
 
 #include <cstdint>
-#include <functional>
 #include <string>
+#include <unordered_map>
 
 namespace tempest::graphics
 {
@@ -197,8 +198,8 @@ namespace tempest::graphics
                                           pipeline_stage first_access = pipeline_stage::INFER,
                                           pipeline_stage last_access = pipeline_stage::INFER);
 
-        graph_pass_builder& on_execute(std::function<void(command_list&)> commands);
-        graph_pass_builder& should_execute(std::function<bool()> fn);
+        graph_pass_builder& on_execute(function<void(command_list&)> commands);
+        graph_pass_builder& should_execute(function<bool()> fn);
 
         std::string_view name() const noexcept;
 
@@ -284,8 +285,8 @@ namespace tempest::graphics
       private:
         render_graph_resource_library& _resource_lib;
         queue_operation_type _op_type;
-        std::function<void(command_list&)> _commands;
-        std::function<bool()> _should_execute = []() { return true; };
+        function<void(command_list&)> _commands;
+        function<bool()> _should_execute = []() { return true; };
         vector<image_resource_state> _image_states;
         vector<buffer_resource_state> _buffer_states;
         vector<swapchain_resource_state> _external_swapchain_states;
@@ -321,7 +322,7 @@ namespace tempest::graphics
         image_resource_handle create_image(image_desc desc);
         buffer_resource_handle create_buffer(buffer_desc desc);
         graph_pass_handle add_graph_pass(std::string_view name, queue_operation_type type,
-                                         std::function<void(graph_pass_builder&)> build);
+                                         function<void(graph_pass_builder&)> build);
 
         void enable_gpu_profiling(bool enabled = true);
         void enable_imgui(bool enabled = true);

@@ -356,3 +356,20 @@ TEST(functional, function_template_deduction_guides)
     EXPECT_EQ(f1(1, 2), 3);
     EXPECT_EQ(f2(1, 2), 3);
 }
+
+TEST(functional, mem_fn)
+{
+    struct Foo
+    {
+        int add(int a, int b)
+        {
+            return a + b;
+        }
+    };
+
+    Foo foo;
+
+    auto f = tempest::mem_fn(&Foo::add);
+
+    EXPECT_EQ(f(foo, 1, 2), 3);
+}

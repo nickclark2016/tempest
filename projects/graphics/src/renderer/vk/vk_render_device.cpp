@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -1998,7 +1999,7 @@ namespace tempest::graphics::vk
     {
     }
 
-    void resource_deletion_queue::add_to_queue(size_t current_frame, std::function<void()> deleter)
+    void resource_deletion_queue::add_to_queue(size_t current_frame, function<void()> deleter)
     {
         _queue.push_back(delete_info{
             .frame = current_frame,

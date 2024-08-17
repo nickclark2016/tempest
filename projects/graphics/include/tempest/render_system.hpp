@@ -126,7 +126,7 @@ namespace tempest::graphics
         struct draw_batch_payload
         {
             graphics_pipeline_resource_handle pipeline;
-            std::vector<indexed_indirect_command> commands;
+            vector<indexed_indirect_command> commands;
             ecs::sparse_map<gpu_object_data> objects;
         };
 
@@ -180,7 +180,7 @@ namespace tempest::graphics
         template <typename Fn>
         inline void draw_imgui(Fn&& fn)
         {
-            _create_imgui_hierarchy = std::forward<Fn>(fn);
+            _create_imgui_hierarchy = tempest::forward<Fn>(fn);
         }
 
         void mark_dirty();
@@ -196,11 +196,11 @@ namespace tempest::graphics
         std::unique_ptr<render_graph> _graph;
         std::unordered_map<iwindow*, swapchain_resource_handle> _swapchains;
 
-        std::vector<image_resource_handle> _images;
-        std::vector<buffer_resource_handle> _buffers;
-        std::vector<graphics_pipeline_resource_handle> _graphics_pipelines;
-        std::vector<compute_pipeline_resource_handle> _compute_pipelines;
-        std::vector<sampler_resource_handle> _samplers;
+        vector<image_resource_handle> _images;
+        vector<buffer_resource_handle> _buffers;
+        vector<graphics_pipeline_resource_handle> _graphics_pipelines;
+        vector<compute_pipeline_resource_handle> _compute_pipelines;
+        vector<sampler_resource_handle> _samplers;
 
         buffer_resource_handle _vertex_pull_buffer;
         buffer_resource_handle _mesh_layout_buffer;
@@ -213,8 +213,8 @@ namespace tempest::graphics
 
         std::uint32_t _mesh_bytes{0};
 
-        std::vector<mesh_layout> _meshes;
-        std::vector<gpu_material_data> _materials;
+        vector<mesh_layout> _meshes;
+        vector<gpu_material_data> _materials;
         std::uint32_t _object_count{0};
 
         flat_map<draw_batch_key, draw_batch_payload> _draw_batches;
@@ -246,7 +246,7 @@ namespace tempest::graphics
 
         std::size_t _last_updated_frame{0};
 
-        std::function<void()> _create_imgui_hierarchy;
+        tempest::function<void()> _create_imgui_hierarchy;
 
         graphics_pipeline_resource_handle create_pbr_pipeline(bool enable_blend);
         graphics_pipeline_resource_handle create_z_prepass_pipeline();

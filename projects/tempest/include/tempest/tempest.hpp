@@ -1,9 +1,11 @@
 #ifndef tempest_tempest_engine_h
 #define tempest_tempest_engine_h
 
+#include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/registry.hpp>
 #include <tempest/render_system.hpp>
+#include <tempest/vector.hpp>
 #include <tempest/window.hpp>
 
 #include <chrono>
@@ -53,17 +55,17 @@ namespace tempest
             _should_close = true;
         }
 
-        void on_initialize(std::function<void(engine&)>&& callback)
+        void on_initialize(function<void(engine&)>&& callback)
         {
             _initialize_callbacks.push_back(std::move(callback));
         }
 
-        void on_close(std::function<void(engine&)>&& callback)
+        void on_close(function<void(engine&)>&& callback)
         {
             _close_callbacks.push_back(std::move(callback));
         }
 
-        void on_update(std::function<void(engine&, float)>&& callback)
+        void on_update(function<void(engine&, float)>&& callback)
         {
             _update_callbacks.push_back(std::move(callback));
         }
@@ -84,11 +86,11 @@ namespace tempest
 
       private:
         ecs::registry _entity_registry;
-        std::vector<window_payload> _windows;
+        vector<window_payload> _windows;
 
-        std::vector<std::function<void(engine&)>> _initialize_callbacks;
-        std::vector<std::function<void(engine&)>> _close_callbacks;
-        std::vector<std::function<void(engine&, float)>> _update_callbacks;
+        vector<function<void(engine&)>> _initialize_callbacks;
+        vector<function<void(engine&)>> _close_callbacks;
+        vector<function<void(engine&, float)>> _update_callbacks;
 
         std::chrono::steady_clock::time_point _last_frame_time;
         std::chrono::duration<float> _delta_time;
