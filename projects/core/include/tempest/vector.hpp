@@ -563,6 +563,15 @@ namespace tempest
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
 
+        ptrdiff_t end_index = end() - begin();
+        ptrdiff_t start_index = index;
+
+        // Move construct first element, then move the rest
+        if (!empty())
+        {
+            allocator_traits<Allocator>::construct(_alloc, _end, tempest::move(_data[end_index - 1]));
+        }
+
         for (auto it = end(); it != begin() + index; --it)
         {
             *it = tempest::move(*(it - 1));
@@ -580,9 +589,18 @@ namespace tempest
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
 
-        for (auto it = end(); it != begin() + index; --it)
+        ptrdiff_t end_index = size();
+        ptrdiff_t start_index = index;
+
+        // Move construct first element, then move the rest
+        if (!empty())
         {
-            *it = tempest::move(*(it - 1));
+            allocator_traits<Allocator>::construct(_alloc, _end, tempest::move(_data[end_index - 1]));
+        }
+
+        for (auto index = end_index - 1; index > start_index; --index)
+        {
+            _data[index] = tempest::move(_data[index - 1]);
         }
 
         allocator_traits<Allocator>::construct(_alloc, _data + index, tempest::move(value));
@@ -598,9 +616,21 @@ namespace tempest
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
 
-        for (auto it = end(); it != begin() + index; --it)
+        // Move construct the first count elements, then move the rest
+        auto count_remaining = size() - index;
+        auto count_to_move = std::min(count, count_remaining);
+
+        ptrdiff_t end_index = size();
+        ptrdiff_t start_index = index;
+
+        for (auto i = 0; i < count_to_move; ++i)
         {
-            *it = tempest::move(*(it - count));
+            allocator_traits<Allocator>::construct(_alloc, _end + i, tempest::move(_data[index + i - 1]));
+        }
+
+        for (auto index = end_index - 1; index > start_index; --index)
+        {
+            _data[index] = tempest::move(_data[index - count]);
         }
 
         for (size_type i = 0; i < count; ++i)
@@ -691,12 +721,6 @@ namespace tempest
         }
 
         _end -= count;
-
-        // Destroy the last count elements
-        for (auto it = end(); it != end() + count; ++it)
-        {
-            allocator_traits<Allocator>::destroy(_alloc, it);
-        }
 
         return begin() + index;
     }

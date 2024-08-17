@@ -3,11 +3,11 @@
 
 #include "window.hpp"
 
+#include <tempest/functional.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec4.hpp>
 
-#include <functional>
 #include <string_view>
 
 namespace tempest::graphics
@@ -18,17 +18,17 @@ namespace tempest::graphics
         static void initialize_for_window(iwindow& win);
         static void shutdown();
 
-        static void create_frame(std::function<void()> contents);
-        static void create_window(std::string_view name, std::function<void()> contents);
+        static void create_frame(function<void()> contents);
+        static void create_window(std::string_view name, function<void()> contents);
 
-        static void create_table(std::string_view name, int cols, std::function<void()> contents);
+        static void create_table(std::string_view name, int cols, function<void()> contents);
         static void next_column();
         static void next_row();
 
-        static void create_header(std::string_view name, std::function<void()> contents);
+        static void create_header(std::string_view name, function<void()> contents);
 
-        static bool create_tree_node(std::string_view name, std::function<void()> contents, bool selected = false);
-        static bool create_tree_node_leaf(std::string_view name, std::function<void()> contents,
+        static bool create_tree_node(std::string_view name, function<void()> contents, bool selected = false);
+        static bool create_tree_node_leaf(std::string_view name, function<void()> contents,
                                           bool selected = false);
         static bool begin_tree_node(std::string_view name);
         static void end_tree_node();

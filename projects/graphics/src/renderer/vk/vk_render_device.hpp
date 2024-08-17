@@ -1,6 +1,7 @@
 #ifndef tempest_graphics_vk_render_device_hpp
 #define tempest_graphics_vk_render_device_hpp
 
+#include <tempest/functional.hpp>
 #include <tempest/object_pool.hpp>
 #include <tempest/render_device.hpp>
 #include <tempest/span.hpp>
@@ -9,7 +10,6 @@
 
 #include <array>
 #include <deque>
-#include <functional>
 #include <optional>
 
 #include <VkBootstrap.h>
@@ -83,7 +83,7 @@ namespace tempest::graphics::vk
       public:
         explicit resource_deletion_queue(size_t frames_in_flight);
 
-        void add_to_queue(size_t current_frame, std::function<void()> deleter);
+        void add_to_queue(size_t current_frame, function<void()> deleter);
         void flush_frame(size_t current_frame);
         void flush_all();
 
@@ -91,7 +91,7 @@ namespace tempest::graphics::vk
         struct delete_info
         {
             size_t frame;
-            std::function<void()> deleter;
+            function<void()> deleter;
         };
 
         vector<delete_info> _queue;

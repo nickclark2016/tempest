@@ -1,6 +1,8 @@
 #ifndef tempest_glfw_window_hpp
 #define tempest_glfw_window_hpp
 
+#include <tempest/functional.hpp>
+#include <tempest/vector.hpp>
 #include <tempest/window.hpp>
 
 #include <GLFW/glfw3.h>
@@ -58,22 +60,22 @@ namespace tempest::graphics::glfw
             return glfwGetInputMode(_win, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
         }
 
-        void register_keyboard_callback(std::function<void(const core::key_state&)>&& cb) override
+        void register_keyboard_callback(function<void(const core::key_state&)>&& cb) override
         {
             _keyboard_callbacks.push_back(std::move(cb));
         }
 
-        void register_mouse_callback(std::function<void(const core::mouse_button_state&)>&& cb) override
+        void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) override
         {
             _mouse_callbacks.push_back(std::move(cb));
         }
 
-        void register_cursor_callback(std::function<void(float, float)>&& cb) override
+        void register_cursor_callback(function<void(float, float)>&& cb) override
         {
             _cursor_callbacks.push_back(std::move(cb));
         }
 
-        void register_scroll_callback(std::function<void(float, float)>&& cb) override
+        void register_scroll_callback(function<void(float, float)>&& cb) override
         {
             _scroll_callbacks.push_back(std::move(cb));
         }
@@ -88,10 +90,10 @@ namespace tempest::graphics::glfw
         std::uint32_t _width{};
         std::uint32_t _height{};
 
-        std::vector<std::function<void(const core::key_state&)>> _keyboard_callbacks;
-        std::vector<std::function<void(const core::mouse_button_state&)>> _mouse_callbacks;
-        std::vector<std::function<void(float, float)>> _cursor_callbacks;
-        std::vector<std::function<void(float, float)>> _scroll_callbacks;
+        vector<function<void(const core::key_state&)>> _keyboard_callbacks;
+        vector<function<void(const core::mouse_button_state&)>> _mouse_callbacks;
+        vector<function<void(float, float)>> _cursor_callbacks;
+        vector<function<void(float, float)>> _scroll_callbacks;
 
         void _release();
     };

@@ -1,11 +1,11 @@
 #ifndef tempest_window_hpp
 #define tempest_window_hpp
 
+#include <tempest/functional.hpp>
 #include <tempest/keyboard.hpp>
 #include <tempest/mouse.hpp>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string_view>
 
@@ -14,7 +14,7 @@ namespace tempest::graphics
     class iwindow
     {
       public:
-        using close_callback = std::function<void()>;
+        using close_callback = function<void()>;
 
         virtual ~iwindow() = default;
 
@@ -26,10 +26,10 @@ namespace tempest::graphics
 
         virtual bool minimized() const noexcept = 0;
 
-        virtual void register_keyboard_callback(std::function<void(const core::key_state&)>&& cb) = 0;
-        virtual void register_mouse_callback(std::function<void(const core::mouse_button_state&)>&& cb) = 0;
-        virtual void register_cursor_callback(std::function<void(float, float)>&& cb) = 0;
-        virtual void register_scroll_callback(std::function<void(float, float)>&& cb) = 0;
+        virtual void register_keyboard_callback(function<void(const core::key_state&)>&& cb) = 0;
+        virtual void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) = 0;
+        virtual void register_cursor_callback(function<void(float, float)>&& cb) = 0;
+        virtual void register_scroll_callback(function<void(float, float)>&& cb) = 0;
 
         virtual void show() = 0;
         virtual void disable_cursor(bool disable = true) = 0;

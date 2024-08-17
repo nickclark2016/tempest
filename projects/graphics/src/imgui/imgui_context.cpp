@@ -30,7 +30,7 @@ namespace tempest::graphics
         }
     }
 
-    void imgui_context::create_frame(std::function<void()> contents)
+    void imgui_context::create_frame(function<void()> contents)
     {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -40,14 +40,14 @@ namespace tempest::graphics
         ImGui::EndFrame();
     }
 
-    void imgui_context::create_window(std::string_view name, std::function<void()> contents)
+    void imgui_context::create_window(std::string_view name, function<void()> contents)
     {
         ImGui::Begin(name.data());
         contents();
         ImGui::End();
     }
 
-    void imgui_context::create_table(std::string_view name, int cols, std::function<void()> contents)
+    void imgui_context::create_table(std::string_view name, int cols, function<void()> contents)
     {
         ImGui::BeginTable(name.data(), cols);
         contents();
@@ -64,7 +64,7 @@ namespace tempest::graphics
         ImGui::TableNextRow();
     }
 
-    bool imgui_context::create_tree_node(std::string_view name, std::function<void()> contents, bool selected)
+    bool imgui_context::create_tree_node(std::string_view name, function<void()> contents, bool selected)
     {
         if (selected)
         {
@@ -88,7 +88,7 @@ namespace tempest::graphics
         }
     }
 
-    bool imgui_context::create_tree_node_leaf(std::string_view name, std::function<void()> contents, bool selected)
+    bool imgui_context::create_tree_node_leaf(std::string_view name, function<void()> contents, bool selected)
     {
         if (selected)
         {
@@ -137,7 +137,7 @@ namespace tempest::graphics
         ImGui::PopStyleColor();
     }
 
-    void imgui_context::create_header(std::string_view name, std::function<void()> contents)
+    void imgui_context::create_header(std::string_view name, function<void()> contents)
     {
         if (ImGui::CollapsingHeader(name.data()))
         {

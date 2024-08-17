@@ -514,6 +514,14 @@ namespace tempest
         }
     } // namespace detail
 
+    template <typename M, typename T>
+    constexpr auto mem_fn(M T::*pm) noexcept
+    {
+        return [pm](T& obj, auto&&... args) -> decltype(auto) {
+            return tempest::invoke(pm, obj, tempest::forward<decltype(args)>(args)...);
+        };
+    }
+
     template <typename R, typename... Args>
     class function<R(Args...)> : private detail::function_base
     {
