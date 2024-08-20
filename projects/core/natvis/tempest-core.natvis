@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+    <Type Name="tempest::array&lt;*,*&gt;">
+        <DisplayString>{{size = {$T2}}}</DisplayString>
+        <Expand>
+            <Item Name="[size]" ExcludeView="simple">$T2</Item>
+            <Item Name="[capacity]" ExcludeView="simple">$T2</Item>
+            <ArrayItems>
+                <Size>$T2</Size>
+                <ValuePointer>_data</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+
+    <Type Name="tempest::optional&lt;*&gt;">
+        <DisplayString Condition="_has_value">{{_data.value}}</DisplayString>
+        <DisplayString Condition="!_has_value">[empty]</DisplayString>
+        <Expand>
+            <Item Name="[value]" Condition="_has_value">_data.value</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="tempest::basic_string&lt;char,*&gt;">
+        <Intrinsic Name="is_small" Expression="(_storage.small.data[small_string_capacity - 1] &amp; 0xE0) == 0" />
+        <Intrinsic Name="small_string_size" Expression="(small_string_capacity - 1 - (_storage.small.data[small_string_capacity - 1] &amp; ~ 0xE0))" />
+        <Intrinsic Name="large_string_size" Expression="(_storage.large.size)" />
+        <Intrinsic Name="small_string_cap" Expression="(small_string_capacity - 1)" />
+        <Intrinsic Name="large_string_cap" Expression="_storage.large.capacity &amp; ~ ((0b111 &lt;&lt; (sizeof(size_t) * 8 - 4)))" />
+        
+        <DisplayString Condition="is_small()">{{{_storage.small.data,s}}}</DisplayString>
+        <DisplayString Condition="!is_small()">{{{_storage.large.data,s}}}</DisplayString>
+        
+        <Expand>
+            <Item Name="[size]" Condition="is_small()">small_string_size()</Item>
+            <Item Name="[size]" Condition="!is_small()">large_string_size()</Item>
+            <Item Name="[capacity]" Condition="is_small()">small_string_cap()</Item>
+            <Item Name="[capacity]" Condition="!is_small()">large_string_cap()</Item>
+            <Item Name="[is_small_string]">is_small()</Item>
+            <Item Name="[allocator]">_alloc</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="tempest::vector&lt;*&gt;">
+        <DisplayString>{{size = {_end - _data}}}</DisplayString>
+        <Expand>
+            <Item Name="[size]">(tempest::size_t)(_end - _data)</Item>
+            <Item Name="[capacity]">(tempest::size_t)(_capacity_end - _data)</Item>
+            <Item Name="[allocator]">_alloc</Item>
+            <Synthetic Name="Values">
+                <Expand>
+                    <ArrayItems Condition="(_end - _data) > 0">
+                        <Size>_end - _data</Size>
+                        <ValuePointer>_data</ValuePointer>
+                    </ArrayItems>
+                </Expand>
+            </Synthetic>
+        </Expand>
+    </Type>
+</AutoVisualizer>
