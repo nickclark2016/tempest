@@ -1,7 +1,7 @@
 project('core', (prj) => {
     kind('StaticLib');
     language('C++');
-    
+
     files([
         './include/**/*.hpp',
         './src/**/*.hpp',
@@ -20,6 +20,12 @@ project('core', (prj) => {
         includeDirs([
             './include'
         ]);
+
+        when({ toolset: 'msc:143' }, (_) => {
+            natvisFiles([
+                './natvis/**/*.natvis',
+            ]);
+        });
     });
 
     uses([
