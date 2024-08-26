@@ -42,7 +42,9 @@ namespace tempest
     using iter_difference_t = typename incrementable_traits<T>::difference_type;
 
     template <typename It>
-    struct indirectly_readable_traits {};
+    struct indirectly_readable_traits
+    {
+    };
 
     template <typename It>
         requires is_object_v<It>
@@ -314,6 +316,78 @@ namespace tempest
 
             return n;
         }
+    }
+
+    template <typename T>
+    constexpr auto begin(T& t) -> decltype(t.begin())
+    {
+        return t.begin();
+    }
+
+    template <typename T>
+    constexpr auto begin(const T& t) -> decltype(t.begin())
+    {
+        return t.begin();
+    }
+
+    template <typename T, size_t N>
+    constexpr auto begin(T (&array)[N]) noexcept
+    {
+        return array;
+    }
+
+    template <typename T>
+    constexpr auto cbegin(const T& t) -> decltype(begin(t))
+    {
+        return t.cbegin();
+    }
+
+    template <typename T>
+    constexpr auto end(T& t) -> decltype(t.end())
+    {
+        return t.end();
+    }
+
+    template <typename T>
+    constexpr auto end(const T& t) -> decltype(t.end())
+    {
+        return t.end();
+    }
+
+    template <typename T, size_t N>
+    constexpr auto end(T (&array)[N]) noexcept
+    {
+        return array + N;
+    }
+
+    template <typename T>
+    constexpr auto cend(const T& t) -> decltype(end(t))
+    {
+        return t.cend();
+    }
+
+    template <typename T>
+    constexpr auto size(const T& t) -> decltype(t.size())
+    {
+        return t.size();
+    }
+
+    template <typename T>
+    constexpr auto ssize(const T& t) -> common_type_t<make_signed_t<decltype(t.size())>, ptrdiff_t>
+    {
+        return static_cast<make_signed_t<decltype(t.size())>>(t.size());
+    }
+
+    template <typename T>
+    constexpr auto data(T& t) -> decltype(t.data())
+    {
+        return t.data();
+    }
+
+    template <typename T>
+    constexpr auto data(const T& t) -> decltype(t.data())
+    {
+        return t.data();
     }
 } // namespace tempest
 

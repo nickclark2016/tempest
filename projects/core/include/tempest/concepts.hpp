@@ -155,6 +155,12 @@ namespace tempest
 
     template <typename T>
     concept signed_integral = integral<T> && is_signed_v<T>;
+
+    template <typename T>
+    concept unsigned_integral = integral<T> && !signed_integral<T>;
+
+    template <typename T, typename U>
+    concept derived_from = is_base_of_v<U, T>;
 } // namespace tempest
 
 #endif // tempest_core_concepts_hpp

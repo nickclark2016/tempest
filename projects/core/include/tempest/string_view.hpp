@@ -3,6 +3,7 @@
 
 #include <tempest/char_traits.hpp>
 #include <tempest/int.hpp>
+#include <tempest/iterator.hpp>
 
 #include <iterator>
 #include <limits>
@@ -112,7 +113,7 @@ namespace tempest
     template <typename CharT, typename Traits>
     template <typename R>
     constexpr basic_string_view<CharT, Traits>::basic_string_view(R&& r) noexcept
-        : _start(std::data(r)), _end(std::data(r) + std::size(r))
+        : _start(tempest::data(r)), _end(tempest::data(r) + tempest::size(r))
     {
     }
 

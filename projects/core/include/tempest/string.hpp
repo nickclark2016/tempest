@@ -238,6 +238,8 @@ namespace tempest
 
         constexpr void swap(basic_string& other) noexcept(is_noexecpt_movable);
 
+        constexpr operator basic_string_view<CharT, Traits>() const noexcept;
+
       private:
         struct large_string
         {
@@ -1782,6 +1784,13 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
+    inline constexpr tempest::basic_string<CharT, Traits, Allocator>::operator basic_string_view<CharT, Traits>()
+        const noexcept
+    {
+        return basic_string_view<CharT, Traits>{data(), size()};
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
     inline constexpr void basic_string<CharT, Traits, Allocator>::swap(basic_string& other) noexcept(
         is_noexecpt_movable)
     {
@@ -2416,6 +2425,60 @@ namespace tempest
                           std::size_t count) noexcept
     {
         return basic_string_view<CharT, Traits>(str.begin() + pos, count);
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr const CharT* data(const basic_string<CharT, Traits, Allocator>& str) noexcept
+    {
+        return str.data();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr typename basic_string<CharT, Traits, Allocator>::size_type size(const basic_string<CharT, Traits, Allocator>& str) noexcept
+    {
+        return str.size();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr bool empty(const basic_string<CharT, Traits, Allocator>& str) noexcept
+    {
+        return str.empty();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr auto begin(basic_string<CharT, Traits, Allocator>& str) noexcept -> decltype(str.begin())
+    {
+        return str.begin();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr auto begin(const basic_string<CharT, Traits, Allocator>& str) noexcept -> decltype(str.begin())
+    {
+        return str.begin();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr auto cbegin(const basic_string<CharT, Traits, Allocator>& str) noexcept -> decltype(str.cbegin())
+    {
+        return str.cbegin();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr auto end(basic_string<CharT, Traits, Allocator>& str) noexcept -> decltype(str.end())
+    {
+        return str.end();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr auto end(const basic_string<CharT, Traits, Allocator>& str) noexcept -> decltype(str.end())
+    {
+        return str.end();
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    constexpr auto cend(const basic_string<CharT, Traits, Allocator>& str) noexcept -> decltype(str.cend())
+    {
+        return str.cend();
     }
 } // namespace tempest
 
