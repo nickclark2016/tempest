@@ -1,7 +1,7 @@
 #include <tempest/editor.hpp>
 
-#include "camera_component_view.hpp"
-#include "transform_component_view.hpp"
+#include <tempest/camera_component_view.hpp>
+#include <tempest/transform_component_view.hpp>
 
 namespace tempest::editor
 {

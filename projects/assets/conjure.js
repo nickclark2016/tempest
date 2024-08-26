@@ -11,6 +11,7 @@ project('assets', (prj) => {
     dependsOn([
         'tinygltf',
         'core',
+        'ecs',
         'logger'
     ]);
 
@@ -21,6 +22,7 @@ project('assets', (prj) => {
 
         uses([
             'core:public',
+            'ecs:public',
             'logger:public'
         ]);
     });
