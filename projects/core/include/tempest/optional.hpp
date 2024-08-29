@@ -135,10 +135,11 @@ namespace tempest
 
       private:
         union impl {
+            byte c;
             T value;
 
-            impl() = default;
-            ~impl() = default;
+            impl() noexcept;
+            ~impl();
         } _data;
 
         bool _has_value = false;
@@ -175,6 +176,16 @@ namespace tempest
 
     template <typename T>
     inline constexpr optional<T>::optional(nullopt_t) noexcept
+    {
+    }
+
+    template <typename T>
+    inline optional<T>::impl::impl() noexcept
+    {
+    }
+
+    template <typename T>
+    inline optional<T>::impl::~impl()
     {
     }
 

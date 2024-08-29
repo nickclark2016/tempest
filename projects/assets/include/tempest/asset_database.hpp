@@ -1,6 +1,11 @@
 #ifndef tempest_assets_asset_database_hpp
 #define tempest_assets_asset_database_hpp
 
+#include <tempest/asset_importer.hpp>
+
+#include <tempest/flat_unordered_map.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/string.hpp>
 
 namespace tempest::assets
@@ -17,8 +22,14 @@ namespace tempest::assets
 
         ~asset_database() = default;
 
+        void register_importer(string extension, unique_ptr<asset_importer> importer);
+        
+        [[nodiscard]] optional<prefab> load(string_view path, span<const byte> data) const;
+
       private:
         string _root_path;
+
+        flat_unordered_map<string, unique_ptr<asset_importer>> _importers;
     };
 } // namespace tempest::assets
 

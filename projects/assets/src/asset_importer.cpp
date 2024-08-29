@@ -21,19 +21,24 @@ namespace tempest::assets
         return _data;
     }
 
-    const prefab& asset_import_context::get_prefab() const noexcept
+    const prefab& asset_import_context::get_prefab() const& noexcept
     {
         return _prefab;
     }
 
-    void asset_import_context::add_asset_as_primary(std::unique_ptr<asset> asset)
+    prefab asset_import_context::get_prefab() && noexcept
+    {
+        return tempest::move(_prefab);
+    }
+
+    void asset_import_context::add_asset_as_primary(unique_ptr<asset> asset)
     {
         _primary_asset = asset.get();
         _prefab.assets.push_back(tempest::move(asset));
     }
 
-    void asset_import_context::add_asset(std::unique_ptr<asset> asset)
+    void asset_import_context::add_asset(unique_ptr<asset> asset)
     {
         _prefab.assets.push_back(tempest::move(asset));
     }
-}
+} // namespace tempest::assets

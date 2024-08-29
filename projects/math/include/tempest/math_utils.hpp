@@ -1,10 +1,13 @@
 #ifndef tempest_math_math_utils_hpp__
 #define tempest_math_math_utils_hpp__
 
+#include <tempest/concepts.hpp>
+
 #include <bit>
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <numeric>
 #include <type_traits>
 
 namespace tempest::math
@@ -106,7 +109,7 @@ namespace tempest::math
         return lerp(new_min, new_max, t);
     }
 
-    template <std::integral T>
+    template <integral T>
     inline constexpr T div_ceil(T x, T y)
     {
         if (x != 0)

@@ -2,6 +2,7 @@
 #define tempest_core_string_view_hpp
 
 #include <tempest/char_traits.hpp>
+#include <tempest/hash.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
 
@@ -497,6 +498,15 @@ namespace tempest
     {
         return basic_string_view<CharT, Traits>(sv.begin() + pos, count);
     }
+
+    template <typename CharT, typename Traits>
+    struct hash<basic_string_view<CharT, Traits>>
+    {
+        size_t operator()(const basic_string_view<CharT, Traits>& sv) const noexcept
+        {
+            return detail::fnv1a_auto(sv.data(), sv.size());
+        }
+    };
 } // namespace tempest
 
 #endif // tempest_core_string_view_hpp
