@@ -33,19 +33,23 @@ namespace tempest
         explicit constexpr vector(const Allocator& alloc) noexcept(noexcept(Allocator()));
         constexpr vector(size_type count, const T& value, const Allocator& alloc = Allocator());
         explicit constexpr vector(size_type count, const Allocator& alloc = Allocator());
-        constexpr vector(std::initializer_list<T> init, const Allocator& alloc = Allocator());
+        constexpr vector(std::initializer_list<T> init, const Allocator& alloc = Allocator())
+            requires is_copy_assignable_v<T>;
 
         template <std::input_iterator It>
         constexpr vector(It first, It last, const Allocator& alloc = Allocator());
 
-        constexpr vector(const vector& other);
-        constexpr vector(const vector& other, const Allocator& alloc);
+        constexpr vector(const vector& other)
+            requires is_copy_constructible_v<T>;
+        constexpr vector(const vector& other, const Allocator& alloc)
+            requires is_copy_constructible_v<T>;
         constexpr vector(vector&& other) noexcept;
         constexpr vector(vector&& other, const Allocator& alloc);
 
         constexpr ~vector();
 
-        constexpr vector& operator=(const vector& other);
+        constexpr vector& operator=(const vector& other)
+            requires is_copy_assignable_v<T>;
         constexpr vector& operator=(vector&& other) noexcept(
             allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
             allocator_traits<Allocator>::is_always_equal::value);
@@ -96,9 +100,12 @@ namespace tempest
 
         constexpr void clear() noexcept;
 
-        constexpr iterator insert(const_iterator pos, const T& value);
+        constexpr iterator insert(const_iterator pos, const T& value)
+            requires is_copy_constructible_v<T>;
         constexpr iterator insert(const_iterator pos, T&& value);
-        constexpr iterator insert(const_iterator pos, size_type count, const T& value);
+
+        constexpr iterator insert(const_iterator pos, size_type count, const T& value)
+            requires is_copy_constructible_v<T>;
 
         template <typename InputIt>
         constexpr iterator insert(const_iterator pos, InputIt first, InputIt last);
@@ -109,7 +116,9 @@ namespace tempest
         constexpr iterator erase(const_iterator pos);
         constexpr iterator erase(const_iterator first, const_iterator last);
 
-        constexpr void push_back(const T& value);
+        constexpr void push_back(const T& value)
+            requires is_copy_constructible_v<T>;
+
         constexpr void push_back(T&& value);
 
         template <typename... Args>
@@ -174,7 +183,9 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    inline constexpr vector<T, Allocator>::vector(std::initializer_list<T> init, const Allocator& alloc) : _alloc{alloc}
+    inline constexpr vector<T, Allocator>::vector(std::initializer_list<T> init, const Allocator& alloc)
+        requires is_copy_assignable_v<T>
+        : _alloc{alloc}
     {
         reserve(init.size());
 
@@ -198,6 +209,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     constexpr vector<T, Allocator>::vector(const vector& other)
+        requires is_copy_constructible_v<T>
         : _alloc{allocator_traits<Allocator>::select_on_container_copy_construction(other._alloc)}
     {
         reserve(other.size());
@@ -209,7 +221,9 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr vector<T, Allocator>::vector(const vector& other, const Allocator& alloc) : _alloc{alloc}
+    constexpr vector<T, Allocator>::vector(const vector& other, const Allocator& alloc)
+        requires is_copy_constructible_v<T>
+        : _alloc{alloc}
     {
         reserve(other.size());
 
@@ -267,6 +281,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     constexpr vector<T, Allocator>& vector<T, Allocator>::operator=(const vector& other)
+        requires is_copy_assignable_v<T>
     {
         if (this == &other)
         {
@@ -559,6 +574,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, const T& value)
+        requires is_copy_constructible_v<T>
     {
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
@@ -612,6 +628,7 @@ namespace tempest
     template <typename T, typename Allocator>
     constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, size_type count,
                                                                                    const T& value)
+        requires is_copy_constructible_v<T>
     {
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
@@ -727,6 +744,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     constexpr void vector<T, Allocator>::push_back(const T& value)
+        requires is_copy_constructible_v<T>
     {
         _emplace_one_at_back(value);
     }

@@ -20,7 +20,7 @@ namespace tempest::editor
                 auto name = registry.name(_selected_entity);
                 if (name && !name->empty())
                 {
-                    imgui::label(std::format("Name: {}", *name));
+                    imgui::label(tempest::string_view(std::format("Name: {}", *name)));
                 }
                 else
                 {

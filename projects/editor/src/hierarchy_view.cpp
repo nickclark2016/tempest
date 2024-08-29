@@ -58,8 +58,7 @@ namespace tempest::editor
 
         if (!relationship || relationship->first_child == tempest::ecs::null)
         {
-            bool selected = imgui::create_tree_node_leaf(
-                name, [&]() {}, _selected_entity == parent);
+            bool selected = imgui::create_tree_node_leaf(string_view(name), [&]() {}, _selected_entity == parent);
             if (selected)
             {
                 _selected_entity = parent;
@@ -68,7 +67,7 @@ namespace tempest::editor
         }
 
         bool selected = imgui::create_tree_node(
-            name,
+            string_view(name),
             [&]() {
                 auto child = relationship->first_child;
 

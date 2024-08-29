@@ -3,6 +3,7 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/char_traits.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
@@ -113,7 +114,7 @@ namespace tempest
         constexpr basic_string(const value_type* s, size_type count, const Allocator& alloc = Allocator());
         constexpr basic_string(const value_type* s, const Allocator& alloc = Allocator());
 
-        template <std::input_iterator InputIt>
+        template <input_iterator InputIt>
         constexpr basic_string(InputIt first, InputIt last, const Allocator& alloc = Allocator());
 
         constexpr basic_string(const basic_string& other);
@@ -122,11 +123,11 @@ namespace tempest
         constexpr basic_string(basic_string&& other, const Allocator& alloc);
 
         template <typename StringLikeView>
-            requires(std::is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> &&
-                     !std::is_convertible_v<const StringLikeView&, const CharT*>)
+            requires(is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> &&
+                     !is_convertible_v<const StringLikeView&, const CharT*>)
         constexpr basic_string(const StringLikeView& view, const Allocator& alloc = Allocator());
 
-        basic_string(std::nullptr_t) = delete;
+        basic_string(nullptr_t) = delete;
 
         constexpr ~basic_string();
 
@@ -136,7 +137,7 @@ namespace tempest
         constexpr basic_string& operator=(const value_type* s);
         constexpr basic_string& operator=(value_type ch);
 
-        basic_string& operator=(std::nullptr_t) = delete;
+        basic_string& operator=(nullptr_t) = delete;
 
         constexpr basic_string& assign(size_type count, value_type ch);
         constexpr basic_string& assign(const basic_string& str);
@@ -145,7 +146,7 @@ namespace tempest
         constexpr basic_string& assign(const value_type* s, size_type count);
         constexpr basic_string& assign(const value_type* s);
 
-        template <std::input_iterator InputIt>
+        template <input_iterator InputIt>
         constexpr basic_string& assign(InputIt first, InputIt last);
 
         constexpr allocator_type get_allocator() const noexcept;
@@ -202,7 +203,7 @@ namespace tempest
                                        size_type count = npos);
         constexpr basic_string& insert(const_iterator pos, value_type ch);
 
-        template <std::input_iterator InputIt>
+        template <input_iterator InputIt>
         constexpr basic_string& insert(const_iterator pos, InputIt first, InputIt last);
 
         constexpr basic_string& erase(const_iterator pos);
@@ -217,7 +218,7 @@ namespace tempest
         constexpr basic_string& append(const value_type* s, size_type count);
         constexpr basic_string& append(const value_type* s);
 
-        template <std::input_iterator InputIt>
+        template <input_iterator InputIt>
         constexpr basic_string& append(InputIt first, InputIt last);
 
         constexpr basic_string& operator+=(const basic_string& str);
@@ -230,7 +231,7 @@ namespace tempest
         constexpr basic_string& replace(const_iterator first, const_iterator last, const value_type* s);
         constexpr basic_string& replace(const_iterator first, const_iterator last, size_type s_count, value_type ch);
 
-        template <std::input_iterator InputIt>
+        template <input_iterator InputIt>
         constexpr basic_string& replace(const_iterator first, const_iterator last, InputIt first2, InputIt last2);
 
         constexpr void resize(size_type count);
@@ -533,7 +534,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    template <std::input_iterator InputIt>
+    template <input_iterator InputIt>
     inline constexpr basic_string<CharT, Traits, Allocator>::basic_string(InputIt first, InputIt last,
                                                                           const Allocator& alloc)
         : _alloc{alloc}
@@ -543,8 +544,8 @@ namespace tempest
 
     template <typename CharT, typename Traits, typename Allocator>
     template <typename StringLikeView>
-        requires(std::is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> &&
-                 !std::is_convertible_v<const StringLikeView&, const CharT*>)
+        requires(is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> &&
+                 !is_convertible_v<const StringLikeView&, const CharT*>)
     inline constexpr basic_string<CharT, Traits, Allocator>::basic_string(const StringLikeView& view,
                                                                           const Allocator& alloc)
         : _alloc{alloc}
@@ -570,7 +571,7 @@ namespace tempest
 
     template <typename CharT, typename Traits, typename Allocator>
     inline constexpr basic_string<CharT, Traits, Allocator>::basic_string(basic_string&& other) noexcept
-        : basic_string{std::move(other), other._alloc}
+        : basic_string{move(other), other._alloc}
     {
     }
 
@@ -630,10 +631,10 @@ namespace tempest
 
         if (alloc_traits::propagate_on_container_move_assignment::value)
         {
-            _alloc = std::move(other._alloc);
+            _alloc = move(other._alloc);
         }
 
-        assign(std::move(other));
+        assign(move(other));
         return *this;
     }
 
@@ -787,7 +788,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    template <std::input_iterator InputIt>
+    template <input_iterator InputIt>
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::assign(
         InputIt first, InputIt last)
     {
@@ -1231,7 +1232,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    template <std::input_iterator InputIt>
+    template <input_iterator InputIt>
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::insert(
         const_iterator pos, InputIt first, InputIt last)
     {
@@ -1476,7 +1477,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    template <std::input_iterator InputIt>
+    template <input_iterator InputIt>
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::append(
         InputIt first, InputIt last)
     {
@@ -1685,7 +1686,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    template <std::input_iterator InputIt>
+    template <input_iterator InputIt>
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::replace(
         const_iterator first, const_iterator last, InputIt first2, InputIt last2)
     {
@@ -1855,7 +1856,8 @@ namespace tempest
 
         // Shift the remaining capacity 3 bits left
         auto remaining_capacity = small_string_capacity - size - 1;
-        _storage.small.data[small_string_capacity - 1] = Traits::to_char_type(static_cast<Traits::int_type>(remaining_capacity));
+        _storage.small.data[small_string_capacity - 1] =
+            Traits::to_char_type(static_cast<Traits::int_type>(remaining_capacity));
     }
 
     template <typename CharT, typename Traits, typename Allocator>
@@ -2434,7 +2436,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    constexpr typename basic_string<CharT, Traits, Allocator>::size_type size(const basic_string<CharT, Traits, Allocator>& str) noexcept
+    constexpr typename basic_string<CharT, Traits, Allocator>::size_type size(
+        const basic_string<CharT, Traits, Allocator>& str) noexcept
     {
         return str.size();
     }
@@ -2480,6 +2483,15 @@ namespace tempest
     {
         return str.cend();
     }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    struct hash<basic_string<CharT, Traits, Allocator>>
+    {
+        std::size_t operator()(const basic_string<CharT, Traits, Allocator>& str) const noexcept
+        {
+            return hash<basic_string_view<CharT, Traits>>{}(str);
+        }
+    };
 } // namespace tempest
 
 #endif // tempest_core_string_hpp

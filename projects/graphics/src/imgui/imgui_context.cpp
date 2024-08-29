@@ -40,14 +40,14 @@ namespace tempest::graphics
         ImGui::EndFrame();
     }
 
-    void imgui_context::create_window(std::string_view name, function<void()> contents)
+    void imgui_context::create_window(string_view name, function<void()> contents)
     {
         ImGui::Begin(name.data());
         contents();
         ImGui::End();
     }
 
-    void imgui_context::create_table(std::string_view name, int cols, function<void()> contents)
+    void imgui_context::create_table(string_view name, int cols, function<void()> contents)
     {
         ImGui::BeginTable(name.data(), cols);
         contents();
@@ -64,7 +64,7 @@ namespace tempest::graphics
         ImGui::TableNextRow();
     }
 
-    bool imgui_context::create_tree_node(std::string_view name, function<void()> contents, bool selected)
+    bool imgui_context::create_tree_node(string_view name, function<void()> contents, bool selected)
     {
         if (selected)
         {
@@ -88,7 +88,7 @@ namespace tempest::graphics
         }
     }
 
-    bool imgui_context::create_tree_node_leaf(std::string_view name, function<void()> contents, bool selected)
+    bool imgui_context::create_tree_node_leaf(string_view name, function<void()> contents, bool selected)
     {
         if (selected)
         {
@@ -112,7 +112,7 @@ namespace tempest::graphics
         }
     }
 
-    bool imgui_context::begin_tree_node(std::string_view name)
+    bool imgui_context::begin_tree_node(string_view name)
     {
         return ImGui::TreeNode(name.data());
     }
@@ -137,7 +137,7 @@ namespace tempest::graphics
         ImGui::PopStyleColor();
     }
 
-    void imgui_context::create_header(std::string_view name, function<void()> contents)
+    void imgui_context::create_header(string_view name, function<void()> contents)
     {
         if (ImGui::CollapsingHeader(name.data()))
         {
@@ -145,44 +145,44 @@ namespace tempest::graphics
         }
     }
 
-    void imgui_context::label(std::string_view contents)
+    void imgui_context::label(string_view contents)
     {
         ImGui::Text("%s", contents.data());
     }
 
-    float imgui_context::float_slider(std::string_view name, float min, float max, float current_value)
+    float imgui_context::float_slider(string_view name, float min, float max, float current_value)
     {
         float value = current_value;
         ImGui::SliderFloat(name.data(), &value, min, max);
         return value;
     }
 
-    math::vec2<float> imgui_context::float2_slider(std::string_view name, float min, float max,
+    math::vec2<float> imgui_context::float2_slider(string_view name, float min, float max,
                                                    math::vec2<float> current_value)
     {
         ImGui::SliderFloat2(name.data(), current_value.data, min, max);
         return current_value;
     }
 
-    int imgui_context::int_slider(std::string_view name, int min, int max, int current_value)
+    int imgui_context::int_slider(string_view name, int min, int max, int current_value)
     {
         int value = current_value;
         ImGui::SliderInt(name.data(), &value, min, max, "%d");
         return value;
     }
 
-    bool imgui_context::checkbox(std::string_view label, bool current_value)
+    bool imgui_context::checkbox(string_view label, bool current_value)
     {
         ImGui::Checkbox(label.data(), &current_value);
         return current_value;
     }
 
-    bool imgui_context::button(std::string label)
+    bool imgui_context::button(string label)
     {
         return ImGui::Button(label.data());
     }
 
-    int imgui_context::combo_box(std::string_view label, int current_item, span<std::string_view> items)
+    int imgui_context::combo_box(string_view label, int current_item, span<string_view> items)
     {
         vector<const char*> item_ptrs;
         for (auto& item : items)
@@ -195,7 +195,7 @@ namespace tempest::graphics
         return current_item;
     }
 
-    float imgui_context::input_float(std::string_view label, float current_value)
+    float imgui_context::input_float(string_view label, float current_value)
     {
         ImGui::InputFloat(label.data(), &current_value);
         return current_value;

@@ -21,10 +21,11 @@ namespace tempest::assets
         string_view path() const noexcept;
         span<const byte> data() const noexcept;
 
-        const prefab& get_prefab() const noexcept;
+        const prefab& get_prefab() const& noexcept;
+        prefab get_prefab() && noexcept;
 
-        void add_asset_as_primary(std::unique_ptr<asset> asset);
-        void add_asset(std::unique_ptr<asset> asset);
+        void add_asset_as_primary(unique_ptr<asset> asset);
+        void add_asset(unique_ptr<asset> asset);
 
       private:
         string _path;
