@@ -10,6 +10,7 @@ project('assets', (prj) => {
 
     dependsOn([
         'tinygltf',
+        'simdjson',
         'core',
         'ecs',
         'logger'
@@ -30,6 +31,7 @@ project('assets', (prj) => {
     uses([
         'tempest:common',
         'stb:public',
+        'simdjson:public',
         'tinygltf:public',
         'assets:public',
         'math:public'
