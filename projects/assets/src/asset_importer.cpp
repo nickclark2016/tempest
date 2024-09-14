@@ -41,4 +41,9 @@ namespace tempest::assets
     {
         _prefab.assets.push_back(tempest::move(asset));
     }
+
+    void asset_import_context::set_name(string name)
+    {
+        _prefab.name = tempest::move(name);
+    }
 } // namespace tempest::assets

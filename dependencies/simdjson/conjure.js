@@ -37,19 +37,19 @@ project('simdjson', (prj) => {
         ]);
     });
 
-    uses([
-        'simdjson:public',
+    includeDirs([
+        './include'
     ]);
 
-    when({ system: 'windows' }, () => {
+    when({ system: 'windows' }, (_) => {
         toolset('msc:143');
     });
 
-    when({ system: 'linux' }, () => {
+    when({ system: 'linux' }, (_) => {
         toolset('clang');
     });
 
-    when({ system: 'windows' }, () => {
+    when({ system: 'windows' }, (_) => {
         toolset('msc:143');
     });
 

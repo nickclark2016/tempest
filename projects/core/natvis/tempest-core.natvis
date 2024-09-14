@@ -13,7 +13,7 @@
     </Type>
 
     <Type Name="tempest::optional&lt;*&gt;">
-        <DisplayString Condition="_has_value">{{_data.value}}</DisplayString>
+        <DisplayString Condition="_has_value">{{{_data.value}}}</DisplayString>
         <DisplayString Condition="!_has_value">[empty]</DisplayString>
         <Expand>
             <Item Name="[value]" Condition="_has_value">_data.value</Item>

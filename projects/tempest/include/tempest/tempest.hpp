@@ -1,6 +1,7 @@
 #ifndef tempest_tempest_engine_h
 #define tempest_tempest_engine_h
 
+#include <tempest/asset_database.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/registry.hpp>
@@ -80,6 +81,16 @@ namespace tempest
             return _render_system;
         }
 
+        assets::asset_database& get_asset_database()
+        {
+            return _asset_database;
+        }
+
+        const assets::asset_database& get_asset_database() const
+        {
+            return _asset_database;
+        }
+
         ecs::entity load_asset(std::string_view path);
 
         [[noreturn]] void run();
@@ -96,6 +107,8 @@ namespace tempest
         std::chrono::duration<float> _delta_time;
 
         graphics::render_system _render_system;
+
+        assets::asset_database _asset_database;
 
         bool _should_close = false;
     };
