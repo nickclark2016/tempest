@@ -587,7 +587,7 @@ namespace tempest
         auto page = idx / _page_size;
         auto slot = idx % _page_size;
 
-        destroy_at(&_data_pages[page][slot]);
+        tempest::destroy_at(&_data_pages[page][slot]);
         _metadata_pages[page].entries[slot] = detail::deleted_entry;
 
         --_size;
@@ -612,7 +612,7 @@ namespace tempest
             {
                 if (_metadata_strategy.is_full(_metadata_pages[i].entries[j]))
                 {
-                    destroy_at(&_data_pages[i][j]);
+                    tempest::destroy_at(&_data_pages[i][j]);
                     _metadata_pages[i].entries[j] = detail::empty_entry;
                 }
             }
@@ -672,7 +672,7 @@ namespace tempest
 
                     // Copy metadata
                     new_metadata_pages[next_empty.first].entries[next_empty.second] = h2;
-                    destroy_at(&_metadata_pages[i].entries[j]);
+                    tempest::destroy_at(&_metadata_pages[i].entries[j]);
 
                     // Move data is nothrow_move_constructible, else copy
                     if constexpr (is_nothrow_move_constructible_v<V>)
@@ -685,7 +685,7 @@ namespace tempest
                         (void)tempest::construct_at(&new_data_pages[next_empty.first][next_empty.second],
                                                     _data_pages[i][j]);
                     }
-                    destroy_at(&_data_pages[i][j]);
+                    tempest::destroy_at(&_data_pages[i][j]);
                 }
             }
         }
@@ -885,13 +885,13 @@ namespace tempest
             {
                 if (_metadata_strategy.is_full(_metadata_pages[i].entries[j]))
                 {
-                    destroy_at(&_data_pages[i][j]);
+                    tempest::destroy_at(&_data_pages[i][j]);
                 }
             }
         }
 
         // Destroy all metadata pages
-        destroy_n(_metadata_pages, _page_count);
+        tempest::destroy_n(_metadata_pages, _page_count);
 
         // Deallocate all memory
         metadata_alloc_traits::deallocate(_metadata_alloc, _metadata_pages, _page_count);

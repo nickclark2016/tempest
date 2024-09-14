@@ -201,7 +201,7 @@ namespace tempest
     template <typename U1, typename U2>
         requires(is_constructible_v<T1, U1> && is_constructible_v<T2, U2>)
     inline constexpr pair<T1, T2>::pair(U1&& first, U2&& second)
-        : first(forward<U1>(first)), second(forward<U2>(second))
+        : first(tempest::forward<U1>(first)), second(tempest::forward<U2>(second))
     {
     }
 

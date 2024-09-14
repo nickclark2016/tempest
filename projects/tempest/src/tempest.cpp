@@ -31,7 +31,7 @@ namespace tempest
         }
     } // namespace
 
-    engine::engine() : _render_system{_entity_registry}, _delta_time{}
+    engine::engine() : _render_system{_entity_registry}, _delta_time{}, _asset_database{""}
     {
     }
 

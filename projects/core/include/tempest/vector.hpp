@@ -132,6 +132,9 @@ namespace tempest
         constexpr void swap(vector& other) noexcept(allocator_traits<Allocator>::propagate_on_container_swap::value ||
                                                     allocator_traits<Allocator>::is_always_equal::value);
 
+        template <typename U>
+        vector<U> reinterpret_as() noexcept;
+
       private:
         Allocator _alloc;
 
@@ -761,6 +764,26 @@ namespace tempest
     {
         _emplace_one_at_back(tempest::forward<Args>(args)...);
         return back();
+    }
+
+    template <typename T, typename Allocator>
+    template <typename U>
+    inline vector<U> tempest::vector<T, Allocator>::reinterpret_as() noexcept
+    {
+        if constexpr (std::is_same_v<T, U>)
+        {
+            return vector<U>{tempest::move(*this)};
+        }
+
+        U* new_data = reinterpret_cast<U*>(_data);
+        U* new_end = reinterpret_cast<U*>(_end);
+
+        // Remove ownership of the data from the original vector
+        _data = nullptr;
+        _end = nullptr;
+        _capacity_end = nullptr;
+
+        return vector<U>(new_data, new_end);
     }
 
     template <typename T, typename Allocator>

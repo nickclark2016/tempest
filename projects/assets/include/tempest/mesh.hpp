@@ -2,6 +2,8 @@
 #define tempest_assets_mesh_hpp
 
 #include <tempest/asset.hpp>
+#include <tempest/guid.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/string.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
@@ -59,6 +61,14 @@ namespace tempest::assets
         vector<index>& indices() noexcept;
         const vector<index>& indices() const noexcept;
 
+        math::vec3<float>& min_bounds() noexcept;
+        const math::vec3<float>& min_bounds() const noexcept;
+        math::vec3<float>& max_bounds() noexcept;
+        const math::vec3<float>& max_bounds() const noexcept;
+
+        optional<guid> material() const noexcept;
+        void set_material(guid mat) noexcept;
+
         uint32_t vertex_count() const noexcept;
         uint32_t triangle_count() const noexcept;
 
@@ -78,6 +88,34 @@ namespace tempest::assets
         vector<tangent> _tangents;
         vector<color> _colors;
         vector<index> _indices;
+
+        math::vec3<float> _min;
+        math::vec3<float> _max;
+
+        optional<guid> _material;
+    };
+
+    class mesh_group : public asset
+    {
+      public:
+        explicit mesh_group(string name);
+        mesh_group(const mesh_group&) = delete;
+        mesh_group(mesh_group&&) noexcept = delete;
+        virtual ~mesh_group() = default;
+
+        mesh_group& operator=(const mesh_group&) = delete;
+        mesh_group& operator=(mesh_group&&) noexcept = delete;
+
+        string_view name() const noexcept override;
+        guid id() const noexcept override;
+
+        vector<guid>& meshes() noexcept;
+        span<const guid> meshes() const noexcept;
+
+      private:
+        guid _id;
+        string _name;
+        vector<guid> _meshes;
     };
 
     inline string_view mesh::name() const noexcept
@@ -150,6 +188,36 @@ namespace tempest::assets
         return _indices;
     }
 
+    inline math::vec3<float>& mesh::min_bounds() noexcept
+    {
+        return _min;
+    }
+
+    inline const math::vec3<float>& mesh::min_bounds() const noexcept
+    {
+        return _min;
+    }
+
+    inline math::vec3<float>& mesh::max_bounds() noexcept
+    {
+        return _max;
+    }
+
+    inline const math::vec3<float>& mesh::max_bounds() const noexcept
+    {
+        return _max;
+    }
+
+    inline optional<guid> mesh::material() const noexcept
+    {
+        return _material;
+    }
+
+    inline void mesh::set_material(guid mat) noexcept
+    {
+        _material = mat;
+    }
+
     inline uint32_t mesh::vertex_count() const noexcept
     {
         return static_cast<uint32_t>(_positions.size());
@@ -158,6 +226,31 @@ namespace tempest::assets
     inline uint32_t mesh::triangle_count() const noexcept
     {
         return static_cast<uint32_t>(_indices.size()) / 3;
+    }
+
+    inline mesh_group::mesh_group(string name)
+        : _id{guid::generate_random_guid()}, _name{tempest::move(name)}
+    {
+    }
+
+    inline string_view mesh_group::name() const noexcept
+    {
+        return _name;
+    }
+
+    inline guid mesh_group::id() const noexcept
+    {
+        return _id;
+    }
+
+    inline vector<guid>& mesh_group::meshes() noexcept
+    {
+        return _meshes;
+    }
+
+    inline span<const guid> mesh_group::meshes() const noexcept
+    {
+        return _meshes;
     }
 } // namespace tempest::assets
 

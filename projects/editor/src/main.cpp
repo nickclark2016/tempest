@@ -20,7 +20,12 @@ int main()
     renderer_settings.enable_profiling = true;
     engine.get_render_system().update_settings(renderer_settings);
 
-    engine.on_initialize([](tempest::engine& engine) {
+    tempest::editor::editor editor(engine);
+
+    engine.on_initialize([&editor](tempest::engine& engine) {
+        auto sponza_asset =
+            engine.get_asset_database().load("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
+
         auto sponza = engine.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
         auto sponza_transform = tempest::ecs::transform_component{};
         sponza_transform.scale({0.1f});
@@ -44,16 +49,16 @@ int main()
         engine.get_registry().assign(camera, camera_transform);
     });
 
-    tempest::editor::editor editor;
-
     engine.on_update([&editor](tempest::engine& engine, float dt) {
         engine.get_render_system().draw_imgui([&, dt]() {
             using imgui = tempest::graphics::imgui_context;
 
             imgui::create_window("Entities", [&]() { editor.update(engine); });
-            imgui::create_window("Metrics", [&, dt]() { imgui::label(tempest::string_view(std::format("FPS: {:.2f}", 1.0f / dt))); });
+            imgui::create_window(
+                "Metrics", [&, dt]() { imgui::label(tempest::string_view(std::format("FPS: {:.2f}", 1.0f / dt))); });
 
-            if (engine.get_render_system().settings().enable_profiling) {
+            if (engine.get_render_system().settings().enable_profiling)
+            {
                 engine.get_render_system().draw_profiler();
             }
         });

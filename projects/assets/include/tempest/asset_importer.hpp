@@ -27,6 +27,8 @@ namespace tempest::assets
         void add_asset_as_primary(unique_ptr<asset> asset);
         void add_asset(unique_ptr<asset> asset);
 
+        void set_name(string name);
+
       private:
         string _path;
         span<const byte> _data;
