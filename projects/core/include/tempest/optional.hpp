@@ -1,6 +1,7 @@
 #ifndef tempest_core_optional_hpp
 #define tempest_core_optional_hpp
 
+#include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/type_traits.hpp>
 
@@ -137,6 +138,96 @@ namespace tempest
         union impl {
             byte c;
             T value;
+
+            impl() noexcept;
+            ~impl();
+        } _data;
+
+        bool _has_value = false;
+    };
+
+    template <typename T>
+    class optional<T&>
+    {
+      public:
+        using value_type = T&;
+        using iterator = T*;
+        using const_iterator = const T*;
+
+        constexpr optional() noexcept = default;
+        constexpr optional(nullopt_t) noexcept;
+        constexpr optional(const optional& other);
+        constexpr optional(optional&& other) noexcept;
+
+        template <typename U>
+            requires(is_convertible_v<U, T>)
+        constexpr optional(const optional<U>& other);
+
+        template <typename U>
+            requires(is_convertible_v<U, T>)
+        constexpr optional(optional<U>&& other);
+
+        template <typename U = T>
+            requires(is_constructible_v<T, U>)
+        constexpr optional(U&& value);
+
+        ~optional() noexcept = default;
+
+        constexpr optional& operator=(nullopt_t) noexcept;
+        constexpr optional& operator=(const optional& other);
+        constexpr optional& operator=(optional&& other) noexcept;
+
+        template <typename U>
+            requires(is_convertible_v<U, T>)
+        constexpr optional& operator=(const optional<U>& other);
+
+        template <typename U>
+            requires(is_convertible_v<U, T>)
+        constexpr optional& operator=(optional<U>&& other);
+
+        template <typename U = T>
+            requires(is_constructible_v<T, U>)
+        constexpr optional& operator=(U&& value);
+
+        constexpr iterator begin() noexcept;
+        constexpr const_iterator begin() const noexcept;
+        constexpr const_iterator cbegin() const noexcept;
+
+        constexpr iterator end() noexcept;
+        constexpr const_iterator end() const noexcept;
+        constexpr const_iterator cend() const noexcept;
+
+        constexpr T& value() &;
+        constexpr const T& value() const&;
+
+        constexpr T&& value() &&;
+        constexpr const T&& value() const&&;
+
+        template <typename U>
+        constexpr T value_or(U&& default_value) const&;
+
+        template <typename U>
+        constexpr T value_or(U&& default_value) &&;
+
+        constexpr T* operator->() noexcept;
+        constexpr const T* operator->() const noexcept;
+
+        constexpr T& operator*() & noexcept;
+        constexpr const T& operator*() const& noexcept;
+
+        constexpr T&& operator*() && noexcept;
+        constexpr const T&& operator*() const&& noexcept;
+
+        constexpr explicit operator bool() const noexcept;
+        constexpr bool has_value() const noexcept;
+
+        constexpr void reset() noexcept;
+        constexpr void swap(optional& other) noexcept;
+
+      private:
+        union impl {
+            byte c;
+            T* ref;
 
             impl() noexcept;
             ~impl();
@@ -551,6 +642,355 @@ namespace tempest
         return _data.value;
     }
 
+    template <typename T>
+    inline optional<T&>::impl::impl() noexcept
+    {
+    }
+
+    template <typename T>
+    inline optional<T&>::impl::~impl()
+    {
+    }
+
+    template <typename T>
+    inline constexpr optional<T&>::optional(nullopt_t) noexcept
+    {
+    }
+
+    template <typename T>
+    inline constexpr optional<T&>::optional(const optional& other)
+    {
+        if (other.has_value())
+        {
+            _data.ref = other._data.ref;
+            _has_value = true;
+        }
+    }
+
+    template <typename T>
+    inline constexpr optional<T&>::optional(optional&& other) noexcept
+    {
+        if (other.has_value())
+        {
+            _data.ref = other._data.ref;
+            other.reset();
+            _has_value = true;
+        }
+    }
+
+    template <typename T>
+    template <typename U>
+        requires(is_convertible_v<U, T>)
+    inline constexpr optional<T&>::optional(const optional<U>& other)
+    {
+        if (other.has_value())
+        {
+            _data.ref = other._data.ref;
+            _has_value = true;
+        }
+    }
+
+    template <typename T>
+    template <typename U>
+        requires(is_convertible_v<U, T>)
+    inline constexpr optional<T&>::optional(optional<U>&& other)
+    {
+        if (other.has_value())
+        {
+            _data.ref = other._data.ref;
+            other.reset();
+            _has_value = true;
+        }
+    }
+
+    template <typename T>
+    template <typename U>
+        requires(is_constructible_v<T, U>)
+    inline constexpr optional<T&>::optional(U&& value)
+    {
+        _data.ref = &value;
+        _has_value = true;
+    }
+
+    template <typename T>
+    inline constexpr optional<T&>& optional<T&>::operator=(nullopt_t) noexcept
+    {
+        if (has_value())
+        {
+            _data.ref = nullptr;
+            _has_value = false;
+        }
+
+        return *this;
+    }
+
+    template <typename T>
+    inline constexpr optional<T&>& optional<T&>::operator=(const optional& other)
+    {
+        if (this != &other)
+        {
+            if (has_value())
+            {
+                _data.ref = nullptr;
+            }
+
+            if (other.has_value())
+            {
+                _data.ref = other._data.ref;
+                _has_value = true;
+            }
+            else
+            {
+                _has_value = false;
+            }
+        }
+
+        return *this;
+    }
+
+    template <typename T>
+    inline constexpr optional<T&>& optional<T&>::operator=(optional&& other) noexcept
+    {
+        if (this != &other)
+        {
+            if (has_value())
+            {
+                _data.ref = nullptr;
+            }
+
+            if (other.has_value())
+            {
+                _data.ref = other._data.ref;
+                other.reset();
+                _has_value = true;
+            }
+            else
+            {
+                _has_value = false;
+            }
+        }
+
+        return *this;
+    }
+
+    template <typename T>
+    template <typename U>
+        requires(is_convertible_v<U, T>)
+    inline constexpr optional<T&>& optional<T&>::operator=(const optional<U>& other)
+    {
+        if (has_value())
+        {
+            _data.ref = nullptr;
+        }
+
+        if (other.has_value())
+        {
+            _data.ref = other._data.ref;
+            _has_value = true;
+        }
+        else
+        {
+            _has_value = false;
+        }
+
+        return *this;
+    }
+
+    template <typename T>
+    template <typename U>
+        requires(is_convertible_v<U, T>)
+    inline constexpr optional<T&>& optional<T&>::operator=(optional<U>&& other)
+    {
+        if (has_value())
+        {
+            _data.ref = nullptr;
+        }
+
+        if (other.has_value())
+        {
+            _data.ref = other._data.ref;
+            other.reset();
+            _has_value = true;
+        }
+        else
+        {
+            _has_value = false;
+        }
+
+        return *this;
+    }
+
+    template <typename T>
+    template <typename U>
+        requires(is_constructible_v<T, U>)
+    inline constexpr optional<T&>& optional<T&>::operator=(U&& value)
+    {
+        if (has_value())
+        {
+            _data.ref = nullptr;
+        }
+
+        _data.ref = &value;
+        _has_value = true;
+
+        return *this;
+    }
+
+    template <typename T>
+    inline constexpr typename optional<T&>::iterator optional<T&>::begin() noexcept
+    {
+        return has_value() ? _data.ref : nullptr;
+    }
+
+    template <typename T>
+    inline constexpr typename optional<T&>::const_iterator optional<T&>::begin() const noexcept
+    {
+        return has_value() ? _data.ref : nullptr;
+    }
+
+    template <typename T>
+    inline constexpr typename optional<T&>::const_iterator optional<T&>::cbegin() const noexcept
+    {
+        return begin();
+    }
+
+    template <typename T>
+    inline constexpr typename optional<T&>::iterator optional<T&>::end() noexcept
+    {
+        return has_value() ? begin() + 1 : nullptr;
+    }
+
+    template <typename T>
+    inline constexpr typename optional<T&>::const_iterator optional<T&>::end() const noexcept
+    {
+        return has_value() ? begin() + 1 : nullptr;
+    }
+
+    template <typename T>
+    inline constexpr typename optional<T&>::const_iterator optional<T&>::cend() const noexcept
+    {
+        return end();
+    }
+
+    template <typename T>
+    inline constexpr T& optional<T&>::value() &
+    {
+        return *_data.ref;
+    }
+
+    template <typename T>
+    inline constexpr const T& optional<T&>::value() const&
+    {
+        return *_data.ref;
+    }
+
+    template <typename T>
+    inline constexpr T&& optional<T&>::value() &&
+    {
+        return tempest::move(*_data.ref);
+    }
+
+    template <typename T>
+    inline constexpr const T&& optional<T&>::value() const&&
+    {
+        return tempest::move(*_data.ref);
+    }
+
+    template <typename T>
+    template <typename U>
+    inline constexpr T optional<T&>::value_or(U&& default_value) const&
+    {
+        return has_value() ? *_data.ref : static_cast<T>(forward<U>(default_value));
+    }
+
+    template <typename T>
+    template <typename U>
+    inline constexpr T optional<T&>::value_or(U&& default_value) &&
+    {
+        return has_value() ? tempest::move(*_data.ref) : static_cast<T>(forward<U>(default_value));
+    }
+
+    template <typename T>
+    inline constexpr T* optional<T&>::operator->() noexcept
+    {
+        return _data.ref;
+    }
+
+    template <typename T>
+    inline constexpr const T* optional<T&>::operator->() const noexcept
+    {
+        return _data.ref;
+    }
+
+    template <typename T>
+    inline constexpr T& optional<T&>::operator*() & noexcept
+    {
+        return *_data.ref;
+    }
+
+    template <typename T>
+    inline constexpr const T& optional<T&>::operator*() const& noexcept
+    {
+        return *_data.ref;
+    }
+
+    template <typename T>
+    inline constexpr T&& optional<T&>::operator*() && noexcept
+    {
+        return tempest::move(*_data.ref);
+    }
+
+    template <typename T>
+    inline constexpr const T&& optional<T&>::operator*() const&& noexcept
+    {
+        return tempest::move(*_data.ref);
+    }
+
+    template <typename T>
+    inline constexpr optional<T&>::operator bool() const noexcept
+    {
+        return has_value();
+    }
+
+    template <typename T>
+    inline constexpr bool optional<T&>::has_value() const noexcept
+    {
+        return _has_value;
+    }
+
+    template <typename T>
+    inline constexpr void optional<T&>::reset() noexcept
+    {
+        if (has_value())
+        {
+            _data.ref = nullptr;
+            _has_value = false;
+        }
+    }
+
+    template <typename T>
+    inline constexpr void optional<T&>::swap(optional& other) noexcept
+    {
+        if (has_value() && other.has_value())
+        {
+            tempest::swap(_data.ref, other._data.ref);
+        }
+        else if (has_value())
+        {
+            other._data.ref = _data.ref;
+            _data.ref = nullptr;
+            _has_value = false;
+            other._has_value = true;
+        }
+        else if (other.has_value())
+        {
+            _data.ref = other._data.ref;
+            other._data.ref = nullptr;
+            _has_value = true;
+            other._has_value = false;
+        }
+    }
+    
     template <typename T>
     inline constexpr void swap(optional<T>& lhs, optional<T>& rhs) noexcept(noexcept(lhs.swap(rhs)))
     {
