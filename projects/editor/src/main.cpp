@@ -23,9 +23,6 @@ int main()
     tempest::editor::editor editor(engine);
 
     engine.on_initialize([&editor](tempest::engine& engine) {
-        auto sponza_asset =
-            engine.get_asset_database().load("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
-
         auto sponza = engine.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
         auto sponza_transform = tempest::ecs::transform_component{};
         sponza_transform.scale({0.1f});
