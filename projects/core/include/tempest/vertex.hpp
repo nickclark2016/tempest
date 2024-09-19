@@ -1,7 +1,10 @@
 #ifndef tempest_vertex_hpp
 #define tempest_vertex_hpp
 
+#include <tempest/flat_unordered_map.hpp>
+#include <tempest/guid.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
 
@@ -76,6 +79,34 @@ namespace tempest::core
         std::size_t index_size = indices.size_bytes();
         return vertex_size + index_size;
     }
+
+    class mesh_registry
+    {
+      public:
+        mesh_registry() = default;
+        mesh_registry(const mesh_registry&) = delete;
+        mesh_registry(mesh_registry&&) noexcept = delete;
+        ~mesh_registry() = default;
+
+        mesh_registry& operator=(const mesh_registry&) = delete;
+        mesh_registry& operator=(mesh_registry&&) noexcept = delete;
+
+        [[nodiscard]] guid register_mesh(mesh&& m);
+        [[nodiscard]] bool register_mesh_with_id(const guid& id, mesh&& m);
+
+        bool remove_mesh(const guid& id);
+
+        optional<mesh&> find(const guid& id);
+        [[nodiscard]] optional<const mesh&> find(const guid& id) const;
+
+      private:
+        flat_unordered_map<guid, mesh> _meshes;
+    };
+
+    struct mesh_component
+    {
+        guid mesh_id;
+    };
 } // namespace tempest::core
 
 #endif // tempest_vertex_hpp

@@ -679,6 +679,8 @@ namespace tempest::ecs
         template <typename T>
         void remove(E e);
 
+        [[nodiscard]] E duplicate(E e);
+
         entity_store& entities() noexcept
         {
             return _entities;
@@ -742,6 +744,17 @@ namespace tempest::ecs
     inline std::size_t basic_registry<E>::entity_count() const noexcept
     {
         return _entities.size();
+    }
+
+    template <typename E>
+    inline E basic_registry<E>::duplicate(E e)
+    {
+        auto dup = acquire_entity();
+        for (auto& store : _component_stores)
+        {
+            store->duplicate(e, dup);
+        }
+        return dup;
     }
 
     template <typename E>
