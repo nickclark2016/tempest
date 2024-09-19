@@ -153,4 +153,49 @@ namespace tempest::core
     {
         return indices.empty() ? vertices.size() / 3 : indices.size() / 3;
     }
+
+    guid mesh_registry::register_mesh(mesh&& m)
+    {
+        guid g = guid::generate_random_guid();
+        _meshes[g] = tempest::move(m);
+        return g;
+    }
+
+    bool mesh_registry::register_mesh_with_id(const guid& id, mesh&& m)
+    {
+        if (_meshes.find(id) == _meshes.end())
+        {
+            _meshes[id] = tempest::move(m);
+            return true;
+        }
+        return false;
+    }
+
+    bool mesh_registry::remove_mesh(const guid& g)
+    {
+        if (auto it = _meshes.find(g); it != _meshes.end())
+        {
+            _meshes.erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    optional<mesh&> mesh_registry::find(const guid& g)
+    {
+        if (auto it = _meshes.find(g); it != _meshes.end())
+        {
+            return it->second;
+        }
+        return none();
+    }
+
+    optional<const mesh&> mesh_registry::find(const guid& g) const
+    {
+        if (auto it = _meshes.find(g); it != _meshes.end())
+        {
+            return it->second;
+        }
+        return none();
+    }
 } // namespace tempest::core

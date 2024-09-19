@@ -489,6 +489,7 @@ namespace tempest::ecs
 
         virtual void reserve(size_t new_capacity) = 0;
 
+        virtual constexpr bool duplicate(T src, T dst) noexcept = 0;
         virtual constexpr void erase(T t) noexcept = 0;
     };
 
@@ -562,6 +563,8 @@ namespace tempest::ecs
 
         template <typename... Ts>
         constexpr iterator emplace_or_replace(K k, Ts&&... ts);
+
+        constexpr bool duplicate(K src, K dst) noexcept override;
 
         void reserve(size_t new_capacity) override;
 
@@ -1311,6 +1314,19 @@ namespace tempest::ecs
                                                 traits_type::as_integral(k));
 
         return --(end() - position);
+    }
+
+    template <typename K, typename V, typename Allocator>
+    inline constexpr bool basic_sparse_map<K, V, Allocator>::duplicate(K src, K dst) noexcept
+    {
+        auto it = find(src);
+        if (it == end())
+        {
+            return false;
+        }
+
+        insert(dst, it->second);
+        return true;
     }
 
     template <typename K, typename V, typename Allocator>

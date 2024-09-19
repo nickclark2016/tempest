@@ -3,18 +3,24 @@
 
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/vector.hpp>
-
-#include <optional>
 
 namespace tempest::core
 {
+    template <typename T>
+    struct range
+    {
+        T start;
+        T end;
+    };
+
     template <typename T>
     class best_fit_scheme
     {
       public:
         explicit best_fit_scheme(const T initial_range);
-        [[nodiscard]] std::optional<range<T>> allocate(const T& len);
+        [[nodiscard]] optional<range<T>> allocate(const T& len);
         void release(range<T>&& rng);
         void release_all();
         void extend(const T& new_length);
@@ -37,7 +43,7 @@ namespace tempest::core
     }
 
     template <typename T>
-    inline std::optional<range<T>> best_fit_scheme<T>::allocate(const T& len)
+    inline optional<range<T>> best_fit_scheme<T>::allocate(const T& len)
     {
         struct fit
         {
@@ -45,7 +51,7 @@ namespace tempest::core
             range<T> range;
         };
 
-        std::optional<fit> optimal_block = std::nullopt;
+        optional<fit> optimal_block = std::nullopt;
         T best_fit = len - len;
 
         for (size_t i = 0; i < _free.size(); ++i)
@@ -112,7 +118,7 @@ namespace tempest::core
             };
         }
 
-        return std::nullopt;
+        return none();
     }
 
     template <typename T>
