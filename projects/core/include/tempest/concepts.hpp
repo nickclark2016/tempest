@@ -76,8 +76,8 @@ namespace tempest
     /// @brief Concept for copyable types.
     /// @tparam T Type to check
     template <typename T>
-    concept copyable = copy_constructible<T> && movable<T> && assignable_from<T&, T&> && assignable_from<T&, const T&> &&
-                       assignable_from<T&, const T>;
+    concept copyable = copy_constructible<T> && movable<T> && assignable_from<T&, T&> &&
+                       assignable_from<T&, const T&> && assignable_from<T&, const T>;
 
     /// @brief Concept for default initializable types.
     /// @tparam T Type to check
@@ -161,6 +161,12 @@ namespace tempest
 
     template <typename T, typename U>
     concept derived_from = is_base_of_v<U, T>;
+
+    template <typename F, typename... Args>
+    concept invocable = requires(F&& f, Args&&... args) { invoke(forward<F>(f), forward<Args>(args)...); };
+
+    template <typename F, typename... Args>
+    concept regular_invocable = invocable<F, Args...>;
 } // namespace tempest
 
 #endif // tempest_core_concepts_hpp

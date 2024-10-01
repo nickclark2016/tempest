@@ -7,8 +7,10 @@
 #include "window.hpp"
 
 #include <tempest/flat_map.hpp>
+#include <tempest/material.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/registry.hpp>
+#include <tempest/texture.hpp>
 #include <tempest/vertex.hpp>
 
 #include <string>
@@ -148,7 +150,12 @@ namespace tempest::graphics
             return _settings;
         }
 
-        vector<mesh_layout> load_mesh(span<core::mesh> meshes);
+        flat_unordered_map<guid, mesh_layout> load_meshes(span<const guid> mesh_ids, core::mesh_registry& mesh_registry);
+        void load_textures(span<const guid> texture_ids, const core::texture_registry& texture_registry,
+                           bool generate_mip_maps);
+        void load_materials(span<const guid> material_ids, const core::material_registry& material_registry);
+
+        vector<mesh_layout> load_meshes(span<core::mesh> meshes);
         void load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
         void load_material(graphics::material_payload& material);
 
@@ -175,6 +182,29 @@ namespace tempest::graphics
         inline void allocate_entities(std::uint32_t count)
         {
             _object_count += count;
+        }
+
+        inline optional<size_t> get_mesh_id(const guid& id) const
+        {
+            if (auto it = _mesh_id_map.find(id); it != _mesh_id_map.end())
+            {
+                return it->second;
+            }
+            return none();
+        }
+
+        inline optional<size_t> get_material_id(const guid& id) const
+        {
+            if (auto it = _material_id_map.find(id); it != _material_id_map.end())
+            {
+                return it->second;
+            }
+            return none();
+        }
+
+        inline size_t acquire_new_object() noexcept
+        {
+            return _object_count++;
         }
 
         template <typename Fn>
@@ -212,6 +242,10 @@ namespace tempest::graphics
         buffer_resource_handle _hi_z_buffer_constants;
 
         std::uint32_t _mesh_bytes{0};
+
+        flat_unordered_map<guid, size_t> _image_id_map;
+        flat_unordered_map<guid, size_t> _material_id_map;
+        flat_unordered_map<guid, size_t> _mesh_id_map;
 
         vector<mesh_layout> _meshes;
         vector<gpu_material_data> _materials;

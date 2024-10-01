@@ -1,11 +1,13 @@
 #ifndef tempest_ecs_registry_hpp
 #define tempest_ecs_registry_hpp
 
-#include "sparse.hpp"
-#include "traits.hpp"
-
 #include <tempest/algorithm.hpp>
+#include <tempest/flat_unordered_map.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/meta.hpp>
+#include <tempest/relationship_component.hpp>
+#include <tempest/sparse.hpp>
+#include <tempest/traits.hpp>
 #include <tempest/vector.hpp>
 
 #include <array>
@@ -14,9 +16,7 @@
 #include <compare>
 #include <concepts>
 #include <cstddef>
-#include <memory>
 #include <optional>
-#include <unordered_map>
 
 namespace tempest::ecs
 {
@@ -702,10 +702,13 @@ namespace tempest::ecs
 
       private:
         basic_entity_store<E, 4096, std::uint64_t> _entities;
-        vector<std::unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
+        vector<unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
 
-        std::unordered_map<entity, std::string> _name;
+        flat_unordered_map<entity, std::string> _name;
     };
+
+    template <typename E>
+    void create_parent_child_relationship(basic_registry<E>& reg, E parent, E child);
 
     template <typename E>
     inline void basic_registry<E>::reserve(std::size_t new_capacity)
@@ -754,6 +757,24 @@ namespace tempest::ecs
         {
             store->duplicate(e, dup);
         }
+
+        auto src_rel_comp = try_get<relationship_component<E>>(e);
+        if (src_rel_comp != nullptr && src_rel_comp->first_child != tombstone)
+        {
+            auto child = src_rel_comp->first_child;
+
+            // Duplicate all children
+            while (child != tombstone)
+            {
+                // Recursively duplicate child
+                auto dup_child = duplicate(child);
+                create_parent_child_relationship(*this, dup, dup_child);
+
+                auto sibling = try_get<relationship_component<E>>(child)->next_sibling;
+                child = sibling;
+            }
+        }
+
         return dup;
     }
 
@@ -788,7 +809,7 @@ namespace tempest::ecs
 
         if (_component_stores[id.index()] == nullptr)
         {
-            _component_stores[id.index()] = std::make_unique<sparse_map<type>>();
+            _component_stores[id.index()] = make_unique<sparse_map<type>>();
         }
 
         auto& store = _component_stores[id.index()];
@@ -1318,7 +1339,235 @@ namespace tempest::ecs
         }
     } // namespace detail
 
+    template <typename E>
+    inline void create_parent_child_relationship(basic_registry<E>& reg, E parent, E child)
+    {
+        // If the parent does not have a relationship component, create one
+        if (!reg.has<relationship_component<E>>(parent))
+        {
+            relationship_component<E> rel{
+                .parent = ecs::tombstone,
+                .next_sibling = ecs::tombstone,
+                .first_child = ecs::tombstone,
+            };
+
+            reg.assign(parent, rel);
+        }
+
+        // If the child does not have a relationship component, create one
+        if (!reg.has<relationship_component<E>>(child))
+        {
+            relationship_component<E> rel{
+                .parent = parent,
+                .next_sibling = ecs::tombstone,
+                .first_child = ecs::tombstone,
+            };
+
+            reg.assign(child, rel);
+        }
+
+        auto& opt_parent_rel = reg.get<relationship_component<E>>(parent);
+        auto& opt_child_rel = reg.get<relationship_component<E>>(child);
+
+        // If the parent has no children, set the child as the first child
+        // And the parent as the parent of the child
+        if (opt_parent_rel.first_child == ecs::tombstone)
+        {
+            opt_parent_rel.first_child = child;
+            opt_child_rel.parent = parent;
+        }
+        else
+        {
+            // Otherwise, set the first child of the parent as the next sibling of the child
+            // And the child as the first child of the parent
+            opt_child_rel.next_sibling = opt_parent_rel.first_child;
+            opt_child_rel.parent = parent;
+            opt_parent_rel.first_child = child;
+        }
+    }
+
+    template <typename E>
+    class basic_related_entity_view_iterator
+    {
+      public:
+        using value_type = E;
+        using difference_type = ptrdiff_t;
+
+        basic_related_entity_view_iterator(const basic_registry<E>& source, E current, size_t level) noexcept;
+
+        E operator*() noexcept;
+        const E operator*() const noexcept;
+
+        basic_related_entity_view_iterator& operator++() noexcept;
+        basic_related_entity_view_iterator operator++(int) noexcept;
+
+      private:
+        const basic_registry<E>* _source;
+        E _current;
+        size_t _level;
+    };
+
+    template <typename E>
+    class basic_related_entity_view
+    {
+      public:
+        using value_type = E;
+        using iterator = basic_related_entity_view_iterator<E>;
+        using const_iterator = iterator;
+
+        basic_related_entity_view(const basic_registry<E>& source, E root) noexcept;
+
+        iterator begin() noexcept;
+        const_iterator begin() const noexcept;
+        const_iterator cbegin() const noexcept;
+
+        iterator end() noexcept;
+        const_iterator end() const noexcept;
+        const_iterator cend() const noexcept;
+
+      private:
+        const basic_registry<E>* _source;
+        E _root;
+    };
+
+    template <typename E>
+    inline basic_related_entity_view_iterator<E>::basic_related_entity_view_iterator(const basic_registry<E>& source,
+                                                                                     E current, size_t level) noexcept
+        : _source{&source}, _current{current}, _level{level}
+    {
+    }
+
+    template <typename E>
+    inline E basic_related_entity_view_iterator<E>::operator*() noexcept
+    {
+        return _current;
+    }
+
+    template <typename E>
+    inline const E basic_related_entity_view_iterator<E>::operator*() const noexcept
+    {
+        return _current;
+    }
+
+    template <typename E>
+    inline basic_related_entity_view_iterator<E>& basic_related_entity_view_iterator<E>::operator++() noexcept
+    {
+        auto rel_comp = _source->try_get<relationship_component<E>>(_current);
+        if (rel_comp == nullptr)
+        {
+            _current = ecs::tombstone;
+            return *this;
+        }
+
+        if (rel_comp->first_child != ecs::tombstone)
+        {
+            _current = rel_comp->first_child;
+            ++_level;
+            return *this;
+        }
+
+        if (rel_comp->next_sibling != ecs::tombstone)
+        {
+            _current = rel_comp->next_sibling;
+            return *this;
+        }
+
+        while (rel_comp->parent != ecs::tombstone)
+        {
+            --_level;
+            if (_level == 0) // Reached the root
+            {
+                _current = ecs::tombstone;
+                return *this;
+            }
+
+            auto parent_rel_comp = _source->try_get<relationship_component<E>>(rel_comp->parent);
+            if (parent_rel_comp == nullptr) [[unlikely]]
+            {
+                _current = ecs::tombstone;
+                return *this;
+            }
+
+            if (parent_rel_comp->next_sibling != ecs::tombstone)
+            {
+                _current = parent_rel_comp->next_sibling;
+                return *this;
+            }
+
+            rel_comp = parent_rel_comp;
+        }
+
+        // Unreachable
+        _current = ecs::tombstone;
+        return *this;
+    }
+
+    template <typename E>
+    inline basic_related_entity_view_iterator<E> basic_related_entity_view_iterator<E>::operator++(int) noexcept
+    {
+        auto self = *this;
+        ++(*this);
+        return self;
+    }
+
+    template <typename E>
+    inline basic_related_entity_view<E>::basic_related_entity_view(const basic_registry<E>& source, E root) noexcept
+        : _source{&source}, _root{root}
+    {
+    }
+
+    template <typename E>
+    inline typename basic_related_entity_view<E>::iterator basic_related_entity_view<E>::begin() noexcept
+    {
+        return {*_source, _root, 0};
+    }
+
+    template <typename E>
+    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::begin() const noexcept
+    {
+        return {*_source, _root, 0};
+    }
+
+    template <typename E>
+    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::cbegin() const noexcept
+    {
+        return {*_source, _root, 0};
+    }
+
+    template <typename E>
+    inline typename basic_related_entity_view<E>::iterator basic_related_entity_view<E>::end() noexcept
+    {
+        return {*_source, ecs::tombstone, 0};
+    }
+
+    template <typename E>
+    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::end() const noexcept
+    {
+        return {*_source, ecs::tombstone, 0};
+    }
+
+    template <typename E>
+    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::cend() const noexcept
+    {
+        return {*_source, ecs::tombstone, 0};
+    }
+
+    template <typename E>
+    bool operator==(const basic_related_entity_view_iterator<E>& lhs,
+                    const basic_related_entity_view_iterator<E>& rhs) noexcept
+    {
+        return *lhs == *rhs;
+    }
+
+    template <typename E>
+    bool operator!=(const basic_related_entity_view_iterator<E>& lhs,
+                    const basic_related_entity_view_iterator<E>& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     using registry = basic_registry<entity>;
+    using related_entity_view = basic_related_entity_view<entity>;
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_registry_hpp

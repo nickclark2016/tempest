@@ -56,4 +56,19 @@
             </Synthetic>
         </Expand>
     </Type>
+
+    <Type Name="tempest::span&lt;*&gt;">
+        <DisplayString>{{size = {_end - _start}}}</DisplayString>
+        <Expand>
+            <Item Name="[size]">(tempest::size_t)(_end - _start)</Item>
+            <Synthetic Name="Values">
+                <Expand>
+                    <ArrayItems Condition="(_end - _start) > 0">
+                        <Size>_end - _start</Size>
+                        <ValuePointer>_start</ValuePointer>
+                    </ArrayItems>
+                </Expand>
+            </Synthetic>
+        </Expand>
+    </Type>
 </AutoVisualizer>

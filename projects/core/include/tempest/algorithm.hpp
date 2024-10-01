@@ -117,10 +117,11 @@ namespace tempest
         return d_first;
     }
 
-    template <input_iterator InputIt, typename Size, output_iterator<typename InputIt::value_type> OutputIt>
+    template <input_iterator InputIt, typename Size,
+              output_iterator<typename iterator_traits<InputIt>::value_type> OutputIt>
     inline constexpr OutputIt copy_n(InputIt first, Size count, OutputIt d_first)
     {
-        using value_type = typename InputIt::value_type;
+        using value_type = typename iterator_traits<InputIt>::value_type;
 
         if constexpr (is_trivial_v<value_type> && contiguous_iterator<InputIt>)
         {
@@ -133,6 +134,20 @@ namespace tempest
             *d_first++ = *first++;
         }
         return d_first;
+    }
+
+    template <input_iterator It, typename T = typename iterator_traits<It>::value_type>
+    [[nodiscard]] inline constexpr It find(It first, It last, const T& value)
+    {
+        while (first != last)
+        {
+            if (*first == value)
+            {
+                return first;
+            }
+            ++first;
+        }
+        return last;
     }
 } // namespace tempest
 

@@ -761,11 +761,16 @@ namespace tempest::graphics
                 };
 
                 auto& draw_batch = _draw_batches[key];
-                auto& mesh = _meshes[renderable.mesh_id];
+                const auto& mesh = _meshes[renderable.mesh_id];
 
                 auto object_data_it = draw_batch.objects.find(ent);
                 if (object_data_it == draw_batch.objects.end()) [[unlikely]]
                 {
+                    log->info("New object added to draw batch - ID: {}, Mesh ID: {}, Material ID: {} - Entity {}:{}",
+                              renderable.object_id, renderable.mesh_id, renderable.material_id,
+                              ecs::entity_traits<ecs::entity>::as_entity(ent),
+                              ecs::entity_traits<ecs::entity>::as_version(ent));
+
                     object_payload.prev_model = object_payload.model;
 
                     draw_batch.objects.insert(ent, object_payload);
@@ -802,9 +807,7 @@ namespace tempest::graphics
 
         if (_create_imgui_hierarchy && _settings.enable_imgui)
         {
-            imgui_context::create_frame([this]() {
-                _create_imgui_hierarchy();
-            });
+            imgui_context::create_frame([this]() { _create_imgui_hierarchy(); });
         }
 
         if (_static_data_dirty) [[unlikely]]
@@ -871,11 +874,43 @@ namespace tempest::graphics
         _settings_dirty = true;
     }
 
-    vector<mesh_layout> render_system::load_mesh(span<core::mesh> meshes)
+    flat_unordered_map<guid, mesh_layout> render_system::load_meshes(span<const guid> mesh_guids,
+                                                                     core::mesh_registry& mesh_reg)
+    {
+
+        flat_unordered_map<guid, mesh_layout> mesh_layouts;
+        vector<guid> new_mesh_ids;
+        for (const auto& guid : mesh_guids)
+        {
+            if (_mesh_id_map.find(guid) == _mesh_id_map.end())
+            {
+                new_mesh_ids.push_back(guid);
+            }
+            else
+            {
+                mesh_layouts[guid] = _meshes[_mesh_id_map[guid]];
+            }
+        }
+
+        auto mesh_layout_mapping = renderer_utilities::upload_meshes(
+            *_device, mesh_guids, mesh_reg, _vertex_pull_buffer, _mesh_bytes, _device->get_staging_buffer());
+
+        for (const auto& [guid, layout] : mesh_layout_mapping)
+        {
+            log->info("Uploaded mesh with guid: {} at index {}", to_string(guid).c_str(), _meshes.size());
+            _mesh_id_map[guid] = _meshes.size();
+            _meshes.push_back(layout);
+            mesh_layouts[guid] = layout;
+        }
+
+        return mesh_layouts;
+    }
+
+    vector<mesh_layout> render_system::load_meshes(span<core::mesh> meshes)
     {
         auto mesh_layouts = renderer_utilities::upload_meshes(*_device, meshes, _vertex_pull_buffer, _mesh_bytes);
 
-        for (auto& mesh : mesh_layouts)
+        for (const auto& mesh : mesh_layouts)
         {
             _meshes.push_back(mesh);
         }
@@ -891,6 +926,36 @@ namespace tempest::graphics
         for (auto& tex : textures)
         {
             _images.push_back(tex);
+        }
+    }
+
+    void render_system::load_textures(span<const guid> texture_ids, const core::texture_registry& tex_reg,
+                                      bool generate_mip_maps)
+    {
+        // Get the unique texture ids
+        vector<guid> new_texture_ids;
+        for (const auto& guid : texture_ids)
+        {
+            if (_image_id_map.find(guid) == _image_id_map.end() &&
+                std::find(new_texture_ids.begin(), new_texture_ids.end(), guid) == new_texture_ids.end())
+            {
+                new_texture_ids.push_back(guid);
+            }
+        }
+
+        auto textures = renderer_utilities::upload_textures(*_device, new_texture_ids, tex_reg,
+                                                            _device->get_staging_buffer(), true, true);
+
+        size_t idx = 0;
+        for (auto& tex : textures)
+        {
+            if (_image_id_map.find(new_texture_ids[idx]) == _image_id_map.end())
+            {
+                _image_id_map[new_texture_ids[idx]] = _images.size();
+                _images.push_back(tex);
+
+                ++idx;
+            }
         }
     }
 
@@ -924,6 +989,117 @@ namespace tempest::graphics
         };
 
         _materials.push_back(mat);
+    }
+
+    void render_system::load_materials(span<const guid> material_guids, const core::material_registry& mat_reg)
+    {
+        for (const auto& guid : material_guids)
+        {
+            // Check if this material already exists
+            if (_material_id_map.find(guid) != _material_id_map.end())
+            {
+                continue;
+            }
+
+            auto material = mat_reg.get_material(guid);
+            if (material)
+            {
+                auto base_color_factor = material->get_vec4(core::material::base_color_factor_name)
+                                             .value_or(math::vec4<float>(1.0f, 1.0f, 1.0f, 1.0f));
+                auto emissive_factor = material->get_vec3(core::material::emissive_factor_name)
+                                           .value_or(math::vec3<float>(0.0f, 0.0f, 0.0f));
+                auto normal_scale = material->get_scalar(core::material::normal_scale_name).value_or(1.0f);
+                auto metallic_factor = material->get_scalar(core::material::metallic_factor_name).value_or(1.0f);
+                auto roughness_factor = material->get_scalar(core::material::roughness_factor_name).value_or(1.0f);
+                auto alpha_cutoff = material->get_scalar(core::material::alpha_cutoff_name).value_or(0.5f);
+
+                // TODO: Rework material types
+                auto material_type = [&]() -> gpu_material_type {
+                    auto material_type_str = material->get_string(core::material::alpha_mode_name).value_or("OPAQUE");
+                    if (material_type_str == "OPAQUE")
+                    {
+                        return gpu_material_type::PBR_OPAQUE;
+                    }
+                    else if (material_type_str == "MASK")
+                    {
+                        return gpu_material_type::PBR_MASK;
+                    }
+                    else if (material_type_str == "TRANSPARENT")
+                    {
+                        return gpu_material_type::PBR_BLEND;
+                    }
+                    else
+                    {
+                        return gpu_material_type::PBR_OPAQUE;
+                    }
+                }();
+
+                auto gpu_material = gpu_material_data{
+                    .base_color_factor = base_color_factor,
+                    .emissive_factor = math::vec4<float>(emissive_factor.x, emissive_factor.y, emissive_factor.z, 1.0f),
+                    .normal_scale = normal_scale,
+                    .metallic_factor = metallic_factor,
+                    .roughness_factor = roughness_factor,
+                    .alpha_cutoff = alpha_cutoff,
+                    .material_type = material_type,
+                };
+
+                if (const auto albedo_map = material->get_texture(core::material::base_color_texture_name))
+                {
+                    auto tex_id = _image_id_map[*albedo_map];
+                    gpu_material.base_color_texture_id = static_cast<std::int16_t>(tex_id);
+                }
+                else
+                {
+                    gpu_material.base_color_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                }
+
+                if (const auto normal_map = material->get_texture(core::material::normal_texture_name))
+                {
+                    auto tex_id = _image_id_map[*normal_map];
+                    gpu_material.normal_texture_id = static_cast<std::int16_t>(tex_id);
+                }
+                else
+                {
+                    gpu_material.normal_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                }
+
+                if (const auto metallic_map = material->get_texture(core::material::metallic_roughness_texture_name))
+                {
+                    auto tex_id = _image_id_map[*metallic_map];
+                    gpu_material.metallic_roughness_texture_id = static_cast<std::int16_t>(tex_id);
+                }
+                else
+                {
+                    gpu_material.metallic_roughness_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                }
+
+                if (const auto emissive_map = material->get_texture(core::material::emissive_texture_name))
+                {
+                    auto tex_id = _image_id_map[*emissive_map];
+                    gpu_material.emissive_texture_id = static_cast<std::int16_t>(tex_id);
+                }
+                else
+                {
+                    gpu_material.emissive_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                }
+
+                if (const auto ao_map = material->get_texture(core::material::occlusion_texture_name))
+                {
+                    auto tex_id = _image_id_map[*ao_map];
+                    gpu_material.occlusion_texture_id = static_cast<std::int16_t>(tex_id);
+                }
+                else
+                {
+                    gpu_material.occlusion_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                }
+
+                log->info("Uploaded material with guid: {} at index {}", to_string(guid).c_str(), _materials.size());
+
+                _material_id_map[guid] = _materials.size();
+                _materials.push_back(gpu_material);
+            }
+        }
     }
 
     void render_system::mark_dirty()

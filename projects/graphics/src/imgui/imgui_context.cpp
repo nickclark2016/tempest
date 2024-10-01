@@ -150,6 +150,11 @@ namespace tempest::graphics
         ImGui::Text("%s", contents.data());
     }
 
+    void imgui_context::label(uint32_t contents)
+    {
+        ImGui::Text("%u", contents);
+    }
+
     float imgui_context::float_slider(string_view name, float min, float max, float current_value)
     {
         float value = current_value;
@@ -199,6 +204,24 @@ namespace tempest::graphics
     {
         ImGui::InputFloat(label.data(), &current_value);
         return current_value;
+    }
+
+    math::vec3<float> imgui_context::input_color(string_view label, math::vec3<float> current_value, bool enabled)
+    {
+        float color[3] = {current_value.x, current_value.y, current_value.z};
+        ImGui::ColorEdit3(label.data(), color,
+                          enabled ? ImGuiColorEditFlags_NoInputs
+                                  : (ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker));
+        return {color[0], color[1], color[2]};
+    }
+
+    math::vec4<float> imgui_context::input_color(string_view label, math::vec4<float> current_value, bool enabled)
+    {
+        float color[4] = {current_value.x, current_value.y, current_value.z, current_value.w};
+        ImGui::ColorEdit4(label.data(), color,
+                          enabled ? ImGuiColorEditFlags_NoInputs
+                                  : (ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker));
+        return {color[0], color[1], color[2], color[3]};
     }
 
     void imgui_context::start_frame()

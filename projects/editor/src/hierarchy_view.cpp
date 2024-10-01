@@ -41,6 +41,12 @@ namespace tempest::editor
         using traits_type = tempest::ecs::registry::traits_type;
         using imgui = tempest::graphics::imgui_context;
 
+        // Do not display prefabs in the hierarchy view
+        if (registry.has<assets::prefab_tag_t>(parent))
+        {
+            return;
+        }
+
         auto ent_name = registry.name(parent);
 
         std::string name;

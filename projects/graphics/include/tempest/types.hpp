@@ -46,6 +46,7 @@ namespace tempest::graphics
         RGBA8_UINT,
         RGBA8_UNORM,
         RGBA16_FLOAT,
+        RGBA16_UNORM,
         RG16_FLOAT,
         RG32_FLOAT,
         RG32_UINT,

@@ -23,12 +23,6 @@ int main()
     tempest::editor::editor editor(engine);
 
     engine.on_initialize([&editor](tempest::engine& engine) {
-        auto sponza = engine.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
-        auto sponza_transform = tempest::ecs::transform_component{};
-        sponza_transform.scale({0.1f});
-
-        engine.get_registry().assign(sponza, sponza_transform);
-
         auto camera = engine.get_registry().acquire_entity();
 
         tempest::graphics::camera_component camera_data = {
@@ -44,6 +38,13 @@ int main()
 
         engine.get_registry().assign(camera, camera_data);
         engine.get_registry().assign(camera, camera_transform);
+
+        auto sponza_prefab = engine.get_asset_database().import(
+            "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", engine.get_registry());
+        auto sponza_instance = engine.load_entity(sponza_prefab);
+        auto sponza_transform = tempest::ecs::transform_component{};
+        sponza_transform.scale({0.1f});
+        engine.get_registry().assign(sponza_instance, sponza_transform);
     });
 
     engine.on_update([&editor](tempest::engine& engine, float dt) {

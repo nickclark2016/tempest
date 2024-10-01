@@ -77,6 +77,12 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
+    constexpr bool operator==(const basic_string_view<CharT, Traits>& lhs, const CharT* rhs) noexcept
+    {
+        return lhs == basic_string_view<CharT, Traits>(rhs);
+    }
+
+    template <typename CharT, typename Traits>
     constexpr auto operator<=>(const basic_string_view<CharT, Traits>& lhs,
                                const basic_string_view<CharT, Traits>& rhs) noexcept
     {

@@ -1319,6 +1319,11 @@ namespace tempest::ecs
     template <typename K, typename V, typename Allocator>
     inline constexpr bool basic_sparse_map<K, V, Allocator>::duplicate(K src, K dst) noexcept
     {
+        if constexpr (!is_duplicatable_v<V>)
+        {
+            return false;
+        }
+
         auto it = find(src);
         if (it == end())
         {

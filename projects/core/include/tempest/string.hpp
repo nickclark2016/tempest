@@ -539,6 +539,7 @@ namespace tempest
                                                                           const Allocator& alloc)
         : _alloc{alloc}
     {
+        _emplace_remaining_small_capacity(0);
         assign(first, last);
     }
 

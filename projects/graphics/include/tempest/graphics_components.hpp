@@ -14,16 +14,16 @@ namespace tempest::graphics
 {
     struct mesh_layout
     {
-        std::uint32_t mesh_start_offset;
-        std::uint32_t positions_offset;
-        std::uint32_t interleave_offset;
-        std::uint32_t interleave_stride;
-        std::uint32_t uvs_offset;
-        std::uint32_t normals_offset;
-        std::uint32_t tangents_offset = std::numeric_limits<std::uint32_t>::max();
-        std::uint32_t color_offset = std::numeric_limits<std::uint32_t>::max();
-        std::uint32_t index_offset;
-        std::uint32_t index_count;
+        uint32_t mesh_start_offset;
+        uint32_t positions_offset;
+        uint32_t interleave_offset;
+        uint32_t interleave_stride;
+        uint32_t uvs_offset;
+        uint32_t normals_offset;
+        uint32_t tangents_offset = std::numeric_limits<std::uint32_t>::max();
+        uint32_t color_offset = std::numeric_limits<std::uint32_t>::max();
+        uint32_t index_offset;
+        uint32_t index_count;
     };
 
     enum class alpha_behavior : std::uint32_t

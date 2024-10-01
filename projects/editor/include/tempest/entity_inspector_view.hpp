@@ -1,12 +1,10 @@
 #ifndef tempest_editor_entity_inspector_view_hpp
 #define tempest_editor_entity_inspector_view_hpp
 
-#include "component_view.hpp"
-
+#include <tempest/component_view.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/tempest.hpp>
-
-#include <memory>
-#include <vector>
+#include <tempest/vector.hpp>
 
 namespace tempest::editor
 {
@@ -14,19 +12,19 @@ namespace tempest::editor
     {
       public:
         void update(tempest::engine& eng);
-        
+
         void set_selected_entity(tempest::ecs::entity ent) noexcept;
-        
-        template <typename T>
-        void register_component_view_factory()
+
+        template <typename T, typename... Ts>
+        void register_component_view_factory(Ts&&... args)
         {
-            _component_view_factories.push_back(std::make_unique<T>());
+            _component_view_factories.push_back(tempest::make_unique<T>(tempest::forward<Ts>(args)...));
         }
 
       private:
-        tempest::ecs::entity _selected_entity = tempest::ecs::null;
+        ecs::entity _selected_entity = ecs::null;
 
-        std::vector<std::unique_ptr<component_view_factory>> _component_view_factories;
+        vector<unique_ptr<component_view_factory>> _component_view_factories;
     };
 } // namespace tempest::editor
 
