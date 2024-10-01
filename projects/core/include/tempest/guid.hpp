@@ -5,6 +5,7 @@
 #include <tempest/array.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
+#include <tempest/string.hpp>
 
 namespace tempest
 {
@@ -35,6 +36,8 @@ namespace tempest
             return detail::fnv1a64(data_qwords, 2);
         }
     };
+
+    string to_string(const guid& g);
 };
 
 #endif // tempest_guid_hpp

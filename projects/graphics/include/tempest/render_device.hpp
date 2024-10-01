@@ -6,6 +6,7 @@
 
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
+#include <tempest/texture.hpp>
 #include <tempest/vector.hpp>
 #include <tempest/vertex.hpp>
 
@@ -92,8 +93,19 @@ namespace tempest::graphics
                                                              bool use_entire_buffer = false,
                                                              bool generate_mip_maps = false);
 
+        static vector<image_resource_handle> upload_textures(render_device& dev, span<const guid> texture_ids,
+                                                             const core::texture_registry& texture_registry,
+                                                             buffer_resource_handle staging_buffer,
+                                                             bool use_entire_buffer = false,
+                                                             bool generate_mip_maps = false);
+
         static vector<mesh_layout> upload_meshes(render_device& device, span<core::mesh> meshes,
                                                  buffer_resource_handle target, uint32_t& offset);
+
+        static flat_unordered_map<guid, mesh_layout> upload_meshes(render_device& device, span<const guid> mesh_ids,
+                                                                   core::mesh_registry& mesh_registry,
+                                                                   buffer_resource_handle target, uint32_t& offset,
+                                                                   buffer_resource_handle staging_buffer);
     };
 
     class staging_buffer_writer

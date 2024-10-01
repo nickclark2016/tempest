@@ -1,6 +1,7 @@
 #ifndef tempest_tempest_engine_h
 #define tempest_tempest_engine_h
 
+#include <tempest/asset_database.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/registry.hpp>
@@ -81,11 +82,56 @@ namespace tempest
         }
 
         ecs::entity load_asset(std::string_view path);
+        ecs::entity load_entity(ecs::entity src);
 
         [[noreturn]] void run();
 
+        assets::asset_database& get_asset_database()
+        {
+            return _asset_database;
+        }
+
+        const assets::asset_database& get_asset_database() const
+        {
+            return _asset_database;
+        }
+
+        core::mesh_registry& get_mesh_registry()
+        {
+            return _mesh_reg;
+        }
+
+        const core::mesh_registry& get_mesh_registry() const
+        {
+            return _mesh_reg;
+        }
+
+        core::material_registry& get_material_registry()
+        {
+            return _material_reg;
+        }
+
+        const core::material_registry& get_material_registry() const
+        {
+            return _material_reg;
+        }
+
+        core::texture_registry& get_texture_registry()
+        {
+            return _texture_reg;
+        }
+
+        const core::texture_registry& get_texture_registry() const
+        {
+            return _texture_reg;
+        }
+
       private:
         ecs::registry _entity_registry;
+        core::material_registry _material_reg;
+        core::mesh_registry _mesh_reg;
+        core::texture_registry _texture_reg;
+        assets::asset_database _asset_database;
         vector<window_payload> _windows;
 
         vector<function<void(engine&)>> _initialize_callbacks;

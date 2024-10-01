@@ -17,6 +17,10 @@ project('ecs', (prj) => {
             'core:public',
             'math:public',
         ]);
+
+        dependsOn([
+            'core',
+        ]);
     });
 
     uses([

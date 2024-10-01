@@ -575,7 +575,7 @@ namespace tempest
 
         unique_ptr& operator=(const unique_ptr&) = delete;
 
-        [[no_discard]] constexpr pointer release() noexcept;
+        [[nodiscard]] constexpr pointer release() noexcept;
 
         constexpr void reset(pointer p = pointer()) noexcept;
 
@@ -642,7 +642,7 @@ namespace tempest
     template <typename T, typename Deleter>
     inline constexpr unique_ptr<T, Deleter>& unique_ptr<T, Deleter>::operator=(unique_ptr&& other) noexcept
     {
-        if (this == &other) [[unlikely]]
+        if (this == addressof(other)) [[unlikely]]
         {
             return *this;
         }
@@ -656,11 +656,6 @@ namespace tempest
     template <typename U, typename E>
     inline constexpr unique_ptr<T, Deleter>& unique_ptr<T, Deleter>::operator=(unique_ptr<U, E>&& other) noexcept
     {
-        if (this == &other) [[unlikely]]
-        {
-            return *this;
-        }
-
         reset(other.release());
         _deleter = tempest::move(other._deleter);
         return *this;
@@ -750,6 +745,42 @@ namespace tempest
     inline constexpr unique_ptr<T> make_unique(Args&&... args)
     {
         return unique_ptr<T>(new T(tempest::forward<Args>(args)...));
+    }
+
+    template <typename T, typename Deleter>
+    inline bool operator==(const unique_ptr<T, Deleter>& lhs, const unique_ptr<T, Deleter>& rhs) noexcept
+    {
+        return lhs.get() == rhs.get();
+    }
+
+    template <typename T, typename Deleter>
+    inline bool operator==(const unique_ptr<T, Deleter>& lhs, nullptr_t) noexcept
+    {
+        return !lhs;
+    }
+
+    template <typename T, typename Deleter>
+    inline bool operator==(nullptr_t, const unique_ptr<T, Deleter>& rhs) noexcept
+    {
+        return !rhs;
+    }
+
+    template <typename T, typename Deleter>
+    inline bool operator!=(const unique_ptr<T, Deleter>& lhs, const unique_ptr<T, Deleter>& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    template <typename T, typename Deleter>
+    inline bool operator!=(const unique_ptr<T, Deleter>& lhs, nullptr_t) noexcept
+    {
+        return static_cast<bool>(lhs);
+    }
+
+    template <typename T, typename Deleter>
+    inline bool operator!=(nullptr_t, const unique_ptr<T, Deleter>& rhs) noexcept
+    {
+        return static_cast<bool>(rhs);
     }
 } // namespace tempest
 

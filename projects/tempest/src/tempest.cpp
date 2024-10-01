@@ -31,7 +31,8 @@ namespace tempest
         }
     } // namespace
 
-    engine::engine() : _render_system{_entity_registry}, _delta_time{}
+    engine::engine()
+        : _render_system{_entity_registry}, _asset_database{&_mesh_reg, &_texture_reg, &_material_reg}, _delta_time{}
     {
     }
 
@@ -220,7 +221,7 @@ namespace tempest
             meshes.push_back(mesh.mesh);
         }
 
-        _render_system.load_mesh(meshes);
+        _render_system.load_meshes(meshes);
         _render_system.allocate_entities(node_id);
 
         for (auto material : model.materials)
@@ -266,6 +267,114 @@ namespace tempest
         _render_system.load_textures(texture_descriptors, true);
 
         return root;
+    }
+
+    ecs::entity engine::load_entity(ecs::entity src)
+    {
+        auto dst = _entity_registry.duplicate(src);
+
+        // TODO: Move this logic to the render system
+        // Iterate over all of the entities and upload the mesh, material, and textures
+        auto hierarchy = ecs::related_entity_view(_entity_registry, dst);
+
+        vector<guid> mesh_guids;
+        vector<guid> material_guids;
+        vector<guid> texture_guids;
+
+        std::size_t entity_count = 0;
+
+        for (auto e : hierarchy)
+        {
+            ++entity_count;
+
+            // Get the mesh, material, and transform components
+            auto mesh_comp = _entity_registry.try_get<core::mesh_component>(e);
+            auto material_comp = _entity_registry.try_get<core::material_component>(e);
+
+            if (mesh_comp != nullptr && material_comp != nullptr)
+            {
+                auto mesh_id = mesh_comp->mesh_id;
+                mesh_guids.push_back(mesh_id);
+
+                auto material_id = material_comp->material_id;
+                if (tempest::find(material_guids.begin(), material_guids.end(), material_id) != material_guids.end())
+                {
+                    continue;
+                }
+
+                material_guids.push_back(material_id);
+
+                // Get the material and add the textures to the texture list
+                auto mat = _material_reg.get_material(material_id);
+                if (mat)
+                {
+                    if (auto base_color = mat->get_texture(core::material::base_color_texture_name);
+                        base_color.has_value())
+                    {
+                        texture_guids.push_back(*base_color);
+                    }
+
+                    if (auto normal_map = mat->get_texture(core::material::normal_texture_name); normal_map.has_value())
+                    {
+                        texture_guids.push_back(*normal_map);
+                    }
+
+                    if (auto metallic_roughness = mat->get_texture(core::material::metallic_roughness_texture_name);
+                        metallic_roughness.has_value())
+                    {
+                        texture_guids.push_back(*metallic_roughness);
+                    }
+
+                    if (auto occlusion_map = mat->get_texture(core::material::occlusion_texture_name);
+                        occlusion_map.has_value())
+                    {
+                        texture_guids.push_back(*occlusion_map);
+                    }
+
+                    if (auto emissive_map = mat->get_texture(core::material::emissive_texture_name);
+                        emissive_map.has_value())
+                    {
+                        texture_guids.push_back(*emissive_map);
+                    }
+                }
+            }
+        }
+
+        _render_system.load_meshes(mesh_guids, _mesh_reg);
+        _render_system.load_textures(texture_guids, _texture_reg, true);
+        _render_system.load_materials(material_guids, _material_reg);
+
+        // Assign the mesh layouts to render components
+        for (auto e : hierarchy)
+        {
+            auto mesh_comp = _entity_registry.try_get<core::mesh_component>(e);
+            auto material_comp = _entity_registry.try_get<core::material_component>(e);
+
+            if (mesh_comp != nullptr && material_comp != nullptr)
+            {
+                auto mesh_id = mesh_comp->mesh_id;
+                auto material_id = material_comp->material_id;
+
+                log->info("Assigning mesh {} and material {} to entity {}:{}", to_string(mesh_id).c_str(),
+                          to_string(material_id).c_str(), ecs::entity_traits<ecs::entity>::as_entity(e),
+                          ecs::entity_traits<ecs::entity>::as_version(e));
+
+                graphics::renderable_component renderable{
+                    .mesh_id = static_cast<uint32_t>(_render_system.get_mesh_id(mesh_id).value()),
+                    .material_id = static_cast<uint32_t>(_render_system.get_material_id(material_id).value()),
+                    .object_id = static_cast<uint32_t>(_render_system.acquire_new_object()),
+                };
+
+                _entity_registry.assign(e, renderable);
+
+                if (!_entity_registry.has<ecs::transform_component>(e))
+                {
+                    _entity_registry.assign(e, ecs::transform_component{});
+                }
+            }
+        }
+
+        return dst;
     }
 
     void engine::run()

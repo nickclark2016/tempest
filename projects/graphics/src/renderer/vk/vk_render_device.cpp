@@ -189,6 +189,8 @@ namespace tempest::graphics::vk
                 return VK_FORMAT_R16G16B16A16_SFLOAT;
             case resource_format::RG16_FLOAT:
                 return VK_FORMAT_R16G16_SFLOAT;
+            case resource_format::RGBA16_UNORM:
+                return VK_FORMAT_R16G16B16A16_UNORM;
             case resource_format::R32_FLOAT:
                 return VK_FORMAT_R32_SFLOAT;
             case resource_format::R32_UINT:
@@ -361,6 +363,8 @@ namespace tempest::graphics::vk
             case resource_format::BGRA8_SRGB:
                 [[fallthrough]];
             case resource_format::RGBA16_FLOAT:
+                [[fallthrough]];
+            case resource_format::RGBA16_UNORM:
                 [[fallthrough]];
             case resource_format::RGBA32_FLOAT:
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |

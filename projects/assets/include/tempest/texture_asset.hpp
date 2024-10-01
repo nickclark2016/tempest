@@ -4,11 +4,8 @@
 #include <tempest/int.hpp>
 #include <tempest/vector.hpp>
 
-#include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <optional>
-#include <vector>
 
 namespace tempest::assets
 {

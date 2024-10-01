@@ -8,6 +8,7 @@
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/vec2.hpp>
+#include <tempest/vec3.hpp>
 #include <tempest/vec4.hpp>
 
 
@@ -39,6 +40,7 @@ namespace tempest::graphics
         static void pop_color();
 
         static void label(string_view contents);
+        static void label(uint32_t contents);
         static float float_slider(string_view name, float min, float max, float current_value);
         static math::vec2<float> float2_slider(string_view name, float min, float max,
                                                math::vec2<float> current_value);
@@ -47,6 +49,8 @@ namespace tempest::graphics
         static bool button(string label);
         static int combo_box(string_view label, int current_item, span<string_view> items);
         static float input_float(string_view label, float current_value);
+        static math::vec3<float> input_color(string_view label, math::vec3<float> current_value, bool enabled = true);
+        static math::vec4<float> input_color(string_view label, math::vec4<float> current_value, bool enabled = true);
 
         static void start_frame();
         static void end_frame();
