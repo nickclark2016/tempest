@@ -56,10 +56,10 @@ namespace tempest::core
 
     struct sampler_state
     {
-        magnify_texture_filter mag_filter;
-        minify_texture_filter min_filter;
-        texture_wrap_mode wrap_s;
-        texture_wrap_mode wrap_t;
+        magnify_texture_filter mag_filter = magnify_texture_filter::LINEAR;
+        minify_texture_filter min_filter = minify_texture_filter::LINEAR;
+        texture_wrap_mode wrap_s = texture_wrap_mode::REPEAT;
+        texture_wrap_mode wrap_t = texture_wrap_mode::REPEAT;
     };
 
     struct texture

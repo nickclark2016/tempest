@@ -739,22 +739,22 @@ namespace tempest::graphics
                  _registry->view<ecs::transform_component, renderable_component>())
             {
                 gpu_object_data object_payload = {
-                    .model = transform.matrix(),
-                    .inv_tranpose_model = math::transpose(math::inverse(transform.matrix())),
+                    .model = math::mat4<float>(1.0f),
                     .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
                     .material_id = static_cast<std::uint32_t>(renderable.material_id),
                     .self_id = static_cast<std::uint32_t>(renderable.object_id),
                 };
 
-                if (const auto relationship = _registry->try_get<ecs::relationship_component<ecs::entity>>(ent))
+                auto ancestor_view = ecs::ancestor_entity_view(*_registry, ent);
+                for (auto ent : ancestor_view)
                 {
-                    if (const auto parent_transform =
-                            _registry->try_get<ecs::transform_component>(relationship->parent))
+                    if (auto tx = _registry->try_get<ecs::transform_component>(ent))
                     {
-                        object_payload.model = parent_transform->matrix() * object_payload.model;
-                        object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
+                        object_payload.model = tx->matrix() * object_payload.model;
                     }
                 }
+
+                object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
 
                 draw_batch_key key = {
                     .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
