@@ -300,109 +300,113 @@ namespace tempest::assets
             return accs;
         }
 
-        guid process_texture(const image_payload& img, const simdjson::dom::element& sampler,
+        guid process_texture(const image_payload& img, optional<const simdjson::dom::element&> sampler,
                              core::texture_registry* tex_reg, span<const buffer_view_payload> views,
                              const flat_unordered_map<uint32_t, vector<byte>>& buffers)
         {
             core::sampler_state state;
 
-            uint64_t min_filter, mag_filter;
-            if (sampler["magFilter"].get(mag_filter))
+            if (sampler)
             {
-                state.mag_filter = core::magnify_texture_filter::LINEAR;
-            }
-            else
-            {
-                switch (mag_filter)
+                uint64_t min_filter, mag_filter;
+
+                if ((*sampler)["magFilter"].get(mag_filter))
                 {
-                case 9728:
-                    state.mag_filter = core::magnify_texture_filter::NEAREST;
-                    break;
-                case 9729:
                     state.mag_filter = core::magnify_texture_filter::LINEAR;
-                    break;
-                default:
-                    state.mag_filter = core::magnify_texture_filter::LINEAR;
-                    break;
                 }
-            }
-
-            if (sampler["minFilter"].get(min_filter))
-            {
-                state.min_filter = core::minify_texture_filter::LINEAR;
-            }
-            else
-            {
-                switch (min_filter)
+                else
                 {
-                case 9728:
-                    state.min_filter = core::minify_texture_filter::NEAREST;
-                    break;
-                case 9729:
+                    switch (mag_filter)
+                    {
+                    case 9728:
+                        state.mag_filter = core::magnify_texture_filter::NEAREST;
+                        break;
+                    case 9729:
+                        state.mag_filter = core::magnify_texture_filter::LINEAR;
+                        break;
+                    default:
+                        state.mag_filter = core::magnify_texture_filter::LINEAR;
+                        break;
+                    }
+                }
+
+                if ((*sampler)["minFilter"].get(min_filter))
+                {
                     state.min_filter = core::minify_texture_filter::LINEAR;
-                    break;
-                case 9984:
-                    state.min_filter = core::minify_texture_filter::NEAREST_MIPMAP_NEAREST;
-                    break;
-                case 9985:
-                    state.min_filter = core::minify_texture_filter::LINEAR_MIPMAP_NEAREST;
-                    break;
-                case 9986:
-                    state.min_filter = core::minify_texture_filter::NEAREST_MIPMAP_LINEAR;
-                    break;
-                case 9987:
-                    state.min_filter = core::minify_texture_filter::LINEAR_MIPMAP_LINEAR;
-                    break;
-                default:
-                    state.min_filter = core::minify_texture_filter::LINEAR;
-                    break;
                 }
-            }
-
-            uint64_t wrap_s, wrap_t;
-            if (sampler["wrapS"].get(wrap_s))
-            {
-                state.wrap_s = core::texture_wrap_mode::REPEAT;
-            }
-            else
-            {
-                switch (wrap_s)
+                else
                 {
-                case 33071:
-                    state.wrap_s = core::texture_wrap_mode::CLAMP_TO_EDGE;
-                    break;
-                case 33648:
-                    state.wrap_s = core::texture_wrap_mode::MIRRORED_REPEAT;
-                    break;
-                case 10497:
-                    state.wrap_s = core::texture_wrap_mode::REPEAT;
-                    break;
-                default:
-                    state.wrap_s = core::texture_wrap_mode::REPEAT;
-                    break;
+                    switch (min_filter)
+                    {
+                    case 9728:
+                        state.min_filter = core::minify_texture_filter::NEAREST;
+                        break;
+                    case 9729:
+                        state.min_filter = core::minify_texture_filter::LINEAR;
+                        break;
+                    case 9984:
+                        state.min_filter = core::minify_texture_filter::NEAREST_MIPMAP_NEAREST;
+                        break;
+                    case 9985:
+                        state.min_filter = core::minify_texture_filter::LINEAR_MIPMAP_NEAREST;
+                        break;
+                    case 9986:
+                        state.min_filter = core::minify_texture_filter::NEAREST_MIPMAP_LINEAR;
+                        break;
+                    case 9987:
+                        state.min_filter = core::minify_texture_filter::LINEAR_MIPMAP_LINEAR;
+                        break;
+                    default:
+                        state.min_filter = core::minify_texture_filter::LINEAR;
+                        break;
+                    }
                 }
-            }
 
-            if (sampler["wrapT"].get(wrap_t))
-            {
-                state.wrap_t = core::texture_wrap_mode::REPEAT;
-            }
-            else
-            {
-                switch (wrap_t)
+                uint64_t wrap_s, wrap_t;
+                if ((*sampler)["wrapS"].get(wrap_s))
                 {
-                case 33071:
-                    state.wrap_t = core::texture_wrap_mode::CLAMP_TO_EDGE;
-                    break;
-                case 33648:
-                    state.wrap_t = core::texture_wrap_mode::MIRRORED_REPEAT;
-                    break;
-                case 10497:
+                    state.wrap_s = core::texture_wrap_mode::REPEAT;
+                }
+                else
+                {
+                    switch (wrap_s)
+                    {
+                    case 33071:
+                        state.wrap_s = core::texture_wrap_mode::CLAMP_TO_EDGE;
+                        break;
+                    case 33648:
+                        state.wrap_s = core::texture_wrap_mode::MIRRORED_REPEAT;
+                        break;
+                    case 10497:
+                        state.wrap_s = core::texture_wrap_mode::REPEAT;
+                        break;
+                    default:
+                        state.wrap_s = core::texture_wrap_mode::REPEAT;
+                        break;
+                    }
+                }
+
+                if ((*sampler)["wrapT"].get(wrap_t))
+                {
                     state.wrap_t = core::texture_wrap_mode::REPEAT;
-                    break;
-                default:
-                    state.wrap_t = core::texture_wrap_mode::REPEAT;
-                    break;
+                }
+                else
+                {
+                    switch (wrap_t)
+                    {
+                    case 33071:
+                        state.wrap_t = core::texture_wrap_mode::CLAMP_TO_EDGE;
+                        break;
+                    case 33648:
+                        state.wrap_t = core::texture_wrap_mode::MIRRORED_REPEAT;
+                        break;
+                    case 10497:
+                        state.wrap_t = core::texture_wrap_mode::REPEAT;
+                        break;
+                    default:
+                        state.wrap_t = core::texture_wrap_mode::REPEAT;
+                        break;
+                    }
                 }
             }
 
@@ -465,7 +469,8 @@ namespace tempest::assets
 
             if (img.name.empty())
             {
-                tex.name = img.file_path;
+                auto path = std::filesystem::path(img.file_path.c_str()).stem();
+                tex.name = path.string().c_str();
             }
             else
             {
@@ -986,12 +991,17 @@ namespace tempest::assets
             for (const auto& tex : textures)
             {
                 auto image_id = tex["source"].get_uint64().value();
-                auto sampler_id = tex["sampler"].get_uint64().value();
 
-                auto sampler = doc.at_key("samplers").get_array().at(sampler_id);
+                optional<const simdjson::dom::element&> sampler;
 
-                auto guid = process_texture(image_contents[image_id], sampler.value(), _texture_reg, buffer_views,
-                                            buffer_contents);
+                uint64_t sampler_id;
+                if (tex["sampler"].get(sampler_id) == simdjson::error_code::SUCCESS)
+                {
+                    sampler = doc.at_key("samplers").get_array().at(sampler_id).value();
+                }
+
+                auto guid =
+                    process_texture(image_contents[image_id], sampler, _texture_reg, buffer_views, buffer_contents);
                 texture_guids.insert({texture_id, guid});
                 ++texture_id;
             }
@@ -1007,13 +1017,6 @@ namespace tempest::assets
             {
                 auto guid = process_material(mat, texture_guids, _material_reg);
                 material_guids.insert({material_id, guid});
-
-                _material_reg->update_material(guid, [&](core::material& m) {
-                    if (m.get_name().empty()) {
-                        auto str = std::to_string(material_id);
-                        m.set_name(str.c_str());
-                    }
-                });
 
                 ++material_id;
             }
@@ -1089,7 +1092,7 @@ namespace tempest::assets
                             ecs::create_parent_child_relationship(registry, ent, mesh_ent);
                         }
 
-                        auto hierarchy_view = ecs::related_entity_view(registry, ent);
+                        auto hierarchy_view = ecs::descendant_entity_view(registry, ent);
                     }
                 }
 
@@ -1197,7 +1200,7 @@ namespace tempest::assets
             }
         }
 
-        auto ent_hierarchy_view = ecs::related_entity_view(registry, ent);
+        auto ent_hierarchy_view = ecs::descendant_entity_view(registry, ent);
         auto ent_in_view_count = tempest::distance(ent_hierarchy_view.begin(), ent_hierarchy_view.end());
 
         return ent;

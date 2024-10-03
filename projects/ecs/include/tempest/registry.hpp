@@ -1408,14 +1408,14 @@ namespace tempest::ecs
     };
 
     template <typename E>
-    class basic_related_entity_view
+    class basic_descendant_entity_view
     {
       public:
         using value_type = E;
         using iterator = basic_related_entity_view_iterator<E>;
         using const_iterator = iterator;
 
-        basic_related_entity_view(const basic_registry<E>& source, E root) noexcept;
+        basic_descendant_entity_view(const basic_registry<E>& source, E root) noexcept;
 
         iterator begin() noexcept;
         const_iterator begin() const noexcept;
@@ -1511,43 +1511,48 @@ namespace tempest::ecs
     }
 
     template <typename E>
-    inline basic_related_entity_view<E>::basic_related_entity_view(const basic_registry<E>& source, E root) noexcept
+    inline basic_descendant_entity_view<E>::basic_descendant_entity_view(const basic_registry<E>& source,
+                                                                         E root) noexcept
         : _source{&source}, _root{root}
     {
     }
 
     template <typename E>
-    inline typename basic_related_entity_view<E>::iterator basic_related_entity_view<E>::begin() noexcept
+    inline typename basic_descendant_entity_view<E>::iterator basic_descendant_entity_view<E>::begin() noexcept
     {
         return {*_source, _root, 0};
     }
 
     template <typename E>
-    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::begin() const noexcept
+    inline typename basic_descendant_entity_view<E>::const_iterator basic_descendant_entity_view<E>::begin()
+        const noexcept
     {
         return {*_source, _root, 0};
     }
 
     template <typename E>
-    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::cbegin() const noexcept
+    inline typename basic_descendant_entity_view<E>::const_iterator basic_descendant_entity_view<E>::cbegin()
+        const noexcept
     {
         return {*_source, _root, 0};
     }
 
     template <typename E>
-    inline typename basic_related_entity_view<E>::iterator basic_related_entity_view<E>::end() noexcept
+    inline typename basic_descendant_entity_view<E>::iterator basic_descendant_entity_view<E>::end() noexcept
     {
         return {*_source, ecs::tombstone, 0};
     }
 
     template <typename E>
-    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::end() const noexcept
+    inline typename basic_descendant_entity_view<E>::const_iterator basic_descendant_entity_view<E>::end()
+        const noexcept
     {
         return {*_source, ecs::tombstone, 0};
     }
 
     template <typename E>
-    inline typename basic_related_entity_view<E>::const_iterator basic_related_entity_view<E>::cend() const noexcept
+    inline typename basic_descendant_entity_view<E>::const_iterator basic_descendant_entity_view<E>::cend()
+        const noexcept
     {
         return {*_source, ecs::tombstone, 0};
     }
@@ -1566,8 +1571,153 @@ namespace tempest::ecs
         return !(lhs == rhs);
     }
 
+    template <typename E>
+    class basic_ancestor_entity_view_iterator
+    {
+      public:
+        using value_type = E;
+        using difference_type = ptrdiff_t;
+
+        basic_ancestor_entity_view_iterator(const basic_registry<E>& source, E current) noexcept;
+
+        E operator*() noexcept;
+        const E operator*() const noexcept;
+
+        basic_ancestor_entity_view_iterator& operator++() noexcept;
+        basic_ancestor_entity_view_iterator operator++(int) noexcept;
+
+      private:
+        const basic_registry<E>* _source;
+        E _current;
+    };
+
+    template <typename E>
+    class basic_ancestor_entity_view
+    {
+      public:
+        using value_type = E;
+        using iterator = basic_ancestor_entity_view_iterator<E>;
+        using const_iterator = iterator;
+
+        basic_ancestor_entity_view(const basic_registry<E>& source, E root) noexcept;
+
+        iterator begin() noexcept;
+        const_iterator begin() const noexcept;
+        const_iterator cbegin() const noexcept;
+
+        iterator end() noexcept;
+        const_iterator end() const noexcept;
+        const_iterator cend() const noexcept;
+
+      private:
+        const basic_registry<E>* _reg;
+        E _root;
+    };
+
+    template <typename E>
+    inline basic_ancestor_entity_view_iterator<E>::basic_ancestor_entity_view_iterator(const basic_registry<E>& source,
+                                                                                       E current) noexcept
+        : _source{&source}, _current{current}
+    {
+    }
+
+    template <typename E>
+    inline E basic_ancestor_entity_view_iterator<E>::operator*() noexcept
+    {
+        return _current;
+    }
+
+    template <typename E>
+    inline const E basic_ancestor_entity_view_iterator<E>::operator*() const noexcept
+    {
+        return _current;
+    }
+
+    template <typename E>
+    inline basic_ancestor_entity_view_iterator<E>& basic_ancestor_entity_view_iterator<E>::operator++() noexcept
+    {
+        auto rel_comp = _source->try_get<relationship_component<E>>(_current);
+        if (rel_comp == nullptr)
+        {
+            _current = ecs::tombstone;
+            return *this;
+        }
+
+        _current = rel_comp->parent;
+        return *this;
+    }
+
+    template <typename E>
+    inline basic_ancestor_entity_view_iterator<E> basic_ancestor_entity_view_iterator<E>::operator++(int) noexcept
+    {
+        auto self = *this;
+        ++(*this);
+        return self;
+    }
+
+    template <typename E>
+    inline basic_ancestor_entity_view<E>::basic_ancestor_entity_view(const basic_registry<E>& source, E root) noexcept
+        : _reg{&source}, _root{root}
+    {
+    }
+
+    template <typename E>
+    inline typename basic_ancestor_entity_view<E>::iterator basic_ancestor_entity_view<E>::begin() noexcept
+    {
+        return {*_reg, _root};
+    }
+
+    template <typename E>
+    inline typename basic_ancestor_entity_view<E>::const_iterator basic_ancestor_entity_view<E>::begin()
+        const noexcept
+    {
+        return {*_reg, _root};
+    }
+
+    template <typename E>
+    inline typename basic_ancestor_entity_view<E>::const_iterator basic_ancestor_entity_view<E>::cbegin()
+        const noexcept
+    {
+        return {*_reg, _root};
+    }
+
+    template <typename E>
+    inline typename basic_ancestor_entity_view<E>::iterator basic_ancestor_entity_view<E>::end() noexcept
+    {
+        return {*_reg, ecs::tombstone};
+    }
+
+    template <typename E>
+    inline typename basic_ancestor_entity_view<E>::const_iterator basic_ancestor_entity_view<E>::end()
+        const noexcept
+    {
+        return {*_reg, ecs::tombstone};
+    }
+
+    template <typename E>
+    inline typename basic_ancestor_entity_view<E>::const_iterator basic_ancestor_entity_view<E>::cend()
+        const noexcept
+    {
+        return {*_reg, ecs::tombstone};
+    }
+
+    template <typename E>
+    inline bool operator==(const basic_ancestor_entity_view_iterator<E>& lhs,
+                    const basic_ancestor_entity_view_iterator<E>& rhs) noexcept
+    {
+        return *lhs == *rhs;
+    }
+
+    template <typename E>
+    inline bool operator!=(const basic_ancestor_entity_view_iterator<E>& lhs,
+                    const basic_ancestor_entity_view_iterator<E>& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     using registry = basic_registry<entity>;
-    using related_entity_view = basic_related_entity_view<entity>;
+    using descendant_entity_view = basic_descendant_entity_view<entity>;
+    using ancestor_entity_view = basic_ancestor_entity_view<entity>;
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_registry_hpp

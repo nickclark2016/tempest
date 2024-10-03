@@ -275,7 +275,7 @@ namespace tempest
 
         // TODO: Move this logic to the render system
         // Iterate over all of the entities and upload the mesh, material, and textures
-        auto hierarchy = ecs::related_entity_view(_entity_registry, dst);
+        auto hierarchy = ecs::descendant_entity_view(_entity_registry, dst);
 
         vector<guid> mesh_guids;
         vector<guid> material_guids;
