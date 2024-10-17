@@ -77,6 +77,12 @@ namespace tempest::graphics
         float vertical_fov;
         float near_plane{0.1f};
     };
+
+    struct directional_light_component
+    {
+        math::vec3<float> color;
+        float intensity;
+    };
 } // namespace tempest::graphics
 
 #endif // tempest_graphics_graphics_components_hpp
