@@ -106,15 +106,6 @@ namespace tempest::graphics
             .name = "Resolved Color Buffer",
         });
 
-        auto sharpened_color_buffer = rgc->create_image({
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::RGBA8_SRGB,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "Sharpened Color Buffer",
-        });
-
         auto history_color_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
@@ -567,45 +558,6 @@ namespace tempest::graphics
                     .on_execute(pbr_commands);
             });
 
-        auto first_frame_taa_copy_pass = rgc->add_graph_pass(
-            "TAA Build Initial History", queue_operation_type::GRAPHICS_AND_TRANSFER, [&](graph_pass_builder& bldr) {
-                bldr.depends_on(_pbr_pass)
-                    .add_blit_target(history_color_buffer)
-                    .add_blit_source(color_buffer)
-                    .should_execute([&]() {
-                        return _device->current_frame() == 0 && _settings_dirty &&
-                               _settings.aa_mode == anti_aliasing_mode::TAA;
-                    })
-                    .on_execute([history_color_buffer, color_buffer](command_list& cmds) {
-                        cmds.blit(color_buffer, history_color_buffer);
-                    });
-            });
-
-        auto taa_resolve_pass =
-            rgc->add_graph_pass("TAA Resolve", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
-                bldr.depends_on(_pbr_pass)
-                    .depends_on(first_frame_taa_copy_pass)
-                    .add_color_attachment(resolved_color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
-                                          store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
-                    .add_sampled_image(color_buffer, 0, 0)
-                    .add_sampled_image(history_color_buffer, 0, 1)
-                    .add_sampled_image(velocity_buffer, 0, 2)
-                    .add_sampler(_point_sampler_no_aniso, 0, 3, pipeline_stage::FRAGMENT)
-                    .add_sampler(_linear_sampler_no_aniso, 0, 4, pipeline_stage::FRAGMENT)
-                    .should_execute([this]() { return _settings.aa_mode == anti_aliasing_mode::TAA; })
-                    .on_execute([&](command_list& cmds) { cmds.use_pipeline(_taa_resolve_handle).draw(3, 1, 0, 0); });
-            });
-
-        auto sharpening_pass =
-            rgc->add_graph_pass("Sharpen Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
-                bldr.depends_on(taa_resolve_pass)
-                    .add_color_attachment(sharpened_color_buffer, resource_access_type::READ_WRITE, load_op::LOAD,
-                                          store_op::STORE)
-                    .add_sampled_image(resolved_color_buffer, 0, 0)
-                    .should_execute([this]() { return _settings.aa_mode == anti_aliasing_mode::TAA; })
-                    .on_execute([&](command_list& cmds) { cmds.use_pipeline(_sharpen_handle).draw(3, 1, 0, 0); });
-            });
-
         auto imgui_pass = rgc->add_graph_pass(
             "ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
                 bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
@@ -618,19 +570,6 @@ namespace tempest::graphics
                                _create_imgui_hierarchy;
                     })
                     .on_execute([]([[maybe_unused]] auto& cmds) {});
-            });
-
-        auto imgui_pass_with_taa = rgc->add_graph_pass(
-            "ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
-                bldr.add_color_attachment(sharpened_color_buffer, graphics::resource_access_type::WRITE,
-                                          graphics::load_op::LOAD, graphics::store_op::STORE)
-                    .draw_imgui()
-                    .depends_on(sharpening_pass)
-                    .should_execute([this]() {
-                        return _settings.aa_mode == anti_aliasing_mode::TAA && _settings.enable_imgui &&
-                               _create_imgui_hierarchy;
-                    })
-                    .on_execute([](auto& cmds) {});
             });
 
         for (auto& [win, sc_handle] : _swapchains)
@@ -650,19 +589,6 @@ namespace tempest::graphics
                                             cmds.blit(color_buffer, _device->fetch_current_image(sc_handle));
                                         });
                                 });
-
-            rgc->add_graph_pass(
-                "Swapchain Resolve", queue_operation_type::GRAPHICS_AND_TRANSFER, [&](graph_pass_builder& builder) {
-                    builder.add_blit_source(sharpened_color_buffer)
-                        .add_external_blit_target(sc_handle)
-                        .add_blit_target(history_color_buffer)
-                        .depends_on(imgui_pass_with_taa)
-                        .should_execute([this]() { return _settings.aa_mode == anti_aliasing_mode::TAA; })
-                        .on_execute([&, sc_handle, sharpened_color_buffer, history_color_buffer](command_list& cmds) {
-                            cmds.blit(sharpened_color_buffer, _device->fetch_current_image(sc_handle));
-                            cmds.blit(sharpened_color_buffer, history_color_buffer);
-                        });
-                });
         }
 
         if (_settings.enable_imgui)
@@ -710,8 +636,6 @@ namespace tempest::graphics
         _pbr_transparencies_pipeline = create_pbr_pipeline(true);
         _z_prepass_pipeline = create_z_prepass_pipeline();
         _hzb_build_pipeline = create_hzb_build_pipeline();
-        _taa_resolve_handle = create_taa_resolve_pipeline();
-        _sharpen_handle = create_sharpen_pipeline();
 
         _last_updated_frame = _device->current_frame();
 
@@ -802,6 +726,18 @@ namespace tempest::graphics
                 }
 
                 instances_written += static_cast<std::uint32_t>(batch.objects.size());
+            }
+
+            // Find the directional light for the scene
+            for (auto [ent, dir_light, tx] : _registry->view<directional_light_component, ecs::transform_component>())
+            {
+                _scene_data.sun.color =
+                    math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, 1.0f);
+
+                // Rotate 0, 0, 1 by the rotation of the transform
+                auto light_rot = math::transform({}, tx.rotation(), {1.0f});
+                auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
+                _scene_data.sun.direction = math::vec3<float>(light_dir.x, light_dir.y, light_dir.z);
             }
         }
 

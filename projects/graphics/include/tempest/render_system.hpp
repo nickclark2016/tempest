@@ -262,8 +262,6 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle _pbr_transparencies_pipeline;
         graphics_pipeline_resource_handle _z_prepass_pipeline;
         compute_pipeline_resource_handle _hzb_build_pipeline;
-        graphics_pipeline_resource_handle _taa_resolve_handle;
-        graphics_pipeline_resource_handle _sharpen_handle;
 
         render_system_settings _settings;
         bool _settings_dirty{false};

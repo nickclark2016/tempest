@@ -53,6 +53,20 @@ int main()
         lantern_transform.position({0.0f, 0.0f, 2.0f});
         lantern_transform.scale({0.1f, 0.1f, 0.1f});
         engine.get_registry().assign(lantern_instance, lantern_transform);
+
+        auto sun = engine.get_registry().acquire_entity();
+        tempest::graphics::directional_light_component sun_data = {
+            .color = {1.0f, 1.0f, 1.0f},
+            .intensity = 1.0f,
+        };
+
+        engine.get_registry().assign(sun, sun_data);
+        engine.get_registry().name(sun, "Sun");
+
+        tempest::ecs::transform_component sun_tx{};
+        sun_tx.rotation({tempest::math::as_radians(90.0f), 0.0f, 0.0f});
+
+        engine.get_registry().assign(sun, sun_tx);
     });
 
     engine.on_update([&editor](tempest::engine& engine, float dt) {
