@@ -32,7 +32,7 @@ int main()
         };
 
         tempest::ecs::transform_component camera_transform;
-        camera_transform.position({0.0f, 0.0f, 0.0f});
+        camera_transform.position({0.0f, 1.0f, 0.0f});
 
         engine.get_registry().name(camera, "Camera");
 

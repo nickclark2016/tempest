@@ -196,6 +196,12 @@ namespace tempest::math
     }
 
     template <typename T>
+    inline constexpr mat4<T> rotate(const vec3<T>& euler)
+    {
+        return as_mat4(quat(euler));
+    }
+
+    template <typename T>
     inline constexpr mat4<T> scale(const mat4<T>& m, const vec3<T>& v)
     {
         mat4<T> res;
@@ -325,12 +331,7 @@ namespace tempest::math
         T A = near / (far - near);
         T B = far * A;
 
-        return transpose(mat4<T>{
-            x, 0, 0, 0,
-            0, y, 0, 0,
-            0, 0, A, B,
-            0, 0, -1, 0
-        });
+        return transpose(mat4<T>{x, 0, 0, 0, 0, y, 0, 0, 0, 0, A, B, 0, 0, -1, 0});
     }
 
     template <typename T>

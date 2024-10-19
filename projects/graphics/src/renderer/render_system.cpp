@@ -735,9 +735,29 @@ namespace tempest::graphics
                     math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, 1.0f);
 
                 // Rotate 0, 0, 1 by the rotation of the transform
-                auto light_rot = math::transform({}, tx.rotation(), {1.0f});
+                auto light_rot = math::rotate(tx.rotation());
                 auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
                 _scene_data.sun.direction = math::vec3<float>(light_dir.x, light_dir.y, light_dir.z);
+            }
+
+            // Gather point lights
+            vector<point_light> point_lights;
+            for (const auto& [ent, pt_light, tx] : _registry->view<point_light_component, ecs::transform_component>())
+            {
+                point_light pl = {
+                    .location =
+                        {
+                            tx.position().x,
+                            tx.position().y,
+                            tx.position().z,
+                            0.0f,
+                        },
+                    .color = pt_light.color,
+                    .range = pt_light.range,
+                    .intensity = pt_light.intensity,
+                };
+
+                point_lights.push_back(pl);
             }
         }
 
