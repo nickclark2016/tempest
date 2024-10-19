@@ -83,6 +83,13 @@ namespace tempest::graphics
         math::vec3<float> color;
         float intensity;
     };
+
+    struct point_light_component
+    {
+        math::vec3<float> color;
+        float intensity;
+        float range;
+    };
 } // namespace tempest::graphics
 
 #endif // tempest_graphics_graphics_components_hpp
