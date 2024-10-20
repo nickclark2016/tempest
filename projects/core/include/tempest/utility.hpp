@@ -461,6 +461,15 @@ namespace tempest
 #endif
 #endif
     }
+
+    template <auto V>
+    struct nontype_t
+    {
+        explicit nontype_t() = default;
+    };
+
+    template <auto V>
+    inline constexpr nontype_t<V> nontype{};
 } // namespace tempest
 
 #endif // tempest_core_utility_hpp

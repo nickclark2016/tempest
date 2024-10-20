@@ -3,7 +3,6 @@
 
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
-#include <tempest/memory.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
