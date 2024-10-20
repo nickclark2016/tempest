@@ -373,3 +373,29 @@ TEST(functional, mem_fn)
 
     EXPECT_EQ(f(foo, 1, 2), 3);
 }
+
+TEST(functional, function_ref)
+{
+    auto fn = [](int a, int b) { return a + b; };
+
+    tempest::function_ref<int(int, int)> f(fn);
+
+    EXPECT_EQ(f(1, 2), 3);
+}
+
+TEST(functional, function_ref_to_member)
+{
+    struct Foo
+    {
+        int add(int a, int b)
+        {
+            return a + b;
+        }
+    };
+
+    Foo foo;
+
+    tempest::function_ref<int(int, int)> fr(tempest::nontype<&Foo::add>, foo);
+
+    EXPECT_EQ(fr(1, 2), 3);
+}

@@ -1,6 +1,7 @@
 #ifndef tempest_core_functional_hpp
 #define tempest_core_functional_hpp
 
+#include <tempest/memory.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
@@ -1097,6 +1098,178 @@ namespace tempest
     {
         return tempest::forward<T>(t);
     }
+
+    namespace detail
+    {
+        template <bool Nx, typename R, typename... Args>
+        struct is_invocable_using
+        {
+            template <typename... Fn>
+            static constexpr bool value() noexcept
+            {
+                if constexpr (Nx)
+                {
+                    return is_nothrow_invocable_r_v<R, Fn..., Args...>;
+                }
+                else
+                {
+                    return is_invocable_r_v<R, Fn..., Args...>;
+                }
+            }
+        };
+
+        struct function_ref_base
+        {
+            union storage {
+                void* p = nullptr;
+                void const* cp;
+                void (*fp)();
+
+                constexpr storage() noexcept = default;
+
+                template <typename T>
+                    requires is_object_v<T>
+                constexpr explicit storage(T* t) noexcept : p{t}
+                {
+                }
+
+                template <typename T>
+                    requires is_object_v<T>
+                constexpr explicit storage(T const* t) noexcept : cp{t}
+                {
+                }
+
+                template <typename T>
+                    requires is_function_v<T>
+                constexpr explicit storage(T* t) noexcept : fp{reinterpret_cast<void (*)()>(t)}
+                {
+                }
+            };
+
+            template <typename T>
+            static constexpr auto get(storage s)
+            {
+                if constexpr (is_const_v<T>)
+                {
+                    return static_cast<T*>(s.cp);
+                }
+                else if constexpr (is_object_v<T>)
+                {
+                    return static_cast<T*>(s.p);
+                }
+                else
+                {
+                    return reinterpret_cast<T*>(s.fp);
+                }
+            }
+        };
+
+        template <bool Cx, bool Nx, typename R, typename... Args>
+        class function_ref_impl : function_ref_base
+        {
+          public:
+            template <typename T>
+            using cv = conditional_t<Cx, const T, T>;
+
+            template <typename T>
+            using cvref = cv<T>&;
+
+            using type = R (*)(Args...);
+
+            template <typename F>
+                requires(is_invocable_using<Nx, R, Args...>::template value<F>() && is_function_v<F>)
+            inline function_ref_impl(F* f) noexcept
+                : _obj{f}, _callback{[](storage s, Args... args) noexcept(Nx) -> R {
+                      if constexpr (is_void_v<R>)
+                      {
+                          tempest::invoke(get<F>(s), tempest::forward<Args>(args)...);
+                      }
+                      else
+                      {
+                          return tempest::invoke(get<F>(s), tempest::forward<Args>(args)...);
+                      }
+                  }}
+            {
+            }
+
+            template <typename Fn>
+                requires(is_invocable_using<Nx, R, Args...>::template value<Fn>() && !is_member_pointer_v<Fn> &&
+                         !is_same_v<decay_t<Fn>, function_ref_impl>)
+            inline function_ref_impl(Fn&& f) noexcept
+                : _obj{tempest::addressof(f)}, _callback{[](storage s, Args... args) noexcept(Nx) -> R {
+                      cvref<decay_t<Fn>> obj = *get<decay_t<Fn>>(s);
+                      if constexpr (is_void_v<R>)
+                      {
+                          obj(tempest::forward<Args>(args)...);
+                      }
+                      else
+                      {
+                          return obj(tempest::forward<Args>(args)...);
+                      }
+                  }}
+            {
+            }
+
+            template <auto f>
+                requires(is_invocable_using<Nx, R, Args...>::template value<decltype(f)>())
+            inline function_ref_impl(nontype_t<f>) noexcept
+                : _callback{[](storage s, Args... args) noexcept(Nx) -> R {
+                      return invoke_r<R>(f, tempest::forward<Args>(args)...);
+                  }}
+            {
+            }
+
+            template <auto f, typename T>
+                requires(!is_rvalue_reference_v<T &&> &&
+                         is_invocable_using<Nx, R, Args...>::template value<decltype(f), cvref<decay_t<T>>>())
+            inline function_ref_impl(nontype_t<f>, T&& obj) noexcept
+                : _obj{tempest::addressof(obj)}, _callback{[](storage s, Args... args) noexcept(Nx) -> R {
+                      cvref<T> obj = *get<decay_t<T>>(s);
+                      return invoke_r<R>(f, obj, tempest::forward<Args>(args)...);
+                  }}
+            {
+            }
+
+            template <auto f, typename T>
+                requires(is_invocable_using<Nx, R, Args...>::template value<decltype(f),
+                                                                            add_const_t<add_volatile_t<T>>>())
+            inline function_ref_impl(nontype_t<f>, T* obj) noexcept
+                : _obj{obj}, _callback{[](storage s, Args... args) noexcept(Nx) -> R {
+                      auto obj = *get<cv<T>>(s);
+                      return invoke_r<R>(f, obj, tempest::forward<Args>(args)...);
+                  }}
+            {
+            }
+
+            function_ref_impl(const function_ref_impl&) noexcept = default;
+
+            function_ref_impl& operator=(const function_ref_impl&) noexcept = default;
+
+            template <typename T>
+            function_ref_impl& operator=(T) = delete;
+
+            R operator()(Args... args) const noexcept(Nx)
+            {
+                return _callback(_obj, tempest::forward<Args>(args)...);
+            }
+
+          private:
+            using fn_t = R (*)(storage, Args...);
+
+            storage _obj;
+            fn_t _callback;
+        };
+    } // namespace detail
+
+    template <typename...>
+    class function_ref;
+
+    template <typename R, typename... Args>
+    class function_ref<R(Args...)> : public detail::function_ref_impl<false, false, R, Args...>
+    {
+      public:
+        using detail::function_ref_impl<false, false, R, Args...>::function_ref_impl;
+    };
 } // namespace tempest
 
 #endif // tempest_core_functional_hpp
