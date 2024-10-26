@@ -4,7 +4,7 @@
 
 namespace tempest
 {
-    [[noexcept]] void abort() noexcept
+    void abort() noexcept
     {
         std::abort();
     }

@@ -97,24 +97,6 @@ namespace tempest::graphics
             .name = "MSAA Color Buffer",
         });
 
-        auto resolved_color_buffer = rgc->create_image({
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::RGBA8_SRGB,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "Resolved Color Buffer",
-        });
-
-        auto history_color_buffer = rgc->create_image({
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::RGBA8_SRGB,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "History Color Buffer",
-        });
-
         auto depth_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,

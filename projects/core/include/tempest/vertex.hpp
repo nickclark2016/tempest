@@ -45,9 +45,9 @@ namespace tempest::core
         vector<std::uint32_t> indices;
         std::string name;
 
-        bool has_normals;
-        bool has_tangents;
-        bool has_colors;
+        bool has_normals{};
+        bool has_tangents{};
+        bool has_colors{};
 
         void flip_winding_order();
 

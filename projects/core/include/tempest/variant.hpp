@@ -11,6 +11,17 @@ namespace tempest
     template <typename... Ts>
     class variant;
 
+    template <typename T>
+    struct variant_size;
+
+    template <typename... Ts>
+    struct variant_size<variant<Ts...>> : integral_constant<size_t, sizeof...(Ts)>
+    {
+    };
+
+    template <typename T>
+    inline constexpr size_t variant_size_v = variant_size<T>::value;
+
     namespace detail
     {
         template <typename T>
@@ -125,7 +136,22 @@ namespace tempest
 
         template <size_t Idx, typename... Ts>
         using type_at_index = typename type_at_index_helper<0, Idx, Ts...>::type;
+    } // namespace detail
 
+    template <size_t I, typename T>
+    struct variant_alternative;
+
+    template <size_t I, typename... T>
+    struct variant_alternative<I, variant<T...>>
+    {
+        using type = detail::type_at_index<I, T...>;
+    };
+
+    template <size_t I, typename T>
+    using variant_alternative_t = typename variant_alternative<I, T>::type;
+
+    namespace detail
+    {
         template <size_t Index, typename...>
         struct variant_construction_helper;
 
@@ -423,6 +449,60 @@ namespace tempest
         {
             static constexpr bool value = has_duplicate_types<T, Ts...>::value || has_duplicate_types<U, Ts...>::value;
         };
+
+        template <bool IsValid, typename T>
+        struct construction_dispatcher;
+
+        template <typename T>
+        struct construction_dispatcher<false, T>
+        {
+            template <size_t Idx, typename... Args>
+            static constexpr void switch_case(size_t index, void* addr, Args&&... args)
+            {
+                tempest::unreachable();
+            }
+
+            template <size_t Base, size_t TargetIdx, typename... Args>
+            static constexpr void switch_dispatch(size_t index, void* addr, Args&&... args)
+            {
+                tempest::unreachable();
+            }
+        };
+
+        template <typename T>
+        struct construction_dispatcher<true, T>
+        {
+            template <size_t Idx, typename... Args>
+            static constexpr void switch_case(void* addr, Args&&... args)
+            {
+                using actual_type = variant_alternative_t<Idx, T>;
+
+                if constexpr (is_constructible_v<actual_type, Args...>)
+                {
+                    (void)tempest::construct_at(reinterpret_cast<actual_type*>(addr), tempest::forward<Args>(args)...);
+                }
+                else
+                {
+                    unreachable();
+                }
+            }
+
+            template <size_t Base, size_t TargetIdx, typename... Args>
+            static constexpr void switch_dispatch(void* addr, Args&&... args)
+            {
+                constexpr auto sz = variant_size_v<T>;
+                if constexpr (Base == TargetIdx)
+                {
+                    construction_dispatcher <
+                        Base<sz, T>::template switch_case<Base>(addr, tempest::forward<Args>(args)...);
+                }
+                else
+                {
+                    construction_dispatcher<Base + 1 < sz, T>::template switch_dispatch<Base + 1, TargetIdx>(
+                        addr, tempest::forward<Args>(args)...);
+                }
+            }
+        };
     } // namespace detail
 
     struct monostate_t
@@ -431,18 +511,6 @@ namespace tempest
     };
 
     inline constexpr monostate_t monostate{};
-
-    template <size_t I, typename T>
-    struct variant_alternative;
-
-    template <size_t I, typename... T>
-    struct variant_alternative<I, variant<T...>>
-    {
-        using type = detail::type_at_index<I, T...>;
-    };
-
-    template <size_t I, typename T>
-    using variant_alternative_t = typename variant_alternative<I, T>::type;
 
     template <typename T>
     struct in_place_type_t
@@ -494,7 +562,7 @@ namespace tempest
             requires(!is_same_v<remove_cvref_t<T>, variant<Ts...>>)
         constexpr variant& operator=(T&& value) noexcept;
 
-        [[no_discard]] constexpr size_t index() const noexcept;
+        [[nodiscard]] constexpr size_t index() const noexcept;
 
         constexpr void swap(variant& other) noexcept;
 
@@ -527,36 +595,24 @@ namespace tempest
         friend constexpr const variant_alternative_t<I, variant<Ts...>>&& get(const variant<Ts...>&& v);
     };
 
-    template <typename T>
-    struct variant_size;
-
-    template <typename... Ts>
-    struct variant_size<variant<Ts...>> : integral_constant<size_t, sizeof...(Ts)>
-    {
-    };
-
-    template <typename T>
-    inline constexpr size_t variant_size_v = variant_size<T>::value;
-
     template <typename... Ts>
     inline constexpr variant<Ts...>::variant() : _index{0}
     {
-        using head_type = typename detail::type_list<Ts...>::head;
-        detail::variant_helper::construct<Ts...>(_index, &_storage.data, head_type{});
+        detail::construction_dispatcher<true, variant<Ts...>>::switch_dispatch<0, 0>(&_storage.data);
     }
 
     template <typename... Ts>
     inline constexpr variant<Ts...>::variant(const variant& other) : _index{other._index}
     {
-        detail::variant_helper::copy_assign<0, Ts...>(other._index, &other._storage.data, &_storage.data,
-                                                      detail::type_list<Ts...>{});
+        detail::variant_helper::copy_construct<0, Ts...>(other._index, &other._storage.data, &_storage.data,
+                                                         detail::type_list<Ts...>{});
     }
 
     template <typename... Ts>
     inline constexpr variant<Ts...>::variant(variant&& other) noexcept : _index{other._index}
     {
-        detail::variant_helper::move_assign<0, Ts...>(other._index, &other._storage.data, &_storage.data,
-                                                      detail::type_list<Ts...>{});
+        detail::variant_helper::move_construct<0, Ts...>(other._index, &other._storage.data, &_storage.data,
+                                                         detail::type_list<Ts...>{});
     }
 
     template <typename... Ts>
@@ -565,7 +621,8 @@ namespace tempest
     inline constexpr variant<Ts...>::variant(T&& value) noexcept
         : _index{detail::variant_index_selector<T, Ts...>::index}
     {
-        detail::variant_helper::construct<Ts..., T>(_index, &_storage.data, tempest::forward<T>(value));
+        detail::construction_dispatcher<true, variant<Ts...>>::switch_dispatch<
+            0, detail::variant_index_selector<T, Ts...>::index>(&_storage.data, tempest::forward<T>(value));
     }
 
     template <typename... Ts>
@@ -582,7 +639,8 @@ namespace tempest
         requires is_constructible_v<variant_alternative_t<I, variant<Ts...>>, Args...> && (I < sizeof...(Ts))
     inline constexpr variant<Ts...>::variant(in_place_index_t<I>, Args&&... args) : _index{I}
     {
-        detail::variant_helper::construct<Ts...>(_index, &_storage.data, tempest::forward<Args>(args)...);
+        using T = detail::type_at_index<I, Ts...>;
+        (void)tempest::construct_at(reinterpret_cast<T*>(&_storage.data), tempest::forward<Args>(args)...);
     }
 
     template <typename... Ts>
@@ -649,7 +707,8 @@ namespace tempest
         else
         {
             detail::variant_helper::destroy<0, Ts...>(_index, &_storage.data);
-            detail::variant_helper::construct<Ts..., T>(index, &_storage.data, tempest::forward<T>(value));
+            detail::construction_dispatcher<true, variant<Ts...>>::switch_dispatch<0, index>(
+                &_storage.data, tempest::forward<T>(value));
             _index = index;
         }
 
