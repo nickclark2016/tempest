@@ -50,8 +50,8 @@ namespace tempest::core
     struct texture_mip_data
     {
         vector<byte> data;
-        uint32_t width;
-        uint32_t height;
+        uint32_t width{};
+        uint32_t height{};
     };
 
     struct sampler_state

@@ -793,7 +793,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::assign(
         InputIt first, InputIt last)
     {
-        auto count = std::distance(first, last);
+        size_t count = std::distance(first, last);
         if (count < small_string_capacity)
         {
             _release_large();

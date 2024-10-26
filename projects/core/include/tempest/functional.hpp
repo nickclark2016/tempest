@@ -1270,6 +1270,34 @@ namespace tempest
       public:
         using detail::function_ref_impl<false, false, R, Args...>::function_ref_impl;
     };
+
+    template <typename R, typename... Args>
+    class function_ref<R(Args...) noexcept> : public detail::function_ref_impl<false, true, R, Args...>
+    {
+      public:
+        using detail::function_ref_impl<false, true, R, Args...>::function_ref_impl;
+    };
+
+    template <typename R, typename... Args>
+    class function_ref<R(Args...) const> : public detail::function_ref_impl<true, false, R, Args...>
+    {
+      public:
+        using detail::function_ref_impl<true, false, R, Args...>::function_ref_impl;
+    };
+
+    template <typename R, typename... Args>
+    class function_ref<R(Args...) const noexcept> : public detail::function_ref_impl<true, true, R, Args...>
+    {
+      public:
+        using detail::function_ref_impl<true, true, R, Args...>::function_ref_impl;
+    };
+
+    template <typename F>
+    function_ref(F*) -> function_ref<F>;
+
+    template <auto f>
+        requires is_function_v<remove_pointer_t<decltype(f)>>
+    function_ref(nontype_t<f>) -> function_ref<remove_pointer_t<decltype(f)>>;
 } // namespace tempest
 
 #endif // tempest_core_functional_hpp

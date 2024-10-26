@@ -59,12 +59,12 @@ namespace tempest::assets
 
         struct accessor_payload
         {
-            uint32_t buffer_view;
-            uint32_t buffer_offset;
-            component_type ctype;
-            accessor_type atype;
-            bool normalized;
-            uint32_t count;
+            uint32_t buffer_view{};
+            uint32_t buffer_offset{};
+            component_type ctype{};
+            accessor_type atype{};
+            bool normalized{};
+            uint32_t count{};
             vector<double> min;
             vector<double> max;
         };
@@ -168,7 +168,7 @@ namespace tempest::assets
             }
             else if (auto error = img["bufferView"].get(buffer_view_index); error == simdjson::error_code::SUCCESS)
             {
-                payload.buffer_view_index = buffer_view_index;
+                payload.buffer_view_index = static_cast<uint32_t>(buffer_view_index);
                 payload.mime_type = img["mimeType"].get_string().value().data();
             }
 
@@ -187,9 +187,9 @@ namespace tempest::assets
 
             for (const auto& view : buffer_views)
             {
-                buffer_view_payload payload;
-                payload.buffer_id = view["buffer"].get_uint64().value();
-                payload.byte_length = view["byteLength"].get_uint64().value();
+                buffer_view_payload payload{};
+                payload.buffer_id = static_cast<uint32_t>(view["buffer"].get_uint64().value());
+                payload.byte_length = static_cast<uint32_t>(view["byteLength"].get_uint64().value());
 
                 uint64_t byte_offset;
                 if (view["byteOffset"].get(byte_offset))
@@ -224,7 +224,7 @@ namespace tempest::assets
             for (const auto& accessor : accessors)
             {
                 accessor_payload payload;
-                payload.buffer_view = accessor["bufferView"].get_uint64().value();
+                payload.buffer_view = static_cast<uint32_t>(accessor["bufferView"].get_uint64().value());
 
                 uint64_t buffer_offset;
                 if (accessor["byteOffset"].get(buffer_offset))
@@ -418,35 +418,37 @@ namespace tempest::assets
                 img.buffer_view_index < 0 ? img.data : buffers.find(img.buffer_view_index)->second;
 
             // Load image data
-            const bool is_16_bit =
-                stbi_is_16_bit_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()), image_data.size());
+            const bool is_16_bit = stbi_is_16_bit_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
+                                                              static_cast<int>(image_data.size()));
             int width, height, components;
-            stbi_info_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()), image_data.size(), &width,
-                                  &height, &components);
+            stbi_info_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
+                                  static_cast<int>(image_data.size()), &width, &height, &components);
 
             tex.width = width;
             tex.height = height;
 
-            const bool is_hdr =
-                stbi_is_hdr_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()), image_data.size());
+            const bool is_hdr = stbi_is_hdr_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
+                                                        static_cast<int>(image_data.size()));
 
             if (is_hdr)
             {
                 tex.format = core::texture_format::RGBA32_FLOAT;
-                const auto data = stbi_loadf_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
-                                                         image_data.size(), &width, &height, &components, 4);
+                const auto data =
+                    stbi_loadf_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
+                                           static_cast<int>(image_data.size()), &width, &height, &components, 4);
                 auto& mip = tex.mips.emplace_back();
                 mip.width = width;
                 mip.height = height;
-                mip.data.resize(width * height * 4 * sizeof(float));
+                mip.data.resize(static_cast<size_t>(width) * height * 4 * sizeof(float));
                 copy_n(reinterpret_cast<const byte*>(data), mip.data.size(), mip.data.begin());
                 stbi_image_free(data);
             }
             else if (is_16_bit)
             {
                 tex.format = core::texture_format::RGBA16_UNORM;
-                const auto data = stbi_load_16_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
-                                                           image_data.size(), &width, &height, &components, 4);
+                const auto data =
+                    stbi_load_16_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
+                                             static_cast<int>(image_data.size()), &width, &height, &components, 4);
                 auto& mip = tex.mips.emplace_back();
                 mip.width = width;
                 mip.height = height;
@@ -457,12 +459,13 @@ namespace tempest::assets
             else
             {
                 tex.format = core::texture_format::RGBA8_UNORM;
-                const auto data = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
-                                                        image_data.size(), &width, &height, &components, 4);
+                const auto data =
+                    stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
+                                          static_cast<int32_t>(image_data.size()), &width, &height, &components, 4);
                 auto& mip = tex.mips.emplace_back();
                 mip.width = width;
                 mip.height = height;
-                mip.data.resize(width * height * 4);
+                mip.data.resize(static_cast<size_t>(width) * height * 4);
                 copy_n(reinterpret_cast<const byte*>(data), mip.data.size(), mip.data.begin());
                 stbi_image_free(data);
             }
@@ -487,7 +490,7 @@ namespace tempest::assets
         };
 
         guid process_material(const simdjson::dom::element& mat,
-                              const flat_unordered_map<uint32_t, guid>& texture_guids, core::material_registry* mat_reg)
+                              const flat_unordered_map<uint64_t, guid>& texture_guids, core::material_registry* mat_reg)
         {
             core::material m;
 
@@ -647,7 +650,6 @@ namespace tempest::assets
             sjd::object attribs;
             if (prim["attributes"].get(attribs) == simdjson::error_code::SUCCESS)
             {
-                uint64_t positions;
                 if (auto positions = attribs["POSITION"].get_uint64();
                     positions.error() == simdjson::error_code::SUCCESS)
                 {
@@ -791,6 +793,8 @@ namespace tempest::assets
 
                     assert(accessor.atype == accessor_type::VEC4);
 
+                    m.has_colors = true;
+
                     switch (accessor.ctype)
                     {
                     case component_type::FLOAT: {
@@ -843,11 +847,13 @@ namespace tempest::assets
                             m.vertices[i].color =
                                 math::vec4<float>(r / 65535.0f, g / 65535.0f, b / 65535.0f, a / 65535.0f);
                         }
-                    }
-                    default:
                         break;
                     }
-                    m.has_colors = true;
+                    default: {
+                        m.has_colors = false;
+                        break;
+                    }
+                    }
                 }
             }
 
@@ -983,14 +989,14 @@ namespace tempest::assets
         auto accessors = read_accessors(doc.at_key("accessors"));
 
         // Process all textures
-        flat_unordered_map<uint32_t, guid> texture_guids;
+        flat_unordered_map<uint64_t, guid> texture_guids;
         sjd::array textures;
         if (auto error = doc["textures"].get(textures); error == simdjson::SUCCESS)
         {
-            uint32_t texture_id = 0;
+            uint64_t texture_id = 0;
             for (const auto& tex : textures)
             {
-                auto image_id = tex["source"].get_uint64().value();
+                uint32_t image_id = static_cast<uint32_t>(tex["source"].get_uint64().value());
 
                 optional<const simdjson::dom::element&> sampler;
 
@@ -1032,7 +1038,7 @@ namespace tempest::assets
             {
                 vector<ecs::entity> primitives;
 
-                for (const auto& prim : mesh.at("primitives"))
+                for (const auto& prim : mesh["primitives"])
                 {
                     auto ent = registry.acquire_entity();
                     auto [mesh_id, material_idx] =
@@ -1083,7 +1089,7 @@ namespace tempest::assets
                 uint64_t mesh_id;
                 if (node["mesh"].get(mesh_id) == simdjson::error_code::SUCCESS)
                 {
-                    auto mesh_prims = mesh_primitives.find(mesh_id);
+                    auto mesh_prims = mesh_primitives.find(static_cast<uint32_t>(mesh_id));
                     if (mesh_prims != mesh_primitives.end())
                     {
                         span<const ecs::entity> mesh_entities = mesh_prims->second;
@@ -1178,7 +1184,7 @@ namespace tempest::assets
                 {
                     for (const auto& child : children)
                     {
-                        uint32_t child_id = child.get_uint64().value();
+                        auto child_id = static_cast<uint32_t>(child.get_uint64().value());
                         auto child_ent = node_entities.find(child_id)->second;
 
                         ecs::create_parent_child_relationship(registry, node_ent, child_ent);
