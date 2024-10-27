@@ -9,6 +9,16 @@ namespace tempest::events
 
     bool bus::try_publish(const uint32_t type_id, span<const byte> bytes)
     {
-        
+        return false;
+    }
+
+    optional<raw_byte_payload> bus::peek() const noexcept
+    {
+        return nullopt;
+    }
+
+    bool bus::try_pop()
+    {
+        return false;
     }
 }
