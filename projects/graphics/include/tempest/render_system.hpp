@@ -276,7 +276,7 @@ namespace tempest::graphics
         hi_z_data _hi_z_data;
         ecs::entity _camera_entity{ecs::tombstone};
 
-        std::size_t _last_updated_frame{0};
+        std::size_t _last_updated_frame{2};
 
         tempest::function<void()> _create_imgui_hierarchy;
 
