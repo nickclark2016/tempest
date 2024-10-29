@@ -714,7 +714,7 @@ namespace tempest::graphics
             for (auto [ent, dir_light, tx] : _registry->view<directional_light_component, ecs::transform_component>())
             {
                 _scene_data.sun.color =
-                    math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, 1.0f);
+                    math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, dir_light.intensity);
 
                 // Rotate 0, 0, 1 by the rotation of the transform
                 auto light_rot = math::rotate(tx.rotation());

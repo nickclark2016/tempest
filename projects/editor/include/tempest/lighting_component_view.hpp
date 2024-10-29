@@ -15,13 +15,24 @@ namespace tempest::editor
             {
                 using imgui = graphics::imgui_context;
 
+                auto color = dir_light->color;
+                auto intensity = dir_light->intensity;
+
                 imgui::create_header("Directional Light Component", [&]() {
                     imgui::label("Color");
-                    dir_light->color = imgui::input_color("Color", dir_light->color);
+                    color = imgui::input_color("Color", color);
 
                     imgui::label("Intensity");
-                    dir_light->intensity = imgui::float_slider("Intensity", 0, 1, dir_light->intensity);
+                    intensity = imgui::float_slider("Intensity", 0, 1, intensity);
                 });
+
+                if (color != dir_light->color || intensity != dir_light->intensity)
+                {
+                    dir_light->color = color;
+                    dir_light->intensity = intensity;
+
+                    return true;
+                }
             }
 
             return false;
