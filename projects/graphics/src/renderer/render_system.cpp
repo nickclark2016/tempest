@@ -583,7 +583,7 @@ namespace tempest::graphics
             rgc->enable_gpu_profiling();
         }
 
-        _graph = std::move(*rgc).compile();
+        _graph = tempest::move(*rgc).compile();
     }
 
     void render_system::after_initialize()

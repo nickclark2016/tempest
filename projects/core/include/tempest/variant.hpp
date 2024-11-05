@@ -512,24 +512,6 @@ namespace tempest
 
     inline constexpr monostate_t monostate{};
 
-    template <typename T>
-    struct in_place_type_t
-    {
-        constexpr explicit in_place_type_t() = default;
-    };
-
-    template <typename T>
-    inline constexpr in_place_type_t<T> in_place_type{};
-
-    template <size_t I>
-    struct in_place_index_t
-    {
-        constexpr explicit in_place_index_t() = default;
-    };
-
-    template <size_t I>
-    inline constexpr in_place_index_t<I> in_place_index{};
-
     template <typename... Ts>
     class variant
     {
