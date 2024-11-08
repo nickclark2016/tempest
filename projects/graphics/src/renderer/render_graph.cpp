@@ -65,7 +65,7 @@ namespace tempest::graphics
         }
     } // namespace
 
-    graph_pass_builder::graph_pass_builder(render_graph_resource_library& lib, std::string_view name,
+    graph_pass_builder::graph_pass_builder(render_graph_resource_library& lib, string_view name,
                                            queue_operation_type type)
         : _resource_lib{lib}, _name{name}, _op_type{type}
     {
@@ -461,7 +461,7 @@ namespace tempest::graphics
         return *this;
     }
 
-    std::string_view graph_pass_builder::name() const noexcept
+    string_view graph_pass_builder::name() const noexcept
     {
         return _name;
     }
@@ -496,8 +496,8 @@ namespace tempest::graphics
     }
 
     render_graph_compiler::render_graph_compiler(abstract_allocator* alloc, render_device* device)
-        : _device{device}, _alloc{alloc}, _resource_lib{std::make_unique<vk::render_graph_resource_library>(
-                                              _alloc, static_cast<vk::render_device*>(device))}
+        : _device{device}, _alloc{alloc},
+          _resource_lib{make_unique<vk::render_graph_resource_library>(_alloc, static_cast<vk::render_device*>(device))}
     {
     }
 
@@ -511,7 +511,7 @@ namespace tempest::graphics
         return _resource_lib->load(desc);
     }
 
-    graph_pass_handle render_graph_compiler::add_graph_pass(std::string_view name, queue_operation_type type,
+    graph_pass_handle render_graph_compiler::add_graph_pass(string_view name, queue_operation_type type,
                                                             function<void(graph_pass_builder&)> build)
     {
         graph_pass_builder bldr(*_resource_lib, name, type);
@@ -539,15 +539,15 @@ namespace tempest::graphics
         _gpu_profiling_enabled = enabled;
     }
 
-    std::unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(abstract_allocator* alloc,
-                                                                                  render_device* device)
+    unique_ptr<render_graph_compiler> render_graph_compiler::create_compiler(abstract_allocator* alloc,
+                                                                             render_device* device)
     {
-        return std::make_unique<vk::render_graph_compiler>(alloc, device);
+        return make_unique<vk::render_graph_compiler>(alloc, device);
     }
 
     void dependency_graph::add_graph_pass(std::uint64_t pass_id)
     {
-        if (!_adjacency_list.contains(pass_id))
+        if (_adjacency_list.find(pass_id) == _adjacency_list.cend())
         {
             _adjacency_list[pass_id] = {};
         }
@@ -556,7 +556,7 @@ namespace tempest::graphics
     void dependency_graph::add_graph_dependency(std::uint64_t src_pass, std::uint64_t dst_pass)
     {
         _adjacency_list[src_pass].push_back(dst_pass);
-        if (!_adjacency_list.contains(dst_pass))
+        if (_adjacency_list.find(dst_pass) == _adjacency_list.cend())
         {
             add_graph_pass(dst_pass);
         }
@@ -564,8 +564,8 @@ namespace tempest::graphics
 
     namespace
     {
-        void dfs(const std::unordered_map<std::uint64_t, vector<std::uint64_t>>& adjacency_list,
-                 std::unordered_set<std::uint64_t>& visited, std::uint64_t node, vector<std::uint64_t>& results)
+        void dfs(const flat_unordered_map<std::uint64_t, vector<uint64_t>>& adjacency_list,
+                 std::unordered_set<uint64_t>& visited, std::uint64_t node, vector<std::uint64_t>& results)
         {
             visited.insert(node);
 
@@ -586,11 +586,11 @@ namespace tempest::graphics
 
     vector<std::uint64_t> dependency_graph::toposort() const noexcept
     {
-        std::unordered_set<std::uint64_t> visited;
+        std::unordered_set<uint64_t> visited;
         vector<std::uint64_t> result;
         result.reserve(_adjacency_list.size());
 
-        for (std::size_t node : std::ranges::views::keys(_adjacency_list))
+        for (auto [node, _] : _adjacency_list)
         {
             if (!visited.contains(node))
             {

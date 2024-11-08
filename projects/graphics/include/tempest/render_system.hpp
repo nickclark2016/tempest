@@ -41,13 +41,13 @@ namespace tempest::graphics
             math::mat4<float> inv_tranpose_model;
             math::mat4<float> prev_model;
 
-            std::uint32_t mesh_id;
-            std::uint32_t material_id;
-            std::uint32_t parent_id;
-            std::uint32_t self_id;
+            uint32_t mesh_id;
+            uint32_t material_id;
+            uint32_t parent_id;
+            uint32_t self_id;
         };
 
-        enum class gpu_material_type : std::uint32_t
+        enum class gpu_material_type : uint32_t
         {
             PBR_OPAQUE = 0,
             PBR_MASK = 1,
@@ -56,7 +56,7 @@ namespace tempest::graphics
 
         struct gpu_material_data
         {
-            static constexpr std::int16_t INVALID_TEXTURE_ID = -1;
+            static constexpr int16_t INVALID_TEXTURE_ID = -1;
 
             math::vec4<float> base_color_factor;
             math::vec4<float> emissive_factor;
@@ -67,11 +67,11 @@ namespace tempest::graphics
             float alpha_cutoff;
             float reflectance;
 
-            std::int16_t base_color_texture_id;
-            std::int16_t normal_texture_id;
-            std::int16_t metallic_roughness_texture_id;
-            std::int16_t emissive_texture_id;
-            std::int16_t occlusion_texture_id;
+            int16_t base_color_texture_id;
+            int16_t normal_texture_id;
+            int16_t metallic_roughness_texture_id;
+            int16_t emissive_texture_id;
+            int16_t occlusion_texture_id;
 
             gpu_material_type material_type;
         };
@@ -87,7 +87,7 @@ namespace tempest::graphics
             math::vec3<float> position;
         };
 
-        enum class gpu_light_type : std::uint32_t
+        enum class gpu_light_type : uint32_t
         {
             DIRECTIONAL = 0,
             POINT = 1,
@@ -103,6 +103,12 @@ namespace tempest::graphics
             gpu_light_type light_type;
         };
 
+        struct shadow_cascade_data
+        {
+            array<math::mat4<float>, 8> cascade_projections;
+            uint32_t cascade_count;
+        };
+
         struct gpu_scene_data
         {
             gpu_camera_data camera;
@@ -114,8 +120,8 @@ namespace tempest::graphics
 
         struct hi_z_data
         {
-            math::vec2<std::uint32_t> size;
-            std::uint32_t mip_count;
+            math::vec2<uint32_t> size;
+            uint32_t mip_count;
         };
 
         struct draw_batch_key
@@ -159,27 +165,27 @@ namespace tempest::graphics
         void load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
         void load_material(graphics::material_payload& material);
 
-        [[nodiscard]] inline std::uint32_t mesh_count() const noexcept
+        [[nodiscard]] inline uint32_t mesh_count() const noexcept
         {
-            return static_cast<std::uint32_t>(_meshes.size());
+            return static_cast<uint32_t>(_meshes.size());
         }
 
-        [[nodiscard]] inline std::uint32_t material_count() const noexcept
+        [[nodiscard]] inline uint32_t material_count() const noexcept
         {
-            return static_cast<std::uint32_t>(_materials.size());
+            return static_cast<uint32_t>(_materials.size());
         }
 
-        [[nodiscard]] inline std::uint32_t object_count() const noexcept
+        [[nodiscard]] inline uint32_t object_count() const noexcept
         {
             return _object_count;
         }
 
-        [[nodiscard]] inline std::uint32_t texture_count() const noexcept
+        [[nodiscard]] inline uint32_t texture_count() const noexcept
         {
-            return static_cast<std::uint32_t>(_images.size());
+            return static_cast<uint32_t>(_images.size());
         }
 
-        inline void allocate_entities(std::uint32_t count)
+        inline void allocate_entities(uint32_t count)
         {
             _object_count += count;
         }
@@ -221,10 +227,10 @@ namespace tempest::graphics
         heap_allocator _allocator;
         ecs::registry* _registry;
 
-        std::unique_ptr<render_context> _context;
+        unique_ptr<render_context> _context;
         render_device* _device;
-        std::unique_ptr<render_graph> _graph;
-        std::unordered_map<iwindow*, swapchain_resource_handle> _swapchains;
+        unique_ptr<render_graph> _graph;
+        flat_unordered_map<iwindow*, swapchain_resource_handle> _swapchains;
 
         vector<image_resource_handle> _images;
         vector<buffer_resource_handle> _buffers;
@@ -241,7 +247,7 @@ namespace tempest::graphics
         buffer_resource_handle _indirect_buffer;
         buffer_resource_handle _hi_z_buffer_constants;
 
-        std::uint32_t _mesh_bytes{0};
+        uint32_t _mesh_bytes{0};
 
         flat_unordered_map<guid, size_t> _image_id_map;
         flat_unordered_map<guid, size_t> _material_id_map;
@@ -249,7 +255,7 @@ namespace tempest::graphics
 
         vector<mesh_layout> _meshes;
         vector<gpu_material_data> _materials;
-        std::uint32_t _object_count{0};
+        uint32_t _object_count{0};
 
         flat_map<draw_batch_key, draw_batch_payload> _draw_batches;
 
@@ -261,6 +267,7 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle _pbr_opaque_pipeline;
         graphics_pipeline_resource_handle _pbr_transparencies_pipeline;
         graphics_pipeline_resource_handle _z_prepass_pipeline;
+        graphics_pipeline_resource_handle _directional_shadow_map_pipeline;
         compute_pipeline_resource_handle _hzb_build_pipeline;
 
         render_system_settings _settings;
@@ -268,15 +275,14 @@ namespace tempest::graphics
         bool _static_data_dirty{true};
 
         graph_pass_handle _pbr_pass;
-        graph_pass_handle _pbr_msaa_pass;
         graph_pass_handle _z_prepass_pass;
-        graph_pass_handle _z_prepass_msaa_pass;
+        graph_pass_handle _directional_shadow_map_pass;
 
         gpu_scene_data _scene_data;
         hi_z_data _hi_z_data;
         ecs::entity _camera_entity{ecs::tombstone};
 
-        std::size_t _last_updated_frame{2};
+        size_t _last_updated_frame{2};
 
         tempest::function<void()> _create_imgui_hierarchy;
 
@@ -285,6 +291,7 @@ namespace tempest::graphics
         compute_pipeline_resource_handle create_hzb_build_pipeline();
         graphics_pipeline_resource_handle create_taa_resolve_pipeline();
         graphics_pipeline_resource_handle create_sharpen_pipeline();
+        graphics_pipeline_resource_handle create_directional_shadow_map_pipeline();
     };
 } // namespace tempest::graphics
 

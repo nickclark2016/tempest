@@ -12,7 +12,6 @@
 
 #include <compare>
 #include <cstdint>
-#include <memory>
 #include <string>
 
 namespace tempest::graphics
@@ -21,8 +20,8 @@ namespace tempest::graphics
 
     struct physical_device_context
     {
-        std::uint32_t id;
-        std::string name;
+        uint32_t id;
+        string name;
     };
 
     class render_context
@@ -31,11 +30,11 @@ namespace tempest::graphics
         virtual ~render_context() = default;
 
         virtual bool has_suitable_device() const noexcept = 0;
-        virtual std::uint32_t device_count() const noexcept = 0;
-        virtual render_device& create_device(std::uint32_t idx = 0) = 0;
+        virtual uint32_t device_count() const noexcept = 0;
+        virtual render_device& create_device(uint32_t idx = 0) = 0;
         virtual vector<physical_device_context> enumerate_suitable_devices() = 0;
 
-        static std::unique_ptr<render_context> create(abstract_allocator* alloc);
+        static unique_ptr<render_context> create(abstract_allocator* alloc);
 
       protected:
         abstract_allocator* _alloc;
@@ -52,8 +51,8 @@ namespace tempest::graphics
         virtual buffer_resource_handle create_buffer(const buffer_create_info& ci) = 0;
         virtual void release_buffer(buffer_resource_handle handle) = 0;
         virtual span<byte> map_buffer(buffer_resource_handle handle) = 0;
-        virtual span<byte> map_buffer_frame(buffer_resource_handle handle, std::uint64_t frame_offset = 0) = 0;
-        virtual std::size_t get_buffer_frame_offset(buffer_resource_handle handle, std::uint64_t frame_offset = 0) = 0;
+        virtual span<byte> map_buffer_frame(buffer_resource_handle handle, uint64_t frame_offset = 0) = 0;
+        virtual size_t get_buffer_frame_offset(buffer_resource_handle handle, uint64_t frame_offset = 0) = 0;
         virtual void unmap_buffer(buffer_resource_handle handle) = 0;
 
         virtual image_resource_handle create_image(const image_create_info& ci) = 0;

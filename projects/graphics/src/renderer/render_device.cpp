@@ -4,9 +4,9 @@
 
 namespace tempest::graphics
 {
-    std::unique_ptr<render_context> render_context::create(abstract_allocator* alloc)
+    unique_ptr<render_context> render_context::create(abstract_allocator* alloc)
     {
-        return std::make_unique<vk::render_context>(alloc);
+        return make_unique<vk::render_context>(alloc);
     }
 
     render_context::render_context(abstract_allocator* alloc) : _alloc{alloc}

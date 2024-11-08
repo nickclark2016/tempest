@@ -39,7 +39,9 @@ project('sandbox', _ => {
             `${slangPath} ${shaderBasePath}/taa.slang -target spirv -o ${shaderBasePath}/taa.vert.spv -entry VSMain ${debugFlags}`,
             `${slangPath} ${shaderBasePath}/taa.slang -target spirv -o ${shaderBasePath}/taa.frag.spv -entry FSMain ${debugFlags}`,
             `${slangPath} ${shaderBasePath}/sharpen.slang -target spirv -o ${shaderBasePath}/sharpen.vert.spv -entry VSMain ${debugFlags}`,
-            `${slangPath} ${shaderBasePath}/sharpen.slang -target spirv -o ${shaderBasePath}/sharpen.frag.spv -entry FSMain ${debugFlags}`
+            `${slangPath} ${shaderBasePath}/sharpen.slang -target spirv -o ${shaderBasePath}/sharpen.frag.spv -entry FSMain ${debugFlags}`,
+            `${slangPath} ${shaderBasePath}/directional_shadow_map.slang -target spirv -o ${shaderBasePath}/directional_shadow_map.vert.spv -entry VSMain ${debugFlags}`,
+            `${slangPath} ${shaderBasePath}/directional_shadow_map.slang -target spirv -o ${shaderBasePath}/directional_shadow_map.frag.spv -entry FSMain ${debugFlags}`,
         ];
 
         if (ctx.system === 'windows') {
