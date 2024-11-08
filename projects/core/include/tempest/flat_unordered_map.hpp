@@ -178,8 +178,8 @@ namespace tempest
         template <typename InputIt>
         void insert(InputIt first, InputIt last);
 
-        void erase(iterator pos);
-        void erase(const K& key);
+        iterator erase(iterator pos);
+        iterator erase(const K& key);
         void clear() noexcept;
 
         V& operator[](const K& key);
@@ -372,7 +372,7 @@ namespace tempest
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline double flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::load_factor() const noexcept
     {
-        return empty() ? 1.0 : static_cast<double>(size()) / static_cast<double>(capacity());
+        return capacity() == 0 ? 1.0 : static_cast<double>(size()) / static_cast<double>(capacity());
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -581,8 +581,12 @@ namespace tempest
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::erase(iterator pos)
+    inline typename flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::iterator flat_unordered_map<
+        K, V, Hash, KeyEqual, Allocator>::erase(iterator pos)
     {
+        auto next = pos;
+        ++next;
+
         auto idx = pos.index();
         auto page = idx / _page_size;
         auto slot = idx % _page_size;
@@ -591,16 +595,23 @@ namespace tempest
         _metadata_pages[page].entries[slot] = detail::deleted_entry;
 
         --_size;
+
+        return next;
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
-    inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::erase(const K& key)
+    inline typename flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::iterator flat_unordered_map<
+        K, V, Hash, KeyEqual, Allocator>::erase(const K& key)
     {
         auto it = find(key);
         if (it != end())
         {
+            auto next = it;
+            ++next;
             erase(it);
+            return next;
         }
+        return end();
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -945,6 +956,25 @@ namespace tempest
             return &_map->_data_pages[_index / _map->_page_size][_index % _map->_page_size];
         }
     } // namespace detail
+
+    template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, typename Pred>
+    inline typename flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::size_type erase_if(
+        flat_unordered_map<K, V, Hash, KeyEqual, Allocator>& c, Pred pred)
+    {
+        auto old_size = c.size();
+        for (auto first = c.begin(), last = c.end(); first != last;)
+        {
+            if (pred(*first))
+            {
+                first = c.erase(first);
+            }
+            else
+            {
+                ++first;
+            }
+        }
+        return old_size - c.size();
+    }
 } // namespace tempest
 
 #endif // tempest_core_flat_unordered_map_hpp

@@ -32,6 +32,55 @@ namespace tempest::graphics
             {0.937500f, 0.259259f},
             {0.031250f, 0.592593f},
         }};
+
+        // Bindings
+        descriptor_binding_info scene_constant_buffer = {
+            .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info vertex_pull_buffer_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding_index = 1,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info mesh_layout_buffer_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding_index = 2,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info object_buffer_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .binding_index = 3,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info materials_buffer_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .binding_index = 4,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info instance_buffer_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding_index = 5,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info linear_sampler_desc = {
+            .type = descriptor_binding_type::SAMPLER,
+            .binding_index = 6,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info texture_array_desc = {
+            .type = descriptor_binding_type::SAMPLED_IMAGE,
+            .binding_index = 7,
+            .binding_count = 512,
+        };
     } // namespace
 
     render_system::render_system(ecs::registry& entities, const render_system_settings& settings)
@@ -46,7 +95,7 @@ namespace tempest::graphics
             std::terminate();
         }
 
-        log->info("Found {} suitable devices. Selecting device {}", devices.size(), devices[0].name);
+        log->info("Found {} suitable devices. Selecting device {}", devices.size(), devices[0].name.c_str());
 
         _device = &_context->create_device(0);
     }
@@ -59,7 +108,7 @@ namespace tempest::graphics
             .use_vsync = false,
         });
 
-        _swapchains.emplace(&win, swapchain_handle);
+        _swapchains.insert({&win, swapchain_handle});
 
         imgui_context::initialize_for_window(win);
     }
@@ -87,16 +136,6 @@ namespace tempest::graphics
             .name = "Color Buffer",
         });
 
-        auto ms_color_buffer = rgc->create_image({
-            .samples = sample_count::COUNT_4,
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::RGBA8_SRGB,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "MSAA Color Buffer",
-        });
-
         auto depth_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
@@ -106,16 +145,6 @@ namespace tempest::graphics
             .name = "Depth Buffer",
         });
 
-        auto ms_depth_buffer = rgc->create_image({
-            .samples = sample_count::COUNT_4,
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::D24_FLOAT,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "MSAA Depth Buffer",
-        });
-
         auto velocity_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
@@ -123,16 +152,6 @@ namespace tempest::graphics
             .type = image_type::IMAGE_2D,
             .persistent = true,
             .name = "Velocity Buffer",
-        });
-
-        auto ms_velocity_buffer = rgc->create_image({
-            .samples = sample_count::COUNT_4,
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::RG32_FLOAT,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "MSAA Velocity Buffer",
         });
 
         std::vector<image_resource_handle> hi_z_images;
@@ -153,16 +172,6 @@ namespace tempest::graphics
         }
 
         auto encoded_normals_buffer = rgc->create_image({
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::RG16_FLOAT,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "Encoded Normals Buffer",
-        });
-
-        auto ms_encoded_normals_buffer = rgc->create_image({
-            .samples = sample_count::COUNT_4,
             .width = 1920,
             .height = 1080,
             .fmt = resource_format::RG16_FLOAT,
@@ -403,50 +412,9 @@ namespace tempest::graphics
                     });
             });
 
-        _z_prepass_msaa_pass =
-            rgc->add_graph_pass("Z Pre Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
-                bldr.depends_on(upload_pass)
-                    .add_depth_attachment(ms_depth_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
-                                          store_op::STORE, 0.0f)
-                    .add_color_attachment(ms_encoded_normals_buffer, resource_access_type::WRITE, load_op::CLEAR,
-                                          store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
-                    .add_constant_buffer(_scene_buffer, 0, 0)
-                    .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
-                    .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
-                    .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
-                    .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
-                    .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
-                    .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
-                    .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
-                    .add_indirect_argument_buffer(_indirect_buffer)
-                    .add_index_buffer(_vertex_pull_buffer)
-                    .resolve_image(ms_encoded_normals_buffer, encoded_normals_buffer)
-                    .resolve_image(ms_depth_buffer, depth_buffer)
-                    .should_execute([this]() { return _settings.aa_mode == anti_aliasing_mode::MSAA; })
-                    .on_execute([&](command_list& cmds) {
-                        cmds.set_scissor_region(0, 0, 1920, 1080)
-                            .set_viewport(0, 0, 1920, 1080)
-                            .use_index_buffer(_vertex_pull_buffer, 0);
-
-                        for (auto [key, batch] : _draw_batches)
-                        {
-                            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
-                            {
-                                cmds.use_pipeline(_z_prepass_pipeline)
-                                    .draw_indexed(
-                                        _indirect_buffer,
-                                        static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
-                                        static_cast<std::uint32_t>(batch.objects.size()),
-                                        sizeof(indexed_indirect_command));
-                            }
-                        }
-                    });
-            });
-
         auto build_hi_z_pass =
             rgc->add_graph_pass("Build Hi Z Pass", queue_operation_type::COMPUTE, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(_z_prepass_pass)
-                    .depends_on(_z_prepass_msaa_pass)
                     .depends_on(upload_pass)
                     .add_constant_buffer(_hi_z_buffer_constants, 0, 0)
                     .add_sampled_image(depth_buffer, 0, 1)
@@ -488,10 +456,27 @@ namespace tempest::graphics
             }
         };
 
+        _directional_shadow_map_pass = rgc->add_graph_pass(
+            "Directional Shadow Map Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(upload_pass).on_execute([&](command_list& cmds) {
+                    const auto& cam_data = _registry->get<camera_component>(_camera_entity);
+                    const auto& inv_view_transform = _scene_data.camera.inv_view;
+
+                    // Compute the light space transformation
+                    const auto light_view =
+                        math::look_at(math::vec3(0.0f), _scene_data.sun.direction, math::vec3<float>(0.0f, 1.0f, 0.0f));
+
+                    const auto aspect_ratio = cam_data.aspect_ratio;
+                    const auto tan_half_h_fov = std::tanf(cam_data.vertical_fov / 2.0f);
+                    const auto tan_half_v_fov = std::tanf((cam_data.vertical_fov * aspect_ratio) / 2.0f);
+                });
+            });
+
         _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
             bldr.depends_on(_z_prepass_pass)
                 .depends_on(build_hi_z_pass)
                 .depends_on(upload_pass)
+                .depends_on(_directional_shadow_map_pass)
                 .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR, store_op::STORE,
                                       {0.5f, 1.0f, 1.0f, 1.0f})
                 .add_color_attachment(velocity_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
@@ -512,41 +497,12 @@ namespace tempest::graphics
                 .on_execute(pbr_commands);
         });
 
-        _pbr_msaa_pass =
-            rgc->add_graph_pass("PBR MSAA Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
-                bldr.depends_on(_z_prepass_msaa_pass)
-                    .depends_on(build_hi_z_pass)
-                    .depends_on(upload_pass)
-                    .add_color_attachment(ms_color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
-                                          store_op::STORE, {0.5f, 1.0f, 1.0f, 1.0f})
-                    .add_color_attachment(ms_velocity_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
-                                          store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
-                    .add_depth_attachment(ms_depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD,
-                                          store_op::DONT_CARE)
-                    .add_constant_buffer(_scene_buffer, 0, 0)
-                    .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
-                    .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
-                    .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
-                    .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
-                    .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
-                    .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
-                    .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
-                    .add_indirect_argument_buffer(_indirect_buffer)
-                    .add_index_buffer(_vertex_pull_buffer)
-                    .resolve_image(ms_color_buffer, color_buffer)
-                    .resolve_image(ms_velocity_buffer, velocity_buffer)
-                    .resolve_image(ms_depth_buffer, depth_buffer)
-                    .should_execute([this]() { return _settings.aa_mode == anti_aliasing_mode::MSAA; })
-                    .on_execute(pbr_commands);
-            });
-
         auto imgui_pass = rgc->add_graph_pass(
             "ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
                 bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
                                           graphics::store_op::STORE)
                     .draw_imgui()
                     .depends_on(_pbr_pass)
-                    .depends_on(_pbr_msaa_pass)
                     .should_execute([this]() {
                         return _settings.aa_mode != anti_aliasing_mode::TAA && _settings.enable_imgui &&
                                _create_imgui_hierarchy;
@@ -561,7 +517,6 @@ namespace tempest::graphics
                                     builder.add_external_blit_target(sc_handle)
                                         .add_blit_source(color_buffer)
                                         .depends_on(imgui_pass)
-                                        .depends_on(_pbr_msaa_pass)
                                         .depends_on(_pbr_pass)
                                         .should_execute([this]() {
                                             return _settings.aa_mode == anti_aliasing_mode::NONE ||
@@ -611,12 +566,11 @@ namespace tempest::graphics
 
         _graph->update_external_sampled_images(_pbr_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
         _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_pbr_msaa_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_z_prepass_msaa_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
 
         _pbr_opaque_pipeline = create_pbr_pipeline(false);
         _pbr_transparencies_pipeline = create_pbr_pipeline(true);
         _z_prepass_pipeline = create_z_prepass_pipeline();
+        _directional_shadow_map_pipeline = create_directional_shadow_map_pipeline();
         _hzb_build_pipeline = create_hzb_build_pipeline();
 
         _last_updated_frame = _device->current_frame();
@@ -1445,6 +1399,59 @@ namespace tempest::graphics
                 .attachment_blend_ops = blending,
             },
             .name = "Sharpen Pipeline",
+        });
+
+        _graphics_pipelines.push_back(pipeline);
+
+        return pipeline;
+    }
+
+    graphics_pipeline_resource_handle render_system::create_directional_shadow_map_pipeline()
+    {
+        auto vertex_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.vert.spv");
+        auto fragment_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.frag.spv");
+
+        descriptor_binding_info set0_bindings[] = {
+            scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
+            instance_buffer_desc,  materials_buffer_desc,   linear_sampler_desc,     texture_array_desc,
+        };
+
+        descriptor_set_layout_create_info layouts[] = {
+            {
+                .set = 0,
+                .bindings = set0_bindings,
+            },
+        };
+
+        // Depth buffer format
+        resource_format depth_buffer_fmt[] = {resource_format::D32_FLOAT};
+
+        auto pipeline = _device->create_graphics_pipeline({
+            .layout{
+                .set_layouts = layouts,
+            },
+            .target{
+                .depth_attachment_format = depth_buffer_fmt[0],
+            },
+            .vertex_shader{
+                .bytes = vertex_shader_source,
+                .entrypoint = "main",
+                .name = "Directional Shadow Map Vertex Shader Module",
+            },
+            .fragment_shader{
+                .bytes = fragment_shader_source,
+                .entrypoint = "main",
+                .name = "Directional Shadow Map Fragment Shader Module",
+            },
+            .depth_testing{
+                .enable_test = true,
+                .enable_write = true,
+                .depth_test_op = compare_operation::LESS,
+            },
+            .blending{
+                .attachment_blend_ops = {},
+            },
+            .name = "Directional Shadow Map Pipeline",
         });
 
         _graphics_pipelines.push_back(pipeline);

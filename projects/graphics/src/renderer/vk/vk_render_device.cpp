@@ -562,7 +562,7 @@ namespace tempest::graphics::vk
         _delete_queue->flush_all();
         _recycled_cmd_buf_pool.release_all(_dispatch);
         _sync_prim_recycler.release_all(_dispatch);
-        _executor = std::nullopt;
+        _executor = nullopt;
 
         vmaDestroyAllocator(_vk_alloc);
         vkb::destroy_device(_device);
@@ -1968,7 +1968,7 @@ namespace tempest::graphics::vk
         vkb::PhysicalDeviceSelector selector = select_device(_instance);
 
         auto selection = selector.select_devices();
-        _devices[idx] = std::make_unique<render_device>(_alloc, _instance, (*selection)[devices[idx].id]);
+        _devices[idx] = make_unique<render_device>(_alloc, _instance, (*selection)[devices[idx].id]);
 
         return *(_devices[idx]);
     }
@@ -1991,7 +1991,7 @@ namespace tempest::graphics::vk
 
                 devices.push_back(physical_device_context{
                     .id = static_cast<uint32_t>(i),
-                    .name = (*selection)[i].name,
+                    .name = (*selection)[i].name.c_str(),
                 });
             }
         }

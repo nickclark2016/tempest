@@ -3,6 +3,7 @@
 
 #include <tempest/functional.hpp>
 #include <tempest/object_pool.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/render_device.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
@@ -232,7 +233,7 @@ namespace tempest::graphics::vk
         render_device* _device;
         VkCommandPool _pool{VK_NULL_HANDLE};
         VkCommandBuffer _buffer{VK_NULL_HANDLE};
-        std::optional<command_list> _cmds;
+        tempest::optional<command_list> _cmds;
         bool _is_recording{false};
     };
 
@@ -338,7 +339,7 @@ namespace tempest::graphics::vk
 
         void release_semaphore(VkSemaphore&& sem)
         {
-            _sync_prim_recycler.release(std::move(sem), _current_frame);
+            _sync_prim_recycler.release(tempest::move(sem), _current_frame);
         }
 
         VkFence acquire_fence()
@@ -348,7 +349,7 @@ namespace tempest::graphics::vk
 
         void release_fence(VkFence&& fence)
         {
-            return _sync_prim_recycler.release(std::move(fence), _current_frame);
+            return _sync_prim_recycler.release(tempest::move(fence), _current_frame);
         }
 
         vkb::DispatchTable& dispatch()
@@ -394,17 +395,17 @@ namespace tempest::graphics::vk
         vkb::DispatchTable _dispatch;
         VmaAllocator _vk_alloc{VK_NULL_HANDLE};
 
-        std::optional<core::generational_object_pool> _images;
-        std::optional<core::generational_object_pool> _buffers;
-        std::optional<core::generational_object_pool> _graphics_pipelines;
-        std::optional<core::generational_object_pool> _compute_pipelines;
-        std::optional<core::generational_object_pool> _swapchains;
-        std::optional<core::generational_object_pool> _samplers;
+        tempest::optional<core::generational_object_pool> _images;
+        tempest::optional<core::generational_object_pool> _buffers;
+        tempest::optional<core::generational_object_pool> _graphics_pipelines;
+        tempest::optional<core::generational_object_pool> _compute_pipelines;
+        tempest::optional<core::generational_object_pool> _swapchains;
+        tempest::optional<core::generational_object_pool> _samplers;
 
         queue_info _queue;
-        std::optional<command_execution_service> _executor;
+        tempest::optional<command_execution_service> _executor;
 
-        std::optional<resource_deletion_queue> _delete_queue;
+        tempest::optional<resource_deletion_queue> _delete_queue;
 
         size_t _current_frame{0};
         static constexpr size_t _frames_in_flight{2};
@@ -430,7 +431,7 @@ namespace tempest::graphics::vk
         vector<physical_device_context> enumerate_suitable_devices() override;
 
       private:
-        vector<std::unique_ptr<render_device>> _devices;
+        vector<tempest::unique_ptr<render_device>> _devices;
 
         vkb::Instance _instance;
     };

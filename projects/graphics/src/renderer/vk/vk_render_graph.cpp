@@ -290,7 +290,7 @@ namespace tempest::graphics::vk
             return VK_DESCRIPTOR_TYPE_MAX_ENUM;
         }
 
-        void begin_marked_region(const vkb::DispatchTable& dispatch, VkCommandBuffer buf, std::string_view name)
+        void begin_marked_region(const vkb::DispatchTable& dispatch, VkCommandBuffer buf, string_view name)
         {
 #ifdef _DEBUG
             VkDebugUtilsLabelEXT label = {
@@ -328,7 +328,7 @@ namespace tempest::graphics::vk
         }
     }
 
-    image_resource_handle render_graph_resource_library::find_texture(std::string_view name)
+    image_resource_handle render_graph_resource_library::find_texture(string_view name)
     {
         return image_resource_handle();
     }
@@ -396,7 +396,7 @@ namespace tempest::graphics::vk
         }
     }
 
-    buffer_resource_handle render_graph_resource_library::find_buffer(std::string_view name)
+    buffer_resource_handle render_graph_resource_library::find_buffer(string_view name)
     {
         return buffer_resource_handle();
     }
@@ -489,7 +489,7 @@ namespace tempest::graphics::vk
 
     render_graph::render_graph(abstract_allocator* alloc, render_device* device,
                                span<graphics::graph_pass_builder> pass_builders,
-                               std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled,
+                               unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled,
                                bool gpu_profile_enabled)
         : _alloc{alloc}, _device{device}, _resource_lib{std::move(resources)}
     {
@@ -556,8 +556,8 @@ namespace tempest::graphics::vk
                 .Queue = _device->get_queue().queue,
                 .DescriptorPool = ctx.imgui_desc_pool,
                 .Subpass = 0,
-                .MinImageCount = static_cast<std::uint32_t>(_device->frames_in_flight()),
-                .ImageCount = static_cast<std::uint32_t>(_device->frames_in_flight()),
+                .MinImageCount = static_cast<uint32_t>(_device->frames_in_flight()),
+                .ImageCount = static_cast<uint32_t>(_device->frames_in_flight()),
                 .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
                 .MemoryAllocator = _device->vma_allocator(),
                 .UseDynamicRendering = true,
@@ -713,7 +713,7 @@ namespace tempest::graphics::vk
     }
 
     void render_graph::update_external_sampled_images(graph_pass_handle pass, span<image_resource_handle> images,
-                                                      std::uint32_t set, std::uint32_t binding, pipeline_stage stage)
+                                                      uint32_t set, uint32_t binding, pipeline_stage stage)
     {
         auto pass_idx = _pass_index_map[pass.as_uint64()];
         _all_passes[pass_idx].add_external_sampled_images(images, set, binding, stage);
@@ -722,7 +722,7 @@ namespace tempest::graphics::vk
 
         auto image_writes = new VkDescriptorImageInfo[image_count];
 
-        std::uint32_t images_written = 0;
+        uint32_t images_written = 0;
 
         for (; images_written < image_count; ++images_written)
         {
@@ -827,7 +827,7 @@ namespace tempest::graphics::vk
 
             std::transform(std::begin(sorted_pass_handles), std::end(sorted_pass_handles),
                            std::back_inserter(_active_pass_set), [this](auto handle) {
-                               return std::ref(*std::find_if(
+                               return ref(*std::find_if(
                                    std::begin(_all_passes), std::end(_all_passes),
                                    [handle](const auto& node) { return node.handle().as_uint64() == handle; }));
                            });
@@ -975,7 +975,7 @@ namespace tempest::graphics::vk
 
                     logger->debug(
                         "Successfully queried timestamps for pass {} and frame {}.  Query Results: Begin - {} End - {}",
-                        pass_ref.name(), _device->current_frame() - _device->frames_in_flight(), timestamps[0],
+                        pass_ref.name().data(), _device->current_frame() - _device->frames_in_flight(), timestamps[0],
                         timestamps[1]);
                 }
                 else
@@ -983,11 +983,11 @@ namespace tempest::graphics::vk
                     pools.timestamp.begin_timestamp = 0;
                     pools.timestamp.end_timestamp = 0;
 
-                    logger->warn("Failed to get timestamp query results for pass {} and frame {}.", pass_ref.name(),
+                    logger->warn("Failed to get timestamp query results for pass {} and frame {}.", pass_ref.name().data(),
                                  _device->current_frame() - _device->frames_in_flight());
                 }
 
-                // std::array<std::uint64_t, pipeline_statistic_results::statistic_query_count> pipeline_statistics =
+                // std::array<uint64_t, pipeline_statistic_results::statistic_query_count> pipeline_statistics =
                 // {}; result = dispatch->getQueryPoolResults(
                 //     pools.pipeline_stat_queries,
                 //     _device->frame_in_flight() * pipeline_statistic_results::statistic_query_count,
@@ -1042,8 +1042,7 @@ namespace tempest::graphics::vk
                 auto write_copy = writes;
                 tempest::erase_if(write_copy, [](const auto& write) { return write.descriptorCount == 0; });
 
-                dispatch->updateDescriptorSets(static_cast<std::uint32_t>(write_copy.size()), write_copy.data(), 0,
-                                               nullptr);
+                dispatch->updateDescriptorSets(static_cast<uint32_t>(write_copy.size()), write_copy.data(), 0, nullptr);
             }
 
             // apply barriers
@@ -1235,7 +1234,7 @@ namespace tempest::graphics::vk
                     .pNext = nullptr,
                     .memoryBarrierCount = 0,
                     .pMemoryBarriers = nullptr,
-                    .bufferMemoryBarrierCount = static_cast<std::uint32_t>(buffer_barriers_2.size()),
+                    .bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers_2.size()),
                     .pBufferMemoryBarriers = buffer_barriers_2.empty() ? nullptr : buffer_barriers_2.data(),
                     .imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers_2.size()),
                     .pImageMemoryBarriers = image_barriers_2.empty() ? nullptr : image_barriers_2.data(),
@@ -1511,9 +1510,9 @@ namespace tempest::graphics::vk
 
                 dispatch->cmdBindDescriptorSets(
                     cmds, bind_point, _descriptor_set_states[pass_idx].layout, 0,
-                    static_cast<std::uint32_t>(_descriptor_set_states[pass_idx].set_layouts.size()),
+                    static_cast<uint32_t>(_descriptor_set_states[pass_idx].set_layouts.size()),
                     set_frame_state.descriptor_sets.data(),
-                    static_cast<std::uint32_t>(set_frame_state.dynamic_offsets.size()),
+                    static_cast<uint32_t>(set_frame_state.dynamic_offsets.size()),
                     set_frame_state.dynamic_offsets.empty() ? nullptr : set_frame_state.dynamic_offsets.data());
             }
 
@@ -1534,7 +1533,7 @@ namespace tempest::graphics::vk
                 // End timestamp query
                 cmd_buffer_alloc.dispatch->cmdWriteTimestamp(cmds, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                                                              pools.timestamp_queries,
-                                                             static_cast<std::uint32_t>(end_timestamp_query_index));
+                                                             static_cast<uint32_t>(end_timestamp_query_index));
             }
 
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -1549,8 +1548,8 @@ namespace tempest::graphics::vk
 
                 auto& pools = _gpu_profile_state->recording_state.pools[pass_idx];
                 pools.cpu_timestamp = {
-                    .begin_timestamp = static_cast<std::uint64_t>(start_ns),
-                    .end_timestamp = static_cast<std::uint64_t>(end_ns),
+                    .begin_timestamp = static_cast<uint64_t>(start_ns),
+                    .end_timestamp = static_cast<uint64_t>(end_ns),
                 };
             }
         }
@@ -1601,7 +1600,7 @@ namespace tempest::graphics::vk
             VkDependencyInfo dep_info = {
                 .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
                 .pNext = nullptr,
-                .imageMemoryBarrierCount = static_cast<std::uint32_t>(transition_to_present.size()),
+                .imageMemoryBarrierCount = static_cast<uint32_t>(transition_to_present.size()),
                 .pImageMemoryBarriers = transition_to_present.empty() ? nullptr : transition_to_present.data(),
             };
 
@@ -1697,7 +1696,7 @@ namespace tempest::graphics::vk
         // return allocator
         _device->release_frame_local_command_buffer_allocator(std::move(cmd_buffer_alloc));
 
-        std::erase_if(_last_known_state.images, [](const auto& state) {
+        tempest::erase_if(_last_known_state.images, [](const auto& state) {
             auto [key, info] = state;
             return !info.persistent;
         });
@@ -1763,7 +1762,7 @@ namespace tempest::graphics::vk
 
                 for (auto pass_result : _gpu_profile_state->results.pass_results)
                 {
-                    auto pass_index = _pass_index_map.at(pass_result.pass.as_uint64());
+                    auto pass_index = _pass_index_map.find(pass_result.pass.as_uint64())->second;
                     auto& pass = _all_passes[pass_index];
                     auto did_exec = _active_passes[pass_index];
                     if (!did_exec)
@@ -1849,7 +1848,7 @@ namespace tempest::graphics::vk
 
         for (const auto& pass : _all_passes)
         {
-            std::unordered_set<std::uint32_t> sets;
+            std::unordered_set<uint32_t> sets;
 
             for (const auto& buffer : pass.buffer_usage())
             {
@@ -1922,7 +1921,7 @@ namespace tempest::graphics::vk
             for (const auto& external_smp : pass.external_samplers())
             {
                 sizes[VK_DESCRIPTOR_TYPE_SAMPLER].descriptorCount +=
-                    static_cast<std::uint32_t>(external_smp.samplers.size());
+                    static_cast<uint32_t>(external_smp.samplers.size());
             }
 
             set_count += sets.size();
@@ -1936,8 +1935,8 @@ namespace tempest::graphics::vk
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .maxSets = static_cast<std::uint32_t>(set_count),
-            .poolSizeCount = static_cast<std::uint32_t>(pool_size_count),
+            .maxSets = static_cast<uint32_t>(set_count),
+            .poolSizeCount = static_cast<uint32_t>(pool_size_count),
             .pPoolSizes = sizes,
         };
 
@@ -1955,9 +1954,9 @@ namespace tempest::graphics::vk
 
         for (auto& pass : _all_passes)
         {
-            std::unordered_map<std::uint32_t, std::vector<VkDescriptorSetLayoutBinding>> bindings;
-            std::unordered_map<std::uint32_t, std::vector<VkDescriptorBindingFlags>> binding_flags;
-            std::map<std::uint32_t, std::vector<VkWriteDescriptorSet>> binding_writes;
+            std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> bindings;
+            std::unordered_map<uint32_t, std::vector<VkDescriptorBindingFlags>> binding_flags;
+            std::map<uint32_t, std::vector<VkWriteDescriptorSet>> binding_writes;
 
             for (auto& buffer : pass.buffer_usage())
             {
@@ -2011,15 +2010,15 @@ namespace tempest::graphics::vk
                 bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
                     .binding = img.binding,
                     .descriptorType = type,
-                    .descriptorCount = static_cast<std::uint32_t>(img.handles.size()),
+                    .descriptorCount = static_cast<uint32_t>(img.handles.size()),
                     .stageFlags = compute_accessible_stages(pass.operation_type()),
                     .pImmutableSamplers = nullptr,
                 });
 
-                auto img_count = static_cast<std::uint32_t>(img.handles.size());
+                auto img_count = static_cast<uint32_t>(img.handles.size());
                 auto images = new VkDescriptorImageInfo[img_count];
 
-                for (std::uint32_t i = 0; i < img_count; ++i)
+                for (uint32_t i = 0; i < img_count; ++i)
                 {
                     auto vk_img = _device->access_image(img.handles[i]);
                     images[i] = {
@@ -2052,7 +2051,7 @@ namespace tempest::graphics::vk
                     continue;
                 }
 
-                auto img_count = static_cast<std::uint32_t>(img.images.size());
+                auto img_count = static_cast<uint32_t>(img.images.size());
 
                 bindings[img.set].push_back(VkDescriptorSetLayoutBinding{
                     .binding = img.binding,
@@ -2064,7 +2063,7 @@ namespace tempest::graphics::vk
 
                 auto images = new VkDescriptorImageInfo[img_count];
 
-                for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(img.images.size()); ++i)
+                for (uint32_t i = 0; i < static_cast<uint32_t>(img.images.size()); ++i)
                 {
                     VkImageView view = VK_NULL_HANDLE;
                     if (img.images[i])
@@ -2083,7 +2082,7 @@ namespace tempest::graphics::vk
                     .pNext = nullptr,
                     .dstBinding = img.binding,
                     .dstArrayElement = 0,
-                    .descriptorCount = static_cast<std::uint32_t>(img.images.size()),
+                    .descriptorCount = static_cast<uint32_t>(img.images.size()),
                     .descriptorType = type,
                     .pImageInfo = images,
                     .pBufferInfo = nullptr,
@@ -2111,7 +2110,7 @@ namespace tempest::graphics::vk
                     .pNext = nullptr,
                     .dstBinding = smp.binding,
                     .dstArrayElement = 0,
-                    .descriptorCount = static_cast<std::uint32_t>(sampler_count),
+                    .descriptorCount = static_cast<uint32_t>(sampler_count),
                     .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
                     .pImageInfo = samplers,
                     .pBufferInfo = nullptr,
@@ -2142,7 +2141,7 @@ namespace tempest::graphics::vk
                 VkDescriptorSetLayoutBindingFlagsCreateInfo binding_ci = {
                     .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
                     .pNext = nullptr,
-                    .bindingCount = static_cast<std::uint32_t>(bind_flags.size()),
+                    .bindingCount = static_cast<uint32_t>(bind_flags.size()),
                     .pBindingFlags = bind_flags.empty() ? nullptr : bind_flags.data(),
                 };
 
@@ -2150,7 +2149,7 @@ namespace tempest::graphics::vk
                     .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                     .pNext = &binding_ci,
                     .flags = 0,
-                    .bindingCount = static_cast<std::uint32_t>(binding_arr.size()),
+                    .bindingCount = static_cast<uint32_t>(binding_arr.size()),
                     .pBindings = binding_arr.data(),
                 };
 
@@ -2165,7 +2164,7 @@ namespace tempest::graphics::vk
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
-                .setLayoutCount = static_cast<std::uint32_t>(set_layouts.size()),
+                .setLayoutCount = static_cast<uint32_t>(set_layouts.size()),
                 .pSetLayouts = set_layouts.data(),
                 .pushConstantRangeCount = 0,
                 .pPushConstantRanges = nullptr,
@@ -2187,7 +2186,7 @@ namespace tempest::graphics::vk
                     .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
                     .pNext = nullptr,
                     .descriptorPool = pool,
-                    .descriptorSetCount = static_cast<std::uint32_t>(set_state.set_layouts.size()),
+                    .descriptorSetCount = static_cast<uint32_t>(set_state.set_layouts.size()),
                     .pSetLayouts = set_state.set_layouts.data(),
                 };
 
@@ -2213,14 +2212,14 @@ namespace tempest::graphics::vk
                     {
                         auto per_frame_size = write.pBufferInfo->range;
                         _descriptor_set_states[pass_index].per_frame_descriptors[i].dynamic_offsets.push_back(
-                            static_cast<std::uint32_t>(per_frame_size * i));
+                            static_cast<uint32_t>(per_frame_size * i));
                     }
                 }
 
                 auto writes = _descriptor_set_states[pass_index].writes;
                 tempest::erase_if(writes, [](const VkWriteDescriptorSet& write) { return write.descriptorCount == 0; });
 
-                _device->dispatch().updateDescriptorSets(static_cast<std::uint32_t>(writes.size()), writes.data(), 0,
+                _device->dispatch().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0,
                                                          nullptr);
 
                 if (i < _device->frames_in_flight() - 1)
@@ -2239,13 +2238,13 @@ namespace tempest::graphics::vk
     {
     }
 
-    std::unique_ptr<graphics::render_graph> render_graph_compiler::compile() &&
+    unique_ptr<graphics::render_graph> render_graph_compiler::compile() &&
     {
         _resource_lib->compile();
 
-        return std::make_unique<vk::render_graph>(
+        return tempest::make_unique<vk::render_graph>(
             _alloc, static_cast<render_device*>(_device), _builders,
-            std::unique_ptr<vk::render_graph_resource_library>(
+            unique_ptr<vk::render_graph_resource_library>(
                 static_cast<vk::render_graph_resource_library*>(_resource_lib.release())),
             _imgui_enabled, _gpu_profiling_enabled);
     }

@@ -17,4 +17,6 @@ fi
 ../../../dependencies/slang/linux/slangc zprepass.slang -target spirv -o zprepass.frag.spv -entry FSMain $DEBUG && \
 ../../../dependencies/slang/linux/slangc taa.slang -target spirv -o taa.vert.spv -entry VSMain $DEBUG && \
 ../../../dependencies/slang/linux/slangc taa.slang -target spirv -o taa.frag.spv -entry FSMain $DEBUG && \
+../../../dependencies/slang/linux/slangc directional_shadow_map.slang -target spirv -o directional_shadow_map.vert.spv -entry VSMain $DEBUG && \
+../../../dependencies/slang/linux/slangc directional_shadow_map.slang -target spirv -o directional_shadow_map.frag.spv -entry FSMain $DEBUG && \
 echo "Compiled PBR shaders"

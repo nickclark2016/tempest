@@ -3,6 +3,7 @@
 
 #include "vk_render_device.hpp"
 
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/object_pool.hpp>
 #include <tempest/render_graph.hpp>
@@ -29,7 +30,7 @@ namespace tempest::graphics::vk
         VkBuffer buffer{VK_NULL_HANDLE};
         VkDeviceSize offset{0};
         VkDeviceSize size{0};
-        std::uint32_t queue_family{0};
+        uint32_t queue_family{0};
     };
 
     struct render_graph_image_state
@@ -40,11 +41,11 @@ namespace tempest::graphics::vk
         VkImageLayout image_layout{VK_IMAGE_LAYOUT_UNDEFINED};
         VkImage image{VK_NULL_HANDLE};
         VkImageAspectFlags aspect{0};
-        std::uint32_t base_mip{0};
-        std::uint32_t mip_count{0};
-        std::uint32_t base_array_layer{0};
-        std::uint32_t layer_count{0};
-        std::uint32_t queue_family{0};
+        uint32_t base_mip{0};
+        uint32_t mip_count{0};
+        uint32_t base_array_layer{0};
+        uint32_t layer_count{0};
+        uint32_t queue_family{0};
     };
 
     struct swapchain_resource_state
@@ -57,18 +58,18 @@ namespace tempest::graphics::vk
 
     struct external_image_state
     {
-        std::uint32_t count{0};
-        std::uint32_t binding{0};
-        std::uint32_t set{0};
+        uint32_t count{0};
+        uint32_t binding{0};
+        uint32_t set{0};
 
         vector<VkDescriptorImageInfo> images;
     };
 
     struct external_sampler_state
     {
-        std::uint32_t count{0};
-        std::uint32_t binding{0};
-        std::uint32_t set{0};
+        uint32_t count{0};
+        uint32_t binding{0};
+        uint32_t set{0};
 
         vector<VkDescriptorImageInfo> samplers;
     };
@@ -81,26 +82,26 @@ namespace tempest::graphics::vk
 
     struct descriptor_set_frame_state
     {
-        vector<std::uint32_t> dynamic_offsets{};
-        std::array<VkDescriptorSet, 8> descriptor_sets{};
-        std::size_t last_frame_changed{0};
+        vector<uint32_t> dynamic_offsets{};
+        array<VkDescriptorSet, 8> descriptor_sets{};
+        size_t last_frame_changed{0};
     };
 
     struct descriptor_set_state
     {
-        std::unordered_map<VkDescriptorSet, std::uint32_t> vk_set_to_set_index;
+        flat_unordered_map<VkDescriptorSet, uint32_t> vk_set_to_set_index;
         vector<VkDescriptorSetLayout> set_layouts;
         VkPipelineLayout layout{VK_NULL_HANDLE};
         vector<descriptor_set_frame_state> per_frame_descriptors;
         vector<VkWriteDescriptorSet> writes;
-        std::size_t last_update_frame{0};
+        size_t last_update_frame{0};
     };
 
     struct render_graph_resource_state
     {
-        std::unordered_map<std::uint64_t, render_graph_buffer_state> buffers;
-        std::unordered_map<std::uint64_t, render_graph_image_state> images;
-        std::unordered_map<std::uint64_t, swapchain_resource_state> swapchain;
+        flat_unordered_map<uint64_t, render_graph_buffer_state> buffers;
+        flat_unordered_map<uint64_t, render_graph_image_state> images;
+        flat_unordered_map<uint64_t, swapchain_resource_state> swapchain;
 
         vector<external_image_state> external_images;
         vector<external_sampler_state> external_samplers;
@@ -126,19 +127,19 @@ namespace tempest::graphics::vk
 
     struct pipeline_statistic_results
     {
-        std::uint64_t input_assembly_vertices;
-        std::uint64_t input_assembly_primitives;
-        std::uint64_t vertex_shader_invocations;
-        std::uint64_t tess_control_shader_invocations;
-        std::uint64_t tess_evaluation_shader_invocations;
-        std::uint64_t geometry_shader_invocations;
-        std::uint64_t geometry_shader_primitives;
-        std::uint64_t fragment_shader_invocations;
-        std::uint64_t clipping_invocations;
-        std::uint64_t clipping_primitives;
-        std::uint64_t compute_shader_invocations;
+        uint64_t input_assembly_vertices;
+        uint64_t input_assembly_primitives;
+        uint64_t vertex_shader_invocations;
+        uint64_t tess_control_shader_invocations;
+        uint64_t tess_evaluation_shader_invocations;
+        uint64_t geometry_shader_invocations;
+        uint64_t geometry_shader_primitives;
+        uint64_t fragment_shader_invocations;
+        uint64_t clipping_invocations;
+        uint64_t clipping_primitives;
+        uint64_t compute_shader_invocations;
 
-        static constexpr std::size_t statistic_query_count = 11;
+        static constexpr size_t statistic_query_count = 11;
     };
 
     /// @brief Contains the query results for a single pass.
@@ -148,7 +149,7 @@ namespace tempest::graphics::vk
         VkQueryPool timestamp_queries{VK_NULL_HANDLE};
 
         graph_pass_handle pass;
-        std::optional<pipeline_statistic_results> pipeline_stats;
+        optional<pipeline_statistic_results> pipeline_stats;
         timestamp_query_range timestamp;
         timestamp_query_range cpu_timestamp;
     };
@@ -157,7 +158,7 @@ namespace tempest::graphics::vk
     {
         graph_pass_handle pass;
 
-        std::optional<pipeline_statistic_results> pipeline_stats;
+        optional<pipeline_statistic_results> pipeline_stats;
         timestamp_query_range timestamp;
         timestamp_query_range cpu_timestamp;
     };
@@ -193,12 +194,12 @@ namespace tempest::graphics::vk
       public:
         explicit render_graph(abstract_allocator* alloc, render_device* device,
                               span<graphics::graph_pass_builder> pass_builders,
-                              std::unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled,
+                              unique_ptr<render_graph_resource_library>&& resources, bool imgui_enabled,
                               bool gpu_profile_enabled);
         ~render_graph() override;
 
         void update_external_sampled_images(graph_pass_handle pass, span<image_resource_handle> images,
-                                            std::uint32_t set, std::uint32_t binding, pipeline_stage stage) override;
+                                            uint32_t set, uint32_t binding, pipeline_stage stage) override;
 
         void execute() override;
 
@@ -209,15 +210,15 @@ namespace tempest::graphics::vk
 
         using pass_active_mask = std::bitset<1024>;
 
-        std::unique_ptr<render_graph_resource_library> _resource_lib;
+        unique_ptr<render_graph_resource_library> _resource_lib;
 
         vector<per_frame_data> _per_frame;
         vector<graph_pass_builder> _all_passes;
 
         pass_active_mask _active_passes;
-        vector<std::reference_wrapper<graph_pass_builder>> _active_pass_set;
+        vector<reference_wrapper<graph_pass_builder>> _active_pass_set;
         vector<swapchain_resource_handle> _active_swapchain_set;
-        std::unordered_map<std::uint64_t, std::size_t> _pass_index_map;
+        flat_unordered_map<uint64_t, size_t> _pass_index_map;
 
         abstract_allocator* _alloc;
         render_device* _device;
@@ -227,8 +228,8 @@ namespace tempest::graphics::vk
 
         vector<descriptor_set_state> _descriptor_set_states;
 
-        std::optional<imgui_render_graph_context> _imgui_ctx;
-        std::optional<gpu_profile_state> _gpu_profile_state;
+        optional<imgui_render_graph_context> _imgui_ctx;
+        optional<gpu_profile_state> _gpu_profile_state;
     };
 
     class render_graph_resource_library : public graphics::render_graph_resource_library
@@ -237,11 +238,11 @@ namespace tempest::graphics::vk
         explicit render_graph_resource_library(abstract_allocator* alloc, render_device* device);
         ~render_graph_resource_library();
 
-        image_resource_handle find_texture(std::string_view name) override;
+        image_resource_handle find_texture(string_view name) override;
         image_resource_handle load(const image_desc& desc) override;
         void add_image_usage(image_resource_handle handle, image_resource_usage usage) override;
 
-        buffer_resource_handle find_buffer(std::string_view name) override;
+        buffer_resource_handle find_buffer(string_view name) override;
         buffer_resource_handle load(const buffer_desc& desc) override;
         void add_buffer_usage(buffer_resource_handle handle, buffer_resource_usage usage) override;
 
@@ -273,7 +274,7 @@ namespace tempest::graphics::vk
     {
       public:
         explicit render_graph_compiler(abstract_allocator* alloc, graphics::render_device* device);
-        std::unique_ptr<graphics::render_graph> compile() && override;
+        unique_ptr<graphics::render_graph> compile() && override;
     };
 } // namespace tempest::graphics::vk
 

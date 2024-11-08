@@ -27,3 +27,5 @@ goto compile
 ..\..\..\dependencies\slang\windows\slangc.exe zprepass.slang -target spirv -o zprepass.frag.spv -entry FSMain %debug_flags%
 ..\..\..\dependencies\slang\windows\slangc.exe taa.slang -target spirv -o taa.vert.spv -entry VSMain %debug_flags%
 ..\..\..\dependencies\slang\windows\slangc.exe taa.slang -target spirv -o taa.frag.spv -entry FSMain %debug_flags%
+..\..\..\dependencies\slang\windows\slangc.exe directional_shadow_map.slang -target spirv -o directional_shadow_map.vert.spv -entry VSMain %debug_flags%
+..\..\..\dependencies\slang\windows\slangc.exe directional_shadow_map.slang -target spirv -o directional_shadow_map.frag.spv -entry FSMain %debug_flags%

@@ -4,7 +4,9 @@
 #include "render_device.hpp"
 #include "types.hpp"
 
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
+#include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vec4.hpp>
@@ -29,8 +31,8 @@ namespace tempest::graphics
         math::vec4<float> clear_color;
         float clear_depth;
 
-        std::uint32_t set;
-        std::uint32_t binding;
+        uint32_t set;
+        uint32_t binding;
     };
 
     struct buffer_resource_state
@@ -43,8 +45,8 @@ namespace tempest::graphics
         pipeline_stage last_access;
         bool per_frame_memory{false};
 
-        std::uint32_t set;
-        std::uint32_t binding;
+        uint32_t set;
+        uint32_t binding;
     };
 
     struct swapchain_resource_state
@@ -66,9 +68,9 @@ namespace tempest::graphics
         vector<image_resource_handle> images;
         pipeline_stage stages;
 
-        std::uint32_t count;
-        std::uint32_t set;
-        std::uint32_t binding;
+        uint32_t count;
+        uint32_t set;
+        uint32_t binding;
     };
 
     struct resolve_image_state
@@ -85,8 +87,8 @@ namespace tempest::graphics
         vector<sampler_resource_handle> samplers;
         pipeline_stage stages;
 
-        std::uint32_t set;
-        std::uint32_t binding;
+        uint32_t set;
+        uint32_t binding;
     };
 
     class render_graph_resource_library
@@ -94,11 +96,11 @@ namespace tempest::graphics
       public:
         virtual ~render_graph_resource_library() = default;
 
-        virtual image_resource_handle find_texture(std::string_view name) = 0;
+        virtual image_resource_handle find_texture(string_view name) = 0;
         virtual image_resource_handle load(const image_desc& desc) = 0;
         virtual void add_image_usage(image_resource_handle handle, image_resource_usage usage) = 0;
 
-        virtual buffer_resource_handle find_buffer(std::string_view name) = 0;
+        virtual buffer_resource_handle find_buffer(string_view name) = 0;
         virtual buffer_resource_handle load(const buffer_desc& desc) = 0;
         virtual void add_buffer_usage(buffer_resource_handle handle, buffer_resource_usage usage) = 0;
 
@@ -111,7 +113,7 @@ namespace tempest::graphics
     {
         friend class render_graph_compiler;
 
-        graph_pass_builder(render_graph_resource_library& lib, std::string_view name, queue_operation_type type);
+        graph_pass_builder(render_graph_resource_library& lib, string_view name, queue_operation_type type);
 
       public:
         graph_pass_builder& add_color_attachment(image_resource_handle handle, resource_access_type access,
@@ -129,17 +131,17 @@ namespace tempest::graphics
                                                  float clear_depth = 0.0f,
                                                  pipeline_stage first_access = pipeline_stage::INFER,
                                                  pipeline_stage last_access = pipeline_stage::INFER);
-        graph_pass_builder& add_sampled_image(image_resource_handle handle, std::uint32_t set, std::uint32_t binding,
+        graph_pass_builder& add_sampled_image(image_resource_handle handle, uint32_t set, uint32_t binding,
                                               pipeline_stage first_read = pipeline_stage::INFER,
                                               pipeline_stage last_read = pipeline_stage::INFER);
-        graph_pass_builder& add_external_sampled_image(image_resource_handle handle, std::uint32_t set,
-                                                       std::uint32_t binding, pipeline_stage usage);
-        graph_pass_builder& add_external_sampled_images(span<image_resource_handle> handles, std::uint32_t set,
-                                                        std::uint32_t binding, pipeline_stage usage);
-        graph_pass_builder& add_external_sampled_images(std::uint32_t count, std::uint32_t set, std::uint32_t binding,
+        graph_pass_builder& add_external_sampled_image(image_resource_handle handle, uint32_t set,
+                                                       uint32_t binding, pipeline_stage usage);
+        graph_pass_builder& add_external_sampled_images(span<image_resource_handle> handles, uint32_t set,
+                                                        uint32_t binding, pipeline_stage usage);
+        graph_pass_builder& add_external_sampled_images(uint32_t count, uint32_t set, uint32_t binding,
                                                         pipeline_stage usage);
         graph_pass_builder& add_external_storage_image(image_resource_handle handle, resource_access_type access,
-                                                       std::uint32_t set, std::uint32_t binding, pipeline_stage usage);
+                                                       uint32_t set, uint32_t binding, pipeline_stage usage);
         graph_pass_builder& add_blit_target(image_resource_handle handle,
                                             pipeline_stage first_write = pipeline_stage::INFER,
                                             pipeline_stage last_write = pipeline_stage::INFER);
@@ -156,16 +158,16 @@ namespace tempest::graphics
                                             pipeline_stage first_read = pipeline_stage::INFER,
                                             pipeline_stage last_read = pipeline_stage::INFER);
         graph_pass_builder& add_storage_image(image_resource_handle handle, resource_access_type access,
-                                              std::uint32_t set, std::uint32_t binding,
+                                              uint32_t set, uint32_t binding,
                                               pipeline_stage first_access = pipeline_stage::INFER,
                                               pipeline_stage last_access = pipeline_stage::INFER);
         graph_pass_builder& add_storage_image(span<image_resource_handle> handle, resource_access_type access,
-                                              std::uint32_t set, std::uint32_t binding,
+                                              uint32_t set, uint32_t binding,
                                               pipeline_stage first_access = pipeline_stage::INFER,
                                               pipeline_stage last_access = pipeline_stage::INFER);
 
         graph_pass_builder& add_structured_buffer(buffer_resource_handle handle, resource_access_type access,
-                                                  std::uint32_t set, std::uint32_t binding,
+                                                  uint32_t set, uint32_t binding,
                                                   pipeline_stage first_access = pipeline_stage::INFER,
                                                   pipeline_stage last_access = pipeline_stage::INFER);
         graph_pass_builder& add_vertex_buffer(buffer_resource_handle handle,
@@ -174,7 +176,7 @@ namespace tempest::graphics
         graph_pass_builder& add_index_buffer(buffer_resource_handle handle,
                                              pipeline_stage first_read = pipeline_stage::INFER,
                                              pipeline_stage last_read = pipeline_stage::INFER);
-        graph_pass_builder& add_constant_buffer(buffer_resource_handle handle, std::uint32_t set, std::uint32_t binding,
+        graph_pass_builder& add_constant_buffer(buffer_resource_handle handle, uint32_t set, uint32_t binding,
                                                 pipeline_stage first_read = pipeline_stage::INFER,
                                                 pipeline_stage last_read = pipeline_stage::INFER);
         graph_pass_builder& add_indirect_argument_buffer(buffer_resource_handle handle,
@@ -189,7 +191,7 @@ namespace tempest::graphics
         graph_pass_builder& add_host_write_buffer(buffer_resource_handle handle,
                                                   pipeline_stage first_write = pipeline_stage::INFER,
                                                   pipeline_stage last_write = pipeline_stage::INFER);
-        graph_pass_builder& add_sampler(sampler_resource_handle handle, std::uint32_t set, std::uint32_t binding,
+        graph_pass_builder& add_sampler(sampler_resource_handle handle, uint32_t set, uint32_t binding,
                                         pipeline_stage usage);
 
         graph_pass_builder& depends_on(graph_pass_handle src);
@@ -201,7 +203,7 @@ namespace tempest::graphics
         graph_pass_builder& on_execute(function<void(command_list&)> commands);
         graph_pass_builder& should_execute(function<bool()> fn);
 
-        std::string_view name() const noexcept;
+        string_view name() const noexcept;
 
         graph_pass_builder& draw_imgui()
         {
@@ -295,7 +297,7 @@ namespace tempest::graphics
         vector<graph_pass_handle> _depends_on;
         vector<resolve_image_state> _resolve_images;
         graph_pass_handle _self;
-        std::string _name;
+        string _name;
 
         bool _draw_imgui{false};
         bool _draw_gpu_profile{false};
@@ -307,7 +309,7 @@ namespace tempest::graphics
     {
       public:
         virtual void update_external_sampled_images(graph_pass_handle pass, span<image_resource_handle> images,
-                                                    std::uint32_t set, std::uint32_t binding, pipeline_stage stage) = 0;
+                                                    uint32_t set, uint32_t binding, pipeline_stage stage) = 0;
 
         virtual ~render_graph() = default;
         virtual void execute() = 0;
@@ -321,21 +323,21 @@ namespace tempest::graphics
 
         image_resource_handle create_image(image_desc desc);
         buffer_resource_handle create_buffer(buffer_desc desc);
-        graph_pass_handle add_graph_pass(std::string_view name, queue_operation_type type,
+        graph_pass_handle add_graph_pass(string_view name, queue_operation_type type,
                                          function<void(graph_pass_builder&)> build);
 
         void enable_gpu_profiling(bool enabled = true);
         void enable_imgui(bool enabled = true);
 
-        virtual std::unique_ptr<render_graph> compile() && = 0;
+        virtual unique_ptr<render_graph> compile() && = 0;
 
-        static std::unique_ptr<render_graph_compiler> create_compiler(abstract_allocator* alloc, render_device* device);
+        static unique_ptr<render_graph_compiler> create_compiler(abstract_allocator* alloc, render_device* device);
 
       protected:
         render_device* _device;
         abstract_allocator* _alloc;
         vector<graph_pass_builder> _builders;
-        std::unique_ptr<render_graph_resource_library> _resource_lib;
+        unique_ptr<render_graph_resource_library> _resource_lib;
         bool _imgui_enabled = false;
         bool _gpu_profiling_enabled = false;
 
@@ -345,12 +347,12 @@ namespace tempest::graphics
     class dependency_graph
     {
       public:
-        void add_graph_pass(std::uint64_t pass_id);
-        void add_graph_dependency(std::uint64_t src_pass, std::uint64_t dst_pass);
-        vector<std::uint64_t> toposort() const noexcept;
+        void add_graph_pass(uint64_t pass_id);
+        void add_graph_dependency(uint64_t src_pass, uint64_t dst_pass);
+        vector<uint64_t> toposort() const noexcept;
 
       private:
-        std::unordered_map<std::uint64_t, vector<std::uint64_t>> _adjacency_list;
+        flat_unordered_map<uint64_t, vector<uint64_t>> _adjacency_list;
     };
 } // namespace tempest::graphics
 
