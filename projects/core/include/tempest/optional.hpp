@@ -118,38 +118,38 @@ namespace tempest
                                                     is_nothrow_destructible_v<T>);
 
         template <typename Fn>
-            requires invocable<Fn, T&> && is_optional<invoke_result_t<Fn, T&>>
+            requires invocable<Fn, T&> && is_optional<invoke_result_t<Fn, T&>>::value
         constexpr auto and_then(Fn&& fn) &;
 
         template <typename Fn>
-            requires invocable<Fn, const T&> && is_optional<invoke_result_t<Fn, const T&>>
+            requires invocable<Fn, const T&> && is_optional<invoke_result_t<Fn, const T&>>::value
         constexpr auto and_then(Fn&& fn) const&;
 
         template <typename Fn>
-            requires invocable<Fn, T&&> && is_optional<invoke_result_t<Fn, T&&>>
+            requires invocable<Fn, T&&> && is_optional<invoke_result_t<Fn, T&&>>::value
         constexpr auto and_then(Fn&& fn) &&;
 
         template <typename Fn>
-            requires invocable<Fn, const T&&> && is_optional<invoke_result_t<Fn, const T&&>>
+            requires invocable<Fn, const T&&> && is_optional<invoke_result_t<Fn, const T&&>>::value
         constexpr auto and_then(Fn&& fn) const&&;
 
         template <typename Fn>
-            requires(is_invocable<Fn, T&> && !is_void_v<invoke_result_t<Fn, T&>> &&
+            requires(is_invocable<Fn, T&>::value && !is_void_v<invoke_result_t<Fn, T&>> &&
                      !is_reference_v<invoke_result_t<Fn, T&>>)
         constexpr auto transform(Fn&& fn) & -> optional<invoke_result_t<Fn, T&>>;
 
         template <typename Fn>
-            requires(is_invocable<Fn, const T&> && !is_void_v<invoke_result_t<Fn, const T&>> &&
+            requires(is_invocable<Fn, const T&>::value && !is_void_v<invoke_result_t<Fn, const T&>> &&
                      !is_reference_v<invoke_result_t<Fn, const T&>>)
         constexpr auto transform(Fn&& fn) const& -> optional<invoke_result_t<Fn, const T&>>;
 
         template <typename Fn>
-            requires(is_invocable<Fn, T&&> && !is_void_v<invoke_result_t<Fn, T&&>> &&
+            requires(is_invocable<Fn, T&&>::value && !is_void_v<invoke_result_t<Fn, T&&>> &&
                      !is_reference_v<invoke_result_t<Fn, T&&>>)
         constexpr auto transform(Fn&& fn) && -> optional<invoke_result_t<Fn, T&&>>;
 
         template <typename Fn>
-            requires(is_invocable<Fn, const T&&> && !is_void_v<invoke_result_t<Fn, const T&&>> &&
+            requires(is_invocable<Fn, const T&&>::value && !is_void_v<invoke_result_t<Fn, const T&&>> &&
                      !is_reference_v<invoke_result_t<Fn, const T&&>>)
         constexpr auto transform(Fn&& fn) const&& -> optional<invoke_result_t<Fn, const T&&>>;
 
@@ -670,7 +670,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires invocable<Fn, T&> && is_optional<invoke_result_t<Fn, T&>>
+        requires invocable<Fn, T&> && is_optional<invoke_result_t<Fn, T&>>::value
     inline constexpr auto optional<T>::and_then(Fn&& fn) &
     {
         if (*this)
@@ -685,7 +685,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires invocable<Fn, const T&> && is_optional<invoke_result_t<Fn, const T&>>
+        requires invocable<Fn, const T&> && is_optional<invoke_result_t<Fn, const T&>>::value
     inline constexpr auto optional<T>::and_then(Fn&& fn) const&
     {
         if (*this)
@@ -700,7 +700,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires invocable<Fn, T&&> && is_optional<invoke_result_t<Fn, T&&>>
+        requires invocable<Fn, T&&> && is_optional<invoke_result_t<Fn, T&&>>::value
     inline constexpr auto optional<T>::and_then(Fn&& fn) &&
     {
         if (*this)
@@ -715,7 +715,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires invocable<Fn, const T&&> && is_optional<invoke_result_t<Fn, const T&&>>
+        requires invocable<Fn, const T&&> && is_optional<invoke_result_t<Fn, const T&&>>::value
     inline constexpr auto optional<T>::and_then(Fn&& fn) const&&
     {
         if (*this)
@@ -730,7 +730,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires(is_invocable<Fn, T&> && !is_void_v<invoke_result_t<Fn, T&>> &&
+        requires(is_invocable<Fn, T&>::value && !is_void_v<invoke_result_t<Fn, T&>> &&
                  !is_reference_v<invoke_result_t<Fn, T&>>)
     inline constexpr auto optional<T>::transform(Fn&& fn) & -> optional<invoke_result_t<Fn, T&>>
     {
@@ -746,7 +746,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires(is_invocable<Fn, const T&> && !is_void_v<invoke_result_t<Fn, const T&>> &&
+        requires(is_invocable<Fn, const T&>::value && !is_void_v<invoke_result_t<Fn, const T&>> &&
                  !is_reference_v<invoke_result_t<Fn, const T&>>)
     inline constexpr auto optional<T>::transform(Fn&& fn) const& -> optional<invoke_result_t<Fn, const T&>>
     {
@@ -762,7 +762,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires(is_invocable<Fn, T&&> && !is_void_v<invoke_result_t<Fn, T&&>> &&
+        requires(is_invocable<Fn, T&&>::value && !is_void_v<invoke_result_t<Fn, T&&>> &&
                  !is_reference_v<invoke_result_t<Fn, T&&>>)
     inline constexpr auto optional<T>::transform(Fn&& fn) && -> optional<invoke_result_t<Fn, T&&>>
     {
@@ -778,7 +778,7 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires(is_invocable<Fn, const T&&> && !is_void_v<invoke_result_t<Fn, const T&&>> &&
+        requires(is_invocable<Fn, const T&&>::value && !is_void_v<invoke_result_t<Fn, const T&&>> &&
                  !is_reference_v<invoke_result_t<Fn, const T&&>>)
     inline constexpr auto optional<T>::transform(Fn&& fn) const&& -> optional<invoke_result_t<Fn, const T&&>>
     {

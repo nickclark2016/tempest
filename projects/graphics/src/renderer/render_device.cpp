@@ -233,7 +233,7 @@ namespace tempest::graphics
                     std::memcpy(staging_buffer_bytes.data() + staging_buffer_bytes_written,
                                 mip_data.data.data() + mip_bytes_written, bytes_to_write);
                     cmds->copy(staging_buffer, images[image_index], buffer_offset, mip_data.width,
-                               static_cast<std::uint32_t>(row_count), mip_index, 0, row_index);
+                               static_cast<uint32_t>(row_count), mip_index, 0, static_cast<int32_t>(row_index));
 
                     row_index += row_count;
                     mip_bytes_written += bytes_to_write;

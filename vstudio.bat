@@ -1,1 +1,0 @@
-.\dependencies\conjure\conjure.exe vstudio -s windows

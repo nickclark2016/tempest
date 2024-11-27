@@ -2,7 +2,6 @@
 
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
-#include <tempest/mesh_asset.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/transform_component.hpp>
 
@@ -14,21 +13,6 @@ namespace tempest
     namespace
     {
         auto log = logger::logger_factory::create({.prefix{"tempest::engine"}});
-
-        graphics::alpha_behavior convert_material_type(assets::material_type type)
-        {
-            switch (type)
-            {
-            case assets::material_type::OPAQUE:
-                return graphics::alpha_behavior::OPAQUE;
-            case assets::material_type::BLEND:
-                return graphics::alpha_behavior::TRANSPARENT;
-            case assets::material_type::MASK:
-                return graphics::alpha_behavior::MASK;
-            }
-
-            std::exit(EXIT_FAILURE);
-        }
     } // namespace
 
     engine::engine()
@@ -115,158 +99,6 @@ namespace tempest
         }
 
         _render_system.on_close();
-    }
-
-    ecs::entity engine::load_asset(std::string_view path)
-    {
-        auto model_result = assets::load_scene(std::string(path));
-        if (!model_result)
-        {
-            log->error("Failed to load asset: {}", path);
-            return ecs::tombstone;
-        }
-
-        auto& model = *model_result;
-
-        std::unordered_map<std::uint32_t, ecs::entity> node_to_entity;
-
-        auto root = _entity_registry.acquire_entity();
-        auto root_relationship = ecs::relationship_component<ecs::entity>{
-            .parent = ecs::tombstone,
-            .next_sibling = ecs::tombstone,
-            .first_child = ecs::tombstone,
-        };
-        _entity_registry.assign(root, root_relationship);
-
-        std::uint32_t node_id = 0;
-        std::uint32_t renderable_count = 0;
-
-        for (auto& node : model.nodes)
-        {
-            auto ent = _entity_registry.acquire_entity();
-            node_to_entity[node_id] = ent;
-
-            ecs::transform_component transform;
-            transform.position(node.position);
-            transform.rotation(node.rotation);
-            transform.scale(node.scale);
-
-            _entity_registry.assign(ent, transform);
-
-            _entity_registry.name(ent, node.name);
-
-            ++node_id;
-        }
-
-        for (auto& [node_id, ent] : node_to_entity)
-        {
-            auto& node = model.nodes[node_id];
-
-            ecs::relationship_component<ecs::entity> relationship{
-                .parent = node.parent == std::numeric_limits<std::uint32_t>::max() ? root : node_to_entity[node.parent],
-                .next_sibling = ecs::tombstone,
-                .first_child = ecs::tombstone,
-            };
-
-            auto& parent_relationship =
-                _entity_registry.get<ecs::relationship_component<ecs::entity>>(relationship.parent);
-            relationship.next_sibling = parent_relationship.first_child;
-            parent_relationship.first_child = ent;
-
-            _entity_registry.assign(ent, relationship);
-
-            if (node.mesh_id != std::numeric_limits<std::uint32_t>::max()) [[likely]]
-            {
-                graphics::renderable_component renderable;
-                renderable.mesh_id = node.mesh_id + _render_system.mesh_count();
-                renderable.material_id = model.meshes[node.mesh_id].material_id + _render_system.material_count();
-                renderable.object_id = renderable_count + _render_system.object_count();
-                ++renderable_count;
-
-                _entity_registry.assign(ent, renderable);
-            }
-        }
-
-        for (auto& [_, ent] : node_to_entity)
-        {
-            auto& relationship = _entity_registry.get<ecs::relationship_component<ecs::entity>>(ent);
-            if (relationship.parent != root)
-            {
-                auto& parent_relationship =
-                    _entity_registry.get<ecs::relationship_component<ecs::entity>>(relationship.parent);
-                if (parent_relationship.first_child == ecs::tombstone)
-                {
-                    parent_relationship.first_child = ent;
-                }
-                else
-                {
-                    auto sibling = parent_relationship.first_child;
-                    while (_entity_registry.get<ecs::relationship_component<ecs::entity>>(sibling).next_sibling !=
-                           ecs::tombstone)
-                    {
-                        sibling = _entity_registry.get<ecs::relationship_component<ecs::entity>>(sibling).next_sibling;
-                    }
-
-                    auto& sibling_relationship =
-                        _entity_registry.get<ecs::relationship_component<ecs::entity>>(sibling);
-                    sibling_relationship.next_sibling = ent;
-                }
-            }
-        }
-
-        vector<core::mesh> meshes;
-        meshes.reserve(model.meshes.size());
-        for (auto& mesh : model.meshes)
-        {
-            meshes.push_back(mesh.mesh);
-        }
-
-        _render_system.load_meshes(meshes);
-        _render_system.allocate_entities(node_id);
-
-        for (auto material : model.materials)
-        {
-            graphics::material_payload payload{
-                .type = convert_material_type(material.type),
-                .albedo_map_id = material.base_color_texture,
-                .normal_map_id = material.normal_map_texture,
-                .metallic_map_id = material.metallic_roughness_texture,
-                .ao_map_id = material.occlusion_map_texture,
-                .emissive_map_id = material.emissive_map_texture,
-                .alpha_cutoff = material.alpha_cutoff,
-                .metallic_factor = material.metallic_factor,
-                .roughness_factor = material.roughness_factor,
-                .reflectance = 0.0f,
-                .base_color_factor = material.base_color_factor,
-                .emissive_factor = material.emissive_factor,
-            };
-
-            _render_system.load_material(payload);
-        }
-
-        vector<graphics::texture_data_descriptor> texture_descriptors;
-        for (auto& tex_asset : model.textures)
-        {
-            graphics::texture_data_descriptor desc{
-                .fmt = tex_asset.type == assets::texture_asset_type::LINEAR ? graphics::resource_format::RGBA8_UNORM
-                                                                            : graphics::resource_format::RGBA8_SRGB,
-                .mips{
-                    {
-                        {
-                            .width = tex_asset.width,
-                            .height = tex_asset.height,
-                            .bytes = tex_asset.data,
-                        },
-                    },
-                },
-            };
-
-            texture_descriptors.push_back(desc);
-        }
-
-        _render_system.load_textures(texture_descriptors, true);
-
-        return root;
     }
 
     ecs::entity engine::load_entity(ecs::entity src)
