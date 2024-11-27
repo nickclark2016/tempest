@@ -11,6 +11,8 @@
 #include <filesystem>
 
 #include <simdjson.h>
+
+#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 namespace tempest::assets

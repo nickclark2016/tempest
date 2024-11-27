@@ -81,7 +81,6 @@ namespace tempest
             return _render_system;
         }
 
-        ecs::entity load_asset(std::string_view path);
         ecs::entity load_entity(ecs::entity src);
 
         [[noreturn]] void run();

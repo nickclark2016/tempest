@@ -1,0 +1,8 @@
+include 'assets'
+include 'core'
+include 'ecs'
+include 'editor'
+include 'graphics'
+include 'logger'
+include 'math'
+include 'tempest'

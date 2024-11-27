@@ -1,0 +1,22 @@
+local tempest = require '../tempest-config'
+
+group 'Engine'
+    project 'tempest'
+        kind 'StaticLib'
+        language 'C++'
+        cppdialect 'C++20'
+
+        targetdir '%{binaries}'
+        objdir '%{intermidates}'
+
+        files {
+            'include/**.hpp',
+            'src/**.cpp',
+            'src/**.hpp',
+        }
+
+        externalwarnings 'Off'
+
+        tempest.applyTempestInternalConfig()
+
+        IncludeDir['tempest'] = '%{root}/projects/tempest/include'

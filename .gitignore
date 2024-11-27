@@ -15,9 +15,10 @@ Makefile
 *.sln
 *.vcxproj
 *.vcxproj.user
+*.vcxproj.filters
 *.ninja
 *.ninja_log
 *.ninja_deps
 
 # Caches
-ConjureCache/
+TempestCache/
