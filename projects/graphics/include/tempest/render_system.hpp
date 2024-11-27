@@ -103,10 +103,28 @@ namespace tempest::graphics
             gpu_light_type light_type;
         };
 
-        struct shadow_cascade_data
+        struct orthogonal_bounds
         {
-            array<math::mat4<float>, 8> cascade_projections;
+            float left;
+            float right;
+            float bottom;
+            float top;
+            float near;
+            float far;
+        };
+
+        struct gpu_directional_shadow_map_parameters
+        {
+            static constexpr size_t max_shadow_cascade_count = 8;
+            
+            array<math::mat4<float>, max_shadow_cascade_count> cascade_view;
+            array<float, max_shadow_cascade_count> cascade_ranges;
             uint32_t cascade_count;
+        };
+
+        struct gpu_shadow_map_parameters
+        {
+            gpu_directional_shadow_map_parameters directional;
         };
 
         struct gpu_scene_data
@@ -284,6 +302,8 @@ namespace tempest::graphics
 
         size_t _last_updated_frame{2};
 
+        gpu_shadow_map_parameters _shadow_map_params;
+
         tempest::function<void()> _create_imgui_hierarchy;
 
         graphics_pipeline_resource_handle create_pbr_pipeline(bool enable_blend);
@@ -292,6 +312,8 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle create_taa_resolve_pipeline();
         graphics_pipeline_resource_handle create_sharpen_pipeline();
         graphics_pipeline_resource_handle create_directional_shadow_map_pipeline();
+
+        void build_shadow_cascades();
     };
 } // namespace tempest::graphics
 
