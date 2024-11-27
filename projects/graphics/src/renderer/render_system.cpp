@@ -1,10 +1,12 @@
 #include <tempest/render_system.hpp>
 
+#include <tempest/array.hpp>
 #include <tempest/files.hpp>
 #include <tempest/imgui_context.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/vector.hpp>
 
 #include <cstring>
 
@@ -14,7 +16,7 @@ namespace tempest::graphics
     {
         auto log = logger::logger_factory::create({"tempest::render_system"});
 
-        static std::array<math::vec2<float>, 16> jitter = {{
+        static array<math::vec2<float>, 16> jitter = {{
             {0.5f, 0.333333f},
             {0.25f, 0.666667f},
             {0.75f, 0.111111f},
@@ -154,8 +156,17 @@ namespace tempest::graphics
             .name = "Velocity Buffer",
         });
 
-        std::vector<image_resource_handle> hi_z_images;
-        for (std::uint32_t i = 0; i < 5; ++i)
+        auto shadow_map_l0 = rgc->create_image({
+            .width = 2048,
+            .height = 2048,
+            .fmt = resource_format::D24_FLOAT,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "Directional Shadow Map L0",
+        });
+
+        vector<image_resource_handle> hi_z_images;
+        for (uint32_t i = 0; i < 5; ++i)
         {
             // compute width and height of non-power of 2
             auto width = 1920u >> i;
@@ -200,6 +211,13 @@ namespace tempest::graphics
             .per_frame_memory = true,
         });
 
+        auto dir_shadow_buffer = rgc->create_buffer({
+            .size = 16 * 1024,
+            .location = memory_location::AUTO,
+            .name = "Shadow Map Parameter Buffer",
+            .per_frame_memory = true,
+        });
+
         _materials_buffer = rgc->create_buffer({
             .size = 1024 * 64 * sizeof(gpu_material_data),
             .location = memory_location::DEVICE,
@@ -207,7 +225,7 @@ namespace tempest::graphics
         });
 
         _instance_buffer = rgc->create_buffer({
-            .size = 1024 * 64 * sizeof(std::uint32_t),
+            .size = 1024 * 64 * sizeof(uint32_t),
             .location = memory_location::DEVICE,
             .name = "Instance Buffer",
             .per_frame_memory = true,
@@ -279,7 +297,7 @@ namespace tempest::graphics
         _scene_data.ambient_light = math::vec3<float>(0.1f, 0.1f, 0.1f);
 
         _hi_z_data = {
-            .size = math::vec2<std::uint32_t>(1920, 1080),
+            .size = math::vec2<uint32_t>(1920, 1080),
             .mip_count = 5,
         };
 
@@ -291,21 +309,24 @@ namespace tempest::graphics
             result.y = ((result.y - 0.5f) / _scene_data.screen_size.y) * 2;
         }
 
-        auto upload_pass =
-            rgc->add_graph_pass("Upload Pass", queue_operation_type::TRANSFER, [&](graph_pass_builder& builder) {
+        _shadow_map_params.directional.cascade_count = 1;
+
+        auto upload_pass = rgc->add_graph_pass(
+            "Upload Pass", queue_operation_type::TRANSFER, [&, dir_shadow_buffer](graph_pass_builder& builder) {
                 builder.add_transfer_destination_buffer(_scene_buffer)
                     .add_transfer_destination_buffer(_object_buffer)
                     .add_transfer_destination_buffer(_instance_buffer)
                     .add_transfer_destination_buffer(_indirect_buffer)
                     .add_transfer_destination_buffer(_hi_z_buffer_constants)
+                    .add_transfer_destination_buffer(dir_shadow_buffer)
                     .add_transfer_source_buffer(_device->get_staging_buffer())
                     .add_host_write_buffer(_device->get_staging_buffer())
-                    .on_execute([&](command_list& cmds) {
+                    .on_execute([&, dir_shadow_buffer](command_list& cmds) {
                         staging_buffer_writer writer{*_device};
 
                         if (_last_updated_frame + _device->frames_in_flight() > _device->current_frame())
                         {
-                            std::uint32_t instances_written = 0;
+                            uint32_t instances_written = 0;
 
                             for (const auto& [key, batch] : _draw_batches)
                             {
@@ -316,13 +337,13 @@ namespace tempest::graphics
                                 writer.write(cmds, span<const indexed_indirect_command>{batch.commands},
                                              _indirect_buffer, instances_written * sizeof(indexed_indirect_command));
 
-                                std::vector<std::uint32_t> instances(batch.objects.size());
+                                vector<uint32_t> instances(batch.objects.size());
 
                                 std::iota(instances.begin(), instances.end(), instances_written);
-                                writer.write(cmds, span<const std::uint32_t>{instances}, _instance_buffer,
-                                             instances_written * sizeof(std::uint32_t));
+                                writer.write(cmds, span<const uint32_t>{instances}, _instance_buffer,
+                                             instances_written * sizeof(uint32_t));
 
-                                instances_written += static_cast<std::uint32_t>(batch.objects.size());
+                                instances_written += static_cast<uint32_t>(batch.objects.size());
                             }
                         }
 
@@ -351,16 +372,13 @@ namespace tempest::graphics
                             _scene_data.camera.position = transform.position();
                         }
 
-                        if (_settings.aa_mode == anti_aliasing_mode::TAA)
-                        {
-                            auto jitter_value = jitter[_device->current_frame() % 16];
-                            _scene_data.jitter.x = jitter_value.x * 0.85f;
-                            _scene_data.jitter.y = jitter_value.y * 0.85f;
-                        }
-                        else
-                        {
-                            _scene_data.jitter = math::vec4<float>(0.0f, 0.0f, 0.0f, 0.0f);
-                        }
+                        // Upload Directional Shadow Map Data
+                        build_shadow_cascades();
+                        writer.write(cmds,
+                                     span<const gpu_shadow_map_parameters>{&_shadow_map_params, static_cast<size_t>(1)},
+                                     dir_shadow_buffer);
+
+                        _scene_data.jitter = math::vec4<float>(0.0f, 0.0f, 0.0f, 0.0f);
                         _scene_data.jitter.z = 0.0f;
                         _scene_data.jitter.w = 0.0f;
 
@@ -404,8 +422,8 @@ namespace tempest::graphics
                                 cmds.use_pipeline(_z_prepass_pipeline)
                                     .draw_indexed(
                                         _indirect_buffer,
-                                        static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
-                                        static_cast<std::uint32_t>(batch.objects.size()),
+                                        static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
+                                        static_cast<uint32_t>(batch.objects.size()),
                                         sizeof(indexed_indirect_command));
                             }
                         }
@@ -432,7 +450,7 @@ namespace tempest::graphics
                 .set_viewport(0, 0, 1920, 1080)
                 .use_index_buffer(_vertex_pull_buffer, 0);
 
-            std::uint32_t draw_calls_issued = 0;
+            uint32_t draw_calls_issued = 0;
 
             for (auto [key, batch] : _draw_batches)
             {
@@ -448,28 +466,47 @@ namespace tempest::graphics
 
                 cmds.use_pipeline(pipeline).draw_indexed(
                     _indirect_buffer,
-                    static_cast<std::uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                                               draw_calls_issued * sizeof(indexed_indirect_command)),
-                    static_cast<std::uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
+                    static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                                          draw_calls_issued * sizeof(indexed_indirect_command)),
+                    static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
 
-                draw_calls_issued += static_cast<std::uint32_t>(batch.commands.size());
+                draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
             }
         };
 
         _directional_shadow_map_pass = rgc->add_graph_pass(
             "Directional Shadow Map Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
-                bldr.depends_on(upload_pass).on_execute([&](command_list& cmds) {
-                    const auto& cam_data = _registry->get<camera_component>(_camera_entity);
-                    const auto& inv_view_transform = _scene_data.camera.inv_view;
+                bldr.depends_on(upload_pass)
+                    .add_depth_attachment(shadow_map_l0, resource_access_type::READ_WRITE, load_op::CLEAR,
+                                          store_op::STORE, 1.0f)
+                    .add_constant_buffer(dir_shadow_buffer, 0, 0)
+                    .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
+                    .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
+                    .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
+                    .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
+                    .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
+                    .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
+                    .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
+                    .add_indirect_argument_buffer(_indirect_buffer)
+                    .add_index_buffer(_vertex_pull_buffer)
+                    .on_execute([&](command_list& cmds) {
+                        uint32_t draw_calls_issued = 0;
 
-                    // Compute the light space transformation
-                    const auto light_view =
-                        math::look_at(math::vec3(0.0f), _scene_data.sun.direction, math::vec3<float>(0.0f, 1.0f, 0.0f));
+                        for (auto [key, batch] : _draw_batches)
+                        {
+                            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+                            {
+                                cmds.use_pipeline(_directional_shadow_map_pipeline)
+                                    .draw_indexed(
+                                        _indirect_buffer,
+                                        static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                                                              draw_calls_issued * sizeof(indexed_indirect_command)),
+                                        static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
 
-                    const auto aspect_ratio = cam_data.aspect_ratio;
-                    const auto tan_half_h_fov = std::tanf(cam_data.vertical_fov / 2.0f);
-                    const auto tan_half_v_fov = std::tanf((cam_data.vertical_fov * aspect_ratio) / 2.0f);
-                });
+                                draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
+                            }
+                        }
+                    });
             });
 
         _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
@@ -493,7 +530,6 @@ namespace tempest::graphics
                 .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
                 .add_indirect_argument_buffer(_indirect_buffer)
                 .add_index_buffer(_vertex_pull_buffer)
-                .should_execute([this]() { return _settings.aa_mode != anti_aliasing_mode::MSAA; })
                 .on_execute(pbr_commands);
         });
 
@@ -566,6 +602,7 @@ namespace tempest::graphics
 
         _graph->update_external_sampled_images(_pbr_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
         _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_directional_shadow_map_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
 
         _pbr_opaque_pipeline = create_pbr_pipeline(false);
         _pbr_transparencies_pipeline = create_pbr_pipeline(true);
@@ -600,9 +637,9 @@ namespace tempest::graphics
             {
                 gpu_object_data object_payload = {
                     .model = math::mat4<float>(1.0f),
-                    .mesh_id = static_cast<std::uint32_t>(renderable.mesh_id),
-                    .material_id = static_cast<std::uint32_t>(renderable.material_id),
-                    .self_id = static_cast<std::uint32_t>(renderable.object_id),
+                    .mesh_id = static_cast<uint32_t>(renderable.mesh_id),
+                    .material_id = static_cast<uint32_t>(renderable.material_id),
+                    .self_id = static_cast<uint32_t>(renderable.object_id),
                 };
 
                 auto ancestor_view = ecs::ancestor_entity_view(*_registry, ent);
@@ -647,13 +684,13 @@ namespace tempest::graphics
                     .instance_count = 1,
                     .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
                     .vertex_offset = 0,
-                    .first_instance = static_cast<std::uint32_t>(draw_batch.objects.index_of(ent)),
+                    .first_instance = static_cast<uint32_t>(draw_batch.objects.index_of(ent)),
                 });
             }
 
             // Iterate through the draw batches and update first instance based on the number of instances in the
             // previous batches
-            std::uint32_t instances_written = 0;
+            uint32_t instances_written = 0;
             for (auto [_, batch] : _draw_batches)
             {
                 for (auto& cmd : batch.commands)
@@ -661,7 +698,7 @@ namespace tempest::graphics
                     cmd.first_instance += instances_written;
                 }
 
-                instances_written += static_cast<std::uint32_t>(batch.objects.size());
+                instances_written += static_cast<uint32_t>(batch.objects.size());
             }
 
             // Find the directional light for the scene
@@ -861,22 +898,22 @@ namespace tempest::graphics
             .metallic_factor = material.metallic_factor,
             .roughness_factor = material.roughness_factor,
             .alpha_cutoff = material.alpha_cutoff,
-            .base_color_texture_id = material.albedo_map_id == std::numeric_limits<std::uint32_t>::max()
+            .base_color_texture_id = material.albedo_map_id == std::numeric_limits<uint32_t>::max()
                                          ? gpu_material_data::INVALID_TEXTURE_ID
-                                         : static_cast<std::int16_t>(texture_count() + material.albedo_map_id),
-            .normal_texture_id = material.normal_map_id == std::numeric_limits<std::uint32_t>::max()
+                                         : static_cast<int16_t>(texture_count() + material.albedo_map_id),
+            .normal_texture_id = material.normal_map_id == std::numeric_limits<uint32_t>::max()
                                      ? gpu_material_data::INVALID_TEXTURE_ID
-                                     : static_cast<std::int16_t>(texture_count() + material.normal_map_id),
+                                     : static_cast<int16_t>(texture_count() + material.normal_map_id),
             .metallic_roughness_texture_id =
-                material.metallic_map_id == std::numeric_limits<std::uint32_t>::max()
+                material.metallic_map_id == std::numeric_limits<uint32_t>::max()
                     ? gpu_material_data::INVALID_TEXTURE_ID
-                    : static_cast<std::int16_t>(texture_count() + material.metallic_map_id),
-            .emissive_texture_id = material.emissive_map_id == std::numeric_limits<std::uint32_t>::max()
+                    : static_cast<int16_t>(texture_count() + material.metallic_map_id),
+            .emissive_texture_id = material.emissive_map_id == std::numeric_limits<uint32_t>::max()
                                        ? gpu_material_data::INVALID_TEXTURE_ID
-                                       : static_cast<std::int16_t>(texture_count() + material.emissive_map_id),
-            .occlusion_texture_id = material.ao_map_id == std::numeric_limits<std::uint32_t>::max()
+                                       : static_cast<int16_t>(texture_count() + material.emissive_map_id),
+            .occlusion_texture_id = material.ao_map_id == std::numeric_limits<uint32_t>::max()
                                         ? gpu_material_data::INVALID_TEXTURE_ID
-                                        : static_cast<std::int16_t>(texture_count() + material.ao_map_id),
+                                        : static_cast<int16_t>(texture_count() + material.ao_map_id),
             .material_type = static_cast<gpu_material_type>(material.type),
         };
 
@@ -939,7 +976,7 @@ namespace tempest::graphics
                 if (const auto albedo_map = material->get_texture(core::material::base_color_texture_name))
                 {
                     auto tex_id = _image_id_map[*albedo_map];
-                    gpu_material.base_color_texture_id = static_cast<std::int16_t>(tex_id);
+                    gpu_material.base_color_texture_id = static_cast<int16_t>(tex_id);
                 }
                 else
                 {
@@ -949,7 +986,7 @@ namespace tempest::graphics
                 if (const auto normal_map = material->get_texture(core::material::normal_texture_name))
                 {
                     auto tex_id = _image_id_map[*normal_map];
-                    gpu_material.normal_texture_id = static_cast<std::int16_t>(tex_id);
+                    gpu_material.normal_texture_id = static_cast<int16_t>(tex_id);
                 }
                 else
                 {
@@ -959,7 +996,7 @@ namespace tempest::graphics
                 if (const auto metallic_map = material->get_texture(core::material::metallic_roughness_texture_name))
                 {
                     auto tex_id = _image_id_map[*metallic_map];
-                    gpu_material.metallic_roughness_texture_id = static_cast<std::int16_t>(tex_id);
+                    gpu_material.metallic_roughness_texture_id = static_cast<int16_t>(tex_id);
                 }
                 else
                 {
@@ -969,7 +1006,7 @@ namespace tempest::graphics
                 if (const auto emissive_map = material->get_texture(core::material::emissive_texture_name))
                 {
                     auto tex_id = _image_id_map[*emissive_map];
-                    gpu_material.emissive_texture_id = static_cast<std::int16_t>(tex_id);
+                    gpu_material.emissive_texture_id = static_cast<int16_t>(tex_id);
                 }
                 else
                 {
@@ -979,7 +1016,7 @@ namespace tempest::graphics
                 if (const auto ao_map = material->get_texture(core::material::occlusion_texture_name))
                 {
                     auto tex_id = _image_id_map[*ao_map];
-                    gpu_material.occlusion_texture_id = static_cast<std::int16_t>(tex_id);
+                    gpu_material.occlusion_texture_id = static_cast<int16_t>(tex_id);
                 }
                 else
                 {
@@ -1424,7 +1461,7 @@ namespace tempest::graphics
         };
 
         // Depth buffer format
-        resource_format depth_buffer_fmt[] = {resource_format::D32_FLOAT};
+        resource_format depth_buffer_fmt[] = {resource_format::D24_FLOAT};
 
         auto pipeline = _device->create_graphics_pipeline({
             .layout{
@@ -1457,5 +1494,101 @@ namespace tempest::graphics
         _graphics_pipelines.push_back(pipeline);
 
         return pipeline;
+    }
+
+    void render_system::build_shadow_cascades()
+    {
+        const auto& cam_data = _registry->get<camera_component>(_camera_entity);
+        const auto& inv_view_transform = _scene_data.camera.inv_view;
+
+        // Compute the light space transformation
+        const auto light_view =
+            math::look_at(math::vec3(0.0f), _scene_data.sun.direction, math::vec3<float>(0.0f, 1.0f, 0.0f));
+
+        const auto aspect_ratio = cam_data.aspect_ratio;
+        const auto tan_half_h_fov = std::tanf(cam_data.vertical_fov * aspect_ratio / 2.0f);
+        const auto tan_half_v_fov = std::tanf((cam_data.vertical_fov) / 2.0f);
+
+        // Set up the cascade ranges
+        const auto near_plane = cam_data.near_plane;
+        const auto far_plane = cam_data.far_shadow_plane;
+
+        static constexpr auto range_bound_count = gpu_directional_shadow_map_parameters::max_shadow_cascade_count + 1;
+
+        array<float, range_bound_count> cascade_ranges;
+        cascade_ranges[0] = near_plane;
+        cascade_ranges[_shadow_map_params.directional.cascade_count] = far_plane;
+
+        // Compute the cascade splits using logarithmic interpolation
+        for (uint32_t i = 1; i < _shadow_map_params.directional.cascade_count; ++i)
+        {
+            const auto p = static_cast<float>(i) / static_cast<float>(_shadow_map_params.directional.cascade_count);
+            cascade_ranges[i] = near_plane * std::powf(far_plane / near_plane, p);
+        }
+
+        for (size_t cascade_index = 0; cascade_index < _shadow_map_params.directional.cascade_count; ++cascade_index)
+        {
+            // TODO: Cache the light space frustum corners
+            const auto x_near = cascade_ranges[cascade_index] * tan_half_h_fov;
+            const auto x_far = cascade_ranges[cascade_index + 1] * tan_half_h_fov;
+            const auto y_near = cascade_ranges[cascade_index] * tan_half_v_fov;
+            const auto y_far = cascade_ranges[cascade_index + 1] * tan_half_v_fov;
+
+            // Compute the frustum corners
+            array<math::vec4<float>, 8> frustum_corners = {
+                // Near Face
+                math::vec4<float>(-x_near, -y_near, cascade_ranges[cascade_index], 1.0f),
+                math::vec4<float>(x_near, -y_near, cascade_ranges[cascade_index], 1.0f),
+                math::vec4<float>(x_near, y_near, cascade_ranges[cascade_index], 1.0f),
+                math::vec4<float>(-x_near, y_near, cascade_ranges[cascade_index], 1.0f),
+                // Far Face
+                math::vec4<float>(-x_far, -y_far, cascade_ranges[cascade_index + 1], 1.0f),
+                math::vec4<float>(x_far, -y_far, cascade_ranges[cascade_index + 1], 1.0f),
+                math::vec4<float>(x_far, y_far, cascade_ranges[cascade_index + 1], 1.0f),
+                math::vec4<float>(-x_far, y_far, cascade_ranges[cascade_index + 1], 1.0f),
+            };
+
+            // Transform the frustum corners to light space and get the bounds
+            float min_x = std::numeric_limits<float>::max();
+            float min_y = std::numeric_limits<float>::max();
+            float min_z = std::numeric_limits<float>::max();
+            float max_x = std::numeric_limits<float>::min();
+            float max_y = std::numeric_limits<float>::min();
+            float max_z = std::numeric_limits<float>::min();
+
+            array<math::vec4<float>, 8> light_space_corners;
+
+            for (size_t idx = 0; idx < 8; ++idx)
+            {
+                auto corner = frustum_corners[idx];
+
+                const auto world_space_corner = inv_view_transform * corner;
+                const auto light_space_corner = light_view * world_space_corner;
+
+                min_x = std::min(min_x, light_space_corner.x);
+                min_y = std::min(min_y, light_space_corner.y);
+                min_z = std::min(min_z, light_space_corner.z);
+
+                max_x = std::max(max_x, light_space_corner.x);
+                max_y = std::max(max_y, light_space_corner.y);
+                max_z = std::max(max_z, light_space_corner.z);
+            }
+
+            const auto cascade_bounds = orthogonal_bounds{
+                .left = min_x,
+                .right = max_x,
+                .bottom = min_y,
+                .top = max_y,
+                .near = min_z,
+                .far = max_z,
+            };
+
+            // Build projection matrix
+            const auto proj = math::ortho(cascade_bounds.left, cascade_bounds.right, cascade_bounds.bottom,
+                                          cascade_bounds.top, cascade_bounds.near, cascade_bounds.far);
+
+            _shadow_map_params.directional.cascade_view[cascade_index] = proj * light_view;
+            _shadow_map_params.directional.cascade_ranges[cascade_index] = cascade_ranges[cascade_index + 1];
+        }
     }
 } // namespace tempest::graphics

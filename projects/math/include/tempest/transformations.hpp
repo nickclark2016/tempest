@@ -335,6 +335,20 @@ namespace tempest::math
     }
 
     template <typename T>
+    inline constexpr mat4<T> ortho(const T left, const T right, const T top, const T bottom, const T near, const T far)
+    {
+        const auto sx = T(2) / (right - left);
+        const auto sy = T(2) / (top - bottom);
+        const auto sz = T(-2) / (far - near);
+
+        const auto tx = -(right + left) / (right - left);
+        const auto ty = -(top + bottom) / (top - bottom);
+        const auto tz = -(far + near) / (far - near);
+
+        return mat4<T>{sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, tx, ty, tz, 1};
+    }
+
+    template <typename T>
     mat4<T> look_at(const vec3<T>& eye, const vec3<T>& target, const vec3<T>& up)
     {
         const auto dir = target - eye;
