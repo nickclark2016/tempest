@@ -11,6 +11,8 @@ group 'Engine'
             'include/**.hpp',
             'src/**.cpp',
             'src/**.hpp',
+            -- Shaders
+            'shaders/**.slang',
         }
 
         dependson {
@@ -55,5 +57,31 @@ group 'Engine'
             '%{IncludeDir.vma}',
             '%{IncludeDir.vulkan}',
         }
+
+        filter { 'files:shaders/raster/**.slang' }
+            buildmessage 'Compiling %{file.relpath}'
+
+            buildcommands {
+                '"%{fetch.slang}" "%[%{!file.relpath}]" -I"%{prj.basedir}/shaders/common" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
+                '"%{fetch.slang}" "%[%{!file.relpath}]" -I"%{prj.basedir}/shaders/common" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
+            }
+            
+            buildoutputs {
+                '%{cfg.targetdir}/shaders/%{file.basename}.vert.spv',
+                '%{cfg.targetdir}/shaders/%{file.basename}.frag.spv'
+            }
+
+        filter { 'files:shaders/compute/**.slang' }
+            buildmessage 'Compiling %{file.relpath}'
+
+            buildcommands {
+                '"%{fetch.slang}" "%[%{!file.relpath}]" -I"%{prj.basedir}/shaders/common" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
+            }
+            
+            buildoutputs {
+                '%{cfg.targetdir}/shaders/%{file.basename}.comp.spv',
+            }
+
+        filter {}
 
         IncludeDir['graphics'] = '%{root}/projects/graphics/include'
