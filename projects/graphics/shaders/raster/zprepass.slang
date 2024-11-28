@@ -1,8 +1,8 @@
-#include "camera.slang"
-#include "consts.slang"
-#include "material.slang"
-#include "mesh.slang"
-#include "vertex_pull.slang"
+#include "../common/camera.slang"
+#include "../common/consts.slang"
+#include "../common/material.slang"
+#include "../common/mesh.slang"
+#include "../common/vertex_pull.slang"
 
 struct SceneGlobals {
     Camera camera;
