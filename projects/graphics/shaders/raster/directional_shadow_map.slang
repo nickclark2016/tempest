@@ -1,10 +1,10 @@
-#include "camera.slang"
-#include "consts.slang"
-#include "lighting.slang"
-#include "material.slang"
-#include "mesh.slang"
-#include "shadows.slang"
-#include "vertex_pull.slang"
+#include "../common/camera.slang"
+#include "../common/consts.slang"
+#include "../common/lighting.slang"
+#include "../common/material.slang"
+#include "../common/mesh.slang"
+#include "../common/shadows.slang"
+#include "../common/vertex_pull.slang"
 
 struct VertexOutput {
     float4 position         : SV_Position;
