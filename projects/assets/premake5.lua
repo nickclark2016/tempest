@@ -1,5 +1,5 @@
-group 'Engine'
-    project 'assets'
+scoped.group('Engine', function()
+    scoped.project('assets', function()
         kind 'StaticLib'
         language 'C++'
         cppdialect 'C++20'
@@ -51,3 +51,5 @@ group 'Engine'
         externalwarnings 'Off'
         
         IncludeDir['assets'] = '%{root}/projects/assets/include'
+    end)
+end)

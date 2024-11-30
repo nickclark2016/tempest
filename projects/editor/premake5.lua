@@ -1,7 +1,7 @@
 local tempest = require '../tempest-config'
 
-group 'Engine'
-    project 'editor'
+scoped.group('Editor', function()
+    scoped.project('editor', function()
         kind 'ConsoleApp'
         language 'C++'
         cppdialect 'C++20'
@@ -21,5 +21,6 @@ group 'Engine'
         }
 
         tempest.applyTempestConfig()
-
+    end)
+end)
         

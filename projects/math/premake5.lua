@@ -1,26 +1,28 @@
-group 'Engine'
-    project 'math'
-    kind 'StaticLib'
-    language 'C++'
-    cppdialect 'C++20'
+scoped.group('Engine', function()
+    scoped.project('math', function()
+        kind 'StaticLib'
+        language 'C++'
+        cppdialect 'C++20'
 
-    targetdir '%{binaries}'
-    objdir '%{intermidates}'
+        targetdir '%{binaries}'
+        objdir '%{intermidates}'
 
-    files {
-        'include/**.hpp',
-        'src/**.cpp',
-        'src/**.hpp',
-    }
+        files {
+            'include/**.hpp',
+            'src/**.cpp',
+            'src/**.hpp',
+        }
 
-    includedirs {
-        'include',
-    }
+        includedirs {
+            'include',
+        }
 
-    IncludeDir['math'] = '%{root}/projects/math/include'
+        IncludeDir['math'] = '%{root}/projects/math/include'
+    end)
+end)
 
-group 'Tests'
-    project 'math-tests'
+scoped.group('Tests', function()
+    scoped.project('math-tests', function()
         kind 'ConsoleApp'
         language 'C++'
         cppdialect 'C++20'
@@ -46,3 +48,5 @@ group 'Tests'
             'math',
             'googletest',
         }
+    end)
+end)
