@@ -1,5 +1,5 @@
-group 'Engine'
-    project 'ecs'
+scoped.group('Engine', function()
+    scoped.project('ecs', function()
         kind 'StaticLib'
         language 'C++'
         cppdialect 'C++20'
@@ -34,9 +34,11 @@ group 'Engine'
         IncludeDir['ecs'] = '%{root}/projects/ecs/include'
 
         externalwarnings 'Off'
+    end)
+end)
 
-group 'Tests'
-    project 'ecs-tests'
+scoped.group('Tests', function()
+    scoped.project('ecs-tests', function()
         kind 'ConsoleApp'
         language 'C++'
         cppdialect 'C++20'
@@ -68,3 +70,5 @@ group 'Tests'
             'math',
             'tlsf',
         }
+    end)
+end)

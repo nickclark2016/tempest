@@ -1,5 +1,5 @@
-group 'Engine'
-    project 'graphics'
+scoped.group('Engine', function()
+    scoped.project('graphics', function()
         kind 'StaticLib'
         language 'C++'
         cppdialect 'C++20'
@@ -58,7 +58,9 @@ group 'Engine'
             '%{IncludeDir.vulkan}',
         }
 
-        filter { 'files:shaders/raster/**.slang' }
+        IncludeDir['graphics'] = '%{root}/projects/graphics/include'
+
+        scoped.filter({ 'files:shaders/raster/**.slang' }, function()
             buildmessage 'Compiling %{file.relpath}'
 
             buildcommands {
@@ -70,8 +72,9 @@ group 'Engine'
                 '%{cfg.targetdir}/shaders/%{file.basename}.vert.spv',
                 '%{cfg.targetdir}/shaders/%{file.basename}.frag.spv'
             }
+        end)
 
-        filter { 'files:shaders/compute/**.slang' }
+        scoped.filter({ 'files:shaders/compute/**.slang' }, function()
             buildmessage 'Compiling %{file.relpath}'
 
             buildcommands {
@@ -81,7 +84,6 @@ group 'Engine'
             buildoutputs {
                 '%{cfg.targetdir}/shaders/%{file.basename}.comp.spv',
             }
-
-        filter {}
-
-        IncludeDir['graphics'] = '%{root}/projects/graphics/include'
+        end)
+    end)
+end)

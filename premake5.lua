@@ -1,7 +1,8 @@
 require('premake', '>=5.0.0-beta3')
 fetch = require 'build/fetch'
+scoped = require 'build/premake-scoped'
 
-workspace 'Tempest'
+scoped.workspace('Tempest', function()
     configurations { 'Debug', 'Release' }
     platforms { 'x64' }
 
@@ -40,3 +41,4 @@ workspace 'Tempest'
 
     include 'dependencies'
     include 'projects'
+end)

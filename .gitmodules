@@ -1,3 +1,6 @@
 [submodule "sandbox/assets/glTF-Sample-Assets"]
 	path = sandbox/assets/glTF-Sample-Assets
 	url = git@github.com:KhronosGroup/glTF-Sample-Assets.git
+[submodule "build/premake-scoped"]
+	path = build/premake-scoped
+	url = git@github.com:nickclark2016/premake-scoped.git
