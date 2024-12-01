@@ -37,36 +37,36 @@ scoped.group('Engine', function()
     
         externalwarnings 'Off'
     end)
-end)
 
-scoped.group('Tests', function()
-    scoped.project('core-tests', function()
-        kind 'ConsoleApp'
-        language 'C++'
-        cppdialect 'C++20'
-    
-        targetdir '%{binaries}'
-        objdir '%{intermidates}'
-    
-        files {
-            'tests/**.cpp',
-        }
-    
-        includedirs {
-            'include',
-            '%{IncludeDir.gtest}',
-        }
-    
-        dependson {
-            'core',
-            'googletest',
-        }
-    
-        links {
-            'core',
-            'googletest',
-        }
-    
-        externalwarnings 'Off'
+    scoped.group('Tests', function()
+        scoped.project('core-tests', function()
+            kind 'ConsoleApp'
+            language 'C++'
+            cppdialect 'C++20'
+        
+            targetdir '%{binaries}'
+            objdir '%{intermidates}'
+        
+            files {
+                'tests/**.cpp',
+            }
+        
+            includedirs {
+                'include',
+                '%{IncludeDir.gtest}',
+            }
+        
+            dependson {
+                'core',
+                'googletest',
+            }
+        
+            links {
+                'core',
+                'googletest',
+            }
+        
+            externalwarnings 'Off'
+        end)
     end)
 end)
