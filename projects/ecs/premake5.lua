@@ -35,40 +35,40 @@ scoped.group('Engine', function()
 
         externalwarnings 'Off'
     end)
-end)
 
-scoped.group('Tests', function()
-    scoped.project('ecs-tests', function()
-        kind 'ConsoleApp'
-        language 'C++'
-        cppdialect 'C++20'
-
-        targetdir '%{binaries}'
-        objdir '%{intermidates}'
-
-        files {
-            'tests/**.cpp',
-        }
-
-        includedirs {
-            'include',
-            '%{IncludeDir.core}',
-            '%{IncludeDir.gtest}',
-            '%{IncludeDir.math}',
-        }
-
-        dependson {
-            'ecs',
-            'googletest',
-        }
-
-        links {
-            'core',
-            'ecs',
-            'glfw',
-            'googletest',
-            'math',
-            'tlsf',
-        }
+    scoped.group('Tests', function()
+        scoped.project('ecs-tests', function()
+            kind 'ConsoleApp'
+            language 'C++'
+            cppdialect 'C++20'
+    
+            targetdir '%{binaries}'
+            objdir '%{intermidates}'
+    
+            files {
+                'tests/**.cpp',
+            }
+    
+            includedirs {
+                'include',
+                '%{IncludeDir.core}',
+                '%{IncludeDir.gtest}',
+                '%{IncludeDir.math}',
+            }
+    
+            dependson {
+                'ecs',
+                'googletest',
+            }
+    
+            links {
+                'core',
+                'ecs',
+                'glfw',
+                'googletest',
+                'math',
+                'tlsf',
+            }
+        end)
     end)
 end)

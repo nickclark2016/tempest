@@ -19,34 +19,34 @@ scoped.group('Engine', function()
 
         IncludeDir['math'] = '%{root}/projects/math/include'
     end)
-end)
 
-scoped.group('Tests', function()
-    scoped.project('math-tests', function()
-        kind 'ConsoleApp'
-        language 'C++'
-        cppdialect 'C++20'
-
-        targetdir '%{binaries}'
-        objdir '%{intermidates}'
-
-        files {
-            'tests/**.cpp',
-        }
-
-        includedirs {
-            'include',
-            '%{IncludeDir.gtest}',
-        }
-
-        dependson {
-            'math',
-            'googletest',
-        }
-
-        links {
-            'math',
-            'googletest',
-        }
+    scoped.group('Tests', function()
+        scoped.project('math-tests', function()
+            kind 'ConsoleApp'
+            language 'C++'
+            cppdialect 'C++20'
+    
+            targetdir '%{binaries}'
+            objdir '%{intermidates}'
+    
+            files {
+                'tests/**.cpp',
+            }
+    
+            includedirs {
+                'include',
+                '%{IncludeDir.gtest}',
+            }
+    
+            dependson {
+                'math',
+                'googletest',
+            }
+    
+            links {
+                'math',
+                'googletest',
+            }
+        end)
     end)
 end)
