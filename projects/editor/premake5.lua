@@ -7,7 +7,7 @@ scoped.group('Editor', function()
         cppdialect 'C++20'
 
         targetdir '%{binaries}'
-        objdir '%{intermidates}'
+        objdir '%{intermediates}'
         debugdir '%{root}/sandbox'
     
         files {

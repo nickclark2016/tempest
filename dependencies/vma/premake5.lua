@@ -4,7 +4,7 @@ project 'vma'
     cppdialect 'C++20'
     
     targetdir '%{binaries}'
-    objdir '%{intermidates}'
+    objdir '%{intermediates}'
 
     files {
         'include/vk_mem_alloc.h',

@@ -4,7 +4,7 @@ project 'vk-bootstrap'
     cppdialect 'C++20'
 
     targetdir '%{binaries}'
-    objdir '%{intermidates}'
+    objdir '%{intermediates}'
 
     files {
         'include/**.h',

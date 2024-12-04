@@ -4,7 +4,7 @@ project 'googletest'
     cppdialect 'C++20'
 
     targetdir '%{binaries}'
-    objdir '%{intermidates}'
+    objdir '%{intermediates}'
     
     files {
         './src/gmock-all.cc',

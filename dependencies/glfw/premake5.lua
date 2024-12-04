@@ -5,7 +5,7 @@ project 'glfw'
     targetname 'glfw'
     
     targetdir '%{binaries}'
-    objdir '%{intermidates}'
+    objdir '%{intermediates}'
 
     files {
         'include/GLFW/glfw3.h',
