@@ -102,7 +102,7 @@ namespace tempest
     }
 
     heap_allocator::heap_allocator(size_t bytes)
-        : _memory{reinterpret_cast<byte*>(std::malloc(bytes))}, _max_size{bytes}, _allocated_size{0}
+        : _memory{reinterpret_cast<byte*>(std::malloc(bytes))}, _allocated_size{0}, _max_size{bytes}
     {
         _tlsf_handle = tlsf_create_with_pool(_memory, _max_size);
     }

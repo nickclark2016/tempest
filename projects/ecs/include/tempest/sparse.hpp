@@ -455,8 +455,8 @@ namespace tempest::ecs
         using sparse_alloc_type = typename alloc_traits::template rebind_alloc<typename alloc_traits::pointer>;
         using sparse_alloc_traits = allocator_traits<sparse_alloc_type>;
 
-        [[no_unique_address]] packed_alloc_type _packed_alloc;
-        [[no_unique_address]] sparse_alloc_type _sparse_alloc;
+        packed_alloc_type _packed_alloc;
+        sparse_alloc_type _sparse_alloc;
 
         size_t _free_list_head{traits_type::entity_mask};
 
@@ -507,9 +507,9 @@ namespace tempest::ecs
         using size_type = size_t;
         using difference_type = ptrdiff_t;
         using reference =
-            pair<typename add_const_t<typename add_lvalue_reference_t<K>>, typename add_lvalue_reference_t<V>>;
-        using const_reference = pair<typename add_const_t<typename add_lvalue_reference_t<K>>,
-                                     typename add_const_t<typename add_lvalue_reference_t<V>>>;
+            pair<add_const_t<add_lvalue_reference_t<K>>, add_lvalue_reference_t<V>>;
+        using const_reference = pair<add_const_t<add_lvalue_reference_t<K>>,
+                                     add_const_t<add_lvalue_reference_t<V>>>;
         using pointer =
             detail::basic_sparse_map_iterator_ptr<typename reference::first_type, typename reference::second_type>;
         using const_pointer = detail::basic_sparse_map_iterator_ptr<typename const_reference::first_type,
@@ -591,9 +591,9 @@ namespace tempest::ecs
         using value_allocator_type = typename allocator_traits<Allocator>::template rebind_alloc<V>;
         using value_alloc_traits = allocator_traits<value_allocator_type>;
 
-        [[no_unique_address]] packed_alloc_type _packed_alloc;
-        [[no_unique_address]] sparse_alloc_type _sparse_alloc;
-        [[no_unique_address]] value_allocator_type _value_alloc;
+        packed_alloc_type _packed_alloc;
+        sparse_alloc_type _sparse_alloc;
+        value_allocator_type _value_alloc;
 
         K** _sparse{nullptr};
         K* _packed{nullptr};

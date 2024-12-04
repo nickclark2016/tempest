@@ -46,7 +46,7 @@ namespace tempest
     }
 
     template <typename T, T v>
-    constexpr integral_constant<T, v>::value_type integral_constant<T, v>::operator()() const noexcept
+    constexpr typename integral_constant<T, v>::value_type integral_constant<T, v>::operator()() const noexcept
     {
         return value;
     }
@@ -1255,7 +1255,7 @@ namespace tempest
     struct remove_all_extents<T[]>
     {
         /// @brief The type without all extents.
-        using type = remove_all_extents<T>::type;
+        using type = typename remove_all_extents<T>::type;
     };
 
     /// @brief Type trait to remove all extents from a type.
@@ -1265,7 +1265,7 @@ namespace tempest
     struct remove_all_extents<T[N]>
     {
         /// @brief The type without all extents.
-        using type = remove_all_extents<T>::type;
+        using type = typename remove_all_extents<T>::type;
     };
 
     /// @brief Type trait to remove all extents from a type.
@@ -1566,7 +1566,13 @@ namespace tempest
     /// @brief Type trait to check if a type is trivially destructible.
     /// @tparam T Type to check if is trivially destructible.
     template <typename T>
+#if defined(_MSC_VER) && !defined(__clang__)
     struct is_trivially_destructible : bool_constant<__has_trivial_destructor(T)>
+#elif defined(__clang__) || defined(__GNUG__)
+    struct is_trivially_destructible : bool_constant<__is_trivially_destructible(T)>
+#else
+#error "Compiler not supported."
+#endif
     {
     };
 
@@ -1818,6 +1824,7 @@ namespace tempest
     template <typename From, typename To>
     inline constexpr bool is_nothrow_convertible_v = is_nothrow_convertible<From, To>::value;
 
+#if defined(_MSC_VER) && !defined(__clang__)
     /// @brief Type trait to check if two types are layout compatible.
     /// @tparam T Type to check if is layout compatible with U.
     /// @tparam U Type to check if is layout compatible with T.
@@ -1846,6 +1853,8 @@ namespace tempest
     template <typename Base, typename Derived>
     inline constexpr bool is_pointer_interconvertible_base_of_v =
         is_pointer_interconvertible_base_of<Base, Derived>::value;
+
+#endif
 
     namespace detail
     {
@@ -2200,32 +2209,40 @@ namespace tempest
         template <typename T1, typename T2>
         using conditional_result_t = decltype(false ? tempest::declval<T1>() : tempest::declval<T2>());
 
-        template <typename, typename, typename = void>
-        struct decay_conditional_result
+        template <typename T1, typename T2>
+        struct const_lvalue_conditional_operator
         {
         };
 
         template <typename T1, typename T2>
-        struct decay_conditional_result<T1, T2, void_t<conditional_result_t<T1, T2>>>
-            : tempest::decay<conditional_result_t<T1, T2>>
+            requires requires { typename conditional_result_t<const T1&, const T2&>; }
+        struct const_lvalue_conditional_operator<T1, T2>
         {
+            using type = remove_cvref_t<conditional_result_t<const T1&, const T2&>>;
         };
 
         template <typename T1, typename T2, typename = void>
-        struct common_type_impl_2 : decay_conditional_result<const T1&, const T2&>
+        struct decayed_conditional_operator : const_lvalue_conditional_operator<T1, T2>
         {
         };
 
         template <typename T1, typename T2>
-        struct common_type_impl_2<T1, T2, void_t<conditional_result_t<T1, T2>>> : decay_conditional_result<T1, T2>
+        struct decayed_conditional_operator<T1, T2, void_t<conditional_result_t<T1, T2>>>
         {
+            using type = decay_t<conditional_result_t<T1, T2>>;
         };
     } // namespace detail
 
     /// @brief Type trait to get the common type of a set of types.
     /// @tparam ...
     template <typename...>
-    struct common_type
+    struct common_type;
+
+    template <typename... Ts>
+    using common_type_t = typename common_type<Ts...>::type;
+
+    template <>
+    struct common_type<>
     {
     };
 
@@ -2236,13 +2253,24 @@ namespace tempest
     {
     };
 
+    namespace detail
+    {
+        template <typename T1, typename T2, typename DecayedT1 = decay_t<T1>, typename DecayedT2 = decay_t<T2>>
+        struct common_type_impl_2 : common_type<DecayedT1, DecayedT2>
+        {
+        };
+
+        template <typename T1, typename T2>
+        struct common_type_impl_2<T1, T2, T1, T2> : decayed_conditional_operator<T1, T2>
+        {
+        };
+    } // namespace detail
+
     /// @brief Type trait to get the common type of a set of types.
     /// @tparam T1 Type to get the common type of.
     /// @tparam T2 Type to get the common type of.
     template <typename T1, typename T2>
-    struct common_type<T1, T2>
-        : conditional_t<is_same_v<T1, decay_t<T1>> && is_same_v<T2, decay_t<T2>>, detail::common_type_impl_2<T1, T2>,
-                        typename common_type<decay_t<T1>, decay_t<T2>>>
+    struct common_type<T1, T2> : detail::common_type_impl_2<T1, T2>
     {
     };
 
@@ -2269,93 +2297,86 @@ namespace tempest
     {
     };
 
-    /// @brief Type trait to get the common type of a set of types.
-    /// @tparam ...T Types to get the common type of.
-    template <typename... T>
-    using common_type_t = typename common_type<T...>::type;
+    namespace detail
+    {
+        template <typename T>
+        T returns_same_type() noexcept;
+    }
 
-    template <typename T, typename U, template <typename> typename TQual, template <typename> typename UQual>
+    template <typename, typename, template <typename> typename, template <typename> typename>
     struct basic_common_reference
     {
     };
 
     namespace detail
     {
-        template <typename T, bool IsConst, bool IsVolatile>
-        struct cv_selector;
-
         template <typename T>
-        struct cv_selector<T, false, false>
-        {
-            using type = T;
-        };
-
-        template <typename T>
-        struct cv_selector<T, true, false>
-        {
-            using type = const T;
-        };
-
-        template <typename T>
-        struct cv_selector<T, false, true>
-        {
-            using type = volatile T;
-        };
-
-        template <typename T>
-        struct cv_selector<T, true, true>
-        {
-            using type = const volatile T;
-        };
-
-        template <typename T, typename U>
-        struct copy_cv
-        {
-            using type = typename cv_selector<U, is_const_v<T>, is_volatile_v<T>>::type;
-        };
-
-        template <typename T, typename U>
-        using copy_cv_t = typename copy_cv<T, U>::type;
-
-        template <typename T>
-        struct xref
+        struct copy_cv_qual_impl
         {
             template <typename U>
-            using type = copy_cv_t<T, U>;
+            using type = U;
         };
 
         template <typename T>
-        struct xref<T&>
+        struct copy_cv_qual_impl<const T>
         {
             template <typename U>
-            using type = copy_cv_t<T, U>&;
+            using type = const U;
         };
 
         template <typename T>
-        struct xref<T&&>
+        struct copy_cv_qual_impl<volatile T>
         {
             template <typename U>
-            using type = copy_cv_t<T, U>&&;
+            using type = volatile U;
         };
 
-        template <typename T, typename U>
-        using basic_common_ref_impl = basic_common_reference<remove_cvref_t<T>, remove_cvref_t<U>,
-                                                             xref<T>::template type, xref<U>::template type>::type;
+        template <typename T>
+        struct copy_cv_qual_impl<const volatile T>
+        {
+            template <typename U>
+            using type = const volatile U;
+        };
+
+        template <typename From, typename To>
+        using copy_cv_qual = copy_cv_qual_impl<From>::template type<To>;
+
+        template <typename T>
+        struct add_ref_qualifiers
+        {
+            template <typename U>
+            using type = copy_cv_qual<T, U>;
+        };
+
+        template <typename T>
+        struct add_ref_qualifiers<T&>
+        {
+            template <typename U>
+            using type = add_lvalue_reference_t<copy_cv_qual<T, U>>;
+        };
+
+        template <typename T>
+        struct add_ref_qualifiers<T&&>
+        {
+            template <typename U>
+            using type = add_rvalue_reference_t<copy_cv_qual<T, U>>;
+        };
+
+        template <typename T1, typename T2>
+        using conditional_ref_result_t = decltype(false ? returns_same_type<T1>() : returns_same_type<T2>());
     } // namespace detail
 
-    /// @brief Type trait to get the common reference type of a set of types.
-    /// @tparam ...T Types to get the common reference type of.
-    template <typename... T>
+    template <typename...>
     struct common_reference;
 
-    /// @brief Type trait to get the common reference type of a set of types.
+    template <typename... Ts>
+    using common_reference_t = typename common_reference<Ts...>::type;
+
     template <>
     struct common_reference<>
     {
     };
 
-    /// @brief Type trait to get the common reference type of a set of types.
-    /// @tparam T Type to get the common reference type of.
     template <typename T>
     struct common_reference<T>
     {
@@ -2364,154 +2385,384 @@ namespace tempest
 
     namespace detail
     {
-        template <typename T, typename U>
-        using conditional_ref_result_t = decltype(false ? declval<T (&)()>()() : declval<U (&)()>()());
-
-        template <typename T, typename U>
-        using conditional_ref_result_cvref_t = conditional_ref_result_t<copy_cv_t<T, U>&, copy_cv_t<U, T>&>;
-
-        template <typename T, typename U, typename = void>
-        struct common_ref_impl
+        template <typename T1, typename T2>
+        struct common_reference_impl_2_base : common_type<T1, T2>
         {
         };
 
-        template <typename T, typename U>
-        using common_ref = typename common_ref_impl<T, U>::type;
+        template <typename T1, typename T2>
+            requires requires { typename conditional_ref_result_t<T1, T2>; }
+        struct common_reference_impl_2_base<T1, T2>
+        {
+            using type = conditional_ref_result_t<T1, T2>;
+        };
 
-        template <typename T, typename U>
-        struct common_ref_impl<T&, U&, void_t<conditional_ref_result_t<T, U>>>
-            : enable_if<is_reference_v<conditional_ref_result_cvref_t<T, U>>, conditional_ref_result_cvref_t<T, U>>
+        template <typename T1, typename T2>
+        using bcr_specialization =
+            basic_common_reference<remove_cvref_t<T1>, remove_cvref_t<T2>, add_ref_qualifiers<T1>::template type,
+                                   add_ref_qualifiers<T2>::template type>::type;
+
+        template <typename T1, typename T2>
+        struct common_reference_impl_2_bcr : common_reference_impl_2_base<T1, T2>
         {
         };
 
-        template <typename T, typename U>
-        using common_ref_c = remove_reference_t<common_ref<T&, U&>>&&;
-
-        template <typename T, typename U>
-        struct common_ref_impl<
-            T&&, U&&,
-            enable_if_t<is_convertible_v<T&&, common_ref_c<T, U>> && is_convertible_v<U&&, common_ref_c<T, U>>>>
+        template <typename T1, typename T2>
+            requires requires { typename bcr_specialization<T1, T2>; }
+        struct common_reference_impl_2_bcr<T1, T2>
         {
-            using type = common_ref_c<T, U>;
+            using type = bcr_specialization<T1, T2>;
         };
 
-        template <typename T, typename U>
-        using common_ref_d = common_ref<const T&, U&>;
+        template <typename T1, typename T2>
+            requires is_lvalue_reference_v<conditional_ref_result_t<copy_cv_qual<T1, T2>&, copy_cv_qual<T2, T1>&>>
+        using double_lvalue_common_ref_t = conditional_ref_result_t<copy_cv_qual<T1, T2>&, copy_cv_qual<T2, T1>&>;
 
-        template <typename T, typename U>
-        struct common_ref_impl<T&&, U&, enable_if_t<is_convertible_v<T&&, common_ref_d<T, U>>>>
-        {
-            using type = common_ref_d<T, U>;
-        };
-
-        template <typename T, typename U>
-        struct common_ref_impl<T&, U&&> : common_ref_impl<U&&, T&>
+        template <typename T1, typename T2>
+        struct common_reference_impl_2_refs
         {
         };
 
-        template <typename T, typename U, int Bullet = 1, typename = void>
-        struct common_reference_impl : common_reference_impl<U, T, Bullet + 1>
+        template <typename T1, typename T2>
+            requires requires { typename double_lvalue_common_ref_t<T1, T2>; }
+        struct common_reference_impl_2_refs<T1&, T2&>
         {
+            using type = double_lvalue_common_ref_t<T1, T2>;
+        };
+
+        template <typename T1, typename T2>
+            requires is_convertible_v<T1&&, double_lvalue_common_ref_t<const T1, T2>>
+        struct common_reference_impl_2_refs<T1&&, T2&>
+        {
+            using type = double_lvalue_common_ref_t<const T1, T2>;
+        };
+
+        template <typename T1, typename T2>
+            requires is_convertible_v<T2&&, double_lvalue_common_ref_t<const T2, T1>>
+        struct common_reference_impl_2_refs<T1&, T2&&>
+        {
+            using type = double_lvalue_common_ref_t<const T2, T1>;
+        };
+
+        template <typename T1, typename T2>
+        using double_rvalue_common_ref = remove_reference_t<double_lvalue_common_ref_t<T1, T2>>&&;
+
+        template <typename T1, typename T2>
+            requires is_convertible_v<T1&&, double_rvalue_common_ref<T1, T2>> &&
+                     is_convertible_v<T2&&, double_rvalue_common_ref<T1, T2>>
+        struct common_reference_impl_2_refs<T1&&, T2&&>
+        {
+            using type = double_rvalue_common_ref<T1, T2>;
+        };
+
+        template <typename T1, typename T2>
+        using common_reference_impl_2_refs_t = common_reference_impl_2_refs<T1, T2>::type;
+
+        template <typename T1, typename T2>
+        struct common_reference_impl_2 : common_reference_impl_2_bcr<T1, T2>
+        {
+        };
+
+        template <typename T1, typename T2>
+            requires is_convertible_v<add_pointer_t<T1>, add_pointer_t<common_reference_impl_2_refs_t<T1, T2>>> &&
+                     is_convertible_v<add_pointer_t<T2>, add_pointer_t<common_reference_impl_2_refs_t<T1, T2>>>
+        struct common_reference_impl_2<T1, T2>
+        {
+            using type = common_reference_impl_2_refs_t<T1, T2>;
         };
     } // namespace detail
 
-    template <typename T, typename U>
-    struct common_reference<T, U> : detail::common_reference_impl<T, U>
+    template <typename T1, typename T2>
+    struct common_reference<T1, T2> : detail::common_reference_impl_2<T1, T2>
+    {
+    };
+
+    template <typename T1, typename T2, typename T3, typename... Ts>
+    struct common_reference<T1, T2, T3, Ts...>
+    {
+    };
+
+    template <typename T1, typename T2, typename T3, typename... Ts>
+        requires requires { typename common_reference_t<T1, T2>; }
+    struct common_reference<T1, T2, T3, Ts...> : common_reference<common_reference_t<T1, T2>, T3, Ts...>
     {
     };
 
     namespace detail
     {
-        template <typename T, typename U>
-        struct common_reference_impl<T&, U&, 1, void_t<common_ref<T&, U&>>>
-        {
-            using type = common_ref<T&, U&>;
-        };
-
-        template <typename T, typename U>
-        struct common_reference_impl<T&&, U&&, 1, void_t<common_ref<T&&, U&&>>>
-        {
-            using type = common_ref<T&&, U&&>;
-        };
-
-        template <typename T, typename U>
-        struct common_reference_impl<T&&, U&, 1, void_t<common_ref<T&&, U&>>>
-        {
-            using type = common_ref<T&&, U&>;
-        };
-
-        template <typename T, typename U>
-        struct common_reference_impl<T&, U&&, 1, void_t<common_ref<T&, U&&>>>
-        {
-            using type = common_ref<T&, U&&>;
-        };
-
-        template <typename T, typename U>
-        struct common_reference_impl<T, U, 2, void_t<basic_common_ref_impl<T, U>>>
-        {
-            using type = basic_common_ref_impl<T, U>;
-        };
-
-        template <typename T, typename U>
-        struct common_reference_impl<T, U, 3, void_t<conditional_ref_result_t<T, U>>>
-        {
-            using type = conditional_ref_result_t<T, U>;
-        };
-
-        template <typename T, typename U>
-        struct common_reference_impl<T, U, 4, void_t<common_type_t<T, U>>>
-        {
-            using type = common_type_t<T, U>;
-        };
-
-        template <typename T, typename U>
-        struct common_reference_impl<T, U, 5, void>
+        template <typename T, template <typename...> typename Tpl, typename... Ts>
+        struct is_specialization_of : false_type
         {
         };
 
-        template <typename...>
-        struct common_type_pack
+        template <typename... Ts, template <typename...> typename Tpl>
+        struct is_specialization_of<Tpl<Ts...>, Tpl> : true_type
         {
         };
 
-        template <typename, typename, typename = void>
-        struct common_type_fold;
+        template <typename T, template <typename...> typename Tpl>
+        inline constexpr bool is_specialization_of_v = is_specialization_of<T, Tpl>::value;
 
-        template <typename T, typename... Ts>
-        struct common_type_fold<T, common_type_pack<Ts...>, void_t<typename T::type>>
-            : public common_type<typename T::type, Ts...>
-        {
-        };
-
-        template <typename T, typename U>
-        struct common_type_fold<T, U, void>
-        {
-        };
+        template <typename RefWrap, typename T, typename RefWrapQ, typename TQ>
+        concept ref_wrap_common_reference_exists_with = is_specialization_of_v<RefWrap, reference_wrapper> && requires {
+            typename common_reference_t<typename RefWrap::type&, TQ>;
+        } && is_convertible_v<RefWrapQ, common_reference_t<typename RefWrap::type&, TQ>>;
     } // namespace detail
 
-    /// @brief Type trait to get the common reference type of a set of types.
-    /// @tparam T Type to get the common reference type of.
-    /// @tparam U Type to get the common reference type of.
-    template <typename T, typename U, typename... Ts>
-    struct common_reference<T, U, Ts...>
-        : detail::common_type_fold<common_reference<T, U>, detail::common_type_pack<Ts...>>
+    template <typename RefWrap, typename T, template <typename> typename RefWrapQ, template <typename> typename TQ>
+        requires(detail::ref_wrap_common_reference_exists_with<RefWrap, T, RefWrapQ<T>, TQ<T>> &&
+                 !detail::ref_wrap_common_reference_exists_with<T, RefWrap, TQ<T>, RefWrapQ<T>>)
+    struct basic_common_reference<RefWrap, T, RefWrapQ, TQ>
     {
+        using type = common_reference_t<typename RefWrap::type&, TQ<T>>;
     };
 
-    namespace detail
+    template <typename T, typename RefWrap, template <typename> typename TQ, template <typename> typename RefWrapQ>
+        requires(detail::ref_wrap_common_reference_exists_with<RefWrap, T, RefWrapQ<T>, TQ<T>> &&
+                 !detail::ref_wrap_common_reference_exists_with<T, RefWrap, TQ<T>, RefWrapQ<T>>)
+    struct basic_common_reference<T, RefWrap, TQ, RefWrapQ>
     {
-        template <typename T1, typename T2, typename... Ts>
-        struct common_type_fold<common_reference<T1, T2>, common_type_pack<Ts...>,
-                                void_t<typename common_reference<T1, T2>::type>>
-            : common_reference<typename common_reference<T1, T2>::type, Ts...>
-        {
-        };
-    } // namespace detail
+        using type = common_reference_t<typename RefWrap::type&, TQ<T>>;
+    };
 
-    /// @brief Type trait to get the common reference type of a set of types.
-    /// @tparam ...T Types to get the common reference type of.
-    template <typename... T>
-    using common_reference_t = typename common_reference<T...>::type;
+    // template <typename T, typename U, template <typename> typename TQual, template <typename> typename UQual>
+    // struct basic_common_reference
+    // {
+    // };
+
+    // namespace detail
+    // {
+    //     template <typename T, bool IsConst, bool IsVolatile>
+    //     struct cv_selector;
+
+    //     template <typename T>
+    //     struct cv_selector<T, false, false>
+    //     {
+    //         using type = T;
+    //     };
+
+    //     template <typename T>
+    //     struct cv_selector<T, true, false>
+    //     {
+    //         using type = const T;
+    //     };
+
+    //     template <typename T>
+    //     struct cv_selector<T, false, true>
+    //     {
+    //         using type = volatile T;
+    //     };
+
+    //     template <typename T>
+    //     struct cv_selector<T, true, true>
+    //     {
+    //         using type = const volatile T;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct copy_cv
+    //     {
+    //         using type = typename cv_selector<U, is_const_v<T>, is_volatile_v<T>>::type;
+    //     };
+
+    //     template <typename T, typename U>
+    //     using copy_cv_t = typename copy_cv<T, U>::type;
+
+    //     template <typename T>
+    //     struct xref
+    //     {
+    //         template <typename U>
+    //         using type = copy_cv_t<T, U>;
+    //     };
+
+    //     template <typename T>
+    //     struct xref<T&>
+    //     {
+    //         template <typename U>
+    //         using type = copy_cv_t<T, U>&;
+    //     };
+
+    //     template <typename T>
+    //     struct xref<T&&>
+    //     {
+    //         template <typename U>
+    //         using type = copy_cv_t<T, U>&&;
+    //     };
+
+    //     template <typename T, typename U>
+    //     using basic_common_ref_impl = basic_common_reference<remove_cvref_t<T>, remove_cvref_t<U>,
+    //                                                          xref<T>::template type, xref<U>::template type>::type;
+    // } // namespace detail
+
+    // /// @brief Type trait to get the common reference type of a set of types.
+    // /// @tparam ...T Types to get the common reference type of.
+    // template <typename... T>
+    // struct common_reference;
+
+    // /// @brief Type trait to get the common reference type of a set of types.
+    // template <>
+    // struct common_reference<>
+    // {
+    // };
+
+    // /// @brief Type trait to get the common reference type of a set of types.
+    // /// @tparam T Type to get the common reference type of.
+    // template <typename T>
+    // struct common_reference<T>
+    // {
+    //     using type = T;
+    // };
+
+    // namespace detail
+    // {
+    //     template <typename T, typename U>
+    //     using conditional_ref_result_t = decltype(false ? declval<T (&)()>()() : declval<U (&)()>()());
+
+    //     template <typename T, typename U>
+    //     using conditional_ref_result_cvref_t = conditional_ref_result_t<copy_cv_t<T, U>&, copy_cv_t<U, T>&>;
+
+    //     template <typename T, typename U, typename = void>
+    //     struct common_ref_impl
+    //     {
+    //     };
+
+    //     template <typename T, typename U>
+    //     using common_ref = typename common_ref_impl<T, U>::type;
+
+    //     template <typename T, typename U>
+    //     struct common_ref_impl<T&, U&, void_t<conditional_ref_result_t<T, U>>>
+    //         : enable_if<is_reference_v<conditional_ref_result_cvref_t<T, U>>, conditional_ref_result_cvref_t<T, U>>
+    //     {
+    //     };
+
+    //     template <typename T, typename U>
+    //     using common_ref_c = remove_reference_t<common_ref<T&, U&>>&&;
+
+    //     template <typename T, typename U>
+    //     struct common_ref_impl<
+    //         T&&, U&&,
+    //         enable_if_t<is_convertible_v<T&&, common_ref_c<T, U>> && is_convertible_v<U&&, common_ref_c<T, U>>>>
+    //     {
+    //         using type = common_ref_c<T, U>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     using common_ref_d = common_ref<const T&, U&>;
+
+    //     template <typename T, typename U>
+    //     struct common_ref_impl<T&&, U&, enable_if_t<is_convertible_v<T&&, common_ref_d<T, U>>>>
+    //     {
+    //         using type = common_ref_d<T, U>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_ref_impl<T&, U&&> : common_ref_impl<U&&, T&>
+    //     {
+    //     };
+
+    //     template <typename T, typename U, int Bullet = 1, typename = void>
+    //     struct common_reference_impl : common_reference_impl<U, T, Bullet + 1>
+    //     {
+    //     };
+    // } // namespace detail
+
+    // template <typename T, typename U>
+    // struct common_reference<T, U> : detail::common_reference_impl<T, U>
+    // {
+    // };
+
+    // namespace detail
+    // {
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T&, U&, 1, void_t<common_ref<T&, U&>>>
+    //     {
+    //         using type = common_ref<T&, U&>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T&&, U&&, 1, void_t<common_ref<T&&, U&&>>>
+    //     {
+    //         using type = common_ref<T&&, U&&>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T&&, U&, 1, void_t<common_ref<T&&, U&>>>
+    //     {
+    //         using type = common_ref<T&&, U&>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T&, U&&, 1, void_t<common_ref<T&, U&&>>>
+    //     {
+    //         using type = common_ref<T&, U&&>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T, U, 2, void_t<basic_common_ref_impl<T, U>>>
+    //     {
+    //         using type = basic_common_ref_impl<T, U>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T, U, 3, void_t<conditional_ref_result_t<T, U>>>
+    //     {
+    //         using type = conditional_ref_result_t<T, U>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T, U, 4, void_t<common_type_t<T, U>>>
+    //     {
+    //         using type = common_type_t<T, U>;
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_reference_impl<T, U, 5, void>
+    //     {
+    //     };
+
+    //     template <typename...>
+    //     struct common_type_pack
+    //     {
+    //     };
+
+    //     template <typename, typename, typename = void>
+    //     struct common_type_fold;
+
+    //     template <typename T, typename... Ts>
+    //     struct common_type_fold<T, common_type_pack<Ts...>, void_t<typename T::type>>
+    //         : public common_type<typename T::type, Ts...>
+    //     {
+    //     };
+
+    //     template <typename T, typename U>
+    //     struct common_type_fold<T, U, void>
+    //     {
+    //     };
+    // } // namespace detail
+
+    // /// @brief Type trait to get the common reference type of a set of types.
+    // /// @tparam T Type to get the common reference type of.
+    // /// @tparam U Type to get the common reference type of.
+    // template <typename T, typename U, typename... Ts>
+    // struct common_reference<T, U, Ts...>
+    //     : detail::common_type_fold<common_reference<T, U>, detail::common_type_pack<Ts...>>
+    // {
+    // };
+
+    // namespace detail
+    // {
+    //     template <typename T1, typename T2, typename... Ts>
+    //     struct common_type_fold<common_reference<T1, T2>, common_type_pack<Ts...>,
+    //                             void_t<typename common_reference<T1, T2>::type>>
+    //         : common_reference<typename common_reference<T1, T2>::type, Ts...>
+    //     {
+    //     };
+    // } // namespace detail
+
+    // /// @brief Type trait to get the common reference type of a set of types.
+    // /// @tparam ...T Types to get the common reference type of.
+    // template <typename... T>
+    // using common_reference_t = typename common_reference<T...>::type;
 
     /// @brief Type trait to get the underlying type of an enumeration.
     /// @tparam T Enumeration type to get the underlying type of.

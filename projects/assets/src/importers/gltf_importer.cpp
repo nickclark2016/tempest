@@ -276,7 +276,7 @@ namespace tempest::assets
                 }
 
                 uint64_t count;
-                accessor["count"].get(count);
+                (void)accessor["count"].get(count);
                 payload.count = static_cast<uint32_t>(count);
 
                 sjd::array min, max;
@@ -900,6 +900,15 @@ namespace tempest::assets
 
                         m.indices[i] = *reinterpret_cast<const uint32_t*>(buffer.data() + offset);
                     }
+                    break;
+                }
+                case component_type::BYTE: {
+                    break;
+                }
+                case component_type::SHORT: {
+                    break;
+                }
+                case component_type::FLOAT: {
                     break;
                 }
                 }

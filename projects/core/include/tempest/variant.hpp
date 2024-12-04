@@ -493,8 +493,8 @@ namespace tempest
                 constexpr auto sz = variant_size_v<T>;
                 if constexpr (Base == TargetIdx)
                 {
-                    construction_dispatcher <
-                        Base<sz, T>::template switch_case<Base>(addr, tempest::forward<Args>(args)...);
+                    construction_dispatcher<(Base < sz), T>::template switch_case<Base>(
+                        addr, tempest::forward<Args>(args)...);
                 }
                 else
                 {
@@ -564,23 +564,23 @@ namespace tempest
         detail::variant_storage<Ts...> _storage;
         detail::variant_index_type<sizeof...(Ts)> _index;
 
-        template <size_t I, typename... Ts>
-        friend constexpr variant_alternative_t<I, variant<Ts...>>& get(variant<Ts...>& v);
+        template <size_t I, typename... Us>
+        friend constexpr variant_alternative_t<I, variant<Us...>>& get(variant<Us...>& v);
 
-        template <size_t I, typename... Ts>
-        friend constexpr const variant_alternative_t<I, variant<Ts...>>& get(const variant<Ts...>& v);
+        template <size_t I, typename... Us>
+        friend constexpr const variant_alternative_t<I, variant<Us...>>& get(const variant<Us...>& v);
 
-        template <size_t I, typename... Ts>
-        friend constexpr variant_alternative_t<I, variant<Ts...>>&& get(variant<Ts...>&& v);
+        template <size_t I, typename... Us>
+        friend constexpr variant_alternative_t<I, variant<Us...>>&& get(variant<Us...>&& v);
 
-        template <size_t I, typename... Ts>
-        friend constexpr const variant_alternative_t<I, variant<Ts...>>&& get(const variant<Ts...>&& v);
+        template <size_t I, typename... Us>
+        friend constexpr const variant_alternative_t<I, variant<Us...>>&& get(const variant<Us...>&& v);
     };
 
     template <typename... Ts>
     inline constexpr variant<Ts...>::variant() : _index{0}
     {
-        detail::construction_dispatcher<true, variant<Ts...>>::switch_dispatch<0, 0>(&_storage.data);
+        detail::construction_dispatcher<true, variant<Ts...>>::template switch_dispatch<0, 0>(&_storage.data);
     }
 
     template <typename... Ts>
@@ -603,7 +603,7 @@ namespace tempest
     inline constexpr variant<Ts...>::variant(T&& value) noexcept
         : _index{detail::variant_index_selector<T, Ts...>::index}
     {
-        detail::construction_dispatcher<true, variant<Ts...>>::switch_dispatch<
+        detail::construction_dispatcher<true, variant<Ts...>>::template switch_dispatch<
             0, detail::variant_index_selector<T, Ts...>::index>(&_storage.data, tempest::forward<T>(value));
     }
 
@@ -678,7 +678,7 @@ namespace tempest
         requires(!is_same_v<remove_cvref_t<T>, variant<Ts...>>)
     inline constexpr variant<Ts...>& variant<Ts...>::operator=(T&& value) noexcept
     {
-        static constexpr auto index = detail::variant_index_selector<T, Ts...>::index;
+        constexpr auto index = detail::variant_index_selector<T, Ts...>::index;
         static_assert(index < sizeof...(Ts), "Type not in variant.");
 
         if (_index == index)
@@ -689,7 +689,7 @@ namespace tempest
         else
         {
             detail::variant_helper::destroy<0, Ts...>(_index, &_storage.data);
-            detail::construction_dispatcher<true, variant<Ts...>>::switch_dispatch<0, index>(
+            detail::construction_dispatcher<true, variant<Ts...>>::template switch_dispatch<0, index>(
                 &_storage.data, tempest::forward<T>(value));
             _index = index;
         }
@@ -884,8 +884,8 @@ namespace tempest
     inline constexpr decltype(auto) variant<Ts...>::visit(Callable&& callable)
     {
         using R = decltype(tempest::invoke(tempest::forward<Callable>(callable), get<0>(*this)));
-        return detail::visitation_dispatcher<true, R>::switch_dispatch<0>(index(), tempest::forward<Callable>(callable),
-                                                                          *this);
+        return detail::visitation_dispatcher<true, R>::template switch_dispatch<0>(
+            index(), tempest::forward<Callable>(callable), *this);
     }
 
     template <typename... Ts>
@@ -893,8 +893,8 @@ namespace tempest
     inline constexpr decltype(auto) variant<Ts...>::visit(Callable&& callable) const
     {
         using R = decltype(tempest::invoke(tempest::forward<Callable>(callable), get<0>(*this)));
-        return detail::visitation_dispatcher<true, R>::switch_dispatch<0>(index(), tempest::forward<Callable>(callable),
-                                                                          *this);
+        return detail::visitation_dispatcher<true, R>::template switch_dispatch<0>(
+            index(), tempest::forward<Callable>(callable), *this);
     }
 
     template <typename... Ts>
@@ -903,12 +903,12 @@ namespace tempest
     {
         if constexpr (is_void_v<R>)
         {
-            detail::visitation_dispatcher<true, R>::switch_dispatch<0>(index(), tempest::forward<Callable>(callable),
-                                                                       *this);
+            detail::visitation_dispatcher<true, R>::template switch_dispatch<0>(
+                index(), tempest::forward<Callable>(callable), *this);
         }
         else
         {
-            return detail::visitation_dispatcher<true, R>::switch_dispatch<0>(
+            return detail::visitation_dispatcher<true, R>::template switch_dispatch<0>(
                 index(), tempest::forward<Callable>(callable), *this);
         }
     }
@@ -919,12 +919,12 @@ namespace tempest
     {
         if constexpr (is_void_v<R>)
         {
-            detail::visitation_dispatcher<true, R>::switch_dispatch<0>(index(), tempest::forward<Callable>(callable),
-                                                                       *this);
+            detail::visitation_dispatcher<true, R>::template switch_dispatch<0>(
+                index(), tempest::forward<Callable>(callable), *this);
         }
         else
         {
-            return detail::visitation_dispatcher<true, R>::switch_dispatch<0>(
+            return detail::visitation_dispatcher<true, R>::template switch_dispatch<0>(
                 index(), tempest::forward<Callable>(callable), *this);
         }
     }
@@ -950,7 +950,7 @@ namespace tempest
         }
         else
         {
-            return v.visit<R>(tempest::forward<Callable>(callable));
+            return v.template visit<R>(tempest::forward<Callable>(callable));
         }
     }
 
@@ -963,7 +963,7 @@ namespace tempest
         }
         else
         {
-            return v.visit<R>(tempest::forward<Callable>(callable));
+            return v.template visit<R>(tempest::forward<Callable>(callable));
         }
     }
 

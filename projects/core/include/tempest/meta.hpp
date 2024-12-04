@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <iostream>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -17,9 +18,12 @@ namespace tempest::core
         auto src = std::source_location::current();
         std::string_view here = src.function_name();
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
         std::string_view prefix = "auto __cdecl tempest::core::get_type_name<";
         std::string_view suffix = ">(void) noexcept";
+#elif defined (_MSC_VER) && defined (__clang__)
+        std::string_view prefix = "auto __cdecl tempest::core::get_type_name(void) [T = ";
+        std::string_view suffix = "]";
 #elif defined(__clang__)
         std::string_view prefix = "auto tempest::core::get_type_name() [T = ";
         std::string_view suffix = "]";

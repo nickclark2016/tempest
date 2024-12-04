@@ -63,7 +63,7 @@ namespace tempest
             using reference = conditional_t<Const, const value_type&, value_type&>;
             using difference_type = ptrdiff_t;
 
-            using map_type = typename conditional_t<Const, const flat_unordered_map<K, V, Hash, KeyEqual, Allocator>,
+            using map_type = conditional_t<Const, const flat_unordered_map<K, V, Hash, KeyEqual, Allocator>,
                                                     flat_unordered_map<K, V, Hash, KeyEqual, Allocator>>;
 
             flat_unordered_map_iterator() noexcept = default;

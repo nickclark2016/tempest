@@ -41,6 +41,7 @@
 #include <exception>
 
 #include <cassert>
+#include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <cstdarg>

@@ -48,6 +48,13 @@ project 'glfw'
             '_CRT_SECURE_NO_WARNINGS',
         }
 
+        links {
+            'gdi32',
+            'user32',
+            'shell32',
+            'opengl32',
+        }
+
     filter { 'system:linux' }
         files {
             'src/glx_context.c',
