@@ -5,7 +5,7 @@ scoped.group('Engine', function()
         cppdialect 'C++20'
 
         targetdir '%{binaries}'
-        objdir '%{intermidates}'
+        objdir '%{intermediates}'
 
         files {
             'include/**.hpp',
@@ -43,7 +43,7 @@ scoped.group('Engine', function()
             cppdialect 'C++20'
     
             targetdir '%{binaries}'
-            objdir '%{intermidates}'
+            objdir '%{intermediates}'
     
             files {
                 'tests/**.cpp',

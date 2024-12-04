@@ -4,7 +4,7 @@ project 'tlsf'
     cdialect 'C11'
 
     targetdir '%{binaries}'
-    objdir '%{intermidates}'
+    objdir '%{intermediates}'
 
     files {
         'include/tlsf/tlsf.h',

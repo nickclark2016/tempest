@@ -302,7 +302,7 @@ namespace tempest::assets
             return accs;
         }
 
-        guid process_texture(const image_payload& img, optional<const simdjson::dom::element&> sampler,
+        guid process_texture(const image_payload& img, optional<simdjson::dom::element> sampler,
                              core::texture_registry* tex_reg, span<const buffer_view_payload> views,
                              const flat_unordered_map<uint32_t, vector<byte>>& buffers)
         {
@@ -1009,7 +1009,7 @@ namespace tempest::assets
             {
                 uint32_t image_id = static_cast<uint32_t>(tex["source"].get_uint64().value());
 
-                optional<const simdjson::dom::element&> sampler;
+                optional<simdjson::dom::element> sampler;
 
                 uint64_t sampler_id;
                 if (tex["sampler"].get(sampler_id) == simdjson::error_code::SUCCESS)

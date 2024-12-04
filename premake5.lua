@@ -3,42 +3,68 @@ fetch = require 'build/fetch'
 scoped = require 'build/premake-scoped'
 
 scoped.workspace('Tempest', function()
-    configurations { 'Debug', 'Release' }
+    configurations { 'Debug', 'Release', 'RelWithDebugInfo' }
     platforms { 'x64' }
 
     scoped.filter({
-        'system:windows',
         'action:gmake*'
     }, function()
-        toolset 'clang'
+         toolset 'clang'
     end)
 
-    filter 'configurations:Debug'
+    scoped.filter({
+        'action:vs*'
+    }, function()
+        toolset 'v143'
+    end)
+
+    scoped.filter({
+        'configurations:Debug'
+    }, function()
         defines { '_DEBUG' }
         symbols 'On'
+    end)
 
-    filter 'configurations:Release'
+    scoped.filter({
+        'configurations:Release'
+    }, function()
+        defines { 'NDEBUG' }
+        optimize 'Full'
+    end)
+
+    scoped.filter({
+        'configurations:RelWithDebugInfo'
+    }, function()
         defines { 'NDEBUG' }
         optimize 'On'
+        symbols 'Full'
+    end)
 
-    filter 'platforms:x64'
+    scoped.filter({
+        'platforms:x64'
+    }, function()
         architecture 'x86_64'
+    end)
 
-    filter 'system:windows'
+    scoped.filter({
+        'system:windows'
+    }, function()
         systemversion 'latest'
         staticruntime 'Off'
-
-    filter {}
+    end)
 
     root = path.getdirectory(_MAIN_SCRIPT)
 
     binaries = '%{root}/bin/%{cfg.buildcfg}/%{cfg.system}/%{cfg.architecture}'
-    intermidates = '%{root}/bin-int/%{cfg.buildcfg}/%{cfg.system}/%{cfg.architecture}'
+    intermediates = '%{root}/bin-int/%{cfg.buildcfg}/%{cfg.system}/%{cfg.architecture}'
 
-    filter { 'action:vs*' }
+    scoped.filter({
+        'action:vs*'
+    }, function()
         flags {
             'MultiProcessorCompile',
         }
+    end)
 
     scoped.filter({
         'toolset:clang',
@@ -49,6 +75,23 @@ scoped.workspace('Tempest', function()
     }, function()
         linkoptions {
             '-dll_dbg',
+            '-Xlinker /NODEFAULTLIB:libcmt'
+        }
+
+        links {
+            "libcmtd"
+        }
+    end)
+
+    scoped.filter({
+        'toolset:clang',
+        'system:windows',
+        'action:gmake*',
+        'configurations:relwithdebuginfo',
+        'kind:ConsoleApp or SharedLib'
+    }, function()
+        linkoptions {
+            '-dll',
             '-Xlinker /NODEFAULTLIB:libcmt'
         }
 
@@ -73,8 +116,6 @@ scoped.workspace('Tempest', function()
             "libcmt"
         }
     end)
-
-    filter {}
 
     IncludeDir = {}
 
