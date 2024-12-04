@@ -6,6 +6,13 @@ scoped.workspace('Tempest', function()
     configurations { 'Debug', 'Release' }
     platforms { 'x64' }
 
+    scoped.filter({
+        'system:windows',
+        'action:gmake*'
+    }, function()
+        toolset 'clang'
+    end)
+
     filter 'configurations:Debug'
         defines { '_DEBUG' }
         symbols 'On'
@@ -32,6 +39,40 @@ scoped.workspace('Tempest', function()
         flags {
             'MultiProcessorCompile',
         }
+
+    scoped.filter({
+        'toolset:clang',
+        'system:windows',
+        'action:gmake*',
+        'configurations:debug',
+        'kind:ConsoleApp or SharedLib'
+    }, function()
+        linkoptions {
+            '-dll_dbg',
+            '-Xlinker /NODEFAULTLIB:libcmt'
+        }
+
+        links {
+            "libcmtd"
+        }
+    end)
+
+    scoped.filter({
+        'toolset:clang',
+        'system:windows',
+        'action:gmake*',
+        'configurations:release',
+        'kind:ConsoleApp or SharedLib'
+    }, function()
+        linkoptions {
+            '-dll',
+            '-Xlinker /NODEFAULTLIB:libcmt'
+        }
+
+        links {
+            "libcmt"
+        }
+    end)
 
     filter {}
 

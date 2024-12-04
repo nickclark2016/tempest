@@ -1343,7 +1343,7 @@ namespace tempest::ecs
     inline void create_parent_child_relationship(basic_registry<E>& reg, E parent, E child)
     {
         // If the parent does not have a relationship component, create one
-        if (!reg.has<relationship_component<E>>(parent))
+        if (!reg.template has<relationship_component<E>>(parent))
         {
             relationship_component<E> rel{
                 .parent = ecs::tombstone,
@@ -1355,7 +1355,7 @@ namespace tempest::ecs
         }
 
         // If the child does not have a relationship component, create one
-        if (!reg.has<relationship_component<E>>(child))
+        if (!reg.template has<relationship_component<E>>(child))
         {
             relationship_component<E> rel{
                 .parent = parent,
@@ -1366,8 +1366,8 @@ namespace tempest::ecs
             reg.assign(child, rel);
         }
 
-        auto& opt_parent_rel = reg.get<relationship_component<E>>(parent);
-        auto& opt_child_rel = reg.get<relationship_component<E>>(child);
+        auto& opt_parent_rel = reg.template get<relationship_component<E>>(parent);
+        auto& opt_child_rel = reg.template get<relationship_component<E>>(child);
 
         // If the parent has no children, set the child as the first child
         // And the parent as the parent of the child
@@ -1452,7 +1452,7 @@ namespace tempest::ecs
     template <typename E>
     inline basic_related_entity_view_iterator<E>& basic_related_entity_view_iterator<E>::operator++() noexcept
     {
-        auto rel_comp = _source->try_get<relationship_component<E>>(_current);
+        auto rel_comp = _source->template try_get<relationship_component<E>>(_current);
         if (rel_comp == nullptr)
         {
             _current = ecs::tombstone;
@@ -1481,7 +1481,7 @@ namespace tempest::ecs
                 return *this;
             }
 
-            auto parent_rel_comp = _source->try_get<relationship_component<E>>(rel_comp->parent);
+            auto parent_rel_comp = _source->template try_get<relationship_component<E>>(rel_comp->parent);
             if (parent_rel_comp == nullptr) [[unlikely]]
             {
                 _current = ecs::tombstone;
@@ -1636,7 +1636,7 @@ namespace tempest::ecs
     template <typename E>
     inline basic_ancestor_entity_view_iterator<E>& basic_ancestor_entity_view_iterator<E>::operator++() noexcept
     {
-        auto rel_comp = _source->try_get<relationship_component<E>>(_current);
+        auto rel_comp = _source->template try_get<relationship_component<E>>(_current);
         if (rel_comp == nullptr)
         {
             _current = ecs::tombstone;

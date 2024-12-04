@@ -181,7 +181,7 @@ namespace tempest
             }
             else
             {
-                static_assert(tempest::is_object_v<T> & sizeof...(args) == 0);
+                static_assert(tempest::is_object_v<T> && sizeof...(args) == 0);
                 if constexpr (is_derived)
                 {
                     return tempest::forward<O>(o).*member;
@@ -539,7 +539,16 @@ namespace tempest
 
         template <typename Fn>
             requires is_invocable_v<Fn, Args...> && (!is_same_v<decay_t<Fn>, function<R(Args...)>>)
-        function(Fn&& fn) noexcept(handler<Fn>::is_nothrow_init);
+        inline function(Fn&& fn) noexcept(handler<Fn>::is_nothrow_init) : detail::function_base()
+        {
+            using fn_handler = handler<Fn>;
+            if (fn_handler::non_empty_function(fn))
+            {
+                fn_handler::init_functor(_data, tempest::forward<Fn>(fn));
+                _invoker = &fn_handler::invoke;
+                _manager_fn = &fn_handler::exec;
+            }
+        }
 
         ~function() = default;
 
@@ -549,7 +558,11 @@ namespace tempest
 
         template <typename Fn>
             requires is_invocable_v<Fn, Args...> && (!is_same_v<decay_t<Fn>, function<R(Args...)>>)
-        function& operator=(Fn&& fn) noexcept(handler<Fn>::is_nothrow_init);
+        inline function& operator=(Fn&& fn) noexcept(handler<Fn>::is_nothrow_init)
+        {
+            function(tempest::forward<Fn>(fn)).swap(*this);
+            return *this;
+        }
 
         template <typename Fn>
         function& operator=(reference_wrapper<Fn> fn) noexcept;
@@ -678,20 +691,6 @@ namespace tempest
     }
 
     template <typename R, typename... Args>
-    template <typename Fn>
-        requires is_invocable_v<Fn, Args...> && (!is_same_v<decay_t<Fn>, function<R(Args...)>>)
-    inline function<R(Args...)>::function(Fn&& fn) noexcept(handler<Fn>::is_nothrow_init) : detail::function_base()
-    {
-        using fn_handler = handler<Fn>;
-        if (fn_handler::non_empty_function(fn))
-        {
-            fn_handler::init_functor(_data, tempest::forward<Fn>(fn));
-            _invoker = &fn_handler::invoke;
-            _manager_fn = &fn_handler::exec;
-        }
-    }
-
-    template <typename R, typename... Args>
     inline function<R(Args...)>& function<R(Args...)>::operator=(const function& fn)
     {
         function(fn).swap(*this);
@@ -714,15 +713,6 @@ namespace tempest
             _manager_fn = nullptr;
             _invoker = nullptr;
         }
-        return *this;
-    }
-
-    template <typename R, typename... Args>
-    template <typename Fn>
-        requires is_invocable_v<Fn, Args...> && (!is_same_v<decay_t<Fn>, function<R(Args...)>>)
-    inline function<R(Args...)>& function<R(Args...)>::operator=(Fn && fn) noexcept(handler<Fn>::is_nothrow_init)
-    {
-        function(tempest::forward<Fn>(fn)).swap(*this);
         return *this;
     }
 

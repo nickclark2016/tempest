@@ -2259,6 +2259,8 @@ TEST(type_traits, is_nothrow_convertible_fallback)
     EXPECT_TRUE(result);
 }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+
 TEST(type_traits, is_layout_compatible)
 {
     struct Foo
@@ -2318,6 +2320,8 @@ TEST(type_traits, is_pointer_interconvertible_base_of)
     result = tempest::is_pointer_interconvertible_base_of<NonStdLayout, NonStdLayout>::value;
     EXPECT_TRUE(result);
 }
+
+#endif
 
 TEST(type_traits, is_invocable)
 {

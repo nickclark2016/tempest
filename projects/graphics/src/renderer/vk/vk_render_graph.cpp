@@ -458,6 +458,9 @@ namespace tempest::graphics::vk
                 buffer_it->info.transfer_destination = true;
                 break;
             }
+            case buffer_resource_usage::HOST_WRITE: {
+                break;
+            }
             }
         }
     }

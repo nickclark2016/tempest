@@ -583,7 +583,6 @@ namespace tempest
         reserve(_compute_next_capacity(size() + 1));
 
         ptrdiff_t end_index = end() - begin();
-        ptrdiff_t start_index = index;
 
         // Move construct first element, then move the rest
         if (!empty())

@@ -60,12 +60,16 @@ scoped.group('Engine', function()
 
         IncludeDir['graphics'] = '%{root}/projects/graphics/include'
 
+        prebuildcommands {
+            '{MKDIR} "%{cfg.targetdir}/shaders"',
+        }
+
         scoped.filter({ 'files:shaders/raster/**.slang' }, function()
             buildmessage 'Compiling %{file.relpath}'
 
             buildcommands {
-                '"%{fetch.slang}" "%[%{!file.relpath}]" -I"%{prj.basedir}/shaders/common" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
-                '"%{fetch.slang}" "%[%{!file.relpath}]" -I"%{prj.basedir}/shaders/common" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
+                '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
+                '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
             }
             
             buildoutputs {
@@ -78,7 +82,7 @@ scoped.group('Engine', function()
             buildmessage 'Compiling %{file.relpath}'
 
             buildcommands {
-                '"%{fetch.slang}" "%[%{!file.relpath}]" -I"%{prj.basedir}/shaders/common" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
+                '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
             }
             
             buildoutputs {
