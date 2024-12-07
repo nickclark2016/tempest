@@ -2677,7 +2677,7 @@ namespace tempest::graphics::vk
         VkCommandPoolCreateInfo create_info = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .pNext = nullptr,
-            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .flags = 0,
             .queueFamilyIndex = device.get_queue().queue_family_index,
         };
 
@@ -2749,6 +2749,24 @@ namespace tempest::graphics::vk
         _dispatch->waitForFences(1, &fence, VK_TRUE, UINT64_MAX);
 
         _device->release_fence(std::move(fence));
+
+        // Reset the command pool
+        _dispatch->freeCommandBuffers(_pool, 1, &cmds);
+        _dispatch->resetCommandPool(_pool, 0);
+
+        // Fetch a new command buffer
+        VkCommandBufferAllocateInfo alloc_ci = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .commandPool = _pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
+
+        auto res = _dispatch->allocateCommandBuffers(&alloc_ci, &cmds);
+        assert(res == VK_SUCCESS);
+
+        _cmds.emplace(cmds, _dispatch, _device);
 
         _is_recording = false;
     }
