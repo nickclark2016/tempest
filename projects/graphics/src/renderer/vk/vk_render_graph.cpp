@@ -961,33 +961,37 @@ namespace tempest::graphics::vk
                 auto begin_timestamp_query_index = static_cast<uint32_t>(_device->frame_in_flight() * 2);
                 auto end_timestamp_query_index = begin_timestamp_query_index + 1;
 
-                // Check if the queries are ready
-                uint64_t timestamps[2] = {0, 0};
-
-                VkResult result = dispatch->getQueryPoolResults(pools.timestamp_queries, begin_timestamp_query_index, 2,
-                                                                sizeof(uint64_t) * 2, timestamps, sizeof(uint64_t),
-                                                                VK_QUERY_RESULT_64_BIT);
-                // If the queries are ready, log the results
-                if (result == VK_SUCCESS)
+                // Queries are only ready after the FRAMES_IN_FLIGHT frames have been submitted
+                if (_device->current_frame() >= _device->frames_in_flight()) [[likely]]
                 {
-                    pools.timestamp.begin_timestamp = timestamps[0];
-                    pools.timestamp.end_timestamp = timestamps[1];
+                    // Check if the queries are ready
+                    uint64_t timestamps[2] = {0, 0};
 
-                    // Reset the query
-                    dispatch->cmdResetQueryPool(cmds, pools.timestamp_queries, begin_timestamp_query_index, 2);
+                    VkResult result = dispatch->getQueryPoolResults(
+                        pools.timestamp_queries, begin_timestamp_query_index, 2, sizeof(uint64_t) * 2, timestamps,
+                        sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+                    // If the queries are ready, log the results
+                    if (result == VK_SUCCESS)
+                    {
+                        pools.timestamp.begin_timestamp = timestamps[0];
+                        pools.timestamp.end_timestamp = timestamps[1];
 
-                    logger->debug(
-                        "Successfully queried timestamps for pass {} and frame {}.  Query Results: Begin - {} End - {}",
-                        pass_ref.name().data(), _device->current_frame() - _device->frames_in_flight(), timestamps[0],
-                        timestamps[1]);
-                }
-                else
-                {
-                    pools.timestamp.begin_timestamp = 0;
-                    pools.timestamp.end_timestamp = 0;
+                        // Reset the query
+                        dispatch->cmdResetQueryPool(cmds, pools.timestamp_queries, begin_timestamp_query_index, 2);
 
-                    logger->warn("Failed to get timestamp query results for pass {} and frame {}.", pass_ref.name().data(),
-                                 _device->current_frame() - _device->frames_in_flight());
+                        logger->debug("Successfully queried timestamps for pass {} and frame {}.  Query Results: Begin "
+                                      "- {} End - {}",
+                                      pass_ref.name().data(), _device->current_frame() - _device->frames_in_flight(),
+                                      timestamps[0], timestamps[1]);
+                    }
+                    else
+                    {
+                        pools.timestamp.begin_timestamp = 0;
+                        pools.timestamp.end_timestamp = 0;
+
+                        logger->warn("Failed to get timestamp query results for pass {} and frame {}.",
+                                     pass_ref.name().data(), _device->current_frame() - _device->frames_in_flight());
+                    }
                 }
 
                 // std::array<uint64_t, pipeline_statistic_results::statistic_query_count> pipeline_statistics =
