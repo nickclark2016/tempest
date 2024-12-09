@@ -8,6 +8,7 @@
 #include <tempest/transform_component.hpp>
 #include <tempest/vector.hpp>
 
+#include <cmath>
 #include <cstring>
 
 namespace tempest::graphics
@@ -1506,8 +1507,8 @@ namespace tempest::graphics
             math::look_at(math::vec3(0.0f), _scene_data.sun.direction, math::vec3<float>(0.0f, 1.0f, 0.0f));
 
         const auto aspect_ratio = cam_data.aspect_ratio;
-        const auto tan_half_h_fov = std::tanf(cam_data.vertical_fov * aspect_ratio / 2.0f);
-        const auto tan_half_v_fov = std::tanf((cam_data.vertical_fov) / 2.0f);
+        const auto tan_half_h_fov = std::tan(cam_data.vertical_fov * aspect_ratio / 2.0f);
+        const auto tan_half_v_fov = std::tan((cam_data.vertical_fov) / 2.0f);
 
         // Set up the cascade ranges
         const auto near_plane = cam_data.near_plane;
@@ -1523,7 +1524,7 @@ namespace tempest::graphics
         for (uint32_t i = 1; i < _shadow_map_params.directional.cascade_count; ++i)
         {
             const auto p = static_cast<float>(i) / static_cast<float>(_shadow_map_params.directional.cascade_count);
-            cascade_ranges[i] = near_plane * std::powf(far_plane / near_plane, p);
+            cascade_ranges[i] = near_plane * std::pow(far_plane / near_plane, p);
         }
 
         for (size_t cascade_index = 0; cascade_index < _shadow_map_params.directional.cascade_count; ++cascade_index)

@@ -1,5 +1,7 @@
 require('premake', '>=5.0.0-beta3')
+
 fetch = require 'build/fetch'
+require 'build/install'
 scoped = require 'build/premake-scoped'
 
 scoped.workspace('Tempest', function()

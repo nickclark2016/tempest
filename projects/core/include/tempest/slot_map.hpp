@@ -583,7 +583,7 @@ namespace tempest
         const auto free_element_index = _first_free_element;
 
         auto& block = _get_block(free_element_index);
-        const auto free_list_entry = block.key_table[free_element_index % key_block::value_count];
+        const key_type free_list_entry = block.key_table[free_element_index % key_block::value_count];
 
         // Extract the generation from the free list entry
         const auto generation = get_slot_map_key_generation(free_list_entry);

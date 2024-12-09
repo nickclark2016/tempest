@@ -26,6 +26,13 @@
         }
     
         links {
+            -- Engine Projects
+            'graphics',
+            'assets',
+            'ecs',
+            'logger',
+            'core',
+            'math',
             -- Vendor Deps
             'glfw',
             'imgui',
@@ -34,26 +41,20 @@
             'tlsf',
             'vk-bootstrap',
             'vma',
-            -- Engine Projects
-            'assets',
-            'core',
-            'ecs',
-            'graphics',
-            'logger',
-            'math',
+            'X11',
         }
     end
     
     function m.applyTempestConfig()
-        m.applyTempestInternalConfig()
-    
         dependson {
             'tempest',
         }
-    
+        
         links {
             'tempest',
         }
+        
+        m.applyTempestInternalConfig()
     end
 
     return m

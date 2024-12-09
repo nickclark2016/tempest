@@ -15,6 +15,8 @@ namespace tempest
     /// @brief 64 bit floating point type.
     using float64_t = double;
 
+#if defined(_MSC_VER) && !defined(__clang__)
+
     /// @brief 8 bit signed integer type.
     using int8_t = signed char;
 
@@ -38,6 +40,34 @@ namespace tempest
 
     /// @brief 64 bit unsigned integer type.
     using uint64_t = unsigned long long;
+
+#else
+
+    /// @brief 8 bit signed integer type.
+    using int8_t = signed char;
+
+    /// @brief 16 bit signed integer type.
+    using int16_t = short;
+
+    /// @brief 32 bit signed integer type.
+    using int32_t = int;
+
+    /// @brief 64 bit signed integer type.
+    using int64_t = long;
+
+    /// @brief 8 bit unsigned integer type.
+    using uint8_t = unsigned char;
+
+    /// @brief 16 bit unsigned integer type.
+    using uint16_t = unsigned short;
+
+    /// @brief 32 bit unsigned integer type.
+    using uint32_t = unsigned int;
+
+    /// @brief 64 bit unsigned integer type.
+    using uint64_t = unsigned long;
+
+#endif
 
     /// @brief Unsigned integer type capable of holding a pointer.
     using uintptr_t = decltype(sizeof(static_cast<void*>(nullptr)));
