@@ -422,7 +422,7 @@ namespace tempest::ecs
         assert(next != null);
         _head = next;
 
-        blk.occupancy = tempest::set_bit(blk.occupancy, block_offset);
+        blk.occupancy = tempest::set_bit<size_t>(blk.occupancy, block_offset);
 
         auto result = traits_type::construct(traits_type::as_entity(ent), traits_type::as_version(next));
         blk.entities[block_offset] = result;
@@ -445,7 +445,7 @@ namespace tempest::ecs
 
         block& blk = _chunks[chunk_index].blocks[block_index];
 
-        blk.occupancy = tempest::clear_bit(blk.occupancy, block_offset);
+        blk.occupancy = tempest::clear_bit<size_t>(blk.occupancy, block_offset);
 
         auto head_index = traits_type::as_entity(_head);
         T& to_erase = blk.entities[block_offset];
@@ -470,7 +470,7 @@ namespace tempest::ecs
         if (chunk_index < _chunks.size())
         {
             const block& blk = _chunks[chunk_index].blocks[block_index];
-            return tempest::is_bit_set(blk.occupancy, block_offset) &&
+            return tempest::is_bit_set<size_t>(blk.occupancy, block_offset) &&
                    traits_type::as_version(blk.entities[block_offset]) == traits_type::as_version(e);
         }
 

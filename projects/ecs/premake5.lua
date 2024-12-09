@@ -68,6 +68,7 @@ scoped.group('Engine', function()
                 'googletest',
                 'math',
                 'tlsf',
+                'X11',
             }
         end)
     end)

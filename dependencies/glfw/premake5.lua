@@ -57,7 +57,9 @@ project 'glfw'
 
     filter { 'system:linux' }
         files {
+            'src/egl_context.c',
             'src/glx_context.c',
+            'src/osmesa_context.c',
             'src/linux_joystick.c',
             'src/posix_thread.c',
             'src/posix_thread.h',
