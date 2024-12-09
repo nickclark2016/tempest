@@ -22,7 +22,18 @@ scoped.workspace('Tempest', function()
         'configurations:Debug'
     }, function()
         defines { '_DEBUG' }
-        symbols 'On'
+
+        scoped.filter({
+            'action:vs*'
+        }, function()
+            symbols 'Full'
+        end)
+
+        scoped.filter({
+            'action:gmake*'
+        }, function()
+            symbols 'On'
+        end)
     end)
 
     scoped.filter({
@@ -37,7 +48,22 @@ scoped.workspace('Tempest', function()
     }, function()
         defines { 'NDEBUG' }
         optimize 'On'
-        symbols 'Full'
+    end)
+
+    scoped.filter({
+        'configurations:Debug or RelWithDebugInfo',
+    }, function()
+        scoped.filter({
+            'action:vs*',
+        }, function()
+            symbols 'Full'
+        end)
+        
+        scoped.filter({
+            'action:gmake*',
+        }, function()
+            symbols 'On'
+        end)
     end)
 
     scoped.filter({
