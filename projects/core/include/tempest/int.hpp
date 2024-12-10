@@ -15,7 +15,7 @@ namespace tempest
     /// @brief 64 bit floating point type.
     using float64_t = double;
 
-#if defined(_MSC_VER) && !defined(__clang__)
+#if defined(_MSC_VER)
 
     /// @brief 8 bit signed integer type.
     using int8_t = signed char;

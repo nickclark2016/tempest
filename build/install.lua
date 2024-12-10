@@ -41,7 +41,7 @@ newaction {
         elseif _TARGET_OS == 'windows' then
             -- Windows editor and GLFW dll
             os.copyfile(path.join(binDir, 'editor.exe'), path.join(installdir, 'editor.exe'))
-            os.copyfile(path.join(binDir, 'glfw3.dll'), path.join(installdir, 'glfw3.dll'))
+            os.copyfile(path.join(binDir, 'glfw.dll'), path.join(installdir, 'glfw.dll'))
         else
             error('Unsupported OS')
         end

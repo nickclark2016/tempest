@@ -41,8 +41,11 @@
             'tlsf',
             'vk-bootstrap',
             'vma',
-            'X11',
         }
+
+        scoped.filter({ 'system:linux' }, function()
+            links { 'X11' }
+        end)
     end
     
     function m.applyTempestConfig()

@@ -68,8 +68,11 @@ scoped.group('Engine', function()
                 'googletest',
                 'math',
                 'tlsf',
-                'X11',
             }
+
+            scoped.filter({ 'system:linux' }, function()
+                links { 'X11' }
+            end)
         end)
     end)
 end)
