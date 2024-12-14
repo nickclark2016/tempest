@@ -96,6 +96,8 @@ namespace tempest
 
         expected<allocation, error_code> get(allocation_id id) const;
 
+        math::vec2<uint32_t> extent() const noexcept;
+
       private:
         vector<detail::shelf> _shelves;
         vector<detail::item> _items;
@@ -123,6 +125,11 @@ namespace tempest
 
     bool operator!=(const shelf_pack_allocator::allocation_id& lhs,
                     const shelf_pack_allocator::allocation_id& rhs) noexcept;
+
+    inline math::vec2<uint32_t> shelf_pack_allocator::extent() const noexcept
+    {
+        return _extent;
+    }
 
 } // namespace tempest
 
