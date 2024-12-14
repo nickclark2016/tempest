@@ -53,6 +53,7 @@ scoped.group('Engine', function()
         
             includedirs {
                 'include',
+                '%{IncludeDir.math}',
                 '%{IncludeDir.gtest}',
             }
         
