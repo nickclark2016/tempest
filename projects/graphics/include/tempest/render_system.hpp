@@ -10,6 +10,7 @@
 #include <tempest/material.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/registry.hpp>
+#include <tempest/shelf_pack.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/vertex.hpp>
 
@@ -303,6 +304,7 @@ namespace tempest::graphics
         size_t _last_updated_frame{2};
 
         gpu_shadow_map_parameters _shadow_map_params;
+        shelf_pack_allocator _shadow_map_subresource_allocator;
 
         tempest::function<void()> _create_imgui_hierarchy;
 

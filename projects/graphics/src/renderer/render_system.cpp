@@ -87,7 +87,13 @@ namespace tempest::graphics
     } // namespace
 
     render_system::render_system(ecs::registry& entities, const render_system_settings& settings)
-        : _allocator{64 * 1024 * 1024}, _registry{&entities}, _settings{settings}
+        : _allocator{64 * 1024 * 1024}, _registry{&entities}, _settings{settings}, _shadow_map_subresource_allocator{
+                                                                                       {8192, 8192},
+                                                                                       {
+                                                                                           .alignment = {32, 32},
+                                                                                           .column_count = 2,
+                                                                                       },
+                                                                                   }
     {
         _context = render_context::create(&_allocator);
 
@@ -157,13 +163,13 @@ namespace tempest::graphics
             .name = "Velocity Buffer",
         });
 
-        auto shadow_map_l0 = rgc->create_image({
-            .width = 2048,
-            .height = 2048,
+        auto shadow_map_mt_buffer = rgc->create_image({
+            .width = _shadow_map_subresource_allocator.extent().x,
+            .height = _shadow_map_subresource_allocator.extent().y,
             .fmt = resource_format::D24_FLOAT,
             .type = image_type::IMAGE_2D,
             .persistent = true,
-            .name = "Directional Shadow Map L0",
+            .name = "Shadow Map Megatexture Buffer",
         });
 
         vector<image_resource_handle> hi_z_images;
@@ -311,6 +317,8 @@ namespace tempest::graphics
         }
 
         _shadow_map_params.directional.cascade_count = 1;
+        auto dir_shadow_map_cascade_l0 = _shadow_map_subresource_allocator.allocate({2048, 2048});
+        assert(dir_shadow_map_cascade_l0.has_value());
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER, [&, dir_shadow_buffer](graph_pass_builder& builder) {
@@ -424,8 +432,7 @@ namespace tempest::graphics
                                     .draw_indexed(
                                         _indirect_buffer,
                                         static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer)),
-                                        static_cast<uint32_t>(batch.objects.size()),
-                                        sizeof(indexed_indirect_command));
+                                        static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
                             }
                         }
                     });
@@ -476,9 +483,10 @@ namespace tempest::graphics
         };
 
         _directional_shadow_map_pass = rgc->add_graph_pass(
-            "Directional Shadow Map Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+            "Directional Shadow Map Pass", queue_operation_type::GRAPHICS,
+            [&, dir_shadow_map_cascade_l0](graph_pass_builder& bldr) {
                 bldr.depends_on(upload_pass)
-                    .add_depth_attachment(shadow_map_l0, resource_access_type::READ_WRITE, load_op::CLEAR,
+                    .add_depth_attachment(shadow_map_mt_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
                                           store_op::STORE, 1.0f)
                     .add_constant_buffer(dir_shadow_buffer, 0, 0)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
@@ -490,8 +498,17 @@ namespace tempest::graphics
                     .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
-                    .on_execute([&](command_list& cmds) {
+                    .on_execute([&, dir_shadow_map_cascade_l0](command_list& cmds) {
                         uint32_t draw_calls_issued = 0;
+
+                        auto cascade_region_extent = dir_shadow_map_cascade_l0->extent;
+                        auto cascade_region_offset = dir_shadow_map_cascade_l0->position;
+
+                        // Set up viewport and scissor test
+                        cmds.set_scissor_region(cascade_region_offset.x, cascade_region_offset.y,
+                                                cascade_region_extent.x, cascade_region_extent.y)
+                            .set_viewport(cascade_region_offset.x, cascade_region_offset.y, cascade_region_extent.x,
+                                          cascade_region_extent.y, 0, 1, 0, false);
 
                         for (auto [key, batch] : _draw_batches)
                         {
@@ -905,10 +922,9 @@ namespace tempest::graphics
             .normal_texture_id = material.normal_map_id == std::numeric_limits<uint32_t>::max()
                                      ? gpu_material_data::INVALID_TEXTURE_ID
                                      : static_cast<int16_t>(texture_count() + material.normal_map_id),
-            .metallic_roughness_texture_id =
-                material.metallic_map_id == std::numeric_limits<uint32_t>::max()
-                    ? gpu_material_data::INVALID_TEXTURE_ID
-                    : static_cast<int16_t>(texture_count() + material.metallic_map_id),
+            .metallic_roughness_texture_id = material.metallic_map_id == std::numeric_limits<uint32_t>::max()
+                                                 ? gpu_material_data::INVALID_TEXTURE_ID
+                                                 : static_cast<int16_t>(texture_count() + material.metallic_map_id),
             .emissive_texture_id = material.emissive_map_id == std::numeric_limits<uint32_t>::max()
                                        ? gpu_material_data::INVALID_TEXTURE_ID
                                        : static_cast<int16_t>(texture_count() + material.emissive_map_id),
