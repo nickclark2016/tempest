@@ -32,23 +32,23 @@ TEST(shelf_pack_allocator, simple)
     EXPECT_TRUE(a3.has_value());
     EXPECT_FALSE(allocator.empty());
 
-    EXPECT_GE(allocator.used_memory(), 128 * 128 * 3);
+    EXPECT_GE(allocator.used_memory(), 128u * 128u * 3u);
 
     // Check that the allocations are at least the requested size.
-    EXPECT_GE(a1->extent.x, 128);
-    EXPECT_GE(a1->extent.y, 128);
-    EXPECT_GE(a2->extent.x, 128);
-    EXPECT_GE(a2->extent.y, 128);
-    EXPECT_GE(a3->extent.x, 128);
-    EXPECT_GE(a3->extent.y, 128);
+    EXPECT_GE(a1->extent.x, 128u);
+    EXPECT_GE(a1->extent.y, 128u);
+    EXPECT_GE(a2->extent.x, 128u);
+    EXPECT_GE(a2->extent.y, 128u);
+    EXPECT_GE(a3->extent.x, 128u);
+    EXPECT_GE(a3->extent.y, 128u);
 
     // Check that the allocations are at most the shelf size.
-    EXPECT_LE(a1->extent.x, 1024);
-    EXPECT_LE(a1->extent.y, 1024);
-    EXPECT_LE(a2->extent.x, 1024);
-    EXPECT_LE(a2->extent.y, 1024);
-    EXPECT_LE(a3->extent.x, 1024);
-    EXPECT_LE(a3->extent.y, 1024);
+    EXPECT_LE(a1->extent.x, 1024u);
+    EXPECT_LE(a1->extent.y, 1024u);
+    EXPECT_LE(a2->extent.x, 1024u);
+    EXPECT_LE(a2->extent.y, 1024u);
+    EXPECT_LE(a3->extent.x, 1024u);
+    EXPECT_LE(a3->extent.y, 1024u);
 
     // Check that the allocations are aligned.
     EXPECT_EQ(0, a1->position.x % 16);
@@ -90,20 +90,20 @@ TEST(shelf_pack_allocator, shadow_map_test)
     EXPECT_TRUE(a3.has_value());
 
     // Check that the allocations are at least the requested size.
-    EXPECT_GE(a1->extent.x, 2048);
-    EXPECT_GE(a1->extent.y, 2048);
-    EXPECT_GE(a2->extent.x, 1024);
-    EXPECT_GE(a2->extent.y, 1024);
-    EXPECT_GE(a3->extent.x, 512);
-    EXPECT_GE(a3->extent.y, 512);
+    EXPECT_GE(a1->extent.x, 2048u);
+    EXPECT_GE(a1->extent.y, 2048u);
+    EXPECT_GE(a2->extent.x, 1024u);
+    EXPECT_GE(a2->extent.y, 1024u);
+    EXPECT_GE(a3->extent.x, 512u);
+    EXPECT_GE(a3->extent.y, 512u);
 
     // Check that the allocations are at most the shelf size.
-    EXPECT_LE(a1->extent.x, 4096);
-    EXPECT_LE(a1->extent.y, 4096);
-    EXPECT_LE(a2->extent.x, 4096);
-    EXPECT_LE(a2->extent.y, 4096);
-    EXPECT_LE(a3->extent.x, 4096);
-    EXPECT_LE(a3->extent.y, 4096);
+    EXPECT_LE(a1->extent.x, 4096u);
+    EXPECT_LE(a1->extent.y, 4096u);
+    EXPECT_LE(a2->extent.x, 4096u);
+    EXPECT_LE(a2->extent.y, 4096u);
+    EXPECT_LE(a3->extent.x, 4096u);
+    EXPECT_LE(a3->extent.y, 4096u);
 
     // Check that the allocations are aligned.
     EXPECT_EQ(0, a1->position.x % 16);
