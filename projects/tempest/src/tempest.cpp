@@ -16,7 +16,7 @@ namespace tempest
     } // namespace
 
     engine::engine()
-        : _render_system{_entity_registry}, _asset_database{&_mesh_reg, &_texture_reg, &_material_reg}, _delta_time{}
+        : _render_system{_entity_registry}, _asset_database{&_mesh_reg, &_texture_reg, &_material_reg}
     {
     }
 

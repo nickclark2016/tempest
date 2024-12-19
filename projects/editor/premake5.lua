@@ -8,7 +8,7 @@ scoped.group('Editor', function()
 
         targetdir '%{binaries}'
         objdir '%{intermediates}'
-        debugdir '%{root}/sandbox'
+        debugdir '%{root}/projects/editor'
     
         files {
             'include/**.hpp',
@@ -21,6 +21,12 @@ scoped.group('Editor', function()
         }
 
         tempest.applyTempestConfig()
+
+        postbuildcommands {
+            '{RMDIR} %{root}/projects/editor/assets', -- Ensure a clean assets directory before building it
+            '{MKDIR} %{root}/projects/editor/assets',
+            '{LINKDIR} %{root}/projects/editor/assets/glTF-Sample-Assets ../../../vendor/glTF-Sample-Assets',
+            '{LINKDIR} %{root}/projects/editor/assets/shaders ../../../bin/%{cfg.buildcfg}/%{cfg.system}/%{cfg.architecture}/shaders',
+        }
     end)
 end)
-        

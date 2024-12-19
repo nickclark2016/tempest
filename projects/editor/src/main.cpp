@@ -60,6 +60,12 @@ int main()
             .intensity = 1.0f,
         };
 
+        tempest::graphics::shadow_map_component sun_shadows = {
+            .size = {2048, 2048},
+            .cascade_count = 1,
+        };
+
+        engine.get_registry().assign(sun, sun_shadows);
         engine.get_registry().assign(sun, sun_data);
         engine.get_registry().name(sun, "Sun");
 

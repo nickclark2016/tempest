@@ -449,6 +449,12 @@ namespace tempest::graphics
         return *this;
     }
 
+    graph_pass_builder& graph_pass_builder::allow_push_constants(uint32_t range)
+    {
+        _push_constant_range = range;
+        return *this;
+    }
+
     graph_pass_builder& graph_pass_builder::on_execute(function<void(command_list&)> commands)
     {
         _commands = commands;

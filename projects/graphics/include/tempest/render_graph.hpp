@@ -199,6 +199,7 @@ namespace tempest::graphics
         graph_pass_builder& resolve_image(image_resource_handle src, image_resource_handle dst,
                                           pipeline_stage first_access = pipeline_stage::INFER,
                                           pipeline_stage last_access = pipeline_stage::INFER);
+        graph_pass_builder& allow_push_constants(uint32_t range);
 
         graph_pass_builder& on_execute(function<void(command_list&)> commands);
         graph_pass_builder& should_execute(function<bool()> fn);
@@ -284,6 +285,11 @@ namespace tempest::graphics
             return _op_type;
         }
 
+        uint32_t push_constant_range_size() const noexcept
+        {
+            return _push_constant_range;
+        }
+
       private:
         render_graph_resource_library& _resource_lib;
         queue_operation_type _op_type;
@@ -297,6 +303,7 @@ namespace tempest::graphics
         vector<graph_pass_handle> _depends_on;
         vector<resolve_image_state> _resolve_images;
         graph_pass_handle _self;
+        uint32_t _push_constant_range{0};
         string _name;
 
         bool _draw_imgui{false};

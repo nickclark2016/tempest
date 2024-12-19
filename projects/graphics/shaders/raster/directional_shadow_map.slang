@@ -15,7 +15,6 @@ struct VertexOutput {
 struct FragmentOutput {
 };
 
-[vk_binding(0, 0)] ConstantBuffer<ShadowMapParameters> scene;
 [vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
 [vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
 [vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;
@@ -24,15 +23,20 @@ struct FragmentOutput {
 [vk_binding(6, 0)] SamplerState linear_sampler;
 [vk_binding(7, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
 
+// Push constants for the shadow map
+struct ShadowMapPushConstants {
+    float4x4 view_projection;
+};
+
 [shader("vertex")]
-VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID) {
+VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID, uniform ShadowMapPushConstants light) {
     uint iid = instance_buffer[instance_id];
     ObjectData instance = objects[iid];
 
     Vertex v = pull_vertex(vertex_pull_buffer, meshes[instance.mesh_id], vertex_id);
 
     float4 world_pos = mul(instance.model_matrix, float4(v.position, 1.0));
-    float4 clip_pos = mul(scene.directional.view_projection[0], world_pos);
+    float4 clip_pos = mul(light.view_projection, world_pos);
 
     VertexOutput result;
 
