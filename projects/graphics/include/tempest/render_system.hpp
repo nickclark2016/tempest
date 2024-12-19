@@ -95,13 +95,22 @@ namespace tempest::graphics
             SPOT = 2
         };
 
-        struct gpu_light
+        struct alignas(16) shadow_map_parameter
+        {
+            math::mat4<float> inv_view_mat;
+            math::vec4<float> bounds;
+            float cascade_split;
+        };
+
+        struct alignas(16) gpu_light
         {
             math::vec4<float> color;
             math::vec4<float> position;
             math::vec3<float> direction;
             math::vec3<float> attenuation;
+            array<uint32_t, 6> shadow_map_indices;
             gpu_light_type light_type;
+            uint32_t shadow_map_count;
         };
 
         struct orthogonal_bounds
@@ -295,7 +304,7 @@ namespace tempest::graphics
 
         graph_pass_handle _pbr_pass;
         graph_pass_handle _z_prepass_pass;
-        graph_pass_handle _directional_shadow_map_pass;
+        graph_pass_handle _shadow_map_pass;
 
         gpu_scene_data _scene_data;
         hi_z_data _hi_z_data;

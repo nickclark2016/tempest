@@ -38,6 +38,53 @@ namespace tempest::editor
             return false;
         }
     };
+
+    struct shadow_map_component_view : component_view_factory
+    {
+        bool create_view(ecs::registry& registry, ecs::entity ent) const override
+        {
+            if (auto shadows = registry.try_get<graphics::shadow_map_component>(ent))
+            {
+                using imgui = graphics::imgui_context;
+                auto size = shadows->size;
+                auto cascade_count = shadows->cascade_count;
+
+                imgui::create_header("Shadow Map Component", [&]() {
+                    imgui::label("Size");
+
+                    string_view size_labels[] = {
+                        "1024x1024", // index 0
+                        "2048x2048", // index 1
+                        "4096x4096", // index 2
+                    };
+
+                    // Get current index with bit manipulation
+                    // 1024 >> x = 0
+                    // 2048 >> x = 1
+                    // 4096 >> x = 2
+
+                    auto size_index = size.x >> 11;
+                    size_index = imgui::combo_box("##Size", size_index, size_labels);
+
+                    // Set size based on index
+                    size.x = 1024 << size_index;
+                    size.y = 1024 << size_index;
+
+                    imgui::label("Cascade Count");
+                    cascade_count = imgui::int_slider("Cascade Count", 1, 6, cascade_count);
+                });
+
+                if (size != shadows->size || cascade_count != shadows->cascade_count)
+                {
+                    shadows->size = size;
+                    shadows->cascade_count = cascade_count;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    };
 } // namespace tempest::editor
 
 #endif // tempest_editor_lighting_component_view_hpp

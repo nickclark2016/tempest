@@ -2167,14 +2167,20 @@ namespace tempest::graphics::vk
                 set_layouts.push_back(layout);
             }
 
+            VkPushConstantRange push_constant_range = {
+                .stageFlags = compute_accessible_stages(pass.operation_type()),
+                .offset = 0,
+                .size = static_cast<uint32_t>(pass.push_constant_range_size()),
+            };
+
             VkPipelineLayoutCreateInfo pipeline_layout_ci = {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
                 .setLayoutCount = static_cast<uint32_t>(set_layouts.size()),
                 .pSetLayouts = set_layouts.data(),
-                .pushConstantRangeCount = 0,
-                .pPushConstantRanges = nullptr,
+                .pushConstantRangeCount = push_constant_range.size > 0 ? 1u : 0u,
+                .pPushConstantRanges = push_constant_range.size > 0 ? &push_constant_range : nullptr,
             };
 
             VkPipelineLayout layout;

@@ -15,6 +15,7 @@ namespace tempest::editor
         _entity_inspector_view.register_component_view_factory<camera_component_view>();
         _entity_inspector_view.register_component_view_factory<transform_component_view>();
         _entity_inspector_view.register_component_view_factory<directional_lighting_component_view>();
+        _entity_inspector_view.register_component_view_factory<shadow_map_component_view>();
         _entity_inspector_view.register_component_view_factory<mesh_component_view>(eng.get_mesh_registry());
         _entity_inspector_view.register_component_view_factory<material_component_view>(eng.get_material_registry(),
                                                                                         eng.get_texture_registry());

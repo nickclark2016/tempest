@@ -137,12 +137,12 @@ namespace tempest
         vector<function<void(engine&)>> _close_callbacks;
         vector<function<void(engine&, float)>> _update_callbacks;
 
-        std::chrono::steady_clock::time_point _last_frame_time;
-        std::chrono::duration<float> _delta_time;
+        std::chrono::steady_clock::time_point _last_frame_time{};
+        std::chrono::duration<float> _delta_time{};
 
         graphics::render_system _render_system;
 
-        bool _should_close = false;
+        bool _should_close{false};
     };
 } // namespace tempest
 

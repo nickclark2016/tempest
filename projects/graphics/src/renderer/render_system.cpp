@@ -317,8 +317,6 @@ namespace tempest::graphics
         }
 
         _shadow_map_params.directional.cascade_count = 1;
-        auto dir_shadow_map_cascade_l0 = _shadow_map_subresource_allocator.allocate({2048, 2048});
-        assert(dir_shadow_map_cascade_l0.has_value());
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER, [&, dir_shadow_buffer](graph_pass_builder& builder) {
@@ -482,13 +480,11 @@ namespace tempest::graphics
             }
         };
 
-        _directional_shadow_map_pass = rgc->add_graph_pass(
-            "Directional Shadow Map Pass", queue_operation_type::GRAPHICS,
-            [&, dir_shadow_map_cascade_l0](graph_pass_builder& bldr) {
+        _shadow_map_pass =
+            rgc->add_graph_pass("Shadow Map Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(upload_pass)
                     .add_depth_attachment(shadow_map_mt_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
                                           store_op::STORE, 1.0f)
-                    .add_constant_buffer(dir_shadow_buffer, 0, 0)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                     .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -498,32 +494,62 @@ namespace tempest::graphics
                     .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
-                    .on_execute([&, dir_shadow_map_cascade_l0](command_list& cmds) {
-                        uint32_t draw_calls_issued = 0;
+                    .allow_push_constants(64)
+                    .on_execute([&](command_list& cmds) {
+                        // Render directional shadow maps
+                        cmds.use_pipeline(_directional_shadow_map_pipeline);
 
-                        auto cascade_region_extent = dir_shadow_map_cascade_l0->extent;
-                        auto cascade_region_offset = dir_shadow_map_cascade_l0->position;
-
-                        // Set up viewport and scissor test
-                        cmds.set_scissor_region(cascade_region_offset.x, cascade_region_offset.y,
-                                                cascade_region_extent.x, cascade_region_extent.y)
-                            .set_viewport(cascade_region_offset.x, cascade_region_offset.y, cascade_region_extent.x,
-                                          cascade_region_extent.y, 0, 1, 0, false);
-
-                        for (auto [key, batch] : _draw_batches)
+                        auto lights_with_shadows = _registry->view<directional_light_component, shadow_map_component>();
+                        for (const auto& [ent, dir_light, shadows] : lights_with_shadows)
                         {
-                            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+                            for (auto i = 0u; i < shadows.cascade_count; ++i)
                             {
-                                cmds.use_pipeline(_directional_shadow_map_pipeline)
-                                    .draw_indexed(
-                                        _indirect_buffer,
-                                        static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                                                              draw_calls_issued * sizeof(indexed_indirect_command)),
-                                        static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
+                                // Determine the shadow map size
+                                auto cascade_width = shadows.size.x >> i;
+                                auto cascade_height = shadows.size.y >> i;
+                                auto cascade_region_extent = math::vec2<uint32_t>(cascade_width, cascade_height);
 
-                                draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
+                                // Allocate shadow map region
+                                auto dir_shadow_map_cascade =
+                                    _shadow_map_subresource_allocator.allocate(cascade_region_extent);
+
+                                assert(dir_shadow_map_cascade.has_value());
+
+                                auto cascade_region_offset = dir_shadow_map_cascade.value().position;
+
+                                // Set up viewport and scissor test
+                                cmds.set_scissor_region(cascade_region_offset.x, cascade_region_offset.y,
+                                                        cascade_region_extent.x, cascade_region_extent.y)
+                                    .set_viewport(static_cast<float>(cascade_region_offset.x),
+                                                  static_cast<float>(cascade_region_offset.y),
+                                                  static_cast<float>(cascade_region_extent.x),
+                                                  static_cast<float>(cascade_region_extent.y), 0.0f, 1.0f, 0u, false);
+
+                                // Push the shadow map inverse projection matrix
+                                const auto& to_push = _shadow_map_params.directional.cascade_view[i];
+                                cmds.push_constants(0, to_push, _directional_shadow_map_pipeline);
+
+                                uint32_t draw_calls_issued = 0;
+                                for (auto [key, batch] : _draw_batches)
+                                {
+                                    if (key.alpha_type == alpha_behavior::OPAQUE ||
+                                        key.alpha_type == alpha_behavior::MASK)
+                                    {
+                                        cmds.draw_indexed(
+                                            _indirect_buffer,
+                                            static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                                                                  draw_calls_issued * sizeof(indexed_indirect_command)),
+                                            static_cast<uint32_t>(batch.objects.size()),
+                                            sizeof(indexed_indirect_command));
+
+                                        draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
+                                    }
+                                }
                             }
                         }
+
+                        // Reset the shadow map allocator
+                        _shadow_map_subresource_allocator.clear();
                     });
             });
 
@@ -531,7 +557,7 @@ namespace tempest::graphics
             bldr.depends_on(_z_prepass_pass)
                 .depends_on(build_hi_z_pass)
                 .depends_on(upload_pass)
-                .depends_on(_directional_shadow_map_pass)
+                .depends_on(_shadow_map_pass)
                 .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR, store_op::STORE,
                                       {0.5f, 1.0f, 1.0f, 1.0f})
                 .add_color_attachment(velocity_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
@@ -620,7 +646,7 @@ namespace tempest::graphics
 
         _graph->update_external_sampled_images(_pbr_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
         _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_directional_shadow_map_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_shadow_map_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
 
         _pbr_opaque_pipeline = create_pbr_pipeline(false);
         _pbr_transparencies_pipeline = create_pbr_pipeline(true);
@@ -1466,8 +1492,8 @@ namespace tempest::graphics
         auto fragment_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
-            instance_buffer_desc,  materials_buffer_desc,   linear_sampler_desc,     texture_array_desc,
+            vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc, instance_buffer_desc,
+            materials_buffer_desc,   linear_sampler_desc,     texture_array_desc,
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -1477,12 +1503,20 @@ namespace tempest::graphics
             },
         };
 
+        push_constant_layout push_constants[] = {
+            {
+                .offset = 0,
+                .range = 64, // single mat4
+            },
+        };
+
         // Depth buffer format
         resource_format depth_buffer_fmt[] = {resource_format::D24_FLOAT};
 
         auto pipeline = _device->create_graphics_pipeline({
             .layout{
                 .set_layouts = layouts,
+                .push_constants = push_constants,
             },
             .target{
                 .depth_attachment_format = depth_buffer_fmt[0],
