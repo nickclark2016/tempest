@@ -105,7 +105,7 @@ namespace tempest
         constexpr void swap(inplace_vector& other) noexcept;
 
       private:
-        alignas(T) byte _data[sizeof(T[N])];
+        alignas(T) byte _data[sizeof(T[N])] = {byte{}};
         T* _typed_data{nullptr};
         size_t _size{0};
     };

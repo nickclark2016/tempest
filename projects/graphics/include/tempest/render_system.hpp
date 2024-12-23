@@ -7,11 +7,13 @@
 #include "window.hpp"
 
 #include <tempest/flat_map.hpp>
+#include <tempest/inplace_vector.hpp>
 #include <tempest/material.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/registry.hpp>
 #include <tempest/shelf_pack.hpp>
 #include <tempest/texture.hpp>
+#include <tempest/transform_component.hpp>
 #include <tempest/vertex.hpp>
 
 #include <string>
@@ -123,20 +125,6 @@ namespace tempest::graphics
             float far;
         };
 
-        struct gpu_directional_shadow_map_parameters
-        {
-            static constexpr size_t max_shadow_cascade_count = 8;
-            
-            array<math::mat4<float>, max_shadow_cascade_count> cascade_view;
-            array<float, max_shadow_cascade_count> cascade_ranges;
-            uint32_t cascade_count;
-        };
-
-        struct gpu_shadow_map_parameters
-        {
-            gpu_directional_shadow_map_parameters directional;
-        };
-
         struct gpu_scene_data
         {
             gpu_camera_data camera;
@@ -144,6 +132,20 @@ namespace tempest::graphics
             math::vec3<float> ambient_light;
             math::vec4<float> jitter;
             gpu_light sun;
+        };
+
+        struct alignas(16) gpu_shadow_map_parameter
+        {
+            math::mat4<float> light_proj_matrix;
+            math::vec4<float> shadow_map_region; // x, y, w, h (normalized)
+            float cascade_split_far;
+        };
+
+        struct cpu_shadow_map_parameter
+        {
+            math::mat4<float> proj_matrix;
+            math::vec4<uint32_t> shadow_map_bounds;
+            ecs::entity light_entity;
         };
 
         struct hi_z_data
@@ -166,6 +168,18 @@ namespace tempest::graphics
             ecs::sparse_map<gpu_object_data> objects;
         };
 
+        struct shadow_map_parameters
+        {
+            static constexpr size_t max_regions = 6; // 6 cascades or 6 faces of a cube map
+
+            // Requirements:
+            // * For directional lights, the number of cascade splits is the number of cascades
+            // * For point lights, there are no cascades, just projections for each face
+
+            inplace_vector<math::mat4<float>, max_regions> projections;
+            inplace_vector<float, max_regions + 1> cascade_splits;
+        };
+
       public:
         render_system(ecs::registry& entities, const render_system_settings& settings = {});
 
@@ -184,7 +198,8 @@ namespace tempest::graphics
             return _settings;
         }
 
-        flat_unordered_map<guid, mesh_layout> load_meshes(span<const guid> mesh_ids, core::mesh_registry& mesh_registry);
+        flat_unordered_map<guid, mesh_layout> load_meshes(span<const guid> mesh_ids,
+                                                          core::mesh_registry& mesh_registry);
         void load_textures(span<const guid> texture_ids, const core::texture_registry& texture_registry,
                            bool generate_mip_maps);
         void load_materials(span<const guid> material_ids, const core::material_registry& material_registry);
@@ -312,7 +327,8 @@ namespace tempest::graphics
 
         size_t _last_updated_frame{2};
 
-        gpu_shadow_map_parameters _shadow_map_params;
+        vector<cpu_shadow_map_parameter> _cpu_shadow_map_build_params;
+        vector<gpu_shadow_map_parameter> _gpu_shadow_map_use_parameters;
         shelf_pack_allocator _shadow_map_subresource_allocator;
 
         tempest::function<void()> _create_imgui_hierarchy;
@@ -324,7 +340,10 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle create_sharpen_pipeline();
         graphics_pipeline_resource_handle create_directional_shadow_map_pipeline();
 
-        void build_shadow_cascades();
+        shadow_map_parameters compute_shadow_map_cascades(const directional_light_component& dir_light,
+                                                          const shadow_map_component& shadowing,
+                                                          const ecs::transform_component& light_transform,
+                                                          const camera_component& camera_data);
     };
 } // namespace tempest::graphics
 

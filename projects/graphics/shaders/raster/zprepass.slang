@@ -70,7 +70,6 @@ FragmentOutput FSMain(VertexOutput input) {
     MaterialState material;
     material.mat = materials[input.material_id];
     material.linear_sampler = linear_sampler;
-    material.textures = bindless_textures;
 
     PixelData pd;
     pd.uv = half2(input.uv);
@@ -78,7 +77,7 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
 
-    fetch_pixel_data(material, pd);
+    fetch_pixel_data(material, pd, bindless_textures);
 
     if (pd.diffuse.w < material.mat.alpha_cutoff) {
         discard;

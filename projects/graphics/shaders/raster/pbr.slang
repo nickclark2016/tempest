@@ -39,6 +39,9 @@ struct FragmentOutput {
 [vk_binding(6, 0)] SamplerState linear_sampler;
 [vk_binding(7, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
 
+[vk_binding(0, 1)] StructuredBuffer<ShadowMapParameter> shadow_map_params;
+[vk_binding(1, 1)] Texture2D shadow_map_mt;
+
 half2 calculate_velocity(half4 new_position, half4 previous_position) {
     previous_position /= previous_position.w;
     previous_position.xy = (previous_position.xy + 1.0h) * 0.5h;
@@ -107,7 +110,6 @@ FragmentOutput FSMain(VertexOutput input) {
     MaterialState material;
     material.mat = materials[input.material_id];
     material.linear_sampler = linear_sampler;
-    material.textures = bindless_textures;
 
     PixelData pd;
     pd.uv = half2(input.uv);
@@ -115,9 +117,9 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
 
-    fetch_pixel_data(material, pd);
+    fetch_pixel_data(material, pd, bindless_textures);
 
-    float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position);
+    float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position, bindless_textures);
     color.rgb = uncharted_2_tonemap(color.rgb * 4.5);
     color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
 
