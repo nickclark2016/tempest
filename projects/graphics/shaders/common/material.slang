@@ -33,7 +33,6 @@ struct Material {
 struct MaterialState {
     Material mat;
     SamplerState linear_sampler;
-    Texture2D textures[BINDLESS_TEXTURE_COUNT];
 };
 
 struct LightingState {
@@ -181,25 +180,25 @@ void evaluate_lights(const PixelData px, const MaterialState mat_state, const Li
     evaluate_directional_light(px, mat_state, lighting, camera, world_pos, color);
 }
 
-half fetch_metallic(const MaterialState mat_state, float2 uv) {
+half fetch_metallic(const MaterialState mat_state, float2 uv, Texture2D[] textures) {
     if (mat_state.mat.metallic_roughness_map_id < 0) {
         return 0.0h;
     }
-    return half(mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b);
+    return half(textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b);
 }
 
 half3 compute_diffuse(const half3 base, half metallic) {
     return base * (1.0h - metallic);
 }
 
-void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
+void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel, Texture2D[] textures) {
     half4 texture_factor = half4(mat_state.mat.base_texture_factor);
     if (mat_state.mat.base_texture_id < 0) {
         pixel.diffuse = texture_factor;
         return;
     }
 
-    half4 texture_color = half4(mat_state.textures[(int) mat_state.mat.base_texture_id].Sample(mat_state.linear_sampler, pixel.uv));
+    half4 texture_color = half4(textures[(int) mat_state.mat.base_texture_id].Sample(mat_state.linear_sampler, pixel.uv));
 
     if (texture_color.a < mat_state.mat.alpha_cutoff) {
         discard;
@@ -207,7 +206,7 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
 
     half4 color = texture_color * texture_factor;
     
-    half metallic = fetch_metallic(mat_state, pixel.uv);
+    half metallic = fetch_metallic(mat_state, pixel.uv, textures);
     half reflectance = compute_dielectric_f0(half(mat_state.mat.reflectance));
 
     pixel.diffuse.rgb = compute_diffuse(color.rgb, metallic);
@@ -215,15 +214,15 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel) {
     pixel.f0 = compute_f0(color, metallic, reflectance);
 }
 
-void fetch_roughness(const MaterialState mat_state, inout PixelData pixel) {
+void fetch_roughness(const MaterialState mat_state, inout PixelData pixel, Texture2D[] textures) {
     if (mat_state.mat.metallic_roughness_map_id < 0) {
         pixel.roughness = 0.0h;
     } else {
-        pixel.roughness = half(mat_state.textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g);
+        pixel.roughness = half(textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, pixel.uv).g);
     }
 }
 
-void fetch_normal(const MaterialState mat_state, inout PixelData pixel)
+void fetch_normal(const MaterialState mat_state, inout PixelData pixel, Texture2D[] textures)
 {
     if (mat_state.mat.normal_map_id < 0)
     {
@@ -233,7 +232,7 @@ void fetch_normal(const MaterialState mat_state, inout PixelData pixel)
 
     // map rg [0, 1] -> [-1, 1]
     // map b (0.5, 1] -> [0, 1]
-    half3 tan_normal = half3(mat_state.textures[(int) mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb) * 2.0h - 1.0h;
+    half3 tan_normal = half3(textures[(int) mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb) * 2.0h - 1.0h;
 
     tan_normal.rg *= half(mat_state.mat.normal_scale);
 
@@ -241,11 +240,11 @@ void fetch_normal(const MaterialState mat_state, inout PixelData pixel)
     pixel.shading_normal = normal;
 }
 
-void apply_emissive(const MaterialState mat_state, inout half4 color, const half2 uv) {
+void apply_emissive(const MaterialState mat_state, inout half4 color, const half2 uv, Texture2D[] textures) {
     half4 emissive = half4(mat_state.mat.emissive_factor);
     
     if (mat_state.mat.emissive_texture_id >= 0) {
-        emissive *= half4(mat_state.textures[(int) mat_state.mat.emissive_texture_id].Sample(mat_state.linear_sampler, uv));
+        emissive *= half4(textures[(int) mat_state.mat.emissive_texture_id].Sample(mat_state.linear_sampler, uv));
     }
 
     half attenuation = lerp(1.0h, 5.0h, emissive.w);
@@ -254,13 +253,13 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
     color.rgb += emissive.rgb * attenuation;
 }
 
-void fetch_pixel_data(const MaterialState mat_state, inout PixelData pixel) {
-    fetch_diffuse(mat_state, pixel);
-    fetch_roughness(mat_state, pixel);
-    fetch_normal(mat_state, pixel);
+void fetch_pixel_data(const MaterialState mat_state, inout PixelData pixel, Texture2D[] textures) {
+    fetch_diffuse(mat_state, pixel, textures);
+    fetch_roughness(mat_state, pixel, textures);
+    fetch_normal(mat_state, pixel, textures);
 }
 
-float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos) {
+float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, Texture2D[] textures) {
     half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h);
 
     evaluate_lights(px, mat_state, lighting, camera, world_pos, color.rgb);
@@ -268,7 +267,7 @@ float4 evaluate_material(const PixelData px, const MaterialState mat_state, cons
     // premultiply alpha
     color.rgb *= px.diffuse.a;
 
-    apply_emissive(mat_state, color, px.uv);
+    apply_emissive(mat_state, color, px.uv, textures);
 
     return color;
 }

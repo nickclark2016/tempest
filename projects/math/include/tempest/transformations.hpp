@@ -1,12 +1,12 @@
 #ifndef tempest_math_transformations_hpp__
 #define tempest_math_transformations_hpp__
 
-#include "mat3.hpp"
-#include "mat4.hpp"
-#include "quat.hpp"
-#include "vec2.hpp"
-#include "vec3.hpp"
-#include "vec4.hpp"
+#include <tempest/mat3.hpp>
+#include <tempest/mat4.hpp>
+#include <tempest/quat.hpp>
+#include <tempest/vec2.hpp>
+#include <tempest/vec3.hpp>
+#include <tempest/vec4.hpp>
 
 #include <cassert>
 #include <iostream>
@@ -339,11 +339,11 @@ namespace tempest::math
     {
         const auto sx = T(2) / (right - left);
         const auto sy = T(2) / (top - bottom);
-        const auto sz = T(-2) / (far - near);
+        const auto sz = T(1) / (far - near);
 
         const auto tx = -(right + left) / (right - left);
         const auto ty = -(top + bottom) / (top - bottom);
-        const auto tz = -(far + near) / (far - near);
+        const auto tz = -near / (far - near);
 
         return mat4<T>{sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, tx, ty, tz, 1};
     }

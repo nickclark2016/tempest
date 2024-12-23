@@ -84,6 +84,18 @@ namespace tempest::graphics
             .binding_index = 7,
             .binding_count = 512,
         };
+
+        descriptor_binding_info shadow_map_parameter_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .binding_index = 0,
+            .binding_count = 1,
+        };
+
+        descriptor_binding_info shadow_map_mt_desc = {
+            .type = descriptor_binding_type::SAMPLED_IMAGE,
+            .binding_index = 1,
+            .binding_count = 1,
+        };
     } // namespace
 
     render_system::render_system(ecs::registry& entities, const render_system_settings& settings)
@@ -219,7 +231,7 @@ namespace tempest::graphics
         });
 
         auto dir_shadow_buffer = rgc->create_buffer({
-            .size = 16 * 1024,
+            .size = 96 * 1024,
             .location = memory_location::AUTO,
             .name = "Shadow Map Parameter Buffer",
             .per_frame_memory = true,
@@ -316,8 +328,6 @@ namespace tempest::graphics
             result.y = ((result.y - 0.5f) / _scene_data.screen_size.y) * 2;
         }
 
-        _shadow_map_params.directional.cascade_count = 1;
-
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER, [&, dir_shadow_buffer](graph_pass_builder& builder) {
                 builder.add_transfer_destination_buffer(_scene_buffer)
@@ -380,10 +390,58 @@ namespace tempest::graphics
                         }
 
                         // Upload Directional Shadow Map Data
-                        build_shadow_cascades();
-                        writer.write(cmds,
-                                     span<const gpu_shadow_map_parameters>{&_shadow_map_params, static_cast<size_t>(1)},
-                                     dir_shadow_buffer);
+
+                        _cpu_shadow_map_build_params.clear();
+                        _gpu_shadow_map_use_parameters.clear();
+                        _shadow_map_subresource_allocator.clear();
+
+                        for (const auto& [ent, dir_light, shadow_map, transform] :
+                             _registry
+                                 ->view<directional_light_component, shadow_map_component, ecs::transform_component>())
+                        {
+                            auto params = compute_shadow_map_cascades(dir_light, shadow_map, transform,
+                                                                      _registry->get<camera_component>(_camera_entity));
+
+                            for (size_t i = 0; i < params.projections.size(); ++i)
+                            {
+                                auto region = _shadow_map_subresource_allocator.allocate(shadow_map.size);
+                                assert(region.has_value());
+
+                                cpu_shadow_map_parameter cpu_params = {
+                                    .proj_matrix = params.projections[i],
+                                    .shadow_map_bounds =
+                                        {
+                                            region->position.x,
+                                            region->position.y,
+                                            region->extent.x,
+                                            region->extent.y,
+                                        },
+                                    .light_entity = ent,
+                                };
+
+                                _cpu_shadow_map_build_params.push_back(cpu_params);
+
+                                gpu_shadow_map_parameter gpu_param = {
+                                    .light_proj_matrix = params.projections[i],
+                                    .shadow_map_region =
+                                        {
+                                            static_cast<float>(region->position.x) /
+                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                            static_cast<float>(region->position.y) /
+                                                (_shadow_map_subresource_allocator.extent().y - 1),
+                                            static_cast<float>(region->extent.x) /
+                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                            static_cast<float>(region->extent.y) /
+                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                        },
+                                    .cascade_split_far = params.cascade_splits[i],
+                                };
+
+                                _gpu_shadow_map_use_parameters.push_back(gpu_param);
+                            }
+                        }
+
+                        writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters), dir_shadow_buffer);
 
                         _scene_data.jitter = math::vec4<float>(0.0f, 0.0f, 0.0f, 0.0f);
                         _scene_data.jitter.z = 0.0f;
@@ -484,7 +542,7 @@ namespace tempest::graphics
             rgc->add_graph_pass("Shadow Map Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(upload_pass)
                     .add_depth_attachment(shadow_map_mt_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
-                                          store_op::STORE, 1.0f)
+                                          store_op::STORE, 0.0f)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                     .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -500,34 +558,24 @@ namespace tempest::graphics
                         cmds.use_pipeline(_directional_shadow_map_pipeline);
 
                         auto lights_with_shadows = _registry->view<directional_light_component, shadow_map_component>();
+
+                        uint32_t lights_written = 0;
+
                         for (const auto& [ent, dir_light, shadows] : lights_with_shadows)
                         {
                             for (auto i = 0u; i < shadows.cascade_count; ++i)
                             {
-                                // Determine the shadow map size
-                                auto cascade_width = shadows.size.x >> i;
-                                auto cascade_height = shadows.size.y >> i;
-                                auto cascade_region_extent = math::vec2<uint32_t>(cascade_width, cascade_height);
-
-                                // Allocate shadow map region
-                                auto dir_shadow_map_cascade =
-                                    _shadow_map_subresource_allocator.allocate(cascade_region_extent);
-
-                                assert(dir_shadow_map_cascade.has_value());
-
-                                auto cascade_region_offset = dir_shadow_map_cascade.value().position;
+                                const auto& params = _cpu_shadow_map_build_params[lights_written];
+                                const auto& region = params.shadow_map_bounds;
 
                                 // Set up viewport and scissor test
-                                cmds.set_scissor_region(cascade_region_offset.x, cascade_region_offset.y,
-                                                        cascade_region_extent.x, cascade_region_extent.y)
-                                    .set_viewport(static_cast<float>(cascade_region_offset.x),
-                                                  static_cast<float>(cascade_region_offset.y),
-                                                  static_cast<float>(cascade_region_extent.x),
-                                                  static_cast<float>(cascade_region_extent.y), 0.0f, 1.0f, 0u, false);
+                                cmds.set_scissor_region(region.x, region.y, region.z, region.w)
+                                    .set_viewport(static_cast<float>(region.x), static_cast<float>(region.y),
+                                                  static_cast<float>(region.z), static_cast<float>(region.w), 0.0f,
+                                                  1.0f, 0u, false);
 
-                                // Push the shadow map inverse projection matrix
-                                const auto& to_push = _shadow_map_params.directional.cascade_view[i];
-                                cmds.push_constants(0, to_push, _directional_shadow_map_pipeline);
+                                // Push the shadow map projection matrix
+                                cmds.push_constants(0, params.proj_matrix, _directional_shadow_map_pipeline);
 
                                 uint32_t draw_calls_issued = 0;
                                 for (auto [key, batch] : _draw_batches)
@@ -545,11 +593,10 @@ namespace tempest::graphics
                                         draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
                                     }
                                 }
+
+                                lights_written++;
                             }
                         }
-
-                        // Reset the shadow map allocator
-                        _shadow_map_subresource_allocator.clear();
                     });
             });
 
@@ -572,6 +619,8 @@ namespace tempest::graphics
                 .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                 .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
                 .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
+                .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 0)
+                .add_sampled_image(shadow_map_mt_buffer, 1, 1)
                 .add_indirect_argument_buffer(_indirect_buffer)
                 .add_index_buffer(_vertex_pull_buffer)
                 .on_execute(pbr_commands);
@@ -1132,10 +1181,19 @@ namespace tempest::graphics
             },
         };
 
+        descriptor_binding_info set1_bindings[] = {
+            shadow_map_parameter_desc,
+            shadow_map_mt_desc,
+        };
+
         descriptor_set_layout_create_info layouts[] = {
             {
                 .set = 0,
                 .bindings = set0_bindings,
+            },
+            {
+                .set = 1,
+                .bindings = set1_bindings,
             },
         };
 
@@ -1534,7 +1592,8 @@ namespace tempest::graphics
             .depth_testing{
                 .enable_test = true,
                 .enable_write = true,
-                .depth_test_op = compare_operation::LESS,
+                .clamp_depth = true,
+                .depth_test_op = compare_operation::GREATER,
             },
             .blending{
                 .attachment_blend_ops = {},
@@ -1547,99 +1606,112 @@ namespace tempest::graphics
         return pipeline;
     }
 
-    void render_system::build_shadow_cascades()
+    // TODO: Move this to a compute shader
+    render_system::shadow_map_parameters render_system::compute_shadow_map_cascades(
+        const directional_light_component& dir_light, const shadow_map_component& shadowing,
+        const ecs::transform_component& light_transform, const camera_component& camera_data)
     {
-        const auto& cam_data = _registry->get<camera_component>(_camera_entity);
-        const auto& inv_view_transform = _scene_data.camera.inv_view;
+        float near_plane = camera_data.near_plane;
+        float far_plane = camera_data.far_shadow_plane;
+        float clip_range = far_plane - near_plane;
 
-        // Compute the light space transformation
-        const auto light_view =
-            math::look_at(math::vec3(0.0f), _scene_data.sun.direction, math::vec3<float>(0.0f, 1.0f, 0.0f));
+        float ratio = far_plane / near_plane;
 
-        const auto aspect_ratio = cam_data.aspect_ratio;
-        const auto tan_half_h_fov = std::tan(cam_data.vertical_fov * aspect_ratio / 2.0f);
-        const auto tan_half_v_fov = std::tan((cam_data.vertical_fov) / 2.0f);
+        shadow_map_parameters params;
+        params.cascade_splits.resize(shadowing.cascade_count);
+        params.projections.resize(shadowing.cascade_count);
 
-        // Set up the cascade ranges
-        const auto near_plane = cam_data.near_plane;
-        const auto far_plane = cam_data.far_shadow_plane;
-
-        static constexpr auto range_bound_count = gpu_directional_shadow_map_parameters::max_shadow_cascade_count + 1;
-
-        array<float, range_bound_count> cascade_ranges;
-        cascade_ranges[0] = near_plane;
-        cascade_ranges[_shadow_map_params.directional.cascade_count] = far_plane;
-
-        // Compute the cascade splits using logarithmic interpolation
-        for (uint32_t i = 1; i < _shadow_map_params.directional.cascade_count; ++i)
+        // Compute splits
+        // https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus
+        for (uint32_t cascade = 0; cascade < shadowing.cascade_count; ++cascade)
         {
-            const auto p = static_cast<float>(i) / static_cast<float>(_shadow_map_params.directional.cascade_count);
-            cascade_ranges[i] = near_plane * std::pow(far_plane / near_plane, p);
+            float p = (cascade + 1) / static_cast<float>(shadowing.cascade_count);
+            float log = near_plane * std::pow(ratio, p);
+            float uniform = near_plane + clip_range * p;
+            float d = 0.95f * (log - uniform) + uniform;
+            float res = (d - near_plane) / clip_range;
+
+            params.cascade_splits[cascade] = res;
         }
 
-        for (size_t cascade_index = 0; cascade_index < _shadow_map_params.directional.cascade_count; ++cascade_index)
+        auto proj_with_clip = math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov,
+                                                camera_data.near_plane, camera_data.far_shadow_plane);
+
+        auto inv_view_proj = math::inverse(proj_with_clip * _scene_data.camera.view);
+
+        float last_split = 0.0f;
+        for (uint32_t cascade = 0; cascade < shadowing.cascade_count; ++cascade)
         {
-            // TODO: Cache the light space frustum corners
-            const auto x_near = cascade_ranges[cascade_index] * tan_half_h_fov;
-            const auto x_far = cascade_ranges[cascade_index + 1] * tan_half_h_fov;
-            const auto y_near = cascade_ranges[cascade_index] * tan_half_v_fov;
-            const auto y_far = cascade_ranges[cascade_index + 1] * tan_half_v_fov;
-
-            // Compute the frustum corners
-            array<math::vec4<float>, 8> frustum_corners = {
-                // Near Face
-                math::vec4<float>(-x_near, -y_near, cascade_ranges[cascade_index], 1.0f),
-                math::vec4<float>(x_near, -y_near, cascade_ranges[cascade_index], 1.0f),
-                math::vec4<float>(x_near, y_near, cascade_ranges[cascade_index], 1.0f),
-                math::vec4<float>(-x_near, y_near, cascade_ranges[cascade_index], 1.0f),
-                // Far Face
-                math::vec4<float>(-x_far, -y_far, cascade_ranges[cascade_index + 1], 1.0f),
-                math::vec4<float>(x_far, -y_far, cascade_ranges[cascade_index + 1], 1.0f),
-                math::vec4<float>(x_far, y_far, cascade_ranges[cascade_index + 1], 1.0f),
-                math::vec4<float>(-x_far, y_far, cascade_ranges[cascade_index + 1], 1.0f),
+            // clang-format off
+            array<math::vec3<float>, 8> frustum_corners = {
+                math::vec3<float>{ -1.0f,  1.0f, 0.0f },
+                math::vec3<float>{  1.0f,  1.0f, 0.0f },
+                math::vec3<float>{  1.0f, -1.0f, 0.0f },
+                math::vec3<float>{ -1.0f, -1.0f, 0.0f },
+                math::vec3<float>{ -1.0f,  1.0f, 1.0f },
+                math::vec3<float>{  1.0f,  1.0f, 1.0f },
+                math::vec3<float>{  1.0f, -1.0f, 1.0f },
+                math::vec3<float>{ -1.0f, -1.0f, 1.0f },
             };
+            // clang-format on
 
-            // Transform the frustum corners to light space and get the bounds
-            float min_x = std::numeric_limits<float>::max();
-            float min_y = std::numeric_limits<float>::max();
-            float min_z = std::numeric_limits<float>::max();
-            float max_x = std::numeric_limits<float>::min();
-            float max_y = std::numeric_limits<float>::min();
-            float max_z = std::numeric_limits<float>::min();
-
-            array<math::vec4<float>, 8> light_space_corners;
-
-            for (size_t idx = 0; idx < 8; ++idx)
+            // Compute frustum corners
+            for (math::vec3<float>& corner : frustum_corners)
             {
-                auto corner = frustum_corners[idx];
-
-                const auto world_space_corner = inv_view_transform * corner;
-                const auto light_space_corner = light_view * world_space_corner;
-
-                min_x = std::min(min_x, light_space_corner.x);
-                min_y = std::min(min_y, light_space_corner.y);
-                min_z = std::min(min_z, light_space_corner.z);
-
-                max_x = std::max(max_x, light_space_corner.x);
-                max_y = std::max(max_y, light_space_corner.y);
-                max_z = std::max(max_z, light_space_corner.z);
+                auto inv_corner = inv_view_proj * math::vec4<float>(corner.x, corner.y, corner.z, 1.0f);
+                auto normalized = inv_corner / inv_corner.w;
+                corner = {normalized.x, normalized.y, normalized.z};
             }
 
-            const auto cascade_bounds = orthogonal_bounds{
-                .left = min_x,
-                .right = max_x,
-                .bottom = min_y,
-                .top = max_y,
-                .near = min_z,
-                .far = max_z,
-            };
+            float split_distance = params.cascade_splits[cascade];
 
-            // Build projection matrix
-            const auto proj = math::ortho(cascade_bounds.left, cascade_bounds.right, cascade_bounds.bottom,
-                                          cascade_bounds.top, cascade_bounds.near, cascade_bounds.far);
+            for (auto idx = 0; idx < 4; ++idx)
+            {
+                auto edge = frustum_corners[idx + 4] - frustum_corners[idx];
+                auto normalized_far = frustum_corners[idx] + edge * split_distance;
+                auto normalized_near = frustum_corners[idx] + edge * last_split;
 
-            _shadow_map_params.directional.cascade_view[cascade_index] = proj * light_view;
-            _shadow_map_params.directional.cascade_ranges[cascade_index] = cascade_ranges[cascade_index + 1];
+                frustum_corners[idx + 4] = normalized_far;
+                frustum_corners[idx] = normalized_near;
+            }
+
+            // Compute the center of the frustum
+            math::vec3<float> frustum_center = 0.0f;
+            for (const auto& corner : frustum_corners)
+            {
+                frustum_center += corner;
+            }
+            frustum_center /= 8.0f;
+
+            float radius = 0.0f;
+            for (const auto& corner : frustum_corners)
+            {
+                float dist = math::norm(corner - frustum_center);
+                radius = std::max(radius, dist);
+            }
+
+            radius = std::ceil(radius * 16.0f) / 16.0f;
+
+            math::vec3<float> max_extents = radius;
+            math::vec3<float> min_extents = -max_extents;
+
+            // Compute light direction
+            auto light_rot = math::rotate(light_transform.rotation());
+            auto light_dir_xyzw = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
+            auto light_dir = math::vec3<float>(light_dir_xyzw.x, light_dir_xyzw.y, light_dir_xyzw.z);
+
+            // Light View Matrix
+            auto light_view = math::look_at(frustum_center - light_dir * -min_extents.z, frustum_center,
+                                            math::vec3<float>(0.0f, 1.0f, 0.0f));
+            auto light_proj =
+                math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y, min_extents.z, max_extents.z);
+
+            params.cascade_splits[cascade] = (near_plane + split_distance * clip_range) * -1.0f;
+            params.projections[cascade] = light_proj * light_view;
+
+            last_split = params.cascade_splits[cascade];
         }
+
+        return params;
     }
 } // namespace tempest::graphics

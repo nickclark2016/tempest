@@ -179,6 +179,12 @@ namespace tempest::math
     }
 
     template <typename T>
+    inline constexpr vec3<T> operator-(const vec3<T>& v) noexcept
+    {
+        return vec3<T>(-v[0], -v[1], -v[2]);
+    }
+
+    template <typename T>
     inline constexpr T norm(const vec3<T>& v)
     {
         const T mag_squared = v.x * v.x + v.y * v.y + v.z * v.z;
