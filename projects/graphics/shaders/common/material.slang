@@ -158,26 +158,56 @@ half3 diffuse_lobe(const PixelData px, half n_dot_v, half n_dot_l, half l_dot_h)
     return px.diffuse.rgb * diffuse(px.roughness, n_dot_v, n_dot_l, l_dot_h);
 }
 
-void evaluate_directional_light(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout half3 color) {
+void evaluate_directional_light(const PixelData px, const MaterialState mat_state, const Light lighting, const Camera camera, const float3 world_pos, const float3 view_pos, inout half3 color, Texture2D shadow_map, StructuredBuffer<ShadowMapParameter> shadow_map_params, SamplerState shadow_map_sampler) {
     half3 v = half3(normalize(camera.eye.xyz - world_pos));
-    half3 l = half3(-lighting.sun.direction.xyz);
+    half3 l = half3(-lighting.direction.xyz);
     half3 h = normalize(v + l);
     half n_dot_v = saturate(dot(px.shading_normal, v));
     half n_dot_l = saturate(dot(px.shading_normal, l));
     half n_dot_h = saturate(dot(px.shading_normal, h));
     half l_dot_h = saturate(dot(l, h));
 
-    half3 fr = specular_lobe(px, lighting.sun, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
+    half visibility = 1.0h;
+    
+    // If the normal is facing towards the light, compute shadows
+    if (n_dot_l > 0.0h) {
+        // Get the pixel position in light space
+        uint cascade_count = lighting.shadow_map_count;
+        uint cascade_index = 0;
+        for (uint i = 0; i < cascade_count - 1; ++i)
+        {
+            uint shadow_map_index = lighting.shadow_map_indices[i];
+            const ShadowMapParameter shadow_map_param = shadow_map_params[shadow_map_index];
+
+            if (view_pos.z < shadow_map_param.cascade_split)
+            {
+                cascade_index = i + 1;
+            }
+        }
+
+        uint selected_shadow_map_index = lighting.shadow_map_indices[cascade_index];
+        const ShadowMapParameter shadow_map_param = shadow_map_params[selected_shadow_map_index];
+
+        // compute the xy position in the shadow map relative to the cascade bounds
+        float4 shadow_coord = mul(shadow_map_param.view_proj_matrix[cascade_index], float4(world_pos, 1.0));
+        float shadow_x = lerp(shadow_map_param.shadow_map_region.x, shadow_map_param.shadow_map_region.x + shadow_map_param.shadow_map_region.z, shadow_coord.x);
+        float shadow_y = lerp(shadow_map_param.shadow_map_region.y, shadow_map_param.shadow_map_region.y + shadow_map_param.shadow_map_region.w, shadow_coord.y);
+
+        // read the shadow map
+        float shadow_depth = shadow_map.SampleLevel(shadow_map_sampler, float2(shadow_x, shadow_y), 0.0).r;
+    }
+
+    half3 fr = specular_lobe(px, lighting, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
     half3 fd = diffuse_lobe(px, n_dot_v, n_dot_l, l_dot_h);
 
     half3 dr = fd + fr;
 
     half3 base = dr;
-    color += (base.rgb * half3(lighting.sun.color_intensity.rgb)) * (half(lighting.sun.color_intensity.w) * n_dot_l); 
+    color += (base.rgb * half3(lighting.color_intensity.rgb)) * (half(lighting.color_intensity.w) * n_dot_l * visibility); 
 }
 
-void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, inout half3 color) {
-    evaluate_directional_light(px, mat_state, lighting, camera, world_pos, color);
+void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, inout half3 color, Texture2D shadow_map, StructuredBuffer<ShadowMapParameter> shadow_map_params, SamplerState shadow_map_sampler) {
+    evaluate_directional_light(px, mat_state, lighting.sun, camera, world_pos, view_pos, color, shadow_map, shadow_map_params, shadow_map_sampler);
 }
 
 half fetch_metallic(const MaterialState mat_state, float2 uv, Texture2D[] textures) {
@@ -259,10 +289,10 @@ void fetch_pixel_data(const MaterialState mat_state, inout PixelData pixel, Text
     fetch_normal(mat_state, pixel, textures);
 }
 
-float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, Texture2D[] textures) {
+float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, Texture2D[] textures, Texture2D shadow_map, StructuredBuffer<ShadowMapParameter> shadow_map_params, SamplerState shadow_map_sampler) {
     half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h);
 
-    evaluate_lights(px, mat_state, lighting, camera, world_pos, color.rgb);
+    evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, color.rgb, shadow_map, shadow_map_params, shadow_map_sampler);
 
     // premultiply alpha
     color.rgb *= px.diffuse.a;
