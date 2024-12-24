@@ -16,6 +16,7 @@ struct SceneGlobals {
 struct VertexOutput {
     float4 position         : SV_Position;
     float3 world_position   : Position;
+    float3 view_position    : ViewPosition;
     float4 current_position : CurrentPosition;
     float4 prev_position    : PreviousPosition;
     float2 uv               : UV0;
@@ -30,7 +31,7 @@ struct FragmentOutput {
     float2 velocity : SV_Target1;
 };
 
-[vk_binding(0, 0)] ConstantBuffer<SceneGlobals> scene;
+[vk_binding(0, 0)] StructuredBuffer<SceneGlobals> scene;
 [vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
 [vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
 [vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;
@@ -62,11 +63,11 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     Vertex v = pull_vertex(vertex_pull_buffer, meshes[instance.mesh_id], vertex_id);
 
     float4 world_pos = mul(instance.model_matrix, float4(v.position, 1.0));
-    float4 view_pos = mul(scene.camera.view, world_pos);
-    float4 clip_pos = mul(scene.camera.projection, view_pos);
+    float4 view_pos = mul(scene[0].camera.view, world_pos);
+    float4 clip_pos = mul(scene[0].camera.projection, view_pos);
 
     float4 prev_world_pos = mul(instance.prev_model_matrix, float4(v.position, 1.0));
-    float4 prev_clip_pos = mul(scene.camera.prev_projection, mul(scene.camera.prev_view, prev_world_pos));
+    float4 prev_clip_pos = mul(scene[0].camera.prev_projection, mul(scene[0].camera.prev_view, prev_world_pos));
 
     float3x3 model_3x3 = (float3x3) instance.model_matrix;
     float3x3 t_inv_model_3x3 = (float3x3) instance.transpose_inv_model_matrix;
@@ -77,10 +78,11 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
     VertexOutput result;
 
-    result.position = clip_pos + scene.jitter_offset;
+    result.position = clip_pos + scene[0].jitter_offset;
     result.current_position = clip_pos;
     result.prev_position = prev_clip_pos;
     result.world_position = world_pos.xyz;
+    result.view_position = view_pos.xyz;
     result.uv = v.uv0;
     result.normal = geom_normal;
     result.tangent = geom_tangent;
@@ -104,8 +106,8 @@ float3 uncharted_2_tonemap(float3 x)
 [shader("fragment")]
 FragmentOutput FSMain(VertexOutput input) {
     LightingState lighting;
-    lighting.sun = scene.sun;
-    lighting.ambient_color_factor = scene.ambient_light.rgb;
+    lighting.sun = scene[0].sun;
+    lighting.ambient_color_factor = scene[0].ambient_light.rgb;
 
     MaterialState material;
     material.mat = materials[input.material_id];
@@ -119,7 +121,7 @@ FragmentOutput FSMain(VertexOutput input) {
 
     fetch_pixel_data(material, pd, bindless_textures);
 
-    float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position, bindless_textures);
+    float4 color = evaluate_material(pd, material, lighting, scene[0].camera, input.world_position, input.view_position, bindless_textures, shadow_map_mt, shadow_map_params, linear_sampler);
     color.rgb = uncharted_2_tonemap(color.rgb * 4.5);
     color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
 

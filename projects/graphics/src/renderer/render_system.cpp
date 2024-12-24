@@ -38,7 +38,7 @@ namespace tempest::graphics
 
         // Bindings
         descriptor_binding_info scene_constant_buffer = {
-            .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
             .binding_index = 0,
             .binding_count = 1,
         };
@@ -364,6 +364,64 @@ namespace tempest::graphics
                             }
                         }
 
+                        // Compute shadow data
+                        _cpu_shadow_map_build_params.clear();
+                        _gpu_shadow_map_use_parameters.clear();
+                        _shadow_map_subresource_allocator.clear();
+
+                        sizeof(gpu_scene_data);
+
+                        uint32_t shadow_maps_written = 0;
+
+                        for (const auto& [ent, dir_light, shadow_map, transform] :
+                             _registry
+                                 ->view<directional_light_component, shadow_map_component, ecs::transform_component>())
+                        {
+                            auto params = compute_shadow_map_cascades(dir_light, shadow_map, transform,
+                                                                      _registry->get<camera_component>(_camera_entity));
+
+                            _scene_data.sun.shadow_map_count = static_cast<uint32_t>(params.projections.size());
+                            for (size_t i = 0; i < params.projections.size(); ++i)
+                            {
+                                auto region = _shadow_map_subresource_allocator.allocate(shadow_map.size);
+                                assert(region.has_value());
+
+                                cpu_shadow_map_parameter cpu_params = {
+                                    .proj_matrix = params.projections[i],
+                                    .shadow_map_bounds =
+                                        {
+                                            region->position.x,
+                                            region->position.y,
+                                            region->extent.x,
+                                            region->extent.y,
+                                        },
+                                    .light_entity = ent,
+                                };
+
+                                _scene_data.sun.shadow_map_indices[i] = shadow_maps_written++;
+
+                                _cpu_shadow_map_build_params.push_back(cpu_params);
+
+                                gpu_shadow_map_parameter gpu_param = {
+                                    .light_proj_matrix = params.projections[i],
+                                    .shadow_map_region =
+                                        {
+                                            static_cast<float>(region->position.x) /
+                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                            static_cast<float>(region->position.y) /
+                                                (_shadow_map_subresource_allocator.extent().y - 1),
+                                            static_cast<float>(region->extent.x) /
+                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                            static_cast<float>(region->extent.y) /
+                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                        },
+                                    .cascade_split_far = params.cascade_splits[i],
+                                };
+
+                                _gpu_shadow_map_use_parameters.push_back(gpu_param);
+                            }
+                        }
+
                         // upload scene data
                         if (_camera_entity != ecs::tombstone)
                         {
@@ -391,56 +449,6 @@ namespace tempest::graphics
 
                         // Upload Directional Shadow Map Data
 
-                        _cpu_shadow_map_build_params.clear();
-                        _gpu_shadow_map_use_parameters.clear();
-                        _shadow_map_subresource_allocator.clear();
-
-                        for (const auto& [ent, dir_light, shadow_map, transform] :
-                             _registry
-                                 ->view<directional_light_component, shadow_map_component, ecs::transform_component>())
-                        {
-                            auto params = compute_shadow_map_cascades(dir_light, shadow_map, transform,
-                                                                      _registry->get<camera_component>(_camera_entity));
-
-                            for (size_t i = 0; i < params.projections.size(); ++i)
-                            {
-                                auto region = _shadow_map_subresource_allocator.allocate(shadow_map.size);
-                                assert(region.has_value());
-
-                                cpu_shadow_map_parameter cpu_params = {
-                                    .proj_matrix = params.projections[i],
-                                    .shadow_map_bounds =
-                                        {
-                                            region->position.x,
-                                            region->position.y,
-                                            region->extent.x,
-                                            region->extent.y,
-                                        },
-                                    .light_entity = ent,
-                                };
-
-                                _cpu_shadow_map_build_params.push_back(cpu_params);
-
-                                gpu_shadow_map_parameter gpu_param = {
-                                    .light_proj_matrix = params.projections[i],
-                                    .shadow_map_region =
-                                        {
-                                            static_cast<float>(region->position.x) /
-                                                (_shadow_map_subresource_allocator.extent().x - 1),
-                                            static_cast<float>(region->position.y) /
-                                                (_shadow_map_subresource_allocator.extent().y - 1),
-                                            static_cast<float>(region->extent.x) /
-                                                (_shadow_map_subresource_allocator.extent().x - 1),
-                                            static_cast<float>(region->extent.y) /
-                                                (_shadow_map_subresource_allocator.extent().x - 1),
-                                        },
-                                    .cascade_split_far = params.cascade_splits[i],
-                                };
-
-                                _gpu_shadow_map_use_parameters.push_back(gpu_param);
-                            }
-                        }
-
                         writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters), dir_shadow_buffer);
 
                         _scene_data.jitter = math::vec4<float>(0.0f, 0.0f, 0.0f, 0.0f);
@@ -464,7 +472,7 @@ namespace tempest::graphics
                                           store_op::STORE, 0.0f)
                     .add_color_attachment(encoded_normals_buffer, resource_access_type::WRITE, load_op::CLEAR,
                                           store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
-                    .add_constant_buffer(_scene_buffer, 0, 0)
+                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                     .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -611,7 +619,7 @@ namespace tempest::graphics
                                       store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
                 .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD,
                                       store_op::DONT_CARE)
-                .add_constant_buffer(_scene_buffer, 0, 0)
+                .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
                 .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                 .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                 .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -1140,7 +1148,7 @@ namespace tempest::graphics
 
         descriptor_binding_info set0_bindings[] = {
             {
-                .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
                 .binding_index = 0,
                 .binding_count = 1,
             },
@@ -1263,7 +1271,7 @@ namespace tempest::graphics
 
         descriptor_binding_info set0_bindings[] = {
             {
-                .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
                 .binding_index = 0,
                 .binding_count = 1,
             },

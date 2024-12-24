@@ -1,7 +1,7 @@
 #ifndef tempest_lighting_slang
 #define tempest_lighting_slang
 
-enum LightType
+enum LightType : uint
 {
     DIRECTIONAL,
     POINT,
@@ -10,7 +10,7 @@ enum LightType
 
 struct ShadowMapParameter
 {
-    float4x4 inv_view_proj_matrix;
+    float4x4 view_proj_matrix;
     float4 shadow_map_region; // x, y, width, height - normalized
     float cascade_split;
     
@@ -26,7 +26,7 @@ struct Light
     float4 position;
     float4 direction;
     float4 attenuation;
-    uint shadow_map_indices[6]; // Up to 6 cascades, or 1 cascade per face of a cube map
+    Array<uint, 6> shadow_map_indices; // Up to 6 cascades, or 1 cascade per face of a cube map
     LightType type;
     uint shadow_map_count;
 };
