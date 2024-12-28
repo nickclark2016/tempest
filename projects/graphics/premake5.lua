@@ -66,15 +66,33 @@ scoped.group('Engine', function()
 
         scoped.filter({ 'files:shaders/raster/**.slang' }, function()
             buildmessage 'Compiling %{file.relpath}'
+            
+            scoped.filter({
+                'options:debugshaders'
+            }, function()
+                buildcommands {
+                    '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O0 -g3 -line-directive-mode source-map',
+                    '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O0 -g3 -line-directive-mode source-map',
+                }
+            end)
 
-            buildcommands {
-                '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
-                '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
-            }
+            scoped.filter({
+                'options:not debugshaders'
+            }, function()
+                buildcommands {
+                    '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
+                    '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
+                }
+            end)
+
             
             buildoutputs {
                 '%{cfg.targetdir}/shaders/%{file.basename}.vert.spv',
                 '%{cfg.targetdir}/shaders/%{file.basename}.frag.spv'
+            }
+
+            buildinputs {
+                'shaders/common/**.slang',
             }
         end)
 
@@ -91,3 +109,9 @@ scoped.group('Engine', function()
         end)
     end)
 end)
+
+newoption {
+    trigger = 'debugshaders',
+    description = 'Compile shaders with debug information',
+    category = 'Tempest Engine',
+}

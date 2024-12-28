@@ -1,8 +1,7 @@
-#ifndef tempest_vertex_pull_slang
-#define tempest_vertex_pull_slang
+// vertex_pull.slang
 
-#include "consts.slang"
-#include "mesh.slang"
+import consts;
+import mesh;
 
 float2 pull_float2_f32(StructuredBuffer<uint> src, uint byte_offset) {
     uint index = byte_offset / 4;
@@ -62,5 +61,3 @@ Vertex pull_vertex(StructuredBuffer<uint> src, const Mesh mesh, const uint verte
 
     return v;
 }
-
-#endif // tempest_vertex_pull_slang

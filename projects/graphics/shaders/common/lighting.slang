@@ -1,5 +1,4 @@
-#ifndef tempest_lighting_slang
-#define tempest_lighting_slang
+// lighting.slang
 
 enum LightType : uint
 {
@@ -30,5 +29,3 @@ struct Light
     LightType type;
     uint shadow_map_count;
 };
-
-#endif // tempest_lighting_slang

@@ -1,9 +1,8 @@
-#ifndef tempest_material_slang
-#define tempest_material_slang
+// material.slang
 
-#include "camera.slang"
-#include "consts.slang"
-#include "lighting.slang"
+import camera;
+import consts;
+import lighting;
 
 enum class MaterialType : uint {
     OPAQUE,
@@ -50,6 +49,13 @@ struct PixelData {
     half2 uv;
     half roughness;
 };
+
+static const float4x4 shadow_bias_matrix = float4x4(
+    0.5, 0.0, 0.0, 0.5,
+    0.0, 0.5, 0.0, 0.5,
+    0.0, 0.0, 1.0, 0.0,
+    0.0, 0.0, 0.0, 1.0
+);
 
 // Octohedral encoding
 
@@ -174,13 +180,11 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
         // Get the pixel position in light space
         uint cascade_count = lighting.shadow_map_count;
         uint cascade_index = 0;
-        for (uint i = 0; i < cascade_count - 1; ++i)
-        {
+        for (uint i = 0; i < cascade_count - 1; ++i) {
             uint shadow_map_index = lighting.shadow_map_indices[i];
             const ShadowMapParameter shadow_map_param = shadow_map_params[shadow_map_index];
 
-            if (view_pos.z < shadow_map_param.cascade_split)
-            {
+            if (view_pos.z > -shadow_map_param.cascade_split) {
                 cascade_index = i + 1;
             }
         }
@@ -189,12 +193,19 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
         const ShadowMapParameter shadow_map_param = shadow_map_params[selected_shadow_map_index];
 
         // compute the xy position in the shadow map relative to the cascade bounds
-        float4 shadow_coord = mul(shadow_map_param.view_proj_matrix[cascade_index], float4(world_pos, 1.0));
+        float4 shadow_coord = mul(shadow_bias_matrix, mul(shadow_map_param.view_proj_matrix, float4(world_pos, 1.0)));
+        shadow_coord.xyz /= shadow_coord.w;
+
         float shadow_x = lerp(shadow_map_param.shadow_map_region.x, shadow_map_param.shadow_map_region.x + shadow_map_param.shadow_map_region.z, shadow_coord.x);
         float shadow_y = lerp(shadow_map_param.shadow_map_region.y, shadow_map_param.shadow_map_region.y + shadow_map_param.shadow_map_region.w, shadow_coord.y);
 
         // read the shadow map
-        float shadow_depth = shadow_map.SampleLevel(shadow_map_sampler, float2(shadow_x, shadow_y), 0.0).r;
+        if (shadow_coord.z > -1.0 && shadow_coord.z < 1.0) {
+            float dist = shadow_map.Sample(shadow_map_sampler, float2(shadow_x, shadow_y)).r;
+            if (shadow_coord.w > 0 && dist > -shadow_coord.z) {
+                visibility = 0.0h;
+            }
+        }
     }
 
     half3 fr = specular_lobe(px, lighting, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
@@ -301,5 +312,3 @@ float4 evaluate_material(const PixelData px, const MaterialState mat_state, cons
 
     return color;
 }
-
-#endif // tempest_material_slang

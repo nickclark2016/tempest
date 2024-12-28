@@ -39,6 +39,11 @@ namespace tempest::editor
                         imgui::label("Near Clip Plane");
                         imgui::next_column();
                         comp->near_plane = imgui::input_float("##camera_near_plane", comp->near_plane);
+
+                        imgui::next_column();
+                        imgui::label("Shadow Distance");
+                        imgui::next_column();
+                        comp->far_shadow_plane = imgui::input_float("##camera_shadow_distance", comp->far_shadow_plane);
                     });
                 });
             }
