@@ -1,7 +1,7 @@
 #ifndef tempest_math_mat3_hpp__
 #define tempest_math_mat3_hpp__
 
-#include "vec3.hpp"
+#include <tempest/vec3.hpp>
 
 namespace tempest::math
 {
