@@ -1,17 +1,17 @@
 newoption {
     trigger = 'installdir',
     value = 'string',
-    description = 'Installation directory',
+    description = 'Directory to install the application to.',
     default = './install',
-    category = 'Installation',
+    category = 'Tempest Engine',
 }
 
 newoption {
     trigger = 'installcfg',
     value = 'string',
-    description = 'Installation configuration',
+    description = 'Configuration of the build to install.',
     default = 'Release',
-    category = 'Installation',
+    category = 'Tempest Engine',
 }
 
 newaction {

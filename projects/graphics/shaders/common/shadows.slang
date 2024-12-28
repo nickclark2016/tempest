@@ -1,5 +1,4 @@
-#ifndef tempest_shadows_slang
-#define tempest_shadows_slang
+// shadows.slang
 
 static const uint SHADOW_CASCADE_COUNT = 8;
 
@@ -13,5 +12,3 @@ struct ShadowMapParameters {
     DirectionalShadowMapParameters directional;
     // TODO: Add other shadow types here
 }
-
-#endif // tempest_shadows_slang

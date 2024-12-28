@@ -32,7 +32,8 @@ int main()
         };
 
         tempest::ecs::transform_component camera_transform;
-        camera_transform.position({0.0f, 1.0f, 0.0f});
+        camera_transform.position({0.0f, 10.0f, 0.0f});
+        camera_transform.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
 
         engine.get_registry().name(camera, "Camera");
 
@@ -43,7 +44,7 @@ int main()
             "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", engine.get_registry());
         auto sponza_instance = engine.load_entity(sponza_prefab);
         auto sponza_transform = tempest::ecs::transform_component{};
-        sponza_transform.scale({125.0f, 125.0f, 125.0f});
+        sponza_transform.scale({12.5f, 12.5f, 12.5f});
         engine.get_registry().assign(sponza_instance, sponza_transform);
         
         auto lantern_prefab = engine.get_asset_database().import(

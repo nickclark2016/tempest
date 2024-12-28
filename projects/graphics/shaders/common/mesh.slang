@@ -1,5 +1,4 @@
-#ifndef tempest_mesh_slang
-#define tempest_mesh_slang
+// mesh.slang
 
 struct Mesh {
     uint mesh_start_offset;
@@ -31,5 +30,3 @@ struct Vertex {
     float4 tangent;
     float4 color;
 };
-
-#endif // tempest_mesh_slang

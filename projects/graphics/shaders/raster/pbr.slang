@@ -1,9 +1,9 @@
-#include "../common/camera.slang"
-#include "../common/consts.slang"
-#include "../common/lighting.slang"
-#include "../common/material.slang"
-#include "../common/mesh.slang"
-#include "../common/vertex_pull.slang"
+import "../common/camera";
+import "../common/consts";
+import "../common/lighting";
+import "../common/material";
+import "../common/mesh";
+import "../common/vertex_pull";
 
 struct SceneGlobals {
     Camera camera;

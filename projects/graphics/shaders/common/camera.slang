@@ -1,5 +1,4 @@
-#ifndef tempest_camera_slang
-#define tempest_camera_slang
+// camera.slang
 
 struct Camera {
     float4x4 projection;
@@ -10,5 +9,3 @@ struct Camera {
     float4x4 prev_view;
     float4 eye;
 };
-
-#endif // tempest_camera_slang

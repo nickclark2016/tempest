@@ -407,13 +407,13 @@ namespace tempest::graphics
                                     .shadow_map_region =
                                         {
                                             static_cast<float>(region->position.x) /
-                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                                (_shadow_map_subresource_allocator.extent().x),
                                             static_cast<float>(region->position.y) /
-                                                (_shadow_map_subresource_allocator.extent().y - 1),
+                                                (_shadow_map_subresource_allocator.extent().y),
                                             static_cast<float>(region->extent.x) /
-                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                                (_shadow_map_subresource_allocator.extent().x),
                                             static_cast<float>(region->extent.y) /
-                                                (_shadow_map_subresource_allocator.extent().x - 1),
+                                                (_shadow_map_subresource_allocator.extent().x),
                                         },
                                     .cascade_split_far = params.cascade_splits[i],
                                 };
@@ -449,7 +449,8 @@ namespace tempest::graphics
 
                         // Upload Directional Shadow Map Data
 
-                        writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters), dir_shadow_buffer);
+                        writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters),
+                                                               dir_shadow_buffer);
 
                         _scene_data.jitter = math::vec4<float>(0.0f, 0.0f, 0.0f, 0.0f);
                         _scene_data.jitter.z = 0.0f;
@@ -907,7 +908,6 @@ namespace tempest::graphics
     flat_unordered_map<guid, mesh_layout> render_system::load_meshes(span<const guid> mesh_guids,
                                                                      core::mesh_registry& mesh_reg)
     {
-
         flat_unordered_map<guid, mesh_layout> mesh_layouts;
         vector<guid> new_mesh_ids;
         for (const auto& guid : mesh_guids)
@@ -1709,8 +1709,8 @@ namespace tempest::graphics
             auto light_dir = math::vec3<float>(light_dir_xyzw.x, light_dir_xyzw.y, light_dir_xyzw.z);
 
             // Light View Matrix
-            auto light_view = math::look_at(frustum_center - light_dir * -min_extents.z, frustum_center,
-                                            math::vec3<float>(0.0f, 1.0f, 0.0f));
+            auto light_view =
+                math::look_at(frustum_center - light_dir * radius, frustum_center, math::vec3<float>(0.0f, 1.0f, 0.0f));
             auto light_proj =
                 math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y, min_extents.z, max_extents.z);
 

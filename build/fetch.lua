@@ -18,16 +18,16 @@ newaction {
         end
 
         if _TARGET_OS == 'windows' then
-            local slangZipPath = path.join(cacheDir, 'slang-2024.17-win64.zip')
-            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2024.17/slang-2024.17-windows-x86_64.zip', slangZipPath)
+            local slangZipPath = path.join(cacheDir, 'slang-2024.16-win64.zip')
+            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2024.16/slang-2024.16-windows-x86_64.zip', slangZipPath)
             if downloaded then
                 zip.extract(slangZipPath, path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang'))
             end
         end
 
         if _TARGET_OS == 'linux' then
-            local slangZipPath = path.join(cacheDir, 'slang-2024.17-linux-64.zip')
-            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2024.17/slang-2024.17-linux-x86_64.zip', slangZipPath)
+            local slangZipPath = path.join(cacheDir, 'slang-2024.16-linux-64.zip')
+            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2024.16/slang-2024.16-linux-x86_64.zip', slangZipPath)
             if downloaded then
                 zip.extract(slangZipPath, path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang'))
             end
