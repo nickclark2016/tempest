@@ -1961,8 +1961,8 @@ namespace tempest::graphics::vk
 
         for (auto& pass : _all_passes)
         {
-            std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> bindings;
-            std::unordered_map<uint32_t, std::vector<VkDescriptorBindingFlags>> binding_flags;
+            std::map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> bindings;
+            std::map<uint32_t, std::vector<VkDescriptorBindingFlags>> binding_flags;
             std::map<uint32_t, std::vector<VkWriteDescriptorSet>> binding_writes;
 
             for (auto& buffer : pass.buffer_usage())

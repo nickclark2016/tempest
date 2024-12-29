@@ -369,8 +369,6 @@ namespace tempest::graphics
                         _gpu_shadow_map_use_parameters.clear();
                         _shadow_map_subresource_allocator.clear();
 
-                        sizeof(gpu_scene_data);
-
                         uint32_t shadow_maps_written = 0;
 
                         for (const auto& [ent, dir_light, shadow_map, transform] :
