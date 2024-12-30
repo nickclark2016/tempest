@@ -108,8 +108,8 @@ namespace tempest::graphics
         {
             math::vec4<float> color;
             math::vec4<float> position;
-            math::vec3<float> direction;
-            math::vec3<float> attenuation;
+            math::vec4<float> direction;
+            math::vec4<float> attenuation;
             array<uint32_t, 6> shadow_map_indices;
             gpu_light_type light_type;
             uint32_t shadow_map_count;
@@ -132,6 +132,7 @@ namespace tempest::graphics
             math::vec3<float> ambient_light;
             math::vec4<float> jitter;
             gpu_light sun;
+            uint32_t point_light_count;
         };
 
         struct alignas(16) gpu_shadow_map_parameter
