@@ -85,15 +85,21 @@ namespace tempest::graphics
             .binding_count = 512,
         };
 
-        descriptor_binding_info shadow_map_parameter_desc = {
+        descriptor_binding_info light_parameter_desc = {
             .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
             .binding_index = 0,
             .binding_count = 1,
         };
 
+        descriptor_binding_info shadow_map_parameter_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .binding_index = 1,
+            .binding_count = 1,
+        };
+
         descriptor_binding_info shadow_map_mt_desc = {
             .type = descriptor_binding_type::SAMPLED_IMAGE,
-            .binding_index = 1,
+            .binding_index = 2,
             .binding_count = 1,
         };
     } // namespace
@@ -237,6 +243,13 @@ namespace tempest::graphics
             .per_frame_memory = true,
         });
 
+        auto light_buffer = rgc->create_buffer({
+            .size = sizeof(gpu_light) * 1024,
+            .location = memory_location::DEVICE,
+            .name = "Light Parameter Buffer",
+            .per_frame_memory = true,
+        });
+
         _materials_buffer = rgc->create_buffer({
             .size = 1024 * 64 * sizeof(gpu_material_data),
             .location = memory_location::DEVICE,
@@ -309,7 +322,7 @@ namespace tempest::graphics
 
         _scene_data.sun = gpu_light{
             .color = math::vec4<float>(1.0f, 1.0f, 1.0f, 1.0f),
-            .direction = math::vec3<float>(0.0f, -1.0f, 0.0f),
+            .direction = math::vec4<float>(0.0f, -1.0f, 0.0f, 0.0f),
             .light_type = gpu_light_type::DIRECTIONAL,
         };
         _scene_data.screen_size = math::vec2<float>(1920.0f, 1080.0f);
@@ -329,13 +342,15 @@ namespace tempest::graphics
         }
 
         auto upload_pass = rgc->add_graph_pass(
-            "Upload Pass", queue_operation_type::TRANSFER, [&, dir_shadow_buffer](graph_pass_builder& builder) {
+            "Upload Pass", queue_operation_type::TRANSFER,
+            [&, dir_shadow_buffer, light_buffer](graph_pass_builder& builder) {
                 builder.add_transfer_destination_buffer(_scene_buffer)
                     .add_transfer_destination_buffer(_object_buffer)
                     .add_transfer_destination_buffer(_instance_buffer)
                     .add_transfer_destination_buffer(_indirect_buffer)
                     .add_transfer_destination_buffer(_hi_z_buffer_constants)
                     .add_transfer_destination_buffer(dir_shadow_buffer)
+                    .add_transfer_destination_buffer(light_buffer)
                     .add_transfer_source_buffer(_device->get_staging_buffer())
                     .add_host_write_buffer(_device->get_staging_buffer())
                     .on_execute([&, dir_shadow_buffer](command_list& cmds) {
@@ -363,6 +378,51 @@ namespace tempest::graphics
                                 instances_written += static_cast<uint32_t>(batch.objects.size());
                             }
                         }
+
+                        // Build scene data
+                        if (_camera_entity != ecs::tombstone)
+                        {
+                            auto camera_data = _registry->get<camera_component>(_camera_entity);
+                            auto transform = _registry->get<ecs::transform_component>(_camera_entity);
+
+                            auto quat_rot = math::quat(transform.rotation());
+                            auto f = math::extract_forward(quat_rot);
+                            auto u = math::extract_up(quat_rot);
+
+                            auto camera_view = math::look_at(transform.position(), transform.position() + f, u);
+                            auto camera_projection = math::perspective(
+                                camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio,
+                                camera_data.near_plane);
+
+                            _scene_data.camera.prev_proj = _scene_data.camera.proj;
+                            _scene_data.camera.prev_view = _scene_data.camera.view;
+
+                            _scene_data.camera.view = camera_view;
+                            _scene_data.camera.inv_view = math::inverse(camera_view);
+                            _scene_data.camera.proj = camera_projection;
+                            _scene_data.camera.inv_proj = math::inverse(camera_projection);
+                            _scene_data.camera.position = transform.position();
+                        }
+
+                        // Build and upload point and spot light data
+                        vector<gpu_light> light_data;
+                        for (const auto& [ent, point_light, transform] :
+                             _registry->view<point_light_component, ecs::transform_component>())
+                        {
+                            gpu_light light = {
+                                .color = math::vec4<float>(point_light.color.x, point_light.color.y,
+                                                           point_light.color.z, 1.0f),
+                                .position = math::vec4<float>(transform.position().x, transform.position().y,
+                                                              transform.position().z, 1.0f),
+                                .attenuation = math::vec4<float>(point_light.intensity, 0, 0, point_light.range),
+                                .light_type = gpu_light_type::POINT,
+                                .shadow_map_count = 0,
+                            };
+
+                            light_data.push_back(light);
+                        }
+
+                        _scene_data.point_light_count = static_cast<uint32_t>(light_data.size());
 
                         // Compute shadow data
                         _cpu_shadow_map_build_params.clear();
@@ -420,33 +480,7 @@ namespace tempest::graphics
                             }
                         }
 
-                        // upload scene data
-                        if (_camera_entity != ecs::tombstone)
-                        {
-                            auto camera_data = _registry->get<camera_component>(_camera_entity);
-                            auto transform = _registry->get<ecs::transform_component>(_camera_entity);
-
-                            auto quat_rot = math::quat(transform.rotation());
-                            auto f = math::extract_forward(quat_rot);
-                            auto u = math::extract_up(quat_rot);
-
-                            auto camera_view = math::look_at(transform.position(), transform.position() + f, u);
-                            auto camera_projection = math::perspective(
-                                camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio,
-                                camera_data.near_plane);
-
-                            _scene_data.camera.prev_proj = _scene_data.camera.proj;
-                            _scene_data.camera.prev_view = _scene_data.camera.view;
-
-                            _scene_data.camera.view = camera_view;
-                            _scene_data.camera.inv_view = math::inverse(camera_view);
-                            _scene_data.camera.proj = camera_projection;
-                            _scene_data.camera.inv_proj = math::inverse(camera_projection);
-                            _scene_data.camera.position = transform.position();
-                        }
-
                         // Upload Directional Shadow Map Data
-
                         writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters),
                                                                dir_shadow_buffer);
 
@@ -454,11 +488,16 @@ namespace tempest::graphics
                         _scene_data.jitter.z = 0.0f;
                         _scene_data.jitter.w = 0.0f;
 
+                        // Upload scene data
                         writer.write(cmds, span<const gpu_scene_data>{&_scene_data, static_cast<size_t>(1)},
                                      _scene_buffer);
 
+                        // Upload hierarchical z data
                         writer.write(cmds, span<const hi_z_data>{&_hi_z_data, static_cast<size_t>(1)},
                                      _hi_z_buffer_constants);
+
+                        span<const gpu_light> light_span{light_data};
+                        writer.write(cmds, light_span, light_buffer);
 
                         writer.finish();
                     });
@@ -626,8 +665,9 @@ namespace tempest::graphics
                 .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                 .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
                 .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
-                .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 0)
-                .add_sampled_image(shadow_map_mt_buffer, 1, 1)
+                .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
+                .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 1)
+                .add_sampled_image(shadow_map_mt_buffer, 1, 2)
                 .add_indirect_argument_buffer(_indirect_buffer)
                 .add_index_buffer(_vertex_pull_buffer)
                 .on_execute(pbr_commands);
@@ -810,7 +850,7 @@ namespace tempest::graphics
                 // Rotate 0, 0, 1 by the rotation of the transform
                 auto light_rot = math::rotate(tx.rotation());
                 auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
-                _scene_data.sun.direction = math::vec3<float>(light_dir.x, light_dir.y, light_dir.z);
+                _scene_data.sun.direction = math::vec4<float>(light_dir.x, light_dir.y, light_dir.z, 0.0f);
             }
 
             // Gather point lights
@@ -1188,6 +1228,7 @@ namespace tempest::graphics
         };
 
         descriptor_binding_info set1_bindings[] = {
+            light_parameter_desc,
             shadow_map_parameter_desc,
             shadow_map_mt_desc,
         };

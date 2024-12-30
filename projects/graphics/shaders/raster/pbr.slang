@@ -11,6 +11,7 @@ struct SceneGlobals {
     float4 ambient_light;
     float4 jitter_offset;
     Light sun;
+    uint point_light_count;
 };
 
 struct VertexOutput {
@@ -40,8 +41,9 @@ struct FragmentOutput {
 [vk_binding(6, 0)] SamplerState linear_sampler;
 [vk_binding(7, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
 
-[vk_binding(0, 1)] StructuredBuffer<ShadowMapParameter> shadow_map_params;
-[vk_binding(1, 1)] Texture2D shadow_map_mt;
+[vk_binding(0, 1)] StructuredBuffer<Light> lights;
+[vk_binding(1, 1)] StructuredBuffer<ShadowMapParameter> shadow_map_params;
+[vk_binding(2, 1)] Texture2D shadow_map_mt;
 
 half2 calculate_velocity(half4 new_position, half4 previous_position) {
     previous_position /= previous_position.w;
@@ -108,6 +110,11 @@ FragmentOutput FSMain(VertexOutput input) {
     LightingState lighting;
     lighting.sun = scene[0].sun;
     lighting.ambient_color_factor = scene[0].ambient_light.rgb;
+    lighting.point_and_spot_lights = lights;
+    lighting.shadow_map_mt = shadow_map_mt;
+    lighting.shadow_map_params = shadow_map_params;
+    lighting.shadow_map_sampler = linear_sampler;
+    lighting.num_point_and_spot_lights = scene[0].point_light_count;
 
     MaterialState material;
     material.mat = materials[input.material_id];
@@ -121,7 +128,7 @@ FragmentOutput FSMain(VertexOutput input) {
 
     fetch_pixel_data(material, pd, bindless_textures);
 
-    float4 color = evaluate_material(pd, material, lighting, scene[0].camera, input.world_position, input.view_position, bindless_textures, shadow_map_mt, shadow_map_params, linear_sampler);
+    float4 color = evaluate_material(pd, material, lighting, scene[0].camera, input.world_position, input.view_position, bindless_textures);
     color.rgb = uncharted_2_tonemap(color.rgb * 4.5);
     color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
 

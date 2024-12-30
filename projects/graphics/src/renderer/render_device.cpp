@@ -584,6 +584,12 @@ namespace tempest::graphics
             _mapped_buffer = _dev->map_buffer_frame(_staging_buffer);
         }
 
+        if (data.empty())
+        {
+            // TODO: log error
+            return *this;
+        }
+
         const auto target_offset = _dev->get_buffer_frame_offset(target);
 
         std::size_t staging_buffer_write_offset = _staging_buffer_offset + _bytes_written;
