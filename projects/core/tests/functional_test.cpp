@@ -37,6 +37,9 @@ TEST(functional, invoke_member_function_non_void)
 
     auto invoke_result = tempest::invoke(&Foo::add, foo, 1, 2);
     auto invoke_result_r = tempest::invoke_r<int>(&Foo::add, foo, 1, 2);
+
+    EXPECT_EQ(invoke_result, 3);
+    EXPECT_EQ(invoke_result_r, 3);
 }
 
 TEST(functional, invoke_member_function_void)

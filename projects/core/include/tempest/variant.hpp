@@ -457,13 +457,13 @@ namespace tempest
         struct construction_dispatcher<false, T>
         {
             template <size_t Idx, typename... Args>
-            static constexpr void switch_case(size_t index, void* addr, Args&&... args)
+            static constexpr void switch_case([[maybe_unused]] size_t index, [[maybe_unused]] void* addr, [[maybe_unused]] Args&&... args)
             {
                 tempest::unreachable();
             }
 
             template <size_t Base, size_t TargetIdx, typename... Args>
-            static constexpr void switch_dispatch(size_t index, void* addr, Args&&... args)
+            static constexpr void switch_dispatch([[maybe_unused]] size_t index, [[maybe_unused]] void* addr, [[maybe_unused]] Args&&... args)
             {
                 tempest::unreachable();
             }
@@ -818,13 +818,13 @@ namespace tempest
         struct visitation_dispatcher<false, R>
         {
             template <size_t Idx, typename Fn, typename V>
-            static constexpr R switch_case(Fn&& fn, V&& v)
+            static constexpr R switch_case([[maybe_unused]] Fn&& fn, [[maybe_unused]] V&& v)
             {
                 tempest::unreachable();
             }
 
             template <size_t Base, typename Fn, typename V>
-            static constexpr R switch_dispatch(size_t index, Fn&& fn, V&& v)
+            static constexpr R switch_dispatch([[maybe_unused]] size_t index, [[maybe_unused]] Fn&& fn, [[maybe_unused]] V&& v)
             {
                 tempest::unreachable();
             }

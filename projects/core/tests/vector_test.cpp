@@ -49,10 +49,8 @@ TEST(vector, copy_constructor_non_trivial_copy)
     struct non_trivial
     {
         int i;
+
         non_trivial(int i) : i(i)
-        {
-        }
-        non_trivial(const non_trivial& other) : i(other.i)
         {
         }
     };
@@ -287,13 +285,15 @@ TEST(vector, insert)
 TEST(vector, erase)
 {
     vector<int> v(10, 42);
-    auto it = v.erase(v.begin() + 5);
+    (void)v.erase(v.begin() + 5);
     EXPECT_EQ(v.size(), 9);
     EXPECT_GE(v.capacity(), v.size());
+    
     for (int i = 0; i < 5; ++i)
     {
         EXPECT_EQ(v[i], 42);
     }
+    
     for (int i = 5; i < 9; ++i)
     {
         EXPECT_EQ(v[i], 42);
@@ -303,7 +303,7 @@ TEST(vector, erase)
 TEST(vector, erase_range)
 {
     vector<int> v(10, 42);
-    auto it = v.erase(v.begin() + 5, v.begin() + 7);
+    (void)v.erase(v.begin() + 5, v.begin() + 7);
     EXPECT_EQ(v.size(), 8);
     EXPECT_GE(v.capacity(), v.size());
     for (int i = 0; i < 5; ++i)

@@ -36,6 +36,7 @@ scoped.group('Engine', function()
         IncludeDir['core'] = '%{root}/projects/core/include'
     
         externalwarnings 'Off'
+        warnings 'Extra'
     end)
 
     scoped.group('Tests', function()
@@ -54,6 +55,9 @@ scoped.group('Engine', function()
             includedirs {
                 'include',
                 '%{IncludeDir.math}',
+            }
+
+            externalincludedirs {
                 '%{IncludeDir.gtest}',
             }
         
@@ -68,6 +72,7 @@ scoped.group('Engine', function()
             }
         
             externalwarnings 'Off'
+            warnings 'Extra'
         end)
     end)
 end)

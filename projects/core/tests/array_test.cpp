@@ -141,19 +141,20 @@ TEST(array, copy_assignment_non_trivial_copy)
     struct non_trivial
     {
         int i;
+
         non_trivial() : i(0)
         {
         }
 
-        non_trivial(int i) : i(i)
-        {
-        }
-        non_trivial(const non_trivial& other) : i(other.i)
+        explicit non_trivial(int i) : i(i)
         {
         }
     };
 
-    tempest::array<non_trivial, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    tempest::array<non_trivial, 10> arr = {
+        non_trivial(1), non_trivial(2), non_trivial(3), non_trivial(4), non_trivial(5),
+        non_trivial(6), non_trivial(7), non_trivial(8), non_trivial(9), non_trivial(10),
+    };
     tempest::array<non_trivial, 10> arr2;
     arr2 = arr;
 

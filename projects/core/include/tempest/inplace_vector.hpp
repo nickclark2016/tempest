@@ -537,7 +537,6 @@ namespace tempest
         auto insert_pos = static_cast<size_t>(pos - _typed_data);
         auto insert_end = insert_pos + count;
         auto shift_pos = _size - 1;
-        auto shift_end = insert_pos - 1;
 
         // Move assign elements to the right of the insertion point
         // Move construct new elements at indices where no such elements exist

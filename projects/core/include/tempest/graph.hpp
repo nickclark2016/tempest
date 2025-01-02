@@ -87,8 +87,8 @@ namespace tempest
         {
             V data;
 
-            vector<edge_type> outgoing_edges;
-            vector<edge_type> incoming_edges;
+            vector<edge_type> outgoing_edges{};
+            vector<edge_type> incoming_edges{};
         };
 
         using vertex = V;
