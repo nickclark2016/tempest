@@ -99,12 +99,28 @@ scoped.group('Engine', function()
         scoped.filter({ 'files:shaders/compute/**.slang' }, function()
             buildmessage 'Compiling %{file.relpath}'
 
-            buildcommands {
-                '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
-            }
+            scoped.filter({
+                'options:debugshaders'
+            }, function()
+                buildcommands {
+                    '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O0 -g3 -line-directive-mode source-map',
+                }
+            end)
+
+            scoped.filter({
+                'options:not debugshaders'
+            }, function()
+                buildcommands {
+                    '"%{fetch.slang}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
+                }
+            end)
             
             buildoutputs {
                 '%{cfg.targetdir}/shaders/%{file.basename}.comp.spv',
+            }
+
+            buildinputs {
+                'shaders/common/**.slang',
             }
         end)
     end)

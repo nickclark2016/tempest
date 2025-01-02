@@ -22,9 +22,8 @@ struct ShadowMapParameter
 struct Light
 {
     float4 color_intensity;
-    float4 position;
+    float4 position_falloff;
     float4 direction;
-    float4 attenuation; // x = constant, y = linear, z = quadratic, w = range
     Array<uint, 6> shadow_map_indices; // Up to 6 cascades, or 1 cascade per face of a cube map
     LightType type;
     uint shadow_map_count;

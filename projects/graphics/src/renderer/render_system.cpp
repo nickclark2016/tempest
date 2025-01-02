@@ -17,25 +17,6 @@ namespace tempest::graphics
     {
         auto log = logger::logger_factory::create({"tempest::render_system"});
 
-        static array<math::vec2<float>, 16> jitter = {{
-            {0.5f, 0.333333f},
-            {0.25f, 0.666667f},
-            {0.75f, 0.111111f},
-            {0.125000f, 0.444444f},
-            {0.625000f, 0.777778f},
-            {0.375000f, 0.222222f},
-            {0.875000f, 0.555556f},
-            {0.062500f, 0.888889f},
-            {0.562500f, 0.037037f},
-            {0.312500f, 0.370370f},
-            {0.812500f, 0.703704f},
-            {0.187500f, 0.148148f},
-            {0.687500f, 0.481481f},
-            {0.437500f, 0.814815f},
-            {0.937500f, 0.259259f},
-            {0.031250f, 0.592593f},
-        }};
-
         // Bindings
         descriptor_binding_info scene_constant_buffer = {
             .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
@@ -321,7 +302,7 @@ namespace tempest::graphics
         });
 
         _scene_data.sun = gpu_light{
-            .color = math::vec4<float>(1.0f, 1.0f, 1.0f, 1.0f),
+            .color_intensity = math::vec4<float>(1.0f, 1.0f, 1.0f, 1.0f),
             .direction = math::vec4<float>(0.0f, -1.0f, 0.0f, 0.0f),
             .light_type = gpu_light_type::DIRECTIONAL,
         };
@@ -332,14 +313,6 @@ namespace tempest::graphics
             .size = math::vec2<uint32_t>(1920, 1080),
             .mip_count = 5,
         };
-
-        for (int i = 0; i < 16; ++i)
-        {
-            math::vec2<float>& result = jitter[i];
-
-            result.x = ((result.x - 0.5f) / _scene_data.screen_size.x) * 2;
-            result.y = ((result.y - 0.5f) / _scene_data.screen_size.y) * 2;
-        }
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER,
@@ -353,7 +326,7 @@ namespace tempest::graphics
                     .add_transfer_destination_buffer(light_buffer)
                     .add_transfer_source_buffer(_device->get_staging_buffer())
                     .add_host_write_buffer(_device->get_staging_buffer())
-                    .on_execute([&, dir_shadow_buffer](command_list& cmds) {
+                    .on_execute([&, dir_shadow_buffer, light_buffer](command_list& cmds) {
                         staging_buffer_writer writer{*_device};
 
                         if (_last_updated_frame + _device->frames_in_flight() > _device->current_frame())
@@ -409,12 +382,14 @@ namespace tempest::graphics
                         for (const auto& [ent, point_light, transform] :
                              _registry->view<point_light_component, ecs::transform_component>())
                         {
+                            auto sq_range = point_light.range * point_light.range;
+                            auto inv_sq_range = sq_range > 0.0f ? 1.0f / sq_range : 0.0f;
+
                             gpu_light light = {
-                                .color = math::vec4<float>(point_light.color.x, point_light.color.y,
-                                                           point_light.color.z, 1.0f),
-                                .position = math::vec4<float>(transform.position().x, transform.position().y,
-                                                              transform.position().z, 1.0f),
-                                .attenuation = math::vec4<float>(point_light.intensity, 0, 0, point_light.range),
+                                .color_intensity = math::vec4<float>(point_light.color.x, point_light.color.y,
+                                                           point_light.color.z, point_light.intensity),
+                                .position_falloff = math::vec4<float>(transform.position().x, transform.position().y,
+                                                              transform.position().z, inv_sq_range),
                                 .light_type = gpu_light_type::POINT,
                                 .shadow_map_count = 0,
                             };
@@ -483,10 +458,6 @@ namespace tempest::graphics
                         // Upload Directional Shadow Map Data
                         writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters),
                                                                dir_shadow_buffer);
-
-                        _scene_data.jitter = math::vec4<float>(0.0f, 0.0f, 0.0f, 0.0f);
-                        _scene_data.jitter.z = 0.0f;
-                        _scene_data.jitter.w = 0.0f;
 
                         // Upload scene data
                         writer.write(cmds, span<const gpu_scene_data>{&_scene_data, static_cast<size_t>(1)},
@@ -844,33 +815,13 @@ namespace tempest::graphics
             // Find the directional light for the scene
             for (auto [ent, dir_light, tx] : _registry->view<directional_light_component, ecs::transform_component>())
             {
-                _scene_data.sun.color =
+                _scene_data.sun.color_intensity =
                     math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, dir_light.intensity);
 
                 // Rotate 0, 0, 1 by the rotation of the transform
                 auto light_rot = math::rotate(tx.rotation());
                 auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
                 _scene_data.sun.direction = math::vec4<float>(light_dir.x, light_dir.y, light_dir.z, 0.0f);
-            }
-
-            // Gather point lights
-            vector<point_light> point_lights;
-            for (const auto& [ent, pt_light, tx] : _registry->view<point_light_component, ecs::transform_component>())
-            {
-                point_light pl = {
-                    .location =
-                        {
-                            tx.position().x,
-                            tx.position().y,
-                            tx.position().z,
-                            0.0f,
-                        },
-                    .color = pt_light.color,
-                    .range = pt_light.range,
-                    .intensity = pt_light.intensity,
-                };
-
-                point_lights.push_back(pl);
             }
         }
 
@@ -1751,7 +1702,7 @@ namespace tempest::graphics
             auto light_view =
                 math::look_at(frustum_center - light_dir * radius, frustum_center, math::vec3<float>(0.0f, 1.0f, 0.0f));
             auto light_proj =
-                math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y, min_extents.z, max_extents.z);
+                math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y, min_extents.z - max_extents.z, 0.0f);
 
             params.cascade_splits[cascade] = (near_plane + split_distance * clip_range) * -1.0f;
             params.projections[cascade] = light_proj * light_view;

@@ -9,7 +9,6 @@ struct SceneGlobals {
     Camera camera;
     float2 screen_size;
     float4 ambient_light;
-    float4 jitter_offset;
     Light sun;
 };
 
@@ -54,7 +53,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     float3 geom_bitan = normalize(cross(geom_normal, geom_tangent)) * v.tangent.w;
 
     VertexOutput output;
-    output.position = clip_pos + scene[0].jitter_offset;
+    output.position = clip_pos;
     output.uv = v.uv0;
     output.normal = geom_normal;
     output.tangent = geom_tangent;
