@@ -24,22 +24,22 @@ namespace tempest::graphics::vk
 
     struct image
     {
-        VmaAllocation allocation;
-        VmaAllocationInfo alloc_info;
+        VmaAllocation allocation{};
+        VmaAllocationInfo alloc_info{};
         VkImage image;
         VkImageView view;
         VkImageCreateInfo img_info;
         VkImageViewCreateInfo view_info;
-        bool persistent;
+        bool persistent{};
         string name;
     };
 
     struct buffer
     {
-        bool per_frame_resource;
-        VmaAllocation allocation;
-        VmaAllocationInfo alloc_info;
-        VkBuffer buffer;
+        bool per_frame_resource{};
+        VmaAllocation allocation{};
+        VmaAllocationInfo alloc_info{};
+        VkBuffer buffer{};
         VkBufferCreateInfo info;
         string name;
     };
@@ -65,11 +65,11 @@ namespace tempest::graphics::vk
 
     struct swapchain
     {
-        glfw::window* win;
-        uint32_t image_index;
-        vkb::Swapchain sc;
-        VkSurfaceKHR surface;
-        vector<image_resource_handle> image_handles;
+        glfw::window* win{nullptr};
+        uint32_t image_index{};
+        vkb::Swapchain sc{};
+        VkSurfaceKHR surface{};
+        vector<image_resource_handle> image_handles{};
     };
 
     struct sampler
@@ -121,7 +121,7 @@ namespace tempest::graphics::vk
                                      graphics_pipeline_resource_handle handle) override;
 
         command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
-                                   float max_depth = 1.0f, uint32_t viewport_id = 0, bool flip = true) override;
+                                   float max_depth = 1.0f, bool flip = true) override;
         command_list& set_scissor_region(int32_t x, int32_t y, uint32_t width, uint32_t height) override;
         command_list& draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0,
                            uint32_t first_index = 0) override;
@@ -180,8 +180,8 @@ namespace tempest::graphics::vk
 
         size_t frames_in_flight;
         queue_info queue;
-        vector<command_buffer_allocator> global_pool;
-        std::deque<command_buffer_recycle_payload> recycle_pool;
+        vector<command_buffer_allocator> global_pool{};
+        std::deque<command_buffer_recycle_payload> recycle_pool{};
 
         command_buffer_allocator acquire(vkb::DispatchTable& dispatch, render_device* device);
         void release(command_buffer_allocator&& allocator, size_t current_frame);
@@ -203,10 +203,10 @@ namespace tempest::graphics::vk
             size_t recycled_frame;
         };
 
-        vector<VkFence> global_fence_pool;
-        std::deque<fence_recycle_payload> recycle_fence_pool;
-        vector<VkSemaphore> global_semaphore_pool;
-        std::deque<semaphore_recycle_payload> recycle_semaphore_pool;
+        vector<VkFence> global_fence_pool{};
+        std::deque<fence_recycle_payload> recycle_fence_pool{};
+        vector<VkSemaphore> global_semaphore_pool{};
+        std::deque<semaphore_recycle_payload> recycle_semaphore_pool{};
 
         size_t frames_in_flight;
 

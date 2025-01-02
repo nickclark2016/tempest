@@ -192,7 +192,7 @@ namespace tempest::graphics::glfw
             w->_height = height;
         });
 
-        glfwSetKeyCallback(_win, [](GLFWwindow* win, int key, int scancode, int action, int mods) {
+        glfwSetKeyCallback(_win, [](GLFWwindow* win, int key, [[maybe_unused]] int scancode, int action, [[maybe_unused]] int mods) {
             window* w = reinterpret_cast<window*>(glfwGetWindowUserPointer(win));
             auto k = glfw_to_tempest_keys[key];
             auto a = glfw_to_tempest_key_actions[action];
@@ -210,7 +210,7 @@ namespace tempest::graphics::glfw
             }
         });
 
-        glfwSetMouseButtonCallback(_win, [](GLFWwindow* win, int button, int action, int mods) {
+        glfwSetMouseButtonCallback(_win, [](GLFWwindow* win, int button, int action, [[maybe_unused]] int mods) {
             window* w = reinterpret_cast<window*>(glfwGetWindowUserPointer(win));
             core::mouse_button_state state = {
                 .button = glfw_to_tempest_mouse_buttons[button],

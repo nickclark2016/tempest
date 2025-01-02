@@ -45,17 +45,20 @@ scoped.group('Engine', function()
             'vma',
         }
 
+        externalincludedirs {
+            '%{IncludeDir.glfw}',
+            '%{IncludeDir.vkb}',
+            '%{IncludeDir.vma}',
+            '%{IncludeDir.vulkan}',
+        }
+
         includedirs {
             'include',
             '%{IncludeDir.core}',
             '%{IncludeDir.ecs}',
-            '%{IncludeDir.glfw}',
             '%{IncludeDir.imgui}',
             '%{IncludeDir.logger}',
             '%{IncludeDir.math}',
-            '%{IncludeDir.vkb}',
-            '%{IncludeDir.vma}',
-            '%{IncludeDir.vulkan}',
         }
 
         IncludeDir['graphics'] = '%{root}/projects/graphics/include'
@@ -123,6 +126,9 @@ scoped.group('Engine', function()
                 'shaders/common/**.slang',
             }
         end)
+
+        externalwarnings 'Off'
+        warnings 'Extra'
     end)
 end)
 

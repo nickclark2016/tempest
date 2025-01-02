@@ -31,6 +31,7 @@ scoped.group('Engine', function()
         }
 
         externalwarnings 'Off'
+        warnings 'Extra'
 
         IncludeDir['logger'] = '%{root}/projects/logger/include'
     end)

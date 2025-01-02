@@ -19,9 +19,9 @@ namespace tempest::graphics::vk
         auto logger = logger::logger_factory::create({.prefix{"tempest::graphics::vk::render_device"}});
 
         VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                                      VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                                      [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType,
                                                       const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                                      void* pUserData)
+                                                      [[maybe_unused]] void* pUserData)
         {
             if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
@@ -83,45 +83,6 @@ namespace tempest::graphics::vk
             PARTIAL,
             NONE,
         };
-
-        constexpr VkImageUsageFlagBits to_vulkan(image_resource_usage usage)
-        {
-            switch (usage)
-            {
-            case image_resource_usage::COLOR_ATTACHMENT:
-                return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-            case image_resource_usage::DEPTH_ATTACHMENT:
-                return VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-            case image_resource_usage::SAMPLED:
-                return VK_IMAGE_USAGE_SAMPLED_BIT;
-            case image_resource_usage::STORAGE:
-                return VK_IMAGE_USAGE_STORAGE_BIT;
-            case image_resource_usage::TRANSFER_SOURCE:
-                return VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-            case image_resource_usage::TRANSFER_DESTINATION:
-                return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            default:
-                break;
-            }
-
-            logger->critical("Logic Error: Failed to determine proper VkImageUsageFlagBits. Forcing exit.");
-            std::exit(EXIT_FAILURE);
-        }
-
-        constexpr VkImageAspectFlags to_vulkan_aspect(image_resource_usage usage)
-        {
-            switch (usage)
-            {
-            case image_resource_usage::COLOR_ATTACHMENT:
-                return VK_IMAGE_ASPECT_COLOR_BIT;
-            case image_resource_usage::DEPTH_ATTACHMENT:
-                return VK_IMAGE_ASPECT_DEPTH_BIT;
-            default:
-                break;
-            }
-
-            return VK_IMAGE_ASPECT_NONE;
-        }
 
         constexpr VkImageType to_vulkan(image_type type)
         {
@@ -282,6 +243,10 @@ namespace tempest::graphics::vk
                 return VK_COMPARE_OP_GREATER;
             case compare_operation::NOT_EQUALS:
                 return VK_COMPARE_OP_NOT_EQUAL;
+            case compare_operation::NEVER:
+                return VK_COMPARE_OP_NEVER;
+            case compare_operation::ALWAYS:
+                return VK_COMPARE_OP_ALWAYS;
             }
 
             logger->critical("Logic Error: Failed to determine proper VkCompareOp. Forcing exit.");
@@ -507,6 +472,7 @@ namespace tempest::graphics::vk
         }
 
         _queue = {
+            .queue = VK_NULL_HANDLE,
             .queue_family_index = std::get<1>(*queue_family_info),
             .queue_index = std::get<2>(*queue_family_info),
             .flags = std::get<0>(*queue_family_info).queueFlags,
@@ -516,18 +482,53 @@ namespace tempest::graphics::vk
         VmaVulkanFunctions fns = {
             .vkGetInstanceProcAddr = _instance.fp_vkGetInstanceProcAddr,
             .vkGetDeviceProcAddr = _device.fp_vkGetDeviceProcAddr,
+            .vkGetPhysicalDeviceProperties = nullptr,
+            .vkGetPhysicalDeviceMemoryProperties = nullptr,
+            .vkAllocateMemory = nullptr,
+            .vkFreeMemory = nullptr,
+            .vkMapMemory = nullptr,
+            .vkUnmapMemory = nullptr,
+            .vkFlushMappedMemoryRanges = nullptr,
+            .vkInvalidateMappedMemoryRanges = nullptr,
+            .vkBindBufferMemory = nullptr,
+            .vkBindImageMemory = nullptr,
+            .vkGetBufferMemoryRequirements = nullptr,
+            .vkGetImageMemoryRequirements = nullptr,
+            .vkCreateBuffer = nullptr,
+            .vkDestroyBuffer = nullptr,
+            .vkCreateImage = nullptr,
+            .vkDestroyImage = nullptr,
+            .vkCmdCopyBuffer = nullptr,
+            .vkGetBufferMemoryRequirements2KHR = nullptr,
+            .vkGetImageMemoryRequirements2KHR = nullptr,
+            .vkBindBufferMemory2KHR = nullptr,
+            .vkBindImageMemory2KHR = nullptr,
+            .vkGetPhysicalDeviceMemoryProperties2KHR = nullptr,
+            .vkGetDeviceBufferMemoryRequirements = nullptr,
+            .vkGetDeviceImageMemoryRequirements = nullptr,
         };
 
         VmaAllocatorCreateInfo ci = {
+            .flags = 0,
             .physicalDevice = physical.physical_device,
             .device = _device.device,
+            .preferredLargeHeapBlockSize = 0,
             .pAllocationCallbacks = nullptr,
+            .pDeviceMemoryCallbacks = nullptr,
+            .pHeapSizeLimit = nullptr,
             .pVulkanFunctions = &fns,
             .instance = _instance.instance,
+            .vulkanApiVersion = VK_API_VERSION_1_3,
+            .pTypeExternalMemoryHandleTypes = nullptr,
         };
 
         VmaAllocator allocator;
         const auto result = vmaCreateAllocator(&ci, &allocator);
+        if (result != VK_SUCCESS)
+        {
+            logger->critical("Failed to create Vulkan Memory Allocator. Forcing exit.");
+            std::exit(EXIT_FAILURE);
+        }
         _vk_alloc = allocator;
 
         _recycled_cmd_buf_pool = command_buffer_recycler{
@@ -671,6 +672,10 @@ namespace tempest::graphics::vk
             .usage = mem_usage,
             .requiredFlags = required,
             .preferredFlags = preferred,
+            .memoryTypeBits = 0,
+            .pool = VK_NULL_HANDLE,
+            .pUserData = nullptr,
+            .priority = 0.0f,
         };
 
         buffer buf{
@@ -840,6 +845,11 @@ namespace tempest::graphics::vk
             .flags = alloc_flags,
             .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
             .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            .preferredFlags = 0,
+            .memoryTypeBits = 0,
+            .pool = VK_NULL_HANDLE,
+            .pUserData = nullptr,
+            .priority = 0.0f,
         };
 
         VkImage img;
@@ -1095,6 +1105,7 @@ namespace tempest::graphics::vk
             VkDescriptorSetLayoutCreateInfo set_layout_ci = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags,
+                .flags = {},
                 .bindingCount = static_cast<uint32_t>(bindings.size()),
                 .pBindings = bindings.data(),
             };
@@ -1180,6 +1191,7 @@ namespace tempest::graphics::vk
         VkPipelineShaderStageCreateInfo vertex_stage_ci = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .pNext = nullptr,
+            .flags = {},
             .stage = VK_SHADER_STAGE_VERTEX_BIT,
             .module = vertex_module,
             .pName = ci.vertex_shader.entrypoint.data(),
@@ -1204,6 +1216,7 @@ namespace tempest::graphics::vk
             fragment_stage_ci = {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .pNext = nullptr,
+                .flags = {},
                 .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .module = fragment_module,
                 .pName = ci.fragment_shader.entrypoint.data(),
@@ -1284,7 +1297,10 @@ namespace tempest::graphics::vk
             .depthTestEnable = ci.depth_testing.enable_test ? VK_TRUE : VK_FALSE,
             .depthWriteEnable = ci.depth_testing.enable_write ? VK_TRUE : VK_FALSE,
             .depthCompareOp = to_vulkan(ci.depth_testing.depth_test_op),
+            .depthBoundsTestEnable = VK_FALSE,
             .stencilTestEnable = VK_FALSE,
+            .front = {},
+            .back = {},
             .minDepthBounds = ci.depth_testing.min_depth_bounds,
             .maxDepthBounds = ci.depth_testing.max_depth_bounds,
         };
@@ -1331,6 +1347,7 @@ namespace tempest::graphics::vk
             .logicOp = VK_LOGIC_OP_NO_OP,
             .attachmentCount = static_cast<uint32_t>(attachment_blends.size()),
             .pAttachments = attachment_blends.empty() ? nullptr : attachment_blends.data(),
+            .blendConstants = {},
         };
 
         VkPipelineDynamicStateCreateInfo dynamic_state = {
@@ -1357,6 +1374,8 @@ namespace tempest::graphics::vk
             .flags = 0,
             .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
             .sampleShadingEnable = VK_FALSE,
+            .minSampleShading = 0.0f,
+            .pSampleMask = nullptr,
             .alphaToCoverageEnable = VK_FALSE,
             .alphaToOneEnable = VK_FALSE,
         };
@@ -1481,6 +1500,7 @@ namespace tempest::graphics::vk
             VkDescriptorSetLayoutCreateInfo set_layout_ci = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
+                .flags = {},
                 .bindingCount = static_cast<uint32_t>(bindings.size()),
                 .pBindings = bindings.data(),
             };
@@ -1569,6 +1589,7 @@ namespace tempest::graphics::vk
         compute_pipeline pipeline = {
             .compute_module = compute_shader_module,
             .set_layouts = set_layouts,
+            .pipeline = VK_NULL_HANDLE,
             .pipeline_layout = pipeline_layout,
             .name = ci.name,
         };
@@ -1688,16 +1709,46 @@ namespace tempest::graphics::vk
                 .image = images[i],
                 .view = views[i],
                 .img_info{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = {},
+                    .imageType = VK_IMAGE_TYPE_2D,
+                    .format = VK_FORMAT_UNDEFINED,
                     .extent{
                         .width = sc.sc.extent.width,
                         .height = sc.sc.extent.height,
                         .depth = 1,
                     },
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .samples = VK_SAMPLE_COUNT_1_BIT,
+                    .tiling = VK_IMAGE_TILING_OPTIMAL,
+                    .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
+                    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 },
                 .view_info{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = {},
                     .image = images[i],
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = VK_FORMAT_UNDEFINED,
+                    .components =
+                        {
+                            .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        },
                     .subresourceRange{
                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
                     },
                 },
                 .name = std::format("swapchain_image_{}", i).c_str(),
@@ -1788,7 +1839,7 @@ namespace tempest::graphics::vk
                                         [this, img]() { _dispatch.destroyImageView(img.view, nullptr); });
         }
 
-        _delete_queue->add_to_queue(_current_frame, [this, old_swap]() { vkb::destroy_swapchain(old_swap); });
+        _delete_queue->add_to_queue(_current_frame, [old_swap]() { vkb::destroy_swapchain(old_swap); });
 
         sc->sc = *swap_result;
 
@@ -1812,16 +1863,46 @@ namespace tempest::graphics::vk
                 .image = images[i],
                 .view = views[i],
                 .img_info{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = {},
+                    .imageType = VK_IMAGE_TYPE_2D,
+                    .format = VK_FORMAT_UNDEFINED,
                     .extent{
                         .width = sc->sc.extent.width,
                         .height = sc->sc.extent.height,
                         .depth = 1,
                     },
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .samples = VK_SAMPLE_COUNT_1_BIT,
+                    .tiling = VK_IMAGE_TILING_OPTIMAL,
+                    .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
+                    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 },
                 .view_info{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = {},
                     .image = images[i],
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = VK_FORMAT_UNDEFINED,
+                    .components =
+                        {
+                            .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        },
                     .subresourceRange{
                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
                     },
                 },
                 .name = std::format("swapchain_image_{}", i).c_str(),
@@ -1893,7 +1974,37 @@ namespace tempest::graphics::vk
             VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state = {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT,
                 .pNext = nullptr,
+                .extendedDynamicState3TessellationDomainOrigin = VK_FALSE,
+                .extendedDynamicState3DepthClampEnable = VK_FALSE,
+                .extendedDynamicState3PolygonMode = VK_FALSE,
                 .extendedDynamicState3RasterizationSamples = VK_TRUE,
+                .extendedDynamicState3SampleMask = VK_FALSE,
+                .extendedDynamicState3AlphaToCoverageEnable = VK_FALSE,
+                .extendedDynamicState3AlphaToOneEnable = VK_FALSE,
+                .extendedDynamicState3LogicOpEnable = VK_FALSE,
+                .extendedDynamicState3ColorBlendEnable = VK_FALSE,
+                .extendedDynamicState3ColorBlendEquation = VK_FALSE,
+                .extendedDynamicState3ColorWriteMask = VK_FALSE,
+                .extendedDynamicState3RasterizationStream = VK_FALSE,
+                .extendedDynamicState3ConservativeRasterizationMode = VK_FALSE,
+                .extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_FALSE,
+                .extendedDynamicState3DepthClipEnable = VK_FALSE,
+                .extendedDynamicState3SampleLocationsEnable = VK_FALSE,
+                .extendedDynamicState3ColorBlendAdvanced = VK_FALSE,
+                .extendedDynamicState3ProvokingVertexMode = VK_FALSE,
+                .extendedDynamicState3LineRasterizationMode = VK_FALSE,
+                .extendedDynamicState3LineStippleEnable = VK_FALSE,
+                .extendedDynamicState3DepthClipNegativeOneToOne = VK_FALSE,
+                .extendedDynamicState3ViewportWScalingEnable = VK_FALSE,
+                .extendedDynamicState3ViewportSwizzle = VK_FALSE,
+                .extendedDynamicState3CoverageToColorEnable = VK_FALSE,
+                .extendedDynamicState3CoverageToColorLocation = VK_FALSE,
+                .extendedDynamicState3CoverageModulationMode = VK_FALSE,
+                .extendedDynamicState3CoverageModulationTableEnable = VK_FALSE,
+                .extendedDynamicState3CoverageModulationTable = VK_FALSE,
+                .extendedDynamicState3CoverageReductionMode = VK_FALSE,
+                .extendedDynamicState3RepresentativeFragmentTestEnable = VK_FALSE,
+                .extendedDynamicState3ShadingRateImageEnable = VK_FALSE,
             };
 
             vkb::PhysicalDeviceSelector selector =
@@ -1907,7 +2018,13 @@ namespace tempest::graphics::vk
 #ifdef _DEBUG
                         .robustBufferAccess = VK_TRUE,
 #endif
+                        .fullDrawIndexUint32 = VK_FALSE,
+                        .imageCubeArray = VK_FALSE,
                         .independentBlend = VK_TRUE,
+                        .geometryShader = VK_FALSE,
+                        .tessellationShader = VK_FALSE,
+                        .sampleRateShading = VK_FALSE,
+                        .dualSrcBlend = VK_FALSE,
                         .logicOp = VK_TRUE,
                         .multiDrawIndirect = VK_TRUE,
                         .drawIndirectFirstInstance = VK_TRUE,
@@ -1915,40 +2032,132 @@ namespace tempest::graphics::vk
                         .depthBiasClamp = VK_TRUE,
                         .fillModeNonSolid = VK_TRUE,
                         .depthBounds = VK_TRUE,
+                        .wideLines = VK_FALSE,
+                        .largePoints = VK_FALSE,
+                        .alphaToOne = VK_FALSE,
+                        .multiViewport = VK_FALSE,
                         .samplerAnisotropy = VK_TRUE,
+                        .textureCompressionETC2 = VK_FALSE,
+                        .textureCompressionASTC_LDR = VK_FALSE,
+                        .textureCompressionBC = VK_FALSE,
+                        .occlusionQueryPrecise = VK_FALSE,
                         .pipelineStatisticsQuery = VK_TRUE,
+                        .vertexPipelineStoresAndAtomics = VK_FALSE,
+                        .fragmentStoresAndAtomics = VK_FALSE,
+                        .shaderTessellationAndGeometryPointSize = VK_FALSE,
+                        .shaderImageGatherExtended = VK_FALSE,
+                        .shaderStorageImageExtendedFormats = VK_FALSE,
+                        .shaderStorageImageMultisample = VK_FALSE,
+                        .shaderStorageImageReadWithoutFormat = VK_FALSE,
+                        .shaderStorageImageWriteWithoutFormat = VK_FALSE,
                         .shaderUniformBufferArrayDynamicIndexing = VK_TRUE,
                         .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
                         .shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
                         .shaderStorageImageArrayDynamicIndexing = VK_TRUE,
+                        .shaderClipDistance = VK_FALSE,
+                        .shaderCullDistance = VK_FALSE,
+                        .shaderFloat64 = VK_FALSE,
                         .shaderInt64 = VK_FALSE,
                         .shaderInt16 = VK_TRUE,
+                        .shaderResourceResidency = VK_FALSE,
+                        .shaderResourceMinLod = VK_FALSE,
+                        .sparseBinding = VK_FALSE,
+                        .sparseResidencyBuffer = VK_FALSE,
+                        .sparseResidencyImage2D = VK_FALSE,
+                        .sparseResidencyImage3D = VK_FALSE,
+                        .sparseResidency2Samples = VK_FALSE,
+                        .sparseResidency4Samples = VK_FALSE,
+                        .sparseResidency8Samples = VK_FALSE,
+                        .sparseResidency16Samples = VK_FALSE,
+                        .sparseResidencyAliased = VK_FALSE,
+                        .variableMultisampleRate = VK_FALSE,
+                        .inheritedQueries = VK_FALSE,
                     })
                     .set_required_features_11({
+                        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                        .pNext = nullptr,
                         .storageBuffer16BitAccess = VK_TRUE,
                         .uniformAndStorageBuffer16BitAccess = VK_TRUE,
+                        .storagePushConstant16 = VK_FALSE,
+                        .storageInputOutput16 = VK_FALSE,
+                        .multiview = VK_FALSE,
+                        .multiviewGeometryShader = VK_FALSE,
+                        .multiviewTessellationShader = VK_FALSE,
+                        .variablePointersStorageBuffer = VK_FALSE,
+                        .variablePointers = VK_FALSE,
+                        .protectedMemory = VK_FALSE,
+                        .samplerYcbcrConversion = VK_FALSE,
+                        .shaderDrawParameters = VK_FALSE,
                     })
                     .set_required_features_12({
+                        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                        .pNext = nullptr,
+                        .samplerMirrorClampToEdge = VK_FALSE,
+                        .drawIndirectCount = VK_FALSE,
+                        .storageBuffer8BitAccess = VK_TRUE,
+                        .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+                        .storagePushConstant8 = VK_FALSE,
+                        .shaderBufferInt64Atomics = VK_FALSE,
+                        .shaderSharedInt64Atomics = VK_FALSE,
                         .shaderFloat16 = VK_TRUE,
+                        .shaderInt8 = VK_FALSE,
+                        .descriptorIndexing = VK_FALSE,
+                        .shaderInputAttachmentArrayDynamicIndexing = VK_FALSE,
+                        .shaderUniformTexelBufferArrayDynamicIndexing = VK_FALSE,
+                        .shaderStorageTexelBufferArrayDynamicIndexing = VK_FALSE,
                         .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
                         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
                         .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
                         .shaderStorageImageArrayNonUniformIndexing = VK_TRUE,
+                        .shaderInputAttachmentArrayNonUniformIndexing = VK_FALSE,
                         .shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE,
                         .shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE,
+                        .descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE,
                         .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
                         .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
+                        .descriptorBindingStorageBufferUpdateAfterBind = VK_FALSE,
+                        .descriptorBindingUniformTexelBufferUpdateAfterBind = VK_FALSE,
+                        .descriptorBindingStorageTexelBufferUpdateAfterBind = VK_FALSE,
+                        .descriptorBindingUpdateUnusedWhilePending = VK_FALSE,
                         .descriptorBindingPartiallyBound = VK_TRUE,
                         .descriptorBindingVariableDescriptorCount = VK_TRUE,
                         .runtimeDescriptorArray = VK_TRUE,
+                        .samplerFilterMinmax = VK_FALSE,
+                        .scalarBlockLayout = VK_FALSE,
                         .imagelessFramebuffer = VK_TRUE,
+                        .uniformBufferStandardLayout = VK_FALSE,
+                        .shaderSubgroupExtendedTypes = VK_FALSE,
                         .separateDepthStencilLayouts = VK_TRUE,
                         .hostQueryReset = VK_TRUE,
+                        .timelineSemaphore = VK_FALSE,
                         .bufferDeviceAddress = VK_TRUE,
+                        .bufferDeviceAddressCaptureReplay = VK_FALSE,
+                        .bufferDeviceAddressMultiDevice = VK_FALSE,
+                        .vulkanMemoryModel = VK_FALSE,
+                        .vulkanMemoryModelDeviceScope = VK_FALSE,
+                        .vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE,
+                        .shaderOutputViewportIndex = VK_FALSE,
+                        .shaderOutputLayer = VK_FALSE,
+                        .subgroupBroadcastDynamicId = VK_FALSE,
                     })
                     .set_required_features_13({
+                        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                        .pNext = nullptr,
+                        .robustImageAccess = VK_FALSE,
+                        .inlineUniformBlock = VK_FALSE,
+                        .descriptorBindingInlineUniformBlockUpdateAfterBind = VK_FALSE,
+                        .pipelineCreationCacheControl = VK_FALSE,
+                        .privateData = VK_FALSE,
+                        .shaderDemoteToHelperInvocation = VK_FALSE,
+                        .shaderTerminateInvocation = VK_FALSE,
+                        .subgroupSizeControl = VK_FALSE,
+                        .computeFullSubgroups = VK_FALSE,
                         .synchronization2 = VK_TRUE,
+                        .textureCompressionASTC_HDR = VK_FALSE,
+                        .shaderZeroInitializeWorkgroupMemory = VK_FALSE,
                         .dynamicRendering = VK_TRUE,
+                        .shaderIntegerDotProduct = VK_FALSE,
+                        .maintenance4 = VK_FALSE,
                     })
                     .add_required_extension_features(extended_dynamic_state);
             return selector;
@@ -2065,7 +2274,7 @@ namespace tempest::graphics::vk
     }
 
     command_list& command_list::set_viewport(float x, float y, float width, float height, float min_depth,
-                                             float max_depth, uint32_t viewport_id, bool flip)
+                                             float max_depth, bool flip)
     {
         VkViewport vp = {
             .x = x,
@@ -2511,6 +2720,7 @@ namespace tempest::graphics::vk
             command_buffer_allocator allocator{
                 .queue = queue,
                 .pool = pool,
+                .cached_commands = {},
                 .dispatch = &dispatch,
                 .device = device,
             };
@@ -2530,7 +2740,7 @@ namespace tempest::graphics::vk
         });
     }
 
-    void command_buffer_recycler::recycle(size_t current_frame, vkb::DispatchTable& dispatch)
+    void command_buffer_recycler::recycle(size_t current_frame, [[maybe_unused]] vkb::DispatchTable& dispatch)
     {
         while (!recycle_pool.empty())
         {
@@ -2547,7 +2757,7 @@ namespace tempest::graphics::vk
         }
     }
 
-    void command_buffer_recycler::release_all(vkb::DispatchTable& dispatch)
+    void command_buffer_recycler::release_all([[maybe_unused]] vkb::DispatchTable& dispatch)
     {
         // delete from the global pool
         for (auto& alloc : global_pool)
@@ -2568,7 +2778,9 @@ namespace tempest::graphics::vk
             VkFenceCreateInfo create = {
                 .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
                 .pNext = nullptr,
+                .flags = 0,
             };
+
             VkFence fen{VK_NULL_HANDLE};
             auto result = dispatch.createFence(&create, nullptr, &fen);
             assert(result == VK_SUCCESS);
@@ -2586,6 +2798,7 @@ namespace tempest::graphics::vk
             VkSemaphoreCreateInfo create = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
                 .pNext = nullptr,
+                .flags = 0,
             };
 
             VkSemaphore sem{VK_NULL_HANDLE};
@@ -2619,7 +2832,7 @@ namespace tempest::graphics::vk
         recycle_semaphore_pool.push_back(std::move(payload));
     }
 
-    void sync_primitive_recycler::recycle(size_t current_frame, vkb::DispatchTable& dispatch)
+    void sync_primitive_recycler::recycle(size_t current_frame, [[maybe_unused]] vkb::DispatchTable& dispatch)
     {
         while (!recycle_fence_pool.empty())
         {
@@ -2711,6 +2924,7 @@ namespace tempest::graphics::vk
             VkCommandBufferBeginInfo begin = {
                 .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                 .pNext = nullptr,
+                .flags = 0,
                 .pInheritanceInfo = nullptr,
             };
             VkCommandBuffer buf = _cmds.value();

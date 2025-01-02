@@ -67,7 +67,7 @@ namespace tempest::graphics
 
     graph_pass_builder::graph_pass_builder(render_graph_resource_library& lib, string_view name,
                                            queue_operation_type type)
-        : _resource_lib{lib}, _name{name}, _op_type{type}
+        : _resource_lib{lib}, _op_type{type}, _name{name}
     {
     }
 
@@ -198,7 +198,7 @@ namespace tempest::graphics
     }
 
     graph_pass_builder& graph_pass_builder::add_external_storage_image(image_resource_handle handle,
-                                                                       resource_access_type access, std::uint32_t set,
+                                                                       [[maybe_unused]] resource_access_type access, std::uint32_t set,
                                                                        std::uint32_t binding, pipeline_stage usage)
     {
         _external_image_states.push_back(external_image_resource_state{
