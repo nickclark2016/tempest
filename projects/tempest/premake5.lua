@@ -16,6 +16,7 @@ group 'Engine'
         }
 
         externalwarnings 'Off'
+        warnings 'Extra'
 
         tempest.applyTempestInternalConfig()
 
