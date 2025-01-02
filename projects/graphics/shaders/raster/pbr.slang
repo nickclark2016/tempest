@@ -9,7 +9,6 @@ struct SceneGlobals {
     Camera camera;
     float2 screen_size;
     float4 ambient_light;
-    float4 jitter_offset;
     Light sun;
     uint point_light_count;
 };
@@ -80,7 +79,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
     VertexOutput result;
 
-    result.position = clip_pos + scene[0].jitter_offset;
+    result.position = clip_pos;
     result.current_position = clip_pos;
     result.prev_position = prev_clip_pos;
     result.world_position = world_pos.xyz;

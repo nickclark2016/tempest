@@ -39,6 +39,57 @@ namespace tempest::editor
         }
     };
 
+    struct point_light_component_view : component_view_factory
+    {
+        bool create_view(ecs::registry& registry, ecs::entity ent) const override
+        {
+            if (auto point_light = registry.try_get<graphics::point_light_component>(ent))
+            {
+                using imgui = graphics::imgui_context;
+
+                auto color = point_light->color;
+                auto intensity = point_light->intensity;
+                auto range = point_light->range;
+
+                imgui::create_header("Point Light Component", [&]() {
+                    imgui::label("Color");
+                    color = imgui::input_color("Color", color);
+
+                    imgui::create_table("##point light props", 2, [&]() {
+                        imgui::next_row();
+                        imgui::next_column();
+                        imgui::label("Intensity");
+
+                        imgui::next_column();
+                        intensity = imgui::input_float("##Intensity", intensity);
+                        // Clamp intensity to be positive
+                        intensity = std::max(intensity, 0.01f);
+
+                        imgui::next_row();
+                        imgui::next_column();
+                        imgui::label("Falloff Radius");
+
+                        imgui::next_column();
+                        range = imgui::input_float("##Falloff Radius", range);
+                        // Clamp range to be positive
+                        range = std::max(range, 0.01f);
+                    });
+                });
+
+                if (color != point_light->color || intensity != point_light->intensity || range != point_light->range)
+                {
+                    point_light->color = color;
+                    point_light->intensity = intensity;
+                    point_light->range = range;
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    };
+
     struct shadow_map_component_view : component_view_factory
     {
         bool create_view(ecs::registry& registry, ecs::entity ent) const override

@@ -106,10 +106,9 @@ namespace tempest::graphics
 
         struct alignas(16) gpu_light
         {
-            math::vec4<float> color;
-            math::vec4<float> position;
+            math::vec4<float> color_intensity;
+            math::vec4<float> position_falloff;
             math::vec4<float> direction;
-            math::vec4<float> attenuation;
             array<uint32_t, 6> shadow_map_indices;
             gpu_light_type light_type;
             uint32_t shadow_map_count;
@@ -130,7 +129,6 @@ namespace tempest::graphics
             gpu_camera_data camera;
             math::vec2<float> screen_size;
             math::vec3<float> ambient_light;
-            math::vec4<float> jitter;
             gpu_light sun;
             uint32_t point_light_count;
         };

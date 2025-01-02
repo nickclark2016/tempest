@@ -58,6 +58,17 @@
         }
         
         m.applyTempestInternalConfig()
+
+        removeincludedirs {
+            '%{IncludeDir.tempest}',
+        }
+
+        externalincludedirs {
+            '%{IncludeDir.tempest}',
+        }
+
+        externalwarnings 'Off'
+        warnings 'Extra'
     end
 
     return m

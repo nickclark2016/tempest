@@ -180,8 +180,14 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
     half n_dot_h = saturate(dot(px.shading_normal, h));
     half l_dot_h = saturate(dot(l, h));
 
+    half3 fr = specular_lobe(px, lighting, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
+    half3 fd = diffuse_lobe(px, n_dot_v, n_dot_l, l_dot_h);
+
+    half3 dr = fd + fr;
+    half3 base = dr;
+
     half visibility = 1.0h;
-    
+
     // If the normal is facing towards the light, compute shadows
     if (n_dot_l > 0.0h) {
         // Get the pixel position in light space
@@ -203,29 +209,77 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
         float4 shadow_coord = mul(shadow_bias_matrix, mul(shadow_map_param.view_proj_matrix, float4(world_pos, 1.0)));
         shadow_coord.xyz /= shadow_coord.w;
 
-        float shadow_x = lerp(shadow_map_param.shadow_map_region.x, shadow_map_param.shadow_map_region.x + shadow_map_param.shadow_map_region.z, shadow_coord.x);
-        float shadow_y = lerp(shadow_map_param.shadow_map_region.y, shadow_map_param.shadow_map_region.y + shadow_map_param.shadow_map_region.w, shadow_coord.y);
+        // Build a matrix to transform the shadow coordinate to the space of the shadow map param region
+        // lerp x from shadow_map_region.x to shadow_map_region.x + shadow_map_region.z
+        // lerp y from shadow_map_region.y to shadow_map_region.y + shadow_map_region.w
+        // Matrix is:
+        // [shadow_map_region.z, 0, shadow_map_region.x, 0]
+        // [0, shadow_map_region.w, shadow_map_region.y, 0]
+        // [0, 0, 1, 0]
+        // [0, 0, 0, 1]
+        
+        float4x4 shadow_map_transform = float4x4(
+            shadow_map_param.shadow_map_region.z, 0, 0, shadow_map_param.shadow_map_region.x,
+            0, shadow_map_param.shadow_map_region.w, 0, shadow_map_param.shadow_map_region.y,
+            0, 0, 1, 0,
+            0, 0, 0, 1
+        );
+        
+        float4 shadow_coord_transformed = mul(shadow_map_transform, shadow_coord);
+        float shadow_x = shadow_coord_transformed.x;
+        float shadow_y = shadow_coord_transformed.y;
 
         // read the shadow map
         if (shadow_coord.z > -1.0 && shadow_coord.z < 1.0) {
             float dist = lights.shadow_map_mt.Sample(lights.shadow_map_sampler, float2(shadow_x, shadow_y)).r;
-            if (shadow_coord.w > 0 && dist > -shadow_coord.z) {
+            if (shadow_coord.w > 0 && dist - 0.0005 > shadow_coord.z) {
                 visibility = 0.0h;
             }
         }
     }
 
-    half3 fr = specular_lobe(px, lighting, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
-    half3 fd = diffuse_lobe(px, n_dot_v, n_dot_l, l_dot_h);
-
-    half3 dr = fd + fr;
-
-    half3 base = dr;
     color += (base.rgb * half3(lighting.color_intensity.rgb)) * (half(lighting.color_intensity.w) * n_dot_l * visibility); 
 }
 
-void evaluate_point_lights(const PixelData px, const MaterialState mat_state, const Camera camera, const float3 world_pos, const float3 view_pos, inout half3 color, const LightingState lighting) {
+float compute_square_falloff_attenuation(float3 pos_to_light, float inv_light_radius) {
+    float distance_squared = dot(pos_to_light, pos_to_light);
+    float factor = distance_squared * inv_light_radius * inv_light_radius;
+    float smooth = max(1.0 - factor * factor, 0.0);
+    return (smooth * smooth) / max(distance_squared, 1e-4);
+}
 
+void evaluate_point_lights(const PixelData px, const MaterialState mat_state, const Camera camera, const float3 world_pos, const float3 view_pos, inout half3 color, const LightingState lighting) {
+    for (uint i = 0; i < lighting.num_point_and_spot_lights; ++i) {
+        const Light light = lighting.point_and_spot_lights[i];
+
+        float3 pos_to_light = light.position_falloff.xyz - world_pos;
+
+        half3 v = half3(normalize(camera.eye.xyz - world_pos));
+        half3 l = half3(normalize(pos_to_light));
+        half3 h = normalize(v + l);
+
+        half n_dot_v = saturate(dot(px.shading_normal, v));
+        half n_dot_l = saturate(dot(px.shading_normal, l));
+        half n_dot_h = saturate(dot(px.shading_normal, h));
+        half l_dot_h = saturate(dot(l, h));
+
+        half3 fr = specular_lobe(px, light, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
+        half3 fd = diffuse_lobe(px, n_dot_v, n_dot_l, l_dot_h);
+
+        half3 dr = fd + fr;
+        half3 base = dr;
+
+        half visibility = 1.0h;
+
+        // If the normal is facing towards the light, compute shadows
+        if (n_dot_l > 0.0h) {
+            // TODO: Implement shadow mapping for point lights
+        }
+
+        float attenuation = compute_square_falloff_attenuation(pos_to_light, light.position_falloff.w);
+
+        color += (base.rgb * half3(light.color_intensity.rgb)) * (half(light.color_intensity.w * attenuation) * n_dot_l * visibility); 
+    }
 }
 
 void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, inout half3 color) {

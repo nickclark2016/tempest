@@ -4,6 +4,9 @@
 
 #include <iostream>
 
+void initialize_lights(tempest::ecs::registry& registry);
+void initialize_models(tempest::engine& engine);
+
 int main()
 {
     tempest::engine engine = tempest::engine::initialize();
@@ -13,6 +16,7 @@ int main()
         .width = 1920,
         .height = 1080,
     }));
+    (void)win;
 
     auto renderer_settings = engine.get_render_system().settings();
     renderer_settings.aa_mode = tempest::graphics::anti_aliasing_mode::NONE;
@@ -22,7 +26,7 @@ int main()
 
     tempest::editor::editor editor(engine);
 
-    engine.on_initialize([&editor](tempest::engine& engine) {
+    engine.on_initialize([](tempest::engine& engine) {
         auto camera = engine.get_registry().acquire_entity();
 
         tempest::graphics::camera_component camera_data = {
@@ -32,48 +36,15 @@ int main()
         };
 
         tempest::ecs::transform_component camera_transform;
-        camera_transform.position({0.0f, 10.0f, 0.0f});
-        camera_transform.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
-
-        engine.get_registry().name(camera, "Camera");
+        camera_transform.position({0.0f, 10.0f, -25.0f});
+        camera_transform.rotation({0.0f, 0.0f, 0.0f});
 
         engine.get_registry().assign(camera, camera_data);
         engine.get_registry().assign(camera, camera_transform);
+        engine.get_registry().name(camera, "Camera");
 
-        auto sponza_prefab = engine.get_asset_database().import(
-            "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", engine.get_registry());
-        auto sponza_instance = engine.load_entity(sponza_prefab);
-        auto sponza_transform = tempest::ecs::transform_component{};
-        sponza_transform.scale({12.5f, 12.5f, 12.5f});
-        engine.get_registry().assign(sponza_instance, sponza_transform);
-        
-        auto lantern_prefab = engine.get_asset_database().import(
-            "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_registry());
-        auto lantern_instance = engine.load_entity(lantern_prefab);
-        auto lantern_transform = tempest::ecs::transform_component{};
-        lantern_transform.position({0.0f, 0.0f, 2.0f});
-        lantern_transform.scale({0.1f, 0.1f, 0.1f});
-        engine.get_registry().assign(lantern_instance, lantern_transform);
-
-        auto sun = engine.get_registry().acquire_entity();
-        tempest::graphics::directional_light_component sun_data = {
-            .color = {1.0f, 1.0f, 1.0f},
-            .intensity = 1.0f,
-        };
-
-        tempest::graphics::shadow_map_component sun_shadows = {
-            .size = {2048, 2048},
-            .cascade_count = 1,
-        };
-
-        engine.get_registry().assign(sun, sun_shadows);
-        engine.get_registry().assign(sun, sun_data);
-        engine.get_registry().name(sun, "Sun");
-
-        tempest::ecs::transform_component sun_tx{};
-        sun_tx.rotation({tempest::math::as_radians(90.0f), 0.0f, 0.0f});
-
-        engine.get_registry().assign(sun, sun_tx);
+        initialize_models(engine);
+        initialize_lights(engine.get_registry());
     });
 
     engine.on_update([&editor](tempest::engine& engine, float dt) {
@@ -92,4 +63,60 @@ int main()
     });
 
     engine.run();
+}
+
+void initialize_lights(tempest::ecs::registry& registry)
+{
+    auto sun = registry.acquire_entity();
+    tempest::graphics::directional_light_component sun_data = {
+        .color = {1.0f, 1.0f, 1.0f},
+        .intensity = 1.0f,
+    };
+
+    tempest::graphics::shadow_map_component sun_shadows = {
+        .size = {2048, 2048},
+        .cascade_count = 1,
+    };
+
+    registry.assign(sun, sun_shadows);
+    registry.assign(sun, sun_data);
+    registry.name(sun, "Sun");
+
+    tempest::ecs::transform_component sun_tx{};
+    sun_tx.rotation({tempest::math::as_radians(90.0f), 0.0f, 0.0f});
+
+    registry.assign(sun, sun_tx);
+
+    // Create a point light
+    auto point_light = registry.acquire_entity();
+    tempest::graphics::point_light_component point_light_data = {
+        .color = {1.0f, 1.0f, 1.0f},
+        .intensity = 50.0f,
+        .range = 10.0f,
+    };
+
+    auto point_light_tx = tempest::ecs::transform_component{};
+    point_light_tx.position({0.0f, 10.0f, 15.0f});
+
+    registry.assign(point_light, point_light_data);
+    registry.assign(point_light, point_light_tx);
+    registry.name(point_light, "Point Light");
+}
+
+void initialize_models(tempest::engine& engine)
+{
+    auto sponza_prefab = engine.get_asset_database().import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf",
+                                                            engine.get_registry());
+    auto sponza_instance = engine.load_entity(sponza_prefab);
+    auto sponza_transform = tempest::ecs::transform_component{};
+    sponza_transform.scale({12.5f, 12.5f, 12.5f});
+    engine.get_registry().assign(sponza_instance, sponza_transform);
+
+    auto lantern_prefab = engine.get_asset_database().import(
+        "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_registry());
+    auto lantern_instance = engine.load_entity(lantern_prefab);
+    auto lantern_transform = tempest::ecs::transform_component{};
+    lantern_transform.position({0.0f, 0.0f, 2.0f});
+    lantern_transform.scale({0.1f, 0.1f, 0.1f});
+    engine.get_registry().assign(lantern_instance, lantern_transform);
 }

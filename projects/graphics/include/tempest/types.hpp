@@ -601,20 +601,6 @@ namespace tempest::graphics
         math::mat4<float> proj_matrix;
         math::mat4<float> view_proj_matrix;
     };
-
-    struct directional_light
-    {
-        math::vec3<float> light_direction;
-        math::vec4<float> color_illum;
-    };
-
-    struct point_light
-    {
-        math::vec4<float> location;
-        math::vec3<float> color;
-        float range;
-        float intensity;
-    };
 } // namespace tempest::graphics
 
 #endif // tempest_graphics_types_hpp
