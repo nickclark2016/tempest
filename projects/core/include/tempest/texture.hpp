@@ -64,16 +64,16 @@ namespace tempest::core
 
     struct texture
     {
-        vector<texture_mip_data> mips;
-        uint32_t width;
-        uint32_t height;
+        vector<texture_mip_data> mips{};
+        uint32_t width{};
+        uint32_t height{};
 
-        texture_format format;
-        texture_compression compression;
+        texture_format format{};
+        texture_compression compression{};
 
-        sampler_state sampler;
+        sampler_state sampler{};
 
-        string name;
+        string name{};
     };
 
     class texture_registry

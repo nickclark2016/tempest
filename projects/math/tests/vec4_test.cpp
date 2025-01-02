@@ -82,6 +82,7 @@ TEST(Vec4F, MoveConstructor)
 {
     vec4 v{ 1.0f, 2.0f, 3.0f, 4.0f };
     vec4 w{ std::move(v) };
+    (void)w;
 
     ASSERT_FLOAT_EQ(v.x, 1.0f);
     ASSERT_FLOAT_EQ(v.y, 2.0f);

@@ -8,7 +8,7 @@ namespace tempest::assets
                                    core::material_registry* material_reg) noexcept
         : _mesh_reg{mesh_reg}, _texture_reg{texture_reg}, _material_reg{material_reg}
     {
-        register_importer(make_unique<gltf_importer>(mesh_reg, texture_reg, material_reg), ".gltf");
+        register_importer(make_unique<gltf_importer>(_mesh_reg, _texture_reg, _material_reg), ".gltf");
     }
 
     void asset_database::register_importer(unique_ptr<asset_importer> importer, string_view extension)

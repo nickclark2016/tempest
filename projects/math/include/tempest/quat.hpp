@@ -59,7 +59,7 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr quat<T>::quat(const T x, const T y, const T z, const T w) : w(w), x(x), y(y), z(z)
+    inline constexpr quat<T>::quat(const T x, const T y, const T z, const T w) : x{x}, y{y}, z{z}, w{w}
     {
     }
 
