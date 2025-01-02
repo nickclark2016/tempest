@@ -68,7 +68,6 @@ namespace tempest::graphics
                 std::size_t mip_size = mip_data.bytes.size_bytes();
                 std::size_t mip_bytes_written = 0;
                 std::size_t row_width_in_bytes = mip_data.width * bytes_per_element(tex_data.fmt);
-                std::size_t row_index = 0;
 
                 while (mip_bytes_written < mip_size)
                 {
@@ -93,7 +92,6 @@ namespace tempest::graphics
                     cmds->copy(staging_buffer, images[image_index], buffer_offset, mip_data.width,
                                static_cast<std::uint32_t>(row_count), mip_index, 0, 0);
 
-                    row_index += row_count;
                     mip_bytes_written += bytes_to_write;
                     staging_buffer_bytes_written += bytes_to_write;
                 }
@@ -300,8 +298,11 @@ namespace tempest::graphics
                 .mesh_start_offset = static_cast<std::uint32_t>(bytes_written),
                 .positions_offset = 0,
                 .interleave_offset = 3 * static_cast<std::uint32_t>(sizeof(float) * mesh.vertices.size()),
+                .interleave_stride = 0,
                 .uvs_offset = 0,
                 .normals_offset = static_cast<std::uint32_t>(2 * sizeof(float)),
+                .index_offset = 0,
+                .index_count = 0,
             };
 
             std::uint32_t last_offset = 5 * sizeof(float);
@@ -446,8 +447,11 @@ namespace tempest::graphics
                 .mesh_start_offset = static_cast<std::uint32_t>(bytes_written),
                 .positions_offset = 0,
                 .interleave_offset = 3 * static_cast<std::uint32_t>(sizeof(float) * mesh.vertices.size()),
+                .interleave_stride = 0,
                 .uvs_offset = 0,
                 .normals_offset = static_cast<std::uint32_t>(2 * sizeof(float)),
+                .index_offset = 0,
+                .index_count = 0,
             };
 
             std::uint32_t last_offset = 5 * sizeof(float);

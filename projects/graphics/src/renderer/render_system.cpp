@@ -175,9 +175,6 @@ namespace tempest::graphics
         for (uint32_t i = 0; i < 5; ++i)
         {
             // compute width and height of non-power of 2
-            auto width = 1920u >> i;
-            auto height = 1080u >> i;
-
             hi_z_images.push_back(rgc->create_image({
                 .width = 1920u >> i,
                 .height = 1080u >> i,
@@ -387,9 +384,9 @@ namespace tempest::graphics
 
                             gpu_light light = {
                                 .color_intensity = math::vec4<float>(point_light.color.x, point_light.color.y,
-                                                           point_light.color.z, point_light.intensity),
+                                                                     point_light.color.z, point_light.intensity),
                                 .position_falloff = math::vec4<float>(transform.position().x, transform.position().y,
-                                                              transform.position().z, inv_sq_range),
+                                                                      transform.position().z, inv_sq_range),
                                 .light_type = gpu_light_type::POINT,
                                 .shadow_map_count = 0,
                             };
@@ -410,7 +407,7 @@ namespace tempest::graphics
                              _registry
                                  ->view<directional_light_component, shadow_map_component, ecs::transform_component>())
                         {
-                            auto params = compute_shadow_map_cascades(dir_light, shadow_map, transform,
+                            auto params = compute_shadow_map_cascades(shadow_map, transform,
                                                                       _registry->get<camera_component>(_camera_entity));
 
                             _scene_data.sun.shadow_map_count = static_cast<uint32_t>(params.projections.size());
@@ -589,7 +586,7 @@ namespace tempest::graphics
                                 cmds.set_scissor_region(region.x, region.y, region.z, region.w)
                                     .set_viewport(static_cast<float>(region.x), static_cast<float>(region.y),
                                                   static_cast<float>(region.z), static_cast<float>(region.w), 0.0f,
-                                                  1.0f, 0u, false);
+                                                  1.0f, false);
 
                                 // Push the shadow map projection matrix
                                 cmds.push_constants(0, params.proj_matrix, _directional_shadow_map_pipeline);
@@ -748,8 +745,11 @@ namespace tempest::graphics
             {
                 gpu_object_data object_payload = {
                     .model = math::mat4<float>(1.0f),
+                    .inv_tranpose_model = math::mat4<float>(1.0f),
+                    .prev_model = math::mat4<float>(1.0f),
                     .mesh_id = static_cast<uint32_t>(renderable.mesh_id),
                     .material_id = static_cast<uint32_t>(renderable.material_id),
+                    .parent_id = ~0u,
                     .self_id = static_cast<uint32_t>(renderable.object_id),
                 };
 
@@ -963,7 +963,7 @@ namespace tempest::graphics
         }
 
         auto textures = renderer_utilities::upload_textures(*_device, new_texture_ids, tex_reg,
-                                                            _device->get_staging_buffer(), true, true);
+                                                            _device->get_staging_buffer(), true, generate_mip_maps);
 
         size_t idx = 0;
         for (auto& tex : textures)
@@ -988,6 +988,7 @@ namespace tempest::graphics
             .metallic_factor = material.metallic_factor,
             .roughness_factor = material.roughness_factor,
             .alpha_cutoff = material.alpha_cutoff,
+            .reflectance = material.reflectance,
             .base_color_texture_id = material.albedo_map_id == std::numeric_limits<uint32_t>::max()
                                          ? gpu_material_data::INVALID_TEXTURE_ID
                                          : static_cast<int16_t>(texture_count() + material.albedo_map_id),
@@ -1059,6 +1060,7 @@ namespace tempest::graphics
                     .metallic_factor = metallic_factor,
                     .roughness_factor = roughness_factor,
                     .alpha_cutoff = alpha_cutoff,
+                    .reflectance = 0.0f,
                     .material_type = material_type,
                 };
 
@@ -1136,46 +1138,14 @@ namespace tempest::graphics
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-                .binding_index = 0,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER,
-                .binding_index = 1,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER,
-                .binding_index = 2,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-                .binding_index = 3,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-                .binding_index = 4,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER,
-                .binding_index = 5,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::SAMPLER,
-                .binding_index = 6,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::SAMPLED_IMAGE,
-                .binding_index = 7,
-                .binding_count = 512,
-            },
+            scene_constant_buffer,
+            vertex_pull_buffer_desc,
+            mesh_layout_buffer_desc,
+            object_buffer_desc,
+            instance_buffer_desc,
+            materials_buffer_desc,
+            linear_sampler_desc,
+            texture_array_desc,
         };
 
         descriptor_binding_info set1_bindings[] = {
@@ -1200,14 +1170,20 @@ namespace tempest::graphics
             resource_format::RG32_FLOAT,
         };
 
-        color_blend_attachment_state blending[] = {{
-                                                       // Color Buffer
-                                                       .enabled = false,
-                                                   },
-                                                   {
-                                                       // Velocity Buffer
-                                                       .enabled = false,
-                                                   }};
+        color_blend_attachment_state blending[] = {
+            {
+                // Color Buffer
+                .enabled = false,
+                .color = {},
+                .alpha = {},
+            },
+            {
+                // Velocity Buffer
+                .enabled = false,
+                .color = {},
+                .alpha = {},
+            },
+        };
 
         if (enable_blend)
         {
@@ -1470,6 +1446,7 @@ namespace tempest::graphics
             .depth_testing{
                 .enable_test = false,
                 .enable_write = false,
+                .depth_test_op = compare_operation::NEVER,
             },
             .blending{
                 .attachment_blend_ops = blending,
@@ -1530,6 +1507,7 @@ namespace tempest::graphics
             .depth_testing{
                 .enable_test = false,
                 .enable_write = false,
+                .depth_test_op = compare_operation::NEVER,
             },
             .blending{
                 .attachment_blend_ops = blending,
@@ -1606,8 +1584,8 @@ namespace tempest::graphics
 
     // TODO: Move this to a compute shader
     render_system::shadow_map_parameters render_system::compute_shadow_map_cascades(
-        const directional_light_component& dir_light, const shadow_map_component& shadowing,
-        const ecs::transform_component& light_transform, const camera_component& camera_data)
+        const shadow_map_component& shadowing, const ecs::transform_component& light_transform,
+        const camera_component& camera_data)
     {
         float near_plane = camera_data.near_plane;
         float far_plane = camera_data.far_shadow_plane;
@@ -1701,8 +1679,8 @@ namespace tempest::graphics
             // Light View Matrix
             auto light_view =
                 math::look_at(frustum_center - light_dir * radius, frustum_center, math::vec3<float>(0.0f, 1.0f, 0.0f));
-            auto light_proj =
-                math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y, min_extents.z - max_extents.z, 0.0f);
+            auto light_proj = math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y,
+                                          min_extents.z - max_extents.z, 0.0f);
 
             params.cascade_splits[cascade] = (near_plane + split_distance * clip_range) * -1.0f;
             params.projections[cascade] = light_proj * light_view;

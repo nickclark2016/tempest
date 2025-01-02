@@ -70,11 +70,11 @@ namespace tempest::graphics
             float alpha_cutoff;
             float reflectance;
 
-            int16_t base_color_texture_id;
-            int16_t normal_texture_id;
-            int16_t metallic_roughness_texture_id;
-            int16_t emissive_texture_id;
-            int16_t occlusion_texture_id;
+            int16_t base_color_texture_id = INVALID_TEXTURE_ID;
+            int16_t normal_texture_id = INVALID_TEXTURE_ID;
+            int16_t metallic_roughness_texture_id = INVALID_TEXTURE_ID;
+            int16_t emissive_texture_id = INVALID_TEXTURE_ID;
+            int16_t occlusion_texture_id = INVALID_TEXTURE_ID;
 
             gpu_material_type material_type;
         };
@@ -106,12 +106,12 @@ namespace tempest::graphics
 
         struct alignas(16) gpu_light
         {
-            math::vec4<float> color_intensity;
-            math::vec4<float> position_falloff;
-            math::vec4<float> direction;
-            array<uint32_t, 6> shadow_map_indices;
-            gpu_light_type light_type;
-            uint32_t shadow_map_count;
+            math::vec4<float> color_intensity{};
+            math::vec4<float> position_falloff{};
+            math::vec4<float> direction{};
+            array<uint32_t, 6> shadow_map_indices{};
+            gpu_light_type light_type{};
+            uint32_t shadow_map_count{};
         };
 
         struct orthogonal_bounds
@@ -339,8 +339,7 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle create_sharpen_pipeline();
         graphics_pipeline_resource_handle create_directional_shadow_map_pipeline();
 
-        shadow_map_parameters compute_shadow_map_cascades(const directional_light_component& dir_light,
-                                                          const shadow_map_component& shadowing,
+        shadow_map_parameters compute_shadow_map_cascades(const shadow_map_component& shadowing,
                                                           const ecs::transform_component& light_transform,
                                                           const camera_component& camera_data);
     };

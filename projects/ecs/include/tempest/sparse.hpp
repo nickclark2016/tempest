@@ -512,10 +512,8 @@ namespace tempest::ecs
         using value_type = pair<add_const_t<K>, V>;
         using size_type = size_t;
         using difference_type = ptrdiff_t;
-        using reference =
-            pair<add_const_t<add_lvalue_reference_t<K>>, add_lvalue_reference_t<V>>;
-        using const_reference = pair<add_const_t<add_lvalue_reference_t<K>>,
-                                     add_const_t<add_lvalue_reference_t<V>>>;
+        using reference = pair<add_const_t<add_lvalue_reference_t<K>>, add_lvalue_reference_t<V>>;
+        using const_reference = pair<add_const_t<add_lvalue_reference_t<K>>, add_const_t<add_lvalue_reference_t<V>>>;
         using pointer =
             detail::basic_sparse_map_iterator_ptr<typename reference::first_type, typename reference::second_type>;
         using const_pointer = detail::basic_sparse_map_iterator_ptr<typename const_reference::first_type,
@@ -1000,12 +998,14 @@ namespace tempest::ecs
 
     template <typename K, typename V, typename Allocator>
     inline constexpr basic_sparse_map<K, V, Allocator>::basic_sparse_map(basic_sparse_map&& rhs) noexcept
-        : basic_sparse_map_interface<K>{}, _sparse{tempest::exchange(rhs._sparse, nullptr)},
-          _packed{tempest::exchange(rhs._packed, nullptr)}, _values{tempest::exchange(rhs._values, nullptr)},
+        : basic_sparse_map_interface<K>{}, _packed_alloc{tempest::move(rhs._packed_alloc)},
+          _sparse_alloc{tempest::move(rhs._sparse_alloc)}, _value_alloc{tempest::move(rhs._value_alloc)},
+          _sparse{tempest::exchange(rhs._sparse, nullptr)}, _packed{tempest::exchange(rhs._packed, nullptr)},
+          _values{tempest::exchange(rhs._values, nullptr)},
           _sparse_page_count{tempest::exchange(rhs._sparse_page_count, 0)},
           _packed_count{tempest::exchange(rhs._packed_count, 0)},
-          _packed_capacity{tempest::exchange(rhs._packed_capacity, 0)}, _packed_alloc{tempest::move(rhs._packed_alloc)},
-          _sparse_alloc{tempest::move(rhs._sparse_alloc)}, _value_alloc{tempest::move(rhs._value_alloc)},
+          _packed_capacity{tempest::exchange(rhs._packed_capacity, 0)},
+
           _free_list_head{tempest::exchange(rhs._free_list_head, traits_type::entity_mask)}
     {
     }
@@ -1120,8 +1120,6 @@ namespace tempest::ecs
     {
         // Get the index of the key in the packed array
         const auto element = _sparse_pointer(k);
-        constexpr auto max_cap = traits_type::entity_mask;
-        constexpr auto mask = traits_type::as_integral(null) & ~max_cap;
         return static_cast<size_type>(traits_type::as_entity(*element));
     }
 

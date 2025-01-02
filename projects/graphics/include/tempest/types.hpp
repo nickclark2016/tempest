@@ -190,14 +190,14 @@ namespace tempest::graphics
         bool per_frame;
         memory_location loc;
         size_t size;
-        bool transfer_source : 1;
-        bool transfer_destination : 1;
-        bool uniform_buffer : 1;
-        bool storage_buffer : 1;
-        bool index_buffer : 1;
-        bool vertex_buffer : 1;
-        bool indirect_buffer : 1;
-        string name;
+        bool transfer_source : 1  = false;
+        bool transfer_destination : 1 = false;
+        bool uniform_buffer : 1 = false;
+        bool storage_buffer : 1 = false;
+        bool index_buffer : 1 = false;
+        bool vertex_buffer : 1 = false;
+        bool indirect_buffer : 1 = false;
+        string name{};
     };
 
     struct image_create_info
@@ -210,14 +210,14 @@ namespace tempest::graphics
         uint32_t mip_count;
         resource_format format;
         sample_count samples;
-        bool transfer_source : 1;
-        bool transfer_destination : 1;
-        bool sampled : 1;
-        bool storage : 1;
-        bool color_attachment : 1;
-        bool depth_attachment : 1;
-        bool persistent;
-        string name;
+        bool transfer_source : 1 = false;
+        bool transfer_destination : 1 = false;
+        bool sampled : 1 = false;
+        bool storage : 1 = false;
+        bool color_attachment : 1 = false;
+        bool depth_attachment : 1 = false;
+        bool persistent = false;
+        string name{};
     };
 
     enum class descriptor_binding_type
@@ -252,8 +252,8 @@ namespace tempest::graphics
 
     struct pipeline_layout_create_info
     {
-        span<descriptor_set_layout_create_info> set_layouts;
-        span<push_constant_layout> push_constants;
+        span<descriptor_set_layout_create_info> set_layouts{};
+        span<push_constant_layout> push_constants{};
     };
 
     enum class blend_factor
@@ -285,7 +285,9 @@ namespace tempest::graphics
         EQUALS,
         GREATER_OR_EQUALS,
         GREATER,
-        NOT_EQUALS
+        NOT_EQUALS,
+        NEVER,
+        ALWAYS,
     };
 
     enum class vertex_winding_order
@@ -304,8 +306,8 @@ namespace tempest::graphics
     struct color_blend_attachment_state
     {
         bool enabled;
-        attachment_blend_info color;
-        attachment_blend_info alpha;
+        attachment_blend_info color{};
+        attachment_blend_info alpha{};
     };
 
     struct color_blend_state
@@ -328,7 +330,7 @@ namespace tempest::graphics
 
     struct render_target_layout
     {
-        span<resource_format> color_attachment_formats;
+        span<resource_format> color_attachment_formats{};
         resource_format depth_attachment_format{resource_format::UNKNOWN};
     };
 
@@ -336,12 +338,12 @@ namespace tempest::graphics
     {
         bool enable_test;
         bool enable_write;
-        bool enable_bounds_test;
-        bool clamp_depth;
+        bool enable_bounds_test{false};
+        bool clamp_depth{false};
         compare_operation depth_test_op;
         float min_depth_bounds{0.0f};
         float max_depth_bounds{1.0f};
-        bool enable_depth_bias;
+        bool enable_depth_bias{false};
         float depth_bias_constant_factor{0.0f};
         float depth_bias_clamp{0.0f};
         float depth_bias_slope_factor{0.0f};
@@ -360,7 +362,7 @@ namespace tempest::graphics
         render_target_layout target;
         shader_create_info vertex_shader;
         shader_create_info fragment_shader;
-        vertex_input_layout vertex_layout;
+        vertex_input_layout vertex_layout{};
         depth_state depth_testing;
         color_blend_state blending;
         string name;
@@ -411,12 +413,12 @@ namespace tempest::graphics
         filter mag;
         filter min;
         mipmap_mode mipmap;
-        float mip_lod_bias;
+        float mip_lod_bias{0.0f};
         float min_lod{0.0f};
         float max_lod{1000.0f};
-        bool enable_aniso;
-        float max_anisotropy;
-        string name;
+        bool enable_aniso{false};
+        float max_anisotropy{};
+        string name{};
     };
 
     enum class resource_access_type
@@ -541,7 +543,7 @@ namespace tempest::graphics
                                              graphics_pipeline_resource_handle handle) = 0;
 
         virtual command_list& set_viewport(float x, float y, float width, float height, float min_depth = 0.0f,
-                                           float max_depth = 1.0f, uint32_t viewport_id = 0, bool flip = true) = 0;
+                                           float max_depth = 1.0f, bool flip = true) = 0;
         virtual command_list& set_scissor_region(int32_t x, int32_t y, uint32_t width, uint32_t height) = 0;
         virtual command_list& draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0,
                                    uint32_t first_index = 0) = 0;

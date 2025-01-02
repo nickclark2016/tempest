@@ -20,75 +20,75 @@ namespace tempest::graphics
 {
     struct image_resource_state
     {
-        resource_access_type type;
+        resource_access_type type{};
 
-        vector<image_resource_handle> handles;
-        image_resource_usage usage;
-        pipeline_stage first_access;
-        pipeline_stage last_access;
-        load_op load;
-        store_op store;
-        math::vec4<float> clear_color;
-        float clear_depth;
+        vector<image_resource_handle> handles{};
+        image_resource_usage usage{};
+        pipeline_stage first_access{};
+        pipeline_stage last_access{};
+        load_op load{};
+        store_op store{};
+        math::vec4<float> clear_color{};
+        float clear_depth{};
 
-        uint32_t set;
-        uint32_t binding;
+        uint32_t set{};
+        uint32_t binding{};
     };
 
     struct buffer_resource_state
     {
-        resource_access_type type;
+        resource_access_type type{};
 
-        buffer_resource_handle buf;
-        buffer_resource_usage usage;
-        pipeline_stage first_access;
-        pipeline_stage last_access;
+        buffer_resource_handle buf{};
+        buffer_resource_usage usage{};
+        pipeline_stage first_access{};
+        pipeline_stage last_access{};
         bool per_frame_memory{false};
 
-        uint32_t set;
-        uint32_t binding;
+        uint32_t set{};
+        uint32_t binding{};
     };
 
     struct swapchain_resource_state
     {
-        resource_access_type type;
+        resource_access_type type{};
 
-        swapchain_resource_handle swap;
-        image_resource_usage usage;
-        pipeline_stage first_access;
-        pipeline_stage last_access;
-        load_op load;
-        store_op store;
+        swapchain_resource_handle swap{};
+        image_resource_usage usage{};
+        pipeline_stage first_access{};
+        pipeline_stage last_access{};
+        load_op load{};
+        store_op store{};
     };
 
     struct external_image_resource_state
     {
-        resource_access_type type;
-        image_resource_usage usage;
-        vector<image_resource_handle> images;
-        pipeline_stage stages;
+        resource_access_type type{};
+        image_resource_usage usage{};
+        vector<image_resource_handle> images{};
+        pipeline_stage stages{};
 
-        uint32_t count;
-        uint32_t set;
-        uint32_t binding;
+        uint32_t count{};
+        uint32_t set{};
+        uint32_t binding{};
     };
 
     struct resolve_image_state
     {
-        image_resource_handle src;
-        image_resource_handle dst;
+        image_resource_handle src{};
+        image_resource_handle dst{};
 
-        pipeline_stage first_access;
-        pipeline_stage last_access;
+        pipeline_stage first_access{};
+        pipeline_stage last_access{};
     };
 
     struct external_sampler_resource_state
     {
-        vector<sampler_resource_handle> samplers;
-        pipeline_stage stages;
+        vector<sampler_resource_handle> samplers{};
+        pipeline_stage stages{};
 
-        uint32_t set;
-        uint32_t binding;
+        uint32_t set{};
+        uint32_t binding{};
     };
 
     class render_graph_resource_library
