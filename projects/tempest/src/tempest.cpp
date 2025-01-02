@@ -16,7 +16,7 @@ namespace tempest
     } // namespace
 
     engine::engine()
-        : _render_system{_entity_registry}, _asset_database{&_mesh_reg, &_texture_reg, &_material_reg}
+        : _asset_database{&_mesh_reg, &_texture_reg, &_material_reg}, _render_system{_entity_registry}
     {
     }
 
@@ -113,12 +113,8 @@ namespace tempest
         vector<guid> material_guids;
         vector<guid> texture_guids;
 
-        std::size_t entity_count = 0;
-
         for (auto e : hierarchy)
         {
-            ++entity_count;
-
             // Get the mesh, material, and transform components
             auto mesh_comp = _entity_registry.try_get<core::mesh_component>(e);
             auto material_comp = _entity_registry.try_get<core::material_component>(e);

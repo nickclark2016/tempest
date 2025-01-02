@@ -22,6 +22,8 @@ scoped.group('Editor', function()
 
         tempest.applyTempestConfig()
 
+        warnings 'Extra'
+
         postbuildcommands {
             '{RMDIR} %{root}/projects/editor/assets', -- Ensure a clean assets directory before building it
             '{MKDIR} %{root}/projects/editor/assets',
