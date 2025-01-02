@@ -16,6 +16,7 @@ TEST(directed_graph, add_vertex)
     tempest::directed_graph<int, float, double> graph;
 
     auto key = graph.add_vertex(42);
+    (void)key;
 
     EXPECT_EQ(graph.vertex_count(), 1);
     EXPECT_EQ(graph.edge_count(), 0);

@@ -266,7 +266,7 @@ namespace tempest
         {
             auto min_value = bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
 
-            for (int s = 0; s <= (str_len - pattern_len);)
+            for (ptrdiff_t s = 0; s <= static_cast<ptrdiff_t>(str_len - pattern_len);)
             {
                 ptrdiff_t p = static_cast<ptrdiff_t>(pattern_len) - 1;
 
@@ -291,18 +291,19 @@ namespace tempest
         const CharT* reverse_boyer_more_helper(const CharT* str, size_t str_len, const CharT* pattern,
                                                size_t pattern_len, span<typename Traits::int_type> bad_char_table)
         {
+            auto s_pattern_len = static_cast<ptrdiff_t>(pattern_len);
             auto min_value = reverse_bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
 
             for (auto s = static_cast<ptrdiff_t>(str_len - pattern_len); s >= 0;)
             {
-                int p = 0;
+                ptrdiff_t p = 0;
 
-                while (p < pattern_len && pattern[p] == str[s + p])
+                while (p < s_pattern_len && pattern[p] == str[s + p])
                 {
                     ++p;
                 }
 
-                if (p == pattern_len)
+                if (p == s_pattern_len)
                 {
                     return str + s;
                 }

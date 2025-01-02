@@ -22,7 +22,7 @@ namespace tempest
     struct loop_unroller<IdxType, StartIdx, EndIdx, StepSize, false>
     {
         template <typename Fn>
-        inline static constexpr void evaluate(Fn f)
+        inline static constexpr void evaluate([[maybe_unused]] Fn f)
         {
             // no op
             // loop does not continue, as loop function evaluated to false
@@ -54,12 +54,6 @@ namespace tempest
     [[nodiscard]] inline constexpr T set_bit(T n, T k) noexcept
     {
         return n | (static_cast<T>(1) << k);
-    }
-
-    template <integral T>
-    [[nodiscard]] inline constexpr T set_bit(T n, T k, bool x) noexcept
-    {
-        return (n & ~(static_cast<T>(1) << k)) | (static_cast<T>(1) << k);
     }
 
     template <integral T>

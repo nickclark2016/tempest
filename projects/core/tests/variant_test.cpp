@@ -126,7 +126,7 @@ TEST(variant, visit)
     EXPECT_EQ(tempest::visit(callable, v2), false);
 
     // Ensure void return compiles
-    auto void_callable = [](auto&& arg) {};
+    auto void_callable = []([[maybe_unused]] auto&& arg) {};
     v.visit(void_callable);
     tempest::visit(void_callable, v);
 }
@@ -134,7 +134,7 @@ TEST(variant, visit)
 TEST(variant, visit_with_return)
 {
     // Verify void return compiles
-    auto void_callable = [](auto&& arg) {};
+    auto void_callable = []([[maybe_unused]] auto&& arg) {};
 
     tempest::variant<int, float> v(42);
     v.visit<void>(void_callable);

@@ -469,7 +469,7 @@ namespace tempest
 
         template <typename Fn>
         template <typename F>
-        inline bool function_base::manager<Fn>::non_empty_function(const F& f) noexcept
+        inline bool function_base::manager<Fn>::non_empty_function([[maybe_unused]] const F& f) noexcept
         {
             return true;
         }
@@ -1203,7 +1203,7 @@ namespace tempest
             template <auto f>
                 requires(is_invocable_using<Nx, R, Args...>::template value<decltype(f)>())
             inline function_ref_impl(nontype_t<f>) noexcept
-                : _callback{[](storage s, Args... args) noexcept(Nx) -> R {
+                : _callback{[]([[maybe_unused]] storage s, Args... args) noexcept(Nx) -> R {
                       return invoke_r<R>(f, tempest::forward<Args>(args)...);
                   }}
             {

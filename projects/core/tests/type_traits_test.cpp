@@ -1,4 +1,5 @@
 #include <tempest/type_traits.hpp>
+#include <tempest/utility.hpp>
 
 #include <gtest/gtest.h>
 
@@ -1899,23 +1900,32 @@ namespace
     // Swappable types and functions
     struct SwappableType1
     {
+        int a;
     };
     struct SwappableType2
     {
+        int b;
     };
 
-    void swap(SwappableType1&, SwappableType1&)
+    void swap(SwappableType1& lhs, SwappableType1& rhs)
     {
+        tempest::swap(lhs.a, rhs.a);
     }
-    void swap(SwappableType2&, SwappableType2&)
+
+    void swap(SwappableType2& lhs, SwappableType2& rhs)
     {
+        tempest::swap(lhs.b, rhs.b);
     }
+
     // Swap with each other
-    void swap(SwappableType1&, SwappableType2&)
+    void swap(SwappableType1& lhs, SwappableType2& rhs)
     {
+        tempest::swap(lhs.a, rhs.b);
     }
-    void swap(SwappableType2&, SwappableType1&)
+
+    void swap(SwappableType2& lhs, SwappableType1& rhs)
     {
+        tempest::swap(lhs.b, rhs.a);
     }
 
     // Nothrow swappable types and functions
@@ -1959,6 +1969,82 @@ TEST(type_traits, is_swappable_with)
 
     result = tempest::is_swappable_with<SwappableType2, SwappableType1>::value;
     EXPECT_TRUE(result);
+
+    {
+        // Swap 1 and 1
+        SwappableType1 a{.a = 1};
+        SwappableType1 b{.a = 2};
+
+        swap(a, b);
+
+        EXPECT_EQ(a.a, 2);
+        EXPECT_EQ(b.a, 1);
+    }
+
+    {
+        // Swap 1 and 2
+        SwappableType1 a{.a = 1};
+        SwappableType2 b{.b = 2};
+
+        swap(a, b);
+
+        EXPECT_EQ(a.a, 2);
+        EXPECT_EQ(b.b, 1);
+    }
+
+    {
+        // Swap 2 and 1
+        SwappableType2 a{.b = 1};
+        SwappableType1 b{.a = 2};
+
+        swap(a, b);
+
+        EXPECT_EQ(a.b, 2);
+        EXPECT_EQ(b.a, 1);
+    }
+
+    {
+        // Swap 2 and 2
+        SwappableType2 a{.b = 1};
+        SwappableType2 b{.b = 2};
+
+        swap(a, b);
+
+        EXPECT_EQ(a.b, 2);
+        EXPECT_EQ(b.b, 1);
+    }
+
+    {
+        // Swap 1 and 1
+        NothrowSwappableType1 a;
+        NothrowSwappableType1 b;
+
+        swap(a, b);
+    }
+
+    {
+        // Swap 1 and 2
+        NothrowSwappableType1 a;
+        NothrowSwappableType2 b;
+
+        swap(a, b);
+    }
+
+    {
+        // Swap 2 and 1
+        NothrowSwappableType2 a;
+        NothrowSwappableType1 b;
+
+        swap(a, b);
+    }
+
+    {
+        // Swap 2 and 2
+        NothrowSwappableType2 a;
+        NothrowSwappableType2 b;
+
+        swap(a, b);
+    }
 }
 
 TEST(type_traits, is_nothrow_swappable_with)

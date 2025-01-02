@@ -312,7 +312,7 @@ namespace tempest
     }
 
     template <typename T>
-    void allocator<T>::deallocate(T* ptr, size_t n)
+    void allocator<T>::deallocate(T* ptr, [[maybe_unused]] size_t n)
     {
         ::operator delete[](ptr, std::align_val_t(alignof(T)), std::nothrow);
     }
@@ -460,14 +460,14 @@ namespace tempest
 
     template <typename Alloc>
     template <typename T, typename... Args>
-    inline constexpr void allocator_traits<Alloc>::construct(allocator_type& alloc, T* p, Args&&... args)
+    inline constexpr void allocator_traits<Alloc>::construct([[maybe_unused]] allocator_type& alloc, T* p, Args&&... args)
     {
         (void)::tempest::construct_at(p, tempest::forward<Args>(args)...);
     }
 
     template <typename Alloc>
     template <typename T>
-    inline constexpr void allocator_traits<Alloc>::destroy(allocator_type& alloc, T* p)
+    inline constexpr void allocator_traits<Alloc>::destroy([[maybe_unused]] allocator_type& alloc, T* p)
     {
         ::tempest::destroy_at(p);
     }
