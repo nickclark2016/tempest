@@ -73,8 +73,6 @@ TEST(entity_traits, non_zero_entity_and_version)
 
 TEST(entity_traits, null_conversion)
 {
-    using traits = entity_traits<entity>;
-
     entity e = null;
     ASSERT_TRUE(e == null);
     ASSERT_TRUE(null == e);
@@ -84,8 +82,6 @@ TEST(entity_traits, null_conversion)
 
 TEST(entity_traits, tombstone_conversion)
 {
-    using traits = entity_traits<entity>;
-
     entity e = tombstone;
     ASSERT_TRUE(e == tombstone);
     ASSERT_TRUE(tombstone == e);

@@ -18,6 +18,8 @@ scoped.group('Engine', function()
         }
 
         IncludeDir['math'] = '%{root}/projects/math/include'
+
+        warnings 'Extra'
     end)
 
     scoped.group('Tests', function()
@@ -47,6 +49,8 @@ scoped.group('Engine', function()
                 'math',
                 'googletest',
             }
+
+            warnings 'Extra'
         end)
     end)
 end)

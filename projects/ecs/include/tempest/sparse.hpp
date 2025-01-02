@@ -312,14 +312,20 @@ namespace tempest::ecs
         inline constexpr basic_sparse_map_iterator<K, V>::reference basic_sparse_map_iterator<K, V>::operator[](
             difference_type diff) noexcept
         {
-            return make_pair(keys[get_index()], values[get_index()]);
+            auto self = *this;
+            self += diff;
+
+            return make_pair(keys[self.get_index()], values[self.get_index()]);
         }
 
         template <typename K, typename V>
         inline constexpr basic_sparse_map_iterator<K, V>::const_reference basic_sparse_map_iterator<K, V>::operator[](
             difference_type diff) const noexcept
         {
-            return make_pair(keys[get_index()], values[get_index()]);
+            auto self = *this;
+            self += diff;
+
+            return make_pair(keys[self.get_index()], values[self.get_index()]);
         }
 
         template <typename K, typename V>

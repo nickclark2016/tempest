@@ -303,8 +303,7 @@ namespace tempest::assets
         }
 
         guid process_texture(const image_payload& img, optional<simdjson::dom::element> sampler,
-                             core::texture_registry* tex_reg, span<const buffer_view_payload> views,
-                             const flat_unordered_map<uint32_t, vector<byte>>& buffers)
+                             core::texture_registry* tex_reg, const flat_unordered_map<uint32_t, vector<byte>>& buffers)
         {
             core::sampler_state state;
 
@@ -1017,8 +1016,7 @@ namespace tempest::assets
                     sampler = doc.at_key("samplers").get_array().at(sampler_id).value();
                 }
 
-                auto guid =
-                    process_texture(image_contents[image_id], sampler, _texture_reg, buffer_views, buffer_contents);
+                auto guid = process_texture(image_contents[image_id], sampler, _texture_reg, buffer_contents);
                 texture_guids.insert({texture_id, guid});
                 ++texture_id;
             }
@@ -1139,23 +1137,19 @@ namespace tempest::assets
                     auto m = math::as_mat4(quat_rot);
                     auto te = m.data;
 
-                    const float m11 = te[0], m12 = te[4], m13 = te[8];
-                    const float m21 = te[1], m22 = te[5], m23 = te[9];
-                    const float m31 = te[2], m32 = te[6], m33 = te[10];
-
                     float x, z;
-                    auto y = std::asin(math::clamp(m13, -1.0f, 1.0f));
+                    auto y = std::asin(math::clamp(te[8], -1.0f, 1.0f));
 
-                    if (std::abs(m13) < 0.9999999)
+                    if (std::abs(te[8]) < 0.9999999)
                     {
 
-                        x = std::atan2(-m23, m33);
-                        z = std::atan2(-m12, m11);
+                        x = std::atan2(-te[9], te[10]);
+                        z = std::atan2(-te[4], te[0]);
                     }
                     else
                     {
 
-                        x = std::atan2(m32, m22);
+                        x = std::atan2(te[6], te[5]);
                         z = 0;
                     }
 
@@ -1216,9 +1210,6 @@ namespace tempest::assets
                 }
             }
         }
-
-        auto ent_hierarchy_view = ecs::descendant_entity_view(registry, ent);
-        auto ent_in_view_count = tempest::distance(ent_hierarchy_view.begin(), ent_hierarchy_view.end());
 
         return ent;
     }

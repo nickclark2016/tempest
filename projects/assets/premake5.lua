@@ -49,6 +49,7 @@ scoped.group('Engine', function()
         }
 
         externalwarnings 'Off'
+        warnings 'Extra'
         
         IncludeDir['assets'] = '%{root}/projects/assets/include'
     end)

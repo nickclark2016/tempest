@@ -34,6 +34,7 @@ scoped.group('Engine', function()
         IncludeDir['ecs'] = '%{root}/projects/ecs/include'
 
         externalwarnings 'Off'
+        warnings 'Extra'
     end)
 
     scoped.group('Tests', function()
@@ -52,8 +53,11 @@ scoped.group('Engine', function()
             includedirs {
                 'include',
                 '%{IncludeDir.core}',
-                '%{IncludeDir.gtest}',
                 '%{IncludeDir.math}',
+            }
+
+            externalincludedirs {
+                '%{IncludeDir.gtest}',
             }
     
             dependson {
@@ -73,6 +77,8 @@ scoped.group('Engine', function()
             scoped.filter({ 'system:linux' }, function()
                 links { 'X11' }
             end)
+
+            warnings 'Extra'
         end)
     end)
 end)
