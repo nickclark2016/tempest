@@ -10,9 +10,14 @@
 
 namespace tempest::math
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(disable : 4201)
+#endif
     template <typename T>
     struct alignas(sizeof(T) * 4) quat
     {
+
         union {
             T data[4];
             struct
@@ -23,6 +28,9 @@ namespace tempest::math
                 T w;
             };
         };
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#endif
 
         constexpr quat();
         constexpr quat(const T scalar);

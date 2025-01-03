@@ -130,7 +130,7 @@ namespace tempest::graphics
             math::vec2<float> screen_size;
             math::vec3<float> ambient_light;
             gpu_light sun;
-            uint32_t point_light_count;
+            uint32_t point_light_count{};
         };
 
         struct alignas(16) gpu_shadow_map_parameter
@@ -150,7 +150,7 @@ namespace tempest::graphics
         struct hi_z_data
         {
             math::vec2<uint32_t> size;
-            uint32_t mip_count;
+            uint32_t mip_count{};
         };
 
         struct draw_batch_key

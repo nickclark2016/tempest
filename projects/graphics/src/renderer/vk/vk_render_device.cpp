@@ -684,7 +684,7 @@ namespace tempest::graphics::vk
             .name = string{ci.name},
         };
 
-        auto result = vmaCreateBuffer(_vk_alloc, &buf_ci, &alloc_ci, &buf.buffer, &buf.allocation, &buf.alloc_info);
+        auto result = vmaCreateBuffer(_vk_alloc, &buf_ci, &alloc_ci, &buf.vk_buffer, &buf.allocation, &buf.alloc_info);
         if (result != VK_SUCCESS)
         {
             _buffers->release_resource({
@@ -695,7 +695,7 @@ namespace tempest::graphics::vk
             return buffer_resource_handle();
         }
 
-        name_object(_dispatch, std::bit_cast<uint64_t>(buf.buffer), VK_OBJECT_TYPE_BUFFER, ci.name.c_str());
+        name_object(_dispatch, std::bit_cast<uint64_t>(buf.vk_buffer), VK_OBJECT_TYPE_BUFFER, ci.name.c_str());
 
         buffer* buf_ptr = access_buffer(handle);
         std::construct_at(buf_ptr, buf);
@@ -709,7 +709,7 @@ namespace tempest::graphics::vk
         if (buf)
         {
             _delete_queue->add_to_queue(_current_frame, [this, buf, handle]() {
-                vmaDestroyBuffer(_vk_alloc, buf->buffer, buf->allocation);
+                vmaDestroyBuffer(_vk_alloc, buf->vk_buffer, buf->allocation);
                 std::destroy_at(buf);
                 _buffers->release_resource({.index = handle.id, .generation = handle.generation});
             });
@@ -1771,9 +1771,9 @@ namespace tempest::graphics::vk
         swapchain* sc = access_swapchain(handle);
         if (sc)
         {
-            for (image_resource_handle handle : sc->image_handles)
+            for (image_resource_handle img : sc->image_handles)
             {
-                release_image(handle);
+                release_image(img);
             }
 
             _delete_queue->add_to_queue(_current_frame, [this, sc, handle]() {
@@ -2320,7 +2320,7 @@ namespace tempest::graphics::vk
 
     command_list& command_list::draw(buffer_resource_handle buf, uint32_t offset, uint32_t count, uint32_t stride)
     {
-        _dispatch->cmdDrawIndirect(_cmds, _device->access_buffer(buf)->buffer, offset, count, stride);
+        _dispatch->cmdDrawIndirect(_cmds, _device->access_buffer(buf)->vk_buffer, offset, count, stride);
 
         return *this;
     }
@@ -2328,7 +2328,7 @@ namespace tempest::graphics::vk
     command_list& command_list::draw_indexed(buffer_resource_handle buf, uint32_t offset, uint32_t count,
                                              uint32_t stride)
     {
-        _dispatch->cmdDrawIndexedIndirect(_cmds, _device->access_buffer(buf)->buffer, offset, count, stride);
+        _dispatch->cmdDrawIndexedIndirect(_cmds, _device->access_buffer(buf)->vk_buffer, offset, count, stride);
 
         return *this;
     }
@@ -2344,7 +2344,7 @@ namespace tempest::graphics::vk
     command_list& command_list::use_index_buffer(buffer_resource_handle buf, uint32_t offset)
     {
         auto vk_buf = _device->access_buffer(buf);
-        _dispatch->cmdBindIndexBuffer(_cmds, vk_buf->buffer, offset, VK_INDEX_TYPE_UINT32);
+        _dispatch->cmdBindIndexBuffer(_cmds, vk_buf->vk_buffer, offset, VK_INDEX_TYPE_UINT32);
 
         return *this;
     }
@@ -2444,7 +2444,7 @@ namespace tempest::graphics::vk
             .size = byte_count,
         };
 
-        _dispatch->cmdCopyBuffer(_cmds, src_buf->buffer, dst_buf->buffer, 1, &copy);
+        _dispatch->cmdCopyBuffer(_cmds, src_buf->vk_buffer, dst_buf->vk_buffer, 1, &copy);
 
         return *this;
     }
@@ -2475,7 +2475,7 @@ namespace tempest::graphics::vk
             },
         };
 
-        _dispatch->cmdCopyBufferToImage(_cmds, _device->access_buffer(src)->buffer, _device->access_image(dst)->image,
+        _dispatch->cmdCopyBufferToImage(_cmds, _device->access_buffer(src)->vk_buffer, _device->access_image(dst)->image,
                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
         return *this;

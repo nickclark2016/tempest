@@ -489,7 +489,10 @@ namespace tempest::core
             static type_info instance{std::in_place_type_t<T>{}};
             return instance;
         }
-        return type_id<base>();
+        else
+        {
+            return type_id<base>();
+        }
     }
 
     template <std::size_t N>

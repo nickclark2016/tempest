@@ -103,12 +103,14 @@ namespace tempest
             detail::copy_bytes(first, d_first, count * sizeof(value_type));
             return d_first + count;
         }
-
-        while (first != last)
+        else
         {
-            *d_first++ = *first++;
+            while (first != last)
+            {
+                *d_first++ = *first++;
+            }
+            return d_first;
         }
-        return d_first;
     }
 
     template <input_iterator InputIt, typename Size,
@@ -122,12 +124,14 @@ namespace tempest
             detail::copy_bytes(first, d_first, count * sizeof(value_type));
             return d_first + count;
         }
-
-        for (Size i = 0; i < count; ++i)
+        else
         {
-            *d_first++ = *first++;
+            for (Size i = 0; i < count; ++i)
+            {
+                *d_first++ = *first++;
+            }
+            return d_first;
         }
-        return d_first;
     }
 
     template <input_iterator It, typename T = typename iterator_traits<It>::value_type>

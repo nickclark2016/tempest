@@ -105,7 +105,7 @@ namespace tempest
         using reverse_iterator = std::reverse_iterator<iterator>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-        static constexpr size_type npos = -1;
+        static constexpr size_type npos = ~size_type(0);
 
         constexpr basic_string() noexcept(noexcept(Allocator()));
         explicit constexpr basic_string(const Allocator& alloc) noexcept;

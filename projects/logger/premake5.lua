@@ -15,6 +15,9 @@ scoped.group('Engine', function()
 
         includedirs {
             'include',
+        }
+        
+        externalincludedirs {
             '%{IncludeDir.spdlog}',
         }
 
@@ -30,9 +33,17 @@ scoped.group('Engine', function()
             '_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS',
         }
 
+        IncludeDir['logger'] = '%{root}/projects/logger/include'
+
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
+            }
+        end)
+
         externalwarnings 'Off'
         warnings 'Extra'
-
-        IncludeDir['logger'] = '%{root}/projects/logger/include'
     end)
 end)

@@ -801,7 +801,7 @@ namespace tempest
             }
         }
 
-        return result;
+        return static_cast<std::uint16_t>(result);
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -852,8 +852,6 @@ namespace tempest
         }
 
         std::abort();
-
-        return tempest::pair<size_t, size_t>();
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>

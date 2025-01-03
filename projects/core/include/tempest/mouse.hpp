@@ -136,7 +136,7 @@ namespace tempest::core
 
       private:
         std::array<mouse_button_state, static_cast<std::underlying_type_t<mouse_button>>(mouse_button::LAST)>
-            _button_states;
+            _button_states{};
 
         float _x = -1.0f;
         float _y = -1.0f;

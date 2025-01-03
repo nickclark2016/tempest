@@ -1327,15 +1327,17 @@ namespace tempest::ecs
         {
             return false;
         }
-
-        auto it = find(src);
-        if (it == end())
+        else
         {
-            return false;
-        }
+            auto it = find(src);
+            if (it == end())
+            {
+                return false;
+            }
 
-        insert(dst, it->second);
-        return true;
+            insert(dst, it->second);
+            return true;
+        }
     }
 
     template <typename K, typename V, typename Allocator>

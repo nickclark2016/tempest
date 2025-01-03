@@ -16,8 +16,11 @@ scoped.group('Engine', function()
     
         includedirs {
             'include',
-            '%{IncludeDir.glfw}',
             '%{IncludeDir.math}',
+        }
+
+        externalincludedirs {
+            '%{IncludeDir.glfw}',
             '%{IncludeDir.tlsf}',
         }
     
@@ -34,6 +37,14 @@ scoped.group('Engine', function()
         }
     
         IncludeDir['core'] = '%{root}/projects/core/include'
+
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
+            }
+        end)
     
         externalwarnings 'Off'
         warnings 'Extra'

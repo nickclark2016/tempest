@@ -46,6 +46,14 @@
         scoped.filter({ 'system:linux' }, function()
             links { 'X11' }
         end)
+
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
+            }
+        end)
     end
     
     function m.applyTempestConfig()

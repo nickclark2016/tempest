@@ -16,7 +16,7 @@ namespace tempest
             using shelf_index = uint16_t;
             using item_index = uint16_t;
 
-            static constexpr shelf_index NONE = ~static_cast<shelf_index>(0);
+            static constexpr shelf_index NONE = static_cast<shelf_index>(~0);
 
             math::vec2<uint16_t> position;
             uint16_t height;
@@ -32,7 +32,7 @@ namespace tempest
 
         struct item
         {
-            static constexpr uint16_t NONE = ~static_cast<uint16_t>(0);
+            static constexpr uint16_t NONE = static_cast<uint16_t>(~0);
 
             uint16_t x;
             uint16_t width;
@@ -71,9 +71,9 @@ namespace tempest
 
         struct allocation
         {
-            allocation_id id;
             math::vec2<uint32_t> position;
             math::vec2<uint32_t> extent;
+            allocation_id id;
         };
 
         enum class error_code

@@ -616,9 +616,9 @@ namespace tempest
             allocator_traits<Allocator>::construct(_alloc, _end, tempest::move(_data[end_index - 1]));
         }
 
-        for (auto index = end_index - 1; index > start_index; --index)
+        for (auto idx = end_index - 1; idx > start_index; --idx)
         {
-            _data[index] = tempest::move(_data[index - 1]);
+            _data[idx] = tempest::move(_data[idx - 1]);
         }
 
         allocator_traits<Allocator>::construct(_alloc, _data + index, tempest::move(value));

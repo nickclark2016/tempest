@@ -39,7 +39,7 @@ namespace tempest::graphics::vk
         bool per_frame_resource{};
         VmaAllocation allocation{};
         VmaAllocationInfo alloc_info{};
-        VkBuffer buffer{};
+        VkBuffer vk_buffer{};
         VkBufferCreateInfo info;
         string name;
     };

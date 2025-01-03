@@ -201,7 +201,7 @@ namespace tempest
             _shelves[new_shelf_index].first_unallocated_index = new_item_index;
 
             const auto next = _shelves[selected_shelf].next;
-            _shelves[selected_shelf].height = height;
+            _shelves[selected_shelf].height = static_cast<std::uint16_t>(height);
             _shelves[selected_shelf].next = new_shelf_index;
 
             if (is_some(next))
@@ -233,7 +233,7 @@ namespace tempest
 
             auto new_item_index = _add_item(tempest::move(item_to_insert));
 
-            _items[selected_item].width = width;
+            _items[selected_item].width = static_cast<std::uint16_t>(width);
             _items[selected_item].next = new_item_index;
 
             if (is_some(element.next))
@@ -241,10 +241,10 @@ namespace tempest
                 _items[element.next].previous = new_item_index;
             }
 
-            auto& shelf = _shelves[selected_shelf];
-            if (shelf.first_unallocated_index == selected_item)
+            auto& s_shelf = _shelves[selected_shelf];
+            if (s_shelf.first_unallocated_index == selected_item)
             {
-                shelf.first_unallocated_index = new_item_index;
+                s_shelf.first_unallocated_index = new_item_index;
             }
 
             if (is_some(element.previous_unallocated))
@@ -259,10 +259,10 @@ namespace tempest
         }
         else
         {
-            auto& shelf = _shelves[selected_shelf];
-            if (shelf.first_unallocated_index == selected_item)
+            auto& s_shelf = _shelves[selected_shelf];
+            if (s_shelf.first_unallocated_index == selected_item)
             {
-                shelf.first_unallocated_index = element.next_unallocated;
+                s_shelf.first_unallocated_index = element.next_unallocated;
             }
 
             if (is_some(element.previous_unallocated))
@@ -289,9 +289,9 @@ namespace tempest
         _allocated_memory += area;
 
         return allocation{
-            .id = {static_cast<uint16_t>(selected_item), generation},
             .position = {x, y},
             .extent = {width, height},
+            .id = {static_cast<uint16_t>(selected_item), generation},
         };
     }
 
@@ -412,15 +412,15 @@ namespace tempest
             if (is_some(previous_shelf_index) && _shelves[previous_shelf_index].is_empty &&
                 _shelves[previous_shelf_index].position.x == x)
             {
-                auto next_shelf_index = _shelves[shelf_index].next;
-                _shelves[previous_shelf_index].next = next_shelf_index;
+                auto next_selected_shelf_index = _shelves[shelf_index].next;
+                _shelves[previous_shelf_index].next = next_selected_shelf_index;
                 _shelves[previous_shelf_index].height += _shelves[shelf_index].height;
 
-                _shelves[previous_shelf_index].next = next_shelf_index;
+                _shelves[previous_shelf_index].next = next_selected_shelf_index;
 
-                if (is_some(next_shelf_index))
+                if (is_some(next_selected_shelf_index))
                 {
-                    _shelves[next_shelf_index].previous = previous_shelf_index;
+                    _shelves[next_selected_shelf_index].previous = previous_shelf_index;
                 }
 
                 _remove_shelf(shelf_index);
@@ -446,9 +446,9 @@ namespace tempest
         const auto& shelf = _shelves[item.shelf_id];
 
         return allocation{
-            .id = id,
             .position = {item.x, shelf.position.y},
             .extent = {item.width, shelf.height},
+            .id = id,
         };
     }
 

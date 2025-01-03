@@ -327,8 +327,10 @@ namespace tempest
         {
             return {_start + Offset, _end};
         }
-
-        return {_start + Offset, _start + Offset + Count};
+        else
+        {
+            return {_start + Offset, _start + Offset + Count};
+        }
     }
 
     template <typename T, std::size_t Extent>

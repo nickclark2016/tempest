@@ -139,7 +139,7 @@ namespace tempest::assets
             image_payload payload;
 
             std::string_view uri;
-            uint64_t buffer_view_index = -1;
+            uint64_t buffer_view_index = ~static_cast<std::uint64_t>(0);
             if (auto error = img["uri"].get(uri); error == simdjson::error_code::SUCCESS)
             {
                 if (uri.starts_with("data:"))
@@ -168,14 +168,15 @@ namespace tempest::assets
                     }
                 }
             }
-            else if (auto error = img["bufferView"].get(buffer_view_index); error == simdjson::error_code::SUCCESS)
+            else if (auto error_bv = img["bufferView"].get(buffer_view_index);
+                     error_bv == simdjson::error_code::SUCCESS)
             {
                 payload.buffer_view_index = static_cast<uint32_t>(buffer_view_index);
                 payload.mime_type = img["mimeType"].get_string().value().data();
             }
 
             std::string_view name;
-            if (auto error = img["name"].get(name); error == simdjson::error_code::SUCCESS)
+            if (auto error_img = img["name"].get(name); error_img == simdjson::error_code::SUCCESS)
             {
                 payload.name = name.data();
             }
@@ -1042,14 +1043,14 @@ namespace tempest::assets
         sjd::array meshes;
         if (auto error = doc["meshes"].get(meshes); error == simdjson::SUCCESS)
         {
-            uint32_t mesh_id = 0;
+            uint32_t mesh_idx = 0;
             for (const auto& mesh : meshes)
             {
                 vector<ecs::entity> primitives;
 
                 for (const auto& prim : mesh["primitives"])
                 {
-                    auto ent = registry.acquire_entity();
+                    auto prim_ent = registry.acquire_entity();
                     auto [mesh_id, material_idx] =
                         process_mesh(buffer_contents, prim, buffer_views, accessors, _mesh_reg);
 
@@ -1058,8 +1059,8 @@ namespace tempest::assets
                     };
 
                     ecs::transform_component default_tx;
-                    registry.assign<core::mesh_component>(ent, mesh_comp);
-                    registry.assign<ecs::transform_component>(ent, default_tx);
+                    registry.assign<core::mesh_component>(prim_ent, mesh_comp);
+                    registry.assign<ecs::transform_component>(prim_ent, default_tx);
 
                     if (material_idx >= 0)
                     {
@@ -1067,21 +1068,21 @@ namespace tempest::assets
                             .material_id = material_guids.find(material_idx)->second,
                         };
 
-                        registry.assign<core::material_component>(ent, mat_comp);
+                        registry.assign<core::material_component>(prim_ent, mat_comp);
                     }
 
-                    primitives.push_back(ent);
+                    primitives.push_back(prim_ent);
                 }
 
                 // Get mesh name
                 std::string_view name;
-                if (auto error = mesh["name"].get(name); error == simdjson::SUCCESS)
+                if (auto mesh_error = mesh["name"].get(name); mesh_error == simdjson::SUCCESS)
                 {
                     registry.name(ent, name);
                 }
 
-                mesh_primitives.insert({mesh_id, move(primitives)});
-                ++mesh_id;
+                mesh_primitives.insert({mesh_idx, move(primitives)});
+                ++mesh_idx;
             }
         }
 
@@ -1093,7 +1094,7 @@ namespace tempest::assets
             uint32_t node_id = 0;
             for (const auto& node : nodes)
             {
-                auto ent = registry.acquire_entity();
+                auto parent_ent = registry.acquire_entity();
 
                 uint64_t mesh_id;
                 if (node["mesh"].get(mesh_id) == simdjson::error_code::SUCCESS)
@@ -1104,10 +1105,8 @@ namespace tempest::assets
                         span<const ecs::entity> mesh_entities = mesh_prims->second;
                         for (const auto& mesh_ent : mesh_entities)
                         {
-                            ecs::create_parent_child_relationship(registry, ent, mesh_ent);
+                            ecs::create_parent_child_relationship(registry, parent_ent, mesh_ent);
                         }
-
-                        auto hierarchy_view = ecs::descendant_entity_view(registry, ent);
                     }
                 }
 
@@ -1172,9 +1171,9 @@ namespace tempest::assets
                     // TODO: Support matrix extration
                 }
 
-                registry.assign<ecs::transform_component>(ent, transform);
+                registry.assign<ecs::transform_component>(parent_ent, transform);
 
-                node_entities.insert({node_id, ent});
+                node_entities.insert({node_id, parent_ent});
                 ++node_id;
             }
 

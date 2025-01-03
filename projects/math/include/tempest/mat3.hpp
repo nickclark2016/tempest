@@ -7,6 +7,10 @@ namespace tempest::math
 {
     template <typename T> struct alignas(sizeof(vec3<T>)) mat3
     {
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(disable : 4201)
+#endif
         union {
             T data[12];
             vec3<T> columns[3];
@@ -29,6 +33,9 @@ namespace tempest::math
                 T pad2; // padding
             };
         };
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#endif
 
         constexpr mat3();
         constexpr mat3(const T diagonal);

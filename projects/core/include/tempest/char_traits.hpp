@@ -422,20 +422,21 @@ namespace tempest
 
             return last;
         }
-
-        // Fallback for non 8 bit characters
-        for (; first != last; ++first)
+        else
         {
-            for (auto it = p_first; it != p_last; ++it)
+            // Fallback for non 8 bit characters
+            for (; first != last; ++first)
             {
-                if (*first == *it)
+                for (auto it = p_first; it != p_last; ++it)
                 {
-                    return first;
+                    if (*first == *it)
+                    {
+                        return first;
+                    }
                 }
             }
+            return last;
         }
-
-        return last;
     }
 
     template <typename It, character_type CharT>
@@ -558,21 +559,23 @@ namespace tempest
 
             return last;
         }
-
-        // Fallback for non 8 bit characters
-        for (auto it = last; it != first;)
+        else
         {
-            --it;
-            for (auto it2 = p_first; it2 != p_last; ++it2)
+            // Fallback for non 8 bit characters
+            for (auto it = last; it != first;)
             {
-                if (*it == *it2)
+                --it;
+                for (auto it2 = p_first; it2 != p_last; ++it2)
                 {
-                    return it;
+                    if (*it == *it2)
+                    {
+                        return it;
+                    }
                 }
             }
-        }
 
-        return last;
+            return last;
+        }
     }
 
     template <typename It, character_type CharT>
@@ -637,27 +640,29 @@ namespace tempest
 
             return last;
         }
-
-        // Fallback for non 8 bit characters
-        for (; first != last; ++first)
+        else
         {
-            bool found = false;
-            for (auto it = p_first; it != p_last; ++it)
+            // Fallback for non 8 bit characters
+            for (; first != last; ++first)
             {
-                if (*first == *it)
+                bool found = false;
+                for (auto it = p_first; it != p_last; ++it)
                 {
-                    found = true;
-                    break;
+                    if (*first == *it)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    return first;
                 }
             }
 
-            if (!found)
-            {
-                return first;
-            }
+            return last;
         }
-
-        return last;
     }
 
     template <typename It, character_type CharT>
@@ -724,28 +729,30 @@ namespace tempest
 
             return last;
         }
-
-        // Fallback for non 8 bit characters
-        for (auto it = last; it != first;)
+        else
         {
-            --it;
-            bool found = false;
-            for (auto it2 = p_first; it2 != p_last; ++it2)
+            // Fallback for non 8 bit characters
+            for (auto it = last; it != first;)
             {
-                if (*it == *it2)
+                --it;
+                bool found = false;
+                for (auto it2 = p_first; it2 != p_last; ++it2)
                 {
-                    found = true;
-                    break;
+                    if (*it == *it2)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    return it;
                 }
             }
 
-            if (!found)
-            {
-                return it;
-            }
+            return last;
         }
-
-        return last;
     }
 
     template <typename It, character_type CharT>
