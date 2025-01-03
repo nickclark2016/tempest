@@ -8,6 +8,7 @@ scoped.group('Engine', function()
         objdir '%{intermediates}'
 
         files {
+            'asm/**.s',
             'include/**.hpp',
             'src/**.cpp',
             'src/**.hpp',
@@ -16,6 +17,15 @@ scoped.group('Engine', function()
         includedirs {
             'include',
         }
+
+        scoped.filter({
+            'toolset:clang',
+            'files:**.s',
+        }, function()
+            buildoptions {
+                '-masm=intel',
+            }
+        end)
 
         IncludeDir['math'] = '%{root}/projects/math/include'
 

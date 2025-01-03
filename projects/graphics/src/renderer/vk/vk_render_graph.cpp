@@ -2204,7 +2204,8 @@ namespace tempest::graphics::vk
                 };
 
                 VkDescriptorSetLayout layout;
-                auto result = _device->dispatch().createDescriptorSetLayout(&layout_ci, nullptr, &layout);
+                [[maybe_unused]] auto result =
+                    _device->dispatch().createDescriptorSetLayout(&layout_ci, nullptr, &layout);
                 assert(result == VK_SUCCESS);
 
                 set_layouts.push_back(layout);
@@ -2227,7 +2228,7 @@ namespace tempest::graphics::vk
             };
 
             VkPipelineLayout layout;
-            auto result = _device->dispatch().createPipelineLayout(&pipeline_layout_ci, nullptr, &layout);
+            [[maybe_unused]] auto result = _device->dispatch().createPipelineLayout(&pipeline_layout_ci, nullptr, &layout);
             assert(result == VK_SUCCESS);
 
             auto& set_state = _descriptor_set_states[pass_index];
@@ -2246,7 +2247,7 @@ namespace tempest::graphics::vk
                     .pSetLayouts = set_state.set_layouts.data(),
                 };
 
-                auto result = _device->dispatch().allocateDescriptorSets(
+                [[maybe_unused]] auto result = _device->dispatch().allocateDescriptorSets(
                     &alloc_info, _descriptor_set_states[pass_index].per_frame_descriptors[i].descriptor_sets.data());
                 assert(result == VK_SUCCESS);
 

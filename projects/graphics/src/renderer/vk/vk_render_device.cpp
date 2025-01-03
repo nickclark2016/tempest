@@ -18,7 +18,7 @@ namespace tempest::graphics::vk
     {
         auto logger = logger::logger_factory::create({.prefix{"tempest::graphics::vk::render_device"}});
 
-        VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+        [[maybe_unused]] VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                                                       [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType,
                                                       const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
                                                       [[maybe_unused]] void* pUserData)
@@ -383,8 +383,8 @@ namespace tempest::graphics::vk
             std::exit(EXIT_FAILURE);
         }
 
-        void name_object(const vkb::DispatchTable& dispatch, uint64_t object_handle, VkObjectType type,
-                         const char* name)
+        void name_object([[maybe_unused]] const vkb::DispatchTable& dispatch, [[maybe_unused]] uint64_t object_handle,
+                         [[maybe_unused]] VkObjectType type, [[maybe_unused]] const char* name)
         {
 #ifdef _DEBUG
             VkDebugUtilsObjectNameInfoEXT name_info = {
@@ -720,7 +720,7 @@ namespace tempest::graphics::vk
     {
         auto vk_buf = access_buffer(handle);
         void* result;
-        auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
+        [[maybe_unused]] auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
         assert(res == VK_SUCCESS);
         return span(reinterpret_cast<byte*>(result), vk_buf->info.size);
     }
@@ -729,7 +729,7 @@ namespace tempest::graphics::vk
     {
         auto vk_buf = access_buffer(handle);
         void* result;
-        auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
+        [[maybe_unused]] auto res = vmaMapMemory(_vk_alloc, vk_buf->allocation, &result);
         assert(res == VK_SUCCESS);
 
         uint64_t frame = (_current_frame + frame_offset) % _frames_in_flight;
@@ -2017,6 +2017,8 @@ namespace tempest::graphics::vk
                     .set_required_features({
 #ifdef _DEBUG
                         .robustBufferAccess = VK_TRUE,
+#else
+                        .robustBufferAccess = VK_FALSE,
 #endif
                         .fullDrawIndexUint32 = VK_FALSE,
                         .imageCubeArray = VK_FALSE,
@@ -2684,7 +2686,7 @@ namespace tempest::graphics::vk
                 .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 .commandBufferCount = 1,
             };
-            VkResult result = dispatch->allocateCommandBuffers(&alloc_info, &buf);
+            [[maybe_unused]] VkResult result = dispatch->allocateCommandBuffers(&alloc_info, &buf);
             assert(result == VK_SUCCESS);
             cached_commands.push_back(buf);
         }
@@ -2713,7 +2715,7 @@ namespace tempest::graphics::vk
             };
 
             VkCommandPool pool;
-            auto result = dispatch.createCommandPool(&ci, nullptr, &pool);
+            [[maybe_unused]] auto result = dispatch.createCommandPool(&ci, nullptr, &pool);
 
             assert(result == VK_SUCCESS);
 
@@ -2782,7 +2784,7 @@ namespace tempest::graphics::vk
             };
 
             VkFence fen{VK_NULL_HANDLE};
-            auto result = dispatch.createFence(&create, nullptr, &fen);
+            [[maybe_unused]] auto result = dispatch.createFence(&create, nullptr, &fen);
             assert(result == VK_SUCCESS);
             return fen;
         }
@@ -2802,7 +2804,7 @@ namespace tempest::graphics::vk
             };
 
             VkSemaphore sem{VK_NULL_HANDLE};
-            auto result = dispatch.createSemaphore(&create, nullptr, &sem);
+            [[maybe_unused]] auto result = dispatch.createSemaphore(&create, nullptr, &sem);
             assert(result == VK_SUCCESS);
             return sem;
         }
@@ -2894,7 +2896,7 @@ namespace tempest::graphics::vk
             .queueFamilyIndex = device.get_queue().queue_family_index,
         };
 
-        auto res = _dispatch->createCommandPool(&create_info, nullptr, &_pool);
+        [[maybe_unused]] auto res = _dispatch->createCommandPool(&create_info, nullptr, &_pool);
         assert(res == VK_SUCCESS);
 
         VkCommandBufferAllocateInfo alloc_ci = {
@@ -2928,7 +2930,7 @@ namespace tempest::graphics::vk
                 .pInheritanceInfo = nullptr,
             };
             VkCommandBuffer buf = _cmds.value();
-            auto res = _dispatch->beginCommandBuffer(buf, &begin);
+            [[maybe_unused]] auto res = _dispatch->beginCommandBuffer(buf, &begin);
             assert(res == VK_SUCCESS);
             _is_recording = true;
         }
@@ -2977,7 +2979,7 @@ namespace tempest::graphics::vk
             .commandBufferCount = 1,
         };
 
-        auto res = _dispatch->allocateCommandBuffers(&alloc_ci, &cmds);
+        [[maybe_unused]] auto res = _dispatch->allocateCommandBuffers(&alloc_ci, &cmds);
         assert(res == VK_SUCCESS);
 
         _cmds.emplace(cmds, _dispatch, _device);
