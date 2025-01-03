@@ -14,7 +14,7 @@
     .p2align 4
     .globl tempest_math_aligned_assign_mul_mat4_mat4
     .type  tempest_math_aligned_assign_mul_mat4_mat4, @function
-tempest_math_aligned_assign_mul_mat4_mat4
+tempest_math_aligned_assign_mul_mat4_mat4:
         push    rbp
         mov     rbp, rsp
         and     rsp, -32
