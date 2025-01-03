@@ -143,7 +143,7 @@ namespace tempest::math
     template <typename T>
     inline constexpr mat4<T>& mat4<T>::operator*=(const mat4& rhs) noexcept
     {
-        ::tempest_math_aligned_inplace_mul_mat4_mat4(data, rhs.data);
+        ::tempest_math_aligned_assign_mul_mat4_mat4(data, rhs.data);
 
         return *this;
     }

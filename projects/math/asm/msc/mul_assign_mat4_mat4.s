@@ -1,10 +1,10 @@
 .code
-public tempest_math_aligned_inplace_mul_mat4_mat4
+public tempest_math_aligned_assign_mul_mat4_mat4
 
 $lhs = 8
 $rhs = 16
 
-tempest_math_aligned_inplace_mul_mat4_mat4 PROC
+tempest_math_aligned_assign_mul_mat4_mat4 PROC
         push    rbp
         mov     rbp, rsp
         and     rsp, -32
