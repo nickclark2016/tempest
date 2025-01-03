@@ -14,6 +14,10 @@ tempest_math_aligned_mul_mat4_mat4 PROC
     push r12
     push rbx
 
+    push rdi
+    push rsi
+    push rdx
+
     ; copy RCX -> RDI
     ; copy RDX -> RSI
     ; copy R8 -> RDX
@@ -70,6 +74,11 @@ $LL2:
     add rdi, 4
     cmp rax, 4
     jne $LL1
+
+    pop rdx
+    pop rsi
+    pop rdi
+
     pop rbx
     pop r12
     pop r14
