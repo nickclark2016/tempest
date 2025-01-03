@@ -19,10 +19,10 @@ tempest_math_aligned_assign_mul_mat4_mat4:
     mov     rbp, rsp
     and     rsp, -32
     sub     rsp, 96
-    vmovups xmm0, xmmword ptr [rsi]
-    vmovups xmm1, xmmword ptr [rsi + 16]
-    vmovups xmm2, xmmword ptr [rsi + 32]
-    vmovups xmm3, xmmword ptr [rsi + 48]
+    vmovaps xmm0, xmmword ptr [rsi]
+    vmovaps xmm1, xmmword ptr [rsi + 16]
+    vmovaps xmm2, xmmword ptr [rsi + 32]
+    vmovaps xmm3, xmmword ptr [rsi + 48]
     xor     eax, eax
     vxorps  xmm4, xmm4, xmm4
 .LBB0_1:                                # =>This Inner Loop Header: Depth=1
@@ -46,13 +46,13 @@ tempest_math_aligned_assign_mul_mat4_mat4:
     cmp     rax, 64
     jne     .LBB0_1
     vmovaps ymm0, ymmword ptr [rsp]
-    vmovups xmmword ptr [rsi], xmm0
+    vmovaps xmmword ptr [rsi], xmm0
     vmovaps xmm0, xmmword ptr [rsp + 16]
-    vmovups xmmword ptr [rsi + 16], xmm0
+    vmovaps xmmword ptr [rsi + 16], xmm0
     vmovaps ymm0, ymmword ptr [rsp + 32]
-    vmovups xmmword ptr [rsi + 32], xmm0
+    vmovaps xmmword ptr [rsi + 32], xmm0
     vmovaps xmm0, xmmword ptr [rsp + 48]
-    vmovups xmmword ptr [rsi + 48], xmm0
+    vmovaps xmmword ptr [rsi + 48], xmm0
     mov     rsp, rbp
     pop     rbp
     vzeroupper

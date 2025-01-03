@@ -13,10 +13,10 @@ tempest_math_aligned_assign_mul_mat4_mat4 PROC
     mov     rbp, rsp
     and     rsp, -32
     sub     rsp, 96
-    vmovups xmm0, xmmword ptr [rdx]
-    vmovups xmm1, xmmword ptr [rdx + 16]
-    vmovups xmm2, xmmword ptr [rdx + 32]
-    vmovups xmm3, xmmword ptr [rdx + 48]
+    vmovaps xmm0, xmmword ptr [rdx]
+    vmovaps xmm1, xmmword ptr [rdx + 16]
+    vmovaps xmm2, xmmword ptr [rdx + 32]
+    vmovaps xmm3, xmmword ptr [rdx + 48]
     xor     eax, eax
     vxorps  xmm4, xmm4, xmm4
 $LBB0_1:
@@ -40,13 +40,13 @@ $LBB0_1:
     cmp     rax, 64
     jne     $LBB0_1
     vmovaps ymm0, ymmword ptr [rsp]
-    vmovups xmmword ptr [rdx], xmm0
+    vmovaps xmmword ptr [rdx], xmm0
     vmovaps xmm0, xmmword ptr [rsp + 16]
-    vmovups xmmword ptr [rdx + 16], xmm0
+    vmovaps xmmword ptr [rdx + 16], xmm0
     vmovaps ymm0, ymmword ptr [rsp + 32]
-    vmovups xmmword ptr [rdx + 32], xmm0
+    vmovaps xmmword ptr [rdx + 32], xmm0
     vmovaps xmm0, xmmword ptr [rsp + 48]
-    vmovups xmmword ptr [rdx + 48], xmm0
+    vmovaps xmmword ptr [rdx + 48], xmm0
     mov     rsp, rbp
     pop     rbp
     vzeroupper
