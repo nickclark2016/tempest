@@ -164,6 +164,7 @@ namespace tempest
       private:
         union impl {
             T value;
+            char c;
 
             impl() noexcept;
             ~impl();
@@ -297,7 +298,7 @@ namespace tempest
     }
 
     template <typename T>
-    inline optional<T>::impl::impl() noexcept
+    inline optional<T>::impl::impl() noexcept : c{}
     {
     }
 

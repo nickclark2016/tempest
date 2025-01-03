@@ -8,11 +8,32 @@ scoped.group('Engine', function()
         objdir '%{intermediates}'
 
         files {
-            'asm/**.s',
             'include/**.hpp',
             'src/**.cpp',
             'src/**.hpp',
         }
+
+        scoped.filter({
+            'toolset:msc*',
+        }, function()
+            files {
+                'asm/msc/**.s',
+            }
+
+            scoped.filter({
+                'files:**.s',
+            }, function()
+                buildaction "Masm"
+            end)
+        end)
+
+        scoped.filter({
+            'toolset:clang',
+        }, function()
+            files {
+                'asm/clang/**.s',
+            }
+        end)
 
         includedirs {
             'include',
@@ -28,6 +49,14 @@ scoped.group('Engine', function()
         end)
 
         IncludeDir['math'] = '%{root}/projects/math/include'
+
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
+            }
+        end)
 
         warnings 'Extra'
     end)

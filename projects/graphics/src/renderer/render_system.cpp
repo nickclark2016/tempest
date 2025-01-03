@@ -754,9 +754,9 @@ namespace tempest::graphics
                 };
 
                 auto ancestor_view = ecs::ancestor_entity_view(*_registry, ent);
-                for (auto ent : ancestor_view)
+                for (auto ancestor : ancestor_view)
                 {
-                    if (auto tx = _registry->try_get<ecs::transform_component>(ent))
+                    if (auto tx = _registry->try_get<ecs::transform_component>(ancestor))
                     {
                         object_payload.model = tx->matrix() * object_payload.model;
                     }
@@ -1602,9 +1602,9 @@ namespace tempest::graphics
         for (uint32_t cascade = 0; cascade < shadowing.cascade_count; ++cascade)
         {
             float p = (cascade + 1) / static_cast<float>(shadowing.cascade_count);
-            float log = near_plane * std::pow(ratio, p);
+            float logarithm = near_plane * std::pow(ratio, p);
             float uniform = near_plane + clip_range * p;
-            float d = 0.95f * (log - uniform) + uniform;
+            float d = 0.95f * (logarithm - uniform) + uniform;
             float res = (d - near_plane) / clip_range;
 
             params.cascade_splits[cascade] = res;

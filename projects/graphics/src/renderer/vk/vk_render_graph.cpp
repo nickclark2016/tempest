@@ -1218,7 +1218,7 @@ namespace tempest::graphics::vk
                 render_graph_buffer_state next_state = {
                     .stage_mask = compute_buffer_stage_access(buf.type, buf.usage, pass_ref.operation_type()),
                     .access_mask = compute_buffer_access_mask(buf.type, buf.usage),
-                    .buffer = vk_buf->buffer,
+                    .buffer = vk_buf->vk_buffer,
                     .offset = offset,
                     .size = size_per_frame,
                     .queue_family = queue.queue_family_index,
@@ -1233,7 +1233,7 @@ namespace tempest::graphics::vk
                     .dstAccessMask = next_state.access_mask,
                     .srcQueueFamilyIndex = queue.queue_family_index,
                     .dstQueueFamilyIndex = next_state.queue_family,
-                    .buffer = vk_buf->buffer,
+                    .buffer = vk_buf->vk_buffer,
                     .offset = next_state.offset,
                     .size = next_state.size,
                 };
@@ -1281,7 +1281,7 @@ namespace tempest::graphics::vk
 
             if (pass_ref.operation_type() == queue_operation_type::GRAPHICS)
             {
-                VkRect2D area;
+                VkRect2D area{};
                 std::vector<VkRenderingAttachmentInfo> color_attachments;
                 VkRenderingAttachmentInfo depth_attachment;
                 bool has_depth = false;
@@ -2036,7 +2036,7 @@ namespace tempest::graphics::vk
                     .pImageInfo = nullptr,
                     .pBufferInfo =
                         new VkDescriptorBufferInfo{
-                            .buffer = buf->buffer,
+                            .buffer = buf->vk_buffer,
                             .offset = 0,
                             .range = buffer_size,
                         },
@@ -2247,9 +2247,9 @@ namespace tempest::graphics::vk
                     .pSetLayouts = set_state.set_layouts.data(),
                 };
 
-                [[maybe_unused]] auto result = _device->dispatch().allocateDescriptorSets(
+                [[maybe_unused]] auto res = _device->dispatch().allocateDescriptorSets(
                     &alloc_info, _descriptor_set_states[pass_index].per_frame_descriptors[i].descriptor_sets.data());
-                assert(result == VK_SUCCESS);
+                assert(res == VK_SUCCESS);
 
                 for (auto& [set_id, writes] : binding_writes)
                 {

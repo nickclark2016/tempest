@@ -9,6 +9,10 @@ namespace tempest::math
     template <typename T>
     struct alignas(sizeof(vec4<T>)) mat4
     {
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(disable : 4201)
+#endif
         union {
             T data[16];
             vec4<T> columns[4];
@@ -39,6 +43,9 @@ namespace tempest::math
                 T m33;
             };
         };
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#endif
 
         constexpr mat4();
         constexpr mat4(const T diagonal);
@@ -136,58 +143,7 @@ namespace tempest::math
     template <typename T>
     inline constexpr mat4<T>& mat4<T>::operator*=(const mat4& rhs) noexcept
     {
-        const auto m00 = columns[0][0] * rhs[0][0] + columns[1][0] * rhs[0][1] + columns[2][0] * rhs[0][2] +
-                         columns[3][0] * rhs[0][3];
-        const auto m10 = columns[0][1] * rhs[0][0] + columns[1][1] * rhs[0][1] + columns[2][1] * rhs[0][2] +
-                         columns[3][1] * rhs[0][3];
-        const auto m20 = columns[0][2] * rhs[0][0] + columns[1][2] * rhs[0][1] + columns[2][2] * rhs[0][2] +
-                         columns[3][2] * rhs[0][3];
-        const auto m30 = columns[0][3] * rhs[0][0] + columns[1][3] * rhs[0][1] + columns[2][3] * rhs[0][2] +
-                         columns[3][3] * rhs[0][3];
-
-        const auto m01 = columns[0][0] * rhs[1][0] + columns[1][0] * rhs[1][1] + columns[2][0] * rhs[1][2] +
-                         columns[3][0] * rhs[1][3];
-        const auto m11 = columns[0][1] * rhs[1][0] + columns[1][1] * rhs[1][1] + columns[2][1] * rhs[1][2] +
-                         columns[3][1] * rhs[1][3];
-        const auto m21 = columns[0][2] * rhs[1][0] + columns[1][2] * rhs[1][1] + columns[2][2] * rhs[1][2] +
-                         columns[3][2] * rhs[1][3];
-        const auto m31 = columns[0][3] * rhs[1][0] + columns[1][3] * rhs[1][1] + columns[2][3] * rhs[1][2] +
-                         columns[3][3] * rhs[1][3];
-
-        const auto m02 = columns[0][0] * rhs[2][0] + columns[1][0] * rhs[2][1] + columns[2][0] * rhs[2][2] +
-                         columns[3][0] * rhs[2][3];
-        const auto m12 = columns[0][1] * rhs[2][0] + columns[1][1] * rhs[2][1] + columns[2][1] * rhs[2][2] +
-                         columns[3][1] * rhs[2][3];
-        const auto m22 = columns[0][2] * rhs[2][0] + columns[1][2] * rhs[2][1] + columns[2][2] * rhs[2][2] +
-                         columns[3][2] * rhs[2][3];
-        const auto m32 = columns[0][3] * rhs[2][0] + columns[1][3] * rhs[2][1] + columns[2][3] * rhs[2][2] +
-                         columns[3][3] * rhs[2][3];
-
-        const auto m03 = columns[0][0] * rhs[3][0] + columns[1][0] * rhs[3][1] + columns[2][0] * rhs[3][2] +
-                         columns[3][0] * rhs[3][3];
-        const auto m13 = columns[0][1] * rhs[3][0] + columns[1][1] * rhs[3][1] + columns[2][1] * rhs[3][2] +
-                         columns[3][1] * rhs[3][3];
-        const auto m23 = columns[0][2] * rhs[3][0] + columns[1][2] * rhs[3][1] + columns[2][2] * rhs[3][2] +
-                         columns[3][2] * rhs[3][3];
-        const auto m33 = columns[0][3] * rhs[3][0] + columns[1][3] * rhs[3][1] + columns[2][3] * rhs[3][2] +
-                         columns[3][3] * rhs[3][3];
-
-        this->m00 = m00;
-        this->m10 = m10;
-        this->m20 = m20;
-        this->m30 = m30;
-        this->m01 = m01;
-        this->m11 = m11;
-        this->m21 = m21;
-        this->m31 = m31;
-        this->m02 = m02;
-        this->m12 = m12;
-        this->m22 = m22;
-        this->m32 = m32;
-        this->m03 = m03;
-        this->m13 = m13;
-        this->m23 = m23;
-        this->m33 = m33;
+        ::tempest_math_aligned_inplace_mul_mat4_mat4(data, rhs.data);
 
         return *this;
     }

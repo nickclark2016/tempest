@@ -11,6 +11,10 @@ namespace tempest::math
     template <typename T>
     struct alignas(sizeof(T) * 4) vec3
     {
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(disable : 4201)
+#endif
         union {
             T data[4];
             struct
@@ -26,6 +30,9 @@ namespace tempest::math
                 T z;
             };
         };
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#endif
 
         constexpr vec3();
         constexpr vec3(const T scalar);

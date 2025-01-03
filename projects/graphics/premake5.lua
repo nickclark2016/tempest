@@ -47,6 +47,7 @@ scoped.group('Engine', function()
 
         externalincludedirs {
             '%{IncludeDir.glfw}',
+            '%{IncludeDir.imgui}',
             '%{IncludeDir.vkb}',
             '%{IncludeDir.vma}',
             '%{IncludeDir.vulkan}',
@@ -56,7 +57,6 @@ scoped.group('Engine', function()
             'include',
             '%{IncludeDir.core}',
             '%{IncludeDir.ecs}',
-            '%{IncludeDir.imgui}',
             '%{IncludeDir.logger}',
             '%{IncludeDir.math}',
         }
@@ -124,6 +124,14 @@ scoped.group('Engine', function()
 
             buildinputs {
                 'shaders/common/**.slang',
+            }
+        end)
+
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
             }
         end)
 

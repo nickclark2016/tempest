@@ -33,6 +33,14 @@ scoped.group('Engine', function()
 
         IncludeDir['ecs'] = '%{root}/projects/ecs/include'
 
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
+            }
+        end)
+
         externalwarnings 'Off'
         warnings 'Extra'
     end)

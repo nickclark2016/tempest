@@ -17,9 +17,12 @@ scoped.group('Engine', function()
             'include',
             '%{IncludeDir.core}',
             '%{IncludeDir.ecs}',
-            '%{IncludeDir.glfw}',
             '%{IncludeDir.logger}',
             '%{IncludeDir.math}',
+        }
+
+        externalincludedirs {
+            '%{IncludeDir.glfw}',
             '%{IncludeDir.simdjson}',
             '%{IncludeDir.spdlog}',
             '%{IncludeDir.stb}',
@@ -47,6 +50,14 @@ scoped.group('Engine', function()
             'spdlog',
             'tlsf',
         }
+
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
+            }
+        end)
 
         externalwarnings 'Off'
         warnings 'Extra'
