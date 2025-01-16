@@ -781,6 +781,9 @@ namespace tempest
     {
         return static_cast<bool>(rhs);
     }
+
+    void* aligned_alloc(size_t n, size_t alignment);
+    void aligned_free(void* ptr);
 } // namespace tempest
 
 #endif // tempest_core_memory_hpp

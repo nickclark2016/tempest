@@ -34,7 +34,7 @@ namespace tempest::math
 #pragma warning(pop)
 #endif
 
-        constexpr vec4();
+        constexpr vec4() = default;
         constexpr vec4(const T scalar);
         constexpr vec4(const T x, const T y, const T z, const T w);
 
@@ -60,11 +60,6 @@ namespace tempest::math
     vec4(vec4<T>&&) -> vec4<T>;
 
     // Implementation
-
-    template <typename T>
-    inline constexpr vec4<T>::vec4() : vec4(T())
-    {
-    }
 
     template <typename T>
     inline constexpr vec4<T>::vec4(const T scalar) : vec4(scalar, scalar, scalar, scalar)
