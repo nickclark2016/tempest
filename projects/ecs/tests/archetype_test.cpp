@@ -1,6 +1,7 @@
 #include <tempest/archetype.hpp>
 
 #include <gtest/gtest.h>
+#include <cstring>
 
 TEST(basic_archetype_type_info, get_trivial_type_info)
 {
