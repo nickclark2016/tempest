@@ -82,6 +82,8 @@ scoped.group('Engine', function()
                 'tlsf',
             }
 
+            linkgroups 'On'
+
             scoped.filter({ 'system:linux' }, function()
                 links { 'X11' }
             end)
