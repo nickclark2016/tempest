@@ -1,7 +1,9 @@
 #ifndef tempest_core_bit_hpp
 #define tempest_core_bit_hpp
 
+#include <tempest/concepts.hpp>
 #include <tempest/type_traits.hpp>
+#include <tempest/utility.hpp>
 
 #if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
@@ -112,6 +114,132 @@ namespace tempest
     constexpr bool has_single_bit(T n) noexcept
     {
         return n && !(n & (n - 1));
+    }
+
+    template <unsigned_integral T>
+    [[nodiscard]] constexpr int countl_zero(T n) noexcept
+    {
+#if defined(_MSC_VER) && !defined(__clang__)
+        if (!is_constant_evaluated())
+        {
+            return _Checked_x86_64_countl_zero(n);
+        }
+        else
+        {
+            return _Countl_zero_fallback(n);
+        }
+#else
+        constexpr auto width = sizeof(T) * 8;
+
+        if (n == 0)
+        {
+            return width;
+        }
+
+        constexpr auto nd_ull = sizeof(unsigned long long) * 8;
+        constexpr auto nd_ul = sizeof(unsigned long) * 8;
+        constexpr auto nd_u = sizeof(unsigned) * 8;
+
+        if constexpr (width <= nd_u)
+        {
+            constexpr int diff = nd_u - width;
+            return __builtin_clz(n) - diff;
+        }
+        else if constexpr (width <= nd_ul)
+        {
+            constexpr int diff = nd_ul - width;
+            return __builtin_clzl(n) - diff;
+        }
+        else if constexpr (width <= nd_ull)
+        {
+            constexpr int diff = nd_ull - width;
+            return __builtin_clzll(n) - diff;
+        }
+        else
+        {
+            // unreachable
+            unreachable();
+        }
+#endif
+    }
+
+    template <unsigned_integral T>
+    constexpr int countl_one(T n) noexcept
+    {
+        return countl_zero(static_cast<T>(~n));
+    }
+
+    template <unsigned_integral T>
+    constexpr int countr_zero(T n) noexcept
+    {
+#if defined(_MSC_VER) && !defined(__clang__)
+        return _Countr_zero(n);
+#else
+        constexpr auto width = sizeof(T) * 8;
+
+        if (n == 0)
+        {
+            return width;
+        }
+
+        constexpr auto nd_ull = sizeof(unsigned long long) * 8;
+        constexpr auto nd_ul = sizeof(unsigned long) * 8;
+        constexpr auto nd_u = sizeof(unsigned) * 8;
+
+        if constexpr (width <= nd_u)
+        {
+            return __builtin_ctz(n);
+        }
+        else if constexpr (width <= nd_ul)
+        {
+            return __builtin_ctzl(n);
+        }
+        else if constexpr (width <= nd_ull)
+        {
+            return __builtin_ctzll(n);
+        }
+        else
+        {
+            // unreachable
+            unreachable();
+        }
+#endif
+    }
+
+    template <unsigned_integral T>
+    constexpr int countr_one(T n) noexcept
+    {
+        return countr_zero(static_cast<T>(~n));
+    }
+
+    template <unsigned_integral T>
+    constexpr int popcount(T n) noexcept
+    {
+#if defined(_MSC_VER) && !defined(__clang__)
+#else
+        constexpr auto width = sizeof(T) * 8;
+        constexpr auto nd_ull = sizeof(unsigned long long) * 8;
+        constexpr auto nd_ul = sizeof(unsigned long) * 8;
+        constexpr auto nd_u = sizeof(unsigned) * 8;
+
+        if constexpr (width <= nd_u)
+        {
+            return __builtin_popcount(n);
+        }
+        else if constexpr (width <= nd_ul)
+        {
+            return __builtin_popcountl(n);
+        }
+        else if constexpr (width <= nd_ull)
+        {
+            return __builtin_popcountll(n);
+        }
+        else
+        {
+            // unreachable
+            unreachable();
+        }
+#endif
     }
 } // namespace tempest
 

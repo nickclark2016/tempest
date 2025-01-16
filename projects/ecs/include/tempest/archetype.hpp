@@ -123,7 +123,6 @@ namespace tempest::ecs
     template <size_t N>
     struct basic_archetype_types_hash
     {
-
     };
 } // namespace tempest::ecs
 
