@@ -47,7 +47,7 @@ namespace tempest::math
 #pragma warning(pop)
 #endif
 
-        constexpr mat4();
+        constexpr mat4() = default;
         constexpr mat4(const T diagonal);
         constexpr mat4(const vec4<T>& col0, const vec4<T>& col1, const vec4<T>& col2, const vec4<T>& col3);
         constexpr mat4(const T m00, const T m10, const T m20, const T m30, const T m01, const T m11, const T m21,
@@ -82,11 +82,6 @@ namespace tempest::math
     inline constexpr mat4<T> transpose(const mat4<T>& m) noexcept;
 
     // Implementation
-
-    template <typename T>
-    inline constexpr mat4<T>::mat4() : mat4(T())
-    {
-    }
 
     template <typename T>
     inline constexpr mat4<T>::mat4(const T diagonal)

@@ -59,6 +59,8 @@ namespace tempest::ecs
             _transform = math::transform(_position, _rotation, _scale);
         }
     };
+
+    static_assert(is_trivial<math::mat4<float>>::value);
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_transform_component_hpp

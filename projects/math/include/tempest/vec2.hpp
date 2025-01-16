@@ -37,7 +37,7 @@ namespace tempest::math
 #pragma warning(pop)
 #endif
 
-        constexpr vec2();
+        constexpr vec2() = default;
         constexpr vec2(const T scalar);
         constexpr vec2(const T x, const T y);
 
@@ -63,11 +63,6 @@ namespace tempest::math
     vec2(vec2<T>&&) -> vec2<T>;
 
     // Implementation
-
-    template <typename T>
-    inline constexpr vec2<T>::vec2() : vec2(T())
-    {
-    }
 
     template <typename T>
     inline constexpr vec2<T>::vec2(const T scalar) : vec2(scalar, scalar)

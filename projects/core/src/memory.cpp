@@ -137,7 +137,8 @@ namespace tempest
         return *this;
     }
 
-    void* heap_allocator::allocate(size_t size, [[maybe_unused]] size_t alignment, [[maybe_unused]] std::source_location loc)
+    void* heap_allocator::allocate(size_t size, [[maybe_unused]] size_t alignment,
+                                   [[maybe_unused]] std::source_location loc)
     {
         return tlsf_malloc(_tlsf_handle, size);
     }
@@ -157,5 +158,23 @@ namespace tempest
             _tlsf_handle = nullptr;
             _memory = nullptr;
         }
+    }
+
+    void* aligned_alloc(size_t n, size_t alignment)
+    {
+#ifdef _MSC_VER
+        return _aligned_malloc(n, alignment);
+#else
+        return std::aligned_alloc(alignment, n);
+#endif
+    }
+
+    void aligned_free(void* ptr)
+    {
+#ifdef _MSC_VER
+        _aligned_free(ptr);
+#else
+        std::free(ptr);
+#endif
     }
 } // namespace tempest

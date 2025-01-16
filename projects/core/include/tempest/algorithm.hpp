@@ -117,6 +117,11 @@ namespace tempest
               output_iterator<typename iterator_traits<InputIt>::value_type> OutputIt>
     inline constexpr OutputIt copy_n(InputIt first, Size count, OutputIt d_first)
     {
+        if (count == 0)
+        {
+            return d_first;
+        }
+
         using value_type = typename iterator_traits<InputIt>::value_type;
 
         if constexpr (is_trivial_v<value_type> && contiguous_iterator<InputIt>)

@@ -32,7 +32,7 @@ namespace tempest::math
 #pragma warning(pop)
 #endif
 
-        constexpr quat();
+        constexpr quat() = default;
         constexpr quat(const T scalar);
         constexpr quat(const T x, const T y, const T z, const T w);
         constexpr quat(const vec3<T>& euler);
@@ -55,11 +55,6 @@ namespace tempest::math
 
     template <typename T>
     quat(quat<T>&&) -> quat<T>;
-
-    template <typename T>
-    inline constexpr quat<T>::quat() : quat(T(1), T(0), T(0), T(0))
-    {
-    }
 
     template <typename T>
     inline constexpr quat<T>::quat(const T scalar) : quat(scalar, scalar, scalar, scalar)

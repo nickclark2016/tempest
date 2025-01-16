@@ -37,7 +37,7 @@ namespace tempest::math
 #pragma warning(pop)
 #endif
 
-        constexpr mat3();
+        constexpr mat3() = default;
         constexpr mat3(const T diagonal);
         constexpr mat3(const vec3<T>& col0, const vec3<T>& col1, const vec3<T>& col2);
         constexpr mat3(const T m00, const T m10, const T m20, const T m01, const T m11, const T m21, const T m02,
@@ -61,10 +61,6 @@ namespace tempest::math
     template <typename T> mat3(const mat3<T>&) -> mat3<T>;
 
     template <typename T> mat3(mat3<T>&&) -> mat3<T>;
-
-    template <typename T> inline constexpr mat3<T>::mat3() : mat3(T())
-    {
-    }
 
     template <typename T>
     inline constexpr mat3<T>::mat3(const T diagonal)
