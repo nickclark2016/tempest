@@ -48,7 +48,7 @@ namespace tempest
         if (!is_constant_evaluated())
         {
 #if defined(_MSC_VER) && !defined(__clang__)
-            if constepxr (sizeof(T) == 1)
+            if constexpr (sizeof(T) == 1)
             {
                 return n;
             }
@@ -120,13 +120,30 @@ namespace tempest
     [[nodiscard]] constexpr int countl_zero(T n) noexcept
     {
 #if defined(_MSC_VER) && !defined(__clang__)
-        if (!is_constant_evaluated())
+        constexpr auto width = sizeof(T) * 8;
+
+        if (n == 0)
         {
-            return _Checked_x86_64_countl_zero(n);
+            return width;
+        }
+
+        constexpr auto nd_ull = sizeof(unsigned long long) * 8;
+        constexpr auto nd_ul = sizeof(unsigned long) * 8;
+
+        if constexpr (width <= nd_ul)
+        {
+            constexpr auto diff = nd_ul - width;
+            return static_cast<int>(__lzcnt(n) - diff);
+        }
+        else if constexpr (width <= nd_ull)
+        {
+            constexpr auto diff = nd_ull - width;
+            return static_cast<int>(__lzcnt64(n) - diff);
         }
         else
         {
-            return _Countl_zero_fallback(n);
+            // unreachable
+            unreachable();
         }
 #else
         constexpr auto width = sizeof(T) * 8;
@@ -173,7 +190,35 @@ namespace tempest
     constexpr int countr_zero(T n) noexcept
     {
 #if defined(_MSC_VER) && !defined(__clang__)
-        return _Countr_zero(n);
+        constexpr auto width = sizeof(T) * 8;
+
+        if (n == 0)
+        {
+            return width;
+        }
+
+        constexpr auto nd_ull = sizeof(unsigned long long) * 8;
+        constexpr auto nd_ul = sizeof(unsigned long) * 8;
+
+        if constexpr (width <= nd_ul)
+        {
+            unsigned long uint_val = n;
+            unsigned long r;
+            _BitScanForward(&r, uint_val);
+            return static_cast<int>(r);
+        }
+        else if constexpr (width <= nd_ull)
+        {
+            unsigned long long uint_val = n;
+            unsigned long r;
+            _BitScanForward64(&r, uint_val);
+            return static_cast<int>(r);
+        }
+        else
+        {
+            // unreachable
+            unreachable();
+        }
 #else
         constexpr auto width = sizeof(T) * 8;
 

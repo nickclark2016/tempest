@@ -80,7 +80,8 @@ TEST(bit, countl_zero_byte)
     }
 
     // Test for zero
-    ASSERT_EQ(8, tempest::countl_zero(static_cast<uint8_t>(0)));
+    constexpr auto zero = tempest::countl_zero(static_cast<uint8_t>(0));
+    ASSERT_EQ(8, zero);
 }
 
 TEST(bit, countl_zero_ushort)
