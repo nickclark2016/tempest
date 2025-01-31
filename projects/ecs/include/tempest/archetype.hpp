@@ -199,7 +199,12 @@ namespace tempest::ecs
         using entity_type = uint64_t;
 
         template <typename... Ts>
+            requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
         entity_type create();
+
+        template <typename... Ts>
+            requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
+        entity_type create_initialized(Ts&&... components);
 
         void destroy(entity_type entity);
 
@@ -238,6 +243,7 @@ namespace tempest::ecs
     };
 
     template <typename... Ts>
+        requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
     inline basic_archetype_registry::entity_type basic_archetype_registry::create()
     {
         static const auto hash = detail::create_archetype_types_hash<256u, remove_cvref_t<Ts>...>();
@@ -267,6 +273,15 @@ namespace tempest::ecs
         };
 
         return _entity_keys.insert(ent);
+    }
+
+    template <typename... Ts>
+        requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
+    inline basic_archetype_registry::entity_type basic_archetype_registry::create_initialized(Ts&&... components)
+    {
+        auto entity = create<Ts...>();
+        (assign_or_replace<Ts>(entity, tempest::forward<Ts>(components)), ...);
+        return entity;
     }
 
     template <typename T>
@@ -306,7 +321,6 @@ namespace tempest::ecs
             new_types.push_back(create_archetype_type_info<component_type>());
             std::sort(new_types.begin(), new_types.end(),
                       [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
-
 
             auto capacity = existing_arch->capacity();
             auto& new_archetype = _archetypes.emplace_back(new_types);
