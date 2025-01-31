@@ -135,6 +135,15 @@ TEST(basic_archetype_registry, create)
     ASSERT_EQ(reg.get<float>(entity), 3.14f);
 }
 
+TEST(basic_archetype_registry, create_initialized)
+{
+    tempest::ecs::basic_archetype_registry reg;
+    auto entity = reg.create_initialized<int, float>(3, 3.14f);
+    ASSERT_EQ(reg.size(), 1);
+    ASSERT_EQ(reg.get<int>(entity), 3);
+    ASSERT_EQ(reg.get<float>(entity), 3.14f);
+}
+
 TEST(basic_archetype_registry, create_swapped)
 {
     tempest::ecs::basic_archetype_registry reg;
