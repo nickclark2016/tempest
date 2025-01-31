@@ -1,6 +1,9 @@
 #ifndef tempest_core_meta_hpp
 #define tempest_core_meta_hpp
 
+#include <tempest/string_view.hpp>
+#include <tempest/type_traits.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -63,7 +66,7 @@ namespace tempest::core
             here.remove_prefix(6);
         }
 
-        return here;
+        return tempest::string_view(here.data(), here.size());
     }
 
     template <std::size_t N>
@@ -106,6 +109,18 @@ namespace tempest::core
     template <typename... Ts>
     struct type_list;
 
+    template <typename... Ts>
+    struct type_list_size;
+
+    template <typename... Ts>
+    struct type_list_size<type_list<Ts...>>
+    {
+        static constexpr size_t value = sizeof...(Ts);
+    };
+
+    template <typename T>
+    inline constexpr size_t type_list_size_v = type_list_size<T>::value;
+
     template <template <typename...> typename T, typename...>
     struct instantiate;
 
@@ -130,10 +145,10 @@ namespace tempest::core
     template <typename... Ts>
     using type_list_concat_t = typename type_list_concat<Ts...>::type;
 
-    template <std::size_t N, typename... Ts>
+    template <size_t N, typename... Ts>
     struct take_type;
 
-    template <std::size_t N, typename... Ts>
+    template <size_t N, typename... Ts>
     using take_type_t = typename take_type<N, Ts...>::type;
 
     template <typename... Ts>
@@ -150,7 +165,7 @@ namespace tempest::core
         using rest_type = type_list<Ts...>;
     };
 
-    template <std::size_t N, typename T, typename... Ts>
+    template <size_t N, typename T, typename... Ts>
     struct take_type<N, type_list<T, Ts...>>
     {
         using type = type_list_concat_t<type_list<T>, take_type_t<N - 1, type_list<Ts...>>>;
@@ -172,7 +187,7 @@ namespace tempest::core
     template <typename C, typename T1, typename T2>
     struct sorted_type_list<C, type_list<T1, T2>>
     {
-        using type = std::conditional_t<C::template compare<T1, T2>(), type_list<T1, T2>, type_list<T2, T1>>;
+        using type = conditional_t<C::template compare<T1, T2>(), type_list<T1, T2>, type_list<T2, T1>>;
     };
 
     namespace detail
@@ -198,7 +213,7 @@ namespace tempest::core
         template <typename C, typename THead, typename... Ts, typename UHead, typename... Us>
         struct type_merge_sort<C, type_list<THead, Ts...>, type_list<UHead, Us...>>
         {
-            using type = std::conditional_t<
+            using type = conditional_t<
                 C::template compare<THead, UHead>(),
                 type_list_concat_t<type_list<THead>, type_merge_sort_t<C, type_list<Ts...>, type_list<UHead, Us...>>>,
                 type_list_concat_t<type_list<UHead>, type_merge_sort_t<C, type_list<THead, Ts...>, type_list<Us...>>>>;
@@ -218,9 +233,9 @@ namespace tempest::core
     {
         struct type_index final
         {
-            [[nodiscard]] static std::size_t next() noexcept
+            [[nodiscard]] static size_t next() noexcept
             {
-                static std::size_t value{0};
+                static size_t value{0};
                 return value++;
             }
         };
@@ -230,27 +245,27 @@ namespace tempest::core
         struct fnv1a_traits;
 
         template <>
-        struct fnv1a_traits<std::uint32_t>
+        struct fnv1a_traits<uint32_t>
         {
-            using type = std::uint32_t;
-            static constexpr std::uint32_t offset = 2166136261;
-            static constexpr std::uint32_t prime = 16777619;
+            using type = uint32_t;
+            static constexpr uint32_t offset = 2166136261;
+            static constexpr uint32_t prime = 16777619;
         };
 
         template <>
-        struct fnv1a_traits<std::uint64_t>
+        struct fnv1a_traits<uint64_t>
         {
-            using type = std::uint64_t;
-            static constexpr std::uint64_t offset = 14695981039346656037ull;
-            static constexpr std::uint64_t prime = 1099511628211ull;
+            using type = uint64_t;
+            static constexpr uint64_t offset = 14695981039346656037ull;
+            static constexpr uint64_t prime = 1099511628211ull;
         };
 
         template <typename C>
         struct hash_string_base
         {
             using value_type = C;
-            using size_type = std::size_t;
-            using hash_type = std::size_t;
+            using size_type = size_t;
+            using hash_type = size_t;
 
             const value_type* c_string;
             size_type length;
@@ -287,7 +302,7 @@ namespace tempest::core
                 return base;
             }
 
-            [[nodiscard]] static constexpr auto hash(const C* str, std::size_t len) noexcept
+            [[nodiscard]] static constexpr auto hash(const C* str, size_t len) noexcept
             {
                 hash_string_base<C> base{str, 0, hash_traits_type::offset};
 
@@ -311,7 +326,7 @@ namespace tempest::core
                 return basic_hash_string{str, sz};
             }
 
-            template <std::size_t N>
+            template <size_t N>
             [[nodiscard]] static constexpr hash_type from(const value_type (&str)[N]) noexcept
             {
                 return basic_hash_string{str};
@@ -330,7 +345,7 @@ namespace tempest::core
             {
             }
 
-            template <std::size_t N>
+            template <size_t N>
             constexpr basic_hash_string(const value_type (&str)[N]) noexcept : base_type{hash(str)}
             {
             }
@@ -410,9 +425,9 @@ namespace tempest::core
         using hash_string = basic_hash_string<char>;
 
         template <typename T>
-        [[nodiscard]] constexpr std::size_t get_type_hash() noexcept
+        [[nodiscard]] constexpr size_t get_type_hash() noexcept
         {
-            std::string_view type_name = get_type_name<T>();
+            string_view type_name = get_type_name<T>();
             return hash_string::from(type_name.data(), type_name.size());
         }
     } // namespace detail
@@ -420,7 +435,7 @@ namespace tempest::core
     template <typename T, typename = void>
     struct type_index final
     {
-        using id_type = std::size_t;
+        using id_type = size_t;
 
         [[nodiscard]] static id_type value() noexcept
         {
@@ -432,7 +447,7 @@ namespace tempest::core
     template <typename T, typename = void>
     struct type_hash final
     {
-        static constexpr std::size_t value() noexcept
+        static constexpr size_t value() noexcept
         {
             constexpr auto v = detail::get_type_hash<T>();
             return v;
@@ -442,7 +457,7 @@ namespace tempest::core
     template <typename T, typename = void>
     struct type_name final
     {
-        static constexpr std::string_view value() noexcept
+        static constexpr tempest::string_view value() noexcept
         {
             return get_type_name<T>();
         }
@@ -452,10 +467,10 @@ namespace tempest::core
     {
       public:
         template <typename T>
-        constexpr type_info(std::in_place_type_t<T>) noexcept
-            : _id{type_index<std::remove_cv_t<std::remove_reference_t<T>>>::value()},
-              _hash{type_hash<std::remove_cv_t<std::remove_reference_t<T>>>::value()},
-              _name{type_name<std::remove_cv_t<std::remove_reference_t<T>>>::value()}
+        constexpr type_info(in_place_type_t<T>) noexcept
+            : _id{type_index<remove_cv_t<remove_reference_t<T>>>::value()},
+              _hash{type_hash<remove_cv_t<remove_reference_t<T>>>::value()},
+              _name{type_name<remove_cv_t<remove_reference_t<T>>>::value()}
         {
         }
 
@@ -475,18 +490,18 @@ namespace tempest::core
         }
 
       private:
-        std::size_t _id;
-        std::size_t _hash;
-        std::string_view _name;
+        size_t _id;
+        size_t _hash;
+        string_view _name;
     };
 
     template <typename T>
     [[nodiscard]] const type_info& type_id() noexcept
     {
-        using base = std::remove_cv_t<std::remove_reference_t<T>>;
-        if constexpr (std::is_same_v<base, T>)
+        using base = remove_cv_t<remove_reference_t<T>>;
+        if constexpr (is_same_v<base, T>)
         {
-            static type_info instance{std::in_place_type_t<T>{}};
+            static type_info instance{in_place_type_t<T>{}};
             return instance;
         }
         else
@@ -495,7 +510,7 @@ namespace tempest::core
         }
     }
 
-    template <std::size_t N>
+    template <size_t N>
     struct select_t : select_t<N - 1>
     {
     };
@@ -505,21 +520,21 @@ namespace tempest::core
     {
     };
 
-    template <std::size_t N>
+    template <size_t N>
     inline constexpr select_t<N> select;
 
     template <typename T, typename = void>
-    struct size_of : std::integral_constant<std::size_t, 0u>
+    struct size_of : integral_constant<size_t, 0u>
     {
     };
 
     template <typename T>
-    struct size_of<T, std::void_t<decltype(sizeof(T))>> : std::integral_constant<std::size_t, sizeof(T)>
+    struct size_of<T, void_t<decltype(sizeof(T))>> : integral_constant<size_t, sizeof(T)>
     {
     };
 
     template <typename T>
-    inline constexpr std::size_t size_of_v = size_of<T>::value;
+    inline constexpr size_t size_of_v = size_of<T>::value;
 } // namespace tempest::core
 
 #endif // tempest_core_meta_hpp

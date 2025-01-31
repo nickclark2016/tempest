@@ -439,13 +439,13 @@ namespace tempest
     template <typename T, typename Allocator>
     inline slot_map<T, Allocator>::reference slot_map<T, Allocator>::at(key_type key)
     {
-        return find(key);
+        return *find(key);
     }
 
     template <typename T, typename Allocator>
     inline slot_map<T, Allocator>::const_reference slot_map<T, Allocator>::at(key_type key) const
     {
-        return find(key);
+        return *find(key);
     }
 
     template <typename T, typename Allocator>

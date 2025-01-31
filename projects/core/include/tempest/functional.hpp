@@ -2,6 +2,7 @@
 #define tempest_core_functional_hpp
 
 #include <tempest/memory.hpp>
+#include <tempest/meta.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
@@ -1288,6 +1289,31 @@ namespace tempest
     template <auto f>
         requires is_function_v<remove_pointer_t<decltype(f)>>
     function_ref(nontype_t<f>) -> function_ref<remove_pointer_t<decltype(f)>>;
+
+    template <typename T>
+    struct function_traits;
+
+    // Specialization for function pointers
+    template <typename Ret, typename... Args>
+    struct function_traits<Ret (*)(Args...)>
+    {
+        using return_type = Ret;
+        using argument_types = core::type_list<Args...>;
+    };
+
+    // Specialization for lambdas and other callables (leveraging operator())
+    template <typename T>
+    struct function_traits : function_traits<decltype(&T::operator())>
+    {
+    };
+
+    // Specialization for member function pointers
+    template <typename Ret, typename ClassType, typename... Args>
+    struct function_traits<Ret (ClassType::*)(Args...) const>
+    {
+        using return_type = Ret;
+        using argument_types = core::type_list<Args...>;
+    };
 } // namespace tempest
 
 #endif // tempest_core_functional_hpp

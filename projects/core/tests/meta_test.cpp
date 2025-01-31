@@ -12,8 +12,8 @@ struct Bar
 
 TEST(tempest_meta, test_type_info)
 {
-    auto foo_type_info = tempest::core::type_info(std::in_place_type_t<Foo>{});
-    auto bar_type_info = tempest::core::type_info(std::in_place_type_t<Bar>{});
+    auto foo_type_info = tempest::core::type_info(tempest::in_place_type_t<Foo>{});
+    auto bar_type_info = tempest::core::type_info(tempest::in_place_type_t<Bar>{});
 
     ASSERT_EQ(foo_type_info.name(), "Foo");
     ASSERT_EQ(bar_type_info.name(), "Bar");
