@@ -35,14 +35,14 @@ namespace tempest
     /// @return Object initialized with the bits from `from`
     template <typename To, typename From>
         requires(sizeof(To) == sizeof(From) && is_trivially_copyable_v<To> && is_trivially_copyable_v<From>)
-    [[nodiscard]] constexpr To bit_cast(const From& from) noexcept
+    [[nodiscard]] inline constexpr To bit_cast(const From& from) noexcept
     {
         return __builtin_bit_cast(To, from);
     }
 
     template <typename T>
         requires(has_unique_object_representations_v<T> && is_integral_v<T>)
-    [[nodiscard]] constexpr T byteswap(T n) noexcept
+    [[nodiscard]] inline constexpr T byteswap(T n) noexcept
     {
         // runtime
         if (!is_constant_evaluated())
@@ -111,16 +111,32 @@ namespace tempest
     template <typename T>
         requires(is_integral_v<T> && is_unsigned_v<T> && !is_same_v<T, bool> && !is_same_v<T, char> &&
                  !is_same_v<T, wchar_t> && !is_same_v<T, char16_t> && !is_same_v<T, char32_t>)
-    constexpr bool has_single_bit(T n) noexcept
+    inline constexpr bool has_single_bit(T n) noexcept
     {
         return n && !(n & (n - 1));
     }
 
     template <unsigned_integral T>
-    [[nodiscard]] constexpr int countl_zero(T n) noexcept
+    inline constexpr int countl_zero(T n) noexcept
     {
 #if defined(_MSC_VER) && !defined(__clang__)
         constexpr auto width = sizeof(T) * 8;
+
+        if (is_constant_evaluated())
+        {
+            // Count how many bits are set to zero from left to right before the
+            // first one bit
+            int result = 0;
+            for (size_t i = 0; i < width; ++i)
+            {
+                if (n & (T(1) << (width - i - 1)))
+                {
+                    break;
+                }
+                ++result;
+            }
+            return result;
+        }
 
         if (n == 0)
         {
@@ -181,16 +197,34 @@ namespace tempest
     }
 
     template <unsigned_integral T>
-    constexpr int countl_one(T n) noexcept
+    inline constexpr int countl_one(T n) noexcept
     {
         return countl_zero(static_cast<T>(~n));
     }
 
     template <unsigned_integral T>
-    constexpr int countr_zero(T n) noexcept
+    inline constexpr int countr_zero(T n) noexcept
     {
 #if defined(_MSC_VER) && !defined(__clang__)
         constexpr auto width = sizeof(T) * 8;
+
+        if (is_constant_evaluated())
+        {
+            // Count how many bits are set to zero from right to left before the
+            // first one bit
+            int result = 0;
+
+            for (size_t i = 0; i < width; ++i)
+            {
+                if (n & (T(1) << i))
+                {
+                    break;
+                }
+                ++result;
+            }
+
+            return result;
+        }
 
         if (n == 0)
         {
@@ -252,15 +286,49 @@ namespace tempest
     }
 
     template <unsigned_integral T>
-    constexpr int countr_one(T n) noexcept
+    inline constexpr int countr_one(T n) noexcept
     {
         return countr_zero(static_cast<T>(~n));
     }
 
     template <unsigned_integral T>
-    constexpr int popcount(T n) noexcept
+    inline constexpr int popcount(T n) noexcept
     {
 #if defined(_MSC_VER) && !defined(__clang__)
+        if (is_constant_evaluated())
+        {
+            // Count number of bits set to one
+            constexpr auto width = sizeof(T) * 8;
+            int result = 0;
+
+            for (size_t i = 0; i < width; ++i)
+            {
+                if (n & (T(1) << i))
+                {
+                    ++result;
+                }
+            }
+
+            return result;
+        }
+
+        constexpr auto width = sizeof(T) * 8;
+        constexpr auto nd_ull = sizeof(unsigned long long) * 8;
+        constexpr auto nd_ul = sizeof(unsigned long) * 8;
+
+        if constexpr (width <= nd_ul)
+        {
+            return __popcnt(n);
+        }
+        else if constexpr (width <= nd_ull)
+        {
+            return __popcnt64(n);
+        }
+        else
+        {
+            // unreachable
+            unreachable();
+        }
 #else
         constexpr auto width = sizeof(T) * 8;
         constexpr auto nd_ull = sizeof(unsigned long long) * 8;
@@ -285,6 +353,40 @@ namespace tempest
             unreachable();
         }
 #endif
+    }
+
+    template <unsigned_integral T>
+    inline constexpr int bit_width(T n) noexcept
+    {
+        return (8 * sizeof(T)) - countl_zero(n);
+    }
+
+    template <unsigned_integral T>
+    inline constexpr T bit_ceil(T n) noexcept
+    {
+        if (n <= 1u)
+        {
+            return T(1);
+        }
+
+        if constexpr (same_as<T, decltype(+n)>)
+        {
+            return T(1) << bit_width(T(n - 1));
+        }
+        else
+        {
+            // Case of promoted integral type
+            constexpr int offset = static_cast<int>((sizeof(unsigned) * 8) - (sizeof(T) * 8));
+            return T(1u << (bit_width(T(n - 1)) + offset) >> offset);
+        }
+    }
+
+    template <unsigned_integral T>
+    inline constexpr T bit_floor(T n) noexcept
+    {
+        if (n == 0)
+            return 0;
+        return T(1) << (bit_width(n) - 1);
     }
 } // namespace tempest
 

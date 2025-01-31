@@ -1,6 +1,7 @@
 #ifndef tempest_core_utility_hpp
 #define tempest_core_utility_hpp
 
+#include <tempest/concepts.hpp>
 #include <tempest/type_traits.hpp>
 
 namespace tempest
@@ -495,6 +496,42 @@ namespace tempest
 
     template <size_t I>
     inline constexpr in_place_index_t<I> in_place_index{};
-} // namespace tempest
 
+    template <integral T, T... Is>
+    struct integer_sequence
+    {
+        using value_type = T;
+
+        static constexpr size_t size() noexcept
+        {
+            return sizeof...(Is);
+        }
+    };
+
+    template <size_t... Is>
+    using index_sequence = integer_sequence<size_t, Is...>;
+
+    // make_integer_sequence and friends
+    namespace detail
+    {
+        template <typename T, T N, T... Is>
+        constexpr auto make_integer_sequence_impl() noexcept
+        {
+            if constexpr (N == 0)
+            {
+                return integer_sequence<T, Is...>{};
+            }
+            else
+            {
+                return make_integer_sequence_impl<T, N - 1, N - 1, Is...>();
+            }
+        }
+    } // namespace detail
+
+    template <typename T, T N>
+    using make_integer_sequence = decltype(detail::make_integer_sequence_impl<T, N>());
+
+    template <size_t N>
+    using make_index_sequence = make_integer_sequence<size_t, N>;
+} // namespace tempest
 #endif // tempest_core_utility_hpp

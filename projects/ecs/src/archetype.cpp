@@ -1,7 +1,9 @@
 #include <tempest/archetype.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/string.hpp>
 #include <tempest/utility.hpp>
 
 #include <bit>
@@ -133,16 +135,20 @@ namespace tempest::ecs
         // Pop off the front of the implicit free list
         auto index = static_cast<uint32_t>(_first_free_element);
         auto trampoline = _trampoline[_first_free_element];
-        auto generation = trampoline.generation;
+        auto next_index = trampoline.index;
 
-        _first_free_element = trampoline.index;
+        auto new_key = key_type{
+            .index = index,
+            .generation = trampoline.generation,
+        };
+
+        _trampoline[_first_free_element].index = index;
+
+        _first_free_element = next_index;
 
         ++_element_count;
 
-        return key_type{
-            .index = index,
-            .generation = generation,
-        };
+        return new_key;
     }
 
     void basic_archetype::reserve(size_t count)
@@ -199,7 +205,7 @@ namespace tempest::ecs
 
         auto index_to_erase = trampoline.index;
         auto index_to_move = _element_count - 1;
-        
+
         // If the index to erase is the same as the index to move, just destroy
         // Else, move the target element to the index of the erased element, update the lookback
         if (index_to_erase != index_to_move)
@@ -253,5 +259,31 @@ namespace tempest::ecs
             return nullptr;
         }
         return _storage[type_info_index].element_at(trampoline.index);
+    }
+
+    namespace detail
+    {
+        size_t get_archetype_type_index(string_view name)
+        {
+            static flat_unordered_map<string, size_t> type_index_map;
+            static size_t next_index = 0;
+            auto it = type_index_map.find(name);
+            if (it != type_index_map.end())
+            {
+                return it->second;
+            }
+            type_index_map[name] = next_index;
+            return next_index++;
+        }
+    } // namespace detail
+
+    void basic_archetype_registry::destroy(typename basic_archetype_registry::entity_type entity)
+    {
+        const auto& key = _entity_keys.at(entity);
+
+        auto archetype_index = key.archetype_index;
+        auto& archetype = _archetypes[archetype_index];
+        archetype.erase(key.archetype_key);
+        _entity_keys.erase(entity);
     }
 } // namespace tempest::ecs
