@@ -1,6 +1,7 @@
 #ifndef tempest_tempest_engine_h
 #define tempest_tempest_engine_h
 
+#include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
@@ -51,6 +52,16 @@ namespace tempest
             return _entity_registry;
         }
 
+        ecs::archetype_registry& get_archetype_registry()
+        {
+            return _archetype_entity_registry;
+        }
+
+        const ecs::archetype_registry& get_archetype_registry() const
+        {
+            return _archetype_entity_registry;
+        }
+
         void request_close() noexcept
         {
             _should_close = true;
@@ -81,7 +92,7 @@ namespace tempest
             return _render_system;
         }
 
-        ecs::entity load_entity(ecs::entity src);
+        ecs::archetype_entity load_entity(ecs::archetype_entity src);
 
         [[noreturn]] void run();
 
@@ -126,6 +137,7 @@ namespace tempest
         }
 
       private:
+        ecs::archetype_registry _archetype_entity_registry;
         ecs::registry _entity_registry;
         core::material_registry _material_reg;
         core::mesh_registry _mesh_reg;

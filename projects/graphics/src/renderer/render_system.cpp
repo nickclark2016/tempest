@@ -85,7 +85,7 @@ namespace tempest::graphics
         };
     } // namespace
 
-    render_system::render_system(ecs::registry& entities, const render_system_settings& settings)
+    render_system::render_system(ecs::archetype_registry& entities, const render_system_settings& settings)
         : _allocator{64 * 1024 * 1024}, _registry{&entities}, _settings{settings}, _shadow_map_subresource_allocator{
                                                                                        {8192, 8192},
                                                                                        {
@@ -376,9 +376,8 @@ namespace tempest::graphics
 
                         // Build and upload point and spot light data
                         vector<gpu_light> light_data;
-                        for (const auto& [ent, point_light, transform] :
-                             _registry->view<point_light_component, ecs::transform_component>())
-                        {
+
+                        _registry->each([&](point_light_component point_light, ecs::transform_component transform) {
                             auto sq_range = point_light.range * point_light.range;
                             auto inv_sq_range = sq_range > 0.0f ? 1.0f / sq_range : 0.0f;
 
@@ -392,7 +391,25 @@ namespace tempest::graphics
                             };
 
                             light_data.push_back(light);
-                        }
+                        });
+
+                        // for (const auto& [ent, point_light, transform] :
+                        //      _registry->view<point_light_component, ecs::transform_component>())
+                        //{
+                        //     auto sq_range = point_light.range * point_light.range;
+                        //     auto inv_sq_range = sq_range > 0.0f ? 1.0f / sq_range : 0.0f;
+
+                        //    gpu_light light = {
+                        //        .color_intensity = math::vec4<float>(point_light.color.x, point_light.color.y,
+                        //                                             point_light.color.z, point_light.intensity),
+                        //        .position_falloff = math::vec4<float>(transform.position().x, transform.position().y,
+                        //                                              transform.position().z, inv_sq_range),
+                        //        .light_type = gpu_light_type::POINT,
+                        //        .shadow_map_count = 0,
+                        //    };
+
+                        //    light_data.push_back(light);
+                        //}
 
                         _scene_data.point_light_count = static_cast<uint32_t>(light_data.size());
 
@@ -403,10 +420,8 @@ namespace tempest::graphics
 
                         uint32_t shadow_maps_written = 0;
 
-                        for (const auto& [ent, dir_light, shadow_map, transform] :
-                             _registry
-                                 ->view<directional_light_component, shadow_map_component, ecs::transform_component>())
-                        {
+                        _registry->each([&]([[maybe_unused]] directional_light_component dir_light,
+                                            shadow_map_component shadow_map, ecs::transform_component transform) {
                             auto params = compute_shadow_map_cascades(shadow_map, transform,
                                                                       _registry->get<camera_component>(_camera_entity));
 
@@ -425,7 +440,6 @@ namespace tempest::graphics
                                             region->extent.x,
                                             region->extent.y,
                                         },
-                                    .light_entity = ent,
                                 };
 
                                 _scene_data.sun.shadow_map_indices[i] = shadow_maps_written++;
@@ -450,7 +464,57 @@ namespace tempest::graphics
 
                                 _gpu_shadow_map_use_parameters.push_back(gpu_param);
                             }
-                        }
+                        });
+
+                        // for (const auto& [ent, dir_light, shadow_map, transform] :
+                        //      _registry
+                        //          ->view<directional_light_component, shadow_map_component,
+                        //          ecs::transform_component>())
+                        //{
+                        //     auto params = compute_shadow_map_cascades(shadow_map, transform,
+                        //                                               _registry->get<camera_component>(_camera_entity));
+
+                        //    _scene_data.sun.shadow_map_count = static_cast<uint32_t>(params.projections.size());
+                        //    for (size_t i = 0; i < params.projections.size(); ++i)
+                        //    {
+                        //        auto region = _shadow_map_subresource_allocator.allocate(shadow_map.size);
+                        //        assert(region.has_value());
+
+                        //        cpu_shadow_map_parameter cpu_params = {
+                        //            .proj_matrix = params.projections[i],
+                        //            .shadow_map_bounds =
+                        //                {
+                        //                    region->position.x,
+                        //                    region->position.y,
+                        //                    region->extent.x,
+                        //                    region->extent.y,
+                        //                },
+                        //            .light_entity = ent,
+                        //        };
+
+                        //        _scene_data.sun.shadow_map_indices[i] = shadow_maps_written++;
+
+                        //        _cpu_shadow_map_build_params.push_back(cpu_params);
+
+                        //        gpu_shadow_map_parameter gpu_param = {
+                        //            .light_proj_matrix = params.projections[i],
+                        //            .shadow_map_region =
+                        //                {
+                        //                    static_cast<float>(region->position.x) /
+                        //                        (_shadow_map_subresource_allocator.extent().x),
+                        //                    static_cast<float>(region->position.y) /
+                        //                        (_shadow_map_subresource_allocator.extent().y),
+                        //                    static_cast<float>(region->extent.x) /
+                        //                        (_shadow_map_subresource_allocator.extent().x),
+                        //                    static_cast<float>(region->extent.y) /
+                        //                        (_shadow_map_subresource_allocator.extent().x),
+                        //                },
+                        //            .cascade_split_far = params.cascade_splits[i],
+                        //        };
+
+                        //        _gpu_shadow_map_use_parameters.push_back(gpu_param);
+                        //    }
+                        //}
 
                         // Upload Directional Shadow Map Data
                         writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters),
@@ -571,12 +635,13 @@ namespace tempest::graphics
                         // Render directional shadow maps
                         cmds.use_pipeline(_directional_shadow_map_pipeline);
 
-                        auto lights_with_shadows = _registry->view<directional_light_component, shadow_map_component>();
+                        // auto lights_with_shadows = _registry->view<directional_light_component,
+                        // shadow_map_component>();
 
                         uint32_t lights_written = 0;
 
-                        for (const auto& [ent, dir_light, shadows] : lights_with_shadows)
-                        {
+                        _registry->each([&]([[maybe_unused]] directional_light_component dir_light,
+                                            shadow_map_component shadows) {
                             for (auto i = 0u; i < shadows.cascade_count; ++i)
                             {
                                 const auto& params = _cpu_shadow_map_build_params[lights_written];
@@ -610,7 +675,45 @@ namespace tempest::graphics
 
                                 lights_written++;
                             }
-                        }
+                        });
+
+                        // for (const auto& [ent, dir_light, shadows] : lights_with_shadows)
+                        //{
+                        //     for (auto i = 0u; i < shadows.cascade_count; ++i)
+                        //     {
+                        //         const auto& params = _cpu_shadow_map_build_params[lights_written];
+                        //         const auto& region = params.shadow_map_bounds;
+
+                        //        // Set up viewport and scissor test
+                        //        cmds.set_scissor_region(region.x, region.y, region.z, region.w)
+                        //            .set_viewport(static_cast<float>(region.x), static_cast<float>(region.y),
+                        //                          static_cast<float>(region.z), static_cast<float>(region.w), 0.0f,
+                        //                          1.0f, false);
+
+                        //        // Push the shadow map projection matrix
+                        //        cmds.push_constants(0, params.proj_matrix, _directional_shadow_map_pipeline);
+
+                        //        uint32_t draw_calls_issued = 0;
+                        //        for (auto [key, batch] : _draw_batches)
+                        //        {
+                        //            if (key.alpha_type == alpha_behavior::OPAQUE ||
+                        //                key.alpha_type == alpha_behavior::MASK)
+                        //            {
+                        //                cmds.draw_indexed(
+                        //                    _indirect_buffer,
+                        //                    static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                        //                                          draw_calls_issued *
+                        //                                          sizeof(indexed_indirect_command)),
+                        //                    static_cast<uint32_t>(batch.objects.size()),
+                        //                    sizeof(indexed_indirect_command));
+
+                        //                draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
+                        //            }
+                        //        }
+
+                        //        lights_written++;
+                        //    }
+                        //}
                     });
             });
 
@@ -720,15 +823,10 @@ namespace tempest::graphics
 
         _last_updated_frame = _device->current_frame();
 
-        // find camera
-        for (ecs::entity ent : _registry->entities())
-        {
-            if (_registry->has<camera_component>(ent))
-            {
-                _camera_entity = ent;
-                break;
-            }
-        }
+        // Find camera
+        _registry->each([&]([[maybe_unused]] const camera_component& camera, ecs::self_component self) {
+            _camera_entity = self.entity;
+        });
     }
 
     void render_system::render()
@@ -740,9 +838,7 @@ namespace tempest::graphics
                 batch.commands.clear();
             }
 
-            for (const auto& [ent, transform, renderable] :
-                 _registry->view<ecs::transform_component, renderable_component>())
-            {
+            _registry->each([&](renderable_component renderable, ecs::self_component self) {
                 gpu_object_data object_payload = {
                     .model = math::mat4<float>(1.0f),
                     .inv_tranpose_model = math::mat4<float>(1.0f),
@@ -753,7 +849,7 @@ namespace tempest::graphics
                     .self_id = static_cast<uint32_t>(renderable.object_id),
                 };
 
-                auto ancestor_view = ecs::ancestor_entity_view(*_registry, ent);
+                auto ancestor_view = ecs::archetype_entity_ancestor_view(*_registry, self.entity);
                 for (auto ancestor : ancestor_view)
                 {
                     if (auto tx = _registry->try_get<ecs::transform_component>(ancestor))
@@ -771,23 +867,22 @@ namespace tempest::graphics
                 auto& draw_batch = _draw_batches[key];
                 const auto& mesh = _meshes[renderable.mesh_id];
 
-                auto object_data_it = draw_batch.objects.find(ent);
+                auto object_data_it = draw_batch.objects.find(self.entity);
                 if (object_data_it == draw_batch.objects.end()) [[unlikely]]
                 {
                     log->info("New object added to draw batch - ID: {}, Mesh ID: {}, Material ID: {} - Entity {}:{}",
                               renderable.object_id, renderable.mesh_id, renderable.material_id,
-                              ecs::entity_traits<ecs::entity>::as_entity(ent),
-                              ecs::entity_traits<ecs::entity>::as_version(ent));
+                              ecs::entity_traits<ecs::entity>::as_entity(self.entity),
+                              ecs::entity_traits<ecs::entity>::as_version(self.entity));
 
                     object_payload.prev_model = object_payload.model;
-
-                    draw_batch.objects.insert(ent, object_payload);
+                    draw_batch.objects.insert(self.entity, object_payload);
                 }
                 else
                 {
-                    const auto& prev_data = draw_batch.objects[ent];
+                    const auto& prev_data = draw_batch.objects[self.entity];
                     object_payload.prev_model = prev_data.model;
-                    draw_batch.objects[ent] = object_payload;
+                    draw_batch.objects[self.entity] = object_payload;
                 }
 
                 draw_batch.commands.push_back({
@@ -795,9 +890,68 @@ namespace tempest::graphics
                     .instance_count = 1,
                     .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
                     .vertex_offset = 0,
-                    .first_instance = static_cast<uint32_t>(draw_batch.objects.index_of(ent)),
+                    .first_instance = static_cast<uint32_t>(draw_batch.objects.index_of(self.entity)),
                 });
-            }
+            });
+
+            // for (const auto& [ent, transform, renderable] :
+            //      _registry->view<ecs::transform_component, renderable_component>())
+            //{
+            //     gpu_object_data object_payload = {
+            //         .model = math::mat4<float>(1.0f),
+            //         .inv_tranpose_model = math::mat4<float>(1.0f),
+            //         .prev_model = math::mat4<float>(1.0f),
+            //         .mesh_id = static_cast<uint32_t>(renderable.mesh_id),
+            //         .material_id = static_cast<uint32_t>(renderable.material_id),
+            //         .parent_id = ~0u,
+            //         .self_id = static_cast<uint32_t>(renderable.object_id),
+            //     };
+
+            //    auto ancestor_view = ecs::ancestor_entity_view(*_registry, ent);
+            //    for (auto ancestor : ancestor_view)
+            //    {
+            //        if (auto tx = _registry->try_get<ecs::transform_component>(ancestor))
+            //        {
+            //            object_payload.model = tx->matrix() * object_payload.model;
+            //        }
+            //    }
+
+            //    object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
+
+            //    draw_batch_key key = {
+            //        .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
+            //    };
+
+            //    auto& draw_batch = _draw_batches[key];
+            //    const auto& mesh = _meshes[renderable.mesh_id];
+
+            //    auto object_data_it = draw_batch.objects.find(ent);
+            //    if (object_data_it == draw_batch.objects.end()) [[unlikely]]
+            //    {
+            //        log->info("New object added to draw batch - ID: {}, Mesh ID: {}, Material ID: {} - Entity {}:{}",
+            //                  renderable.object_id, renderable.mesh_id, renderable.material_id,
+            //                  ecs::entity_traits<ecs::entity>::as_entity(ent),
+            //                  ecs::entity_traits<ecs::entity>::as_version(ent));
+
+            //        object_payload.prev_model = object_payload.model;
+
+            //        draw_batch.objects.insert(ent, object_payload);
+            //    }
+            //    else
+            //    {
+            //        const auto& prev_data = draw_batch.objects[ent];
+            //        object_payload.prev_model = prev_data.model;
+            //        draw_batch.objects[ent] = object_payload;
+            //    }
+
+            //    draw_batch.commands.push_back({
+            //        .index_count = mesh.index_count,
+            //        .instance_count = 1,
+            //        .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
+            //        .vertex_offset = 0,
+            //        .first_instance = static_cast<uint32_t>(draw_batch.objects.index_of(ent)),
+            //    });
+            //}
 
             // Iterate through the draw batches and update first instance based on the number of instances in the
             // previous batches
@@ -813,8 +967,19 @@ namespace tempest::graphics
             }
 
             // Find the directional light for the scene
-            for (auto [ent, dir_light, tx] : _registry->view<directional_light_component, ecs::transform_component>())
-            {
+            // for (auto [ent, dir_light, tx] : _registry->view<directional_light_component,
+            // ecs::transform_component>())
+            //{
+            //    _scene_data.sun.color_intensity =
+            //        math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, dir_light.intensity);
+
+            //    // Rotate 0, 0, 1 by the rotation of the transform
+            //    auto light_rot = math::rotate(tx.rotation());
+            //    auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
+            //    _scene_data.sun.direction = math::vec4<float>(light_dir.x, light_dir.y, light_dir.z, 0.0f);
+            //}
+
+            _registry->each([&](directional_light_component dir_light, ecs::transform_component tx) {
                 _scene_data.sun.color_intensity =
                     math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, dir_light.intensity);
 
@@ -822,7 +987,7 @@ namespace tempest::graphics
                 auto light_rot = math::rotate(tx.rotation());
                 auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
                 _scene_data.sun.direction = math::vec4<float>(light_dir.x, light_dir.y, light_dir.z, 0.0f);
-            }
+            });
         }
 
         if (_create_imgui_hierarchy && _settings.enable_imgui)
@@ -1138,14 +1303,8 @@ namespace tempest::graphics
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            scene_constant_buffer,
-            vertex_pull_buffer_desc,
-            mesh_layout_buffer_desc,
-            object_buffer_desc,
-            instance_buffer_desc,
-            materials_buffer_desc,
-            linear_sampler_desc,
-            texture_array_desc,
+            scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
+            instance_buffer_desc,  materials_buffer_desc,   linear_sampler_desc,     texture_array_desc,
         };
 
         descriptor_binding_info set1_bindings[] = {

@@ -190,6 +190,25 @@ TEST(basic_archetype_registry, remove_component)
     ASSERT_TRUE(reg.has<float>(entity));
 }
 
+TEST(basic_archetype_registry, try_get_component_with_component)
+{
+    tempest::ecs::basic_archetype_registry reg;
+    auto entity = reg.create<int, float>();
+    reg.replace<int>(entity, 3);
+    reg.replace<float>(entity, 3.14f);
+    ASSERT_EQ(reg.try_get<int>(entity), &reg.get<int>(entity));
+    ASSERT_EQ(reg.try_get<float>(entity), &reg.get<float>(entity));
+}
+
+TEST(basic_archetype_registry, try_get_component_with_failure)
+{
+    tempest::ecs::basic_archetype_registry reg;
+    auto entity = reg.create<int, float>();
+    reg.replace<int>(entity, 3);
+    reg.replace<float>(entity, 3.14f);
+    ASSERT_EQ(reg.try_get<char>(entity), nullptr);
+}
+
 TEST(basic_archetype_registry, remove_lots_of_components)
 {
     tempest::ecs::basic_archetype_registry reg;

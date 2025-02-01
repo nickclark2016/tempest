@@ -6,6 +6,7 @@
 #include "render_graph.hpp"
 #include "window.hpp"
 
+#include <tempest/archetype.hpp>
 #include <tempest/flat_map.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/material.hpp>
@@ -144,7 +145,6 @@ namespace tempest::graphics
         {
             math::mat4<float> proj_matrix;
             math::vec4<uint32_t> shadow_map_bounds;
-            ecs::entity light_entity;
         };
 
         struct hi_z_data
@@ -164,7 +164,7 @@ namespace tempest::graphics
         {
             graphics_pipeline_resource_handle pipeline;
             vector<indexed_indirect_command> commands;
-            ecs::sparse_map<gpu_object_data> objects;
+            ecs::basic_sparse_map<ecs::basic_archetype_registry::entity_type, gpu_object_data> objects;
         };
 
         struct shadow_map_parameters
@@ -180,7 +180,7 @@ namespace tempest::graphics
         };
 
       public:
-        render_system(ecs::registry& entities, const render_system_settings& settings = {});
+        render_system(ecs::archetype_registry& entities, const render_system_settings& settings = {});
 
         void register_window(iwindow& win);
         void unregister_window(iwindow& win);
@@ -267,7 +267,7 @@ namespace tempest::graphics
 
       private:
         heap_allocator _allocator;
-        ecs::registry* _registry;
+        ecs::archetype_registry* _registry;
 
         unique_ptr<render_context> _context;
         render_device* _device;
@@ -322,7 +322,7 @@ namespace tempest::graphics
 
         gpu_scene_data _scene_data;
         hi_z_data _hi_z_data;
-        ecs::entity _camera_entity{ecs::tombstone};
+        ecs::archetype_entity _camera_entity{ecs::tombstone};
 
         size_t _last_updated_frame{2};
 

@@ -533,5 +533,8 @@ namespace tempest
 
     template <size_t N>
     using make_index_sequence = make_integer_sequence<size_t, N>;
+
+    template <typename... Ts>
+    using make_sequence_for = make_index_sequence<sizeof...(Ts)>;
 } // namespace tempest
 #endif // tempest_core_utility_hpp

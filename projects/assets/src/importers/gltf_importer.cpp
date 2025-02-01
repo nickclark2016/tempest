@@ -931,8 +931,8 @@ namespace tempest::assets
     {
     }
 
-    ecs::entity gltf_importer::import(asset_database& db, span<const byte> bytes, ecs::registry& registry,
-                                      optional<string_view> path)
+    ecs::archetype_entity gltf_importer::import(asset_database& db, span<const byte> bytes,
+                                                ecs::archetype_registry& registry, optional<string_view> path)
     {
         simdjson::dom::parser parser;
         simdjson::padded_string padded(reinterpret_cast<const char*>(bytes.data()), bytes.size());
@@ -943,7 +943,7 @@ namespace tempest::assets
             return ecs::null;
         }
 
-        auto ent = registry.acquire_entity();
+        auto ent = registry.create();
         auto doc = parse_result.get_object();
 
         optional<std::filesystem::path> base_path;
@@ -966,7 +966,7 @@ namespace tempest::assets
                 .metadata_id = meta_id,
             };
 
-            registry.assign<asset_metadata_component>(ent, meta_comp);
+            registry.assign(ent, meta_comp);
         }
 
         flat_unordered_map<uint32_t, vector<byte>> buffer_contents;
@@ -1039,18 +1039,17 @@ namespace tempest::assets
         }
 
         // Mapping of mesh to list of entities representing the primitives
-        flat_unordered_map<uint32_t, vector<ecs::entity>> mesh_primitives;
+        flat_unordered_map<uint32_t, vector<ecs::archetype_entity>> mesh_primitives;
         sjd::array meshes;
         if (auto error = doc["meshes"].get(meshes); error == simdjson::SUCCESS)
         {
             uint32_t mesh_idx = 0;
             for (const auto& mesh : meshes)
             {
-                vector<ecs::entity> primitives;
+                vector<ecs::archetype_entity> primitives;
 
                 for (const auto& prim : mesh["primitives"])
                 {
-                    auto prim_ent = registry.acquire_entity();
                     auto [mesh_id, material_idx] =
                         process_mesh(buffer_contents, prim, buffer_views, accessors, _mesh_reg);
 
@@ -1058,9 +1057,12 @@ namespace tempest::assets
                         .mesh_id = mesh_id,
                     };
 
-                    ecs::transform_component default_tx;
-                    registry.assign<core::mesh_component>(prim_ent, mesh_comp);
-                    registry.assign<ecs::transform_component>(prim_ent, default_tx);
+                    auto prim_ent = registry.create<core::mesh_component, ecs::transform_component>();
+
+                    ecs::transform_component default_tx = ecs::transform_component::identity();
+
+                    registry.replace(prim_ent, mesh_comp);
+                    registry.replace(prim_ent, default_tx);
 
                     if (material_idx >= 0)
                     {
@@ -1068,7 +1070,7 @@ namespace tempest::assets
                             .material_id = material_guids.find(material_idx)->second,
                         };
 
-                        registry.assign<core::material_component>(prim_ent, mat_comp);
+                        registry.assign(prim_ent, mat_comp);
                     }
 
                     primitives.push_back(prim_ent);
@@ -1078,7 +1080,7 @@ namespace tempest::assets
                 std::string_view name;
                 if (auto mesh_error = mesh["name"].get(name); mesh_error == simdjson::SUCCESS)
                 {
-                    registry.name(ent, name);
+                    // registry.name(ent, name);
                 }
 
                 mesh_primitives.insert({mesh_idx, move(primitives)});
@@ -1090,11 +1092,11 @@ namespace tempest::assets
         if (auto error = doc["nodes"].get(nodes); error == simdjson::SUCCESS)
         {
             // Apply transformations to node, apply child parent relationships to mesh entities and nodes
-            flat_unordered_map<uint32_t, ecs::entity> node_entities;
+            flat_unordered_map<uint32_t, ecs::archetype_entity> node_entities;
             uint32_t node_id = 0;
             for (const auto& node : nodes)
             {
-                auto parent_ent = registry.acquire_entity();
+                auto parent_ent = registry.create();
 
                 uint64_t mesh_id;
                 if (node["mesh"].get(mesh_id) == simdjson::error_code::SUCCESS)
@@ -1102,7 +1104,7 @@ namespace tempest::assets
                     auto mesh_prims = mesh_primitives.find(static_cast<uint32_t>(mesh_id));
                     if (mesh_prims != mesh_primitives.end())
                     {
-                        span<const ecs::entity> mesh_entities = mesh_prims->second;
+                        span<const ecs::archetype_entity> mesh_entities = mesh_prims->second;
                         for (const auto& mesh_ent : mesh_entities)
                         {
                             ecs::create_parent_child_relationship(registry, parent_ent, mesh_ent);
@@ -1171,7 +1173,7 @@ namespace tempest::assets
                     // TODO: Support matrix extration
                 }
 
-                registry.assign<ecs::transform_component>(parent_ent, transform);
+                registry.assign(parent_ent, transform);
 
                 node_entities.insert({node_id, parent_ent});
                 ++node_id;
@@ -1202,7 +1204,7 @@ namespace tempest::assets
             for (const auto& [id, e] : node_entities)
             {
                 // Get the relationship
-                auto rel = registry.try_get<ecs::relationship_component<ecs::entity>>(e);
+                auto rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(e);
                 if (rel == nullptr || rel->parent == ecs::tombstone)
                 {
                     ecs::create_parent_child_relationship(registry, ent, e);

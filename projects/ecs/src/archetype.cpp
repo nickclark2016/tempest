@@ -279,11 +279,174 @@ namespace tempest::ecs
 
     void basic_archetype_registry::destroy(typename basic_archetype_registry::entity_type entity)
     {
-        const auto& key = _entity_keys.at(entity);
+        const auto& key = _entity_archetype_mapping[entity];
 
         auto archetype_index = key.archetype_index;
         auto& archetype = _archetypes[archetype_index];
         archetype.erase(key.archetype_key);
-        _entity_keys.erase(entity);
+        _entities.release(entity);
+    }
+
+    typename basic_archetype_registry::entity_type basic_archetype_registry::duplicate(
+        typename basic_archetype_registry::entity_type src)
+    {
+        auto src_key = _entity_archetype_mapping[src];
+        auto& src_arch = _archetypes[src_key.archetype_index];
+
+        // Create a hash of the archetype without the non-duplicatable components
+        auto hash = _hashes[src_key.archetype_index];
+        for (size_t i = 0; i < src_arch.storages().size(); ++i)
+        {
+            if (!src_arch.storages()[i].type_info().should_duplicate)
+            {
+                hash.hash[src_arch.storages()[i].type_info().index / 8] &=
+                    static_cast<byte>(~(1 << (src_arch.storages()[i].type_info().index % 8)));
+            }
+        }
+
+        // We will always have a self_component, so add that to the hash
+        static const auto self_component_ti = create_archetype_type_info<self_component>();
+        const auto updated_byte = set_bit(static_cast<unsigned int>(hash.hash[self_component_ti.index / 8]), self_component_ti.index % 8);
+        hash.hash[self_component_ti.index / 8] = static_cast<byte>(updated_byte);
+
+        // Find the archetype
+        auto it = tempest::find(_hashes.begin(), _hashes.end(), hash);
+        if (it == _hashes.end())
+        {
+            // Create a new archetype
+            auto existing_storage_view = src_arch.storages();
+            vector<basic_archetype_type_info> new_types;
+            for (const auto& storage : existing_storage_view)
+            {
+                if (storage.type_info().should_duplicate)
+                {
+                    new_types.push_back(storage.type_info());
+                }
+            }
+
+            // Ensure self component exists
+            new_types.push_back(create_archetype_type_info<self_component>());
+
+            std::sort(new_types.begin(), new_types.end(),
+                      [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
+
+            _archetypes.emplace_back(new_types);
+            _hashes.push_back(hash);
+            it = _hashes.end() - 1;
+        }
+
+        auto new_archetype_index = tempest::distance(_hashes.begin(), it);
+
+        auto& new_arch = _archetypes[new_archetype_index];
+        auto new_key = new_arch.allocate();
+
+        // Copy the entity's data to the new archetype, skipping the non-duplicatable components
+        const auto& existing_hash = _hashes[src_key.archetype_index];
+        const auto& new_hash = _hashes[new_archetype_index];
+
+        size_t components_written = 0;
+
+        for (size_t i = 0; i < 256u; ++i)
+        {
+            // Test the bit at i
+            const bool existing_bit =
+                (existing_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
+            const bool new_bit = (new_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
+            auto existing_component_index = _index_of_component_in_archetype(src_key.archetype_index, i);
+            auto new_component_index = _index_of_component_in_archetype(new_archetype_index, i);
+            if (existing_bit && new_bit)
+            {
+                // Copy the component
+                auto existing_data = src_arch.element_at(src_key.archetype_key, existing_component_index);
+                auto new_data = new_arch.element_at(new_key, new_component_index);
+                copy_n(existing_data, src_arch.storages()[existing_component_index].type_info().size, new_data);
+
+                ++components_written;
+            }
+            // Early exit if we've copied all the components
+            if (components_written == new_arch.storages().size())
+            {
+                break;
+            }
+        }
+
+        // Create the new entity
+        basic_archetype_entity entity_payload = {
+            .archetype_key = new_key,
+            .archetype_index = static_cast<uint32_t>(new_archetype_index),
+        };
+
+        auto result = _entities.acquire();
+        _entity_archetype_mapping.insert(result, entity_payload);
+
+        replace(result, self_component{
+                            .entity = result,
+                        });
+
+        auto src_rel_comp = try_get<relationship_component<basic_archetype_registry::entity_type>>(src);
+        if (src_rel_comp != nullptr && src_rel_comp->first_child != tombstone)
+        {
+            auto child = src_rel_comp->first_child;
+            while (child != tombstone)
+            {
+                auto dup_child = duplicate(child);
+                create_parent_child_relationship(*this, result, dup_child);
+
+                auto sibling =
+                    try_get<relationship_component<basic_archetype_registry::entity_type>>(child)->next_sibling;
+                child = sibling;
+            }
+        }
+
+        return result;
+    }
+
+    void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
+                                          basic_archetype_registry::entity_type child)
+    {
+        using rel_comp_type = relationship_component<basic_archetype_registry::entity_type>;
+
+        // If the parent does not have a relationship component, create one
+        if (!reg.template has<rel_comp_type>(parent))
+        {
+            rel_comp_type rel{
+                .parent = tombstone,
+                .next_sibling = tombstone,
+                .first_child = tombstone,
+            };
+
+            reg.assign_or_replace(parent, rel);
+        }
+
+        // If the child does not have a relationship component, create one
+        if (!reg.template has<rel_comp_type>(child))
+        {
+            rel_comp_type rel{
+                .parent = parent,
+                .next_sibling = tombstone,
+                .first_child = tombstone,
+            };
+
+            reg.assign_or_replace(child, rel);
+        }
+
+        auto& opt_parent_rel = reg.template get<rel_comp_type>(parent);
+        auto& opt_child_rel = reg.template get<rel_comp_type>(child);
+
+        // If the parent has no children, set the child as the first child
+        // And the parent as the parent of the child
+        if (opt_parent_rel.first_child == ecs::tombstone)
+        {
+            opt_parent_rel.first_child = child;
+            opt_child_rel.parent = parent;
+        }
+        else
+        {
+            // Otherwise, set the first child of the parent as the next sibling of the child
+            // And the child as the first child of the parent
+            opt_child_rel.next_sibling = opt_parent_rel.first_child;
+            opt_child_rel.parent = parent;
+            opt_parent_rel.first_child = child;
+        }
     }
 } // namespace tempest::ecs

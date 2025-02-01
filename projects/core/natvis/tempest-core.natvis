@@ -55,6 +55,20 @@
         </Expand>
     </Type>
 
+    <Type Name="tempest::basic_string_view&lt;char,*&gt;">
+        <Intrinsic Name="size" Expression="(_end - _start)" />
+        <Intrinsic Name="data" Expression="_start" />
+        <DisplayString>{data(),[size()]na}</DisplayString>
+        <StringView>data(),[size()]na</StringView>
+        <Expand>
+            <Item Name="[size]" ExcludeView="simple">size()</Item>
+            <ArrayItems Condition="size() > 0">
+                <Size>size()</Size>
+                <ValuePointer>data()</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+
     <Type Name="tempest::vector&lt;*&gt;">
         <DisplayString>{{size = {_end - _data}}}</DisplayString>
         <Expand>
