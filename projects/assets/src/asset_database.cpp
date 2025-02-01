@@ -16,12 +16,12 @@ namespace tempest::assets
         _importers[string(extension)] = move(importer);
     }
 
-    ecs::entity asset_database::import(string_view path, ecs::registry& registry)
+    ecs::archetype_entity asset_database::import(string_view path, ecs::archetype_registry& registry)
     {
         auto extension_it = search_last_of(path, '.');
         if (extension_it == path.end())
         {
-            return ecs::null;
+            return ecs::tombstone;
         }
 
         auto importer_it = _importers.find(string(extension_it, path.end()));
@@ -35,7 +35,7 @@ namespace tempest::assets
             return ent;
         }
 
-        return ecs::null;
+        return ecs::tombstone;
     }
 
     guid asset_database::register_asset_metadata(asset_metadata meta)

@@ -6,18 +6,23 @@
 #include <tempest/functional.hpp>
 #include <tempest/int.hpp>
 #include <tempest/meta.hpp>
+#include <tempest/registry.hpp>
+#include <tempest/relationship_component.hpp>
 #include <tempest/slot_map.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/traits.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::ecs
 {
     struct basic_archetype_type_info
     {
+        string_view name;
         uint16_t size;
         uint16_t alignment;
         uint32_t index;
+        bool should_duplicate;
     };
 
     namespace detail
@@ -42,9 +47,11 @@ namespace tempest::ecs
         size_t index = detail::get_archetype_type_index<T>();
 
         basic_archetype_type_info ti = {
+            .name = core::get_type_name<T>(),
             .size = static_cast<uint16_t>(size),
             .alignment = static_cast<uint16_t>(alignment),
-            .index = static_cast<uint32_t>(index),
+            .index = static_cast<uint16_t>(index),
+            .should_duplicate = is_duplicatable_v<T>,
         };
 
         return ti;
@@ -196,10 +203,10 @@ namespace tempest::ecs
     class basic_archetype_registry
     {
       public:
-        using entity_type = uint64_t;
+        using entity_type = entity;
 
         template <typename... Ts>
-            requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
+            requires(is_trivial_v<Ts> && ...)
         entity_type create();
 
         template <typename... Ts>
@@ -226,10 +233,18 @@ namespace tempest::ecs
         template <typename T>
         const remove_cvref_t<T>& get(entity_type entity) const;
 
+        template <typename T>
+        remove_cvref_t<T>* try_get(entity_type entity) noexcept;
+
+        template <typename T>
+        const remove_cvref_t<T>* try_get(entity_type entity) const noexcept;
+
         template <typename... Ts>
         bool has(entity_type entity) const;
 
         size_t size() const noexcept;
+
+        entity_type duplicate(entity_type src);
 
         template <typename Fn>
         void each(Fn&& func);
@@ -237,23 +252,36 @@ namespace tempest::ecs
       private:
         vector<basic_archetype> _archetypes;
         vector<basic_archetype_types_hash<256u>> _hashes;
-        slot_map<basic_archetype_entity> _entity_keys;
+
+        basic_entity_store<entity_type, 4096, std::uint64_t> _entities;
+        sparse_map<basic_archetype_entity> _entity_archetype_mapping;
 
         size_t _index_of_component_in_archetype(size_t arch_index, size_t component_id) const;
     };
 
+    struct self_component
+    {
+        basic_archetype_registry::entity_type entity;
+    };
+
+    template <>
+    struct is_duplicatable<self_component> : false_type
+    {
+    };
+
     template <typename... Ts>
-        requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
+        requires(is_trivial_v<Ts> && ...)
     inline basic_archetype_registry::entity_type basic_archetype_registry::create()
     {
-        static const auto hash = detail::create_archetype_types_hash<256u, remove_cvref_t<Ts>...>();
+        static const auto hash = detail::create_archetype_types_hash<256u, self_component, remove_cvref_t<Ts>...>();
 
         // Check if the archetype already exists
         auto it = tempest::find(_hashes.begin(), _hashes.end(), hash);
         if (it == _hashes.end())
         {
             // Create a new archetype
-            array type_infos{create_archetype_type_info<remove_cvref_t<Ts>>()...};
+            array<basic_archetype_type_info, sizeof...(Ts) + 1> type_infos{
+                create_archetype_type_info<self_component>(), create_archetype_type_info<remove_cvref_t<Ts>>()...};
             std::sort(type_infos.begin(), type_infos.end(),
                       [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
             _archetypes.emplace_back(type_infos);
@@ -272,7 +300,13 @@ namespace tempest::ecs
             .archetype_index = archetype_index,
         };
 
-        return _entity_keys.insert(ent);
+        auto key = _entities.acquire();
+        _entity_archetype_mapping.insert(key, ent);
+
+        replace(key, self_component{
+                         .entity = key,
+                     });
+        return key;
     }
 
     template <typename... Ts>
@@ -288,7 +322,7 @@ namespace tempest::ecs
     inline remove_cvref_t<T>& basic_archetype_registry::assign(typename basic_archetype_registry::entity_type entity,
                                                                T&& component)
     {
-        auto key = _entity_keys.at(entity);
+        auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
 
         // Get the archetype
@@ -387,7 +421,8 @@ namespace tempest::ecs
         // Update the entity key
         key.archetype_key = arch_key;
         key.archetype_index = new_archetype_index;
-        _entity_keys.at(entity) = key;
+
+        _entity_archetype_mapping[entity] = key;
 
         return *result_ptr;
     }
@@ -399,7 +434,7 @@ namespace tempest::ecs
         using component_type = remove_cvref_t<T>;
         static const basic_archetype_type_info type_info = create_archetype_type_info<component_type>();
 
-        auto key = _entity_keys.at(entity);
+        auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
         const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
 
@@ -432,7 +467,7 @@ namespace tempest::ecs
         static const auto type_info_index = detail::get_archetype_type_index<component_type>();
         static const basic_archetype_type_info type_info = create_archetype_type_info<component_type>();
 
-        auto key = _entity_keys.at(entity);
+        auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
 
         auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
@@ -501,6 +536,8 @@ namespace tempest::ecs
         const auto& existing_hash = _hashes[archetype_index];
         const auto& new_hash = _hashes[new_archetype_index];
 
+        size_t components_written = 0;
+
         for (size_t i = 0; i < 256u; ++i)
         {
             // Test the bit at i
@@ -517,10 +554,12 @@ namespace tempest::ecs
                 auto existing_data = arch->element_at(key.archetype_key, existing_component_index);
                 auto new_data = new_arch.element_at(new_key, new_component_index);
                 copy_n(existing_data, arch->storages()[existing_component_index].type_info().size, new_data);
+
+                ++components_written;
             }
 
             // Early exit if we've copied all the components
-            if (new_component_index == new_arch.storages().size())
+            if (components_written == new_arch.storages().size())
             {
                 break;
             }
@@ -535,7 +574,7 @@ namespace tempest::ecs
             .archetype_index = static_cast<size_t>(new_archetype_index),
         };
 
-        _entity_keys.at(entity) = entity_key;
+        _entity_archetype_mapping[entity] = entity_key;
     }
 
     template <typename T>
@@ -544,7 +583,7 @@ namespace tempest::ecs
         using component_type = remove_cvref_t<T>;
         static const auto type_info = create_archetype_type_info<component_type>();
 
-        auto key = _entity_keys.at(entity);
+        auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
         const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
         auto& arch = _archetypes[archetype_index];
@@ -559,7 +598,7 @@ namespace tempest::ecs
         using component_type = remove_cvref_t<T>;
         static const auto type_info = create_archetype_type_info<component_type>();
 
-        auto key = _entity_keys.at(entity);
+        auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
         const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
         auto& arch = _archetypes[archetype_index];
@@ -567,11 +606,55 @@ namespace tempest::ecs
         return *reinterpret_cast<const T*>(data);
     }
 
+    template <typename T>
+    inline remove_cvref_t<T>* basic_archetype_registry::try_get(
+        typename basic_archetype_registry::entity_type entity) noexcept
+    {
+        using component_type = remove_cvref_t<T>;
+        static const auto type_info = create_archetype_type_info<component_type>();
+        basic_archetype_entity key = _entity_archetype_mapping[entity];
+
+        // Check if the archetype contains the component
+        const auto& hash = _hashes[key.archetype_index];
+        if ((hash.hash[type_info.index / 8] & static_cast<byte>(1 << (type_info.index % 8))) == static_cast<byte>(0))
+        {
+            return nullptr;
+        }
+
+        auto archetype_index = key.archetype_index;
+        const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
+        auto& arch = _archetypes[archetype_index];
+        auto data = arch.element_at(key.archetype_key, type_index);
+        return reinterpret_cast<remove_cvref_t<T>*>(data);
+    }
+
+    template <typename T>
+    inline const remove_cvref_t<T>* basic_archetype_registry::try_get(
+        typename basic_archetype_registry::entity_type entity) const noexcept
+    {
+        using component_type = remove_cvref_t<T>;
+        static const auto type_info = create_archetype_type_info<component_type>();
+        basic_archetype_entity key = _entity_archetype_mapping[entity];
+
+        // Check if the archetype contains the component
+        const auto& hash = _hashes[key.archetype_index];
+        if ((hash.hash[type_info.index / 8] & static_cast<byte>(1 << (type_info.index % 8))) == static_cast<byte>(0))
+        {
+            return nullptr;
+        }
+
+        auto archetype_index = key.archetype_index;
+        const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
+        auto& arch = _archetypes[archetype_index];
+        auto data = arch.element_at(key.archetype_key, type_index);
+        return reinterpret_cast<const remove_cvref_t<T>*>(data);
+    }
+
     template <typename... Ts>
     inline bool basic_archetype_registry::has(typename basic_archetype_registry::entity_type entity) const
     {
         static const auto hash = detail::create_archetype_types_hash<256u, remove_cvref_t<Ts>...>();
-        const auto& key = _entity_keys.at(entity);
+        const auto& key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
         const auto& arch_hash = _hashes[archetype_index];
 
@@ -590,7 +673,7 @@ namespace tempest::ecs
 
     inline size_t basic_archetype_registry::size() const noexcept
     {
-        return _entity_keys.size();
+        return _entities.size();
     }
 
     inline size_t basic_archetype_registry::_index_of_component_in_archetype(size_t arch_index,
@@ -646,8 +729,26 @@ namespace tempest::ecs
                 apply(tempest::forward<Fn>(fn), tempest::move(args), arg_indices{});
             }
         };
+
+        struct arch_index_iter
+        {
+            template <typename T>
+            static size_t index(size_t arch_index, auto storage_index_fetcher)
+            {
+                static const auto type_info = create_archetype_type_info<remove_cvref_t<T>>();
+                return storage_index_fetcher(arch_index, type_info.index);
+            }
+
+            template <size_t ArgCount, typename Args, size_t... Is>
+            static array<size_t, ArgCount> iterate(auto arch_index, auto storage_index_fetcher, index_sequence<Is...>)
+            {
+                array<size_t, ArgCount> args = {
+                    index<typename core::type_list_type_at<Is, Args>::type>(arch_index, storage_index_fetcher)...,
+                };
+                return args;
+            }
+        };
     } // namespace detail
-    // namespace detail
 
     template <typename Fn>
     inline void basic_archetype_registry::each(Fn&& func)
@@ -674,32 +775,15 @@ namespace tempest::ecs
             {
                 // Compute the index of the requested components in the archetype
                 // This is not the same as the index of the component in the hash
-                array<size_t, argument_count> argument_indices;
+                basic_archetype& arch = _archetypes[i];
 
-                size_t argument_indices_idx = 0;
-                size_t argument_index = 0;
-
-                for (size_t j = 0; j < 256u; ++j)
-                {
-                    // If the mask and hash bits are both set, this is a component we're interested in
-                    // If the hash bit is set, increment the argument index
-
-                    const bool mask_bit =
-                        (hash_mask.hash[j / 8] & static_cast<byte>(1 << (j % 8))) != static_cast<byte>(0);
-                    const bool hash_bit = (hash.hash[j / 8] & static_cast<byte>(1 << (j % 8))) != static_cast<byte>(0);
-
-                    if (mask_bit && hash_bit)
-                    {
-                        argument_indices[argument_indices_idx++] = _index_of_component_in_archetype(i, j);
-                    }
-
-                    if (mask_bit)
-                    {
-                        ++argument_index;
-                    }
-                }
-
-                auto& arch = _archetypes[i];
+                array<size_t, argument_count> argument_indices =
+                    detail::arch_index_iter::iterate<argument_count, typename fn_traits::argument_types>(
+                        i,
+                        [&](size_t arch_idx, size_t type_id) {
+                            return _index_of_component_in_archetype(arch_idx, type_id);
+                        },
+                        tempest::make_index_sequence<argument_count>());
 
                 for (size_t j = 0; j < arch.size(); ++j)
                 {
@@ -719,6 +803,312 @@ namespace tempest::ecs
             }
         }
     }
+
+    using archetype_registry = basic_archetype_registry;
+
+    class basic_archetype_entity_hierarchy_iterator
+    {
+      public:
+        using value_type = basic_archetype_registry::entity_type;
+        using difference_type = ptrdiff_t;
+
+        basic_archetype_entity_hierarchy_iterator(const basic_archetype_registry& reg,
+                                                  basic_archetype_registry::entity_type root, size_t level) noexcept;
+
+        basic_archetype_entity_hierarchy_iterator& operator++() noexcept;
+        basic_archetype_entity_hierarchy_iterator operator++(int) noexcept;
+
+        value_type operator*() const noexcept;
+
+      private:
+        const basic_archetype_registry* _registry;
+        basic_archetype_registry::entity_type _current;
+        size_t _level;
+    };
+
+    inline basic_archetype_entity_hierarchy_iterator::basic_archetype_entity_hierarchy_iterator(
+        const basic_archetype_registry& reg, basic_archetype_registry::entity_type root, size_t level) noexcept
+        : _registry{&reg}, _current{root}, _level{level}
+    {
+    }
+
+    inline typename basic_archetype_entity_hierarchy_iterator::value_type basic_archetype_entity_hierarchy_iterator::
+    operator*() const noexcept
+    {
+        return _current;
+    }
+
+    inline basic_archetype_entity_hierarchy_iterator& basic_archetype_entity_hierarchy_iterator::operator++() noexcept
+    {
+        auto rel_comp = _registry->try_get<relationship_component<basic_archetype_registry::entity_type>>(_current);
+        if (rel_comp == nullptr)
+        {
+            _current = tombstone;
+            return *this;
+        }
+
+        if (rel_comp->first_child != tombstone)
+        {
+            _current = rel_comp->first_child;
+            ++_level;
+            return *this;
+        }
+
+        if (rel_comp->next_sibling != tombstone)
+        {
+            _current = rel_comp->next_sibling;
+            return *this;
+        }
+
+        while (rel_comp->parent != tombstone)
+        {
+            --_level;
+
+            if (_level == 0) // Reached the root
+            {
+                _current = tombstone;
+                return *this;
+            }
+
+            auto parent_rel_comp =
+                _registry->try_get<relationship_component<basic_archetype_registry::entity_type>>(rel_comp->parent);
+
+            if (parent_rel_comp == nullptr) [[unlikely]]
+            {
+                _current = tombstone;
+                return *this;
+            }
+
+            if (parent_rel_comp->next_sibling != tombstone)
+            {
+                _current = parent_rel_comp->next_sibling;
+                return *this;
+            }
+
+            rel_comp = parent_rel_comp;
+        }
+
+        tempest::unreachable();
+    }
+
+    inline basic_archetype_entity_hierarchy_iterator basic_archetype_entity_hierarchy_iterator::operator++(int) noexcept
+    {
+        auto copy = *this;
+        ++(*this);
+        return copy;
+    }
+
+    inline bool operator==(const basic_archetype_entity_hierarchy_iterator& lhs,
+                           const basic_archetype_entity_hierarchy_iterator& rhs) noexcept
+    {
+        return *lhs == *rhs;
+    }
+
+    inline bool operator!=(const basic_archetype_entity_hierarchy_iterator& lhs,
+                           const basic_archetype_entity_hierarchy_iterator& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    class basic_archetype_entity_hierarchy_view
+    {
+      public:
+        using iterator = basic_archetype_entity_hierarchy_iterator;
+        using const_iterator = basic_archetype_entity_hierarchy_iterator;
+
+        basic_archetype_entity_hierarchy_view(const basic_archetype_registry& reg,
+                                              basic_archetype_registry::entity_type root) noexcept;
+
+        iterator begin() noexcept;
+        const_iterator begin() const noexcept;
+        const_iterator cbegin() const noexcept;
+
+        iterator end() noexcept;
+        const_iterator end() const noexcept;
+        const_iterator cend() const noexcept;
+
+      private:
+        const basic_archetype_registry* _registry;
+        basic_archetype_registry::entity_type _root;
+    };
+
+    inline basic_archetype_entity_hierarchy_view::basic_archetype_entity_hierarchy_view(
+        const basic_archetype_registry& reg, basic_archetype_registry::entity_type root) noexcept
+        : _registry{&reg}, _root{root}
+    {
+    }
+
+    inline typename basic_archetype_entity_hierarchy_view::iterator basic_archetype_entity_hierarchy_view::
+        begin() noexcept
+    {
+        return {*_registry, _root, 0};
+    }
+
+    inline typename basic_archetype_entity_hierarchy_view::const_iterator basic_archetype_entity_hierarchy_view::begin()
+        const noexcept
+    {
+        return {*_registry, _root, 0};
+    }
+
+    inline typename basic_archetype_entity_hierarchy_view::const_iterator basic_archetype_entity_hierarchy_view::
+        cbegin() const noexcept
+    {
+        return {*_registry, _root, 0};
+    }
+
+    inline typename basic_archetype_entity_hierarchy_view::iterator basic_archetype_entity_hierarchy_view::
+        end() noexcept
+    {
+        return {*_registry, tombstone, 0};
+    }
+
+    inline typename basic_archetype_entity_hierarchy_view::const_iterator basic_archetype_entity_hierarchy_view::end()
+        const noexcept
+    {
+        return {*_registry, tombstone, 0};
+    }
+
+    inline typename basic_archetype_entity_hierarchy_view::const_iterator basic_archetype_entity_hierarchy_view::cend()
+        const noexcept
+    {
+        return {*_registry, tombstone, 0};
+    }
+
+    class basic_archetype_entity_ancestor_iterator
+    {
+      public:
+        using value_type = basic_archetype_registry::entity_type;
+        using difference_type = ptrdiff_t;
+
+        basic_archetype_entity_ancestor_iterator(const basic_archetype_registry& reg,
+                                                 basic_archetype_registry::entity_type root) noexcept;
+
+        basic_archetype_entity_ancestor_iterator& operator++() noexcept;
+        basic_archetype_entity_ancestor_iterator operator++(int) noexcept;
+
+        value_type operator*() const noexcept;
+
+      private:
+        const basic_archetype_registry* _registry;
+        basic_archetype_registry::entity_type _current;
+    };
+
+    inline basic_archetype_entity_ancestor_iterator::basic_archetype_entity_ancestor_iterator(
+        const basic_archetype_registry& reg, basic_archetype_registry::entity_type root) noexcept
+        : _registry{&reg}, _current{root}
+    {
+    }
+
+    inline typename basic_archetype_entity_ancestor_iterator::value_type basic_archetype_entity_ancestor_iterator::
+    operator*() const noexcept
+    {
+        return _current;
+    }
+
+    inline basic_archetype_entity_ancestor_iterator& basic_archetype_entity_ancestor_iterator::operator++() noexcept
+    {
+        auto rel_comp =
+            _registry->template try_get<relationship_component<basic_archetype_registry::entity_type>>(_current);
+
+        if (rel_comp == nullptr)
+        {
+            _current = tombstone;
+            return *this;
+        }
+
+        _current = rel_comp->parent;
+        return *this;
+    }
+
+    inline basic_archetype_entity_ancestor_iterator basic_archetype_entity_ancestor_iterator::operator++(int) noexcept
+    {
+        auto copy = *this;
+        ++(*this);
+        return copy;
+    }
+
+    inline bool operator==(const basic_archetype_entity_ancestor_iterator& lhs,
+                           const basic_archetype_entity_ancestor_iterator& rhs) noexcept
+    {
+        return *lhs == *rhs;
+    }
+
+    inline bool operator!=(const basic_archetype_entity_ancestor_iterator& lhs,
+                           const basic_archetype_entity_ancestor_iterator& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    class basic_archetype_entity_ancestor_view
+    {
+      public:
+        using iterator = basic_archetype_entity_ancestor_iterator;
+        using const_iterator = basic_archetype_entity_ancestor_iterator;
+        basic_archetype_entity_ancestor_view(const basic_archetype_registry& reg,
+                                             basic_archetype_registry::entity_type root) noexcept;
+        iterator begin() noexcept;
+        const_iterator begin() const noexcept;
+        const_iterator cbegin() const noexcept;
+        iterator end() noexcept;
+        const_iterator end() const noexcept;
+        const_iterator cend() const noexcept;
+
+      private:
+        const basic_archetype_registry* _registry;
+        basic_archetype_registry::entity_type _root;
+    };
+
+    inline basic_archetype_entity_ancestor_view::basic_archetype_entity_ancestor_view(
+        const basic_archetype_registry& reg, basic_archetype_registry::entity_type root) noexcept
+        : _registry{&reg}, _root{root}
+    {
+    }
+
+    inline typename basic_archetype_entity_ancestor_view::iterator basic_archetype_entity_ancestor_view::
+        begin() noexcept
+    {
+        return {*_registry, _root};
+    }
+
+    inline typename basic_archetype_entity_ancestor_view::const_iterator basic_archetype_entity_ancestor_view::begin()
+        const noexcept
+    {
+        return {*_registry, _root};
+    }
+
+    inline typename basic_archetype_entity_ancestor_view::const_iterator basic_archetype_entity_ancestor_view::cbegin()
+        const noexcept
+    {
+        return {*_registry, _root};
+    }
+
+    inline typename basic_archetype_entity_ancestor_view::iterator basic_archetype_entity_ancestor_view::end() noexcept
+    {
+        return {*_registry, tombstone};
+    }
+
+    inline typename basic_archetype_entity_ancestor_view::const_iterator basic_archetype_entity_ancestor_view::end()
+        const noexcept
+    {
+        return {*_registry, tombstone};
+    }
+
+    inline typename basic_archetype_entity_ancestor_view::const_iterator basic_archetype_entity_ancestor_view::cend()
+        const noexcept
+    {
+        return {*_registry, tombstone};
+    }
+
+    void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
+                                          basic_archetype_registry::entity_type child);
+
+    using archetype_entity_hierarchy_iterator = basic_archetype_entity_hierarchy_iterator;
+    using archetype_entity_hierarchy_view = basic_archetype_entity_hierarchy_view;
+
+    using archetype_entity_ancestor_iterator = basic_archetype_entity_ancestor_iterator;
+    using archetype_entity_ancestor_view = basic_archetype_entity_ancestor_view;
+
+    using archetype_entity = basic_archetype_registry::entity_type;
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_archetype_hpp

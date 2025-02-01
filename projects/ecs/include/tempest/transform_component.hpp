@@ -10,6 +10,17 @@ namespace tempest::ecs
     class transform_component
     {
       public:
+        static constexpr transform_component identity() noexcept
+        {
+            transform_component tx;
+            tx._position = math::vec3<float>(0.0f);
+            tx._rotation = math::vec3<float>(0.0f);
+            tx._scale = math::vec3<float>(1.0f);
+            tx._transform = math::mat4<float>(1.0f);
+
+            return tx;
+        }
+
         math::vec3<float> position() const noexcept
         {
             return _position;
@@ -49,10 +60,10 @@ namespace tempest::ecs
         }
 
       private:
-        math::vec3<float> _position{0.0f};
-        math::vec3<float> _rotation{0.0f};
-        math::vec3<float> _scale{1.0f};
-        math::mat4<float> _transform{1.0f};
+        math::vec3<float> _position;
+        math::vec3<float> _rotation;
+        math::vec3<float> _scale;
+        math::mat4<float> _transform;
 
         void _build_transform()
         {

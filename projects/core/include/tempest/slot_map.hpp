@@ -149,6 +149,8 @@ namespace tempest
         iterator find(key_type key) noexcept;
         const_iterator find(key_type key) const noexcept;
 
+        size_t index_of(key_type key) const noexcept;
+
         void swap(slot_map& other) noexcept;
 
       private:
@@ -476,6 +478,13 @@ namespace tempest
         }
 
         return end();
+    }
+
+    template <typename T, typename Allocator>
+    inline size_t slot_map<T, Allocator>::index_of(key_type key) const noexcept
+    {
+        const auto key_index = get_slot_map_key_id(key);
+        return key_index;
     }
 
     template <typename T, typename Allocator>

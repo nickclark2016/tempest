@@ -1,6 +1,7 @@
 #ifndef tempest_assets_asset_database_hpp
 #define tempest_assets_asset_database_hpp
 
+#include <tempest/archetype.hpp>
 #include <tempest/asset_importer.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
@@ -13,7 +14,9 @@
 
 namespace tempest::assets
 {
-    struct prefab_tag_t{};
+    struct prefab_tag_t
+    {
+    };
 
     inline constexpr prefab_tag_t prefab_tag{};
 
@@ -30,7 +33,7 @@ namespace tempest::assets
                        core::material_registry* material_reg) noexcept;
 
         void register_importer(unique_ptr<asset_importer> importer, string_view extension);
-        [[nodiscard]] ecs::entity import(string_view path, ecs::registry& registry);
+        [[nodiscard]] ecs::archetype_entity import(string_view path, ecs::archetype_registry& registry);
         [[nodiscard]] guid register_asset_metadata(asset_metadata meta);
         [[nodiscard]] optional<const asset_metadata&> get_asset_metadata(guid id) const;
 
@@ -55,6 +58,6 @@ namespace tempest::ecs
     struct is_duplicatable<assets::prefab_tag_t> : false_type
     {
     };
-}
+} // namespace tempest::ecs
 
 #endif // tempest_assets_asset_database_hpp

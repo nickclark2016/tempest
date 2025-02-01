@@ -16,7 +16,7 @@ namespace tempest
     } // namespace
 
     engine::engine()
-        : _asset_database{&_mesh_reg, &_texture_reg, &_material_reg}, _render_system{_entity_registry}
+        : _asset_database{&_mesh_reg, &_texture_reg, &_material_reg}, _render_system{_archetype_entity_registry}
     {
     }
 
@@ -101,13 +101,13 @@ namespace tempest
         _render_system.on_close();
     }
 
-    ecs::entity engine::load_entity(ecs::entity src)
+    ecs::archetype_entity engine::load_entity(ecs::archetype_entity src)
     {
-        auto dst = _entity_registry.duplicate(src);
+        auto dst = _archetype_entity_registry.duplicate(src);
 
         // TODO: Move this logic to the render system
         // Iterate over all of the entities and upload the mesh, material, and textures
-        auto hierarchy = ecs::descendant_entity_view(_entity_registry, dst);
+        auto hierarchy = ecs::archetype_entity_hierarchy_view(_archetype_entity_registry, dst);
 
         vector<guid> mesh_guids;
         vector<guid> material_guids;
@@ -116,8 +116,8 @@ namespace tempest
         for (auto e : hierarchy)
         {
             // Get the mesh, material, and transform components
-            auto mesh_comp = _entity_registry.try_get<core::mesh_component>(e);
-            auto material_comp = _entity_registry.try_get<core::material_component>(e);
+            auto mesh_comp = _archetype_entity_registry.try_get<core::mesh_component>(e);
+            auto material_comp = _archetype_entity_registry.try_get<core::material_component>(e);
 
             if (mesh_comp != nullptr && material_comp != nullptr)
             {
@@ -175,8 +175,8 @@ namespace tempest
         // Assign the mesh layouts to render components
         for (auto e : hierarchy)
         {
-            auto mesh_comp = _entity_registry.try_get<core::mesh_component>(e);
-            auto material_comp = _entity_registry.try_get<core::material_component>(e);
+            auto mesh_comp = _archetype_entity_registry.try_get<core::mesh_component>(e);
+            auto material_comp = _archetype_entity_registry.try_get<core::material_component>(e);
 
             if (mesh_comp != nullptr && material_comp != nullptr)
             {
@@ -193,11 +193,11 @@ namespace tempest
                     .object_id = static_cast<uint32_t>(_render_system.acquire_new_object()),
                 };
 
-                _entity_registry.assign(e, renderable);
+                _archetype_entity_registry.assign_or_replace(e, renderable);
 
-                if (!_entity_registry.has<ecs::transform_component>(e))
+                if (!_archetype_entity_registry.has<ecs::transform_component>(e))
                 {
-                    _entity_registry.assign(e, ecs::transform_component{});
+                    _archetype_entity_registry.assign(e, ecs::transform_component{});
                 }
             }
         }

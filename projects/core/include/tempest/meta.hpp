@@ -24,7 +24,7 @@ namespace tempest::core
 #if defined(_MSC_VER) && !defined(__clang__)
         std::string_view prefix = "auto __cdecl tempest::core::get_type_name<";
         std::string_view suffix = ">(void) noexcept";
-#elif defined (_MSC_VER) && defined (__clang__)
+#elif defined(_MSC_VER) && defined(__clang__)
         std::string_view prefix = "auto __cdecl tempest::core::get_type_name(void) [T = ";
         std::string_view suffix = "]";
 #elif defined(__clang__)
@@ -120,6 +120,30 @@ namespace tempest::core
 
     template <typename T>
     inline constexpr size_t type_list_size_v = type_list_size<T>::value;
+
+    namespace detail
+    {
+        // Get index of a type in a type list
+        template <size_t N, typename T1, typename... Ts>
+        struct type_list_n_helper : type_list_n_helper<N - 1, Ts...>
+        {
+        };
+
+        template <typename T1, typename... Ts>
+        struct type_list_n_helper<0, T1, Ts...>
+        {
+            using type = T1;
+        };
+    } // namespace detail
+
+    template <size_t N, typename... Ts>
+    struct type_list_type_at;
+
+    template <size_t N, typename... Ts>
+    struct type_list_type_at<N, type_list<Ts...>>
+    {
+        using type = detail::type_list_n_helper<N, Ts...>::type;
+    };
 
     template <template <typename...> typename T, typename...>
     struct instantiate;
