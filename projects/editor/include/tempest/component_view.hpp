@@ -1,7 +1,7 @@
 #ifndef tempest_editor_component_view_hpp
 #define tempest_editor_component_view_hpp
 
-#include <tempest/registry.hpp>
+#include <tempest/archetype.hpp>
 
 namespace tempest::editor
 {
@@ -10,7 +10,7 @@ namespace tempest::editor
       public:
         virtual ~component_view_factory() = default;
 
-        virtual bool create_view(ecs::registry& registry, ecs::entity ent) const = 0;
+        virtual bool create_view(ecs::archetype_registry& registry, ecs::entity ent) const = 0;
     };
 } // namespace tempest::editor
 

@@ -11,7 +11,7 @@ namespace tempest::editor
     class camera_component_view : public component_view_factory
     {
       public:
-        bool create_view(tempest::ecs::registry& reg, tempest::ecs::entity ent) const override
+        bool create_view(tempest::ecs::archetype_registry& reg, tempest::ecs::entity ent) const override
         {
             if (graphics::camera_component* comp = reg.try_get<graphics::camera_component>(ent))
             {

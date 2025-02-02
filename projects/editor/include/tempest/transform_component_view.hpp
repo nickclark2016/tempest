@@ -10,7 +10,7 @@ namespace tempest::editor
     class transform_component_view : public component_view_factory
     {
       public:
-        bool create_view(ecs::registry& reg, ecs::entity ent) const override
+        bool create_view(ecs::archetype_registry& reg, ecs::entity ent) const override
         {
             if (ecs::transform_component* tc = reg.try_get<ecs::transform_component>(ent))
             {

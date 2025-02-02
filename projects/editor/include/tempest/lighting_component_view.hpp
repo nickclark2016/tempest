@@ -9,7 +9,7 @@ namespace tempest::editor
 {
     struct directional_lighting_component_view : component_view_factory
     {
-        bool create_view(ecs::registry& registry, ecs::entity ent) const override
+        bool create_view(ecs::archetype_registry& registry, ecs::entity ent) const override
         {
             if (auto dir_light = registry.try_get<graphics::directional_light_component>(ent))
             {
@@ -41,7 +41,7 @@ namespace tempest::editor
 
     struct point_light_component_view : component_view_factory
     {
-        bool create_view(ecs::registry& registry, ecs::entity ent) const override
+        bool create_view(ecs::archetype_registry& registry, ecs::entity ent) const override
         {
             if (auto point_light = registry.try_get<graphics::point_light_component>(ent))
             {
@@ -92,7 +92,7 @@ namespace tempest::editor
 
     struct shadow_map_component_view : component_view_factory
     {
-        bool create_view(ecs::registry& registry, ecs::entity ent) const override
+        bool create_view(ecs::archetype_registry& registry, ecs::entity ent) const override
         {
             if (auto shadows = registry.try_get<graphics::shadow_map_component>(ent))
             {

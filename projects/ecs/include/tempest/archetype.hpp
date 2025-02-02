@@ -6,10 +6,12 @@
 #include <tempest/functional.hpp>
 #include <tempest/int.hpp>
 #include <tempest/meta.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/registry.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/slot_map.hpp>
 #include <tempest/span.hpp>
+#include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/traits.hpp>
 #include <tempest/vector.hpp>
@@ -249,12 +251,17 @@ namespace tempest::ecs
         template <typename Fn>
         void each(Fn&& func);
 
+        optional<string_view> name(entity_type entity) const;
+        void name(entity_type entity, string_view name);
+
       private:
         vector<basic_archetype> _archetypes;
         vector<basic_archetype_types_hash<256u>> _hashes;
 
         basic_entity_store<entity_type, 4096, std::uint64_t> _entities;
         sparse_map<basic_archetype_entity> _entity_archetype_mapping;
+
+        flat_unordered_map<entity, tempest::string> _names;
 
         size_t _index_of_component_in_archetype(size_t arch_index, size_t component_id) const;
     };
@@ -370,50 +377,27 @@ namespace tempest::ecs
 
         auto arch_key = new_arch.allocate();
 
-        // Copy the entity's data to the new archetype, skipping the newly added component
-        auto& existing_hash = _hashes[archetype_index];
-        const auto& new_hash = _hashes[new_archetype_index];
+        existing_arch = &_archetypes[archetype_index];
 
-        existing_arch = &_archetypes[key.archetype_index];
-
-        component_type* result_ptr = nullptr;
-
-        size_t components_written = 0;
-
-        for (size_t i = 0; i < 256u; ++i)
+        // Copy the existing components
+        for (size_t i = 0; i < existing_arch->storages().size(); ++i)
         {
-            // Test the bit at i
-            const bool existing_bit =
-                (existing_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
-            const bool new_bit = (new_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
+            auto ti = existing_arch->storages()[i].type_info();
+            auto storage_index = ti.index;
+            auto existing_component_index = _index_of_component_in_archetype(archetype_index, storage_index);
+            auto new_component_index = _index_of_component_in_archetype(new_archetype_index, storage_index);
 
-            auto existing_component_index = _index_of_component_in_archetype(archetype_index, i);
-            auto new_component_index = _index_of_component_in_archetype(new_archetype_index, i);
+            auto existing_data = existing_arch->element_at(key.archetype_key, existing_component_index);
+            auto new_data = new_arch.element_at(arch_key, new_component_index);
 
-            if (existing_bit && new_bit)
-            {
-                // Copy the component
-                auto existing_data = existing_arch->element_at(key.archetype_key, existing_component_index);
-                auto new_data = new_arch.element_at(arch_key, new_component_index);
-                copy_n(existing_data, existing_arch->storages()[existing_component_index].type_info().size, new_data);
-
-                ++components_written;
-            }
-            else if (new_bit)
-            {
-                // Initialize the component
-                auto new_data = new_arch.element_at(arch_key, new_component_index);
-                result_ptr = construct_at(reinterpret_cast<remove_cvref_t<T>*>(new_data), component);
-
-                ++components_written;
-            }
-
-            // Early exit if we've copied all the components
-            if (components_written == new_arch.storages().size())
-            {
-                break;
-            }
+            copy_n(existing_data, ti.size, new_data);
         }
+
+        // Get the pointer to the new component
+        auto new_component_ti = create_archetype_type_info<component_type>();
+        auto new_component_index = _index_of_component_in_archetype(new_archetype_index, new_component_ti.index);
+        auto new_component_ptr = new_arch.element_at(arch_key, new_component_index);
+        component_type* result_ptr = construct_at(reinterpret_cast<remove_cvref_t<T>*>(new_component_ptr), component);
 
         // Erase the old entity
         existing_arch->erase(key.archetype_key);
@@ -653,22 +637,12 @@ namespace tempest::ecs
     template <typename... Ts>
     inline bool basic_archetype_registry::has(typename basic_archetype_registry::entity_type entity) const
     {
-        static const auto hash = detail::create_archetype_types_hash<256u, remove_cvref_t<Ts>...>();
-        const auto& key = _entity_archetype_mapping[entity];
-        auto archetype_index = key.archetype_index;
-        const auto& arch_hash = _hashes[archetype_index];
-
-        // Test to ensure each bit set in hash is set in arch_hash
-        // TODO: Vectorize this
-        for (size_t i = 0; i < 256u / 8u; ++i)
-        {
-            if ((hash.hash[i] & arch_hash.hash[i]) != hash.hash[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
+        auto key = _entity_archetype_mapping[entity];
+        auto len = _archetypes[key.archetype_index].storages().size();
+        return (((_index_of_component_in_archetype(key.archetype_index,
+                                                   create_archetype_type_info<remove_cvref_t<Ts>>().index) != len) &&
+                 ...) &&
+                true);
     }
 
     inline size_t basic_archetype_registry::size() const noexcept
