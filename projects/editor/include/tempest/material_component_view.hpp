@@ -16,7 +16,7 @@ namespace tempest::editor
         {
         }
 
-        bool create_view(tempest::ecs::registry& reg, tempest::ecs::entity ent) const override
+        bool create_view(tempest::ecs::archetype_registry& reg, tempest::ecs::entity ent) const override
         {
             if (auto mat_comp = reg.try_get<core::material_component>(ent))
             {

@@ -3,6 +3,7 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/files.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transformations.hpp>
@@ -21,6 +22,10 @@ namespace tempest::assets
 
     namespace
     {
+        auto log = logger::logger_factory::create({
+            .prefix = "tempest::gltf_importer",
+        });
+
         enum class component_type : uint32_t
         {
             BYTE = 5120,
@@ -1058,7 +1063,6 @@ namespace tempest::assets
                     };
 
                     auto prim_ent = registry.create<core::mesh_component, ecs::transform_component>();
-
                     ecs::transform_component default_tx = ecs::transform_component::identity();
 
                     registry.replace(prim_ent, mesh_comp);
@@ -1080,7 +1084,9 @@ namespace tempest::assets
                 std::string_view name;
                 if (auto mesh_error = mesh["name"].get(name); mesh_error == simdjson::SUCCESS)
                 {
-                    // registry.name(ent, name);
+                    string_view name_sv{name.begin(), name.end()};
+
+                    registry.name(ent, name_sv);
                 }
 
                 mesh_primitives.insert({mesh_idx, move(primitives)});
@@ -1113,7 +1119,7 @@ namespace tempest::assets
                 }
 
                 // Get the transform
-                ecs::transform_component transform;
+                ecs::transform_component transform = ecs::transform_component::identity();
 
                 sjd::array translation;
                 if (node["translation"].get(translation) == simdjson::error_code::SUCCESS)

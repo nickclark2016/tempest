@@ -341,33 +341,15 @@ namespace tempest::ecs
         auto new_key = new_arch.allocate();
 
         // Copy the entity's data to the new archetype, skipping the non-duplicatable components
-        const auto& existing_hash = _hashes[src_key.archetype_index];
-        const auto& new_hash = _hashes[new_archetype_index];
-
-        size_t components_written = 0;
-
-        for (size_t i = 0; i < 256u; ++i)
+        for (const auto& storage : new_arch.storages())
         {
-            // Test the bit at i
-            const bool existing_bit =
-                (existing_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
-            const bool new_bit = (new_hash.hash[i / 8] & static_cast<byte>(1 << (i % 8))) != static_cast<byte>(0);
-            auto existing_component_index = _index_of_component_in_archetype(src_key.archetype_index, i);
-            auto new_component_index = _index_of_component_in_archetype(new_archetype_index, i);
-            if (existing_bit && new_bit)
-            {
-                // Copy the component
-                auto existing_data = src_arch.element_at(src_key.archetype_key, existing_component_index);
-                auto new_data = new_arch.element_at(new_key, new_component_index);
-                copy_n(existing_data, src_arch.storages()[existing_component_index].type_info().size, new_data);
+            const auto index = storage.type_info().index;
+            auto src_index = _index_of_component_in_archetype(src_key.archetype_index, index);
+            auto dst_index = _index_of_component_in_archetype(new_archetype_index, index);
 
-                ++components_written;
-            }
-            // Early exit if we've copied all the components
-            if (components_written == new_arch.storages().size())
-            {
-                break;
-            }
+            auto src_bytes = src_arch.element_at(src_key.archetype_key, src_index);
+            auto dst_bytes = new_arch.element_at(new_key, dst_index);
+            copy_n(src_bytes, storage.type_info().size, dst_bytes);
         }
 
         // Create the new entity
@@ -382,6 +364,12 @@ namespace tempest::ecs
         replace(result, self_component{
                             .entity = result,
                         });
+
+        // If the entity has a name, copy the name to the new entity
+        if (auto n = name(src); n.has_value())
+        {
+            name(result, *n);
+        }
 
         auto src_rel_comp = try_get<relationship_component<basic_archetype_registry::entity_type>>(src);
         if (src_rel_comp != nullptr && src_rel_comp->first_child != tombstone)
@@ -401,13 +389,27 @@ namespace tempest::ecs
         return result;
     }
 
+    optional<string_view> basic_archetype_registry::name(entity_type entity) const
+    {
+        if (auto it = _names.find(entity); it != _names.end())
+        {
+            return it->second;
+        }
+        return none();
+    }
+
+    void basic_archetype_registry::name(entity_type entity, string_view name)
+    {
+        _names[entity] = name;
+    }
+
     void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
                                           basic_archetype_registry::entity_type child)
     {
         using rel_comp_type = relationship_component<basic_archetype_registry::entity_type>;
 
         // If the parent does not have a relationship component, create one
-        if (!reg.template has<rel_comp_type>(parent))
+        if (!reg.has<rel_comp_type>(parent))
         {
             rel_comp_type rel{
                 .parent = tombstone,
@@ -419,7 +421,7 @@ namespace tempest::ecs
         }
 
         // If the child does not have a relationship component, create one
-        if (!reg.template has<rel_comp_type>(child))
+        if (!reg.has<rel_comp_type>(child))
         {
             rel_comp_type rel{
                 .parent = parent,
@@ -430,8 +432,8 @@ namespace tempest::ecs
             reg.assign_or_replace(child, rel);
         }
 
-        auto& opt_parent_rel = reg.template get<rel_comp_type>(parent);
-        auto& opt_child_rel = reg.template get<rel_comp_type>(child);
+        auto& opt_parent_rel = reg.get<rel_comp_type>(parent);
+        auto& opt_child_rel = reg.get<rel_comp_type>(child);
 
         // If the parent has no children, set the child as the first child
         // And the parent as the parent of the child

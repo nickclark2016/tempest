@@ -6,18 +6,18 @@ namespace tempest::editor
 {
     void hierarchy_view::update(tempest::engine& eng)
     {
-        auto& registry = eng.get_registry();
+        auto& registry = eng.get_archetype_registry();
 
         _create_entities_view(registry);
     }
 
-    void hierarchy_view::_create_entities_view(tempest::ecs::registry& registry)
+    void hierarchy_view::_create_entities_view(tempest::ecs::archetype_registry& registry)
     {
         // Get all root-level entities
         std::vector<tempest::ecs::entity> root_entities;
 
-        for (auto ent : registry.entities())
-        {
+        registry.each([&](ecs::self_component self) {
+            auto ent = self.entity;
             auto* relationship = registry.try_get<tempest::ecs::relationship_component<tempest::ecs::entity>>(ent);
 
             if (relationship && relationship->parent == tempest::ecs::null)
@@ -28,7 +28,7 @@ namespace tempest::editor
             {
                 root_entities.push_back(ent);
             }
-        }
+        });
 
         for (auto root : root_entities)
         {
@@ -36,7 +36,7 @@ namespace tempest::editor
         }
     }
 
-    void hierarchy_view::_create_entities_view_dfs(ecs::registry& registry, ecs::entity parent)
+    void hierarchy_view::_create_entities_view_dfs(ecs::archetype_registry& registry, ecs::entity parent)
     {
         using traits_type = tempest::ecs::registry::traits_type;
         using imgui = tempest::graphics::imgui_context;
@@ -53,7 +53,7 @@ namespace tempest::editor
 
         if (ent_name && !ent_name->empty())
         {
-            name = std::string{*ent_name};
+            name = std::string{ent_name->cbegin(), ent_name->cend()};
         }
         else
         {

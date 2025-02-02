@@ -676,44 +676,6 @@ namespace tempest::graphics
                                 lights_written++;
                             }
                         });
-
-                        // for (const auto& [ent, dir_light, shadows] : lights_with_shadows)
-                        //{
-                        //     for (auto i = 0u; i < shadows.cascade_count; ++i)
-                        //     {
-                        //         const auto& params = _cpu_shadow_map_build_params[lights_written];
-                        //         const auto& region = params.shadow_map_bounds;
-
-                        //        // Set up viewport and scissor test
-                        //        cmds.set_scissor_region(region.x, region.y, region.z, region.w)
-                        //            .set_viewport(static_cast<float>(region.x), static_cast<float>(region.y),
-                        //                          static_cast<float>(region.z), static_cast<float>(region.w), 0.0f,
-                        //                          1.0f, false);
-
-                        //        // Push the shadow map projection matrix
-                        //        cmds.push_constants(0, params.proj_matrix, _directional_shadow_map_pipeline);
-
-                        //        uint32_t draw_calls_issued = 0;
-                        //        for (auto [key, batch] : _draw_batches)
-                        //        {
-                        //            if (key.alpha_type == alpha_behavior::OPAQUE ||
-                        //                key.alpha_type == alpha_behavior::MASK)
-                        //            {
-                        //                cmds.draw_indexed(
-                        //                    _indirect_buffer,
-                        //                    static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                        //                                          draw_calls_issued *
-                        //                                          sizeof(indexed_indirect_command)),
-                        //                    static_cast<uint32_t>(batch.objects.size()),
-                        //                    sizeof(indexed_indirect_command));
-
-                        //                draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
-                        //            }
-                        //        }
-
-                        //        lights_written++;
-                        //    }
-                        //}
                     });
             });
 
@@ -836,7 +798,7 @@ namespace tempest::graphics
             for (auto [_, batch] : _draw_batches)
             {
                 batch.commands.clear();
-            }
+            }      
 
             _registry->each([&](renderable_component renderable, ecs::self_component self) {
                 gpu_object_data object_payload = {
@@ -894,65 +856,6 @@ namespace tempest::graphics
                 });
             });
 
-            // for (const auto& [ent, transform, renderable] :
-            //      _registry->view<ecs::transform_component, renderable_component>())
-            //{
-            //     gpu_object_data object_payload = {
-            //         .model = math::mat4<float>(1.0f),
-            //         .inv_tranpose_model = math::mat4<float>(1.0f),
-            //         .prev_model = math::mat4<float>(1.0f),
-            //         .mesh_id = static_cast<uint32_t>(renderable.mesh_id),
-            //         .material_id = static_cast<uint32_t>(renderable.material_id),
-            //         .parent_id = ~0u,
-            //         .self_id = static_cast<uint32_t>(renderable.object_id),
-            //     };
-
-            //    auto ancestor_view = ecs::ancestor_entity_view(*_registry, ent);
-            //    for (auto ancestor : ancestor_view)
-            //    {
-            //        if (auto tx = _registry->try_get<ecs::transform_component>(ancestor))
-            //        {
-            //            object_payload.model = tx->matrix() * object_payload.model;
-            //        }
-            //    }
-
-            //    object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
-
-            //    draw_batch_key key = {
-            //        .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
-            //    };
-
-            //    auto& draw_batch = _draw_batches[key];
-            //    const auto& mesh = _meshes[renderable.mesh_id];
-
-            //    auto object_data_it = draw_batch.objects.find(ent);
-            //    if (object_data_it == draw_batch.objects.end()) [[unlikely]]
-            //    {
-            //        log->info("New object added to draw batch - ID: {}, Mesh ID: {}, Material ID: {} - Entity {}:{}",
-            //                  renderable.object_id, renderable.mesh_id, renderable.material_id,
-            //                  ecs::entity_traits<ecs::entity>::as_entity(ent),
-            //                  ecs::entity_traits<ecs::entity>::as_version(ent));
-
-            //        object_payload.prev_model = object_payload.model;
-
-            //        draw_batch.objects.insert(ent, object_payload);
-            //    }
-            //    else
-            //    {
-            //        const auto& prev_data = draw_batch.objects[ent];
-            //        object_payload.prev_model = prev_data.model;
-            //        draw_batch.objects[ent] = object_payload;
-            //    }
-
-            //    draw_batch.commands.push_back({
-            //        .index_count = mesh.index_count,
-            //        .instance_count = 1,
-            //        .first_index = (mesh.mesh_start_offset + mesh.index_offset) / 4,
-            //        .vertex_offset = 0,
-            //        .first_instance = static_cast<uint32_t>(draw_batch.objects.index_of(ent)),
-            //    });
-            //}
-
             // Iterate through the draw batches and update first instance based on the number of instances in the
             // previous batches
             uint32_t instances_written = 0;
@@ -965,19 +868,6 @@ namespace tempest::graphics
 
                 instances_written += static_cast<uint32_t>(batch.objects.size());
             }
-
-            // Find the directional light for the scene
-            // for (auto [ent, dir_light, tx] : _registry->view<directional_light_component,
-            // ecs::transform_component>())
-            //{
-            //    _scene_data.sun.color_intensity =
-            //        math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, dir_light.intensity);
-
-            //    // Rotate 0, 0, 1 by the rotation of the transform
-            //    auto light_rot = math::rotate(tx.rotation());
-            //    auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
-            //    _scene_data.sun.direction = math::vec4<float>(light_dir.x, light_dir.y, light_dir.z, 0.0f);
-            //}
 
             _registry->each([&](directional_light_component dir_light, ecs::transform_component tx) {
                 _scene_data.sun.color_intensity =

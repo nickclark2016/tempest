@@ -16,11 +16,11 @@ namespace tempest::editor
         imgui::create_window("Entity Inspector", [&]() {
             if (_selected_entity != ecs::null)
             {
-                auto& registry = eng.get_registry();
+                auto& registry = eng.get_archetype_registry();
                 auto name = registry.name(_selected_entity);
                 if (name && !name->empty())
                 {
-                    imgui::label(tempest::string_view(std::format("Name: {}", *name)));
+                    imgui::label(tempest::string_view(std::format("Name: {}", name->data())));
                 }
                 else
                 {

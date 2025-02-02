@@ -14,8 +14,8 @@ namespace tempest::editor
         ecs::entity selected_entity() const noexcept { return _selected_entity; }
 
       private:
-        void _create_entities_view_dfs(ecs::registry& registry, ecs::entity parent);
-        void _create_entities_view(ecs::registry& registry);
+        void _create_entities_view_dfs(ecs::archetype_registry& registry, ecs::entity parent);
+        void _create_entities_view(ecs::archetype_registry& registry);
 
         ecs::entity _selected_entity = ecs::null;
     };
