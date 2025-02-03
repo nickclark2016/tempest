@@ -1044,7 +1044,13 @@ namespace tempest::assets
         }
 
         // Mapping of mesh to list of entities representing the primitives
-        flat_unordered_map<uint32_t, vector<ecs::archetype_entity>> mesh_primitives;
+        struct mesh_processing_result
+        {
+            vector<ecs::archetype_entity> prim_entities;
+            string name;
+        };
+
+        flat_unordered_map<uint32_t, mesh_processing_result> mesh_primitives;
         sjd::array meshes;
         if (auto error = doc["meshes"].get(meshes); error == simdjson::SUCCESS)
         {
@@ -1080,16 +1086,18 @@ namespace tempest::assets
                     primitives.push_back(prim_ent);
                 }
 
+                mesh_processing_result result = {
+                    .prim_entities = move(primitives),
+                };
+
                 // Get mesh name
                 std::string_view name;
                 if (auto mesh_error = mesh["name"].get(name); mesh_error == simdjson::SUCCESS)
                 {
-                    string_view name_sv{name.begin(), name.end()};
-
-                    registry.name(ent, name_sv);
+                    result.name = {name.data(), name.size()};
                 }
 
-                mesh_primitives.insert({mesh_idx, move(primitives)});
+                mesh_primitives.insert({mesh_idx, result});
                 ++mesh_idx;
             }
         }
@@ -1110,10 +1118,15 @@ namespace tempest::assets
                     auto mesh_prims = mesh_primitives.find(static_cast<uint32_t>(mesh_id));
                     if (mesh_prims != mesh_primitives.end())
                     {
-                        span<const ecs::archetype_entity> mesh_entities = mesh_prims->second;
+                        span<const ecs::archetype_entity> mesh_entities = mesh_prims->second.prim_entities;
                         for (const auto& mesh_ent : mesh_entities)
                         {
                             ecs::create_parent_child_relationship(registry, parent_ent, mesh_ent);
+                        }
+
+                        if (!mesh_prims->second.name.empty())
+                        {
+                            registry.name(parent_ent, mesh_prims->second.name);
                         }
                     }
                 }
@@ -1215,6 +1228,50 @@ namespace tempest::assets
                 {
                     ecs::create_parent_child_relationship(registry, ent, e);
                 }
+            }
+        }
+
+        // If there is only one child, merge it with the root entity
+        auto ent_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(ent);
+        if (ent_rel != nullptr && ent_rel->first_child != ecs::tombstone)
+        {
+            // There exists at least one child
+            auto child = ent_rel->first_child;
+            auto child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
+            bool has_siblings = child_rel->next_sibling != ecs::tombstone;
+
+            // If there are no siblings, copy the components from the parent to the child and delete the parent
+            if (!has_siblings)
+            {
+                // Copy components from parent to child
+                // Asset Metadata
+                auto meta = registry.try_get<asset_metadata_component>(ent);
+                if (meta != nullptr)
+                {
+                    registry.assign_or_replace(child, *meta);
+                }
+
+                // Transform
+                auto tx = registry.try_get<ecs::transform_component>(ent);
+                if (tx != nullptr)
+                {
+                    // Merge the parent and child transforms
+                    registry.assign_or_replace(child, *tx);
+                }
+                else if (!registry.has<ecs::transform_component>(child))
+                {
+                    // If there is no parent transform, apply a default transform to the child
+                    ecs::transform_component default_tx = ecs::transform_component::identity();
+                    registry.assign(child, default_tx);
+                }
+
+                // Remove the parent relationship
+                child_rel->parent = ecs::tombstone;
+
+                //// Delete the parent
+                registry.destroy(ent);
+
+                return child;
             }
         }
 
