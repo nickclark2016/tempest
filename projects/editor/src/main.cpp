@@ -116,14 +116,15 @@ void initialize_models(tempest::engine& engine)
                                                             engine.get_archetype_registry());
     auto sponza_instance = engine.load_entity(sponza_prefab);
     auto sponza_transform = tempest::ecs::transform_component::identity();
-    sponza_transform.scale({12.5f, 12.5f, 12.5f});
+    sponza_transform.scale({0.125f, 0.125f, 0.125f});
     engine.get_archetype_registry().assign_or_replace(sponza_instance, sponza_transform);
 
-    // auto lantern_prefab = engine.get_asset_database().import(
-    //     "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_archetype_registry());
-    // auto lantern_instance = engine.load_entity(lantern_prefab);
-    // auto lantern_transform = tempest::ecs::transform_component{};
-    // lantern_transform.position({0.0f, 0.0f, 2.0f});
-    // lantern_transform.scale({0.1f, 0.1f, 0.1f});
-    // engine.get_archetype_registry().assign(lantern_instance, lantern_transform);
+    auto lantern_prefab = engine.get_asset_database().import(
+        "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_archetype_registry());
+    auto lantern_instance = engine.load_entity(lantern_prefab);
+    auto lantern_transform = tempest::ecs::transform_component::identity();
+    lantern_transform.position({0.0f, -0.5f, 2.0f});
+    lantern_transform.scale({0.8f, 0.8f, 0.8f});
+    lantern_transform.rotation({0.0f, tempest::math::as_radians(180.0f), 0.0f});
+    engine.get_archetype_registry().assign_or_replace(lantern_instance, lantern_transform);
 }

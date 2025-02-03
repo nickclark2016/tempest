@@ -759,6 +759,9 @@ namespace tempest::ecs
                         },
                         tempest::make_index_sequence<argument_count>());
 
+                // TODO: Build a tuple of pointers to the first element of each component pool
+                // Use that to iterate instead
+
                 for (size_t j = 0; j < arch.size(); ++j)
                 {
                     array<byte*, argument_count> arguments;
