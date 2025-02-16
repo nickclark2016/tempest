@@ -465,22 +465,6 @@ namespace tempest::ecs
         hash.hash[detail::get_archetype_type_index<component_type>() / 8] &=
             static_cast<byte>(~(1 << (detail::get_archetype_type_index<component_type>() % 8)));
 
-        // Find the index of the component in the archetype
-        size_t index_to_remove = 0;
-        for (size_t i = 0; i < type_info.index / 8; ++i)
-        {
-            auto hash_byte = hash.hash[i];
-            index_to_remove += popcount(static_cast<uint8_t>(hash_byte));
-        }
-
-        for (size_t i = 0; i < type_info.index % 8; ++i)
-        {
-            if (static_cast<unsigned int>(hash.hash[type_info_index / 8]) & (1 << i))
-            {
-                ++index_to_remove;
-            }
-        }
-
         // Check if the archetype already exists
         auto it = tempest::find(_hashes.begin(), _hashes.end(), hash);
 
