@@ -6,10 +6,10 @@
 
 namespace tempest
 {
-    template <typename T>
+    template <typename... Ts>
     struct tuple_size;
 
-    template <size_t I, typename T>
+    template <size_t I, typename... Ts>
     struct tuple_element;
 
     /// @brief Function used to indicate that an object may be moved from. Produces an xvalue expression from its

@@ -3011,6 +3011,117 @@ namespace tempest
     {
         return __builtin_is_constant_evaluated();
     }
+
+    /// @brief Type trait to copy the reference of a type.
+    /// @tparam T Type to copy the reference of.
+    /// @tparam U Type to copy the reference to.
+    template <typename T, typename U>
+    struct copy_ref
+    {
+        using type = U;
+    };
+
+    /// @brief Type trait to copy the reference of a type.
+    /// @tparam T Type to copy the reference of.
+    /// @tparam U Type to copy the reference to.
+    template <typename T, typename U>
+    struct copy_ref<T&, U>
+    {
+        using type = U&;
+    };
+
+    /// @brief Type trait to copy the reference of a type.
+    /// @tparam T Type to copy the reference of.
+    /// @tparam U Type to copy the reference to.
+    template <typename T, typename U>
+    struct copy_ref<T&&, U>
+    {
+        using type = U&&;
+    };
+
+    /// @brief Type trait to copy the reference of a type.
+    /// @tparam T Type to copy the reference of.
+    /// @tparam U Type to copy the reference to.
+    template <typename T, typename U>
+    using copy_ref_t = typename copy_ref<T, U>::type;
+
+    /// @brief Type trait to copy the constness of a type.
+    /// @tparam T Type to copy the constness of.
+    /// @tparam U Type to copy the constness to.
+    template <typename T, typename U>
+    struct copy_const
+    {
+        using type = U;
+    };
+
+    /// @brief Type trait to copy the constness of a type.
+    /// @tparam T Type to copy the constness of.
+    /// @tparam U Type to copy the constness to.
+    template <typename T, typename U>
+    struct copy_const<const T, U>
+    {
+        using type = const U;
+    };
+
+    /// @brief Type trait to copy the constness of a type.
+    /// @tparam T Type to copy the constness of.
+    /// @tparam U Type to copy the constness to.
+    template <typename T, typename U>
+    using copy_const_t = typename copy_const<T, U>::type;
+
+    /// @brief Type trait to copy the volatility of a type.
+    /// @tparam T Type to copy the volatility of.
+    /// @tparam U Type to copy the volatility to.
+    template <typename T, typename U>
+    struct copy_volatile
+    {
+        using type = U;
+    };
+
+    /// @brief Type trait to copy the volatility of a type.
+    /// @tparam T Type to copy the volatility of.
+    /// @tparam U Type to copy the volatility to.
+    template <typename T, typename U>
+    struct copy_volatile<volatile T, U>
+    {
+        using type = volatile U;
+    };
+
+    /// @brief Type trait to copy the volatility of a type.
+    /// @tparam T Type to copy the volatility of.
+    /// @tparam U Type to copy the volatility to.
+    template <typename T, typename U>
+    using copy_volatile_t = typename copy_volatile<T, U>::type;
+
+    /// @brief Type trait to copy the constness and volatility of a type.
+    /// @tparam T Type to copy the constness and volatility of.
+    /// @tparam U Type to copy the constness and volatility to.
+    template <typename T, typename U>
+    struct copy_cv
+    {
+        using type = copy_const_t<copy_volatile_t<T, U>, U>;
+    };
+
+    /// @brief Type trait to copy the constness and volatility of a type.
+    /// @tparam T Type to copy the constness and volatility of.
+    /// @tparam U Type to copy the constness and volatility to.
+    template <typename T, typename U>
+    using copy_cv_t = typename copy_cv<T, U>::type;
+
+    /// @brief Type trait to copy the constness, volatility and reference of a type.
+    /// @tparam T Type to copy the constness, volatility and reference of.
+    /// @tparam U Type to copy the constness, volatility and reference to.
+    template <typename T, typename U>
+    struct copy_cvref
+    {
+        using type = copy_ref_t<copy_cv<T, U>, U>;
+    };
+
+    /// @brief Type trait to copy the constness, volatility and reference of a type.
+    /// @tparam T Type to copy the constness, volatility and reference of.
+    /// @tparam U Type to copy the constness, volatility and reference to.
+    template <typename T, typename U>
+    using copy_cvref_t = typename copy_cvref<T, U>::type;
 } // namespace tempest
 
 #endif // tempest_core_type_traits_hpp
