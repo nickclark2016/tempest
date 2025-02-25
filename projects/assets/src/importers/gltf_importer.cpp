@@ -1088,6 +1088,7 @@ namespace tempest::assets
 
                 mesh_processing_result result = {
                     .prim_entities = move(primitives),
+                    .name = {},
                 };
 
                 // Get mesh name
