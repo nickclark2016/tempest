@@ -555,6 +555,11 @@ namespace tempest
                 bool tsign = signbit(t);
                 bool usign = signbit(u);
 
+                if (tnan == unan && tsign == usign)
+                {
+                    return strong_ordering::equal;
+                }
+
                 // If t is negative NaN and u is not negative NaN, t < u
                 bool tnegnan = tnan && tsign;
                 bool unotnegnan = !unan || (unan && usign);
