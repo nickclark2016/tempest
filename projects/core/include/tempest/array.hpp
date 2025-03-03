@@ -408,15 +408,15 @@ namespace std
     template <typename T>
     struct tuple_size;
 
-    template <size_t I, typename T>
+    template <tempest::size_t I, typename T>
     struct tuple_element;
 
-    template <typename T, size_t N>
-    struct tuple_size<tempest::array<T, N>> : tempest::integral_constant<size_t, N>
+    template <typename T, tempest::size_t N>
+    struct tuple_size<tempest::array<T, N>> : tempest::integral_constant<tempest::size_t, N>
     {
     };
 
-    template <size_t I, typename T, size_t N>
+    template <tempest::size_t I, typename T, tempest::size_t N>
     struct tuple_element<I, tempest::array<T, N>>
     {
         using type = T;

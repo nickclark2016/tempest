@@ -54,6 +54,7 @@ scoped.group('Engine', function()
             links {
                 'core',
             }
+
     end)
 
     scoped.group('Tests', function()
@@ -71,7 +72,9 @@ scoped.group('Engine', function()
 
             uses {
                 'core',
+                'glfw',
                 'googletest',
+                'tlsf',
             }
         
             externalwarnings 'Off'

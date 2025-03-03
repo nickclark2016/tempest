@@ -4,21 +4,23 @@
 #include <tempest/bit.hpp>
 #include <tempest/compare.hpp>
 #include <tempest/int.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/tuple.hpp>
+#include <tempest/type_traits.hpp>
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 #define NOMINMAX
 #include <Windows.h>
 #include <process.h>
 
-#include <tempest/memory.hpp>
-#include <tempest/tuple.hpp>
-#include <tempest/type_traits.hpp>
+#elif defined(__unix__) || defined(__APPLE__) // pthreads
+
+#include <pthread.h>
 
 #else
 
 #error "Unsupported platform"
-// TODO: Implement for pthreads
 
 #endif
 
@@ -26,7 +28,7 @@ namespace tempest
 {
     namespace detail
     {
-#ifdef _WIN32
+#if defined(_WIN32)
         using thread_handle = uint32_t;
         using native_handle_type = void*;
 
@@ -36,8 +38,8 @@ namespace tempest
             thread_handle id;
         };
 #elif defined(__unix__) || defined(__APPLE__) // pthreads
-        using thread_handle = void*;
-        using native_handle_type = void*;
+        using thread_handle = unsigned long;
+        using native_handle_type = unsigned long;
 #endif
     } // namespace detail
 
@@ -57,7 +59,15 @@ namespace tempest
 
             constexpr strong_ordering operator<=>(const id& other) const noexcept
             {
+#if defined(_WIN32)
                 return three_way_comparer<uintptr_t>::compare(_handle, other._handle);
+#elif defined(__unix__) || defined(__APPLE__) // pthreads
+                // Cast to uintptr_t to allow comparison
+                return three_way_comparer<uintptr_t>::compare(tempest::bit_cast<uintptr_t>(_handle),
+                                                              tempest::bit_cast<uintptr_t>(other._handle));
+#else
+#error "Unsupported platform"
+#endif
             }
 
           private:
@@ -86,7 +96,7 @@ namespace tempest
         native_handle_type native_handle() noexcept;
 
       private:
-#ifdef _WIN32
+#if defined(_WIN32)
         template <typename Tup, size_t... Indices>
         static unsigned int __stdcall _invoke_proc(void* raw_vals) noexcept
         {
@@ -129,10 +139,50 @@ namespace tempest
         }
 
         detail::thread_id _handle{};
+#elif defined(__unix__) || defined(__APPLE__) // pthreads
+        template <typename Tup, size_t... Indices>
+        static void* _invoke_proc(void* raw_vals) noexcept
+        {
+            const tempest::unique_ptr<Tup> fn_args{static_cast<Tup*>(raw_vals)};
+            Tup& tup = *fn_args.get(); // intenionally avoiding ADL
+            tempest::invoke(tempest::move(tempest::get<Indices>(tup))...);
+            return nullptr;
+        }
+
+        template <typename Tup, size_t... Indices>
+        [[nodiscard]] static constexpr auto _get_invoke_proc(tempest::index_sequence<Indices...>) noexcept
+        {
+            return &_invoke_proc<Tup, Indices...>;
+        }
+
+        template <typename Fn, typename... Args>
+        detail::thread_handle _start_pthread(Fn&& fn, Args&&... args)
+        {
+            using tuple_type = tempest::tuple<decay_t<Fn>, decay_t<Args>...>;
+            auto decayed_copy =
+                tempest::make_unique<tuple_type>(tempest::forward<Fn>(fn), tempest::forward<Args>(args)...);
+            constexpr auto invoke_proc_ptr =
+                _get_invoke_proc<tuple_type>(tempest::make_index_sequence<1 + sizeof...(Args)>{});
+
+            pthread_t handle;
+            if (pthread_create(&handle, nullptr, invoke_proc_ptr, decayed_copy.get()) != 0)
+            {
+                return pthread_t{};
+            }
+
+            // Release the unique pointer to be managed by the spawned thread
+            (void)decayed_copy.release();
+
+            return handle;
+        }
+
+        pthread_t _handle{};
+#else
+#error "Unsupported platform"
 #endif
     };
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
     template <typename Fn, typename... Args>
     thread::thread(Fn&& fn, Args&&... args)
@@ -140,6 +190,15 @@ namespace tempest
         _handle = _start(tempest::forward<Fn>(fn), tempest::forward<Args>(args)...);
     }
 
+#elif defined(__unix__) || defined(__APPLE__) // pthreads
+
+    template <typename Fn, typename... Args>
+    thread::thread(Fn&& fn, Args&&... args)
+    {
+        _handle = _start_pthread(tempest::forward<Fn>(fn), tempest::forward<Args>(args)...);
+    }
+#else
+#error "Unsupported platform"
 #endif
 } // namespace tempest
 
