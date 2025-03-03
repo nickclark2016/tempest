@@ -68,12 +68,12 @@ namespace tempest
 
         inline static constexpr float quiet_NaN() noexcept
         {
-            return __builtin_nanf("0");
+            return __builtin_nanf("");
         }
 
         inline static constexpr float signaling_NaN() noexcept
         {
-            return __builtin_nansf("1");
+            return __builtin_nansf("");
         }
     };
 
@@ -132,12 +132,12 @@ namespace tempest
 
         inline static constexpr double quiet_NaN() noexcept
         {
-            return __builtin_nan("0");
+            return __builtin_nan("");
         }
 
         inline static constexpr double signaling_NaN() noexcept
         {
-            return __builtin_nans("1");
+            return __builtin_nans("");
         }
     };
 } // namespace tempest

@@ -65,6 +65,7 @@ scoped.group('Engine', function()
             uses {
                 'ecs',
                 'googletest',
+                'tlsf',
             }
 
             linkgroups 'On'

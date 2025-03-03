@@ -39,15 +39,6 @@ group 'Engine'
                 'tempest',
             }
 
-            scoped.filter({
-                'system:linux'
-            }, function()
-                links {
-                    'pthread',
-                    'X11',
-                }
-            end)
-
             links {
                 'tempest',
                 -- List out the third party dependencies
@@ -65,5 +56,14 @@ group 'Engine'
             }, function()
                 buildoptions {
                     '/wd4324', -- 'structure was padded due to alignment specifier'
+                }
+            end)
+
+            scoped.filter({
+                'system:linux'
+            }, function()
+                links {
+                    'pthread',
+                    'X11',
                 }
             end)
