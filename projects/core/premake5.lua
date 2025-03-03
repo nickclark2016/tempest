@@ -28,11 +28,11 @@ scoped.group('Engine', function()
 
         scoped.filter({
             'system:linux'
-        }, function() {
+        }, function()
             links {
                 'pthread',
             }
-        })
+        end)
     
         externalwarnings 'Off'
         warnings 'Extra'
