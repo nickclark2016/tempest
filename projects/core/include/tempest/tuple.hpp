@@ -103,8 +103,8 @@ namespace tempest
 
             constexpr tuple_impl() = default;
 
-            template <typename Tag, typename Head, typename... Rest, enable_if_t<is_same_v<Tag, exact_args_tag>, int> = 0>
-            constexpr tuple_impl(Tag, Head&& head, Rest&&... rest)
+            template <typename Tag, typename H, typename... R, enable_if_t<is_same_v<Tag, exact_args_tag>, int> = 0>
+            constexpr tuple_impl(Tag, H&& head, R&&... rest)
                 : base{exact_args_tag{}, tempest::forward<Rest>(rest)...}, value{tempest::forward<Head>(head)}
             {
             }
@@ -112,7 +112,7 @@ namespace tempest
             template <typename type2 = type,
                       enable_if_t<tuple_constructible_v<tuple_impl, const type2&, const Rest&...>, int> = 0>
             constexpr tuple_impl(const type& head, const Rest&... rest)
-                : tuple(exact_args_tag{}, tempest::forward<Rest...>(rest)), value{head}
+                : tuple_impl(exact_args_tag{}, tempest::forward<Rest>(rest)...), value{head}
             {
             }
 

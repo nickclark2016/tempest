@@ -72,11 +72,6 @@ namespace tempest
         comparison_categories::type _value;
     };
 
-    inline constexpr partial_ordering partial_ordering::less{comparison_categories::ordering::less};
-    inline constexpr partial_ordering partial_ordering::equivalent{comparison_categories::ordering::equal};
-    inline constexpr partial_ordering partial_ordering::greater{comparison_categories::ordering::greater};
-    inline constexpr partial_ordering partial_ordering::unordered{comparison_categories::no_order::unordered};
-
     inline constexpr partial_ordering::partial_ordering(comparison_categories::ordering o) noexcept
         : _value{to_underlying(o)}
     {
@@ -149,6 +144,11 @@ namespace tempest
         }
     }
 
+    inline constexpr partial_ordering partial_ordering::less{comparison_categories::ordering::less};
+    inline constexpr partial_ordering partial_ordering::equivalent{comparison_categories::ordering::equal};
+    inline constexpr partial_ordering partial_ordering::greater{comparison_categories::ordering::greater};
+    inline constexpr partial_ordering partial_ordering::unordered{comparison_categories::no_order::unordered};
+
     class weak_ordering
     {
         constexpr explicit weak_ordering(comparison_categories::ordering o) noexcept;
@@ -178,10 +178,6 @@ namespace tempest
 
         comparison_categories::type _value;
     };
-
-    inline constexpr weak_ordering weak_ordering::less{comparison_categories::ordering::less};
-    inline constexpr weak_ordering weak_ordering::equivalent{comparison_categories::ordering::equal};
-    inline constexpr weak_ordering weak_ordering::greater{comparison_categories::ordering::greater};
 
     inline constexpr weak_ordering::weak_ordering(comparison_categories::ordering o) noexcept : _value{to_underlying(o)}
     {
@@ -254,6 +250,10 @@ namespace tempest
         }
     }
 
+    inline constexpr weak_ordering weak_ordering::less{comparison_categories::ordering::less};
+    inline constexpr weak_ordering weak_ordering::equivalent{comparison_categories::ordering::equal};
+    inline constexpr weak_ordering weak_ordering::greater{comparison_categories::ordering::greater};
+
     class strong_ordering
     {
         constexpr explicit strong_ordering(comparison_categories::ordering o) noexcept;
@@ -283,11 +283,6 @@ namespace tempest
       private:
         comparison_categories::type _value;
     };
-
-    inline constexpr strong_ordering strong_ordering::less{comparison_categories::ordering::less};
-    inline constexpr strong_ordering strong_ordering::equal{comparison_categories::ordering::equal};
-    inline constexpr strong_ordering strong_ordering::equivalent{comparison_categories::ordering::equal};
-    inline constexpr strong_ordering strong_ordering::greater{comparison_categories::ordering::greater};
 
     inline constexpr strong_ordering::strong_ordering(comparison_categories::ordering o) noexcept
         : _value{to_underlying(o)}
@@ -365,6 +360,11 @@ namespace tempest
             return s;
         }
     }
+
+    inline constexpr strong_ordering strong_ordering::less{comparison_categories::ordering::less};
+    inline constexpr strong_ordering strong_ordering::equal{comparison_categories::ordering::equal};
+    inline constexpr strong_ordering strong_ordering::equivalent{comparison_categories::ordering::equal};
+    inline constexpr strong_ordering strong_ordering::greater{comparison_categories::ordering::greater};
 
     namespace detail
     {

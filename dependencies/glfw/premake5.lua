@@ -92,3 +92,7 @@ project 'glfw'
         links {
             'glfw'
         }
+
+        scoped.filter({ 'system:linux' }, function()
+            links { 'X11' }
+        end)

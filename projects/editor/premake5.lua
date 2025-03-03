@@ -19,10 +19,12 @@ scoped.group('Editor', function()
         }
 
         uses {
-            "tempest"
+            'tempest'
         }
 
         warnings 'Extra'
+
+        linkgroups 'On'
 
         postbuildcommands {
             '{RMDIR} %{root}/projects/editor/assets', -- Ensure a clean assets directory before building it

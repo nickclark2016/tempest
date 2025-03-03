@@ -29,8 +29,6 @@ group 'Engine'
                 'logger',
                 'math',
             }
-        
-        usage "INTERFACE"
 
         usage "INTERFACE"
             externalincludedirs {
@@ -41,9 +39,19 @@ group 'Engine'
                 'tempest',
             }
 
+            scoped.filter({
+                'system:linux'
+            }, function()
+                links {
+                    'pthread',
+                    'X11',
+                }
+            end)
+
             links {
                 'tempest',
                 -- List out the third party dependencies
+                'glfw',
                 'imgui',
                 'simdjson',
                 'spdlog',
@@ -51,10 +59,6 @@ group 'Engine'
                 'vk-bootstrap',
                 'vma'
             }
-
-            scoped.filter({ 'system:linux' }, function()
-                links { 'X11' }
-            end)
 
             scoped.filter({
                 'toolset:msc*'

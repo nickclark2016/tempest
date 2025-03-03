@@ -48,8 +48,10 @@ scoped.group('Engine', function()
             }
 
             uses {
+                'glfw',
                 'googletest',
                 'tasks',
+                'tlsf',
             }
         end)
     end)
