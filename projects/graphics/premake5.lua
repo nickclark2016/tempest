@@ -15,57 +15,33 @@ scoped.group('Engine', function()
             'shaders/**.slang',
         }
 
-        dependson {
-            'core',
-            'ecs',
-            'glfw',
-            'imgui',
-            'math',
-            'logger',
-            'simdjson',
-            'spdlog',
-            'stb',
-            'tlsf',
-            'vk-bootstrap',
-            'vma',
-        }
-
-        links {
-            'core',
-            'ecs',
-            'glfw',
-            'imgui',
-            'math',
-            'logger',
-            'simdjson',
-            'spdlog',
-            'stb',
-            'tlsf',
-            'vk-bootstrap',
-            'vma',
-        }
-
-        externalincludedirs {
-            '%{IncludeDir.glfw}',
-            '%{IncludeDir.imgui}',
-            '%{IncludeDir.vkb}',
-            '%{IncludeDir.vma}',
-            '%{IncludeDir.vulkan}',
-        }
-
         includedirs {
             'include',
-            '%{IncludeDir.core}',
-            '%{IncludeDir.ecs}',
-            '%{IncludeDir.logger}',
-            '%{IncludeDir.math}',
         }
-
-        IncludeDir['graphics'] = '%{root}/projects/graphics/include'
 
         prebuildcommands {
             '{MKDIR} "%{cfg.targetdir}/shaders"',
         }
+
+        uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan' }
+
+        usage "PUBLIC"
+            uses { 'core', 'ecs', 'logger', 'math' }
+
+        usage "INTERFACE"
+            externalincludedirs {
+                '%{root}/projects/graphics/include',
+            }
+
+            dependson {
+                'graphics',
+            }
+
+            links {
+                'graphics',
+            }
+        
+        usage "*"
 
         scoped.filter({ 'files:shaders/raster/**.slang' }, function()
             buildmessage 'Compiling %{file.relpath}'

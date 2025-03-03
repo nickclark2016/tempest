@@ -18,7 +18,6 @@ project 'vma'
 
     includedirs {
         'include',
-        '%{IncludeDir.vulkan}',
     }
 
     defines {
@@ -26,4 +25,18 @@ project 'vma'
         'VMA_DYNAMIC_VULKAN_FUNCTIONS=1',
     }
 
-    IncludeDir['vma'] = '%{root}/dependencies/vma/include'
+    usage "PUBLIC"
+        uses { 'vulkan' }
+
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/vma/include',
+        }
+
+        dependson {
+            'vma',
+        }
+
+        links {
+            'vma',
+        }

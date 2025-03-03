@@ -1,5 +1,3 @@
-local tempest = require '../tempest-config'
-
 scoped.group('Editor', function()
     scoped.project('editor', function()
         kind 'ConsoleApp'
@@ -20,7 +18,9 @@ scoped.group('Editor', function()
             'include'
         }
 
-        tempest.applyTempestConfig()
+        uses {
+            "tempest"
+        }
 
         warnings 'Extra'
 

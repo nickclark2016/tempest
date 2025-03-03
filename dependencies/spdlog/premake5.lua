@@ -28,6 +28,16 @@ project 'spdlog'
     filter {}
     
     warnings 'Off'
-
-    IncludeDir['spdlog'] = '%{root}/dependencies/spdlog/include'
     
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/spdlog/include',
+        }
+
+        dependson {
+            'spdlog',
+        }
+
+        links {
+            'spdlog',
+        }

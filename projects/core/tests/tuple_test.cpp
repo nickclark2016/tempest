@@ -39,6 +39,17 @@ TEST(tuple, make_tuple)
     EXPECT_EQ(tempest::get<4>(t2), 1);
 }
 
+TEST(tuple, make_tuple_const_ref)
+{
+    const int n = 1;
+    auto t = tempest::make_tuple(10, "Test", 3.14, tempest::cref(n));
+    
+    EXPECT_EQ(tempest::get<0>(t), 10);
+    EXPECT_EQ(tempest::get<1>(t), "Test");
+    EXPECT_EQ(tempest::get<2>(t), 3.14);
+    EXPECT_EQ(tempest::get<3>(t), 1);
+}
+
 TEST(tuple, structured_bindings)
 {
     auto t = tempest::make_tuple(1, 2.0f, '3');

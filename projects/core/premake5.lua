@@ -16,28 +16,8 @@ scoped.group('Engine', function()
     
         includedirs {
             'include',
-            '%{IncludeDir.math}',
-        }
-
-        externalincludedirs {
-            '%{IncludeDir.glfw}',
-            '%{IncludeDir.tlsf}',
         }
     
-        links {
-            'glfw',
-            'math',
-            'tlsf',
-        }
-    
-        dependson {
-            'glfw',
-            'math',
-            'tlsf',
-        }
-    
-        IncludeDir['core'] = '%{root}/projects/core/include'
-
         scoped.filter({
             'toolset:msc*'
         }, function()
@@ -45,9 +25,35 @@ scoped.group('Engine', function()
                 '/wd4324', -- 'structure was padded due to alignment specifier'
             }
         end)
+
+        scoped.filter({
+            'system:linux'
+        }, function() {
+            links {
+                'pthread',
+            }
+        })
     
         externalwarnings 'Off'
         warnings 'Extra'
+
+        uses { 'glfw', 'tlsf' }
+
+        usage "PUBLIC"
+            uses { 'math' }
+
+        usage "INTERFACE"
+            externalincludedirs {
+                '%{root}/projects/core/include',
+            }
+    
+            dependson {
+                'core',
+            }
+    
+            links {
+                'core',
+            }
     end)
 
     scoped.group('Tests', function()
@@ -62,22 +68,8 @@ scoped.group('Engine', function()
             files {
                 'tests/**.cpp',
             }
-        
-            includedirs {
-                'include',
-                '%{IncludeDir.math}',
-            }
 
-            externalincludedirs {
-                '%{IncludeDir.gtest}',
-            }
-        
-            dependson {
-                'core',
-                'googletest',
-            }
-        
-            links {
+            uses {
                 'core',
                 'googletest',
             }

@@ -15,41 +15,33 @@ scoped.group('Engine', function()
 
         includedirs {
             'include',
-            '%{IncludeDir.core}',
-            '%{IncludeDir.ecs}',
-            '%{IncludeDir.logger}',
-            '%{IncludeDir.math}',
         }
 
-        externalincludedirs {
-            '%{IncludeDir.glfw}',
-            '%{IncludeDir.simdjson}',
-            '%{IncludeDir.spdlog}',
-            '%{IncludeDir.stb}',
-            '%{IncludeDir.tlsf}',
+        uses {
+            'stb',
+            'simdjson'
         }
 
-        links {
-            'core',
-            'ecs',
-            'glfw',
-            'logger',
-            'math',
-            'simdjson',
-            'spdlog',
-            'tlsf',
-        }
+        usage "PUBLIC"
+            uses {
+                'core',
+                'ecs',
+                'logger',
+                'math',
+            }
+        
+        usage "INTERFACE"
+            externalincludedirs {
+                '%{root}/projects/assets/include',
+            }
 
-        dependson {
-            'core',
-            'ecs',
-            'glfw',
-            'logger',
-            'math',
-            'simdjson',
-            'spdlog',
-            'tlsf',
-        }
+            dependson {
+                'assets',
+            }
+
+            links {
+                'assets',
+            }
 
         scoped.filter({
             'toolset:msc*'
@@ -60,8 +52,6 @@ scoped.group('Engine', function()
         end)
 
         externalwarnings 'Off'
-        warnings 'Extra'
-        
-        IncludeDir['assets'] = '%{root}/projects/assets/include'
+        warnings 'Extra'        
     end)
 end)

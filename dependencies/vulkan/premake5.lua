@@ -10,4 +10,7 @@ project 'vulkan'
         'include/**.h',
     }
 
-    IncludeDir['vulkan'] = '%{root}/dependencies/vulkan/include'
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/vulkan/include',
+        }

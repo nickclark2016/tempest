@@ -48,8 +48,6 @@ scoped.group('Engine', function()
             }
         end)
 
-        IncludeDir['math'] = '%{root}/projects/math/include'
-
         scoped.filter({
             'toolset:msc*'
         }, function()
@@ -59,6 +57,19 @@ scoped.group('Engine', function()
         end)
 
         warnings 'Extra'
+
+        usage "INTERFACE"
+            externalincludedirs {
+                '%{root}/projects/math/include',
+            }
+
+            dependson {
+                'math',
+            }
+
+            links {
+                'math',
+            }
     end)
 
     scoped.group('Tests', function()
@@ -76,17 +87,11 @@ scoped.group('Engine', function()
     
             includedirs {
                 'include',
-                '%{IncludeDir.gtest}',
             }
-    
-            dependson {
-                'math',
+
+            uses {
                 'googletest',
-            }
-    
-            links {
                 'math',
-                'googletest',
             }
 
             warnings 'Extra'

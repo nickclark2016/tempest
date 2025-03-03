@@ -80,4 +80,15 @@ project 'glfw'
 
     filter {}
 
-    IncludeDir['glfw'] = '%{root}/dependencies/glfw/include'
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/glfw/include'
+        }
+
+        dependson {
+            'glfw'
+        }
+
+        links {
+            'glfw'
+        }

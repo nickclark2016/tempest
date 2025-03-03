@@ -16,4 +16,15 @@ project 'googletest'
         './include',
     }
 
-    IncludeDir['gtest'] = '%{root}/dependencies/googletest/include'
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/googletest/include',
+        }
+
+        dependson {
+            'googletest',
+        }
+
+        links {
+            'googletest',
+        }

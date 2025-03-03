@@ -13,19 +13,6 @@ project 'imgui'
     
     includedirs {
         'include',
-        '%{IncludeDir.glfw}',
-        '%{IncludeDir.vulkan}',
-        '%{IncludeDir.vma}',
-    }
-
-    dependson {
-        'glfw',
-        'vma',
-    }
-
-    links {
-        'glfw',
-        'vma',
     }
 
     defines {
@@ -34,4 +21,18 @@ project 'imgui'
 
     warnings 'Off'
 
-    IncludeDir['imgui'] = '%{root}/dependencies/imgui/include'
+    usage "PUBLIC"
+        uses { 'glfw', 'vma', 'vulkan' }
+
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/imgui/include',
+        }
+
+        dependson {
+            'imgui',
+        }
+
+        links {
+            'imgui',
+        }
