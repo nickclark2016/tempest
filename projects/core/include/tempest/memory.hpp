@@ -670,7 +670,7 @@ namespace tempest
     template <typename T, typename Deleter>
     [[nodiscard]] inline constexpr typename unique_ptr<T, Deleter>::pointer unique_ptr<T, Deleter>::release() noexcept
     {
-        return exchange(_ptr, nullptr);
+        return tempest::exchange(_ptr, nullptr);
     }
 
     template <typename T, typename Deleter>

@@ -145,8 +145,6 @@ scoped.workspace('Tempest', function()
         }
     end)
 
-    IncludeDir = {}
-
     startproject 'editor'
 
     include 'dependencies'

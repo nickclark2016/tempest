@@ -167,6 +167,26 @@ namespace tempest
 
     template <typename F, typename... Args>
     concept regular_invocable = invocable<F, Args...>;
+
+    namespace detail
+    {
+        template <typename T1, typename T2>
+        concept half_equality_comparable = requires(const remove_reference_t<T1>& x, const remove_reference_t<T2>& y) {
+            { x == y } -> boolean_testable;
+            { x != y } -> boolean_testable;
+        };
+
+        template <typename T1, typename T2>
+        concept half_ordered = requires(const remove_reference_t<T1>& x, const remove_reference_t<T2>& y) {
+            { x < y } -> boolean_testable;
+            { x > y } -> boolean_testable;
+            { x <= y } -> boolean_testable;
+            { x >= y } -> boolean_testable;
+        };
+    } // namespace detail
+
+    template <typename T>
+    concept floating_point = is_floating_point_v<T>;
 } // namespace tempest
 
 #endif // tempest_core_concepts_hpp

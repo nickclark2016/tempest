@@ -1,5 +1,5 @@
 scoped.group('Engine', function()
-    scoped.project('ecs', function()
+    scoped.project('tasks', function()
         kind 'StaticLib'
         language 'C++'
         cppdialect 'C++20'
@@ -17,36 +17,21 @@ scoped.group('Engine', function()
             'include',
         }
 
-        scoped.filter({
-            'toolset:msc*'
-        }, function()
-            buildoptions {
-                '/wd4324', -- 'structure was padded due to alignment specifier'
-            }
-        end)
-
-        externalwarnings 'Off'
         warnings 'Extra'
 
-        usage "PUBLIC"
-            uses { 'core', 'math' }
-        
-        usage "INTERFACE"
+        usage 'PUBLIC'
+            uses { 'core' }
+
+        usage 'INTERFACE'
             externalincludedirs {
-                '%{root}/projects/ecs/include',
+                '%{root}/projects/tasks/include',
             }
 
-            dependson {
-                'ecs',
-            }
-
-            links {
-                'ecs',
-            }
+        usage "*"
     end)
 
     scoped.group('Tests', function()
-        scoped.project('ecs-tests', function()
+        scoped.project('tasks-tests', function()
             kind 'ConsoleApp'
             language 'C++'
             cppdialect 'C++20'
@@ -63,17 +48,9 @@ scoped.group('Engine', function()
             }
 
             uses {
-                'ecs',
                 'googletest',
+                'tasks',
             }
-
-            linkgroups 'On'
-
-            scoped.filter({ 'system:linux' }, function()
-                links { 'X11' }
-            end)
-
-            warnings 'Extra'
         end)
     end)
 end)

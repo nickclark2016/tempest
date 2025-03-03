@@ -13,4 +13,15 @@ project 'simdjson'
 
     warnings 'Off'
 
-    IncludeDir['simdjson'] = '%{root}/dependencies/simdjson/include'
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/simdjson/include',
+        }
+
+        dependson {
+            'simdjson',
+        }
+
+        links {
+            'simdjson',
+        }

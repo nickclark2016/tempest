@@ -69,7 +69,14 @@ namespace tempest
     inline constexpr invoke_result_t<T&, Ts...> reference_wrapper<T>::operator()(Ts&&... ts) const
         noexcept(is_nothrow_invocable_v<T&, Ts...>)
     {
-        return invoke(get(), tempest::forward<Ts>(ts)...);
+        if constexpr (is_void_v<invoke_result_t<T&, Ts...>>)
+        {
+            invoke(get(), tempest::forward<Ts>(ts)...);
+        }
+        else
+        {
+            return invoke(get(), tempest::forward<Ts>(ts)...);
+        }
     }
 
     template <typename T>

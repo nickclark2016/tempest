@@ -302,77 +302,125 @@ namespace tempest
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline T* begin(array<T, N>& arr) noexcept
+    inline constexpr T* begin(array<T, N>& arr) noexcept
     {
         return arr.begin();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline const T* begin(const array<T, N>& arr) noexcept
+    inline constexpr const T* begin(const array<T, N>& arr) noexcept
     {
         return arr.begin();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline const T* cbegin(const array<T, N>& arr) noexcept
+    inline constexpr const T* cbegin(const array<T, N>& arr) noexcept
     {
         return arr.cbegin();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline T* end(array<T, N>& arr) noexcept
+    inline constexpr T* end(array<T, N>& arr) noexcept
     {
         return arr.end();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline const T* end(const array<T, N>& arr) noexcept
+    inline constexpr const T* end(const array<T, N>& arr) noexcept
     {
         return arr.end();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline const T* cend(const array<T, N>& arr) noexcept
+    inline constexpr const T* cend(const array<T, N>& arr) noexcept
     {
         return arr.cend();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline T* data(array<T, N>& arr) noexcept
+    inline constexpr T* data(array<T, N>& arr) noexcept
     {
         return arr.data();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline const T* data(const array<T, N>& arr) noexcept
+    inline constexpr const T* data(const array<T, N>& arr) noexcept
     {
         return arr.data();
     }
 
     template <typename T, size_t N>
-    inline bool empty(const array<T, N>& arr) noexcept
+    inline constexpr bool empty(const array<T, N>& arr) noexcept
     {
         return arr.empty();
     }
 
     template <typename T, size_t N>
-    inline size_t size(const array<T, N>& arr) noexcept
+    inline constexpr size_t size(const array<T, N>& arr) noexcept
     {
         return arr.size();
     }
 
     template <typename T, size_t N>
-    inline size_t max_size(const array<T, N>& arr) noexcept
+    inline constexpr size_t max_size(const array<T, N>& arr) noexcept
     {
         return arr.max_size();
     }
+
+    template <size_t I, typename T, size_t N>
+    inline constexpr T& get(array<T, N>& arr) noexcept
+    {
+        static_assert(I < N);
+        return arr[I];
+    }
+
+    template <size_t I, typename T, size_t N>
+    inline constexpr const T& get(const array<T, N>& arr) noexcept
+    {
+        static_assert(I < N);
+        return arr[I];
+    }
+
+    template <size_t I, typename T, size_t N>
+    inline constexpr T&& get(array<T, N>&& arr) noexcept
+    {
+        static_assert(I < N);
+        return tempest::move(arr[I]);
+    }
+
+    template <size_t I, typename T, size_t N>
+    inline constexpr const T&& get(const array<T, N>&& arr) noexcept
+    {
+        static_assert(I < N);
+        return tempest::move(arr[I]);
+    }
 } // namespace tempest
+
+namespace std
+{
+    template <typename T>
+    struct tuple_size;
+
+    template <size_t I, typename T>
+    struct tuple_element;
+
+    template <typename T, size_t N>
+    struct tuple_size<tempest::array<T, N>> : tempest::integral_constant<size_t, N>
+    {
+    };
+
+    template <size_t I, typename T, size_t N>
+    struct tuple_element<I, tempest::array<T, N>>
+    {
+        using type = T;
+    };
+}
 
 #endif // tempest_core_array_hpp

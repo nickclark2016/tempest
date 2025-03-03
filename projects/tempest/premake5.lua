@@ -1,5 +1,3 @@
-local tempest = require '../tempest-config'
-
 group 'Engine'
     project 'tempest'
         kind 'StaticLib'
@@ -18,7 +16,50 @@ group 'Engine'
         externalwarnings 'Off'
         warnings 'Extra'
 
-        tempest.applyTempestInternalConfig()
+        includedirs {
+            'include'
+        }
 
-        IncludeDir['tempest'] = '%{root}/projects/tempest/include'
+        usage "PUBLIC"
+            uses {
+                'assets',
+                'core',
+                'ecs',
+                'graphics',
+                'logger',
+                'math',
+            }
         
+        usage "INTERFACE"
+
+        usage "INTERFACE"
+            externalincludedirs {
+                '%{root}/projects/tempest/include',
+            }
+
+            dependson {
+                'tempest',
+            }
+
+            links {
+                'tempest',
+                -- List out the third party dependencies
+                'imgui',
+                'simdjson',
+                'spdlog',
+                'tlsf',
+                'vk-bootstrap',
+                'vma'
+            }
+
+            scoped.filter({ 'system:linux' }, function()
+                links { 'X11' }
+            end)
+
+            scoped.filter({
+                'toolset:msc*'
+            }, function()
+                buildoptions {
+                    '/wd4324', -- 'structure was padded due to alignment specifier'
+                }
+            end)

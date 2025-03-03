@@ -15,4 +15,15 @@ project 'tlsf'
         'include/tlsf',
     }
 
-    IncludeDir['tlsf'] = '%{root}/dependencies/tlsf/include'
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/tlsf/include',
+        }
+
+        dependson {
+            'tlsf',
+        }
+
+        links {
+            'tlsf',
+        }

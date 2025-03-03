@@ -16,24 +16,10 @@ scoped.group('Engine', function()
         includedirs {
             'include',
         }
-        
-        externalincludedirs {
-            '%{IncludeDir.spdlog}',
-        }
-
-        links {
-            'spdlog',
-        }
-
-        dependson {
-            'spdlog',
-        }
 
         defines {
             '_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS',
         }
-
-        IncludeDir['logger'] = '%{root}/projects/logger/include'
 
         scoped.filter({
             'toolset:msc*'
@@ -45,5 +31,20 @@ scoped.group('Engine', function()
 
         externalwarnings 'Off'
         warnings 'Extra'
+
+        uses "spdlog"
+        
+        usage "INTERFACE"
+            externalincludedirs {
+                '%{root}/projects/logger/include',
+            }
+
+            dependson {
+                'logger',
+            }
+
+            links {
+                'logger',
+            }
     end)
 end)

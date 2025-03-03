@@ -13,7 +13,20 @@ project 'vk-bootstrap'
 
     includedirs {
         'include',
-        '%{IncludeDir.vulkan}',
     }
 
-    IncludeDir['vkb'] = '%{root}/dependencies/vk-bootstrap/include'
+    usage "PUBLIC"
+        uses { "vulkan" }
+
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/vk-bootstrap/include',
+        }
+
+        dependson {
+            'vk-bootstrap',
+        }
+
+        links {
+            'vk-bootstrap',
+        }

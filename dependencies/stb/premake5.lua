@@ -10,4 +10,7 @@ project 'stb'
         'include/**.h',
     }
 
-    IncludeDir['stb'] = '%{root}/dependencies/stb/include'
+    usage "INTERFACE"
+        externalincludedirs {
+            '%{root}/dependencies/stb/include',
+        }

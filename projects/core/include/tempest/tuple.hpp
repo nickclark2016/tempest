@@ -8,14 +8,89 @@
 
 namespace tempest
 {
+    template <typename... Ts>
+    class tuple;
+
     namespace detail
     {
+        struct exact_args_tag
+        {
+            constexpr explicit exact_args_tag() noexcept = default;
+        };
+
         template <typename...>
         struct tuple_impl;
+
+        template <typename... Ts>
+        struct tuple_impl_size;
+
+        template <typename... Ts>
+        struct tuple_impl_size<tuple_impl<Ts...>> : integral_constant<size_t, sizeof...(Ts)>
+        {
+        };
+
+        template <bool Same, typename Dst, typename... Src>
+        inline constexpr bool tuple_can_construct_with = false;
+
+        template <typename... Dst, typename... Src>
+        inline constexpr bool tuple_can_construct_with<true, tuple_impl<Dst...>, Src...> =
+            conjunction_v<is_constructible<Dst, Src>...>;
+
+        template <typename Dst, typename... Src>
+        inline constexpr bool tuple_constructible_v =
+            tuple_can_construct_with<tuple_impl_size<Dst>::value == sizeof...(Src), Dst, Src...>;
+
+        template <typename Dst, typename... Src>
+        struct tuple_constructible : bool_constant<tuple_constructible_v<Dst, Src...>>
+        {
+        };
+
+        // Tuple perfect forwarding constructor constraints
+        template <typename S, typename T, typename... Rest>
+        struct tuple_perfect_forwarding : true_type
+        {
+        };
+
+        template <typename S, typename T>
+        struct tuple_perfect_forwarding<S, T> : bool_constant<!is_same_v<S, remove_cvref_t<T>>>
+        {
+        };
+
+        template <typename T>
+        struct tuple_val
+        {
+            constexpr tuple_val() : val{} {};
+
+            template <typename U>
+            constexpr tuple_val(U&& u) : val{tempest::forward<U>(u)} {};
+
+            T val;
+        };
+
+        template <typename T>
+        struct tuple_val<T&>
+        {           
+            constexpr tuple_val(T& u) : val{u} {};
+
+            // Reference wrapper
+            template <typename U>
+            constexpr tuple_val(reference_wrapper<U> u) : val{u.get()} {};
+            
+            T& val;
+        };
 
         template <>
         struct tuple_impl<>
         {
+            constexpr tuple_impl() noexcept = default;
+            constexpr tuple_impl(const tuple_impl&) = default;
+
+            template <typename Tag, enable_if_t<is_same_v<Tag, exact_args_tag>, int> = 0>
+            constexpr tuple_impl(Tag) noexcept
+            {
+            }
+
+            constexpr tuple_impl& operator=(const tuple_impl&) = default;
         };
 
         template <typename Head, typename... Rest>
@@ -24,18 +99,29 @@ namespace tempest
             using type = Head;
             using base = tuple_impl<Rest...>;
 
-            type value{};
+            tuple_val<type> value{};
 
             constexpr tuple_impl() = default;
 
-            constexpr tuple_impl(const type& head, const Rest&... rest)
-                : base{tempest::forward<Rest...>(rest)}, value{head}
+            template <typename Tag, typename Head, typename... Rest, enable_if_t<is_same_v<Tag, exact_args_tag>, int> = 0>
+            constexpr tuple_impl(Tag, Head&& head, Rest&&... rest)
+                : base{exact_args_tag{}, tempest::forward<Rest>(rest)...}, value{tempest::forward<Head>(head)}
             {
             }
 
-            template <typename H, typename... R>
+            template <typename type2 = type,
+                      enable_if_t<tuple_constructible_v<tuple_impl, const type2&, const Rest&...>, int> = 0>
+            constexpr tuple_impl(const type& head, const Rest&... rest)
+                : tuple(exact_args_tag{}, tempest::forward<Rest...>(rest)), value{head}
+            {
+            }
+
+            template <typename H, typename... R,
+                      enable_if_t<conjunction_v<tuple_perfect_forwarding<tuple_impl, H, Rest...>,
+                                                tuple_constructible<tuple_impl, H, Rest...>>,
+                                  int> = 0>
             constexpr tuple_impl(H&& head, R&&... rest)
-                : base{tempest::forward<R>(rest)...}, value{tempest::forward<H>(head)}
+                : tuple_impl(exact_args_tag{}, tempest::forward<H>(head), tempest::forward<R>(rest)...)
             {
             }
 
@@ -66,7 +152,7 @@ namespace tempest
             static_assert(I < sizeof...(Ts), "Index out of bounds.");
             if constexpr (I == 0)
             {
-                return t.value;
+                return t.value.val;
             }
             else
             {
@@ -80,7 +166,7 @@ namespace tempest
             static_assert(I < sizeof...(Ts), "Index out of bounds.");
             if constexpr (I == 0)
             {
-                return t.value;
+                return t.value.val;
             }
             else
             {
@@ -113,7 +199,9 @@ namespace tempest
     template <typename... Ts>
     inline constexpr tuple<detail::unwrapped_decay_t<Ts>...> make_tuple(Ts&&... ts)
     {
-        return tuple<detail::unwrapped_decay_t<Ts>...>(tempest::forward<Ts>(ts)...);
+        using res = tuple<detail::unwrapped_decay_t<Ts>...>;
+
+        return res(tempest::forward<Ts>(ts)...);
     }
 
     template <size_t I, typename... Ts>
@@ -141,23 +229,6 @@ namespace tempest
     template <typename T>
     inline constexpr size_t tuple_size_v = tuple_size<T>::value;
 
-    namespace detail
-    {
-        template <typename T, typename U, typename... Ts, typename... Us>
-        consteval bool tuple_can_construct_with_helper(core::type_list<T, Ts...>, core::type_list<U, Us...>)
-        {
-            bool can_construct = is_constructible_v<T, U>;
-            if constexpr (sizeof...(Ts) > 0 && sizeof...(Us) > 0)
-            {
-                can_construct = can_construct && tuple_can_construct_with_helper<Ts..., Us...>(
-                                                     tempest::declval<core::type_list<Ts...>>(),
-                                                     tempest::declval<core::type_list<Us...>>());
-            }
-
-            return can_construct;
-        }
-    } // namespace detail
-
     template <typename... Ts>
     class tuple : public detail::tuple_impl<Ts...>
     {
@@ -167,8 +238,6 @@ namespace tempest
         constexpr tuple(const Ts&... ts);
 
         template <typename... Us>
-            requires(sizeof...(Us) == sizeof...(Ts) && sizeof...(Ts) >= 1 &&
-                     detail::tuple_can_construct_with_helper<core::type_list<Ts...>, core::type_list<Us...>>())
         constexpr tuple(Us&&... us);
 
         tuple(const tuple&) = default;
@@ -181,15 +250,12 @@ namespace tempest
     };
 
     template <typename... Ts>
-    inline constexpr tuple<Ts...>::tuple(const Ts&... ts)
-        : detail::tuple_impl<Ts...>{tempest::forward<const Ts>(ts)...}
+    inline constexpr tuple<Ts...>::tuple(const Ts&... ts) : detail::tuple_impl<Ts...>{tempest::forward<const Ts>(ts)...}
     {
     }
 
     template <typename... Ts>
     template <typename... Us>
-        requires(sizeof...(Us) == sizeof...(Ts) && sizeof...(Ts) >= 1 &&
-                 detail::tuple_can_construct_with_helper<core::type_list<Ts...>, core::type_list<Us...>>())
     inline constexpr tuple<Ts...>::tuple(Us&&... us) : detail::tuple_impl<Ts...>{tempest::forward<Us>(us)...}
     {
     }
@@ -319,6 +385,12 @@ namespace tempest
 // Add tuple_size and tuple_element specializations for tuple in the std namespace.
 namespace std
 {
+    template <typename T>
+    struct tuple_size;
+
+    template <size_t I, typename T>
+    struct tuple_element;
+
     template <typename... Ts>
     struct tuple_size<tempest::tuple<Ts...>> : tempest::tuple_size<tempest::tuple<Ts...>>
     {
