@@ -8,13 +8,13 @@
 #include <tempest/tuple.hpp>
 #include <tempest/type_traits.hpp>
 
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
 
 #define NOMINMAX
 #include <Windows.h>
 #include <process.h>
 
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
 
 #include <pthread.h>
 
@@ -28,7 +28,7 @@ namespace tempest
 {
     namespace detail
     {
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
         using thread_handle = uint32_t;
         using native_handle_type = void*;
 
@@ -37,7 +37,7 @@ namespace tempest
             void* handle;
             thread_handle id;
         };
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
         using thread_handle = unsigned long;
         using native_handle_type = unsigned long;
 #endif
@@ -48,31 +48,7 @@ namespace tempest
       public:
         using native_handle_type = detail::native_handle_type;
 
-        class id
-        {
-          public:
-            id() noexcept = default;
-
-            explicit id(detail::thread_handle handle) noexcept : _handle{handle}
-            {
-            }
-
-            constexpr strong_ordering operator<=>(const id& other) const noexcept
-            {
-#if defined(_WIN32)
-                return three_way_comparer<uintptr_t>::compare(_handle, other._handle);
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
-                // Cast to uintptr_t to allow comparison
-                return three_way_comparer<uintptr_t>::compare(tempest::bit_cast<uintptr_t>(_handle),
-                                                              tempest::bit_cast<uintptr_t>(other._handle));
-#else
-#error "Unsupported platform"
-#endif
-            }
-
-          private:
-            detail::thread_handle _handle{};
-        };
+        class id;
 
         thread() noexcept;
         thread(thread&& other) noexcept;
@@ -95,8 +71,10 @@ namespace tempest
 
         native_handle_type native_handle() noexcept;
 
+        static unsigned int hardware_concurrency() noexcept;
+
       private:
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
         template <typename Tup, size_t... Indices>
         static unsigned int __stdcall _invoke_proc(void* raw_vals) noexcept
         {
@@ -139,7 +117,7 @@ namespace tempest
         }
 
         detail::thread_id _handle{};
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
         template <typename Tup, size_t... Indices>
         static void* _invoke_proc(void* raw_vals) noexcept
         {
@@ -182,7 +160,7 @@ namespace tempest
 #endif
     };
 
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
 
     template <typename Fn, typename... Args>
     thread::thread(Fn&& fn, Args&&... args)
@@ -190,7 +168,7 @@ namespace tempest
         _handle = _start(tempest::forward<Fn>(fn), tempest::forward<Args>(args)...);
     }
 
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
 
     template <typename Fn, typename... Args>
     thread::thread(Fn&& fn, Args&&... args)
@@ -200,6 +178,40 @@ namespace tempest
 #else
 #error "Unsupported platform"
 #endif
+
+    namespace this_thread
+    {
+        thread::id get_id() noexcept;
+        void yield() noexcept;
+    }; // namespace this_thread
+
+    class thread::id
+    {
+      public:
+        id() noexcept = default;
+
+        explicit id(detail::thread_handle handle) noexcept : _handle{handle}
+        {
+        }
+
+        constexpr strong_ordering operator<=>(const id& other) const noexcept
+        {
+#if defined(TEMPEST_WIN_THREADS)
+            return three_way_comparer<uintptr_t>::compare(_handle, other._handle);
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
+            // Cast to uintptr_t to allow comparison
+            return three_way_comparer<uintptr_t>::compare(tempest::bit_cast<uintptr_t>(_handle),
+                                                          tempest::bit_cast<uintptr_t>(other._handle));
+#else
+#error "Unsupported platform"
+#endif
+        }
+
+      private:
+        detail::thread_handle _handle{};
+
+        friend thread::id this_thread::get_id() noexcept;
+    };
 } // namespace tempest
 
 #endif // tempest_core_thread_hpp

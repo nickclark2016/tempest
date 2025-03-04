@@ -2,6 +2,10 @@
 
 #include <exception>
 
+#if defined(TEMPEST_POSIX_THREADS)
+#include <sched.h>
+#endif
+
 namespace tempest
 {
     thread::thread() noexcept : _handle{}
@@ -39,9 +43,9 @@ namespace tempest
 
     bool thread::joinable() const noexcept
     {
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
         return _handle.id != 0;
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
         // Check if a pthread is joinable
         return _handle != pthread_t{};
 #else
@@ -51,9 +55,9 @@ namespace tempest
 
     thread::id thread::get_id() const noexcept
     {
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
         return id{_handle.id};
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
         // Get the pthread id
         return id{_handle};
 #else
@@ -68,8 +72,8 @@ namespace tempest
             std::terminate();
         }
 
-#if defined(_WIN32)
-        if (_handle.id == _Thrd_id())
+#if defined(TEMPEST_WIN_THREADS)
+        if (_handle.id == GetCurrentThreadId())
         {
             std::terminate();
         }
@@ -84,7 +88,7 @@ namespace tempest
         {
             std::terminate();
         }
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
         if (_handle == pthread_self())
         {
             std::terminate();
@@ -108,13 +112,13 @@ namespace tempest
             std::terminate();
         }
 
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
         // Release the OS handle
         if (!CloseHandle(_handle.handle))
         {
             std::terminate();
         }
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
         pthread_detach(_handle);
 #else
 #error "Unsupported platform"
@@ -125,9 +129,9 @@ namespace tempest
 
     typename thread::native_handle_type thread::native_handle() noexcept
     {
-#if defined(_WIN32)
+#if defined(TEMPEST_WIN_THREADS)
         return _handle.handle;
-#elif defined(__unix__) || defined(__APPLE__) // pthreads
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
         return _handle;
 #else
 #error "Unsupported platform"
@@ -139,4 +143,43 @@ namespace tempest
         using tempest::swap;
         swap(_handle, other._handle);
     }
+
+    unsigned int thread::hardware_concurrency() noexcept
+    {
+#if defined(TEMPEST_WIN_THREADS)
+        SYSTEM_INFO sysinfo;
+        GetSystemInfo(&sysinfo);
+        return sysinfo.dwNumberOfProcessors;
+        // No need to cast to unsigned int, DWORD is unsigned long, which is the same width as an uint on MSVC
+#elif defined(TEMPEST_POSIX_THREADS) // pthreads
+        return static_cast<unsigned int>(sysconf(_SC_NPROCESSORS_ONLN));
+#else
+#error "Unsupported platform"
+#endif
+    }
+
+    namespace this_thread
+    {
+        thread::id get_id() noexcept
+        {
+#if defined(TEMPEST_WIN_THREADS)
+            return thread::id{static_cast<detail::thread_handle>(GetCurrentThreadId())};
+#elif defined(TEMPEST_POSIX_THREADS)
+            return thread::id{pthread_self()};
+#else
+#error "Unsupported platform"
+#endif
+        }
+
+        void yield() noexcept
+        {
+#if defined(TEMPEST_WIN_THREADS)
+            SwitchToThread();
+#elif defined(TEMPEST_POSIX_THREADS)
+            sched_yield(); // pthread_yield is deprecated in favor of sched_yield
+#else
+#error "Unsupported platform"
+#endif
+        }
+    } // namespace this_thread
 } // namespace tempest
