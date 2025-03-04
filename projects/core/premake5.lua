@@ -42,6 +42,22 @@ scoped.group('Engine', function()
         usage "PUBLIC"
             uses { 'math' }
 
+            scoped.filter({
+                'system:windows'
+            }, function()
+                defines {
+                    'TEMPEST_WIN_THREADS',
+                }
+            end)
+
+            scoped.filter({
+                'system:linux'
+            }, function()
+                defines {
+                    'TEMPEST_POSIX_THREADS',
+                }
+            end)
+
         usage "INTERFACE"
             externalincludedirs {
                 '%{root}/projects/core/include',

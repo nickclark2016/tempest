@@ -50,63 +50,96 @@ namespace tempest
         void swap(array& other) noexcept;
 
         // Undefined to access directly.
-        T _data[N > 0 ? N : 1];
+        T _data[N];
+    };
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    struct array<T, 0>
+    {
+        using value_type = T;
+        using size_type = size_t;
+        using difference_type = ptrdiff_t;
+        using reference = T&;
+        using const_reference = const T&;
+        using pointer = T*;
+        using const_pointer = const T*;
+        using iterator = T*;
+        using const_iterator = const T*;
+
+        [[nodiscard]] constexpr T* data() noexcept;
+        [[nodiscard]] constexpr const T* data() const noexcept;
+
+        [[nodiscard]] constexpr iterator begin() noexcept;
+        [[nodiscard]] constexpr const_iterator begin() const noexcept;
+        [[nodiscard]] constexpr const_iterator cbegin() const noexcept;
+
+        [[nodiscard]] constexpr iterator end() noexcept;
+        [[nodiscard]] constexpr const_iterator end() const noexcept;
+        [[nodiscard]] constexpr const_iterator cend() const noexcept;
+
+        [[nodiscard]] constexpr bool empty() const noexcept;
+        [[nodiscard]] constexpr size_type size() const noexcept;
+        [[nodiscard]] constexpr size_type max_size() const noexcept;
+
+        void fill(const T& value);
+        void swap(array& other) noexcept;
     };
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::reference array<T, N>::at(size_type pos) noexcept
     {
-        return _data[pos];
+        return data()[pos];
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_reference array<T, N>::at(size_type pos) const noexcept
     {
-        return _data[pos];
+        return data()[pos];
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::reference array<T, N>::operator[](size_type pos) noexcept
     {
-        return _data[pos];
+        return data()[pos];
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_reference array<T, N>::operator[](size_type pos) const noexcept
     {
-        return _data[pos];
+        return data()[pos];
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::reference array<T, N>::front() noexcept
     {
-        return _data[0];
+        return data()[0];
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_reference array<T, N>::front() const noexcept
     {
-        return _data[0];
+        return data()[0];
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::reference array<T, N>::back() noexcept
     {
-        return _data[N - 1];
+        return data()[N - 1];
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_reference array<T, N>::back() const noexcept
     {
-        return _data[N - 1];
+        return data()[N - 1];
     }
 
     template <typename T, size_t N>
@@ -127,42 +160,42 @@ namespace tempest
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::iterator array<T, N>::begin() noexcept
     {
-        return _data;
+        return data();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_iterator array<T, N>::begin() const noexcept
     {
-        return _data;
+        return data();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_iterator array<T, N>::cbegin() const noexcept
     {
-        return _data;
+        return data();
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::iterator array<T, N>::end() noexcept
     {
-        return _data + N;
+        return data() + N;
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_iterator array<T, N>::end() const noexcept
     {
-        return _data + N;
+        return data() + N;
     }
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
     inline constexpr typename array<T, N>::const_iterator array<T, N>::cend() const noexcept
     {
-        return _data + N;
+        return data() + N;
     }
 
     template <typename T, size_t N>
@@ -204,6 +237,95 @@ namespace tempest
         {
             tempest::swap(_data[i], other._data[i]);
         }
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr T* array<T, 0>::data() noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr const T* array<T, 0>::data() const noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::iterator array<T, 0>::begin() noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::const_iterator array<T, 0>::begin() const noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::const_iterator array<T, 0>::cbegin() const noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::iterator array<T, 0>::end() noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::const_iterator array<T, 0>::end() const noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::const_iterator array<T, 0>::cend() const noexcept
+    {
+        return nullptr;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr bool array<T, 0>::empty() const noexcept
+    {
+        return true;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::size_type array<T, 0>::size() const noexcept
+    {
+        return 0;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline constexpr typename array<T, 0>::size_type array<T, 0>::max_size() const noexcept
+    {
+        return 0;
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline void array<T, 0>::fill(const T& value)
+    {
+    }
+
+    template <typename T>
+        requires is_default_constructible_v<T>
+    inline void array<T, 0>::swap(array& other) noexcept
+    {
     }
 
     template <typename T, size_t N>
@@ -421,6 +543,6 @@ namespace std
     {
         using type = T;
     };
-}
+} // namespace std
 
 #endif // tempest_core_array_hpp

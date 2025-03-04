@@ -100,10 +100,12 @@ TEST(array, move_constructor_non_trivial_copy)
         non_trivial(int i) : i(i)
         {
         }
+
         non_trivial(const non_trivial& other) : i(other.i)
         {
         }
-        non_trivial(non_trivial&& other) : i(other.i)
+
+        non_trivial(non_trivial&& other) noexcept : i(other.i)
         {
             other.i = 0;
         }
@@ -188,15 +190,17 @@ TEST(array, move_assignment_non_trivial_move)
         non_trivial(int i) : i(i)
         {
         }
+
         non_trivial(const non_trivial& other) : i(other.i)
         {
         }
-        non_trivial(non_trivial&& other) : i(other.i)
+
+        non_trivial(non_trivial&& other) noexcept : i(other.i)
         {
             other.i = 0;
         }
 
-        non_trivial operator=(non_trivial&& other)
+        non_trivial operator=(non_trivial&& other) noexcept
         {
             i = other.i;
             other.i = 0;
