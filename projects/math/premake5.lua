@@ -58,7 +58,7 @@ scoped.group('Engine', function()
 
         warnings 'Extra'
 
-        usage "INTERFACE"
+        scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/math/include',
             }
@@ -70,6 +70,7 @@ scoped.group('Engine', function()
             links {
                 'math',
             }
+        end)
     end)
 
     scoped.group('Tests', function()

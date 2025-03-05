@@ -19,15 +19,25 @@ scoped.group('Engine', function()
 
         warnings 'Extra'
 
-        usage 'PUBLIC'
-            uses { 'core' }
+        scoped.usage('PUBLIC', function()
+            uses {
+                'core',
+            }
+        end)
 
-        usage 'INTERFACE'
+        scoped.usage('INTERFACE', function()
             externalincludedirs {
                 '%{root}/projects/tasks/include',
             }
 
-        usage "*"
+            dependson {
+                'tasks',
+            }
+
+            links {
+                'tasks',
+            }
+        end)
     end)
 
     scoped.group('Tests', function()

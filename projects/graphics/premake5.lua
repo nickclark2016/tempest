@@ -25,10 +25,16 @@ scoped.group('Engine', function()
 
         uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan' }
 
-        usage "PUBLIC"
-            uses { 'core', 'ecs', 'logger', 'math' }
+        scoped.usage("PUBLIC", function()
+            uses {
+                'core',
+                'ecs',
+                'logger',
+                'math',
+            }
+        end)
 
-        usage "INTERFACE"
+        scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/graphics/include',
             }
@@ -40,8 +46,7 @@ scoped.group('Engine', function()
             links {
                 'graphics',
             }
-        
-        usage "*"
+        end)
 
         scoped.filter({ 'files:shaders/raster/**.slang' }, function()
             buildmessage 'Compiling %{file.relpath}'

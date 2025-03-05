@@ -1,5 +1,5 @@
-group 'Engine'
-    project 'tempest'
+scoped.group('Engine', function()
+    scoped.project('tempest', function()
         kind 'StaticLib'
         language 'C++'
         cppdialect 'C++20'
@@ -20,7 +20,7 @@ group 'Engine'
             'include'
         }
 
-        usage "PUBLIC"
+        scoped.usage("PUBLIC", function()
             uses {
                 'assets',
                 'core',
@@ -29,8 +29,9 @@ group 'Engine'
                 'logger',
                 'math',
             }
+        end)
 
-        usage "INTERFACE"
+        scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/tempest/include',
             }
@@ -50,20 +51,23 @@ group 'Engine'
                 'vk-bootstrap',
                 'vma'
             }
+        end)
 
-            scoped.filter({
-                'toolset:msc*'
-            }, function()
-                buildoptions {
-                    '/wd4324', -- 'structure was padded due to alignment specifier'
-                }
-            end)
+        scoped.filter({
+            'toolset:msc*'
+        }, function()
+            buildoptions {
+                '/wd4324', -- 'structure was padded due to alignment specifier'
+            }
+        end)
 
-            scoped.filter({
-                'system:linux'
-            }, function()
-                links {
-                    'pthread',
-                    'X11',
-                }
-            end)
+        scoped.filter({
+            'system:linux'
+        }, function()
+            links {
+                'pthread',
+                'X11',
+            }
+        end)
+    end)
+end)
