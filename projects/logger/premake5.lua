@@ -32,9 +32,9 @@ scoped.group('Engine', function()
         externalwarnings 'Off'
         warnings 'Extra'
 
-        uses "spdlog"
-        
-        usage "INTERFACE"
+        uses { 'spdlog' }
+
+        scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/logger/include',
             }
@@ -46,5 +46,6 @@ scoped.group('Engine', function()
             links {
                 'logger',
             }
+        end)
     end)
 end)

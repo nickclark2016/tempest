@@ -39,7 +39,7 @@ scoped.group('Engine', function()
 
         uses { 'glfw', 'tlsf' }
 
-        usage "PUBLIC"
+        scoped.usage("PUBLIC", function()
             uses { 'math' }
 
             scoped.filter({
@@ -57,8 +57,9 @@ scoped.group('Engine', function()
                     'TEMPEST_POSIX_THREADS',
                 }
             end)
+        end)
 
-        usage "INTERFACE"
+        scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/core/include',
             }
@@ -70,7 +71,7 @@ scoped.group('Engine', function()
             links {
                 'core',
             }
-
+        end)
     end)
 
     scoped.group('Tests', function()

@@ -22,15 +22,16 @@ scoped.group('Engine', function()
             'simdjson'
         }
 
-        usage "PUBLIC"
+        scoped.usage("PUBLIC", function()
             uses {
                 'core',
                 'ecs',
                 'logger',
                 'math',
             }
-        
-        usage "INTERFACE"
+        end)
+
+        scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/assets/include',
             }
@@ -42,6 +43,7 @@ scoped.group('Engine', function()
             links {
                 'assets',
             }
+        end)
 
         scoped.filter({
             'toolset:msc*'

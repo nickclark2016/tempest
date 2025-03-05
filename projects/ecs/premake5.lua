@@ -28,10 +28,14 @@ scoped.group('Engine', function()
         externalwarnings 'Off'
         warnings 'Extra'
 
-        usage "PUBLIC"
-            uses { 'core', 'math' }
-        
-        usage "INTERFACE"
+        scoped.usage("PUBLIC", function()
+            uses {
+                'core',
+                'math',
+            }
+        end)
+
+        scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/ecs/include',
             }
@@ -43,6 +47,7 @@ scoped.group('Engine', function()
             links {
                 'ecs',
             }
+        end)
     end)
 
     scoped.group('Tests', function()
