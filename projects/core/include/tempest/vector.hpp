@@ -803,7 +803,7 @@ namespace tempest
             reserve(count);
             for (size_type i = size(); i < count; ++i)
             {
-                allocator_traits<Allocator>::construct(_alloc, _end++, T{});
+                allocator_traits<Allocator>::construct(_alloc, _end++);
             }
         }
     }
