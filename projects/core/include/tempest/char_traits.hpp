@@ -220,7 +220,7 @@ namespace tempest
     namespace detail
     {
         template <typename CharT, typename Traits>
-        typename Traits::int_type bad_character_heuristic(const CharT* str, size_t size,
+        constexpr typename Traits::int_type bad_character_heuristic(const CharT* str, size_t size,
                                                           span<typename Traits::int_type> table)
         {
             for (auto& entry : table)
@@ -233,14 +233,19 @@ namespace tempest
 
             for (size_t i = 0; i < size; ++i)
             {
-                table[Traits::to_int_type(str[i]) - Traits::to_int_type(min_val)] = static_cast<Traits::int_type>(i);
+                auto index = Traits::to_int_type(str[i]) - Traits::to_int_type(min_val);
+                if (index >= 0 && index < table.size())
+                {
+                    table[Traits::to_int_type(str[i]) - Traits::to_int_type(min_val)] =
+                        static_cast<Traits::int_type>(i);
+                }
             }
 
             return min_val;
         }
 
         template <typename CharT, typename Traits>
-        typename Traits::int_type reverse_bad_character_heuristic(const CharT* str, size_t size,
+        constexpr typename Traits::int_type reverse_bad_character_heuristic(const CharT* str, size_t size,
                                                                   span<typename Traits::int_type> table)
         {
             for (auto& entry : table)
@@ -254,14 +259,18 @@ namespace tempest
             for (size_t i = size; i > 0; --i)
             {
                 auto it = i - 1;
-                table[Traits::to_int_type(str[it]) - Traits::to_int_type(min_val)] = static_cast<Traits::int_type>(it);
+                auto index = Traits::to_int_type(str[it]) - Traits::to_int_type(min_val);
+                if (index >= 0 && index < table.size())
+                {
+                    table[index] = static_cast<Traits::int_type>(it);
+                }
             }
 
             return min_val;
         }
 
         template <typename CharT, typename Traits>
-        const CharT* boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len,
+        constexpr const CharT* boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len,
                                         span<typename Traits::int_type> bad_char_table)
         {
             auto min_value = bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
@@ -280,6 +289,13 @@ namespace tempest
                     return str + s;
                 }
 
+                auto index = Traits::to_int_type(str[s + p]) - min_value;
+                if (index < 0 || index >= bad_char_table.size())
+                {
+                    s += 1;
+                    continue;
+                }
+
                 s += std::max<typename Traits::int_type>(
                     1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
@@ -288,7 +304,7 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        const CharT* reverse_boyer_more_helper(const CharT* str, size_t str_len, const CharT* pattern,
+        constexpr const CharT* reverse_boyer_more_helper(const CharT* str, size_t str_len, const CharT* pattern,
                                                size_t pattern_len, span<typename Traits::int_type> bad_char_table)
         {
             auto s_pattern_len = static_cast<ptrdiff_t>(pattern_len);
@@ -308,6 +324,13 @@ namespace tempest
                     return str + s;
                 }
 
+                auto index = Traits::to_int_type(str[s + p]) - min_value;
+                if (index < 0 || index >= bad_char_table.size())
+                {
+                    s -= 1;
+                    continue;
+                }
+
                 s -= std::max<typename Traits::int_type>(
                     1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
@@ -316,7 +339,7 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        const CharT* boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+        constexpr const CharT* boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
         {
             if constexpr (sizeof(CharT) == 1)
             {
@@ -335,7 +358,7 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        const CharT* reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+        constexpr const CharT* reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
         {
             if constexpr (sizeof(CharT) == 1)
             {

@@ -1,82 +1,83 @@
 #ifndef tempest_core_meta_hpp
 #define tempest_core_meta_hpp
 
+#include <tempest/algorithm.hpp>
+#include <tempest/array.hpp>
+#include <tempest/int.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/source_location.hpp>
 #include <tempest/type_traits.hpp>
-
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <iostream>
-#include <source_location>
-#include <string>
-#include <string_view>
-#include <type_traits>
 
 namespace tempest::core
 {
     template <typename T>
     constexpr auto get_type_name() noexcept
     {
-        auto src = std::source_location::current();
-        std::string_view here = src.function_name();
+        auto src = tempest::source_location::current();
+        string_view here = src.function_name();
 
 #if defined(_MSC_VER) && !defined(__clang__)
-        std::string_view prefix = "auto __cdecl tempest::core::get_type_name<";
-        std::string_view suffix = ">(void) noexcept";
+        string_view prefix = "auto __cdecl tempest::core::get_type_name<";
+        string_view suffix = ">(void) noexcept";
 #elif defined(_MSC_VER) && defined(__clang__)
-        std::string_view prefix = "auto __cdecl tempest::core::get_type_name(void) [T = ";
-        std::string_view suffix = "]";
+        string_view prefix = "auto __cdecl tempest::core::get_type_name(void) [T = ";
+        string_view suffix = "]";
 #elif defined(__clang__)
-        std::string_view prefix = "auto tempest::core::get_type_name() [T = ";
-        std::string_view suffix = "]";
+        string_view prefix = "auto tempest::core::get_type_name() [T = ";
+        string_view suffix = "]";
 #elif defined(__GNUC__)
-        std::string_view prefix = "constexpr auto tempest::core::get_type_name() [ with T = ";
-        std::string_view suffix = "]";
+        string_view prefix = "constexpr auto tempest::core::get_type_name() [ with T = ";
+        string_view suffix = "]";
 #else
 #error Unsupported compiler
 #endif
-        here.remove_prefix(prefix.size());
-        here.remove_suffix(suffix.size());
+        // remove prefix
+        here = substr(here, prefix.size(), here.size() - prefix.size());
 
-        auto inner_trim = here.rfind("()::"); // Handle types defined in function scope
-        if (inner_trim != std::string::npos)
+        // remove suffix
+        here = substr(here, 0, here.size() - suffix.size());
+
+        auto inner = tempest::reverse_search(here, "()::"); // defined in function scope
+        if (inner != here.end())
         {
-            here.remove_prefix(inner_trim + 4);
+            here = string_view(inner + 4, here.end());
         }
 
-        inner_trim = here.rfind("<lambda()>::"); // Handle types defined in lambda scope
-        if (inner_trim != std::string::npos)
+        inner = tempest::reverse_search(here, "<lambda()>::"); // defined in lambda scope
+        if (inner != here.end())
         {
-            here.remove_prefix(inner_trim + 12);
+            here = string_view(inner + 12, here.end());
         }
 
-        if (here.starts_with("enum "))
+        inner = tempest::reverse_search(here, "enum "); // defined in enum scope
+        if (inner != here.end())
         {
-            here.remove_prefix(5);
+            here = string_view(inner + 5, here.end());
         }
 
-        if (here.starts_with("struct "))
+        inner = tempest::reverse_search(here, "struct "); // defined in struct scope
+        if (inner != here.end())
         {
-            here.remove_prefix(7);
+            here = string_view(inner + 7, here.end());
         }
 
-        if (here.starts_with("class "))
+        inner = tempest::reverse_search(here, "class "); // defined in class scope
+        if (inner != here.end())
         {
-            here.remove_prefix(6);
+            here = string_view(inner + 6, here.end());
         }
 
-        return tempest::string_view(here.data(), here.size());
+        return here;
     }
 
-    template <std::size_t N>
+    template <size_t N>
     struct string_literal
     {
-        static constexpr std::size_t size = N;
+        static constexpr size_t size = N;
 
         constexpr string_literal(const char (&str)[N])
         {
-            std::copy_n(str, N, value);
+            tempest::copy_n(str, N, value);
         }
 
         char value[N];
@@ -85,7 +86,7 @@ namespace tempest::core
     template <string_literal Name>
     struct named_type
     {
-        static constexpr std::array<char, sizeof(Name.value)> value = std::to_array(Name.value);
+        static constexpr array<char, sizeof(Name.value)> value = to_array(Name.value);
     };
 
     struct named_type_comparator

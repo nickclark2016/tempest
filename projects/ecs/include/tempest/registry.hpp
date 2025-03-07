@@ -5,8 +5,11 @@
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/meta.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/sparse.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/traits.hpp>
 #include <tempest/vector.hpp>
 
@@ -16,7 +19,6 @@
 #include <compare>
 #include <concepts>
 #include <cstddef>
-#include <optional>
 
 namespace tempest::ecs
 {
@@ -691,8 +693,8 @@ namespace tempest::ecs
             return _entities;
         }
 
-        [[nodiscard]] std::optional<std::string_view> name(entity e) const;
-        void name(entity e, std::string_view n);
+        [[nodiscard]] optional<string_view> name(entity e) const;
+        void name(entity e, string_view n);
 
         template <typename... Ts>
         detail::basic_component_view<E, Ts...> view();
@@ -704,7 +706,7 @@ namespace tempest::ecs
         basic_entity_store<E, 4096, std::uint64_t> _entities;
         vector<unique_ptr<basic_sparse_map_interface<E>>> _component_stores;
 
-        flat_unordered_map<entity, std::string> _name;
+        flat_unordered_map<entity, string> _name;
     };
 
     template <typename E>
@@ -779,17 +781,17 @@ namespace tempest::ecs
     }
 
     template <typename E>
-    inline std::optional<std::string_view> basic_registry<E>::name(entity e) const
+    inline optional<string_view> basic_registry<E>::name(entity e) const
     {
         if (auto it = _name.find(e); it != _name.end())
         {
             return it->second;
         }
-        return std::nullopt;
+        return none();
     }
 
     template <typename E>
-    inline void basic_registry<E>::name(entity e, std::string_view n)
+    inline void basic_registry<E>::name(entity e, string_view n)
     {
         _name[e] = n;
     }
