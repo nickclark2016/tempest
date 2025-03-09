@@ -485,9 +485,15 @@ namespace tempest
     }
 
     template <typename T, size_t N>
-    inline constexpr size_t size(const array<T, N>& arr) noexcept
+    inline constexpr auto size(const array<T, N>& arr) noexcept -> decltype(arr.size())
     {
         return arr.size();
+    }
+
+    template <typename T, size_t N>
+    inline constexpr auto ssize(const array<T, N>& arr) noexcept
+    {
+        return static_cast<ptrdiff_t>(arr.size());
     }
 
     template <typename T, size_t N>

@@ -1,13 +1,13 @@
 #ifndef tempest_core_char_traits_hpp
 #define tempest_core_char_traits_hpp
 
+#include <tempest/algorithm.hpp>
+#include <tempest/array.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/int.hpp>
 #include <tempest/span.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/vector.hpp>
-
-#include <algorithm>
-#include <array>
 
 namespace tempest
 {
@@ -228,7 +228,7 @@ namespace tempest
                 entry = static_cast<typename Traits::int_type>(-1);
             }
 
-            auto min_el = std::min_element(str, str + size);
+            auto min_el = min_element(str, str + size);
             auto min_val = *min_el;
 
             for (size_t i = 0; i < size; ++i)
@@ -253,7 +253,7 @@ namespace tempest
                 entry = static_cast<typename Traits::int_type>(-1);
             }
 
-            auto min_el = std::min_element(str, str + size);
+            auto min_el = min_element(str, str + size);
             auto min_val = *min_el;
 
             for (size_t i = size; i > 0; --i)
@@ -296,7 +296,7 @@ namespace tempest
                     continue;
                 }
 
-                s += std::max<typename Traits::int_type>(
+                s += max<typename Traits::int_type>(
                     1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
 
@@ -331,7 +331,7 @@ namespace tempest
                     continue;
                 }
 
-                s -= std::max<typename Traits::int_type>(
+                s -= max<typename Traits::int_type>(
                     1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
 
@@ -343,14 +343,14 @@ namespace tempest
         {
             if constexpr (sizeof(CharT) == 1)
             {
-                std::array<typename Traits::int_type, 256> bad_char_table;
+                array<typename Traits::int_type, 256> bad_char_table;
                 return boyer_moore_helper<CharT, Traits>(str, str_len, pattern, pattern_len, bad_char_table);
             }
             else
             {
                 // Too large for stack, allocate on heap
                 // Get the minimum and maximum values of the pattern
-                auto [min_el, max_el] = std::minmax_element(pattern, pattern + pattern_len);
+                auto [min_el, max_el] = minmax_element(pattern, pattern + pattern_len);
 
                 vector<typename Traits::int_type> bad_char_table(*max_el - *min_el);
                 return boyer_moore_helper<CharT, Traits>(str, str_len, pattern, pattern_len, bad_char_table);
@@ -362,14 +362,14 @@ namespace tempest
         {
             if constexpr (sizeof(CharT) == 1)
             {
-                std::array<typename Traits::int_type, 256> bad_char_table;
+                array<typename Traits::int_type, 256> bad_char_table;
                 return reverse_boyer_more_helper<CharT, Traits>(str, str_len, pattern, pattern_len, bad_char_table);
             }
             else
             {
                 // Too large for stack, allocate on heap
                 // Get the minimum and maximum values of the pattern
-                auto [min_el, max_el] = std::minmax_element(pattern, pattern + pattern_len);
+                auto [min_el, max_el] = minmax_element(pattern, pattern + pattern_len);
 
                 vector<typename Traits::int_type> bad_char_table(*max_el - *min_el);
                 return reverse_boyer_more_helper<CharT, Traits>(str, str_len, pattern, pattern_len, bad_char_table);
@@ -391,35 +391,35 @@ namespace tempest
     template <typename It, character_type CharT>
     constexpr It search(It first, It last, const CharT* s, size_t count)
     {
-        using char_t = typename std::iterator_traits<It>::value_type;
+        using char_t = typename iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto first_char_ptr = detail::boyer_moore<char_t, traits_t>(&(*first), last - first, s, count);
         const auto distance_to_first = first_char_ptr - &(*first);
-        return std::next(first, distance_to_first);
+        return next(first, distance_to_first);
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr It search(It first, It last, It2 p_first, It2 p_last)
     {
-        using char_t = typename std::iterator_traits<It>::value_type;
+        using char_t = typename iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto first_char_ptr =
             detail::boyer_moore<char_t, traits_t>(&(*first), last - first, &(*p_first), p_last - p_first);
         const auto distance_to_first = first_char_ptr - &(*first);
-        return std::next(first, distance_to_first);
+        return next(first, distance_to_first);
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr It search_first_of(It first, It last, It2 p_first, It2 p_last)
     {
         // Fast path for 8 bit characters
-        if constexpr (sizeof(typename std::iterator_traits<It>::value_type) == 1)
+        if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
         {
             // Create bit field for lookup
             uint64_t lut[4] = {0, 0, 0, 0}; // 256 bits, 0 initialized
@@ -463,14 +463,14 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_first_of(It first, It last, const CharT* s, size_t count)
     {
         return search_first_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_first_of(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -478,7 +478,7 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_first_of(It first, It last, CharT ch)
     {
         for (; first != last; ++first)
@@ -493,7 +493,7 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It reverse_search(It first, It last, CharT ch)
     {
         for (auto it = last; it != first;)
@@ -509,33 +509,33 @@ namespace tempest
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr It reverse_search(It first, It last, It2 p_first, It2 p_last)
     {
-        using char_t = typename std::iterator_traits<It>::value_type;
+        using char_t = typename iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto last_char_ptr =
             detail::reverse_boyer_moore<char_t, traits_t>(&(*first), last - first, &(*p_first), p_last - p_first);
         const auto distance_to_last = last_char_ptr - &(*first);
-        return std::next(first, distance_to_last);
+        return next(first, distance_to_last);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It reverse_search(It first, It last, const CharT* s, size_t count)
     {
-        using char_t = typename std::iterator_traits<It>::value_type;
+        using char_t = typename iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto last_char_ptr = detail::reverse_boyer_moore<char_t, traits_t>(&(*first), last - first, s, count);
         const auto distance_to_last = last_char_ptr - &(*first);
-        return std::next(first, distance_to_last);
+        return next(first, distance_to_last);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It reverse_search(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -543,22 +543,22 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_last_of(It first, It last, CharT ch)
     {
         return reverse_search(first, last, ch);
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr It search_last_of(It first, It last, It2 p_first, It2 p_last)
     {
         // Fast path for 8 bit characters
-        if constexpr (sizeof(typename std::iterator_traits<It>::value_type) == 1)
+        if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
         {
             // Create bit field for lookup
-            std::uint64_t lut[4] = {0, 0, 0, 0}; // 256 bits, 0 initialized
+            uint64_t lut[4] = {0, 0, 0, 0}; // 256 bits, 0 initialized
 
             for (auto it = p_first; it != p_last; ++it)
             {
@@ -602,14 +602,14 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_last_of(It first, It last, const CharT* s, size_t count)
     {
         return search_last_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_last_of(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -617,7 +617,7 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_first_not_of(It first, It last, CharT ch)
     {
         for (; first != last; ++first)
@@ -632,15 +632,15 @@ namespace tempest
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr It search_first_not_of(It first, It last, It2 p_first, It2 p_last)
     {
         // Fast path for 8 bit characters
-        if constexpr (sizeof(typename std::iterator_traits<It>::value_type) == 1)
+        if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
         {
             // Create bit field for lookup
-            std::uint64_t lut[4] = {0, 0, 0, 0}; // 256 bits, 0 initialized
+            uint64_t lut[4] = {0, 0, 0, 0}; // 256 bits, 0 initialized
 
             for (auto it = p_first; it != p_last; ++it)
             {
@@ -689,7 +689,7 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_first_not_of(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -697,14 +697,14 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_first_not_of(It first, It last, const CharT* s, size_t count)
     {
         return search_first_not_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_last_not_of(It first, It last, CharT ch)
     {
         for (auto it = last; it != first;)
@@ -720,15 +720,15 @@ namespace tempest
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr It search_last_not_of(It first, It last, It2 p_first, It2 p_last)
     {
         // Fast path for 8 bit characters
-        if constexpr (sizeof(typename std::iterator_traits<It>::value_type) == 1)
+        if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
         {
             // Create bit field for lookup
-            std::uint64_t lut[4] = {0, 0, 0, 0}; // 256 bits, 0 initialized
+            uint64_t lut[4] = {0, 0, 0, 0}; // 256 bits, 0 initialized
 
             for (auto it = p_first; it != p_last; ++it)
             {
@@ -779,14 +779,14 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_last_not_of(It first, It last, const CharT* s, size_t count)
     {
         return search_last_not_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr It search_last_not_of(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -794,14 +794,14 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool starts_with(It first, It last, CharT ch)
     {
         return first != last && *first == ch;
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool starts_with(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -811,8 +811,8 @@ namespace tempest
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr bool starts_with(It first, It last, It2 p_first, It2 p_last)
     {
         while (first != last && p_first != p_last)
@@ -830,14 +830,14 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool starts_with(It first, It last, const CharT* s, size_t count)
     {
         return starts_with(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool ends_with(It first, It last, CharT ch)
     {
         if (first == last)
@@ -851,7 +851,7 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool ends_with(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -861,11 +861,11 @@ namespace tempest
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr bool ends_with(It first, It last, It2 p_first, It2 p_last)
     {
-        if (std::distance(first, last) < std::distance(p_first, p_last))
+        if (distance(first, last) < distance(p_first, p_last))
         {
             return false;
         }
@@ -888,21 +888,21 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool ends_with(It first, It last, const CharT* s, size_t count)
     {
         return ends_with(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool contains(It first, It last, CharT ch)
     {
         return search(first, last, ch) != last;
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool contains(It first, It last, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -912,22 +912,22 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr bool contains(It first, It last, const CharT* s, size_t count)
     {
         return search(first, last, s, s + count) != last;
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr bool contains(It first, It last, It2 p_first, It2 p_last)
     {
         return search(first, last, p_first, p_last) != last;
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr int compare(It first1, It last1, const CharT* s)
     {
         using traits = char_traits<CharT>;
@@ -937,15 +937,15 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-        requires character_type<typename std::iterator_traits<It>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type>
     constexpr int compare(It first1, It last1, const CharT* s, size_t count)
     {
         return compare(first1, last1, s, s + count);
     }
 
     template <typename It, typename It2>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 character_type<typename std::iterator_traits<It2>::value_type>
+        requires character_type<typename iterator_traits<It>::value_type> &&
+                 character_type<typename iterator_traits<It2>::value_type>
     constexpr int compare(It first1, It last1, It2 first2, It2 last2)
     {
         while (first1 != last1 && first2 != last2)

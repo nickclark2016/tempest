@@ -1,8 +1,12 @@
 #ifndef tempest_core_utility_hpp
 #define tempest_core_utility_hpp
 
+#include <tempest/compare.hpp>
 #include <tempest/concepts.hpp>
+#include <tempest/forward.hpp>
+#include <tempest/to_underlying.hpp>
 #include <tempest/type_traits.hpp>
+#include <tempest/unreachable.hpp>
 
 namespace tempest
 {
@@ -37,27 +41,6 @@ namespace tempest
         }
     }
 
-    /// @brief Function used to forward an lvalue as an lvalue or an rvalue reference.
-    /// @tparam T Type of the object to forward.
-    /// @param t Reference to the object to forward.
-    /// @return Forwarded reference.
-    template <typename T>
-    inline constexpr T&& forward(remove_reference_t<T>& t) noexcept
-    {
-        return static_cast<T&&>(t);
-    }
-
-    /// @brief Function used to forward an lvalue as an lvalue or an rvalue reference.
-    /// @tparam T Type of the object to forward.
-    /// @param t Reference to the object to forward.
-    /// @return Forwarded reference.
-    template <typename T>
-    inline constexpr T&& forward(remove_reference_t<T>&& t) noexcept
-    {
-        static_assert(!is_lvalue_reference<T>::value, "Can't forward an rvalue as an lvalue.");
-        return static_cast<T&&>(t);
-    }
-
     /// @brief Function used to swap two objects.
     /// @tparam T Type of the objects to swap.
     /// @param a First object to swap.
@@ -70,17 +53,6 @@ namespace tempest
         T temp = move(a);
         a = move(b);
         b = move(temp);
-    }
-
-    /// @brief Converts an enumeration value to its underlying type.
-    /// @tparam T Type of the enumeration.
-    /// @param value Enumeration value to convert.
-    /// @return Underlying type of the enumeration.
-    template <typename T>
-        requires is_enum_v<T>
-    inline constexpr underlying_type_t<T> to_underlying(T value) noexcept
-    {
-        return static_cast<underlying_type_t<T>>(value);
     }
 
     /// @brief Exchanges the values of two objects.
@@ -448,19 +420,29 @@ namespace tempest
         return tempest::move(p).second;
     }
 
-    [[noreturn]] void abort() noexcept;
-
-    [[noreturn]] inline void unreachable()
+    template <typename T, typename U>
+    inline constexpr bool operator==(const pair<T, U>& lhs, const pair<T, U>& rhs)
     {
-#ifdef _DEBUG
-        abort();
-#else
-#ifdef _MSC_VER
-        __assume(false);
-#else
-        __builtin_unreachable();
-#endif
-#endif
+        return lhs.first == rhs.first && lhs.second == rhs.second;
+    }
+
+    template <typename T, typename U>
+    inline constexpr bool operator!=(const pair<T, U>& lhs, const pair<T, U>& rhs)
+    {
+        return !(lhs == rhs);
+    }
+
+    template <typename T, typename U>
+    constexpr auto operator<=>(const pair<T, U>& lhs, const pair<T, U>& rhs)
+    {
+        tempest::compare_three_way cmp;
+        
+        if (auto c = cmp(lhs.first, rhs.first); c != 0)
+        {
+            return c;
+        }
+        
+        return cmp(lhs.second, rhs.second);
     }
 
     template <auto V>

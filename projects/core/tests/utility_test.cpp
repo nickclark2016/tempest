@@ -103,3 +103,19 @@ TEST(pair, structured_binding_move)
     EXPECT_EQ(first, 1);
     EXPECT_EQ(second, 2);
 }
+
+TEST(pair, compare)
+{
+    tempest::pair<int, int> p1{1, 2};
+    tempest::pair<int, int> p2{1, 2};
+    tempest::pair<int, int> p3{2, 1};
+    EXPECT_EQ(p1, p2);
+    EXPECT_NE(p1, p3);
+    EXPECT_LT(p1, p3);
+    EXPECT_LE(p1, p2);
+    EXPECT_GT(p3, p1);
+    EXPECT_GE(p2, p1);
+    EXPECT_EQ(p1 <=> p2, tempest::strong_ordering::equal);
+    EXPECT_EQ(p1 <=> p3, tempest::strong_ordering::less);
+    EXPECT_EQ(p3 <=> p1, tempest::strong_ordering::greater);
+}

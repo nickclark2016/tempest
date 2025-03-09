@@ -1,9 +1,11 @@
 #ifndef tempest_core_algorithm_hpp
 #define tempest_core_algorithm_hpp
 
+#include <tempest/compare.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/type_traits.hpp>
+#include <tempest/utility.hpp>
 
 namespace tempest
 {
@@ -151,6 +153,335 @@ namespace tempest
             ++first;
         }
         return last;
+    }
+
+    template <forward_iterator It>
+    [[nodiscard]] inline constexpr It min_element(It first, It last)
+    {
+        if (first == last)
+        {
+            return last;
+        }
+
+        It min_it = first;
+        ++first;
+
+        while (first != last)
+        {
+            if (*first < *min_it)
+            {
+                min_it = first;
+            }
+            ++first;
+        }
+
+        return min_it;
+    }
+
+    template <forward_iterator It, typename Compare>
+    [[nodiscard]] inline constexpr It min_element(It first, It last, Compare comp)
+    {
+        if (first == last)
+        {
+            return last;
+        }
+
+        It min_it = first;
+        ++first;
+
+        while (first != last)
+        {
+            if (comp(*first, *min_it))
+            {
+                min_it = first;
+            }
+            ++first;
+        }
+        return min_it;
+    }
+
+    template <forward_iterator It>
+    [[nodiscard]] inline constexpr It max_element(It first, It last)
+    {
+        if (first == last)
+        {
+            return last;
+        }
+
+        It max_it = first;
+        ++first;
+
+        while (first != last)
+        {
+            if (*first > *max_it)
+            {
+                max_it = first;
+            }
+            ++first;
+        }
+        return max_it;
+    }
+
+    template <forward_iterator It, typename Compare>
+    [[nodiscard]] inline constexpr It max_element(It first, It last, Compare comp)
+    {
+        if (first == last)
+        {
+            return last;
+        }
+
+        It max_it = first;
+        ++first;
+
+        while (first != last)
+        {
+            if (comp(*max_it, *first))
+            {
+                max_it = first;
+            }
+            ++first;
+        }
+        return max_it;
+    }
+
+    template <typename T>
+    inline constexpr const T& min(const T& a, const T& b)
+    {
+        return (a < b) ? a : b;
+    }
+
+    template <typename T, typename Compare>
+    inline constexpr const T& min(const T& a, const T& b, Compare comp)
+    {
+        return comp(a, b) ? a : b;
+    }
+
+    template <typename T>
+    inline constexpr const T& max(const T& a, const T& b)
+    {
+        return (a > b) ? a : b;
+    }
+
+    template <typename T, typename Compare>
+    inline constexpr const T& max(const T& a, const T& b, Compare comp)
+    {
+        return comp(a, b) ? b : a;
+    }
+
+    template <forward_iterator It>
+    [[nodiscard]] inline constexpr pair<It, It> minmax_element(It first, It last)
+    {
+        if (first == last)
+        {
+            return {last, last};
+        }
+
+        It min_it = first;
+        It max_it = first;
+        ++first;
+
+        while (first != last)
+        {
+            if (*first < *min_it)
+            {
+                min_it = first;
+            }
+            else if (*first > *max_it)
+            {
+                max_it = first;
+            }
+            ++first;
+        }
+
+        return {min_it, max_it};
+    }
+
+    template <forward_iterator It, typename Compare>
+    [[nodiscard]] inline constexpr pair<It, It> minmax_element(It first, It last, Compare comp)
+    {
+        if (first == last)
+        {
+            return {last, last};
+        }
+
+        It min_it = first;
+        It max_it = first;
+        +first;
+
+        while (first != last)
+        {
+            if (comp(*first, *min_it))
+            {
+                min_it = first;
+            }
+            else if (comp(*max_it, *first))
+            {
+                max_it = first;
+            }
+            ++first;
+        }
+
+        return {min_it, max_it};
+    }
+
+    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type>
+    inline constexpr It lower_bound(It first, It last, const T& value)
+    {
+        using diff_type = typename iterator_traits<It>::difference_type;
+        diff_type count = distance(first, last);
+
+        while (count > 0)
+        {
+            It it = first;
+            auto step = count / 2;
+            tempest::advance(it, step);
+
+            if (*it < value)
+            {
+                first = ++it;
+                count -= step + 1;
+            }
+            else
+            {
+                count = step;
+            }
+        }
+
+        return first;
+    }
+
+    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type, typename Compare>
+    inline constexpr It lower_bound(It first, It last, const T& value, Compare comp)
+    {
+        using diff_type = typename iterator_traits<It>::difference_type;
+        diff_type count = distance(first, last);
+
+        while (count > 0)
+        {
+            It it = first;
+            auto step = count / 2;
+            tempest::advance(it, step);
+
+            if (comp(*it, value))
+            {
+                first = ++it;
+                count -= step + 1;
+            }
+            else
+            {
+                count = step;
+            }
+        }
+
+        return first;
+    }
+
+    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type>
+    inline constexpr It upper_bound(It first, It last, const T& value)
+    {
+        using diff_type = typename iterator_traits<It>::difference_type;
+        diff_type count = distance(first, last);
+
+        while (count > 0)
+        {
+            It it = first;
+            auto step = count / 2;
+            tempest::advance(it, step);
+
+            if (!(value < *it))
+            {
+                first = ++it;
+                count -= step + 1;
+            }
+            else
+            {
+                count = step;
+            }
+        }
+
+        return first;
+    }
+
+    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type, typename Compare>
+    inline constexpr It upper_bound(It first, It last, const T& value, Compare comp)
+    {
+        using diff_type = typename iterator_traits<It>::difference_type;
+        diff_type count = distance(first, last);
+
+        while (count > 0)
+        {
+            It it = first;
+            auto step = count / 2;
+            tempest::advance(it, step);
+
+            if (!comp(value, *it))
+            {
+                first = ++it;
+                count -= step + 1;
+            }
+            else
+            {
+                count = step;
+            }
+        }
+        return first;
+    }
+
+    template <input_iterator It1, input_iterator It2>
+    inline constexpr bool equal(It1 first1, It1 last1, It2 first2)
+    {
+        for (; first1 != last1; ++first1, ++first2)
+        {
+            if constexpr (requires {
+                              { *first1 != *first2 } -> convertible_to<bool>;
+                          })
+            {
+                if (*first1 != *first2)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                if (!(*first1 == *first2))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    // TODO: Replace iterator with input_iterator when I fix flat_map's const iterator to be input_iterator compatible
+    template <iterator It1, iterator It2, typename Compare>
+    constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2, Compare comp)
+        -> decltype(comp(*first1, *first2))
+    {
+        bool exhausted1 = (first1 == last1);
+        bool exhausted2 = (first2 == last2);
+
+        while (!exhausted1 && !exhausted2)
+        {
+            auto c = comp(*first1, *first2);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            exhausted1 = (++first1 == last1);
+            exhausted2 = (++first2 == last2);
+        }
+
+        return !exhausted1   ? tempest::strong_ordering::greater
+               : !exhausted2 ? tempest::strong_ordering::less
+                             : tempest::strong_ordering::equal;
+    }
+
+    template <iterator It1, iterator It2>
+    constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2)
+    {
+        return lexicographical_compare_three_way(first1, last1, first2, last2, tempest::compare_three_way{});
     }
 } // namespace tempest
 

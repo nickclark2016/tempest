@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <map>
 #include <ranges>
 #include <unordered_set>
