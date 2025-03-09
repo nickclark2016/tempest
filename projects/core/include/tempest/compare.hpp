@@ -2,10 +2,11 @@
 #define tempest_core_compare_hpp
 
 #include <tempest/concepts.hpp>
+#include <tempest/forward.hpp>
 #include <tempest/int.hpp>
 #include <tempest/math.hpp>
+#include <tempest/to_underlying.hpp>
 #include <tempest/type_traits.hpp>
-#include <tempest/utility.hpp>
 
 namespace tempest
 {
@@ -456,9 +457,13 @@ namespace tempest
     template <typename T, typename U = T>
     struct three_way_comparer;
 
-    template <integral T, integral U>
+    template <typename T, typename U>
+        requires integral<remove_cvref_t<T>> && integral<remove_cvref_t<U>>
     struct three_way_comparer<T, U>
     {
+        using t_base = remove_cvref_t<T>;
+        using u_base = remove_cvref_t<U>;
+
         static constexpr strong_ordering compare(T t, U u) noexcept
         {
             // If the same signedness
@@ -468,9 +473,9 @@ namespace tempest
             // - If the argument with the signed type is negative, return the appropriate ordering.
             // - If both are non-negative, compare as unsigned.
 
-            if constexpr (signed_integral<T> == signed_integral<U>)
+            if constexpr (signed_integral<t_base> == signed_integral<u_base>)
             {
-                if constexpr (sizeof(T) == sizeof(U))
+                if constexpr (sizeof(t_base) == sizeof(u_base))
                 {
                     if (t < u)
                     {
@@ -485,18 +490,18 @@ namespace tempest
                         return strong_ordering::equal;
                     }
                 }
-                else if constexpr (sizeof(T) > sizeof(U))
+                else if constexpr (sizeof(t_base) > sizeof(u_base))
                 {
                     // promote U to T
-                    return three_way_comparer<T, T>::compare(t, static_cast<T>(u));
+                    return three_way_comparer<t_base, t_base>::compare(t, static_cast<t_base>(u));
                 }
                 else
                 {
                     // promote T to U
-                    return three_way_comparer<U, U>::compare(static_cast<U>(t), u);
+                    return three_way_comparer<u_base, u_base>::compare(static_cast<u_base>(t), u);
                 }
             }
-            else if constexpr (signed_integral<T>)
+            else if constexpr (signed_integral<t_base>)
             {
                 // If only T is signed, check t for negative.
                 if (t < 0)
@@ -505,7 +510,8 @@ namespace tempest
                 }
                 else
                 {
-                    return three_way_comparer<make_unsigned_t<T>, U>::compare(static_cast<make_unsigned_t<T>>(t), u);
+                    return three_way_comparer<make_unsigned_t<t_base>, u_base>::compare(
+                        static_cast<make_unsigned_t<t_base>>(t), u);
                 }
             }
             else
@@ -517,8 +523,30 @@ namespace tempest
                 }
                 else
                 {
-                    return three_way_comparer<T, make_unsigned_t<U>>::compare(t, static_cast<make_unsigned_t<U>>(u));
+                    return three_way_comparer<t_base, make_unsigned_t<u_base>>::compare(
+                        t, static_cast<make_unsigned_t<u_base>>(u));
                 }
+            }
+        }
+    };
+
+    template <typename T, typename U>
+        requires is_pointer_v<remove_cvref_t<T>> && is_pointer_v<remove_cvref_t<U>>
+    struct three_way_comparer<T, U>
+    {
+        static constexpr strong_ordering compare(T t, U u) noexcept
+        {
+            if (t < u)
+            {
+                return strong_ordering::less;
+            }
+            else if (t > u)
+            {
+                return strong_ordering::greater;
+            }
+            else
+            {
+                return strong_ordering::equal;
             }
         }
     };
@@ -551,7 +579,7 @@ namespace tempest
                         return strong_ordering::equal;
                     }
                 }
-                
+
                 bool tsign = signbit(t);
                 bool usign = signbit(u);
 
@@ -591,6 +619,15 @@ namespace tempest
                 // promote T to U
                 return three_way_comparer<U, U>::compare(static_cast<U>(t), u);
             }
+        }
+    };
+
+    template <typename T1, typename T2>
+    struct three_way_comparer
+    {
+        static constexpr auto compare(T1 t, T2 u) noexcept
+        {
+            return t <=> u;
         }
     };
 

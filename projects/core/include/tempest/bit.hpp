@@ -3,7 +3,7 @@
 
 #include <tempest/concepts.hpp>
 #include <tempest/type_traits.hpp>
-#include <tempest/utility.hpp>
+#include <tempest/unreachable.hpp>
 
 #if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
