@@ -1,0 +1,32 @@
+name: Build Linux
+
+on: [push]
+
+jobs:
+  cpp-build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+        config: [ debug, release ]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Configure Ubuntu Libraries
+        run: sudo apt-get install -y libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev mesa-common-dev
+      - name: Configure Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: 19
+          platform: x64
+      - name: Install Premake
+        uses: Jarod42/install-premake5@v4
+        with:
+          ref: master
+      - name: Generate Project
+        run: premake5 gmake
+      - name: Build
+        run: make config=${{ matrix.config }} -j$(nproc)
