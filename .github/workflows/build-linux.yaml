@@ -30,5 +30,7 @@ jobs:
           ref: master
       - name: Generate Project Files
         run: premake5 gmake
+      - name: Fetch Dependencies
+        run: premake5 fetch
       - name: Build
         run: make config=${{ matrix.config }}_x64 -j$(nproc)
