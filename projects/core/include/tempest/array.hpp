@@ -318,13 +318,13 @@ namespace tempest
 
     template <typename T>
         requires is_default_constructible_v<T>
-    inline void array<T, 0>::fill(const T& value)
+    inline void array<T, 0>::fill([[maybe_unused]] const T& value)
     {
     }
 
     template <typename T>
         requires is_default_constructible_v<T>
-    inline void array<T, 0>::swap(array& other) noexcept
+    inline void array<T, 0>::swap([[maybe_unused]] array& other) noexcept
     {
     }
 

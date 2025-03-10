@@ -517,7 +517,7 @@ namespace tempest::graphics
                         //}
 
                         // Upload Directional Shadow Map Data
-                        writer.write<gpu_shadow_map_parameter>(cmds, span(_gpu_shadow_map_use_parameters),
+                        writer.write<gpu_shadow_map_parameter>(cmds, span<gpu_shadow_map_parameter>(_gpu_shadow_map_use_parameters),
                                                                dir_shadow_buffer);
 
                         // Upload scene data

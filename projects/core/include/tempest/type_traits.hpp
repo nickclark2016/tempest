@@ -806,7 +806,7 @@ namespace tempest
     /// @brief Type trait to check if a type is an object.
     /// @tparam T Type to check if is an object.
     template <typename T>
-    struct is_object : bool_constant<is_scalar_v<T> || is_array_v<T> || is_union_v<T> || is_class_v<T>>
+    struct is_object : negation<disjunction<is_function<T>, is_reference<T>, is_void<T>>>
     {
     };
 
@@ -2790,9 +2790,21 @@ namespace tempest
     };
 
     template <>
+    struct make_signed<signed char>
+    {
+        using type = signed char;
+    };
+
+    template <>
     struct make_signed<unsigned short>
     {
         using type = signed short;
+    };
+
+    template <>
+    struct make_signed<short>
+    {
+        using type = short;
     };
 
     template <>
@@ -2802,15 +2814,33 @@ namespace tempest
     };
 
     template <>
+    struct make_signed<int>
+    {
+        using type = int;
+    };
+
+    template <>
     struct make_signed<unsigned long>
     {
         using type = signed long;
     };
 
     template <>
+    struct make_signed<long>
+    {
+        using type = long;
+    };
+
+    template <>
     struct make_signed<unsigned long long>
     {
         using type = signed long long;
+    };
+
+    template <>
+    struct make_signed<long long>
+    {
+        using type = long long;
     };
 
     template <>
@@ -2871,25 +2901,55 @@ namespace tempest
     };
 
     template <>
-    struct make_unsigned<signed short>
+    struct make_unsigned<unsigned char>
+    {
+        using type = unsigned char;
+    };
+
+    template <>
+    struct make_unsigned<short>
     {
         using type = unsigned short;
     };
 
     template <>
-    struct make_unsigned<signed int>
+    struct make_unsigned<unsigned short>
+    {
+        using type = unsigned short;
+    };
+
+    template <>
+    struct make_unsigned<int>
     {
         using type = unsigned int;
     };
 
     template <>
-    struct make_unsigned<signed long>
+    struct make_unsigned<unsigned int>
+    {
+        using type = unsigned int;
+    };
+
+    template <>
+    struct make_unsigned<long>
     {
         using type = unsigned long;
     };
 
     template <>
-    struct make_unsigned<signed long long>
+    struct make_unsigned<unsigned long>
+    {
+        using type = unsigned long;
+    };
+
+    template <>
+    struct make_unsigned<long long>
+    {
+        using type = unsigned long long;
+    };
+
+    template <>
+    struct make_unsigned<unsigned long long>
     {
         using type = unsigned long long;
     };

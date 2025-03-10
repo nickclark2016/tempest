@@ -363,7 +363,7 @@ TEST(flat_map, three_way_compare_greater)
 TEST(flat_map, iterator_checks)
 {
     using it = tempest::flat_map<int, int>::iterator;
-    using const_it = tempest::flat_map<int, int>::const_iterator;
+    // using const_it = tempest::flat_map<int, int>::const_iterator;
 
     EXPECT_TRUE(tempest::input_iterator<it>);
     // EXPECT_TRUE(tempest::input_iterator<const_it>);

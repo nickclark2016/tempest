@@ -454,7 +454,7 @@ namespace tempest
     template <typename T, typename Allocator>
     constexpr typename vector<T, Allocator>::const_reverse_iterator vector<T, Allocator>::crbegin() const noexcept
     {
-        return const_reverse_iterator{end()};
+        return const_reverse_iterator{cend()};
     }
 
     template <typename T, typename Allocator>

@@ -51,6 +51,15 @@ scoped.group('Engine', function()
                 'vk-bootstrap',
                 'vma'
             }
+
+            scoped.filter({
+                'system:linux'
+            }, function()
+                links {
+                    'pthread',
+                    'X11',
+                }
+            end)
         end)
 
         scoped.filter({
@@ -58,15 +67,6 @@ scoped.group('Engine', function()
         }, function()
             buildoptions {
                 '/wd4324', -- 'structure was padded due to alignment specifier'
-            }
-        end)
-
-        scoped.filter({
-            'system:linux'
-        }, function()
-            links {
-                'pthread',
-                'X11',
             }
         end)
     end)

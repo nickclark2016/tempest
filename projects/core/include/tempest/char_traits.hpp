@@ -260,7 +260,7 @@ namespace tempest
             {
                 auto it = i - 1;
                 auto index = Traits::to_int_type(str[it]) - Traits::to_int_type(min_val);
-                if (index >= 0 && index < table.size())
+                if (index >= 0 && static_cast<size_t>(index) < table.size())
                 {
                     table[index] = static_cast<Traits::int_type>(it);
                 }
@@ -290,7 +290,7 @@ namespace tempest
                 }
 
                 auto index = Traits::to_int_type(str[s + p]) - min_value;
-                if (index < 0 || index >= bad_char_table.size())
+                if (index < 0 || static_cast<size_t>(index) >= bad_char_table.size())
                 {
                     s += 1;
                     continue;
@@ -325,7 +325,7 @@ namespace tempest
                 }
 
                 auto index = Traits::to_int_type(str[s + p]) - min_value;
-                if (index < 0 || index >= bad_char_table.size())
+                if (index < 0 || static_cast<size_t>(index) >= bad_char_table.size())
                 {
                     s -= 1;
                     continue;
