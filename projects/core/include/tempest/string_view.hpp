@@ -5,9 +5,10 @@
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
+#include <tempest/limits.hpp>
+#include <tempest/memory.hpp>
 
 #include <iterator>
-#include <limits>
 
 namespace tempest
 {
@@ -22,7 +23,7 @@ namespace tempest
         using reference = CharT&;
         using const_reference = const CharT&;
         using size_type = size_t;
-        using difference_type = std::ptrdiff_t;
+        using difference_type = ptrdiff_t;
         using iterator = pointer;
         using const_iterator = const_pointer;
         using reverse_iterator = std::reverse_iterator<iterator>;
@@ -33,13 +34,13 @@ namespace tempest
         constexpr basic_string_view(const CharT* s, size_type count) noexcept;
         constexpr basic_string_view(const CharT* s) noexcept;
 
-        template <std::contiguous_iterator It, std::sized_sentinel_for<It> End>
+        template <contiguous_iterator It, std::sized_sentinel_for<It> End>
         constexpr basic_string_view(It first, End last) noexcept;
 
         template <typename R>
         constexpr explicit basic_string_view(R&& r) noexcept;
 
-        constexpr basic_string_view(std::nullptr_t) = delete;
+        constexpr basic_string_view(nullptr_t) = delete;
 
         constexpr basic_string_view& operator=(const basic_string_view&) noexcept = default;
 
@@ -89,7 +90,7 @@ namespace tempest
         auto lhs_size = lhs.size();
         auto rhs_size = rhs.size();
 
-        auto result = Traits::compare(lhs.data(), rhs.data(), std::min(lhs_size, rhs_size));
+        auto result = Traits::compare(lhs.data(), rhs.data(), tempest::min(lhs_size, rhs_size));
         if (result != 0)
         {
             return result <=> 0;
@@ -111,7 +112,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    template <std::contiguous_iterator It, std::sized_sentinel_for<It> End>
+    template <contiguous_iterator It, std::sized_sentinel_for<It> End>
     constexpr basic_string_view<CharT, Traits>::basic_string_view(It first, End last) noexcept
         : _start(std::to_address(first)), _end(std::to_address(last))
     {
@@ -219,7 +220,7 @@ namespace tempest
     template <typename CharT, typename Traits>
     inline constexpr auto basic_string_view<CharT, Traits>::max_size() const noexcept -> size_type
     {
-        return std::numeric_limits<size_type>::max();
+        return numeric_limits<size_type>::max();
     }
 
     template <typename CharT, typename Traits>
@@ -232,7 +233,7 @@ namespace tempest
 
     namespace literals
     {
-        [[nodiscard]] constexpr auto operator""_sv(const char* str, std::size_t len) noexcept -> string_view
+        [[nodiscard]] constexpr auto operator""_sv(const char* str, size_t len) noexcept -> string_view
         {
             return string_view(str, len);
         }
@@ -251,7 +252,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto search(basic_string_view<CharT, Traits> sv, const CharT* str, std::size_t count) noexcept
+    constexpr auto search(basic_string_view<CharT, Traits> sv, const CharT* str, size_t count) noexcept
     {
         return search(sv.begin(), sv.end(), str, str + count);
     }
@@ -281,7 +282,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto reverse_search(basic_string_view<CharT, Traits> sv, const CharT* str, std::size_t count) noexcept
+    constexpr auto reverse_search(basic_string_view<CharT, Traits> sv, const CharT* str, size_t count) noexcept
     {
         return reverse_search(sv.begin(), sv.end(), str, str + count);
     }
@@ -311,7 +312,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto search_first_of(basic_string_view<CharT, Traits> sv, const CharT* str, std::size_t count) noexcept
+    constexpr auto search_first_of(basic_string_view<CharT, Traits> sv, const CharT* str, size_t count) noexcept
     {
         return search_first_of(sv.begin(), sv.end(), str, str + count);
     }
@@ -341,8 +342,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto search_first_not_of(basic_string_view<CharT, Traits> sv, const CharT* str,
-                                       std::size_t count) noexcept
+    constexpr auto search_first_not_of(basic_string_view<CharT, Traits> sv, const CharT* str, size_t count) noexcept
     {
         return search_first_not_of(sv.begin(), sv.end(), str, str + count);
     }
@@ -373,7 +373,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto search_last_of(basic_string_view<CharT, Traits> sv, const CharT* str, std::size_t count) noexcept
+    constexpr auto search_last_of(basic_string_view<CharT, Traits> sv, const CharT* str, size_t count) noexcept
     {
         return search_last_of(sv.begin(), sv.end(), str, str + count);
     }
@@ -403,7 +403,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto search_last_not_of(basic_string_view<CharT, Traits> sv, const CharT* str, std::size_t count) noexcept
+    constexpr auto search_last_not_of(basic_string_view<CharT, Traits> sv, const CharT* str, size_t count) noexcept
     {
         return search_last_not_of(sv.begin(), sv.end(), str, str + count);
     }
@@ -440,13 +440,13 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto compare(basic_string_view<CharT, Traits> lhs, const CharT* rhs, std::size_t count) noexcept
+    constexpr auto compare(basic_string_view<CharT, Traits> lhs, const CharT* rhs, size_t count) noexcept
     {
         return compare(lhs.begin(), lhs.end(), rhs, rhs + count);
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto compare(const CharT* lhs, std::size_t count, basic_string_view<CharT, Traits> rhs) noexcept
+    constexpr auto compare(const CharT* lhs, size_t count, basic_string_view<CharT, Traits> rhs) noexcept
     {
         return compare(lhs, lhs + count, rhs.begin(), rhs.end());
     }
@@ -500,7 +500,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto substr(basic_string_view<CharT, Traits> sv, std::size_t pos, std::size_t count) noexcept
+    constexpr auto substr(basic_string_view<CharT, Traits> sv, size_t pos, std::size_t count) noexcept
     {
         return basic_string_view<CharT, Traits>(sv.begin() + pos, count);
     }

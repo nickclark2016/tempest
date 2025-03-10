@@ -1,15 +1,15 @@
 #ifndef tempest_version_hpp
 #define tempest_version_hpp
 
-#include <cstdint>
+#include <tempest/int.hpp>
 
 namespace tempest::core
 {
     struct version
     {
-        std::int32_t major;
-        std::int32_t minor;
-        std::int32_t patch;
+        int32_t major;
+        int32_t minor;
+        int32_t patch;
     };
 }
 

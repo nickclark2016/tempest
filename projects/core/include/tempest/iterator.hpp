@@ -389,6 +389,220 @@ namespace tempest
     {
         return t.data();
     }
+
+    template <bidirectional_iterator It>
+    class reverse_iterator
+    {
+      public:
+        using iterator_type = It;
+        using value_type = iter_value_t<It>;
+        using difference_type = iter_difference_t<It>;
+        using pointer = typename iterator_traits<It>::pointer;
+        using reference = typename iterator_traits<It>::reference;
+
+        constexpr reverse_iterator() noexcept = default;
+        constexpr explicit reverse_iterator(It it) noexcept;
+
+        template <typename U>
+            requires convertible_to<U, It>
+        constexpr reverse_iterator(const reverse_iterator<U>& other) noexcept;
+
+        template <typename U>
+            requires convertible_to<U, It>
+        constexpr reverse_iterator& operator=(const reverse_iterator<U>& other) noexcept;
+
+        constexpr iterator_type base() const noexcept;
+
+        constexpr reference operator[](difference_type n) const noexcept;
+
+        constexpr reverse_iterator& operator++() noexcept;
+        constexpr reverse_iterator operator++(int) noexcept;
+        constexpr reverse_iterator& operator--() noexcept;
+        constexpr reverse_iterator operator--(int) noexcept;
+        constexpr reverse_iterator operator+(difference_type n) const noexcept;
+        constexpr reverse_iterator& operator+=(difference_type n) noexcept;
+        constexpr reverse_iterator operator-(difference_type n) const noexcept;
+        constexpr reverse_iterator& operator-=(difference_type n) noexcept;
+
+        constexpr reference operator*() const noexcept;
+        constexpr pointer operator->() const noexcept
+            requires(is_pointer_v<It> || requires(const It it) { it.operator->(); });
+
+      private:
+        It _it;
+    };
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It>::reverse_iterator(It it) noexcept : _it(it)
+    {
+    }
+
+    template <bidirectional_iterator It>
+    template <typename U>
+        requires convertible_to<U, It>
+    inline constexpr reverse_iterator<It>::reverse_iterator(const reverse_iterator<U>& other) noexcept
+        : _it(other.base())
+    {
+    }
+
+    template <bidirectional_iterator It>
+    template <typename U>
+        requires convertible_to<U, It>
+    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator=(const reverse_iterator<U>& other) noexcept
+    {
+        _it = other.base();
+        return *this;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr It reverse_iterator<It>::base() const noexcept
+    {
+        return _it;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr typename reverse_iterator<It>::reference reverse_iterator<It>::operator[](
+        difference_type n) const noexcept
+    {
+        return *(*this + n);
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator++() noexcept
+    {
+        --_it;
+        return *this;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator++(int) noexcept
+    {
+        auto copy = *this;
+        --_it;
+        return copy;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator--() noexcept
+    {
+        ++_it;
+        return *this;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator--(int) noexcept
+    {
+        auto copy = *this;
+        ++_it;
+        return copy;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator+(difference_type n) const noexcept
+    {
+        auto copy = *this;
+        copy += n;
+        return copy;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator+=(difference_type n) noexcept
+    {
+        if constexpr (random_access_iterator<It>)
+        {
+            _it -= n;
+        }
+        else
+        {
+            // Loop to decrement
+            while (n > 0)
+            {
+                --_it;
+                --n;
+            }
+        }
+
+        return *this;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator-(difference_type n) const noexcept
+    {
+        auto copy = *this;
+        copy -= n;
+        return copy;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator-=(difference_type n) noexcept
+    {
+        if constexpr (random_access_iterator<It>)
+        {
+            _it += n;
+        }
+        else
+        {
+            // Loop to increment
+            while (n > 0)
+            {
+                ++_it;
+                --n;
+            }
+        }
+        return *this;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr typename reverse_iterator<It>::reference reverse_iterator<It>::operator*() const noexcept
+    {
+        auto copy = _it;
+        return *--copy;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr typename reverse_iterator<It>::pointer reverse_iterator<It>::operator->() const noexcept
+        requires(is_pointer_v<It> || requires(const It it) { it.operator->(); })
+    {
+        return &this->operator*();
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr bool operator==(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept
+    {
+        return lhs.base() == rhs.base();
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr bool operator!=(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr auto operator<=>(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept
+    {
+        return lhs.base() <=> rhs.base();
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It> operator+(typename reverse_iterator<It>::difference_type n,
+                                                    const reverse_iterator<It>& it) noexcept
+    {
+        return it + n;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It> operator-(typename reverse_iterator<It>::difference_type n,
+                                                    const reverse_iterator<It>& it) noexcept
+    {
+        return it - n;
+    }
+
+    template <bidirectional_iterator It>
+    inline constexpr reverse_iterator<It> make_reverse_iterator(It it) noexcept
+    {
+        return reverse_iterator<It>(it);
+    }
 } // namespace tempest
 
 #endif // tempest_core_iterator_hpp

@@ -1,13 +1,13 @@
 #ifndef tempest_core_mouse_hpp
 #define tempest_core_mouse_hpp
 
-#include <array>
-#include <cstdint>
-#include <type_traits>
+#include <tempest/array.hpp>
+#include <tempest/int.hpp>
+#include <tempest/type_traits.hpp>
 
 namespace tempest::core
 {
-    enum class mouse_button : std::uint32_t
+    enum class mouse_button : uint32_t
     {
         MB_0,
         MB_1,
@@ -24,7 +24,7 @@ namespace tempest::core
         MIDDLE = MB_3,
     };
 
-    enum class mouse_action : std::uint32_t
+    enum class mouse_action : uint32_t
     {
         PRESS,
         RELEASE,
@@ -41,7 +41,7 @@ namespace tempest::core
       public:
         void set(mouse_button_state state)
         {
-            _button_states[static_cast<std::underlying_type_t<mouse_button>>(state.button)] = state;
+            _button_states[tempest::to_underlying(state.button)] = state;
         }
 
         void set_position(float x, float y)
@@ -112,8 +112,7 @@ namespace tempest::core
 
         bool is_pressed(mouse_button button) const
         {
-            return _button_states[static_cast<std::underlying_type_t<mouse_button>>(button)].action ==
-                   mouse_action::PRESS;
+            return _button_states[tempest::to_underlying(button)].action == mouse_action::PRESS;
         }
 
         bool is_disabled() const noexcept
@@ -135,8 +134,7 @@ namespace tempest::core
         }
 
       private:
-        std::array<mouse_button_state, static_cast<std::underlying_type_t<mouse_button>>(mouse_button::LAST)>
-            _button_states{};
+        std::array<mouse_button_state, tempest::to_underlying(mouse_button::LAST)> _button_states{};
 
         float _x = -1.0f;
         float _y = -1.0f;

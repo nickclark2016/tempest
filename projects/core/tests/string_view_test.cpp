@@ -1,5 +1,7 @@
 #include <tempest/string_view.hpp>
 
+#include <tempest/string.hpp>
+
 #include <gtest/gtest.h>
 
 TEST(string_view, construct_from_cstring)

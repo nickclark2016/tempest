@@ -2584,3 +2584,12 @@ TEST(string, ends_with_string_vs_char_not_found)
 
     EXPECT_FALSE(tempest::ends_with(s, t));
 }
+
+TEST(string, iterator_tests)
+{
+    using iterator = tempest::string::iterator;
+    using const_iterator = tempest::string::const_iterator;
+
+    EXPECT_TRUE(tempest::random_access_iterator<iterator>);
+    EXPECT_TRUE(tempest::random_access_iterator<const_iterator>);
+}

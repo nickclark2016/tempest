@@ -52,7 +52,7 @@ namespace tempest
     }
 
     // TODO: Investigate bump down allocation instead of bump up
-    void* stack_allocator::allocate(size_t size, size_t alignment, [[maybe_unused]] std::source_location loc)
+    void* stack_allocator::allocate(size_t size, size_t alignment, [[maybe_unused]] source_location loc)
     {
         assert(size > 0 && "Size must be non-zero.");
         const auto start = align_memory(_allocated_bytes, alignment);
@@ -137,8 +137,7 @@ namespace tempest
         return *this;
     }
 
-    void* heap_allocator::allocate(size_t size, [[maybe_unused]] size_t alignment,
-                                   [[maybe_unused]] std::source_location loc)
+    void* heap_allocator::allocate(size_t size, [[maybe_unused]] size_t alignment, [[maybe_unused]] source_location loc)
     {
         return tlsf_malloc(_tlsf_handle, size);
     }

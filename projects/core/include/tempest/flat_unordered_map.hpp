@@ -2,13 +2,13 @@
 #define tempest_core_flat_unordered_map_hpp
 
 #include <tempest/array.hpp>
+#include <tempest/bit.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/utility.hpp>
 
-#include <bit>
 #include <cassert>
 
 namespace tempest
@@ -660,7 +660,7 @@ namespace tempest
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_request_grow(size_t new_size)
     {
-        assert(std::popcount(new_size) == 1); // Ensure that the new size is a power of 2
+        assert(popcount(new_size) == 1); // Ensure that the new size is a power of 2
 
         auto page_count = new_size / _page_size;
 
@@ -745,7 +745,7 @@ namespace tempest
         {
             return _page_size;
         }
-        return std::bit_ceil(requested);
+        return bit_ceil(requested);
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -801,7 +801,7 @@ namespace tempest
             }
         }
 
-        return static_cast<std::uint16_t>(result);
+        return static_cast<uint16_t>(result);
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
@@ -851,7 +851,7 @@ namespace tempest
             }
         }
 
-        std::abort();
+        abort();
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>

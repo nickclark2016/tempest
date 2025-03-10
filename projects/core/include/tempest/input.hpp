@@ -1,8 +1,8 @@
 #ifndef tempest_input_hpp
 #define tempest_input_hpp
 
-#include "keyboard.hpp"
-#include "mouse.hpp"
+#include <tempest/keyboard.hpp>
+#include <tempest/mouse.hpp>
 
 namespace tempest::core
 {

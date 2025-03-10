@@ -3,12 +3,12 @@
 
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
+#include <tempest/limits.hpp>
+#include <tempest/source_location.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
-#include <limits>
 #include <new>
-#include <source_location>
 #include <thread>
 
 namespace tempest
@@ -200,8 +200,7 @@ namespace tempest
     {
       public:
         virtual ~abstract_allocator() = default;
-        virtual void* allocate(size_t size, size_t alignment,
-                               std::source_location loc = std::source_location::current()) = 0;
+        virtual void* allocate(size_t size, size_t alignment, source_location loc = source_location::current()) = 0;
         virtual void deallocate(void* ptr) = 0;
     };
 
@@ -218,7 +217,7 @@ namespace tempest
         stack_allocator& operator=(stack_allocator&& rhs) noexcept;
 
         [[nodiscard]] void* allocate(size_t size, size_t alignment,
-                                     std::source_location loc = std::source_location::current()) override;
+                                     source_location loc = source_location::current()) override;
         void deallocate(void* ptr) override;
 
         size_t get_marker() const noexcept;
@@ -244,7 +243,7 @@ namespace tempest
         heap_allocator& operator=(heap_allocator&& rhs) noexcept;
 
         [[nodiscard]] void* allocate(size_t size, size_t alignment,
-                                     std::source_location loc = std::source_location::current()) override;
+                                     source_location loc = source_location::current()) override;
         void deallocate(void* ptr) override;
 
       private:
@@ -278,7 +277,7 @@ namespace tempest
       public:
         using value_type = T;
         using size_type = size_t;
-        using difference_type = std::ptrdiff_t;
+        using difference_type = ptrdiff_t;
 
         using propagate_on_container_copy_assignment = true_type;
 
@@ -460,7 +459,8 @@ namespace tempest
 
     template <typename Alloc>
     template <typename T, typename... Args>
-    inline constexpr void allocator_traits<Alloc>::construct([[maybe_unused]] allocator_type& alloc, T* p, Args&&... args)
+    inline constexpr void allocator_traits<Alloc>::construct([[maybe_unused]] allocator_type& alloc, T* p,
+                                                             Args&&... args)
     {
         (void)::tempest::construct_at(p, tempest::forward<Args>(args)...);
     }
@@ -476,7 +476,7 @@ namespace tempest
     inline constexpr typename allocator_traits<Alloc>::size_type allocator_traits<Alloc>::max_size(
         [[maybe_unused]] const allocator_type& alloc) noexcept
     {
-        return std::numeric_limits<size_type>::max() / sizeof(value_type);
+        return numeric_limits<size_type>::max() / sizeof(value_type);
     }
 
     template <typename Alloc>

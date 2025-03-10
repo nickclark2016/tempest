@@ -1,14 +1,12 @@
 #ifndef tempest_core_vector_hpp
 #define tempest_core_vector_hpp
 
+#include <tempest/algorithm.hpp>
+#include <tempest/assert.hpp>
+#include <tempest/bit.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/utility.hpp>
-
-#include <algorithm>
-#include <bit>
-#include <cassert>
-#include <initializer_list>
-#include <iterator>
 
 namespace tempest
 {
@@ -26,17 +24,15 @@ namespace tempest
         using const_pointer = typename allocator_traits<Allocator>::const_pointer;
         using iterator = pointer;
         using const_iterator = const_pointer;
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = tempest::reverse_iterator<iterator>;
+        using const_reverse_iterator = tempest::reverse_iterator<const_iterator>;
 
         constexpr vector() = default;
         explicit constexpr vector(const Allocator& alloc) noexcept(noexcept(Allocator()));
         constexpr vector(size_type count, const T& value, const Allocator& alloc = Allocator());
         explicit constexpr vector(size_type count, const Allocator& alloc = Allocator());
-        constexpr vector(std::initializer_list<T> init, const Allocator& alloc = Allocator())
-            requires is_copy_assignable_v<T>;
 
-        template <std::input_iterator It>
+        template <input_iterator It>
         constexpr vector(It first, It last, const Allocator& alloc = Allocator());
 
         constexpr vector(const vector& other)
@@ -163,8 +159,8 @@ namespace tempest
     template <typename T, typename Alloc, typename Pred>
     constexpr vector<T, Alloc>::size_type erase_if(vector<T, Alloc>& c, Pred pred);
 
-    template <typename InputIt, typename Alloc = allocator<typename std::iterator_traits<InputIt>::value_type>>
-    vector(InputIt, InputIt, Alloc = Alloc()) -> vector<typename std::iterator_traits<InputIt>::value_type, Alloc>;
+    template <typename InputIt, typename Alloc = allocator<typename iterator_traits<InputIt>::value_type>>
+    vector(InputIt, InputIt, Alloc = Alloc()) -> vector<typename iterator_traits<InputIt>::value_type, Alloc>;
 
     // Implementation
 
@@ -186,23 +182,10 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    inline constexpr vector<T, Allocator>::vector(std::initializer_list<T> init, const Allocator& alloc)
-        requires is_copy_assignable_v<T>
-        : _alloc{alloc}
-    {
-        reserve(init.size());
-
-        for (const auto& value : init)
-        {
-            push_back(value);
-        }
-    }
-
-    template <typename T, typename Allocator>
-    template <std::input_iterator It>
+    template <input_iterator It>
     inline constexpr vector<T, Allocator>::vector(It first, It last, const Allocator& alloc) : _alloc{alloc}
     {
-        reserve(std::distance(first, last));
+        reserve(distance(first, last));
 
         for (auto it = first; it != last; ++it)
         {
@@ -344,7 +327,7 @@ namespace tempest
     constexpr void vector<T, Allocator>::assign(InputIt first, InputIt last)
     {
         clear();
-        reserve(std::distance(first, last));
+        reserve(distance(first, last));
 
         for (auto it = first; it != last; ++it)
         {
@@ -361,14 +344,14 @@ namespace tempest
     template <typename T, typename Allocator>
     constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::at(size_type pos)
     {
-        assert(pos < size());
+        TEMPEST_ASSERT(pos < size());
         return _data[pos];
     }
 
     template <typename T, typename Allocator>
     constexpr typename vector<T, Allocator>::const_reference vector<T, Allocator>::at(size_type pos) const
     {
-        assert(pos < size());
+        TEMPEST_ASSERT(pos < size());
         return _data[pos];
     }
 
@@ -637,7 +620,7 @@ namespace tempest
 
         // Move construct the first count elements, then move the rest
         auto count_remaining = size() - index;
-        auto count_to_move = std::min(count, count_remaining);
+        auto count_to_move = tempest::min(count, count_remaining);
 
         ptrdiff_t end_index = size();
         ptrdiff_t start_index = index;
@@ -668,7 +651,7 @@ namespace tempest
                                                                                    InputIt last)
     {
         auto index = pos - begin();
-        auto count = std::distance(first, last);
+        auto count = tempest::distance(first, last);
         reserve(_compute_next_capacity(size() + 1));
 
         for (auto it = end(); it != begin() + index; --it)
@@ -769,7 +752,7 @@ namespace tempest
     template <typename U>
     inline vector<U> tempest::vector<T, Allocator>::reinterpret_as() noexcept
     {
-        if constexpr (std::is_same_v<T, U>)
+        if constexpr (tempest::is_same_v<T, U>)
         {
             return vector<U>{tempest::move(*this)};
         }
@@ -848,7 +831,7 @@ namespace tempest
     constexpr typename vector<T, Allocator>::size_type vector<T, Allocator>::_compute_next_capacity(
         size_type requested_capacity) const noexcept
     {
-        return std::bit_ceil(requested_capacity);
+        return tempest::bit_ceil(requested_capacity);
     }
 
     template <typename T, typename Allocator>
@@ -862,13 +845,13 @@ namespace tempest
     template <typename T, typename Allocator>
     inline constexpr bool operator==(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs)
     {
-        return std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+        return tempest::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
     }
 
     template <typename T, typename Allocator>
     inline constexpr auto operator<=>(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs)
     {
-        return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+        return tempest::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
     }
 
     template <typename T, typename Allocator>
@@ -880,8 +863,8 @@ namespace tempest
     template <typename T, typename Alloc, typename U>
     inline constexpr vector<T, Alloc>::size_type erase(vector<T, Alloc>& c, const U& value)
     {
-        auto it = std::remove(c.begin(), c.end(), value);
-        auto count = std::distance(it, c.end());
+        auto it = tempest::remove(c.begin(), c.end(), value);
+        auto count = tempest::distance(it, c.end());
         c.erase(it, c.end());
         return count;
     }
@@ -889,8 +872,8 @@ namespace tempest
     template <typename T, typename Alloc, typename Pred>
     inline constexpr vector<T, Alloc>::size_type erase_if(vector<T, Alloc>& c, Pred pred)
     {
-        auto it = std::remove_if(c.begin(), c.end(), pred);
-        auto count = std::distance(it, c.end());
+        auto it = tempest::remove_if(c.begin(), c.end(), pred);
+        auto count = tempest::distance(it, c.end());
         c.erase(it, c.end());
         return count;
     }

@@ -322,7 +322,7 @@ namespace tempest
         }
         else if constexpr (width <= nd_ull)
         {
-            return __popcnt64(n);
+            return static_cast<int>(__popcnt64(n));
         }
         else
         {

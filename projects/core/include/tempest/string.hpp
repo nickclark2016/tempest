@@ -3,8 +3,8 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/char_traits.hpp>
-#include <tempest/iterator.hpp>
 #include <tempest/int.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string_view.hpp>
@@ -12,7 +12,6 @@
 
 #include <cassert>
 #include <compare>
-#include <cstddef>
 #include <iterator>
 
 namespace tempest
@@ -21,14 +20,13 @@ namespace tempest
     class basic_string
     {
         static constexpr bool is_noexecpt_movable =
-            std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
-            std::allocator_traits<Allocator>::is_always_equal::value;
+            allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
+            allocator_traits<Allocator>::is_always_equal::value;
 
         struct iter
         {
-            using iterator_category = std::random_access_iterator_tag;
             using value_type = CharT;
-            using difference_type = std::ptrdiff_t;
+            using difference_type = ptrdiff_t;
             using pointer = value_type*;
             using reference = value_type&;
 
@@ -51,21 +49,25 @@ namespace tempest
             constexpr auto operator<=>(const iter& other) const noexcept = default;
 
             constexpr operator pointer() const noexcept;
+
+            friend iter operator+(difference_type n, const iter& it) noexcept;
         };
 
         struct const_iter
         {
-            using iterator_category = std::random_access_iterator_tag;
             using value_type = CharT;
-            using difference_type = std::ptrdiff_t;
+            using difference_type = ptrdiff_t;
             using pointer = const value_type*;
             using reference = const value_type&;
 
-            const CharT* ptr;
+            const CharT* ptr{};
+
+            constexpr const_iter() = default;
 
             const_iter(const CharT* ptr) : ptr{ptr}
             {
             }
+
             const_iter(const iter& other) : ptr{other.ptr}
             {
             }
@@ -87,6 +89,8 @@ namespace tempest
             constexpr auto operator<=>(const const_iter& other) const noexcept = default;
 
             constexpr operator pointer() const noexcept;
+
+            friend const_iter operator+(difference_type n, const const_iter& it) noexcept;
         };
 
       public:
@@ -94,7 +98,7 @@ namespace tempest
         using size_type = size_t;
         using value_type = CharT;
         using allocator_type = Allocator;
-        using difference_type = std::ptrdiff_t;
+        using difference_type = ptrdiff_t;
         using reference_type = value_type&;
         using const_reference_type = const value_type&;
         using pointer_type = value_type*;
@@ -273,7 +277,7 @@ namespace tempest
         constexpr void _set_capacity(size_t cap) noexcept;
         constexpr size_t _aligned_large_string_allocation(size_t requested) const noexcept;
 
-        using alloc_traits = std::allocator_traits<allocator_type>;
+        using alloc_traits = allocator_traits<allocator_type>;
     };
 
     template <typename CharT, typename Traits, typename Allocator>
@@ -352,6 +356,14 @@ namespace tempest
         CharT, Traits, Allocator>::iter::operator+(difference_type n) const noexcept
     {
         return iter{ptr + n};
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    inline constexpr basic_string<CharT, Traits, Allocator>::iter operator+(
+        typename basic_string<CharT, Traits, Allocator>::difference_type n,
+        const typename basic_string<CharT, Traits, Allocator>::iter& it) noexcept
+    {
+        return it + n;
     }
 
     template <typename CharT, typename Traits, typename Allocator>
@@ -456,6 +468,14 @@ namespace tempest
         CharT, Traits, Allocator>::const_iter::operator+(difference_type n) const noexcept
     {
         return const_iter{ptr + n};
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    inline constexpr basic_string<CharT, Traits, Allocator>::const_iter operator+(
+        typename basic_string<CharT, Traits, Allocator>::difference_type n,
+        const typename basic_string<CharT, Traits, Allocator>::const_iter& it) noexcept
+    {
+        return it + n;
     }
 
     template <typename CharT, typename Traits, typename Allocator>
@@ -699,7 +719,7 @@ namespace tempest
         const basic_string& str, size_type pos, size_type count)
     {
         assert(pos <= str.size());
-        count = std::min(count, str.size() - pos);
+        count = tempest::min(count, str.size() - pos);
 
         if (count < small_string_capacity)
         {
@@ -793,7 +813,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::assign(
         InputIt first, InputIt last)
     {
-        size_t count = std::distance(first, last);
+        size_t count = tempest::distance(first, last);
         if (count < small_string_capacity)
         {
             _release_large();
@@ -1035,7 +1055,7 @@ namespace tempest
     inline constexpr typename basic_string<CharT, Traits, Allocator>::size_type basic_string<
         CharT, Traits, Allocator>::max_size() const noexcept
     {
-        return std::numeric_limits<size_type>::max();
+        return tempest::numeric_limits<size_type>::max();
     }
 
     template <typename CharT, typename Traits, typename Allocator>
@@ -1182,7 +1202,7 @@ namespace tempest
         {
             if (new_size > capacity())
             {
-                auto new_cap = std::max(new_size, 2 * capacity());
+                auto new_cap = tempest::max(new_size, 2 * capacity());
                 auto new_data = _alloc.allocate(new_cap + 1);
 
                 Traits::move(new_data, data(), insert_pos);
@@ -1220,7 +1240,7 @@ namespace tempest
         const_iterator pos, const basic_string& str, size_type s_index, size_type count)
     {
         assert(s_index <= str.size());
-        count = std::min(count, str.size() - s_index);
+        count = tempest::min(count, str.size() - s_index);
 
         return insert(pos, str.data() + s_index, count);
     }
@@ -1237,7 +1257,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::insert(
         const_iterator pos, InputIt first, InputIt last)
     {
-        auto count = std::distance(first, last);
+        auto count = tempest::distance(first, last);
         if (count == 0)
         {
             return *this;
@@ -1267,7 +1287,7 @@ namespace tempest
         {
             if (new_size > capacity())
             {
-                auto new_cap = std::max(new_size, 2 * capacity());
+                auto new_cap = tempest::max(new_size, 2 * capacity());
                 auto new_data = _alloc.allocate(new_cap + 1);
 
                 Traits::move(new_data, data(), insert_pos);
@@ -1413,7 +1433,7 @@ namespace tempest
 
         if (new_size > capacity())
         {
-            auto new_cap = std::max(new_size, 2 * capacity());
+            auto new_cap = tempest::max(new_size, 2 * capacity());
             reserve(new_cap);
         }
 
@@ -1436,7 +1456,7 @@ namespace tempest
         const basic_string& str, size_type pos, size_type count)
     {
         assert(pos <= str.size());
-        count = std::min(count, str.size() - pos);
+        count = tempest::min(count, str.size() - pos);
 
         return append(str.data() + pos, count);
     }
@@ -1466,7 +1486,7 @@ namespace tempest
 
         if (new_size > capacity())
         {
-            auto new_cap = std::max(new_size, 2 * capacity());
+            auto new_cap = tempest::max(new_size, 2 * capacity());
             reserve(new_cap);
         }
 
@@ -1482,7 +1502,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::append(
         InputIt first, InputIt last)
     {
-        auto count = std::distance(first, last);
+        auto count = tempest::distance(first, last);
         if (auto ss_size = _small_string_size(); _is_small() && ss_size + count < small_string_capacity - 1)
         {
             auto it = first;
@@ -1503,7 +1523,7 @@ namespace tempest
 
         if (new_size > capacity())
         {
-            auto new_cap = std::max(new_size, 2 * capacity());
+            auto new_cap = tempest::max(new_size, 2 * capacity());
             reserve(new_cap);
         }
 
@@ -1594,7 +1614,7 @@ namespace tempest
 
             if (new_size > capacity())
             {
-                auto new_cap = std::max(new_size, 2 * capacity());
+                auto new_cap = tempest::max(new_size, 2 * capacity());
                 reserve(new_cap);
             }
 
@@ -1655,7 +1675,7 @@ namespace tempest
 
             if (new_size > capacity())
             {
-                auto new_cap = std::max(new_size, 2 * capacity());
+                auto new_cap = tempest::max(new_size, 2 * capacity());
                 reserve(new_cap);
             }
 
@@ -1694,7 +1714,7 @@ namespace tempest
         auto current_size = size();
         auto erase_pos = first - begin();
         auto erase_count = last - first;
-        auto insert_count = std::distance(first2, last2);
+        auto insert_count = tempest::distance(first2, last2);
 
         if (erase_count > insert_count)
         {
@@ -1731,7 +1751,7 @@ namespace tempest
 
             if (new_size > capacity())
             {
-                auto new_cap = std::max(new_size, 2 * capacity());
+                auto new_cap = tempest::max(new_size, 2 * capacity());
                 reserve(new_cap);
             }
 
@@ -1805,14 +1825,14 @@ namespace tempest
         {
             for (size_type i = 0; i < small_string_capacity; ++i)
             {
-                std::swap(_storage.small.data[i], other._storage.small.data[i]);
+                tempest::swap(_storage.small.data[i], other._storage.small.data[i]);
             }
         }
         else if (!_is_small() && !other._is_small())
         {
-            std::swap(_storage.large.data, other._storage.large.data);
-            std::swap(_storage.large.size, other._storage.large.size);
-            std::swap(_storage.large.capacity, other._storage.large.capacity);
+            tempest::swap(_storage.large.data, other._storage.large.data);
+            tempest::swap(_storage.large.size, other._storage.large.size);
+            tempest::swap(_storage.large.capacity, other._storage.large.capacity);
         }
         else
         {
@@ -1835,7 +1855,7 @@ namespace tempest
     {
         auto last_small_value = _storage.small.data[small_string_capacity - 1];
         // Get the mask of the first 3 bits
-        auto flags = static_cast<std::make_unsigned_t<CharT>>(last_small_value) & 0xE0;
+        auto flags = static_cast<tempest::make_unsigned_t<CharT>>(last_small_value) & 0xE0;
         return flags == 0;
     }
 
@@ -1882,7 +1902,7 @@ namespace tempest
     inline constexpr size_t basic_string<CharT, Traits, Allocator>::_small_string_size() const noexcept
     {
         auto last_small_value =
-            static_cast<std::make_unsigned_t<CharT>>(_storage.small.data[small_string_capacity - 1]) & ~0xE0;
+            static_cast<tempest::make_unsigned_t<CharT>>(_storage.small.data[small_string_capacity - 1]) & ~0xE0;
         // shift the size 3 bits right
         return small_string_capacity - 1 - last_small_value;
     }
@@ -1940,40 +1960,69 @@ namespace tempest
     template <typename CharT, typename Traits, typename Allocator>
     inline constexpr auto operator<=>(const basic_string<CharT, Traits, Allocator>& lhs,
                                       const basic_string<CharT, Traits, Allocator>& rhs) noexcept
-        -> std::strong_ordering
+        -> tempest::strong_ordering
     {
-        auto cmp = Traits::compare(lhs.data(), rhs.data(), std::min(lhs.size(), rhs.size()));
+        auto cmp = Traits::compare(lhs.data(), rhs.data(), tempest::min(lhs.size(), rhs.size()));
+
         if (cmp == 0 && lhs.size() != rhs.size())
         {
-            return lhs.size() <=> rhs.size();
+            return tempest::compare_three_way{}(lhs.size(), rhs.size());
         }
-        return cmp <=> 0;
+
+        if (cmp == 0)
+        {
+            return tempest::strong_ordering::equal;
+        }
+        else if (cmp < 0)
+        {
+            return tempest::strong_ordering::less;
+        }
+        else
+        {
+            return tempest::strong_ordering::greater;
+        }
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    inline constexpr auto operator<=>(const CharT* lhs,
-                                      const basic_string<CharT, Traits, Allocator>& rhs) -> std::strong_ordering
+    inline constexpr auto operator<=>(const CharT* lhs, const basic_string<CharT, Traits, Allocator>& rhs)
+        -> tempest::strong_ordering
     {
         auto lhs_size = Traits::length(lhs);
-        auto cmp = Traits::compare(lhs, rhs.data(), std::min(lhs_size, rhs.size()));
-        if (cmp == 0 && lhs_size != rhs.size())
+        auto cmp = Traits::compare(lhs, rhs.data(), tempest::min(lhs_size, rhs.size()));
+
+        if (cmp == 0)
         {
-            return lhs_size <=> rhs.size();
+            return tempest::strong_ordering::equal;
         }
-        return cmp <=> 0;
+        else if (cmp < 0)
+        {
+            return tempest::strong_ordering::less;
+        }
+        else
+        {
+            return tempest::strong_ordering::greater;
+        }
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    inline constexpr auto operator<=>(const basic_string<CharT, Traits, Allocator>& lhs,
-                                      const CharT* rhs) -> std::strong_ordering
+    inline constexpr auto operator<=>(const basic_string<CharT, Traits, Allocator>& lhs, const CharT* rhs)
+        -> tempest::strong_ordering
     {
         auto rhs_size = Traits::length(rhs);
-        auto cmp = Traits::compare(lhs.data(), rhs, std::min(lhs.size(), rhs_size));
-        if (cmp == 0 && lhs.size() != rhs_size)
+        auto cmp = Traits::compare(lhs.data(), rhs, tempest::min(lhs.size(), rhs_size));
+
+        if (cmp == 0)
         {
-            return lhs.size() <=> rhs_size;
+            return tempest::strong_ordering::equal;
         }
-        return cmp <=> 0;
+        else if (cmp < 0)
+        {
+            return tempest::strong_ordering::less;
+        }
+        else
+        {
+            return tempest::strong_ordering::greater;
+        }
     }
 
     using string = basic_string<char>;
@@ -1987,7 +2036,7 @@ namespace tempest
     {
         assert(pos <= src.size() && "Position out of bounds");
 
-        auto len = std::min(count, src.size() - pos);
+        auto len = tempest::min(count, src.size() - pos);
         Traits::copy(dest, src.data() + pos, len);
         return len;
     }
@@ -2017,8 +2066,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr auto search(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return search(str.begin(), str.end(), first, last);
@@ -2050,8 +2099,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr auto reverse_search(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return reverse_search(str.begin(), str.end(), first, last);
@@ -2083,8 +2132,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr auto search_first_of(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return search_first_of(str.begin(), str.end(), first, last);
@@ -2116,8 +2165,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr auto search_last_of(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return search_last_of(str.begin(), str.end(), first, last);
@@ -2149,8 +2198,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr auto search_first_not_of(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return search_first_not_of(str.begin(), str.end(), first, last);
@@ -2182,8 +2231,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr auto search_last_not_of(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return search_last_not_of(str.begin(), str.end(), first, last);
@@ -2214,8 +2263,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr bool starts_with(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return starts_with(str.begin(), str.end(), first, last);
@@ -2246,8 +2295,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr bool ends_with(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return ends_with(str.begin(), str.end(), first, last);
@@ -2278,8 +2327,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr bool contains(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return contains(str.begin(), str.end(), first, last);
@@ -2304,8 +2353,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator, typename It>
-        requires character_type<typename std::iterator_traits<It>::value_type> &&
-                 std::is_same_v<CharT, typename std::iterator_traits<It>::value_type>
+        requires character_type<typename tempest::iterator_traits<It>::value_type> &&
+                 tempest::is_same_v<CharT, typename tempest::iterator_traits<It>::value_type>
     constexpr int compare(const basic_string<CharT, Traits, Allocator>& str, It first, It last)
     {
         return compare(str.begin(), str.end(), first, last);
@@ -2424,8 +2473,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    constexpr auto substr(const basic_string<CharT, Traits, Allocator>& str, std::size_t pos,
-                          std::size_t count) noexcept
+    constexpr auto substr(const basic_string<CharT, Traits, Allocator>& str, tempest::size_t pos,
+                          tempest::size_t count) noexcept
     {
         return basic_string_view<CharT, Traits>(str.begin() + pos, count);
     }
@@ -2488,7 +2537,7 @@ namespace tempest
     template <typename CharT, typename Traits, typename Allocator>
     struct hash<basic_string<CharT, Traits, Allocator>>
     {
-        std::size_t operator()(const basic_string<CharT, Traits, Allocator>& str) const noexcept
+        tempest::size_t operator()(const basic_string<CharT, Traits, Allocator>& str) const noexcept
         {
             return hash<basic_string_view<CharT, Traits>>{}(str);
         }

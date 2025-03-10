@@ -1664,8 +1664,8 @@ namespace tempest
     {
         template <typename T, typename U>
         concept is_swappable_with_impl = requires(T& t, U& u) {
-            swap(t, u);
-            swap(u, t);
+            tempest::swap(t, u);
+            tempest::swap(u, t);
         };
 
         template <typename T, typename U>

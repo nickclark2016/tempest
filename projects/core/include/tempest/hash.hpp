@@ -1,9 +1,8 @@
 #ifndef tempest_core_hash_hpp
 #define tempest_core_hash_hpp
 
+#include <tempest/bit.hpp>
 #include <tempest/int.hpp>
-
-#include <bit>
 
 namespace tempest
 {
@@ -213,7 +212,7 @@ namespace tempest
     {
         size_t operator()(float key) const noexcept
         {
-            uint32_t uint_bytes = std::bit_cast<uint32_t>(key);
+            uint32_t uint_bytes = bit_cast<uint32_t>(key);
             return static_cast<size_t>(detail::u32_hash(uint_bytes));
         }
     };
@@ -224,7 +223,7 @@ namespace tempest
     {
         size_t operator()(double key) const noexcept
         {
-            uint64_t uint_bytes = std::bit_cast<uint64_t>(key);
+            uint64_t uint_bytes = bit_cast<uint64_t>(key);
             return static_cast<size_t>(detail::u64_hash(uint_bytes));
         }
     };
@@ -237,11 +236,11 @@ namespace tempest
         {
             if constexpr (sizeof(T*) == 4)
             {
-                return static_cast<size_t>(detail::u32_hash(std::bit_cast<uint32_t>(key)));
+                return static_cast<size_t>(detail::u32_hash(bit_cast<uint32_t>(key)));
             }
             else
             {
-                return static_cast<size_t>(detail::u64_hash(std::bit_cast<uint64_t>(key)));
+                return static_cast<size_t>(detail::u64_hash(bit_cast<uint64_t>(key)));
             }
         }
     };
