@@ -8,7 +8,7 @@
 #if defined(TEMPEST_WIN_THREADS)
 #include <windows.h>
 #elif defined(TEMPEST_POSIX_THREADS)
-
+#include <pthread.h>
 #else
 #error "Unsupported platform"
 #endif
@@ -21,6 +21,7 @@ namespace tempest
 #if defined(TEMPEST_WIN_THREADS)
         using native_handle_type = HANDLE;
 #elif defined(TEMPEST_POSIX_THREADS)
+        using native_handle_type = pthread_mutex_t;
 #else
 #error "Unsupported platform"
 #endif
@@ -42,6 +43,7 @@ namespace tempest
     };
 
 #if defined(TEMPEST_WIN_THREADS)
+
     inline constexpr mutex::mutex() noexcept
     {
         if (is_constant_evaluated())
@@ -53,7 +55,21 @@ namespace tempest
             _handle = CreateMutexW(nullptr, FALSE, nullptr);
         }
     }
+
 #elif defined(TEMPEST_POSIX_THREADS)
+
+    inline constexpr mutex::mutex() noexcept
+    {
+        if (is_constant_evaluated())
+        {
+            _handle = {};
+        }
+        else
+        {
+            pthread_mutex_init(&_handle, nullptr);
+        }
+    }
+
 #else
 #error "Unsupported platform"
 #endif
@@ -69,6 +85,7 @@ namespace tempest
 #if defined(TEMPEST_WIN_THREADS)
         using native_handle_type = SRWLOCK;
 #elif defined(TEMPEST_POSIX_THREADS)
+        using native_handle_type = pthread_rwlock_t;
 #else
 #error "Unsupported platform"
 #endif
@@ -94,6 +111,7 @@ namespace tempest
     };
 
 #if defined(TEMPEST_WIN_THREADS)
+
     inline constexpr shared_mutex::shared_mutex() noexcept
     {
         if (is_constant_evaluated())
@@ -105,7 +123,21 @@ namespace tempest
             InitializeSRWLock(&_handle);
         }
     }
+
 #elif defined(TEMPEST_POSIX_THREADS)
+
+    inline constexpr shared_mutex::shared_mutex() noexcept
+    {
+        if (is_constant_evaluated())
+        {
+            _handle = {};
+        }
+        else
+        {
+            pthread_rwlock_init(&_handle, nullptr);
+        }
+    }
+
 #else
 #error "Unsupported platform"
 #endif
@@ -228,7 +260,7 @@ namespace tempest
     template <lockable Mutex>
     inline unique_lock<Mutex>::unique_lock(mutex_type& m) : _mutex{&m}
     {
-        _mutex.lock();
+        _mutex->lock();
         _owns_lock = true;
     }
 
@@ -247,7 +279,7 @@ namespace tempest
     {
         if (_owns_lock)
         {
-            _mutex.unlock();
+            _mutex->unlock();
         }
 
         _mutex = nullptr;
@@ -264,7 +296,7 @@ namespace tempest
 
         if (_owns_lock)
         {
-            _mutex.unlock();
+            _mutex->unlock();
         }
 
         _mutex = exchange(rhs._mutex, nullptr);
@@ -281,7 +313,7 @@ namespace tempest
             std::terminate();
         }
 
-        _mutex.lock();
+        _mutex->lock();
         _owns_lock = true;
     }
 
@@ -292,7 +324,7 @@ namespace tempest
         {
             std::terminate();
         }
-        _owns_lock = _mutex.try_lock();
+        _owns_lock = _mutex->try_lock();
         return _owns_lock;
     }
 
@@ -303,7 +335,7 @@ namespace tempest
         {
             std::terminate();
         }
-        _mutex.unlock();
+        _mutex->unlock();
         _owns_lock = false;
     }
 

@@ -2,6 +2,7 @@
 #define tempest_core_limits_hpp
 
 #include <tempest/bit.hpp>
+#include <tempest/concepts.hpp>
 #include <tempest/int.hpp>
 
 namespace tempest
@@ -11,6 +12,69 @@ namespace tempest
     {
       public:
         inline static constexpr bool is_specialized = false;
+    };
+
+    namespace detail
+    {
+        template <typename T>
+        struct integral_numeric_limits_specialization
+        {
+            inline static constexpr bool is_specialized = true;
+            inline static constexpr bool is_signed = is_signed_v<T>;
+            inline static constexpr bool is_integer = true;
+            inline static constexpr bool is_exact = true;
+            inline static constexpr bool has_infinity = false;
+            inline static constexpr bool has_quiet_NaN = false;
+            inline static constexpr bool has_signaling_NaN = false;
+            inline static constexpr bool is_iec559 = false;
+            inline static constexpr bool is_bounded = true;
+            inline static constexpr bool is_modulo = true;
+            inline static constexpr int digits = is_same_v<T, bool> ? 1 : sizeof(T) * 8 - (is_signed_v<T> ? 1 : 0);
+            inline static constexpr int digits10 = is_same_v<T, bool> ? 0 : digits * 30103 / 100000;
+            inline static constexpr int max_digits10 = 0;
+            inline static constexpr int radix = 2;
+            inline static constexpr int min_exponent = 0;
+            inline static constexpr int min_exponent10 = 0;
+            inline static constexpr int max_exponent = 0;
+            inline static constexpr int max_exponent10 = 0;
+
+            inline static constexpr T min() noexcept
+            {
+                if constexpr (is_same_v<T, bool>)
+                {
+                    return false;
+                }
+                else if constexpr (is_signed_v<T>)
+                {
+                    return T(1) << (digits - 1);
+                }
+                else
+                {
+                    return 0;
+                }
+            }
+
+            inline static constexpr T max() noexcept
+            {
+                if constexpr (is_same_v<T, bool>)
+                {
+                    return true;
+                }
+                else if constexpr (is_signed_v<T>)
+                {
+                    return ~(T(1) << (digits - 1));
+                }
+                else
+                {
+                    return ~T(0);
+                }
+            }
+        };
+    }
+
+    template <integral T>
+    class numeric_limits<T> : public detail::integral_numeric_limits_specialization<T>
+    {
     };
 
     template <>
