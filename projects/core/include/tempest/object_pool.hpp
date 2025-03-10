@@ -1,12 +1,9 @@
 #ifndef tempest_core_object_pool_hpp
 #define tempest_core_object_pool_hpp
 
+#include <tempest/compare.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
-
-#include <compare>
-#include <cstdint>
-#include <memory>
 
 namespace tempest::core
 {
@@ -22,11 +19,11 @@ namespace tempest::core
         object_pool& operator=(object_pool&&) noexcept = delete;
 
         [[nodiscard]] uint32_t acquire_resource();
-        void release_resource(std::uint32_t index);
+        void release_resource(uint32_t index);
         void release_all_resources();
 
-        [[nodiscard]] void* access(std::uint32_t index);
-        [[nodiscard]] const void* access(std::uint32_t index) const;
+        [[nodiscard]] void* access(uint32_t index);
+        [[nodiscard]] const void* access(uint32_t index) const;
 
         [[nodiscard]] size_t size() const noexcept;
 
@@ -73,7 +70,7 @@ namespace tempest::core
         [[nodiscard]] void* access(key index);
         [[nodiscard]] const void* access(key index) const;
 
-        [[nodiscard]] std::size_t size() const noexcept;
+        [[nodiscard]] size_t size() const noexcept;
 
       private:
         abstract_allocator* _alloc;

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <tempest/array.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
 
@@ -69,8 +70,8 @@ TEST(span, construct_from_const_array)
 
 TEST(span, construct_from_std_array)
 {
-    std::array<int, 10> arr;
-    std::fill(arr.begin(), arr.end(), 42);
+    tempest::array<int, 10> arr;
+    tempest::fill(arr.begin(), arr.end(), 42);
 
     tempest::span<int> s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -84,7 +85,7 @@ TEST(span, construct_from_std_array)
 
 TEST(span, construct_from_const_std_array)
 {
-    const std::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
+    const tempest::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
     tempest::span<const int> s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -127,8 +128,8 @@ TEST(span, static_length_from_const_array)
 
 TEST(span, static_length_from_std_array)
 {
-    std::array<int, 10> arr;
-    std::fill(arr.begin(), arr.end(), 42);
+    tempest::array<int, 10> arr;
+    tempest::fill(arr.begin(), arr.end(), 42);
 
     tempest::span<int, 10> s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -142,7 +143,7 @@ TEST(span, static_length_from_std_array)
 
 TEST(span, static_length_from_const_std_array)
 {
-    const std::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
+    const tempest::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
     tempest::span<const int, 10> s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -157,7 +158,7 @@ TEST(span, static_length_from_const_std_array)
 TEST(span, template_deduction_from_array)
 {
     int arr[10];
-    std::fill(std::begin(arr), std::end(arr), 42);
+    tempest::fill(tempest::begin(arr), tempest::end(arr), 42);
 
     tempest::span s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -185,8 +186,8 @@ TEST(span, template_deduction_from_const_array)
 
 TEST(span, template_deduction_from_std_array)
 {
-    std::array<int, 10> arr;
-    std::fill(arr.begin(), arr.end(), 42);
+    tempest::array<int, 10> arr;
+    tempest::fill(arr.begin(), arr.end(), 42);
 
     tempest::span s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -200,7 +201,7 @@ TEST(span, template_deduction_from_std_array)
 
 TEST(span, template_deduction_from_const_std_array)
 {
-    const std::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
+    const tempest::array<int, 10> arr = {42, 42, 42, 42, 42, 42, 42, 42, 42, 42};
 
     tempest::span s(arr);
     EXPECT_EQ(s.size(), 10);

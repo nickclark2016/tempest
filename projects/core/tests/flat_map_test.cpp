@@ -45,7 +45,10 @@ TEST(flat_map, insert_range_from_vector)
 {
     tempest::flat_map<int, int> map;
 
-    tempest::vector<tempest::pair<int, int>> vec = {{1, 2}, {3, 4}, {5, 6}};
+    tempest::vector<tempest::pair<int, int>> vec;
+    vec.push_back({1, 2});
+    vec.push_back({3, 4});
+    vec.push_back({5, 6});
     map.insert(vec.begin(), vec.end());
 
     EXPECT_EQ(map.size(), 3);
@@ -62,7 +65,11 @@ TEST(flat_map, insert_range_from_vector_with_existing_contents)
     map.insert({3, 4});
     map.insert({5, 6});
 
-    tempest::vector<tempest::pair<int, int>> vec = {{7, 8}, {9, 10}, {11, 12}};
+    tempest::vector<tempest::pair<int, int>> vec;
+    vec.push_back({7, 8});
+    vec.push_back({9, 10});
+    vec.push_back({11, 12});
+
     map.insert(vec.begin(), vec.end());
 
     EXPECT_EQ(map.size(), 6);
@@ -94,7 +101,10 @@ TEST(flat_map, insert_range_from_vector_with_dup_keys)
 {
     tempest::flat_map<int, int> map;
 
-    tempest::vector<tempest::pair<int, int>> vec = {{1, 2}, {1, 4}, {1, 6}};
+    tempest::vector<tempest::pair<int, int>> vec;
+    vec.push_back({1, 2});
+    vec.push_back({1, 4});
+    vec.push_back({1, 6});
     map.insert(vec.begin(), vec.end());
 
     EXPECT_EQ(map.size(), 1);
@@ -311,7 +321,7 @@ TEST(flat_map, three_way_compare_equal)
     map1.insert({1, 2});
     map1.insert({3, 4});
     map1.insert({5, 6});
-    
+
     tempest::flat_map<int, int> map2;
     map2.insert({1, 2});
     map2.insert({3, 4});
@@ -331,7 +341,7 @@ TEST(flat_map, three_way_compare_less)
     map2.insert({1, 2});
     map2.insert({3, 4});
     map2.insert({7, 8});
-    
+
     EXPECT_EQ(map1 <=> map2, tempest::strong_ordering::less);
 }
 

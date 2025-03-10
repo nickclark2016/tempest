@@ -155,6 +155,34 @@ namespace tempest
         return last;
     }
 
+    template <input_iterator It, typename Compare>
+    [[nodiscard]] inline constexpr It find_if(It first, It last, Compare comp)
+    {
+        while (first != last)
+        {
+            if (comp(*first))
+            {
+                return first;
+            }
+            ++first;
+        }
+        return last;
+    }
+
+    template <input_iterator It, typename Compare>
+    [[nodiscard]] inline constexpr It find_if_not(It first, It last, Compare comp)
+    {
+        while (first != last)
+        {
+            if (!comp(*first))
+            {
+                return first;
+            }
+            ++first;
+        }
+        return last;
+    }
+
     template <forward_iterator It>
     [[nodiscard]] inline constexpr It min_element(It first, It last)
     {
@@ -453,9 +481,15 @@ namespace tempest
         return true;
     }
 
+    template <input_iterator It1, input_iterator It2>
+    inline constexpr bool equal(It1 first1, It1 last1, It2 first2, It2 last2)
+    {
+        return (last1 - first1) == (last2 - first2) && equal(first1, last1, first2);
+    }
+
     // TODO: Replace iterator with input_iterator when I fix flat_map's const iterator to be input_iterator compatible
     template <iterator It1, iterator It2, typename Compare>
-    constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2, Compare comp)
+    inline constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2, Compare comp)
         -> decltype(comp(*first1, *first2))
     {
         bool exhausted1 = (first1 == last1);
@@ -479,9 +513,48 @@ namespace tempest
     }
 
     template <iterator It1, iterator It2>
-    constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2)
+    inline constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2)
     {
         return lexicographical_compare_three_way(first1, last1, first2, last2, tempest::compare_three_way{});
+    }
+
+    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type>
+    inline constexpr It remove(It first, It last, const T& value)
+    {
+        first = find(first, last, value);
+
+        if (first != last)
+        {
+            for (auto it = first; ++it != last;)
+            {
+                // TODO - Optimize for case where != exists
+                if (!(*it == value))
+                {
+                    *first++ = tempest::move(*it);
+                }
+            }
+        }
+
+        return first;
+    }
+
+    template <forward_iterator It, typename Compare>
+    inline constexpr It remove_if(It first, It last, Compare comp)
+    {
+        first = find_if(first, last, comp);
+
+        if (first != last)
+        {
+            for (auto it = first; ++it != last;)
+            {
+                if (!comp(*it))
+                {
+                    *first++ = tempest::move(*it);
+                }
+            }
+        }
+
+        return first;
     }
 } // namespace tempest
 

@@ -53,7 +53,7 @@ namespace tempest
     concept assignable_from =
         is_lvalue_reference_v<L> && common_reference_with<const remove_reference_t<L>&, remove_reference_t<R>&> &&
         requires(L l, R&& r) {
-            { l = forward<R>(r) } -> same_as<L>;
+            { l = tempest::forward<R>(r) } -> same_as<L>;
         };
 
     /// @brief Concept for types that can be copied constructed.

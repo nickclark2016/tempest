@@ -1,19 +1,18 @@
 #ifndef tempest_vertex_hpp
 #define tempest_vertex_hpp
 
+#include <tempest/array.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/span.hpp>
+#include <tempest/string.hpp>
 #include <tempest/vector.hpp>
 
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
 #include <tempest/vec4.hpp>
-
-#include <array>
-#include <string>
 
 namespace tempest::core
 {
@@ -43,7 +42,7 @@ namespace tempest::core
     {
         vector<vertex> vertices;
         vector<std::uint32_t> indices;
-        std::string name;
+        string name;
 
         bool has_normals{};
         bool has_tangents{};

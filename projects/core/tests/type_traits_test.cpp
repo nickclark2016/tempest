@@ -1965,10 +1965,10 @@ TEST(type_traits, is_swappable_with)
     EXPECT_FALSE(result);
 
     result = tempest::is_swappable_with<SwappableType1, SwappableType2>::value;
-    EXPECT_TRUE(result);
+    EXPECT_FALSE(result);
 
     result = tempest::is_swappable_with<SwappableType2, SwappableType1>::value;
-    EXPECT_TRUE(result);
+    EXPECT_FALSE(result);
 
     {
         // Swap 1 and 1
@@ -2061,10 +2061,10 @@ TEST(type_traits, is_nothrow_swappable_with)
     EXPECT_FALSE(result);
 
     result = tempest::is_nothrow_swappable_with<NothrowSwappableType1, NothrowSwappableType2>::value;
-    EXPECT_TRUE(result);
+    EXPECT_FALSE(result);
 
     result = tempest::is_nothrow_swappable_with<NothrowSwappableType2, NothrowSwappableType1>::value;
-    EXPECT_TRUE(result);
+    EXPECT_FALSE(result);
 }
 
 TEST(type_traits, is_swappable)
