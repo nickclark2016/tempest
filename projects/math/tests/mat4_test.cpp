@@ -6,9 +6,9 @@
 using tempest::math::mat4;
 using tempest::math::vec4;
 
-TEST(Mat4F, DefaultConstructor)
+TEST(Mat4F, ZeroInit)
 {
-    mat4<float> m;
+    mat4<float> m{};
 
     ASSERT_FLOAT_EQ(m[0][0], 0.0f);
     ASSERT_FLOAT_EQ(m[0][1], 0.0f);
