@@ -1,10 +1,10 @@
-name: Build Linux
+name: Compile Tempest
 
 on: [push]
 
 jobs:
-  cpp-build:
-    name: Build
+  cpp-linux-build:
+    name: Build Linux
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -34,3 +34,32 @@ jobs:
         run: premake5 fetch
       - name: Build
         run: make config=${{ matrix.config }}_x64 -j$(nproc)
+
+  cpp-windows-build:
+    name: Build Windows
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ windows-2022 ]
+        config: [ debug, release ]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+      - name: Install Premake
+        uses: Jarod42/install-premake5@v4
+        with:
+          ref: master
+      - name: Generate Project Files
+        run: premake5 vs2022
+      - name: Fetch Dependencies
+        run: premake5 fetch
+      - name: Build
+        run: |
+          $config = (Get-Culture).TextInfo.ToTitleCase("${{ matrix.config }}")
+          msbuild -p:Configuration=$config -p:Platform=x64 -m
