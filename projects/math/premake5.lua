@@ -58,6 +58,16 @@ scoped.group('Engine', function()
 
         warnings 'Extra'
 
+        scoped.usage("PUBLIC", function()
+            scoped.filter({
+                "toolset:clang",
+            }, function()
+                linkoptions {
+                    "-z noexecstack"
+                }
+            end)
+        end)
+
         scoped.usage("INTERFACE", function()
             externalincludedirs {
                 '%{root}/projects/math/include',

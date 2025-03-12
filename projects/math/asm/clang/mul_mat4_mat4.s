@@ -9,6 +9,7 @@
 
     .file "mul_mat4_mat4.s"
     .intel_syntax noprefix
+    .section .note.GNU-stack,"",@progbits
     .text
 .Ltext0:
     .p2align 4
