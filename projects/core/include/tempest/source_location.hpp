@@ -3,10 +3,8 @@
 
 #include <tempest/int.hpp>
 
-// If (GNUC or CLANG) and not (_GLIBCXX_SRCLOC or _LIBCPP_SOURCE_LOCATION) OR SELF_HOSTED
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(_GLIBCXX_SRCLOC) && !defined(_LIBCPP_SOURCE_LOCATION) ||      \
-    defined(__STDC_HOSTED__)
-
+// If (GNUC or CLANG) and not (_GLIBCXX_SRCLOC or _LIBCPP_SOURCE_LOCATION)
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(_GLIBCXX_SRCLOC) && !defined(_LIBCPP_SOURCE_LOCATION)
 // Known UB. If libstdc++ or libc++ changes the layout of std::source_location::__impl, this will break
 // TODO: Investigate a robust way to test for this. Maybe C++26 static reflection will provide a solution.
 namespace std
