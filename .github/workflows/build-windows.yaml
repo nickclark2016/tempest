@@ -1,6 +1,0 @@
-name: Build Windows
-
-on: [push]
-
-jobs:
-
