@@ -43,8 +43,11 @@ int main()
         };
 
         tempest::ecs::transform_component camera_transform = tempest::ecs::transform_component::identity();
-        camera_transform.position({0.0f, 10.0f, -25.0f});
-        camera_transform.rotation({0.0f, 0.0f, 0.0f});
+        camera_transform.position({-0.5f, 0.25f, -0.5f});
+        camera_transform.rotation({tempest::math::as_radians(25.0f), tempest::math::as_radians(45.0f), 0.0f});
+
+        // camera_transform.position({-0.07f, 0.0f, 2.0f});
+        // camera_transform.rotation({0.0f, tempest::math::as_radians(180.0f), 0.0f});
 
         engine.get_archetype_registry().assign(camera, camera_data);
         engine.get_archetype_registry().assign(camera, camera_transform);
@@ -112,19 +115,29 @@ void initialize_lights(tempest::ecs::archetype_registry& registry)
 
 void initialize_models(tempest::engine& engine)
 {
-    auto sponza_prefab = engine.get_asset_database().import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf",
-                                                            engine.get_archetype_registry());
-    auto sponza_instance = engine.load_entity(sponza_prefab);
-    auto sponza_transform = tempest::ecs::transform_component::identity();
-    sponza_transform.scale({0.125f, 0.125f, 0.125f});
-    engine.get_archetype_registry().assign_or_replace(sponza_instance, sponza_transform);
+    // auto sponza_prefab =
+    // engine.get_asset_database().import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf",
+    //                                                         engine.get_archetype_registry());
+    // auto sponza_instance = engine.load_entity(sponza_prefab);
+    // auto sponza_transform = tempest::ecs::transform_component::identity();
+    // sponza_transform.scale({0.125f, 0.125f, 0.125f});
+    // engine.get_archetype_registry().assign_or_replace(sponza_instance, sponza_transform);
+    // 
+    // auto lantern_prefab = engine.get_asset_database().import(
+    //     "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_archetype_registry());
+    // auto lantern_instance = engine.load_entity(lantern_prefab);
+    // auto lantern_transform = tempest::ecs::transform_component::identity();
+    // lantern_transform.position({0.0f, -0.5f, 2.0f});
+    // lantern_transform.scale({0.8f, 0.8f, 0.8f});
+    // lantern_transform.rotation({0.0f, tempest::math::as_radians(180.0f), 0.0f});
+    // engine.get_archetype_registry().assign_or_replace(lantern_instance, lantern_transform);
 
-    auto lantern_prefab = engine.get_asset_database().import(
-        "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_archetype_registry());
-    auto lantern_instance = engine.load_entity(lantern_prefab);
-    auto lantern_transform = tempest::ecs::transform_component::identity();
-    lantern_transform.position({0.0f, -0.5f, 2.0f});
-    lantern_transform.scale({0.8f, 0.8f, 0.8f});
-    lantern_transform.rotation({0.0f, tempest::math::as_radians(180.0f), 0.0f});
-    engine.get_archetype_registry().assign_or_replace(lantern_instance, lantern_transform);
+    auto chess_prefab = engine.get_asset_database().import(
+        "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf", engine.get_archetype_registry());
+    auto chess_board = engine.load_entity(chess_prefab);
+    auto chess_board_tx = tempest::ecs::transform_component::identity();
+    engine.get_archetype_registry().assign_or_replace(chess_board, chess_board_tx);
+
+    // (void)engine.load_entity(engine.get_asset_database().import(
+    //     "assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf", engine.get_archetype_registry()));
 }

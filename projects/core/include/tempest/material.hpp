@@ -29,6 +29,13 @@ namespace tempest::core
         static constexpr string_view alpha_mode_name = "t__alpha_mode";
         static constexpr string_view alpha_cutoff_name = "t__alpha_cutoff";
         static constexpr string_view double_sided_name = "t__double_sided";
+        static constexpr string_view transmissive_factor_name = "t__transmissive_factor";
+        static constexpr string_view transmissive_texture_name = "t__transmissive_texture";
+        static constexpr string_view volume_attenuation_color_name = "t__volume_attenuation_color";
+        static constexpr string_view volume_thickness_factor_name = "t__volume_thickness_factor";
+        static constexpr string_view volume_thickness_texture_name = "t__volume_thickness_texture";
+        static constexpr string_view volume_attenuation_distance_name = "t__volume_attenuation_distance";
+
 
         void set_name(string name);
         void set_texture(string_view name, guid id);

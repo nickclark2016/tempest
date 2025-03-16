@@ -1235,6 +1235,7 @@ namespace tempest::graphics::vk
             VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
             VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
             VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT,
+            VK_DYNAMIC_STATE_CULL_MODE,
         };
 
         vector<VkVertexInputBindingDescription> vertex_bindings;
@@ -2345,6 +2346,24 @@ namespace tempest::graphics::vk
     {
         auto vk_buf = _device->access_buffer(buf);
         _dispatch->cmdBindIndexBuffer(_cmds, vk_buf->vk_buffer, offset, VK_INDEX_TYPE_UINT32);
+
+        return *this;
+    }
+
+    command_list& command_list::set_cull_mode(bool front, bool back)
+    {
+        VkCullModeFlags cull_mode = 0;
+        if (front)
+        {
+            cull_mode |= VK_CULL_MODE_FRONT_BIT;
+        }
+        
+        if (back)
+        {
+            cull_mode |= VK_CULL_MODE_BACK_BIT;
+        }
+
+        _dispatch->cmdSetCullMode(_cmds, cull_mode);
 
         return *this;
     }

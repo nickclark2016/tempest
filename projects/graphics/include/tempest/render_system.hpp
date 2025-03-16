@@ -34,7 +34,7 @@ namespace tempest::graphics
         bool should_show_settings{false};
         bool enable_imgui{false};
         bool enable_profiling{false};
-        anti_aliasing_mode aa_mode{anti_aliasing_mode::TAA};
+        anti_aliasing_mode aa_mode{anti_aliasing_mode::NONE};
     };
 
     class render_system
@@ -56,6 +56,7 @@ namespace tempest::graphics
             PBR_OPAQUE = 0,
             PBR_MASK = 1,
             PBR_BLEND = 2,
+            PBR_TRANSMISSIVE = 3,
         };
 
         struct gpu_material_data
@@ -64,18 +65,24 @@ namespace tempest::graphics
 
             math::vec4<float> base_color_factor;
             math::vec4<float> emissive_factor;
+            math::vec4<float> attenuation_color;
 
             float normal_scale;
             float metallic_factor;
             float roughness_factor;
             float alpha_cutoff;
             float reflectance;
+            float transmission_factor;
+            float thickness_factor;
+            float attenuation_distance;
 
             int16_t base_color_texture_id = INVALID_TEXTURE_ID;
             int16_t normal_texture_id = INVALID_TEXTURE_ID;
             int16_t metallic_roughness_texture_id = INVALID_TEXTURE_ID;
             int16_t emissive_texture_id = INVALID_TEXTURE_ID;
             int16_t occlusion_texture_id = INVALID_TEXTURE_ID;
+            int16_t transmission_texture_id = INVALID_TEXTURE_ID;
+            int16_t thickness_texture_id = INVALID_TEXTURE_ID;
 
             gpu_material_type material_type;
         };
@@ -205,7 +212,7 @@ namespace tempest::graphics
 
         vector<mesh_layout> load_meshes(span<core::mesh> meshes);
         void load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
-        void load_material(graphics::material_payload& material);
+        void load_material(const graphics::material_payload& material);
 
         [[nodiscard]] inline uint32_t mesh_count() const noexcept
         {

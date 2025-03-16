@@ -33,6 +33,7 @@ namespace tempest::graphics
         OPAQUE = 0,
         MASK = 1,
         TRANSPARENT = 2,
+        TRANSMISSIVE = 3,
     };
 
     struct material_payload
@@ -45,15 +46,21 @@ namespace tempest::graphics
         uint32_t roughness_map_id{std::numeric_limits<uint32_t>::max()};
         uint32_t ao_map_id{std::numeric_limits<uint32_t>::max()};
         uint32_t emissive_map_id{std::numeric_limits<uint32_t>::max()};
+        uint32_t transmission_map_id{std::numeric_limits<uint32_t>::max()};
+        uint32_t thickness_map_id{std::numeric_limits<uint32_t>::max()};
 
         float alpha_cutoff;
         float metallic_factor;
         float roughness_factor;
         float reflectance;
         float normal_scale;
+        float transmission_factor;
+        float thickness_factor;
+        float attenuation_distance;
 
         math::vec4<float> base_color_factor;
         math::vec3<float> emissive_factor;
+        math::vec3<float> volume_attenuation_color;
     };
 
     struct object_payload

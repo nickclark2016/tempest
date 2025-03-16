@@ -82,6 +82,10 @@ namespace tempest::assets
 
             for (const auto& [key, value] : obj)
             {
+                if (key == "extensions")
+                {
+                    continue;
+                }
                 meta.metadata[key.data()] = value.get_string().value().data();
             }
 
@@ -621,6 +625,94 @@ namespace tempest::assets
             else
             {
                 m.set_string(core::material::alpha_mode_name, "OPAQUE");
+
+                // Check if there are extensions on the material
+                sjd::object extensions;
+                if (mat["extensions"].get(extensions) == simdjson::error_code::SUCCESS)
+                {
+                    // Check if KHR_materials_transmission exists
+                    sjd::object khr_materials_transmission;
+                    if (extensions["KHR_materials_transmission"].get(khr_materials_transmission) ==
+                        simdjson::error_code::SUCCESS)
+                    {
+                        m.set_string(core::material::alpha_mode_name, "TRANSMISSIVE");
+                        m.set_scalar(core::material::volume_thickness_factor_name, 0.0f);
+
+                        double transmission_factor;
+                        if (khr_materials_transmission["transmissionFactor"].get(transmission_factor) ==
+                            simdjson::error_code::SUCCESS)
+                        {
+                            m.set_scalar(core::material::transmissive_factor_name,
+                                         static_cast<float>(transmission_factor));
+                        }
+                        else
+                        {
+                            m.set_scalar(core::material::transmissive_factor_name, 0.0f);
+                        }
+
+                        sjd::object transmissive_texture;
+                        if (khr_materials_transmission["transmissiveTexture"].get(transmissive_texture) ==
+                            simdjson::error_code::SUCCESS)
+                        {
+                            m.set_texture(
+                                core::material::transmissive_texture_name,
+                                texture_guids.find(transmissive_texture["index"].get_uint64().value())->second);
+                        }
+                    }
+
+                    // Check if KHR_materials_volume exists
+                    sjd::object khr_materials_volume;
+                    if (extensions["KHR_materials_volume"].get(khr_materials_volume) == simdjson::error_code::SUCCESS)
+                    {
+                        double thickness_factor;
+                        if (khr_materials_volume["thicknessFactor"].get(thickness_factor) ==
+                            simdjson::error_code::SUCCESS)
+                        {
+                            m.set_scalar(core::material::volume_thickness_factor_name,
+                                         static_cast<float>(thickness_factor));
+                        }
+                        else
+                        {
+                            m.set_scalar(core::material::volume_thickness_factor_name, 0.0f);
+                        }
+
+                        sjd::object volume_texture;
+                        if (khr_materials_volume["volumeTexture"].get(volume_texture) == simdjson::error_code::SUCCESS)
+                        {
+                            m.set_texture(core::material::volume_thickness_texture_name,
+                                          texture_guids.find(volume_texture["index"].get_uint64().value())->second);
+                        }
+
+                        double attenuation_distance;
+                        if (khr_materials_volume["attenuationDistance"].get(attenuation_distance) ==
+                            simdjson::error_code::SUCCESS)
+                        {
+                            m.set_scalar(core::material::volume_attenuation_distance_name,
+                                         static_cast<float>(attenuation_distance));
+                        }
+                        else
+                        {
+                            m.set_scalar(core::material::volume_attenuation_distance_name,
+                                         numeric_limits<float>::infinity());
+                        }
+
+                        sjd::array attenuation_color;
+                        if (khr_materials_volume["attenuationColor"].get(attenuation_color) ==
+                            simdjson::error_code::SUCCESS)
+                        {
+                            m.set_vec3(core::material::volume_attenuation_color_name,
+                                       {
+                                           static_cast<float>(attenuation_color.at(0).get_double().value()),
+                                           static_cast<float>(attenuation_color.at(1).get_double().value()),
+                                           static_cast<float>(attenuation_color.at(2).get_double().value()),
+                                       });
+                        }
+                        else
+                        {
+                            m.set_vec3(core::material::volume_attenuation_color_name, {1.0f, 1.0f, 1.0f});
+                        }
+                    }
+                }
             }
 
             double alpha_cutoff;
@@ -1191,6 +1283,39 @@ namespace tempest::assets
                 if (node["matrix"].get(matrix) == simdjson::error_code::SUCCESS)
                 {
                     // TODO: Support matrix extration
+                    math::mat4<float> transform_matrix(static_cast<float>(matrix.at(0).get_double().value()),
+                                                       static_cast<float>(matrix.at(1).get_double().value()),
+                                                       static_cast<float>(matrix.at(2).get_double().value()),
+                                                       static_cast<float>(matrix.at(3).get_double().value()),
+                                                       static_cast<float>(matrix.at(4).get_double().value()),
+                                                       static_cast<float>(matrix.at(5).get_double().value()),
+                                                       static_cast<float>(matrix.at(6).get_double().value()),
+                                                       static_cast<float>(matrix.at(7).get_double().value()),
+                                                       static_cast<float>(matrix.at(8).get_double().value()),
+                                                       static_cast<float>(matrix.at(9).get_double().value()),
+                                                       static_cast<float>(matrix.at(10).get_double().value()),
+                                                       static_cast<float>(matrix.at(11).get_double().value()),
+                                                       static_cast<float>(matrix.at(12).get_double().value()),
+                                                       static_cast<float>(matrix.at(13).get_double().value()),
+                                                       static_cast<float>(matrix.at(14).get_double().value()),
+                                                       static_cast<float>(matrix.at(15).get_double().value()));
+
+                    math::vec3<float> translation_vec{};
+                    math::quat<float> rotation_quat{};
+                    math::vec3<float> scale_vec{};
+                    if (!math::decompose(transform_matrix, translation_vec, rotation_quat, scale_vec))
+                    {
+                        log->warn("Failed to decompose transform matrix for node {}, using identity transform instead",
+                                  node_id);
+
+                        transform = ecs::transform_component::identity();
+                    }
+                    else
+                    {
+                        transform.position(translation_vec);
+                        transform.rotation(math::euler(rotation_quat));
+                        transform.scale(scale_vec);
+                    }
                 }
 
                 registry.assign(parent_ent, transform);

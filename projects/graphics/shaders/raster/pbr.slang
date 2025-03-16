@@ -105,7 +105,7 @@ float3 uncharted_2_tonemap(float3 x)
 }
 
 [shader("fragment")]
-FragmentOutput FSMain(VertexOutput input) {
+FragmentOutput FSMain(VertexOutput input, bool is_front_face : SV_IsFrontFace) {
     LightingState lighting;
     lighting.sun = scene[0].sun;
     lighting.ambient_color_factor = scene[0].ambient_light.rgb;
@@ -124,12 +124,15 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.geom_tangent = half3(input.tangent);
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
+    
+    float3 view_dir = normalize(scene[0].camera.eye.xyz - input.world_position);
+    pd.front_face = dot(view_dir, input.normal) > 0.0;
 
     fetch_pixel_data(material, pd, bindless_textures);
 
     float4 color = evaluate_material(pd, material, lighting, scene[0].camera, input.world_position, input.view_position, bindless_textures);
-    color.rgb = uncharted_2_tonemap(color.rgb * 4.5);
-    color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
+    // color.rgb = uncharted_2_tonemap(color.rgb * 4.5);
+    // color.rgb = color.rgb * (1.0f / uncharted_2_tonemap((11.2f).xxx));
 
     FragmentOutput output;
 

@@ -3,6 +3,7 @@
 
 #include <tempest/mat4.hpp>
 #include <tempest/transformations.hpp>
+#include <tempest/type_traits.hpp>
 #include <tempest/vec3.hpp>
 
 namespace tempest::ecs
