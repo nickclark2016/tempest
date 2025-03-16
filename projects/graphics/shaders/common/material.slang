@@ -148,7 +148,7 @@ half pow5(half x) {
 
 half3 fresnel_schlick(const half3 f0, half v_dot_h) {
     half f = pow5(1.0h - v_dot_h);
-    return f + (1.0h - f0) * (1.0h - f);
+    return f0 + (1.0h - f0) * f;
 }
 
 half fresnel_schlick(half f0, half f90, half v_dot_h) {
