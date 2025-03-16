@@ -552,6 +552,7 @@ namespace tempest::graphics
                                            uint32_t stride) = 0;
         virtual command_list& use_pipeline(graphics_pipeline_resource_handle pipeline) = 0;
         virtual command_list& use_index_buffer(buffer_resource_handle buf, uint32_t offset) = 0;
+        virtual command_list& set_cull_mode(bool front, bool back) = 0;
 
         virtual command_list& blit(image_resource_handle src, image_resource_handle dst) = 0;
         virtual command_list& copy(buffer_resource_handle src, buffer_resource_handle dst, size_t src_offset = 0,

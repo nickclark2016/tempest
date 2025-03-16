@@ -164,6 +164,18 @@ namespace tempest
                     {
                         texture_guids.push_back(*emissive_map);
                     }
+
+                    if (auto transmission_map = mat->get_texture(core::material::transmissive_texture_name);
+                        transmission_map.has_value())
+                    {
+                        texture_guids.push_back(*transmission_map);
+                    }
+
+                    if (auto thickness_map = mat->get_texture(core::material::volume_thickness_texture_name);
+                        thickness_map.has_value())
+                    {
+                        texture_guids.push_back(*thickness_map);
+                    }
                 }
             }
         }

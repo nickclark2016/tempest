@@ -304,7 +304,8 @@ namespace tempest::graphics
             .light_type = gpu_light_type::DIRECTIONAL,
         };
         _scene_data.screen_size = math::vec2<float>(1920.0f, 1080.0f);
-        _scene_data.ambient_light = math::vec3<float>(0.1f, 0.1f, 0.1f);
+        _scene_data.ambient_light = math::vec3<float>(253, 242, 200) / 255.0f * 0.1f;
+        // _scene_data.ambient_light = math::vec3<float>(0.2f, 0.2f, 0.2f);
 
         _hi_z_data = {
             .size = math::vec2<uint32_t>(1920, 1080),
@@ -393,24 +394,6 @@ namespace tempest::graphics
                             light_data.push_back(light);
                         });
 
-                        // for (const auto& [ent, point_light, transform] :
-                        //      _registry->view<point_light_component, ecs::transform_component>())
-                        //{
-                        //     auto sq_range = point_light.range * point_light.range;
-                        //     auto inv_sq_range = sq_range > 0.0f ? 1.0f / sq_range : 0.0f;
-
-                        //    gpu_light light = {
-                        //        .color_intensity = math::vec4<float>(point_light.color.x, point_light.color.y,
-                        //                                             point_light.color.z, point_light.intensity),
-                        //        .position_falloff = math::vec4<float>(transform.position().x, transform.position().y,
-                        //                                              transform.position().z, inv_sq_range),
-                        //        .light_type = gpu_light_type::POINT,
-                        //        .shadow_map_count = 0,
-                        //    };
-
-                        //    light_data.push_back(light);
-                        //}
-
                         _scene_data.point_light_count = static_cast<uint32_t>(light_data.size());
 
                         // Compute shadow data
@@ -466,59 +449,9 @@ namespace tempest::graphics
                             }
                         });
 
-                        // for (const auto& [ent, dir_light, shadow_map, transform] :
-                        //      _registry
-                        //          ->view<directional_light_component, shadow_map_component,
-                        //          ecs::transform_component>())
-                        //{
-                        //     auto params = compute_shadow_map_cascades(shadow_map, transform,
-                        //                                               _registry->get<camera_component>(_camera_entity));
-
-                        //    _scene_data.sun.shadow_map_count = static_cast<uint32_t>(params.projections.size());
-                        //    for (size_t i = 0; i < params.projections.size(); ++i)
-                        //    {
-                        //        auto region = _shadow_map_subresource_allocator.allocate(shadow_map.size);
-                        //        assert(region.has_value());
-
-                        //        cpu_shadow_map_parameter cpu_params = {
-                        //            .proj_matrix = params.projections[i],
-                        //            .shadow_map_bounds =
-                        //                {
-                        //                    region->position.x,
-                        //                    region->position.y,
-                        //                    region->extent.x,
-                        //                    region->extent.y,
-                        //                },
-                        //            .light_entity = ent,
-                        //        };
-
-                        //        _scene_data.sun.shadow_map_indices[i] = shadow_maps_written++;
-
-                        //        _cpu_shadow_map_build_params.push_back(cpu_params);
-
-                        //        gpu_shadow_map_parameter gpu_param = {
-                        //            .light_proj_matrix = params.projections[i],
-                        //            .shadow_map_region =
-                        //                {
-                        //                    static_cast<float>(region->position.x) /
-                        //                        (_shadow_map_subresource_allocator.extent().x),
-                        //                    static_cast<float>(region->position.y) /
-                        //                        (_shadow_map_subresource_allocator.extent().y),
-                        //                    static_cast<float>(region->extent.x) /
-                        //                        (_shadow_map_subresource_allocator.extent().x),
-                        //                    static_cast<float>(region->extent.y) /
-                        //                        (_shadow_map_subresource_allocator.extent().x),
-                        //                },
-                        //            .cascade_split_far = params.cascade_splits[i],
-                        //        };
-
-                        //        _gpu_shadow_map_use_parameters.push_back(gpu_param);
-                        //    }
-                        //}
-
                         // Upload Directional Shadow Map Data
-                        writer.write<gpu_shadow_map_parameter>(cmds, span<gpu_shadow_map_parameter>(_gpu_shadow_map_use_parameters),
-                                                               dir_shadow_buffer);
+                        writer.write<gpu_shadow_map_parameter>(
+                            cmds, span<gpu_shadow_map_parameter>(_gpu_shadow_map_use_parameters), dir_shadow_buffer);
 
                         // Upload scene data
                         writer.write(cmds, span<const gpu_scene_data>{&_scene_data, static_cast<size_t>(1)},
@@ -554,7 +487,8 @@ namespace tempest::graphics
                     .add_index_buffer(_vertex_pull_buffer)
                     .should_execute([this]() { return _settings.aa_mode != anti_aliasing_mode::MSAA; })
                     .on_execute([&](command_list& cmds) {
-                        cmds.set_scissor_region(0, 0, 1920, 1080)
+                        cmds.set_cull_mode(false, true)
+                            .set_scissor_region(0, 0, 1920, 1080)
                             .set_viewport(0, 0, 1920, 1080)
                             .use_index_buffer(_vertex_pull_buffer, 0);
 
@@ -601,16 +535,22 @@ namespace tempest::graphics
                 {
                     pipeline = _pbr_opaque_pipeline;
                 }
-                else if (key.alpha_type == alpha_behavior::TRANSPARENT)
+                else if (key.alpha_type == alpha_behavior::TRANSPARENT ||
+                         key.alpha_type == alpha_behavior::TRANSMISSIVE)
                 {
                     pipeline = _pbr_transparencies_pipeline;
                 }
+                else
+                {
+                    continue;
+                }
 
-                cmds.use_pipeline(pipeline).draw_indexed(
-                    _indirect_buffer,
-                    static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                                          draw_calls_issued * sizeof(indexed_indirect_command)),
-                    static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
+                cmds.use_pipeline(pipeline)
+                    .set_cull_mode(false, false)
+                    .draw_indexed(_indirect_buffer,
+                                  static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                                                        draw_calls_issued * sizeof(indexed_indirect_command)),
+                                  static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
 
                 draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
             }
@@ -651,7 +591,8 @@ namespace tempest::graphics
                                 cmds.set_scissor_region(region.x, region.y, region.z, region.w)
                                     .set_viewport(static_cast<float>(region.x), static_cast<float>(region.y),
                                                   static_cast<float>(region.z), static_cast<float>(region.w), 0.0f,
-                                                  1.0f, false);
+                                                  1.0f, false)
+                                    .set_cull_mode(false, true);
 
                                 // Push the shadow map projection matrix
                                 cmds.push_constants(0, params.proj_matrix, _directional_shadow_map_pipeline);
@@ -798,7 +739,7 @@ namespace tempest::graphics
             for (auto [_, batch] : _draw_batches)
             {
                 batch.commands.clear();
-            }      
+            }
 
             _registry->each([&](renderable_component renderable, ecs::self_component self) {
                 gpu_object_data object_payload = {
@@ -1033,32 +974,44 @@ namespace tempest::graphics
         }
     }
 
-    void render_system::load_material(material_payload& material)
+    void render_system::load_material(const material_payload& material)
     {
         auto mat = gpu_material_data{
             .base_color_factor = material.base_color_factor,
             .emissive_factor = math::vec4<float>(material.emissive_factor.x, material.emissive_factor.y,
                                                  material.emissive_factor.z, 1.0f),
+            .attenuation_color =
+                math::vec4<float>(material.volume_attenuation_color.x, material.volume_attenuation_color.y,
+                                  material.volume_attenuation_color.z, 1.0f),
             .normal_scale = material.normal_scale,
             .metallic_factor = material.metallic_factor,
             .roughness_factor = material.roughness_factor,
             .alpha_cutoff = material.alpha_cutoff,
             .reflectance = material.reflectance,
-            .base_color_texture_id = material.albedo_map_id == std::numeric_limits<uint32_t>::max()
+            .transmission_factor = material.transmission_factor,
+            .thickness_factor = material.thickness_factor,
+            .attenuation_distance = material.attenuation_distance,
+            .base_color_texture_id = material.albedo_map_id == numeric_limits<uint32_t>::max()
                                          ? gpu_material_data::INVALID_TEXTURE_ID
                                          : static_cast<int16_t>(texture_count() + material.albedo_map_id),
-            .normal_texture_id = material.normal_map_id == std::numeric_limits<uint32_t>::max()
+            .normal_texture_id = material.normal_map_id == numeric_limits<uint32_t>::max()
                                      ? gpu_material_data::INVALID_TEXTURE_ID
                                      : static_cast<int16_t>(texture_count() + material.normal_map_id),
-            .metallic_roughness_texture_id = material.metallic_map_id == std::numeric_limits<uint32_t>::max()
+            .metallic_roughness_texture_id = material.metallic_map_id == numeric_limits<uint32_t>::max()
                                                  ? gpu_material_data::INVALID_TEXTURE_ID
                                                  : static_cast<int16_t>(texture_count() + material.metallic_map_id),
-            .emissive_texture_id = material.emissive_map_id == std::numeric_limits<uint32_t>::max()
+            .emissive_texture_id = material.emissive_map_id == numeric_limits<uint32_t>::max()
                                        ? gpu_material_data::INVALID_TEXTURE_ID
                                        : static_cast<int16_t>(texture_count() + material.emissive_map_id),
-            .occlusion_texture_id = material.ao_map_id == std::numeric_limits<uint32_t>::max()
+            .occlusion_texture_id = material.ao_map_id == numeric_limits<uint32_t>::max()
                                         ? gpu_material_data::INVALID_TEXTURE_ID
                                         : static_cast<int16_t>(texture_count() + material.ao_map_id),
+            .transmission_texture_id = material.transmission_map_id == numeric_limits<uint32_t>::max()
+                                           ? gpu_material_data::INVALID_TEXTURE_ID
+                                           : static_cast<int16_t>(texture_count() + material.transmission_map_id),
+            .thickness_texture_id = material.thickness_map_id == numeric_limits<uint32_t>::max()
+                                        ? gpu_material_data::INVALID_TEXTURE_ID
+                                        : static_cast<int16_t>(texture_count() + material.thickness_map_id),
             .material_type = static_cast<gpu_material_type>(material.type),
         };
 
@@ -1086,6 +1039,14 @@ namespace tempest::graphics
                 auto metallic_factor = material->get_scalar(core::material::metallic_factor_name).value_or(1.0f);
                 auto roughness_factor = material->get_scalar(core::material::roughness_factor_name).value_or(1.0f);
                 auto alpha_cutoff = material->get_scalar(core::material::alpha_cutoff_name).value_or(0.5f);
+                auto transmissive_factor =
+                    material->get_scalar(core::material::transmissive_factor_name).value_or(0.0f);
+                auto thickness_factor =
+                    material->get_scalar(core::material::volume_thickness_factor_name).value_or(0.0f);
+                auto attenuation_distance = material->get_scalar(core::material::volume_attenuation_distance_name)
+                                                .value_or(numeric_limits<float>::infinity());
+                auto attenuation_color = material->get_vec3(core::material::volume_attenuation_color_name)
+                                             .value_or(math::vec3<float>(0.0f, 0.0f, 0.0f));
 
                 // TODO: Rework material types
                 auto material_type = [&]() -> gpu_material_type {
@@ -1102,6 +1063,10 @@ namespace tempest::graphics
                     {
                         return gpu_material_type::PBR_BLEND;
                     }
+                    else if (material_type_str == "TRANSMISSIVE")
+                    {
+                        return gpu_material_type::PBR_TRANSMISSIVE;
+                    }
                     else
                     {
                         return gpu_material_type::PBR_OPAQUE;
@@ -1111,11 +1076,16 @@ namespace tempest::graphics
                 auto gpu_material = gpu_material_data{
                     .base_color_factor = base_color_factor,
                     .emissive_factor = math::vec4<float>(emissive_factor.x, emissive_factor.y, emissive_factor.z, 1.0f),
+                    .attenuation_color =
+                        math::vec4<float>(attenuation_color.x, attenuation_color.y, attenuation_color.z, 1.0f),
                     .normal_scale = normal_scale,
                     .metallic_factor = metallic_factor,
                     .roughness_factor = roughness_factor,
                     .alpha_cutoff = alpha_cutoff,
                     .reflectance = 0.0f,
+                    .transmission_factor = transmissive_factor,
+                    .thickness_factor = thickness_factor,
+                    .attenuation_distance = attenuation_distance,
                     .material_type = material_type,
                 };
 
@@ -1167,6 +1137,26 @@ namespace tempest::graphics
                 else
                 {
                     gpu_material.occlusion_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                }
+
+                if (const auto transmission_map = material->get_texture(core::material::transmissive_texture_name))
+                {
+                    auto tex_id = _image_id_map[*transmission_map];
+                    gpu_material.transmission_texture_id = static_cast<int16_t>(tex_id);
+                }
+                else
+                {
+                    gpu_material.transmission_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                }
+
+                if (const auto thickness_map = material->get_texture(core::material::volume_thickness_factor_name))
+                {
+                    auto tex_id = _image_id_map[*thickness_map];
+                    gpu_material.thickness_texture_id = static_cast<int16_t>(tex_id);
+                }
+                else
+                {
+                    gpu_material.thickness_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
                 }
 
                 log->info("Uploaded material with guid: {} at index {}", to_string(guid).c_str(), _materials.size());
