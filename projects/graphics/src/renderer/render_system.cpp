@@ -574,10 +574,6 @@ namespace tempest::graphics
                     .on_execute([&](command_list& cmds) {
                         // Render directional shadow maps
                         cmds.use_pipeline(_directional_shadow_map_pipeline);
-
-                        // auto lights_with_shadows = _registry->view<directional_light_component,
-                        // shadow_map_component>();
-
                         uint32_t lights_written = 0;
 
                         _registry->each([&]([[maybe_unused]] directional_light_component dir_light,

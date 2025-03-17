@@ -96,16 +96,16 @@ float3 decode_normal(float2 encoded_normal) {
     return normalize(n);
 }
 
-half3 compute_diffuse(const half4 base, half metallic) {
-    return base.rgb * (1.0h - metallic);
+half3 compute_f0(const half3 base, half metallic, half reflectance) {
+    half dieletric_f0 = 0.16h * reflectance * reflectance;
+    half3 metallic_f0 = base;
+    return lerp(half3(dieletric_f0), metallic_f0, metallic);
 }
 
-half3 compute_f0(const half4 base, half metallic, half reflectance) {
-    return 0.16h * reflectance * reflectance * (1.0h - metallic) + base.rgb * metallic;
-}
-
-half compute_dielectric_f0(half reflectance) {
-    return 0.16h * reflectance * reflectance; 
+half3 compute_f0(const half3 base, half metallic, half3 reflectance) {
+    half3 dielectric_f0 = 0.16h * reflectance * reflectance;
+    half3 metallic_f0 = base;
+    return lerp(dielectric_f0, metallic_f0, metallic);
 }
 
 half compute_metallic_from_specular(const half3 specular) {
@@ -126,12 +126,18 @@ half f0_to_index_of_refraction(half f0) {
     return (1.0h + r) / (1.0h - r);
 }
 
-half ggx(half roughness, half n_dot_h, half3 h) {
-    half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
-    half alpha = n_dot_h * roughness;
-    half k = roughness / (one_minus_noh2 + alpha * alpha);
-    half d = k * k * half(1.0 / PI);
-    return saturate(d);
+half d_ggx(half roughness, half n_dot_h, half3 h, half3 n) {
+    // half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
+    // half alpha = n_dot_h * roughness;
+    // half k = roughness / (one_minus_noh2 + alpha * alpha);
+    // half d = k * k * half(1.0 / PI);
+    // return saturate(d);
+
+    half3 n_cross_h = cross(n, h);
+    half a = n_dot_h * roughness;
+    half k = roughness / (dot(n_cross_h, n_cross_h) + a * a);
+    half d = k * k * (1.0h / half(PI));
+    return min(d, 65504.0h);
 }
 
 half smith_ggx(half roughness, half n_dot_v, half n_dot_l) {
@@ -139,7 +145,7 @@ half smith_ggx(half roughness, half n_dot_v, half n_dot_l) {
     half l_v = n_dot_l * sqrt((n_dot_v - a2 * n_dot_v) * n_dot_v + a2);
     half l_l = n_dot_v * sqrt((n_dot_l - a2 * n_dot_l) * n_dot_l + a2);
     half v = 0.5h / (l_v + l_l);
-    return saturate(v);
+    return v;
 }
 
 half pow5(half x) {
@@ -160,10 +166,9 @@ half3 fresnel_schlick(const half3 f0, half f90, half v_dot_h) {
 }
 
 half3 isotropic_lobe(const PixelData px, const Light light, const half3 h, const half n_dot_v, const half n_dot_l, const half n_dot_h, const half l_dot_h) {
-    half d = ggx(px.roughness, n_dot_h, h);
+    half d = d_ggx(px.roughness, n_dot_h, h, px.shading_normal);
     half v = smith_ggx(px.roughness, n_dot_v, n_dot_l);
-    half f90 = saturate(dot(px.f0, half3(50.0h * 0.33h)));
-    half3 f = fresnel_schlick(px.f0, f90, l_dot_h);
+    half3 f = fresnel_schlick(px.f0, 1.0h, l_dot_h); // 1.0h is a placeholder for materials without specular reflection
 
     return (d * v * f);
 }
@@ -193,7 +198,7 @@ half3 diffuse_lobe_brdf(const PixelData px, half n_dot_v, half n_dot_l, half l_d
 
 // Determine how to respect the volume and attenuation distance
 half3 specular_lobe_btdf(const PixelData px, const half3 h, const half n_dot_v, const half n_dot_l, const half n_dot_h, const half l_dot_h) {
-    half d = ggx(px.roughness, n_dot_h, h);
+    half d = d_ggx(px.roughness, n_dot_h, h, px.shading_normal);
     half v = smith_ggx(px.roughness, n_dot_v, n_dot_l);
     half3 f = fresnel_schlick(px.f0, l_dot_h);
     half3 btdf = (d * v * f) / (4 * abs(n_dot_v) * abs(n_dot_l) + 0.0001h);
@@ -350,11 +355,6 @@ half fetch_metallic(const MaterialState mat_state, float2 uv, Texture2D[] textur
     return metallic_factor * half(textures[(int) mat_state.mat.metallic_roughness_map_id].Sample(mat_state.linear_sampler, uv).b);
 }
 
-half3 compute_diffuse(const half3 base, half metallic) {
-    // Lerp between 0.04 and the base color, depending on the metallic value
-    return lerp(half3(0.04h), base, metallic);
-}
-
 void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel, Texture2D[] textures) {
     half4 texture_factor = half4(mat_state.mat.base_texture_factor);
     pixel.diffuse = texture_factor;
@@ -372,11 +372,10 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel, Texture
     }
     
     half metallic = fetch_metallic(mat_state, pixel.uv, textures);
-    half reflectance = 0.04h;
 
     pixel.diffuse = color;
     pixel.metallic = metallic;
-    pixel.f0 = compute_f0(color, metallic, reflectance);
+    pixel.f0 = lerp(half3(0.04h), color.rgb, metallic);
 }
 
 void fetch_roughness(const MaterialState mat_state, inout PixelData pixel, Texture2D[] textures) {
@@ -390,12 +389,9 @@ void fetch_roughness(const MaterialState mat_state, inout PixelData pixel, Textu
 
 void fetch_normal(const MaterialState mat_state, inout PixelData pixel, Texture2D[] textures)
 {
-    if (mat_state.mat.normal_map_id < 0)
-    {
+    if (mat_state.mat.normal_map_id < 0) {
         pixel.shading_normal = pixel.geom_normal;
-    }
-    else
-    {
+    } else {
         // map rg [0, 1] -> [-1, 1]
         // map b (0.5, 1] -> [0, 1]
         half3 tan_normal = half3(textures[(int) mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb) * 2.0h - 1.0h;
