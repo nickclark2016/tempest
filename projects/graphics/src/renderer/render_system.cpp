@@ -534,23 +534,24 @@ namespace tempest::graphics
                 if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
                 {
                     pipeline = _pbr_opaque_pipeline;
+                    cmds.set_cull_mode(false, true);
                 }
                 else if (key.alpha_type == alpha_behavior::TRANSPARENT ||
                          key.alpha_type == alpha_behavior::TRANSMISSIVE)
                 {
                     pipeline = _pbr_transparencies_pipeline;
+                    cmds.set_cull_mode(false, false);
                 }
                 else
                 {
                     continue;
                 }
 
-                cmds.use_pipeline(pipeline)
-                    .set_cull_mode(false, false)
-                    .draw_indexed(_indirect_buffer,
-                                  static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                                                        draw_calls_issued * sizeof(indexed_indirect_command)),
-                                  static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
+                cmds.use_pipeline(pipeline).draw_indexed(
+                    _indirect_buffer,
+                    static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
+                                          draw_calls_issued * sizeof(indexed_indirect_command)),
+                    static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
 
                 draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
             }
