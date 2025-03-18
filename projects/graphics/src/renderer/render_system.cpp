@@ -312,6 +312,9 @@ namespace tempest::graphics
             .mip_count = 5,
         };
 
+        _pbr.init(*_device);
+        _pbr_oit.init(*_device);
+
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER,
             [&, dir_shadow_buffer, light_buffer](graph_pass_builder& builder) {
@@ -331,7 +334,7 @@ namespace tempest::graphics
                         {
                             uint32_t instances_written = 0;
 
-                            for (const auto& [key, batch] : _draw_batches)
+                            for (auto&& [key, batch] : _draw_batches)
                             {
                                 writer.write(cmds,
                                              span<const gpu_object_data>{batch.objects.values(),
@@ -345,6 +348,8 @@ namespace tempest::graphics
                                 std::iota(instances.begin(), instances.end(), instances_written);
                                 writer.write(cmds, span<const uint32_t>{instances}, _instance_buffer,
                                              instances_written * sizeof(uint32_t));
+
+                                batch.index_buffer_offset = instances_written;
 
                                 instances_written += static_cast<uint32_t>(batch.objects.size());
                             }
@@ -526,34 +531,24 @@ namespace tempest::graphics
                 .set_viewport(0, 0, 1920, 1080)
                 .use_index_buffer(_vertex_pull_buffer, 0);
 
-            uint32_t draw_calls_issued = 0;
-
             for (auto [key, batch] : _draw_batches)
             {
-                graphics_pipeline_resource_handle pipeline;
-                if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+                switch (key.alpha_type)
                 {
-                    pipeline = _pbr_opaque_pipeline;
-                    cmds.set_cull_mode(false, true);
+                case alpha_behavior::OPAQUE:
+                    [[fallthrough]];
+                case alpha_behavior::MASK: {
+                    _pbr.draw_batch(*_device, cmds,
+                                    {
+                                        .indirect_command_buffer = _indirect_buffer,
+                                        .first_indirect_command = batch.index_buffer_offset,
+                                        .indirect_command_count = batch.commands.size(),
+                                        .double_sided = key.double_sided,
+                                    });
                 }
-                else if (key.alpha_type == alpha_behavior::TRANSPARENT ||
-                         key.alpha_type == alpha_behavior::TRANSMISSIVE)
-                {
-                    pipeline = _pbr_transparencies_pipeline;
-                    cmds.set_cull_mode(false, false);
+                default:
+                    break;
                 }
-                else
-                {
-                    continue;
-                }
-
-                cmds.use_pipeline(pipeline).draw_indexed(
-                    _indirect_buffer,
-                    static_cast<uint32_t>(_device->get_buffer_frame_offset(_indirect_buffer) +
-                                          draw_calls_issued * sizeof(indexed_indirect_command)),
-                    static_cast<uint32_t>(batch.objects.size()), sizeof(indexed_indirect_command));
-
-                draw_calls_issued += static_cast<uint32_t>(batch.commands.size());
             }
         };
 
@@ -715,8 +710,6 @@ namespace tempest::graphics
         _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
         _graph->update_external_sampled_images(_shadow_map_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
 
-        _pbr_opaque_pipeline = create_pbr_pipeline(false);
-        _pbr_transparencies_pipeline = create_pbr_pipeline(true);
         _z_prepass_pipeline = create_z_prepass_pipeline();
         _directional_shadow_map_pipeline = create_directional_shadow_map_pipeline();
         _hzb_build_pipeline = create_hzb_build_pipeline();
@@ -760,8 +753,11 @@ namespace tempest::graphics
 
                 object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
 
+                auto alpha = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type);
+
                 draw_batch_key key = {
-                    .alpha_type = static_cast<alpha_behavior>(_materials[renderable.material_id].material_type),
+                    .alpha_type = alpha,
+                    .double_sided = alpha == alpha_behavior::TRANSMISSIVE || alpha == alpha_behavior::TRANSPARENT,
                 };
 
                 auto& draw_batch = _draw_batches[key];
@@ -797,6 +793,7 @@ namespace tempest::graphics
             // Iterate through the draw batches and update first instance based on the number of instances in the
             // previous batches
             uint32_t instances_written = 0;
+            uint32_t batches_written = 0;
             for (auto [_, batch] : _draw_batches)
             {
                 for (auto& cmd : batch.commands)
@@ -873,6 +870,9 @@ namespace tempest::graphics
         _device->release_buffer(_object_buffer);
         _device->release_buffer(_indirect_buffer);
 
+        _pbr.release(*_device);
+        _pbr_oit.release(*_device);
+
         _swapchains.clear();
         _images.clear();
         _buffers.clear();
@@ -918,7 +918,7 @@ namespace tempest::graphics
         return mesh_layouts;
     }
 
-    vector<mesh_layout> render_system::load_meshes(span<core::mesh> meshes)
+    vector<mesh_layout> render_system::_load_meshes(span<core::mesh> meshes)
     {
         auto mesh_layouts = renderer_utilities::upload_meshes(*_device, meshes, _vertex_pull_buffer, _mesh_bytes);
 
@@ -930,7 +930,7 @@ namespace tempest::graphics
         return mesh_layouts;
     }
 
-    void render_system::load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
+    void render_system::_load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
     {
         auto textures = renderer_utilities::upload_textures(*_device, texture_sources, _device->get_staging_buffer(),
                                                             true, generate_mip_maps);
@@ -969,50 +969,6 @@ namespace tempest::graphics
                 ++idx;
             }
         }
-    }
-
-    void render_system::load_material(const material_payload& material)
-    {
-        auto mat = gpu_material_data{
-            .base_color_factor = material.base_color_factor,
-            .emissive_factor = math::vec4<float>(material.emissive_factor.x, material.emissive_factor.y,
-                                                 material.emissive_factor.z, 1.0f),
-            .attenuation_color =
-                math::vec4<float>(material.volume_attenuation_color.x, material.volume_attenuation_color.y,
-                                  material.volume_attenuation_color.z, 1.0f),
-            .normal_scale = material.normal_scale,
-            .metallic_factor = material.metallic_factor,
-            .roughness_factor = material.roughness_factor,
-            .alpha_cutoff = material.alpha_cutoff,
-            .reflectance = material.reflectance,
-            .transmission_factor = material.transmission_factor,
-            .thickness_factor = material.thickness_factor,
-            .attenuation_distance = material.attenuation_distance,
-            .base_color_texture_id = material.albedo_map_id == numeric_limits<uint32_t>::max()
-                                         ? gpu_material_data::INVALID_TEXTURE_ID
-                                         : static_cast<int16_t>(texture_count() + material.albedo_map_id),
-            .normal_texture_id = material.normal_map_id == numeric_limits<uint32_t>::max()
-                                     ? gpu_material_data::INVALID_TEXTURE_ID
-                                     : static_cast<int16_t>(texture_count() + material.normal_map_id),
-            .metallic_roughness_texture_id = material.metallic_map_id == numeric_limits<uint32_t>::max()
-                                                 ? gpu_material_data::INVALID_TEXTURE_ID
-                                                 : static_cast<int16_t>(texture_count() + material.metallic_map_id),
-            .emissive_texture_id = material.emissive_map_id == numeric_limits<uint32_t>::max()
-                                       ? gpu_material_data::INVALID_TEXTURE_ID
-                                       : static_cast<int16_t>(texture_count() + material.emissive_map_id),
-            .occlusion_texture_id = material.ao_map_id == numeric_limits<uint32_t>::max()
-                                        ? gpu_material_data::INVALID_TEXTURE_ID
-                                        : static_cast<int16_t>(texture_count() + material.ao_map_id),
-            .transmission_texture_id = material.transmission_map_id == numeric_limits<uint32_t>::max()
-                                           ? gpu_material_data::INVALID_TEXTURE_ID
-                                           : static_cast<int16_t>(texture_count() + material.transmission_map_id),
-            .thickness_texture_id = material.thickness_map_id == numeric_limits<uint32_t>::max()
-                                        ? gpu_material_data::INVALID_TEXTURE_ID
-                                        : static_cast<int16_t>(texture_count() + material.thickness_map_id),
-            .material_type = static_cast<gpu_material_type>(material.type),
-        };
-
-        _materials.push_back(mat);
     }
 
     void render_system::load_materials(span<const guid> material_guids, const core::material_registry& mat_reg)
@@ -1172,98 +1128,6 @@ namespace tempest::graphics
     void render_system::draw_profiler()
     {
         _graph->show_gpu_profiling();
-    }
-
-    graphics_pipeline_resource_handle render_system::create_pbr_pipeline(bool enable_blend)
-    {
-        auto vertex_shader_source = core::read_bytes("assets/shaders/pbr.vert.spv");
-        auto fragment_shader_source = core::read_bytes("assets/shaders/pbr.frag.spv");
-
-        descriptor_binding_info set0_bindings[] = {
-            scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
-            instance_buffer_desc,  materials_buffer_desc,   linear_sampler_desc,     texture_array_desc,
-        };
-
-        descriptor_binding_info set1_bindings[] = {
-            light_parameter_desc,
-            shadow_map_parameter_desc,
-            shadow_map_mt_desc,
-        };
-
-        descriptor_set_layout_create_info layouts[] = {
-            {
-                .set = 0,
-                .bindings = set0_bindings,
-            },
-            {
-                .set = 1,
-                .bindings = set1_bindings,
-            },
-        };
-
-        resource_format color_buffer_fmt[] = {
-            resource_format::RGBA8_SRGB,
-            resource_format::RG32_FLOAT,
-        };
-
-        color_blend_attachment_state blending[] = {
-            {
-                // Color Buffer
-                .enabled = false,
-                .color = {},
-                .alpha = {},
-            },
-            {
-                // Velocity Buffer
-                .enabled = false,
-                .color = {},
-                .alpha = {},
-            },
-        };
-
-        if (enable_blend)
-        {
-            blending[0].enabled = true;
-            blending[0].color.src = blend_factor::ONE;
-            blending[0].color.dst = blend_factor::ONE_MINUS_SRC_ALPHA;
-            blending[0].color.op = blend_operation::ADD;
-            blending[0].alpha.src = blend_factor::ONE;
-            blending[0].alpha.dst = blend_factor::ONE_MINUS_SRC_ALPHA;
-            blending[0].alpha.op = blend_operation::ADD;
-        }
-
-        auto pipeline = _device->create_graphics_pipeline({
-            .layout{
-                .set_layouts = layouts,
-            },
-            .target{
-                .color_attachment_formats = color_buffer_fmt,
-                .depth_attachment_format = resource_format::D24_FLOAT,
-            },
-            .vertex_shader{
-                .bytes = vertex_shader_source,
-                .entrypoint = "main",
-                .name = "PBR Shader Module",
-            },
-            .fragment_shader{
-                .bytes = fragment_shader_source,
-                .entrypoint = "main",
-                .name = "PBR Shader Module",
-            },
-            .depth_testing{
-                .enable_test = true,
-                .enable_write = true,
-                .depth_test_op = compare_operation::GREATER_OR_EQUALS,
-            },
-            .blending{
-                .attachment_blend_ops = blending,
-            },
-            .name = "PBR Graphics Pipeline",
-        });
-
-        _graphics_pipelines.push_back(pipeline);
-
-        return pipeline;
     }
 
     graphics_pipeline_resource_handle render_system::create_z_prepass_pipeline()

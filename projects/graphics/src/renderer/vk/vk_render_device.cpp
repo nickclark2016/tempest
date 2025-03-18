@@ -2014,6 +2014,7 @@ namespace tempest::graphics::vk
                     .defer_surface_initialization()
                     .require_present()
                     .add_required_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)
+                    .add_required_extension(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME)
                     .set_minimum_version(1, 3)
                     .set_required_features({
 #ifdef _DEBUG
