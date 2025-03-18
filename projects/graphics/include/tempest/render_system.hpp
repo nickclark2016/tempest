@@ -1,10 +1,12 @@
 #ifndef tempest_graphcis_render_system_hpp
 #define tempest_graphcis_render_system_hpp
 
-#include "imgui_context.hpp"
-#include "render_device.hpp"
-#include "render_graph.hpp"
-#include "window.hpp"
+#include <tempest/imgui_context.hpp>
+#include <tempest/render_device.hpp>
+#include <tempest/render_graph.hpp>
+#include <tempest/window.hpp>
+
+#include <tempest/passes/pbr.hpp>
 
 #include <tempest/archetype.hpp>
 #include <tempest/flat_map.hpp>
@@ -163,6 +165,7 @@ namespace tempest::graphics
         struct draw_batch_key
         {
             alpha_behavior alpha_type;
+            bool double_sided;
 
             constexpr auto operator<=>(const draw_batch_key&) const noexcept = default;
         };
@@ -171,6 +174,7 @@ namespace tempest::graphics
         {
             graphics_pipeline_resource_handle pipeline;
             vector<indexed_indirect_command> commands;
+            size_t index_buffer_offset = 0;
             ecs::basic_sparse_map<ecs::basic_archetype_registry::entity_type, gpu_object_data> objects;
         };
 
@@ -209,10 +213,6 @@ namespace tempest::graphics
         void load_textures(span<const guid> texture_ids, const core::texture_registry& texture_registry,
                            bool generate_mip_maps);
         void load_materials(span<const guid> material_ids, const core::material_registry& material_registry);
-
-        vector<mesh_layout> load_meshes(span<core::mesh> meshes);
-        void load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
-        void load_material(const graphics::material_payload& material);
 
         [[nodiscard]] inline uint32_t mesh_count() const noexcept
         {
@@ -313,8 +313,6 @@ namespace tempest::graphics
         sampler_resource_handle _linear_sampler_no_aniso;
         sampler_resource_handle _point_sampler_no_aniso;
 
-        graphics_pipeline_resource_handle _pbr_opaque_pipeline;
-        graphics_pipeline_resource_handle _pbr_transparencies_pipeline;
         graphics_pipeline_resource_handle _z_prepass_pipeline;
         graphics_pipeline_resource_handle _directional_shadow_map_pipeline;
         compute_pipeline_resource_handle _hzb_build_pipeline;
@@ -339,16 +337,21 @@ namespace tempest::graphics
 
         tempest::function<void()> _create_imgui_hierarchy;
 
-        graphics_pipeline_resource_handle create_pbr_pipeline(bool enable_blend);
         graphics_pipeline_resource_handle create_z_prepass_pipeline();
         compute_pipeline_resource_handle create_hzb_build_pipeline();
         graphics_pipeline_resource_handle create_taa_resolve_pipeline();
         graphics_pipeline_resource_handle create_sharpen_pipeline();
         graphics_pipeline_resource_handle create_directional_shadow_map_pipeline();
 
+        passes::pbr_pass _pbr;
+        passes::pbr_oit_pass _pbr_oit;
+
         shadow_map_parameters compute_shadow_map_cascades(const shadow_map_component& shadowing,
                                                           const ecs::transform_component& light_transform,
                                                           const camera_component& camera_data);
+
+        vector<mesh_layout> _load_meshes(span<core::mesh> meshes);
+        void _load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
     };
 } // namespace tempest::graphics
 
