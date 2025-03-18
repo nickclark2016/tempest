@@ -127,17 +127,17 @@ half f0_to_index_of_refraction(half f0) {
 }
 
 half d_ggx(half roughness, half n_dot_h, half3 h, half3 n) {
-    // half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
-    // half alpha = n_dot_h * roughness;
-    // half k = roughness / (one_minus_noh2 + alpha * alpha);
-    // half d = k * k * half(1.0 / PI);
-    // return saturate(d);
-
-    half3 n_cross_h = cross(n, h);
-    half a = n_dot_h * roughness;
-    half k = roughness / (dot(n_cross_h, n_cross_h) + a * a);
-    half d = k * k * (1.0h / half(PI));
+    half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
+    half alpha = n_dot_h * roughness;
+    half k = roughness / (one_minus_noh2 + alpha * alpha);
+    half d = k * k * half(1.0 / PI);
     return min(d, 65504.0h);
+
+    // half3 n_cross_h = cross(n, h);
+    // half a = n_dot_h * roughness;
+    // half k = roughness / (dot(n_cross_h, n_cross_h) + a * a);
+    // half d = k * k * (1.0h / half(PI));
+    // return min(d, 65504.0h);
 }
 
 half smith_ggx(half roughness, half n_dot_v, half n_dot_l) {
@@ -222,7 +222,7 @@ half3 compute_base_model(const PixelData px, const Light light, half3 light_dir,
     half3 l = light_dir;
     half3 h = normalize(v + l);
 
-    half n_dot_v = saturate(dot(px.shading_normal, v));
+    half n_dot_v = max(half(1e-4), dot(px.shading_normal, v));
     half n_dot_l = saturate(dot(px.shading_normal, l));
     half n_dot_h = saturate(dot(px.shading_normal, h));
     half l_dot_h = saturate(dot(l, h));
