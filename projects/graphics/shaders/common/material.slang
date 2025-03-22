@@ -217,6 +217,16 @@ half3 compute_metallic(const PixelData px, half3 specular, half v_dot_h) {
     return specular * fresnel_schlick(px.f0, v_dot_h);
 }
 
+half3 apply_volume_attenuation(half3 radiance, half thickness, half3 attenuation_color, half attenuation_distance) {
+    if (attenuation_distance == 0) {
+        return radiance;
+    } else {
+        // Beer's Law
+        half3 transmittance = pow(attenuation_color, half3(thickness / attenuation_distance));
+        return radiance * transmittance;
+    }
+}
+
 half3 compute_base_model(const PixelData px, const Light light, half3 light_dir, const MaterialState mat_state, const Camera camera, const float3 world_pos, const float3 view_pos) {
     half3 v = half3(normalize(camera.eye.xyz - world_pos));
     half3 l = light_dir;
@@ -234,6 +244,8 @@ half3 compute_base_model(const PixelData px, const Light light, half3 light_dir,
     // If the material is transmissive, we need to compute the BTDF
     if (mat_state.mat.type == MaterialType::TRANSMISSIVE) {
         half3 transmitted = specular_lobe_btdf(px, h, n_dot_v, n_dot_l, n_dot_h, l_dot_h);
+        transmitted = apply_volume_attenuation(transmitted, px.thickness_factor, px.attenuation_color, px.attenuation_distance);
+    
         diffuse_brdf = lerp(diffuse_brdf, transmitted.rgb, px.transmission_factor);
     }
 
@@ -455,8 +467,7 @@ float4 evaluate_material(const PixelData px, const MaterialState mat_state, cons
     evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, color);
 
     // premultiply alpha
-    float final_alpha = px.diffuse.a * (1.0 - px.transmission_factor);
-    color.a = half(final_alpha);
+    color.a = half(px.diffuse.a);
     color.rgb *= px.diffuse.a;
 
     apply_emissive(mat_state, color, px.uv, textures);

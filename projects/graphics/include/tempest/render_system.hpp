@@ -324,6 +324,9 @@ namespace tempest::graphics
         graph_pass_handle _pbr_pass;
         graph_pass_handle _z_prepass_pass;
         graph_pass_handle _shadow_map_pass;
+        graph_pass_handle _pbr_oit_gather_pass;
+        graph_pass_handle _pbr_oit_resolve_pass;
+        graph_pass_handle _pbr_oit_blend_pass;
 
         gpu_scene_data _scene_data;
         hi_z_data _hi_z_data;
@@ -344,7 +347,9 @@ namespace tempest::graphics
         graphics_pipeline_resource_handle create_directional_shadow_map_pipeline();
 
         passes::pbr_pass _pbr;
-        passes::pbr_oit_pass _pbr_oit;
+        passes::pbr_oit_gather_pass _pbr_oit_gather;
+        passes::pbr_oit_resolve_pass _pbr_oit_resolve;
+        passes::pbr_oit_blend_pass _pbr_oit_blend;
 
         shadow_map_parameters compute_shadow_map_cascades(const shadow_map_component& shadowing,
                                                           const ecs::transform_component& light_transform,

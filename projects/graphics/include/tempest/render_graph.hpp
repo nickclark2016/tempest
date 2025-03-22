@@ -23,6 +23,9 @@ namespace tempest::graphics
         resource_access_type type{};
 
         vector<image_resource_handle> handles{};
+
+        uint32_t image_count;
+
         image_resource_usage usage{};
         pipeline_stage first_access{};
         pipeline_stage last_access{};
@@ -105,6 +108,9 @@ namespace tempest::graphics
         virtual void add_buffer_usage(buffer_resource_handle handle, buffer_resource_usage usage) = 0;
 
         virtual bool compile() = 0;
+
+        virtual buffer_create_info get_create_info(buffer_resource_handle handle) const noexcept = 0;
+        virtual image_create_info get_create_info(image_resource_handle handle) const noexcept = 0;
     };
 
     class render_graph_compiler;

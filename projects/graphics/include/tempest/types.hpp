@@ -39,6 +39,7 @@ namespace tempest::graphics
     {
         UNKNOWN,
         R8_UNORM,
+        R16_FLOAT,
         R32_FLOAT,
         R32_UINT,
         RGBA8_SRGB,
@@ -63,6 +64,8 @@ namespace tempest::graphics
         {
         case resource_format::R8_UNORM:
             return 1;
+        case resource_format::R16_FLOAT:
+            return 2;
         case resource_format::R32_FLOAT:
             [[fallthrough]];
         case resource_format::R32_UINT:

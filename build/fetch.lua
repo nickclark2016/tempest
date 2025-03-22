@@ -17,17 +17,17 @@ newaction {
             os.mkdir(cacheDir)
         end
 
-        if _TARGET_OS == 'windows' then
-            local slangZipPath = path.join(cacheDir, 'slang-2024.16-win64.zip')
-            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2024.16/slang-2024.16-windows-x86_64.zip', slangZipPath)
+        if os.target() == 'windows' then
+            local slangZipPath = path.join(cacheDir, 'slang-2025.6.2-win64.zip')
+            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2025.6.2/slang-2025.6.2-windows-x86_64.zip', slangZipPath)
             if downloaded then
                 zip.extract(slangZipPath, path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang'))
             end
         end
 
-        if _TARGET_OS == 'linux' then
-            local slangZipPath = path.join(cacheDir, 'slang-2024.16-linux-64.zip')
-            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2024.16/slang-2024.16-linux-x86_64.zip', slangZipPath)
+        if os.target() == 'linux' then
+            local slangZipPath = path.join(cacheDir, 'slang-2025.6.2-linux-64.zip')
+            local downloaded = fetchIfNotExists('https://github.com/shader-slang/slang/releases/download/v2025.6.2/slang-2025.6.2-linux-x86_64.zip', slangZipPath)
             if downloaded then
                 zip.extract(slangZipPath, path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang'))
             end
@@ -36,9 +36,9 @@ newaction {
 }
 
 local slangPath = (function ()
-    if _TARGET_OS == 'windows' then
+    if os.target() == 'windows' then
         return path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang/bin/slangc.exe')
-    elseif _TARGET_OS == 'linux' then
+    elseif os.target() == 'linux' then
         return path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang/bin/slangc')
     else
         error('Unsupported OS')

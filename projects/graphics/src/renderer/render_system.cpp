@@ -16,73 +16,6 @@ namespace tempest::graphics
     namespace
     {
         auto log = logger::logger_factory::create({"tempest::render_system"});
-
-        // Bindings
-        descriptor_binding_info scene_constant_buffer = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-            .binding_index = 0,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info vertex_pull_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER,
-            .binding_index = 1,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info mesh_layout_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER,
-            .binding_index = 2,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info object_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-            .binding_index = 3,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info materials_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-            .binding_index = 4,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info instance_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER,
-            .binding_index = 5,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info linear_sampler_desc = {
-            .type = descriptor_binding_type::SAMPLER,
-            .binding_index = 6,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info texture_array_desc = {
-            .type = descriptor_binding_type::SAMPLED_IMAGE,
-            .binding_index = 7,
-            .binding_count = 512,
-        };
-
-        descriptor_binding_info light_parameter_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-            .binding_index = 0,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info shadow_map_parameter_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-            .binding_index = 1,
-            .binding_count = 1,
-        };
-
-        descriptor_binding_info shadow_map_mt_desc = {
-            .type = descriptor_binding_type::SAMPLED_IMAGE,
-            .binding_index = 2,
-            .binding_count = 1,
-        };
     } // namespace
 
     render_system::render_system(ecs::archetype_registry& entities, const render_system_settings& settings)
@@ -169,6 +102,34 @@ namespace tempest::graphics
             .type = image_type::IMAGE_2D,
             .persistent = true,
             .name = "Shadow Map Megatexture Buffer",
+        });
+
+        auto moments_oit_images = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .layers = 2,
+            .fmt = resource_format::RGBA16_FLOAT,
+            .type = image_type::IMAGE_2D_ARRAY,
+            .persistent = true,
+            .name = "OIT Moment Images",
+        });
+
+        auto moments_oit_zero_images = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::R16_FLOAT,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "OIT Zero Moment Images",
+        });
+
+        auto transparency_accumulator_buffer = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::RGBA16_FLOAT,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "Transparency Accumulator Buffer",
         });
 
         vector<image_resource_handle> hi_z_images;
@@ -313,7 +274,9 @@ namespace tempest::graphics
         };
 
         _pbr.init(*_device);
-        _pbr_oit.init(*_device);
+        _pbr_oit_gather.init(*_device);
+        _pbr_oit_resolve.init(*_device);
+        _pbr_oit_blend.init(*_device);
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER,
@@ -486,8 +449,8 @@ namespace tempest::graphics
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
                     .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
-                    .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
-                    .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
+                    .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
                     .should_execute([this]() { return _settings.aa_mode != anti_aliasing_mode::MSAA; })
@@ -545,6 +508,7 @@ namespace tempest::graphics
                                         .indirect_command_count = batch.commands.size(),
                                         .double_sided = key.double_sided,
                                     });
+                    break;
                 }
                 default:
                     break;
@@ -562,8 +526,8 @@ namespace tempest::graphics
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
                     .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
-                    .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
-                    .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
+                    .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
                     .allow_push_constants(64)
@@ -612,6 +576,16 @@ namespace tempest::graphics
                     });
             });
 
+        auto oit_prepare_pass =
+            rgc->add_graph_pass("OIT Preparation", queue_operation_type::TRANSFER, [&](graph_pass_builder& bldr) {
+                bldr.add_transfer_target(moments_oit_images)
+                    .add_transfer_target(moments_oit_zero_images)
+                    .on_execute([moments_oit_images, moments_oit_zero_images](command_list& cmds) {
+                        cmds.clear_color(moments_oit_images, 0.0f, 0.0f, 0.0f, 0.0f)
+                            .clear_color(moments_oit_zero_images, 0.0f, 0.0f, 0.0f, 0.0f);
+                    });
+            });
+
         _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
             bldr.depends_on(_z_prepass_pass)
                 .depends_on(build_hi_z_pass)
@@ -621,16 +595,15 @@ namespace tempest::graphics
                                       {0.5f, 1.0f, 1.0f, 1.0f})
                 .add_color_attachment(velocity_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
                                       store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
-                .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD,
-                                      store_op::DONT_CARE)
+                .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
                 .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
                 .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                 .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                 .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
                 .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
                 .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
-                .add_sampler(_linear_sampler, 0, 6, pipeline_stage::FRAGMENT)
-                .add_external_sampled_images(512, 0, 7, pipeline_stage::FRAGMENT)
+                .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
+                .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                 .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
                 .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 1)
                 .add_sampled_image(shadow_map_mt_buffer, 1, 2)
@@ -639,12 +612,113 @@ namespace tempest::graphics
                 .on_execute(pbr_commands);
         });
 
+        _pbr_oit_gather_pass =
+            rgc->add_graph_pass("PBR OIT Gather", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(_pbr_pass)
+                    .depends_on(oit_prepare_pass)
+                    .add_color_attachment(transparency_accumulator_buffer, resource_access_type::READ_WRITE,
+                                          load_op::DONT_CARE, store_op::DONT_CARE, {0.0f, 0.0f, 0.0f, 0.0f})
+                    .add_depth_attachment(depth_buffer, resource_access_type::READ, load_op::LOAD, store_op::STORE)
+                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
+                    .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
+                    .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
+                    .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
+                    .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
+                    .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
+                    .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
+                    .add_storage_image(moments_oit_zero_images, resource_access_type::READ_WRITE, 0, 7)
+                    .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
+                    .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
+                    .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
+                    .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 1)
+                    .add_sampled_image(shadow_map_mt_buffer, 1, 2)
+                    .add_indirect_argument_buffer(_indirect_buffer)
+                    .add_index_buffer(_vertex_pull_buffer)
+                    .on_execute([&](command_list& cmds) {
+                        cmds.set_scissor_region(0, 0, 1920, 1080)
+                            .set_viewport(0, 0, 1920, 1080)
+                            .use_index_buffer(_vertex_pull_buffer, 0);
+
+                        for (auto [key, batch] : _draw_batches)
+                        {
+                            switch (key.alpha_type)
+                            {
+                            case alpha_behavior::TRANSPARENT:
+                                [[fallthrough]];
+                            case alpha_behavior::TRANSMISSIVE: {
+                                _pbr_oit_gather.draw_batch(*_device, cmds,
+                                                           {
+                                                               .indirect_command_buffer = _indirect_buffer,
+                                                               .first_indirect_command = batch.index_buffer_offset,
+                                                               .indirect_command_count = batch.commands.size(),
+                                                               .double_sided = key.double_sided,
+                                                           });
+                                break;
+                            }
+                            default:
+                                break;
+                            }
+                        }
+                    });
+            });
+
+        _pbr_oit_resolve_pass =
+            rgc->add_graph_pass("PBR OIT Resolve", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(_pbr_oit_gather_pass)
+                    .add_color_attachment(transparency_accumulator_buffer, resource_access_type::WRITE, load_op::CLEAR,
+                                          store_op::STORE)
+                    .add_depth_attachment(depth_buffer, resource_access_type::READ, load_op::LOAD, store_op::STORE)
+                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
+                    .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
+                    .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
+                    .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
+                    .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
+                    .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
+                    .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
+                    .add_storage_image(moments_oit_zero_images, resource_access_type::READ_WRITE, 0, 7)
+                    .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
+                    .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
+                    .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
+                    .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 1)
+                    .add_sampled_image(shadow_map_mt_buffer, 1, 2)
+                    .add_indirect_argument_buffer(_indirect_buffer)
+                    .add_index_buffer(_vertex_pull_buffer)
+                    .on_execute([&](command_list& cmds) {
+                        cmds.set_scissor_region(0, 0, 1920, 1080)
+                            .set_viewport(0, 0, 1920, 1080)
+                            .use_index_buffer(_vertex_pull_buffer, 0);
+
+                        for (auto [key, batch] : _draw_batches)
+                        {
+                            switch (key.alpha_type)
+                            {
+                            case alpha_behavior::TRANSPARENT:
+                                [[fallthrough]];
+                            case alpha_behavior::TRANSMISSIVE: {
+                                _pbr_oit_resolve.draw_batch(*_device, cmds,
+                                                            {
+                                                                .indirect_command_buffer = _indirect_buffer,
+                                                                .first_indirect_command = batch.index_buffer_offset,
+                                                                .indirect_command_count = batch.commands.size(),
+                                                                .double_sided = key.double_sided,
+                                                            });
+                                break;
+                            }
+                            default:
+                                break;
+                            }
+                        }
+                    });
+            });
+
+        // TODO: OIT Blend Pass
+
         auto imgui_pass = rgc->add_graph_pass(
             "ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
                 bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
                                           graphics::store_op::STORE)
                     .draw_imgui()
-                    .depends_on(_pbr_pass)
+                    .depends_on(_pbr_oit_resolve_pass)
                     .should_execute([this]() {
                         return _settings.aa_mode != anti_aliasing_mode::TAA && _settings.enable_imgui &&
                                _create_imgui_hierarchy;
@@ -706,9 +780,16 @@ namespace tempest::graphics
 
         _device->unmap_buffer(staging_buffer);
 
-        _graph->update_external_sampled_images(_pbr_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_shadow_map_pass, _images, 0, 7, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_pbr_pass, _images, 0, passes::texture_array_desc.binding_index,
+                                               pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, passes::texture_array_desc.binding_index,
+                                               pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_shadow_map_pass, _images, 0, passes::texture_array_desc.binding_index,
+                                               pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_pbr_oit_gather_pass, _images, 0,
+                                               passes::texture_array_desc.binding_index, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_pbr_oit_resolve_pass, _images, 0,
+                                               passes::texture_array_desc.binding_index, pipeline_stage::FRAGMENT);
 
         _z_prepass_pipeline = create_z_prepass_pipeline();
         _directional_shadow_map_pipeline = create_directional_shadow_map_pipeline();
@@ -793,7 +874,6 @@ namespace tempest::graphics
             // Iterate through the draw batches and update first instance based on the number of instances in the
             // previous batches
             uint32_t instances_written = 0;
-            uint32_t batches_written = 0;
             for (auto [_, batch] : _draw_batches)
             {
                 for (auto& cmd : batch.commands)
@@ -871,7 +951,9 @@ namespace tempest::graphics
         _device->release_buffer(_indirect_buffer);
 
         _pbr.release(*_device);
-        _pbr_oit.release(*_device);
+        _pbr_oit_gather.release(*_device);
+        _pbr_oit_resolve.release(*_device);
+        _pbr_oit_blend.release(*_device);
 
         _swapchains.clear();
         _images.clear();
@@ -1136,46 +1218,9 @@ namespace tempest::graphics
         auto fragment_shader_source = core::read_bytes("assets/shaders/zprepass.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-                .binding_index = 0,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER,
-                .binding_index = 1,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER,
-                .binding_index = 2,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-                .binding_index = 3,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-                .binding_index = 4,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::STRUCTURED_BUFFER,
-                .binding_index = 5,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::SAMPLER,
-                .binding_index = 6,
-                .binding_count = 1,
-            },
-            {
-                .type = descriptor_binding_type::SAMPLED_IMAGE,
-                .binding_index = 7,
-                .binding_count = 512,
-            },
+            passes::scene_constant_buffer, passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc,
+            passes::object_buffer_desc,    passes::instance_buffer_desc,    passes::materials_buffer_desc,
+            passes::linear_sampler_desc,   passes::texture_array_desc,
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -1426,8 +1471,9 @@ namespace tempest::graphics
         auto fragment_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc, instance_buffer_desc,
-            materials_buffer_desc,   linear_sampler_desc,     texture_array_desc,
+            passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc, passes::object_buffer_desc,
+            passes::instance_buffer_desc,    passes::materials_buffer_desc,   passes::linear_sampler_desc,
+            passes::texture_array_desc,
         };
 
         descriptor_set_layout_create_info layouts[] = {

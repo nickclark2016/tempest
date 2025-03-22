@@ -146,6 +146,8 @@ namespace tempest::graphics::vk
                 return VK_FORMAT_R8G8B8A8_SRGB;
             case resource_format::BGRA8_SRGB:
                 return VK_FORMAT_B8G8R8A8_SRGB;
+            case resource_format::R16_FLOAT:
+                return VK_FORMAT_R16_SFLOAT;
             case resource_format::RGBA16_FLOAT:
                 return VK_FORMAT_R16G16B16A16_SFLOAT;
             case resource_format::RG16_FLOAT:
@@ -306,6 +308,8 @@ namespace tempest::graphics::vk
             switch (fmt)
             {
             case resource_format::R8_UNORM:
+                [[fallthrough]];
+            case resource_format::R16_FLOAT:
                 [[fallthrough]];
             case resource_format::R32_FLOAT:
                 [[fallthrough]];
@@ -2008,6 +2012,14 @@ namespace tempest::graphics::vk
                 .extendedDynamicState3ShadingRateImageEnable = VK_FALSE,
             };
 
+            VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragment_shader_interlock = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT,
+                .pNext = nullptr,
+                .fragmentShaderSampleInterlock = VK_TRUE,
+                .fragmentShaderPixelInterlock = VK_TRUE,
+                .fragmentShaderShadingRateInterlock = VK_FALSE,
+            };
+
             vkb::PhysicalDeviceSelector selector =
                 vkb::PhysicalDeviceSelector(instance)
                     .prefer_gpu_device_type(vkb::PreferredDeviceType::integrated)
@@ -2047,7 +2059,7 @@ namespace tempest::graphics::vk
                         .occlusionQueryPrecise = VK_FALSE,
                         .pipelineStatisticsQuery = VK_TRUE,
                         .vertexPipelineStoresAndAtomics = VK_FALSE,
-                        .fragmentStoresAndAtomics = VK_FALSE,
+                        .fragmentStoresAndAtomics = VK_TRUE,
                         .shaderTessellationAndGeometryPointSize = VK_FALSE,
                         .shaderImageGatherExtended = VK_FALSE,
                         .shaderStorageImageExtendedFormats = VK_FALSE,
@@ -2091,7 +2103,7 @@ namespace tempest::graphics::vk
                         .variablePointers = VK_FALSE,
                         .protectedMemory = VK_FALSE,
                         .samplerYcbcrConversion = VK_FALSE,
-                        .shaderDrawParameters = VK_FALSE,
+                        .shaderDrawParameters = VK_TRUE,
                     })
                     .set_required_features_12({
                         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
@@ -2163,7 +2175,8 @@ namespace tempest::graphics::vk
                         .shaderIntegerDotProduct = VK_FALSE,
                         .maintenance4 = VK_FALSE,
                     })
-                    .add_required_extension_features(extended_dynamic_state);
+                    .add_required_extension_features(extended_dynamic_state)
+                    .add_required_extension_features(fragment_shader_interlock);
             return selector;
         }
     } // namespace

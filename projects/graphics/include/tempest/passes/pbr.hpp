@@ -20,7 +20,7 @@ namespace tempest::graphics::passes
         graphics_pipeline_resource_handle _pipeline;
     };
 
-    class pbr_oit_pass
+    class pbr_oit_gather_pass
     {
       public:
         bool init(render_device& device);
@@ -29,6 +29,27 @@ namespace tempest::graphics::passes
 
       private:
         graphics_pipeline_resource_handle _pipeline;
+    };
+
+    class pbr_oit_resolve_pass
+    {
+      public:
+        bool init(render_device& device);
+        bool draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state);
+        void release(render_device& device);
+
+      private:
+        graphics_pipeline_resource_handle _pipeline;
+    };
+
+    class pbr_oit_blend_pass
+    {
+      public:
+        bool init(render_device& device);
+        bool blend(render_device& dev, command_list& cmds);
+        void release(render_device& device);
+
+      private:
     };
 } // namespace tempest::graphics::passes
 

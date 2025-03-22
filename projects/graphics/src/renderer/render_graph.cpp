@@ -79,8 +79,11 @@ namespace tempest::graphics
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::COLOR_ATTACHMENT);
 
+        auto count = _resource_lib.get_create_info(handle).layers;
+
         auto& state = _image_states.emplace_back(image_resource_state{
             .type = access,
+            .image_count = count,
             .usage = image_resource_usage::COLOR_ATTACHMENT,
             .first_access = first_access,
             .last_access = last_access,
@@ -119,8 +122,11 @@ namespace tempest::graphics
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::DEPTH_ATTACHMENT);
 
+        auto count = _resource_lib.get_create_info(handle).layers;
+
         auto& state = _image_states.emplace_back(image_resource_state{
             .type = access,
+            .image_count = count,
             .usage = image_resource_usage::DEPTH_ATTACHMENT,
             .first_access = first_access,
             .last_access = last_access,
@@ -140,8 +146,11 @@ namespace tempest::graphics
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::SAMPLED);
 
+        auto count = _resource_lib.get_create_info(handle).layers;
+
         auto& state = _image_states.emplace_back(image_resource_state{
             .type = resource_access_type::READ,
+            .image_count = count,
             .usage = image_resource_usage::SAMPLED,
             .first_access = first_read,
             .last_access = last_read,
@@ -233,6 +242,7 @@ namespace tempest::graphics
 
         auto& state = _image_states.emplace_back(image_resource_state{
             .type = resource_access_type::WRITE,
+            .image_count = 1,
             .usage = image_resource_usage::TRANSFER_DESTINATION,
             .first_access = first_write,
             .last_access = last_write,
@@ -264,6 +274,7 @@ namespace tempest::graphics
 
         auto& state = _image_states.emplace_back(image_resource_state{
             .type = resource_access_type::READ,
+            .image_count = 1,
             .usage = image_resource_usage::TRANSFER_SOURCE,
             .first_access = first_read,
             .last_access = last_read,
@@ -279,9 +290,12 @@ namespace tempest::graphics
                                                               pipeline_stage first_access, pipeline_stage last_access)
     {
         _resource_lib.add_image_usage(handle, image_resource_usage::STORAGE);
-        
+
+        auto count = _resource_lib.get_create_info(handle).layers;
+
         auto& state = _image_states.emplace_back(image_resource_state{
             .type = access,
+            .image_count = count,
             .usage = image_resource_usage::STORAGE,
             .first_access = first_access,
             .last_access = last_access,
@@ -307,6 +321,7 @@ namespace tempest::graphics
         _image_states.push_back(image_resource_state{
             .type = access,
             .handles = {handle.begin(), handle.end()},
+            .image_count = static_cast<std::uint32_t>(handle.size()),
             .usage = image_resource_usage::STORAGE,
             .first_access = first_access,
             .last_access = last_access,
