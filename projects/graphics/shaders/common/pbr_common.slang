@@ -34,14 +34,20 @@ struct FragmentOutput {
     float2 velocity : SV_Target1;
 };
 
+struct PBROutput {
+    float4 color;
+    float2 velocity;
+    float depth;
+};
+
 [vk_binding(0, 0)] StructuredBuffer<SceneGlobals> scene;
 [vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
 [vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
 [vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;
 [vk_binding(4, 0)] StructuredBuffer<uint> instance_buffer;
 [vk_binding(5, 0)] StructuredBuffer<Material> materials;
-[vk_binding(6, 0)] SamplerState linear_sampler;
-[vk_binding(7, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
+[vk_binding(15, 0)] SamplerState linear_sampler;
+[vk_binding(16, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
 
 [vk_binding(0, 1)] StructuredBuffer<Light> lights;
 [vk_binding(1, 1)] StructuredBuffer<ShadowMapParameter> shadow_map_params;
@@ -95,7 +101,7 @@ VertexOutput compute_vertex(uint vertex_id, uint instance_id) {
     return result;
 }
 
-FragmentOutput compute_fragment(VertexOutput input) {
+PBROutput compute_fragment(VertexOutput input) {
     LightingState lighting;
     lighting.sun = scene[0].sun;
     lighting.ambient_color_factor = scene[0].ambient_light.rgb;
@@ -124,10 +130,21 @@ FragmentOutput compute_fragment(VertexOutput input) {
     color.rgb = uncharted_2(color.rgb * 4.5);
     color.rgb = color.rgb * (1.0f / uncharted_2((11.2f).xxx));
 
-    FragmentOutput output;
+    PBROutput output;
 
     output.color = color;
     output.velocity = calculate_velocity(half4(input.current_position), half4(input.prev_position));
+    output.depth = compute_depth(input.current_position);
+    
+    if (material.mat.type == MaterialType::TRANSMISSIVE) {
+        output.color.a = material.mat.transmission_factor;
+    }
 
     return output;
 }
+
+float compute_depth(float4 clip_pos) {
+    float f_ndc_depth = clip_pos.z / clip_pos.w;
+    return f_ndc_depth;
+}
+

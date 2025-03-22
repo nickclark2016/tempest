@@ -31,12 +31,12 @@ struct FragmentOutput {
 [vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;
 [vk_binding(4, 0)] StructuredBuffer<uint> instance_buffer;
 [vk_binding(5, 0)] StructuredBuffer<Material> materials;
-[vk_binding(6, 0)] SamplerState linear_sampler;
-[vk_binding(7, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
+[vk_binding(15, 0)] SamplerState linear_sampler;
+[vk_binding(16, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
 
 [shader("vertex")]
-VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID) {
-    uint iid = instance_buffer[instance_id];
+VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID, uint base_instance : SV_StartInstanceLocation) {
+    uint iid = instance_buffer[instance_id + base_instance];
     ObjectData instance = objects[iid];
 
     Vertex v = pull_vertex(vertex_pull_buffer, meshes[instance.mesh_id], vertex_id);

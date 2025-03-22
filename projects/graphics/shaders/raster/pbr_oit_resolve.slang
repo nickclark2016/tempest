@@ -1,3 +1,4 @@
+import "../common/mboit";
 import "../common/pbr_common";
 
 [shader("vertex")]
@@ -6,8 +7,12 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 }
 
 [shader("fragment")]
-FragmentOutput FSMain(VertexOutput input) {
-    var pbr_fragment = compute_fragment(input);
+[earlydepthstencil]
+void FSMain(VertexOutput input) : OitFragmentOutput {
+    var frag = compute_fragment(input);
+    float depth = compute_depth(input.current_position);
 
-    return FragmentOutput(pbr_fragment.color, pbr_fragment.velocity);
+    // beginInvocationInterlock();
+
+    // endInvocationInterlock();
 }

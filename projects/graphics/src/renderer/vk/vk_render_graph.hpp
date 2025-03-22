@@ -248,6 +248,9 @@ namespace tempest::graphics::vk
 
         bool compile() override;
 
+        buffer_create_info get_create_info(buffer_resource_handle handle) const noexcept override;
+        image_create_info get_create_info(image_resource_handle handle) const noexcept override;
+
       private:
         render_device* _device;
 
