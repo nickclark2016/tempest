@@ -1,6 +1,7 @@
 #ifndef tempest_core_material_hpp
 #define tempest_core_material_hpp
 
+#include <tempest/functional.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/optional.hpp>

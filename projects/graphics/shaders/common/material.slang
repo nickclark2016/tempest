@@ -465,11 +465,6 @@ float4 evaluate_material(const PixelData px, const MaterialState mat_state, cons
     half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h);
 
     evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, color);
-
-    // premultiply alpha
-    color.a = half(px.diffuse.a);
-    color.rgb *= px.diffuse.a;
-
     apply_emissive(mat_state, color, px.uv, textures);
 
     return color;

@@ -43,8 +43,8 @@ int main()
         };
 
         tempest::ecs::transform_component camera_transform = tempest::ecs::transform_component::identity();
-        camera_transform.position({-0.5f, 0.25f, -0.5f});
-        camera_transform.rotation({tempest::math::as_radians(25.0f), tempest::math::as_radians(45.0f), 0.0f});
+        camera_transform.position({-0.5f, 0.1f, 0.0f});
+        camera_transform.rotation({tempest::math::as_radians(5.0f), tempest::math::as_radians(90.0f), 0.0f});
 
         // camera_transform.position({-0.07f, 0.0f, 2.0f});
         // camera_transform.rotation({0.0f, tempest::math::as_radians(180.0f), 0.0f});
@@ -122,7 +122,7 @@ void initialize_models(tempest::engine& engine)
     // auto sponza_transform = tempest::ecs::transform_component::identity();
     // sponza_transform.scale({0.125f, 0.125f, 0.125f});
     // engine.get_archetype_registry().assign_or_replace(sponza_instance, sponza_transform);
-    // 
+    //
     // auto lantern_prefab = engine.get_asset_database().import(
     //     "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_archetype_registry());
     // auto lantern_instance = engine.load_entity(lantern_prefab);
@@ -134,10 +134,29 @@ void initialize_models(tempest::engine& engine)
 
     auto chess_prefab = engine.get_asset_database().import(
         "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf", engine.get_archetype_registry());
+
+    tempest::ecs::archetype_entity_hierarchy_view chess_view(engine.get_archetype_registry(), chess_prefab);
+    for (auto ent : chess_view)
+    {
+        auto material_comp = engine.get_archetype_registry().try_get<tempest::core::material_component>(ent);
+        if (material_comp)
+        {
+            engine.get_material_registry().update_material(
+                material_comp->material_id, [](tempest::core::material& comp) {
+                    if (auto mode = comp.get_string(tempest::core::material::alpha_mode_name);
+                        mode && *mode == "TRANSMISSIVE")
+                    {
+                        comp.set_scalar(tempest::core::material::transmissive_factor_name, 0.75f);
+                    }
+                });
+        }
+    }
+
     auto chess_board = engine.load_entity(chess_prefab);
     auto chess_board_tx = tempest::ecs::transform_component::identity();
     engine.get_archetype_registry().assign_or_replace(chess_board, chess_board_tx);
 
     // (void)engine.load_entity(engine.get_asset_database().import(
-    //     "assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf", engine.get_archetype_registry()));
+    //     "assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf",
+    //     engine.get_archetype_registry()));
 }

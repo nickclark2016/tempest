@@ -1,96 +1,227 @@
 import "consts";
 
-[vk_binding(6, 0)] RasterizerOrderedTexture2DArray<half4> moments;
-[vk_binding(7, 0)] RWTexture2D<half> zeroth_moment;
+struct OitFragmentOutput {
+    float4 transparent_surface_accumulator : SV_Target0;
+};
 
-void offset_moments(inout half4 even, inout half4 odd, half sign) {
-    odd += 0.5h * sign;
-    even += half4(0.972481993925964h, 1.0h, 0.999179192513328h, 0.991778293073131h) * sign;
+void offset_moments(inout float4 even, inout float4 odd, float sign) {
+    odd += 0.5 * sign;
+    even += float4(0.972481993925964, 1.0, 0.999179192513328, 0.991778293073131) * sign;
 }
 
-void quantize_moments(out half4 even_q, out half4 odd_q, half4 even, half4 odd) {
-    const half4x4 mat_odd = half4x4(
-         3.48044635732474h, -27.5760737514826h,   55.1267384344761h,  -31.5311110403183h,
-         1.26797185782836h,  -0.928755808743913h, -2.07520453231032h,   1.23598848322588h,
-        -2.1671560004294h,    6.17950199592966h,  -0.276515571579297h, -4.23583042392097h,
-         0.974332879165755h, -0.443426830933027h, -0.360491648368785h,  0.310149466050223h
-    );
+float2 solve_quadratic(float3 coefficients) {
+    coefficients[1] *= -0.5;
 
-    const half4x4 mat_even = half4x4(
-         0.280504133158527h, -0.757633844606942h,   0.392179589334688h,  -0.887531871812237h,
-        -2.01362265883247h,   0.221551373038988h,   -1.06107954265125h,   2.83887201588367h,
-        -7.31010494985321h,  13.9855979699139h,     -0.114305766176437h, -7.4361899359832h,
-        -15.8954215629556h,  79.6186327084103h,   -127.457278992502h,    63.7349456687829h
-    );
-
-    odd_q = mul(mat_odd, odd);
-    even_q = mul(mat_even, even);
+    float discriminant = coefficients[1] * coefficients[1] - coefficients[0] * coefficients[2];
+    float sqrt_discriminant = sqrt(discriminant);
+    if (coefficients[1] >= 0.0) {
+        return float2(
+            -coefficients[2] / (coefficients[1] + sqrt_discriminant),
+            (-coefficients[1] - sqrt_discriminant) / coefficients[0]
+        );
+    } else {
+        return float2(
+            (-coefficients[1] + sqrt_discriminant) / coefficients[0],
+            -coefficients[2] / (-coefficients[1] + sqrt_discriminant)
+        );
+    }
 }
 
-// TODO: Evaluate trigonometric power moments
+float find_smallest_cubic_root(float4 coefficients) {
+    coefficients.xyz /= coefficients.w;
+    coefficients.yz /= 3.0;
 
-void generate_power_moments(inout half b0, inout half4 even, inout half4 odd, half depth, half transmittance) {
-    half absorbance = -log(transmittance);
-    absorbance = min(absorbance, 10.0h); // If transmittance is zero, absorbance is infinite. Just clamp it off to a reasonable value.
+    float3 delta = float3(
+        fma(-coefficients.z, coefficients.z, coefficients.y),
+        fma(-coefficients.z, coefficients.y, coefficients.x),
+        coefficients.z * coefficients.x - coefficients.y * coefficients.y
+    );
 
-    offset_moments(even, odd, -1.0h);
+    float discrim = 4.0 * delta.x * delta.z - delta.y * delta.y;
 
-    even *= b0;
-    odd *= b0;
-
-    // Generate new moments
-    half depth2 = depth * depth;
-    half depth4 = depth2 * depth2;
-    half depth6 = depth4 * depth2;
-
-    half4 new_even = half4(depth2, depth4, depth6, depth4 * depth4); // depth^(2, 4, 6, 8)
-    half4 new_odd = half4(depth, depth2 * depth, depth4 * depth, depth6 * depth); // depth^(1, 3, 5, 7)
-
-    // Quantize the half precision moments
-    half4 even_q, odd_q;
-    quantize_moments(even_q, odd_q, even, odd);
+    float2 depressed = float2(delta.z, -coefficients.x * delta.y + 2.0 * coefficients.y * delta.z);
+    float theta = abs(atan2(coefficients.x * sqrt(discrim), -depressed.y)) / 3.0;
+    float2 sin_cos = float2(sin(theta), cos(theta));
+    float temp = 2.0 * sqrt(-depressed.x);
+    float2 x = float2(temp * sin_cos.y, temp * (-0.5h * sin_cos.y - 0.5h * sqrt(3.0) * sin_cos.x));
+    float2 s = (x.x + x.y < 2.0 * coefficients.y) ? float2(-coefficients.x, x.x + coefficients.y) : float2(-coefficients.x, x.y + coefficients.y);
     
-    b0 += absorbance;
-    even += even_q * absorbance;
-    odd += odd_q * absorbance;
-
-    even /= b0;
-    odd /= b0;
-
-    offset_moments(even, odd, 1.0h);
+    return s.x / s.y;
 }
 
-void generate_moments(float depth, float tranmittance, int2 frag_pos) {
-    int3 idx0 = int3(frag_pos, 0);
-    int3 idx1 = int3(frag_pos, 1);
+// Solve quartic via the Neumark method (1965)
+// https://people.csail.mit.edu/enikolova/project275.html
+float4 solve_quartic_neumark(float coefficients[5]) {
+    float b = coefficients[3] / coefficients[4];
+    float c = coefficients[2] / coefficients[4];
+    float d = coefficients[1] / coefficients[4];
+    float e = coefficients[0] / coefficients[4];
 
-    // Early return if the transmittance is effectively opaque
-    if (tranmittance > 0.999999f) {
-        discard;
+    float p = -2.0 * c;
+    float q = c * c + b * d - 4.0 * e;
+    float r = d * d + b * b * e - b * c * d;
+
+    float y = find_smallest_cubic_root(float4(r, q, p, 1.0));
+
+    float bb = b * b;
+    float fy = 4.0 * y;
+    float bb_fy = bb - fy;
+
+    float z = c - y;
+    float zz = z * z;
+    float fe = 4.0 * e;
+    float zz_fe = zz - fe;
+
+    float g1, g2, h1, h2;
+
+    // Compute the coefficients of the quadratics used to solve the quartic
+    // by using factorizations proposed by Herbison-Evans
+    // https://cs.uwaterloo.ca/research/tr/1986/CS-86-56.pdf
+    if (y < 0 || (zz + fe) * bb_fy > zz_fe * (bb + fy)) {
+        float t1 = sqrt(bb_fy);
+        g1 = (b + t1) * 0.5;
+        g2 = (b - t1) * 0.5;
+
+        float t2 = (b * z - 2.0 * d) / (2.0 * t1);
+        h1 = fma(z, 0.5, t2);
+        h2 = fma(z, 0.5, -t2);
+    } else {
+        float t1 = sqrt(zz_fe);
+        h1 = (z + t1) * 0.5;
+        h2 = (z - t1) * 0.5;
+
+        float t2 = (b * z - 2.0 * d) / (2.0 * t1);
+        g1 = fma(b, 0.5, t2);
+        g2 = fma(b, 0.5, -t2);
     }
 
-    half b_0 = zeroth_moment.Load(idx0.xy).x;
-    half4 b_even = moments.Load(idx0);
-    half4 b_odd = moments.Load(idx1);
+    float2 r1 = solve_quadratic(float3(1.0, g1, h1));
+    float2 r2 = solve_quadratic(float3(1.0, g2, h2));
+
+    return float4(r1, r2);
+}
+
+float compute_transmittance_at_depth(float b0, float4 even, float4 odd, float depth, float bias, float overestimation, float bias_vector[8]) {
+    float b[8] = {
+        odd.x,
+        even.x,
+        odd.y,
+        even.y,
+        odd.z,
+        even.z,
+        odd.w,
+        even.w
+    };
+
+    [unroll]
+    for (int i = 0; i < 8; ++i) {
+        b[i] = lerp(b[i], bias_vector[i], bias);
+    }
+
+    float d22 = fma(-b[0], b[0], b[1]);
+    float inv_d22 = 1.0 / d22;
+    float l32_d22 = fma(-b[1], b[0], b[2]);
+    float l32 = l32_d22 * inv_d22;
+    float l42_d22 = fma(-b[2], b[0], b[3]);
+    float l42 = l42_d22 * inv_d22;
+    float l52_d22 = fma(-b[3], b[0], b[4]);
+    float l52 = l52_d22 * inv_d22;
+
+    float d33 = fma(-l32, l32_d22, fma(-b[1], b[1], b[3]));
+    float inv_d33 = 1.0 / d33;
+    float l43_d33 = fma(-l42, l32_d22, fma(-b[2], b[1], b[4]));
+    float l43 = l43_d33 * inv_d33;
+    float l53_d33 = fma(-l52, l32_d22, fma(-b[3], b[1], b[5]));
+    float l53 = l53_d33 * inv_d33;
+
+    float d44 = fma(-b[2], b[2], b[5]) - dot(float2(l42, l43), float2(l42_d22, l43_d33));
+    float inv_d44 = 1.0 / d44;
+    float l54_d44 = fma(-b[3], b[2], b[6]) - dot(float2(l52, l53), float2(l42_d22, l43_d33));
+    float l54 = l54_d44 * inv_d44;
+
+    float d55 = fma(-b[3], b[3], b[7]) - dot(float3(l52, l53, l54),  float3(l52_d22, l53_d33, l54_d44));
+    float inv_d55 = 1.0 / d55;
+
+    float z[5];
+    z[0] = float(depth);
+
+    float c[5];
+    c[0] = 1.0;
+    c[1] = z[0];
+    c[2] = c[1] * z[0];
+    c[3] = c[2] * z[0];
+    c[4] = c[3] * z[0];
+
+    c[1] -= b[0];
+    c[2] -= fma(l32, c[1], b[1]);
+    c[3] -= b[2] + dot(float2(l42, l43), float2(c[1], c[2]));
+    c[4] -= b[3] + dot(float3(l52, l53, l54), float3(c[1], c[2], c[3]));
+
+    c[1] *= inv_d22;
+    c[2] *= inv_d33;
+    c[3] *= inv_d44;
+    c[4] *= inv_d55;
+
+    c[3] -= l54 * c[4];
+    c[2] -= dot(float2(l53, l43), float2(c[4], c[3]));
+    c[1] -= dot(float3(l52, l42, l32), float3(c[4], c[3], c[2]));
+    c[0] -= dot(float4(b[3], b[2], b[1], b[0]), float4(c[4], c[3], c[2], c[1]));
+
+    // Solve the quartic equation described by the coefficients vector (c)
+    float4 roots = solve_quartic_neumark(c);
+
+    z[1] = roots.x;
+    z[2] = roots.y;
+    z[3] = roots.z;
+    z[4] = roots.w;
+
+    bool4 weight_multiplier = bool4(
+        z[1] < z[0],
+        z[2] < z[0],
+        z[3] < z[0],
+        z[4] < z[0]
+    );
+
+    float4 weight_factor = float4(weight_multiplier);
+
+    // Construct interpolation polynomial
+    float f0 = float(overestimation);
+    float f1 = weight_factor[0];
+    float f2 = weight_factor[1];
+    float f3 = weight_factor[2];
+    float f4 = weight_factor[3];
+    float f01 = (f1  - f0) / (z[1] - z[0]);
+    float f12 = (f2  - f1) / (z[2] - z[1]);
+    float f23 = (f3  - f2) / (z[3] - z[2]);
+    float f34 = (f4  - f3) / (z[4] - z[3]);
+    float f012 = (f12 - f01) / (z[2] - z[0]);
+    float f123 = (f23 - f12) / (z[3] - z[1]);
+    float f234 = (f34 - f23) / (z[4] - z[2]);
+    float f0123 = (f123 - f012) / (z[3] - z[0]);
+    float f1234 = (f234 - f123) / (z[4] - z[1]);
+    float f01234 = (f1234 - f0123) / (z[4] - z[0]);
+
+    float poly0;
+    float4 poly;
     
-    // generate power moments
-    generate_power_moments(b_0, b_even, b_odd, half(depth), half(tranmittance));
+    poly0 = fma(-f01234, z[3], f0123);
+    poly[0] = f01234;
 
-    zeroth_moment.Store(idx0.xy, b_0);
-    moments.Store(idx0, b_even);
-    moments.Store(idx1, b_odd);
-}
+    poly[1] = poly[0];
+    poly[0] = fma(-poly[0], z[2], poly0);
+    poly0 = fma(-poly0, z[2], f012);
 
-float4 gather_pass(float4 color, float4 frag_coord, float depth) {
-    float transmittance = 1.0 - color.a;
-    int2 addr = int2(frag_coord.xy);
+    poly[2] = poly[1];
+    poly[1] = fma(-poly[1], z[1], poly[0]);
+    poly[0] = fma(-poly[0], z[1], poly0);
+    poly0 = fma(-poly0, z[1], f01);
 
-    // Sync image access
-    DeviceMemoryBarrier();
-    generate_moments(depth, transmittance, addr);
-    return color;
-}
+    poly[3] = poly[2];
+    poly[2] = fma(-poly[2], z[0], poly[1]);
+    poly[1] = fma(-poly[1], z[0], poly[0]);
+    poly[0] = fma(-poly[0], z[0], poly0);
+    poly0 = fma(-poly0, z[0], f0);
 
-void resolve_pass(float4 color, float4 frag_coord, float depth) {
-
+    float absorbance = poly0 + dot(poly, float4(b[0], b[1], b[2], b[3]));
+    return saturate(exp(-float(b0) * absorbance));
 }

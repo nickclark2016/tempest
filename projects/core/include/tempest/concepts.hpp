@@ -1,6 +1,7 @@
 #ifndef tempest_core_concepts_hpp
 #define tempest_core_concepts_hpp
 
+#include <tempest/invoke.hpp>
 #include <tempest/type_traits.hpp>
 
 namespace tempest
@@ -163,7 +164,7 @@ namespace tempest
     concept derived_from = is_base_of_v<U, T>;
 
     template <typename F, typename... Args>
-    concept invocable = requires(F&& f, Args&&... args) { invoke(forward<F>(f), forward<Args>(args)...); };
+    concept invocable = requires(F&& f, Args&&... args) { tempest::invoke(forward<F>(f), tempest::forward<Args>(args)...); };
 
     template <typename F, typename... Args>
     concept regular_invocable = invocable<F, Args...>;

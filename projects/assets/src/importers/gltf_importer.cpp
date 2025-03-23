@@ -1175,6 +1175,8 @@ namespace tempest::assets
                         registry.assign(prim_ent, mat_comp);
                     }
 
+                    registry.assign(prim_ent, prefab_tag);
+
                     primitives.push_back(prim_ent);
                 }
 
@@ -1214,7 +1216,8 @@ namespace tempest::assets
                         span<const ecs::archetype_entity> mesh_entities = mesh_prims->second.prim_entities;
                         for (const auto& mesh_ent : mesh_entities)
                         {
-                            ecs::create_parent_child_relationship(registry, parent_ent, mesh_ent);
+                            auto dup_mesh = registry.duplicate(mesh_ent);
+                            ecs::create_parent_child_relationship(registry, parent_ent, dup_mesh);
                         }
 
                         if (!mesh_prims->second.name.empty())
@@ -1319,6 +1322,7 @@ namespace tempest::assets
                 }
 
                 registry.assign(parent_ent, transform);
+                registry.assign(parent_ent, prefab_tag);
 
                 node_entities.insert({node_id, parent_ent});
                 ++node_id;
@@ -1400,6 +1404,8 @@ namespace tempest::assets
                 return child;
             }
         }
+
+        registry.assign_or_replace(ent, prefab_tag);
 
         return ent;
     }

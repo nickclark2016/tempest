@@ -18,10 +18,10 @@ namespace tempest::graphics::vk
     {
         auto logger = logger::logger_factory::create({.prefix{"tempest::graphics::vk::render_device"}});
 
-        [[maybe_unused]] VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                                      [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType,
-                                                      const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                                      [[maybe_unused]] void* pUserData)
+        [[maybe_unused]] VKAPI_ATTR VkBool32 VKAPI_CALL
+        debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                       [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType,
+                       const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, [[maybe_unused]] void* pUserData)
         {
             if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
@@ -384,6 +384,20 @@ namespace tempest::graphics::vk
                 return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             }
             logger->critical("Failed to compute expected image layout.");
+            std::exit(EXIT_FAILURE);
+        }
+
+        VkPrimitiveTopology to_vulkan(primitive_topology topo)
+        {
+            switch (topo)
+            {
+            case primitive_topology::TRIANGLE_FAN:
+                return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+            case primitive_topology::TRIANGLE_LIST:
+                return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            }
+
+            logger->critical("Logic Error: Failed to determine proper VkPrimitiveTopology. Forcing exit.");
             std::exit(EXIT_FAILURE);
         }
 
@@ -1291,7 +1305,7 @@ namespace tempest::graphics::vk
             .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .topology = to_vulkan(ci.vertex_layout.topology),
             .primitiveRestartEnable = VK_FALSE,
         };
 
@@ -1338,7 +1352,9 @@ namespace tempest::graphics::vk
                 .dstAlphaBlendFactor = to_vulkan(blend_info.alpha.dst),
                 .alphaBlendOp = to_vulkan(blend_info.alpha.op),
                 .colorWriteMask =
-                    compute_blend_write_mask(ci.target.color_attachment_formats[attachment_blends.size()]),
+                    blend_info.write_enabled
+                        ? compute_blend_write_mask(ci.target.color_attachment_formats[attachment_blends.size()])
+                        : 0,
             };
 
             attachment_blends.push_back(state);
@@ -2164,7 +2180,7 @@ namespace tempest::graphics::vk
                         .descriptorBindingInlineUniformBlockUpdateAfterBind = VK_FALSE,
                         .pipelineCreationCacheControl = VK_FALSE,
                         .privateData = VK_FALSE,
-                        .shaderDemoteToHelperInvocation = VK_FALSE,
+                        .shaderDemoteToHelperInvocation = VK_TRUE,
                         .shaderTerminateInvocation = VK_FALSE,
                         .subgroupSizeControl = VK_FALSE,
                         .computeFullSubgroups = VK_FALSE,
@@ -2371,7 +2387,7 @@ namespace tempest::graphics::vk
         {
             cull_mode |= VK_CULL_MODE_FRONT_BIT;
         }
-        
+
         if (back)
         {
             cull_mode |= VK_CULL_MODE_BACK_BIT;
@@ -2508,8 +2524,9 @@ namespace tempest::graphics::vk
             },
         };
 
-        _dispatch->cmdCopyBufferToImage(_cmds, _device->access_buffer(src)->vk_buffer, _device->access_image(dst)->image,
-                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        _dispatch->cmdCopyBufferToImage(_cmds, _device->access_buffer(src)->vk_buffer,
+                                        _device->access_image(dst)->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                                        &copy);
 
         return *this;
     }
@@ -2530,6 +2547,13 @@ namespace tempest::graphics::vk
 
         _dispatch->cmdClearColorImage(_cmds, _device->access_image(handle)->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                       &color, 1, &range);
+
+        return *this;
+    }
+
+    command_list& command_list::fill_buffer(buffer_resource_handle handle, size_t offset, size_t size, uint32_t data)
+    {
+        _dispatch->cmdFillBuffer(_cmds, _device->access_buffer(handle)->vk_buffer, offset, size, data);
 
         return *this;
     }

@@ -50,6 +50,7 @@ namespace tempest::graphics::passes
         void release(render_device& device);
 
       private:
+        graphics_pipeline_resource_handle _pipeline;
     };
 } // namespace tempest::graphics::passes
 
