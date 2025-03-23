@@ -199,10 +199,13 @@ namespace tempest
                           to_string(material_id).c_str(), ecs::entity_traits<ecs::entity>::as_entity(e),
                           ecs::entity_traits<ecs::entity>::as_version(e));
 
+                auto material = _material_reg.get_material(material_id);
+
                 graphics::renderable_component renderable{
                     .mesh_id = static_cast<uint32_t>(_render_system.get_mesh_id(mesh_id).value()),
                     .material_id = static_cast<uint32_t>(_render_system.get_material_id(material_id).value()),
                     .object_id = static_cast<uint32_t>(_render_system.acquire_new_object()),
+                    .double_sided = material->get_bool(core::material::double_sided_name).value_or(false),
                 };
 
                 _archetype_entity_registry.assign_or_replace(e, renderable);

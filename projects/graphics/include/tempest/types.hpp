@@ -311,6 +311,7 @@ namespace tempest::graphics
         bool enabled;
         attachment_blend_info color{};
         attachment_blend_info alpha{};
+        bool write_enabled{true};
     };
 
     struct color_blend_state
@@ -326,8 +327,15 @@ namespace tempest::graphics
         resource_format format;
     };
 
+    enum class primitive_topology
+    {
+        TRIANGLE_FAN,
+        TRIANGLE_LIST,
+    };
+
     struct vertex_input_layout
     {
+        primitive_topology topology = primitive_topology::TRIANGLE_LIST;        
         span<vertex_input_element> elements;
     };
 
@@ -564,6 +572,7 @@ namespace tempest::graphics
                                    uint32_t region_width, uint32_t region_height, uint32_t mip_level,
                                    int32_t offset_x = 0, int32_t offset_y = 0) = 0;
         virtual command_list& clear_color(image_resource_handle handle, float r, float g, float b, float a) = 0;
+        virtual command_list& fill_buffer(buffer_resource_handle handle, size_t size, size_t offset, uint32_t data) = 0;
 
         virtual command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
                                                image_resource_usage new_usage) = 0;

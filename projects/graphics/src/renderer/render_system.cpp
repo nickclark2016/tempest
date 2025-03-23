@@ -114,13 +114,20 @@ namespace tempest::graphics
             .name = "OIT Moment Images",
         });
 
-        auto moments_oit_zero_images = rgc->create_image({
+        auto moments_oit_zero_image = rgc->create_image({
             .width = 1920,
             .height = 1080,
-            .fmt = resource_format::R16_FLOAT,
+            .fmt = resource_format::R32_FLOAT,
             .type = image_type::IMAGE_2D,
             .persistent = true,
-            .name = "OIT Zero Moment Images",
+            .name = "OIT Zero Moment Image",
+        });
+
+        auto oit_spinlock_buffer = rgc->create_buffer({
+            .size = 1920 * 1080 * sizeof(uint32_t),
+            .location = memory_location::DEVICE,
+            .name = "OIT Spinlock Buffer",
+            .per_frame_memory = false,
         });
 
         auto transparency_accumulator_buffer = rgc->create_image({
@@ -576,16 +583,6 @@ namespace tempest::graphics
                     });
             });
 
-        auto oit_prepare_pass =
-            rgc->add_graph_pass("OIT Preparation", queue_operation_type::TRANSFER, [&](graph_pass_builder& bldr) {
-                bldr.add_transfer_target(moments_oit_images)
-                    .add_transfer_target(moments_oit_zero_images)
-                    .on_execute([moments_oit_images, moments_oit_zero_images](command_list& cmds) {
-                        cmds.clear_color(moments_oit_images, 0.0f, 0.0f, 0.0f, 0.0f)
-                            .clear_color(moments_oit_zero_images, 0.0f, 0.0f, 0.0f, 0.0f);
-                    });
-            });
-
         _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
             bldr.depends_on(_z_prepass_pass)
                 .depends_on(build_hi_z_pass)
@@ -612,10 +609,20 @@ namespace tempest::graphics
                 .on_execute(pbr_commands);
         });
 
+        auto oit_clear_pass =
+            rgc->add_graph_pass("OIT Data Prepare", queue_operation_type::TRANSFER, [&](graph_pass_builder& bldr) {
+                bldr.add_transfer_target(moments_oit_images)
+                    .add_transfer_target(moments_oit_zero_image)
+                    .on_execute([moments_oit_images, moments_oit_zero_image, oit_spinlock_buffer](command_list& cmds) {
+                        cmds.clear_color(moments_oit_images, 0.0f, 0.0f, 0.0f, 0.0f)
+                            .clear_color(moments_oit_zero_image, 0.0f, 0.0f, 0.0f, 0.0f);
+                    });
+            });
+
         _pbr_oit_gather_pass =
             rgc->add_graph_pass("PBR OIT Gather", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(_pbr_pass)
-                    .depends_on(oit_prepare_pass)
+                    .depends_on(oit_clear_pass)
                     .add_color_attachment(transparency_accumulator_buffer, resource_access_type::READ_WRITE,
                                           load_op::DONT_CARE, store_op::DONT_CARE, {0.0f, 0.0f, 0.0f, 0.0f})
                     .add_depth_attachment(depth_buffer, resource_access_type::READ, load_op::LOAD, store_op::STORE)
@@ -626,7 +633,8 @@ namespace tempest::graphics
                     .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                     .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
-                    .add_storage_image(moments_oit_zero_images, resource_access_type::READ_WRITE, 0, 7)
+                    .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0, 7)
+                    .add_structured_buffer(oit_spinlock_buffer, resource_access_type::READ_WRITE, 0, 8)
                     .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -675,7 +683,7 @@ namespace tempest::graphics
                     .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                     .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
-                    .add_storage_image(moments_oit_zero_images, resource_access_type::READ_WRITE, 0, 7)
+                    .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0, 7)
                     .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -711,14 +719,31 @@ namespace tempest::graphics
                     });
             });
 
-        // TODO: OIT Blend Pass
+        auto oit_blend_pass = rgc->add_graph_pass(
+            "OIT Blend Pass", graphics::queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(_pbr_oit_resolve_pass)
+                    .add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
+                                          graphics::store_op::STORE)
+                    .add_storage_image(moments_oit_images, resource_access_type::READ, 0,
+                                       passes::oit_moment_image_desc.binding_index)
+                    .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0,
+                                       passes::oit_zero_moment_image_desc.binding_index)
+                    .add_sampled_image(transparency_accumulator_buffer, 0, passes::oit_accum_image_desc.binding_index,
+                                       pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler, 0, passes::linear_sampler_desc.binding_index,
+                                 pipeline_stage::FRAGMENT)
+                    .on_execute([&](auto& cmds) {
+                        cmds.set_scissor_region(0, 0, 1920, 1080).set_viewport(0, 0, 1920, 1080, 0.0f, 1.0f, false);
+                        _pbr_oit_blend.blend(*_device, cmds);
+                    });
+            });
 
         auto imgui_pass = rgc->add_graph_pass(
             "ImGUI Graph Pass", graphics::queue_operation_type::GRAPHICS, [&](graphics::graph_pass_builder& bldr) {
                 bldr.add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
                                           graphics::store_op::STORE)
                     .draw_imgui()
-                    .depends_on(_pbr_oit_resolve_pass)
+                    .depends_on(oit_blend_pass)
                     .should_execute([this]() {
                         return _settings.aa_mode != anti_aliasing_mode::TAA && _settings.enable_imgui &&
                                _create_imgui_hierarchy;
@@ -755,6 +780,14 @@ namespace tempest::graphics
         }
 
         _graph = tempest::move(*rgc).compile();
+
+        // Clear spinbuffer to 0
+        {
+            auto& executor = _device->get_command_executor();
+            auto& cmds = executor.get_commands();
+            cmds.fill_buffer(oit_spinlock_buffer, 0, 1920 * 1080 * sizeof(uint32_t), 0);
+            executor.submit_and_wait();
+        }
     }
 
     void render_system::after_initialize()
@@ -838,7 +871,7 @@ namespace tempest::graphics
 
                 draw_batch_key key = {
                     .alpha_type = alpha,
-                    .double_sided = alpha == alpha_behavior::TRANSMISSIVE || alpha == alpha_behavior::TRANSPARENT,
+                    .double_sided = renderable.double_sided,
                 };
 
                 auto& draw_batch = _draw_batches[key];

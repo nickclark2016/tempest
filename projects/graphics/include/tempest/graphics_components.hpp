@@ -78,6 +78,7 @@ namespace tempest::graphics
         uint32_t mesh_id;
         uint32_t material_id;
         uint32_t object_id;
+        bool double_sided;
     };
 
     struct camera_component

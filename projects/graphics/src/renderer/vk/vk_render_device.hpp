@@ -139,6 +139,8 @@ namespace tempest::graphics::vk
                            uint32_t region_width, uint32_t region_height, uint32_t mip_level, int32_t offset_x = 0,
                            int32_t offset_y = 0) override;
         command_list& clear_color(image_resource_handle handle, float r, float g, float b, float a) override;
+        command_list& fill_buffer(buffer_resource_handle handle, size_t offset, size_t size, uint32_t data) override;
+
         command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,
                                        image_resource_usage new_usage) override;
         command_list& transition_image(image_resource_handle img, image_resource_usage old_usage,

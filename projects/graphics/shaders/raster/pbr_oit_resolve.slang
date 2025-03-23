@@ -1,4 +1,5 @@
 import "../common/mboit";
+import "../common/mboit_resolve";
 import "../common/pbr_common";
 
 [shader("vertex")]
@@ -8,11 +9,11 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
 [shader("fragment")]
 [earlydepthstencil]
-void FSMain(VertexOutput input) : OitFragmentOutput {
+OitFragmentOutput FSMain(VertexOutput input) : OitFragmentOutput {
     var frag = compute_fragment(input);
-    float depth = compute_depth(input.current_position);
+    
+    float transmittance = resolve_pass(frag.color, input.position, frag.depth);    
+    float4 color = float4(frag.color.rgb * frag.color.a * transmittance, frag.color.a * transmittance);
 
-    // beginInvocationInterlock();
-
-    // endInvocationInterlock();
+    return OitFragmentOutput(color);
 }

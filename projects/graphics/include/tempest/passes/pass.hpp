@@ -54,6 +54,18 @@ namespace tempest::graphics::passes
         .binding_count = 1,
     };
 
+    inline constexpr descriptor_binding_info oit_accum_image_desc = {
+        .type = descriptor_binding_type::SAMPLED_IMAGE,
+        .binding_index = 8,
+        .binding_count = 1,
+    };
+
+    inline constexpr descriptor_binding_info oit_spinlock_buffer_desc = {
+        .type = descriptor_binding_type::STRUCTURED_BUFFER,
+        .binding_index = 8,
+        .binding_count = 1,
+    };
+
     inline constexpr descriptor_binding_info linear_sampler_desc = {
         .type = descriptor_binding_type::SAMPLER,
         .binding_index = 15,

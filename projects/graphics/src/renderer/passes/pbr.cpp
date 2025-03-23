@@ -117,7 +117,7 @@ namespace tempest::graphics::passes
         descriptor_binding_info set0_bindings[] = {
             scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
             instance_buffer_desc,  materials_buffer_desc,   oit_moment_image_desc,   oit_zero_moment_image_desc,
-            linear_sampler_desc,   texture_array_desc,
+            oit_spinlock_buffer_desc, linear_sampler_desc,     texture_array_desc,
         };
 
         descriptor_binding_info set1_bindings[] = {
@@ -142,6 +142,7 @@ namespace tempest::graphics::passes
         color_blend_attachment_state blending[] = {
             {
                 .enabled = false,
+                .write_enabled = false,
             },
         };
 
@@ -260,12 +261,12 @@ namespace tempest::graphics::passes
             .vertex_shader{
                 .bytes = vertex_shader_source,
                 .entrypoint = "main",
-                .name = "PBR OIT Gather Vertex Shader Module",
+                .name = "PBR OIT Resolve Vertex Shader Module",
             },
             .fragment_shader{
                 .bytes = fragment_shader_source,
                 .entrypoint = "main",
-                .name = "PBR OIT Gather Fragment Shader Module",
+                .name = "PBR OIT Resolve Fragment Shader Module",
             },
             .depth_testing{
                 .enable_test = true,
@@ -273,7 +274,7 @@ namespace tempest::graphics::passes
                 .depth_test_op = compare_operation::GREATER_OR_EQUALS,
             },
             .blending = blending,
-            .name = "PBR OIT Gather Graphics Pipeline",
+            .name = "PBR OIT Resolve Graphics Pipeline",
         });
 
         _pipeline = pipeline;
@@ -307,15 +308,94 @@ namespace tempest::graphics::passes
 
     bool pbr_oit_blend_pass::init(render_device& device)
     {
-        return false;
+        auto vertex_shader_source = core::read_bytes("assets/shaders/pbr_oit_blend.vert.spv");
+        auto fragment_shader_source = core::read_bytes("assets/shaders/pbr_oit_blend.frag.spv");
+
+        descriptor_binding_info set0_bindings[] = {
+            oit_moment_image_desc,
+            oit_zero_moment_image_desc,
+            oit_accum_image_desc,
+            linear_sampler_desc,
+        };
+
+        descriptor_binding_info set1_bindings[] = {
+            light_parameter_desc,
+            shadow_map_parameter_desc,
+            shadow_map_mt_desc,
+        };
+
+        descriptor_set_layout_create_info layouts[] = {
+            {
+                .set = 0,
+                .bindings = set0_bindings,
+            },
+        };
+
+        color_blend_attachment_state blending[] = {
+            {
+                .enabled = true,
+                .color =
+                    {
+                        .src = blend_factor::SRC_ALPHA,
+                        .dst = blend_factor::ONE_MINUS_SRC_ALPHA,
+                        .op = blend_operation::ADD,
+                    },
+                .alpha =
+                    {
+                        .src = blend_factor::ONE,
+                        .dst = blend_factor::ONE_MINUS_SRC_ALPHA,
+                        .op = blend_operation::ADD,
+                    },
+            },
+        };
+
+        resource_format color_formats[] = {resource_format::RGBA8_SRGB};
+
+        auto pipeline = device.create_graphics_pipeline({
+            .layout{
+                .set_layouts = layouts,
+            },
+            .target{
+                .color_attachment_formats = color_formats,
+            },
+            .vertex_shader{
+                .bytes = vertex_shader_source,
+                .entrypoint = "main",
+                .name = "PBR OIT Blend Vertex Shader Module",
+            },
+            .fragment_shader{
+                .bytes = fragment_shader_source,
+                .entrypoint = "main",
+                .name = "PBR OIT Blend Fragment Shader Module",
+            },
+            .vertex_layout{
+                .topology = primitive_topology::TRIANGLE_FAN,
+            },
+            .depth_testing{
+                .enable_test = false,
+                .enable_write = false,
+            },
+            .blending = blending,
+            .name = "PBR OIT Blend Graphics Pipeline",
+        });
+
+        _pipeline = pipeline;
+
+        return pipeline != graphics_pipeline_resource_handle{};
     }
 
-    bool pbr_oit_blend_pass::blend(render_device& dev, command_list& cmds)
+    bool pbr_oit_blend_pass::blend([[maybe_unused]] render_device& dev, command_list& cmds)
     {
-        return false;
+        cmds.set_cull_mode(false, true).use_pipeline(_pipeline).draw(3, 1, 0, 0);
+
+        return true;
     }
 
     void pbr_oit_blend_pass::release(render_device& device)
     {
+        if (_pipeline)
+        {
+            device.release_graphics_pipeline(_pipeline);
+        }
     }
 } // namespace tempest::graphics::passes
