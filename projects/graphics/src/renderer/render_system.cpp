@@ -123,13 +123,6 @@ namespace tempest::graphics
             .name = "OIT Zero Moment Image",
         });
 
-        auto oit_spinlock_buffer = rgc->create_buffer({
-            .size = 1920 * 1080 * sizeof(uint32_t),
-            .location = memory_location::DEVICE,
-            .name = "OIT Spinlock Buffer",
-            .per_frame_memory = false,
-        });
-
         auto transparency_accumulator_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
@@ -613,7 +606,7 @@ namespace tempest::graphics
             rgc->add_graph_pass("OIT Data Prepare", queue_operation_type::TRANSFER, [&](graph_pass_builder& bldr) {
                 bldr.add_transfer_target(moments_oit_images)
                     .add_transfer_target(moments_oit_zero_image)
-                    .on_execute([moments_oit_images, moments_oit_zero_image, oit_spinlock_buffer](command_list& cmds) {
+                    .on_execute([moments_oit_images, moments_oit_zero_image](command_list& cmds) {
                         cmds.clear_color(moments_oit_images, 0.0f, 0.0f, 0.0f, 0.0f)
                             .clear_color(moments_oit_zero_image, 0.0f, 0.0f, 0.0f, 0.0f);
                     });
@@ -634,7 +627,6 @@ namespace tempest::graphics
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                     .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
                     .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0, 7)
-                    .add_structured_buffer(oit_spinlock_buffer, resource_access_type::READ_WRITE, 0, 8)
                     .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -780,14 +772,6 @@ namespace tempest::graphics
         }
 
         _graph = tempest::move(*rgc).compile();
-
-        // Clear spinbuffer to 0
-        {
-            auto& executor = _device->get_command_executor();
-            auto& cmds = executor.get_commands();
-            cmds.fill_buffer(oit_spinlock_buffer, 0, 1920 * 1080 * sizeof(uint32_t), 0);
-            executor.submit_and_wait();
-        }
     }
 
     void render_system::after_initialize()

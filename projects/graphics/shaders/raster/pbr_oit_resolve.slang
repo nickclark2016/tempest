@@ -10,10 +10,8 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 [shader("fragment")]
 [earlydepthstencil]
 OitFragmentOutput FSMain(VertexOutput input) : OitFragmentOutput {
+    float transmittance = resolve_pass(input.position, compute_depth(input.position));
     var frag = compute_fragment(input);
-    
-    float transmittance = resolve_pass(frag.color, input.position, frag.depth);    
     float4 color = float4(frag.color.rgb * frag.color.a * transmittance, frag.color.a * transmittance);
-
     return OitFragmentOutput(color);
 }
