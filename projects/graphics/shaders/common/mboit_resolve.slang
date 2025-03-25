@@ -24,7 +24,7 @@ void offset_and_dequantize_moments(out float4 even, out float4 odd, float4 even_
     even = mul(mat_even, even_q);
 }
 
-float resolve_pass(float4 color, float4 frag_coord, float depth) {
+float resolve_pass(float4 frag_coord, float depth) {
     var addr = int3(int2(frag_coord.xy), 0);
     var idx0 = int4(addr.xy, 0, 0);
     var idx1 = int4(addr.xy, 1, 0);

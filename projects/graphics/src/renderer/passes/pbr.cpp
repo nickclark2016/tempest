@@ -117,7 +117,7 @@ namespace tempest::graphics::passes
         descriptor_binding_info set0_bindings[] = {
             scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
             instance_buffer_desc,  materials_buffer_desc,   oit_moment_image_desc,   oit_zero_moment_image_desc,
-            oit_spinlock_buffer_desc, linear_sampler_desc,     texture_array_desc,
+            linear_sampler_desc,   texture_array_desc,
         };
 
         descriptor_binding_info set1_bindings[] = {
