@@ -159,4 +159,9 @@ void initialize_models(tempest::engine& engine)
     // (void)engine.load_entity(engine.get_asset_database().import(
     //     "assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf",
     //     engine.get_archetype_registry()));
+
+    auto sykbox_texture_prefab = engine.get_asset_database().import("assets/polyhaven/hdri/autumn_field_puresky.exr",
+                                                                    engine.get_archetype_registry());
+    auto skybox_texture = engine.load_entity(sykbox_texture_prefab);
+    int trap = 0;
 }

@@ -30,6 +30,7 @@ scoped.group('Editor', function()
             '{RMDIR} %{root}/projects/editor/assets', -- Ensure a clean assets directory before building it
             '{MKDIR} %{root}/projects/editor/assets',
             '{LINKDIR} %{root}/projects/editor/assets/glTF-Sample-Assets ../../../vendor/glTF-Sample-Assets',
+            '{LINKDIR} %{root}/projects/editor/assets/polyhaven ../../../vendor/polyhaven',
             '{LINKDIR} %{root}/projects/editor/assets/shaders ../../../bin/%{cfg.buildcfg}/%{cfg.system}/%{cfg.architecture}/shaders',
         }
     end)

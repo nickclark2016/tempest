@@ -19,7 +19,8 @@ scoped.group('Engine', function()
 
         uses {
             'stb',
-            'simdjson'
+            'simdjson',
+            'tinyexr',
         }
 
         scoped.usage("PUBLIC", function()
