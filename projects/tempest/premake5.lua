@@ -45,8 +45,10 @@ scoped.group('Engine', function()
                 -- List out the third party dependencies
                 'glfw',
                 'imgui',
+                'miniz',
                 'simdjson',
                 'spdlog',
+                'tinyexr',
                 'tlsf',
                 'vk-bootstrap',
                 'vma'

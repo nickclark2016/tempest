@@ -1,5 +1,6 @@
 #include <tempest/asset_database.hpp>
 
+#include "importers/exr_importer.hpp"
 #include "importers/gltf_importer.hpp"
 
 namespace tempest::assets
@@ -9,6 +10,7 @@ namespace tempest::assets
         : _mesh_reg{mesh_reg}, _texture_reg{texture_reg}, _material_reg{material_reg}
     {
         register_importer(make_unique<gltf_importer>(_mesh_reg, _texture_reg, _material_reg), ".gltf");
+        register_importer(make_unique<exr_importer>(_texture_reg), ".exr");
     }
 
     void asset_database::register_importer(unique_ptr<asset_importer> importer, string_view extension)
