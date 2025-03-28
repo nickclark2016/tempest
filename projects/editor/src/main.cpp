@@ -5,7 +5,7 @@
 
 #include <iostream>
 
-void initialize_lights(tempest::ecs::archetype_registry& registry);
+void initialize_lights(tempest::engine& engine);
 void initialize_models(tempest::engine& engine);
 
 namespace
@@ -53,8 +53,8 @@ int main()
         engine.get_archetype_registry().assign(camera, camera_transform);
         engine.get_archetype_registry().name(camera, "Camera");
 
+        initialize_lights(engine);
         initialize_models(engine);
-        initialize_lights(engine.get_archetype_registry());
     });
 
     engine.on_update([&editor](tempest::engine& engine, float dt) {
@@ -75,8 +75,9 @@ int main()
     engine.run();
 }
 
-void initialize_lights(tempest::ecs::archetype_registry& registry)
+void initialize_lights(tempest::engine& engine)
 {
+    auto& registry = engine.get_archetype_registry();
     auto sun = registry.create();
     tempest::graphics::directional_light_component sun_data = {
         .color = {1.0f, 1.0f, 1.0f},
@@ -111,6 +112,12 @@ void initialize_lights(tempest::ecs::archetype_registry& registry)
     registry.assign_or_replace(point_light, point_light_data);
     registry.assign_or_replace(point_light, point_light_tx);
     registry.name(point_light, "Point Light");
+
+    auto sykbox_texture_prefab = engine.get_asset_database().import("assets/polyhaven/hdri/autumn_field_puresky.exr",
+                                                                    engine.get_archetype_registry());
+    auto skybox_texture_guid =
+        engine.get_archetype_registry().get<tempest::core::texture_component>(sykbox_texture_prefab).texture_id;
+    engine.get_render_system().set_skybox_texture(skybox_texture_guid, engine.get_texture_registry());
 }
 
 void initialize_models(tempest::engine& engine)
@@ -159,9 +166,4 @@ void initialize_models(tempest::engine& engine)
     // (void)engine.load_entity(engine.get_asset_database().import(
     //     "assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf",
     //     engine.get_archetype_registry()));
-
-    auto sykbox_texture_prefab = engine.get_asset_database().import("assets/polyhaven/hdri/autumn_field_puresky.exr",
-                                                                    engine.get_archetype_registry());
-    auto skybox_texture = engine.load_entity(sykbox_texture_prefab);
-    int trap = 0;
 }

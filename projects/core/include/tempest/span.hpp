@@ -38,6 +38,7 @@ namespace tempest
         explicit(extent != dynamic_extent) constexpr span(It start, size_type count);
 
         template <typename It, typename End>
+            requires(!is_convertible_v<End, size_t>)
         explicit(extent != dynamic_extent) constexpr span(It start, End end);
 
         template <size_t N>
@@ -145,6 +146,7 @@ namespace tempest
 
     template <typename T, size_t Extent>
     template <typename It, typename End>
+        requires(!is_convertible_v<End, size_t>)
     inline constexpr span<T, Extent>::span(It start, End end)
         : _start{std::to_address(start)}, _end{_start + (end - start)}
     {

@@ -277,6 +277,7 @@ namespace tempest::graphics
         _pbr_oit_gather.init(*_device);
         _pbr_oit_resolve.init(*_device);
         _pbr_oit_blend.init(*_device);
+        _skybox.init(*_device);
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER,
@@ -576,13 +577,25 @@ namespace tempest::graphics
                     });
             });
 
+        _skybox_pass =
+            rgc->add_graph_pass("Skybox Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(upload_pass)
+                    .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
+                                          store_op::STORE, {0.5f, 1.0f, 1.0f, 1.0f})
+                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
+                    .add_external_sampled_images(1, 0, passes::skybox_image_desc.binding_index,
+                                                 pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler_no_aniso, 0, 15, pipeline_stage::FRAGMENT)
+                    .on_execute([&](command_list& cmds) { _skybox.draw_batch(*_device, cmds); });
+            });
+
         _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
             bldr.depends_on(_z_prepass_pass)
                 .depends_on(build_hi_z_pass)
+                .depends_on(_skybox_pass)
                 .depends_on(upload_pass)
                 .depends_on(_shadow_map_pass)
-                .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR, store_op::STORE,
-                                      {0.5f, 1.0f, 1.0f, 1.0f})
+                .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
                 .add_color_attachment(velocity_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
                                       store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
                 .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
@@ -971,6 +984,7 @@ namespace tempest::graphics
         _pbr_oit_gather.release(*_device);
         _pbr_oit_resolve.release(*_device);
         _pbr_oit_blend.release(*_device);
+        _skybox.release(*_device);
 
         _swapchains.clear();
         _images.clear();
@@ -1217,6 +1231,26 @@ namespace tempest::graphics
                 _materials.push_back(gpu_material);
             }
         }
+    }
+
+    void render_system::set_skybox_texture(const guid& texture, core::texture_registry& reg)
+    {
+        auto guid_span = span<const guid>(&texture, 1);
+        auto ids =
+            renderer_utilities::upload_textures(*_device, guid_span, reg, _device->get_staging_buffer(), false, false);
+        if (ids.empty())
+        {
+            return;
+        }
+
+        if (_skybox_texture)
+        {
+            _device->release_image(_skybox_texture);
+        }
+
+        _skybox_texture = ids[0];
+        _graph->update_external_sampled_images(_skybox_pass, span(&_skybox_texture, 1), 0,
+                                               passes::skybox_image_desc.binding_index, pipeline_stage::FRAGMENT);
     }
 
     void render_system::mark_dirty()
