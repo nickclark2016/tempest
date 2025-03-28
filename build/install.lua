@@ -70,5 +70,12 @@ newaction {
             local gltfModelDir = path.join(_MAIN_SCRIPT_DIR, 'vendor', 'glTF-Sample-Assets')
             os.linkdir(gltfModelDir, gltfModelInstallDir)
         end
+
+        -- Symlink the polyhaven folder
+        local polyhavenInstallDir = path.join(assetsDir, 'polyhaven')
+        if not os.islink(polyhavenInstallDir) then
+            local polyhavenDir = path.join(_MAIN_SCRIPT_DIR, 'vendor', 'polyhaven')
+            os.linkdir(polyhavenDir, polyhavenInstallDir)
+        end
     end
 }

@@ -7,6 +7,7 @@
 #include <tempest/window.hpp>
 
 #include <tempest/passes/pbr.hpp>
+#include <tempest/passes/skybox.hpp>
 
 #include <tempest/archetype.hpp>
 #include <tempest/flat_map.hpp>
@@ -268,6 +269,8 @@ namespace tempest::graphics
             _create_imgui_hierarchy = tempest::forward<Fn>(fn);
         }
 
+        void set_skybox_texture(const guid& texture, core::texture_registry& reg);
+
         void mark_dirty();
 
         void draw_profiler();
@@ -327,8 +330,11 @@ namespace tempest::graphics
         graph_pass_handle _pbr_oit_gather_pass;
         graph_pass_handle _pbr_oit_resolve_pass;
         graph_pass_handle _pbr_oit_blend_pass;
+        graph_pass_handle _skybox_pass;
 
-        gpu_scene_data _scene_data;
+        image_resource_handle _skybox_texture;
+
+        gpu_scene_data _scene_data{};
         hi_z_data _hi_z_data;
         ecs::archetype_entity _camera_entity{ecs::tombstone};
 
@@ -350,6 +356,7 @@ namespace tempest::graphics
         passes::pbr_oit_gather_pass _pbr_oit_gather;
         passes::pbr_oit_resolve_pass _pbr_oit_resolve;
         passes::pbr_oit_blend_pass _pbr_oit_blend;
+        passes::skybox_pass _skybox;
 
         shadow_map_parameters compute_shadow_map_cascades(const shadow_map_component& shadowing,
                                                           const ecs::transform_component& light_transform,

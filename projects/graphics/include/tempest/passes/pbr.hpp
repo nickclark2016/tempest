@@ -5,7 +5,6 @@
 
 #include <tempest/render_device.hpp>
 #include <tempest/render_graph.hpp>
-#include <tempest/span.hpp>
 
 namespace tempest::graphics::passes
 {
@@ -13,7 +12,7 @@ namespace tempest::graphics::passes
     {
       public:
         bool init(render_device& device);
-        bool draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state);
+        bool draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state) const;
         void release(render_device& device);
 
       private:
@@ -24,7 +23,7 @@ namespace tempest::graphics::passes
     {
       public:
         bool init(render_device& device);
-        bool draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state);
+        bool draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state) const;
         void release(render_device& device);
 
       private:
@@ -35,7 +34,7 @@ namespace tempest::graphics::passes
     {
       public:
         bool init(render_device& device);
-        bool draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state);
+        bool draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state) const;
         void release(render_device& device);
 
       private:
@@ -46,7 +45,7 @@ namespace tempest::graphics::passes
     {
       public:
         bool init(render_device& device);
-        bool blend(render_device& dev, command_list& cmds);
+        bool blend(render_device& dev, command_list& cmds) const;
         void release(render_device& device);
 
       private:

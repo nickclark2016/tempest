@@ -37,7 +37,7 @@ namespace tempest::assets
 
         core::texture_mip_data mip = {
             .data = vector<byte>(reinterpret_cast<byte*>(image_data),
-                                 reinterpret_cast<byte*>(image_data) + (width * height * sizeof(float))),
+                                 reinterpret_cast<byte*>(image_data) + (4 * width * height * sizeof(float))),
             .width = static_cast<uint32_t>(width),
             .height = static_cast<uint32_t>(height),
         };

@@ -85,7 +85,7 @@ namespace tempest::graphics::passes
         return pipeline != graphics_pipeline_resource_handle{};
     }
 
-    bool pbr_pass::draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state)
+    bool pbr_pass::draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state) const
     {
         auto indirect_buffer_frame_offset = dev.get_buffer_frame_offset(state.indirect_command_buffer);
 
@@ -178,7 +178,7 @@ namespace tempest::graphics::passes
         return pipeline != graphics_pipeline_resource_handle{};
     }
 
-    bool pbr_oit_gather_pass::draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state)
+    bool pbr_oit_gather_pass::draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state) const
     {
         auto indirect_buffer_frame_offset = dev.get_buffer_frame_offset(state.indirect_command_buffer);
 
@@ -282,7 +282,7 @@ namespace tempest::graphics::passes
         return pipeline != graphics_pipeline_resource_handle{};
     }
 
-    bool pbr_oit_resolve_pass::draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state)
+    bool pbr_oit_resolve_pass::draw_batch(render_device& dev, command_list& cmds, const draw_command_state& state) const
     {
         auto indirect_buffer_frame_offset = dev.get_buffer_frame_offset(state.indirect_command_buffer);
 
@@ -384,7 +384,7 @@ namespace tempest::graphics::passes
         return pipeline != graphics_pipeline_resource_handle{};
     }
 
-    bool pbr_oit_blend_pass::blend([[maybe_unused]] render_device& dev, command_list& cmds)
+    bool pbr_oit_blend_pass::blend([[maybe_unused]] render_device& dev, command_list& cmds) const
     {
         cmds.set_cull_mode(false, true).use_pipeline(_pipeline).draw(3, 1, 0, 0);
 
