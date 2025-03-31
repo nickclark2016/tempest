@@ -162,7 +162,7 @@ namespace tempest::graphics::passes
                 .enable_write = false,
                 .depth_test_op = compare_operation::GREATER_OR_EQUALS,
             },
-            .blending = blending,
+            .blending = { blending },
             .name = "PBR OIT Gather Graphics Pipeline",
         });
 
@@ -266,7 +266,7 @@ namespace tempest::graphics::passes
                 .enable_write = false,
                 .depth_test_op = compare_operation::GREATER_OR_EQUALS,
             },
-            .blending = blending,
+            .blending = { blending },
             .name = "PBR OIT Resolve Graphics Pipeline",
         });
 
@@ -309,12 +309,6 @@ namespace tempest::graphics::passes
             oit_zero_moment_image_desc,
             oit_accum_image_desc,
             linear_sampler_desc,
-        };
-
-        descriptor_binding_info set1_bindings[] = {
-            light_parameter_desc,
-            shadow_map_parameter_desc,
-            shadow_map_mt_desc,
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -363,12 +357,14 @@ namespace tempest::graphics::passes
             },
             .vertex_layout{
                 .topology = primitive_topology::TRIANGLE_FAN,
+                .elements = {},
             },
             .depth_testing{
                 .enable_test = false,
                 .enable_write = false,
+                .depth_test_op = compare_operation::NEVER,
             },
-            .blending = blending,
+            .blending = { blending },
             .name = "PBR OIT Blend Graphics Pipeline",
         });
 
