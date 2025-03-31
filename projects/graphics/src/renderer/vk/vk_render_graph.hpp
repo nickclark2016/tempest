@@ -89,6 +89,7 @@ namespace tempest::graphics::vk
 
     struct descriptor_set_state
     {
+        uint32_t first_set{tempest::numeric_limits<uint32_t>::max()};
         flat_unordered_map<VkDescriptorSet, uint32_t> vk_set_to_set_index;
         vector<VkDescriptorSetLayout> set_layouts;
         VkPipelineLayout layout{VK_NULL_HANDLE};

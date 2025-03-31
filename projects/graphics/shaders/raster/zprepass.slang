@@ -14,6 +14,7 @@ struct SceneGlobals {
 
 struct VertexOutput {
     float4 position  : SV_Position;
+    float4 view_pos  : ViewPosition;
     float2 uv        : UV0;
     float3 normal    : Normal;
     float3 tangent   : Tangent;
@@ -23,6 +24,7 @@ struct VertexOutput {
 
 struct FragmentOutput {
     float2 encoded_normal : SV_Target0;
+    float4 position       : SV_Target1;
 };
 
 [vk_binding(0, 0)] StructuredBuffer<SceneGlobals> scene;
@@ -54,6 +56,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
     VertexOutput output;
     output.position = clip_pos;
+    output.view_pos = view_pos;
     output.uv = v.uv0;
     output.normal = geom_normal;
     output.tangent = geom_tangent;
@@ -84,6 +87,7 @@ FragmentOutput FSMain(VertexOutput input) {
     }
 
     output.encoded_normal = encode_normal(pd.shading_normal);
+    output.position = input.view_pos;
 
     return output;
 }

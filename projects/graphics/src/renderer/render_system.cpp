@@ -86,15 +86,6 @@ namespace tempest::graphics
             .name = "Depth Buffer",
         });
 
-        auto velocity_buffer = rgc->create_image({
-            .width = 1920,
-            .height = 1080,
-            .fmt = resource_format::RG32_FLOAT,
-            .type = image_type::IMAGE_2D,
-            .persistent = true,
-            .name = "Velocity Buffer",
-        });
-
         auto shadow_map_mt_buffer = rgc->create_image({
             .width = _shadow_map_subresource_allocator.extent().x,
             .height = _shadow_map_subresource_allocator.extent().y,
@@ -153,6 +144,27 @@ namespace tempest::graphics
             .type = image_type::IMAGE_2D,
             .persistent = true,
             .name = "Encoded Normals Buffer",
+        });
+
+        auto positions_buffer = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::RGBA16_FLOAT,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "View Space Positions Buffer",
+        });
+
+        const auto cluster_grid_count_x = 16;
+        const auto cluster_grid_count_y = 9;
+        const auto cluster_grid_count_z = 24;
+        const auto num_cluster_grids = cluster_grid_count_x * cluster_grid_count_y * cluster_grid_count_z;
+
+        auto cluster_grid_buffer = rgc->create_buffer({
+            .size = sizeof(passes::lighting_cluster_bounds) * num_cluster_grids,
+            .location = memory_location::DEVICE,
+            .name = "Cluster Bounds",
+            .per_frame_memory = false,
         });
 
         // Build resource buffers
@@ -278,6 +290,7 @@ namespace tempest::graphics
         _pbr_oit_resolve.init(*_device);
         _pbr_oit_blend.init(*_device);
         _skybox.init(*_device);
+        _build_cluster_grid.init(*_device);
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER,
@@ -444,6 +457,8 @@ namespace tempest::graphics
                                           store_op::STORE, 0.0f)
                     .add_color_attachment(encoded_normals_buffer, resource_access_type::WRITE, load_op::CLEAR,
                                           store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
+                    .add_color_attachment(positions_buffer, resource_access_type::WRITE, load_op::CLEAR,
+                                          store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
                     .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                     .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
@@ -589,15 +604,39 @@ namespace tempest::graphics
                     .on_execute([&](command_list& cmds) { _skybox.draw_batch(*_device, cmds); });
             });
 
+        auto build_clusters =
+            rgc->add_graph_pass("Build Light Clusters", queue_operation_type::COMPUTE, [&](graph_pass_builder& bldr) {
+                bldr.add_structured_buffer(cluster_grid_buffer, resource_access_type::READ_WRITE, 0,
+                                           passes::light_cluster_desc.binding_index)
+                    .allow_push_constants(
+                        static_cast<uint32_t>(sizeof(passes::build_cluster_grid_pass::push_constants)))
+                    .on_execute([&](command_list& cmds) {
+                        // Push the constants for building the cluster grid
+                        passes::build_cluster_grid_pass::push_constants pc;
+                        pc.inv_projection = _scene_data.camera.inv_proj;
+                        pc.screen_bounds = math::vec4<float>(1920.0f, 1080.0f, 0.1f, 1000.0f); // w, h, min_z, max_z
+                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(16, 9, 24, 1);
+
+                        _build_cluster_grid.execute(*_device, cmds,
+                                                    {
+                                                        .indirect_command_buffer = {},
+                                                        .offset = 0,
+                                                        .x = 16,
+                                                        .y = 9,
+                                                        .z = 24,
+                                                    },
+                                                    pc);
+                    });
+            });
+
         _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
             bldr.depends_on(_z_prepass_pass)
                 .depends_on(build_hi_z_pass)
                 .depends_on(_skybox_pass)
                 .depends_on(upload_pass)
+                .depends_on(build_clusters)
                 .depends_on(_shadow_map_pass)
                 .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
-                .add_color_attachment(velocity_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
-                                      store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
                 .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
                 .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
                 .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
@@ -985,6 +1024,7 @@ namespace tempest::graphics
         _pbr_oit_resolve.release(*_device);
         _pbr_oit_blend.release(*_device);
         _skybox.release(*_device);
+        _build_cluster_grid.release(*_device);
 
         _swapchains.clear();
         _images.clear();
@@ -1281,9 +1321,15 @@ namespace tempest::graphics
             },
         };
 
-        resource_format color_buffer_fmt[] = {resource_format::RG16_FLOAT};
+        resource_format color_buffer_fmt[] = {
+            resource_format::RG16_FLOAT,
+            resource_format::RGBA16_FLOAT,
+        };
 
         color_blend_attachment_state blending[] = {
+            {
+                .enabled = false,
+            },
             {
                 .enabled = false,
             },

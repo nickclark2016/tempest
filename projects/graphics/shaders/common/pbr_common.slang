@@ -31,7 +31,6 @@ struct VertexOutput {
 
 struct FragmentOutput {
     float4 color : SV_Target0;
-    float2 velocity : SV_Target1;
 };
 
 struct PBROutput {
@@ -133,7 +132,6 @@ PBROutput compute_fragment(VertexOutput input) {
     PBROutput output;
 
     output.color = color;
-    output.velocity = calculate_velocity(half4(input.current_position), half4(input.prev_position));
     output.depth = compute_depth(input.current_position);
     
     if (material.mat.type == MaterialType::TRANSMISSIVE) {

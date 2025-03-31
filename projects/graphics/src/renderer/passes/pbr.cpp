@@ -33,18 +33,11 @@ namespace tempest::graphics::passes
 
         resource_format color_buffer_fmt[] = {
             resource_format::RGBA8_SRGB,
-            resource_format::RG32_FLOAT,
         };
 
         color_blend_attachment_state blending[] = {
             {
                 // Color Buffer
-                .enabled = false,
-                .color = {},
-                .alpha = {},
-            },
-            {
-                // Velocity Buffer
                 .enabled = false,
                 .color = {},
                 .alpha = {},

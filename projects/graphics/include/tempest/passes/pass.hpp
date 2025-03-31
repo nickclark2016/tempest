@@ -2,6 +2,7 @@
 #define tempest_graphics_pass_hpp
 
 #include <tempest/graphics_components.hpp>
+#include <tempest/int.hpp>
 #include <tempest/types.hpp>
 
 namespace tempest::graphics::passes
@@ -102,12 +103,27 @@ namespace tempest::graphics::passes
         .binding_count = 1,
     };
 
+    inline constexpr descriptor_binding_info light_cluster_desc = {
+        .type = descriptor_binding_type::STRUCTURED_BUFFER,
+        .binding_index = 0,
+        .binding_count = 1,
+    };
+
     struct draw_command_state
     {
         buffer_resource_handle indirect_command_buffer;
         size_t first_indirect_command;
         size_t indirect_command_count;
         bool double_sided;
+    };
+
+    struct compute_command_state
+    {
+        buffer_resource_handle indirect_command_buffer;
+        size_t offset;
+        uint32_t x;
+        uint32_t y;
+        uint32_t z;
     };
 } // namespace tempest::graphics::passes
 

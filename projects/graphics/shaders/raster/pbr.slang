@@ -9,5 +9,5 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 FragmentOutput FSMain(VertexOutput input) {
     var pbr_fragment = compute_fragment(input);
 
-    return FragmentOutput(pbr_fragment.color, pbr_fragment.velocity);
+    return FragmentOutput(pbr_fragment.color);
 }

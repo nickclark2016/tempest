@@ -6,6 +6,7 @@
 #include <tempest/render_graph.hpp>
 #include <tempest/window.hpp>
 
+#include <tempest/passes/clustered_lighting.hpp>
 #include <tempest/passes/pbr.hpp>
 #include <tempest/passes/skybox.hpp>
 
@@ -19,9 +20,6 @@
 #include <tempest/texture.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/vertex.hpp>
-
-#include <string>
-#include <vector>
 
 namespace tempest::graphics
 {
@@ -357,6 +355,7 @@ namespace tempest::graphics
         passes::pbr_oit_resolve_pass _pbr_oit_resolve;
         passes::pbr_oit_blend_pass _pbr_oit_blend;
         passes::skybox_pass _skybox;
+        passes::build_cluster_grid_pass _build_cluster_grid;
 
         shadow_map_parameters compute_shadow_map_cascades(const shadow_map_component& shadowing,
                                                           const ecs::transform_component& light_transform,
