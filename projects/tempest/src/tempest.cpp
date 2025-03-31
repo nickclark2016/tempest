@@ -231,37 +231,6 @@ namespace tempest
 
         _render_system.after_initialize();
 
-        // auto last_tick_time = std::chrono::high_resolution_clock::now();
-        // auto last_frame_time = last_tick_time;
-        // std::uint32_t fps_counter = 0;
-        // std::uint32_t last_fps = 0;
-        //
-        // while (true)
-        // {
-        //     auto current_time = std::chrono::high_resolution_clock::now();
-        //     std::chrono::duration<double> time_since_tick = current_time - last_tick_time;
-        //     std::chrono::duration<double> frame_time = current_time - last_frame_time;
-        //     last_frame_time = current_time;
-
-        //     ++fps_counter;
-
-        //     if (time_since_tick.count() >= 1.0)
-        //     {
-        //         last_fps = fps_counter;
-        //         fps_counter = 0;
-        //         last_tick_time = current_time;
-        //         log->info("FPS: {}", last_fps);
-        //     }
-
-        //     update(static_cast<float>(frame_time.count()));
-        //     if (_should_close)
-        //     {
-        //         break;
-        //     }
-
-        //     render();
-        // }
-
         std::chrono::duration<double> simulated_time = std::chrono::duration<double>(0.0);
         std::chrono::duration<double> delta_time = std::chrono::duration<double>(1.0 / 60.0);
 
