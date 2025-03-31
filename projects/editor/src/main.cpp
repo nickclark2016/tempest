@@ -62,8 +62,9 @@ int main()
             using imgui = tempest::graphics::imgui_context;
 
             imgui::create_window("Entities", [&]() { editor.update(engine); });
-            imgui::create_window(
-                "Metrics", [&, dt]() { imgui::label(tempest::string_view(std::format("FPS: {:.2f}", 1.0f / dt))); });
+            imgui::create_window("Metrics", [&, dt]() {
+                imgui::label(tempest::string_view(std::format("Target UPS: {:.2f}", 1.0f / dt)));
+            });
 
             if (engine.get_render_system().settings().enable_profiling)
             {

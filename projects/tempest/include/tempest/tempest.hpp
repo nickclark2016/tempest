@@ -155,6 +155,8 @@ namespace tempest
         graphics::render_system _render_system;
 
         bool _should_close{false};
+
+        void _start_frame();
     };
 } // namespace tempest
 

@@ -59,11 +59,6 @@ namespace tempest
 
     void engine::update(float dt)
     {
-        auto current_time = std::chrono::steady_clock::now();
-        auto delta = std::chrono::duration_cast<std::chrono::duration<float>>(current_time - _last_frame_time);
-        _delta_time = delta;
-        _last_frame_time = current_time;
-
         // Reset mouse deltas
         for (auto& window : _windows)
         {
@@ -236,36 +231,71 @@ namespace tempest
 
         _render_system.after_initialize();
 
-        auto last_tick_time = std::chrono::high_resolution_clock::now();
-        auto last_frame_time = last_tick_time;
-        std::uint32_t fps_counter = 0;
-        std::uint32_t last_fps = 0;
+        // auto last_tick_time = std::chrono::high_resolution_clock::now();
+        // auto last_frame_time = last_tick_time;
+        // std::uint32_t fps_counter = 0;
+        // std::uint32_t last_fps = 0;
+        //
+        // while (true)
+        // {
+        //     auto current_time = std::chrono::high_resolution_clock::now();
+        //     std::chrono::duration<double> time_since_tick = current_time - last_tick_time;
+        //     std::chrono::duration<double> frame_time = current_time - last_frame_time;
+        //     last_frame_time = current_time;
+
+        //     ++fps_counter;
+
+        //     if (time_since_tick.count() >= 1.0)
+        //     {
+        //         last_fps = fps_counter;
+        //         fps_counter = 0;
+        //         last_tick_time = current_time;
+        //         log->info("FPS: {}", last_fps);
+        //     }
+
+        //     update(static_cast<float>(frame_time.count()));
+        //     if (_should_close)
+        //     {
+        //         break;
+        //     }
+
+        //     render();
+        // }
+
+        std::chrono::duration<double> simulated_time = std::chrono::duration<double>(0.0);
+        std::chrono::duration<double> delta_time = std::chrono::duration<double>(1.0 / 60.0);
+
+        auto current_time = std::chrono::steady_clock::now();
+        std::chrono::duration<double> accumulator = std::chrono::duration<double>(0.0);
 
         while (true)
         {
-            auto current_time = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> time_since_tick = current_time - last_tick_time;
-            std::chrono::duration<double> frame_time = current_time - last_frame_time;
-            last_frame_time = current_time;
+            _start_frame();
 
-            ++fps_counter;
+            auto new_time = std::chrono::steady_clock::now();
+            std::chrono::duration<double> frame_time = new_time - current_time;
 
-            if (time_since_tick.count() >= 1.0)
+            current_time = new_time;
+
+            accumulator += frame_time;
+
+            while (accumulator >= delta_time)
             {
-                last_fps = fps_counter;
-                fps_counter = 0;
-                last_tick_time = current_time;
-                log->info("FPS: {}", last_fps);
-            }
+                // Update the engine with the fixed timestep
+                update(static_cast<float>(delta_time.count()));
+                if (_should_close)
+                {
+                    goto exit_main_loop;
+                }
 
-            update(static_cast<float>(frame_time.count()));
-            if (_should_close)
-            {
-                break;
+                simulated_time += delta_time;
+                accumulator -= delta_time;
             }
 
             render();
         }
+
+    exit_main_loop:
 
         log->info("Engine exiting main loop");
 
@@ -274,5 +304,13 @@ namespace tempest
         log->info("Engine has stopped");
 
         std::exit(0);
+    }
+
+    void engine::_start_frame()
+    {
+        auto current_time = std::chrono::steady_clock::now();
+        auto delta = std::chrono::duration_cast<std::chrono::duration<float>>(current_time - _last_frame_time);
+        _delta_time = delta;
+        _last_frame_time = current_time;
     }
 } // namespace tempest
