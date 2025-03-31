@@ -18,6 +18,7 @@ scoped.workspace('Tempest', function()
         'action:vs*'
     }, function()
         toolset 'v143'
+        usestandardpreprocessor 'On'
     end)
 
     scoped.filter({
