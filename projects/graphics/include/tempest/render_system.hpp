@@ -121,6 +121,7 @@ namespace tempest::graphics
             array<uint32_t, 6> shadow_map_indices{};
             gpu_light_type light_type{};
             uint32_t shadow_map_count{};
+            uint32_t enabled{1};
         };
 
         struct orthogonal_bounds
@@ -356,6 +357,7 @@ namespace tempest::graphics
         passes::pbr_oit_blend_pass _pbr_oit_blend;
         passes::skybox_pass _skybox;
         passes::build_cluster_grid_pass _build_cluster_grid;
+        passes::cull_light_cluster_pass _cull_light_clusters;
 
         shadow_map_parameters compute_shadow_map_cascades(const shadow_map_component& shadowing,
                                                           const ecs::transform_component& light_transform,

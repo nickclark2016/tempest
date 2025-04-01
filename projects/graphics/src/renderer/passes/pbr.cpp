@@ -10,14 +10,16 @@ namespace tempest::graphics::passes
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
-            instance_buffer_desc,  materials_buffer_desc,   linear_sampler_desc,     texture_array_desc,
+            pbr_pass::scene_constant_buffer_desc.to_binding_info(),   pbr_pass::vertex_pull_buffer_desc.to_binding_info(),
+            pbr_pass::mesh_layout_buffer_desc.to_binding_info(), pbr_pass::object_buffer_desc.to_binding_info(),
+            pbr_pass::instance_buffer_desc.to_binding_info(),    pbr_pass::materials_buffer_desc.to_binding_info(),
+            pbr_pass::linear_sampler_desc.to_binding_info(),     pbr_pass::texture_array_desc.to_binding_info(),
         };
 
         descriptor_binding_info set1_bindings[] = {
-            light_parameter_desc,
-            shadow_map_parameter_desc,
-            shadow_map_mt_desc,
+            pbr_pass::light_parameter_desc.to_binding_info(),
+            pbr_pass::shadow_map_parameter_desc.to_binding_info(),
+            pbr_pass::shadow_map_mt_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -108,15 +110,22 @@ namespace tempest::graphics::passes
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr_oit_gather.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
-            instance_buffer_desc,  materials_buffer_desc,   oit_moment_image_desc,   oit_zero_moment_image_desc,
-            linear_sampler_desc,   texture_array_desc,
+            pbr_oit_gather_pass::scene_constant_buffer_desc.to_binding_info(),
+            pbr_oit_gather_pass::vertex_pull_buffer_desc.to_binding_info(),
+            pbr_oit_gather_pass::mesh_layout_buffer_desc.to_binding_info(),
+            pbr_oit_gather_pass::object_buffer_desc.to_binding_info(),
+            pbr_oit_gather_pass::instance_buffer_desc.to_binding_info(),
+            pbr_oit_gather_pass::materials_buffer_desc.to_binding_info(),
+            pbr_oit_gather_pass::oit_moment_image_desc.to_binding_info(),
+            pbr_oit_gather_pass::oit_zero_moment_image_desc.to_binding_info(),
+            pbr_oit_gather_pass::linear_sampler_desc.to_binding_info(),
+            pbr_oit_gather_pass::texture_array_desc.to_binding_info(),
         };
 
         descriptor_binding_info set1_bindings[] = {
-            light_parameter_desc,
-            shadow_map_parameter_desc,
-            shadow_map_mt_desc,
+            pbr_oit_gather_pass::light_parameter_desc.to_binding_info(),
+            pbr_oit_gather_pass::shadow_map_parameter_desc.to_binding_info(),
+            pbr_oit_gather_pass::shadow_map_mt_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -162,7 +171,7 @@ namespace tempest::graphics::passes
                 .enable_write = false,
                 .depth_test_op = compare_operation::GREATER_OR_EQUALS,
             },
-            .blending = { blending },
+            .blending = {blending},
             .name = "PBR OIT Gather Graphics Pipeline",
         });
 
@@ -201,15 +210,22 @@ namespace tempest::graphics::passes
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr_oit_resolve.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            scene_constant_buffer, vertex_pull_buffer_desc, mesh_layout_buffer_desc, object_buffer_desc,
-            instance_buffer_desc,  materials_buffer_desc,   oit_moment_image_desc,   oit_zero_moment_image_desc,
-            linear_sampler_desc,   texture_array_desc,
+            pbr_oit_resolve_pass::scene_constant_buffer_desc.to_binding_info(),
+            pbr_oit_resolve_pass::vertex_pull_buffer_desc.to_binding_info(),
+            pbr_oit_resolve_pass::mesh_layout_buffer_desc.to_binding_info(),
+            pbr_oit_resolve_pass::object_buffer_desc.to_binding_info(),
+            pbr_oit_resolve_pass::instance_buffer_desc.to_binding_info(),
+            pbr_oit_resolve_pass::materials_buffer_desc.to_binding_info(),
+            pbr_oit_resolve_pass::oit_moment_image_desc.to_binding_info(),
+            pbr_oit_resolve_pass::oit_zero_moment_image_desc.to_binding_info(),
+            pbr_oit_resolve_pass::linear_sampler_desc.to_binding_info(),
+            pbr_oit_resolve_pass::texture_array_desc.to_binding_info(),
         };
 
         descriptor_binding_info set1_bindings[] = {
-            light_parameter_desc,
-            shadow_map_parameter_desc,
-            shadow_map_mt_desc,
+            pbr_oit_resolve_pass::light_parameter_desc.to_binding_info(),
+            pbr_oit_resolve_pass::shadow_map_parameter_desc.to_binding_info(),
+            pbr_oit_resolve_pass::shadow_map_mt_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -266,7 +282,7 @@ namespace tempest::graphics::passes
                 .enable_write = false,
                 .depth_test_op = compare_operation::GREATER_OR_EQUALS,
             },
-            .blending = { blending },
+            .blending = {blending},
             .name = "PBR OIT Resolve Graphics Pipeline",
         });
 
@@ -305,10 +321,10 @@ namespace tempest::graphics::passes
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr_oit_blend.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            oit_moment_image_desc,
-            oit_zero_moment_image_desc,
-            oit_accum_image_desc,
-            linear_sampler_desc,
+            oit_moment_image_desc.to_binding_info(),
+            oit_zero_moment_image_desc.to_binding_info(),
+            oit_accum_image_desc.to_binding_info(),
+            linear_sampler_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -364,7 +380,7 @@ namespace tempest::graphics::passes
                 .enable_write = false,
                 .depth_test_op = compare_operation::NEVER,
             },
-            .blending = { blending },
+            .blending = {blending},
             .name = "PBR OIT Blend Graphics Pipeline",
         });
 

@@ -16,10 +16,10 @@ struct FragmentOutput {
     float4 color            : SV_Target0;
 };
 
-[vk_binding(6, 0)] RWTexture2DArray<half4> moments;
-[vk_binding(7, 0)] RWTexture2D<float> zeroth_moment;
-[vk_binding(8, 0)] Texture2D transparency_accumulator;
-[vk_binding(15, 0)] SamplerState linear_sampler;
+[vk_binding(0, 0)] RWTexture2DArray<half4> moments;
+[vk_binding(1, 0)] RWTexture2D<float> zeroth_moment;
+[vk_binding(2, 0)] Texture2D transparency_accumulator;
+[vk_binding(3, 0)] SamplerState linear_sampler;
 
 [shader("fragment")]
 FragmentOutput FSMain(VertexOutput input) {

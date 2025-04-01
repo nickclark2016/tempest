@@ -73,7 +73,7 @@ namespace tempest::graphics::vk
             case image_resource_usage::TRANSFER_SOURCE:
                 [[fallthrough]];
             case image_resource_usage::TRANSFER_DESTINATION:
-                return VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+                return VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT;
             case image_resource_usage::PRESENT:
                 return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
             case image_resource_usage::UNDEFINED:
@@ -116,7 +116,7 @@ namespace tempest::graphics::vk
             case buffer_resource_usage::TRANSFER_DESTINATION:
                 [[fallthrough]];
             case buffer_resource_usage::TRANSFER_SOURCE:
-                return VK_PIPELINE_STAGE_2_COPY_BIT;
+                return VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT;
             case buffer_resource_usage::HOST_WRITE:
                 return VK_PIPELINE_STAGE_2_HOST_BIT;
             }

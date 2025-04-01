@@ -167,6 +167,27 @@ namespace tempest::graphics
             .per_frame_memory = false,
         });
 
+        auto global_light_index_list_buffer = rgc->create_buffer({
+            .size = sizeof(uint32_t) * 1024 * 128,
+            .location = memory_location::DEVICE,
+            .name = "Global Light Index List",
+            .per_frame_memory = false,
+        });
+
+        auto light_grid_range_buffer = rgc->create_buffer({
+            .size = sizeof(passes::light_grid_range) * num_cluster_grids,
+            .location = memory_location::DEVICE,
+            .name = "Light Grid Range",
+            .per_frame_memory = false,
+        });
+
+        auto global_index_count_buffer = rgc->create_buffer({
+            .size = sizeof(uint32_t),
+            .location = memory_location::DEVICE,
+            .name = "Global Index Count",
+            .per_frame_memory = false,
+        });
+
         // Build resource buffers
         _vertex_pull_buffer = rgc->create_buffer({
             .size = 1024 * 1024 * 512,
@@ -291,10 +312,11 @@ namespace tempest::graphics
         _pbr_oit_blend.init(*_device);
         _skybox.init(*_device);
         _build_cluster_grid.init(*_device);
+        _cull_light_clusters.init(*_device);
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER,
-            [&, dir_shadow_buffer, light_buffer](graph_pass_builder& builder) {
+            [&, dir_shadow_buffer, light_buffer, global_index_count_buffer](graph_pass_builder& builder) {
                 builder.add_transfer_destination_buffer(_scene_buffer)
                     .add_transfer_destination_buffer(_object_buffer)
                     .add_transfer_destination_buffer(_instance_buffer)
@@ -302,9 +324,10 @@ namespace tempest::graphics
                     .add_transfer_destination_buffer(_hi_z_buffer_constants)
                     .add_transfer_destination_buffer(dir_shadow_buffer)
                     .add_transfer_destination_buffer(light_buffer)
+                    .add_transfer_destination_buffer(global_index_count_buffer)
                     .add_transfer_source_buffer(_device->get_staging_buffer())
                     .add_host_write_buffer(_device->get_staging_buffer())
-                    .on_execute([&, dir_shadow_buffer, light_buffer](command_list& cmds) {
+                    .on_execute([&, dir_shadow_buffer, light_buffer, global_index_count_buffer](command_list& cmds) {
                         staging_buffer_writer writer{*_device};
 
                         if (_last_updated_frame + _device->frames_in_flight() > _device->current_frame())
@@ -371,6 +394,7 @@ namespace tempest::graphics
                                                                       transform.position().z, inv_sq_range),
                                 .light_type = gpu_light_type::POINT,
                                 .shadow_map_count = 0,
+                                .enabled = 1,
                             };
 
                             light_data.push_back(light);
@@ -447,6 +471,8 @@ namespace tempest::graphics
                         writer.write(cmds, light_span, light_buffer);
 
                         writer.finish();
+
+                        cmds.fill_buffer(global_index_count_buffer, 0, sizeof(uint32_t), 0);
                     });
             });
 
@@ -597,17 +623,22 @@ namespace tempest::graphics
                 bldr.depends_on(upload_pass)
                     .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
                                           store_op::STORE, {0.5f, 1.0f, 1.0f, 1.0f})
-                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
-                    .add_external_sampled_images(1, 0, passes::skybox_image_desc.binding_index,
+                    .add_structured_buffer(_scene_buffer, resource_access_type::READ,
+                                           passes::skybox_pass::scene_constant_buffer_desc.set,
+                                           passes::skybox_pass::scene_constant_buffer_desc.binding)
+                    .add_external_sampled_images(1, passes::skybox_pass::skybox_texture_desc.set,
+                                                 passes::skybox_pass::skybox_texture_desc.binding,
                                                  pipeline_stage::FRAGMENT)
-                    .add_sampler(_linear_sampler_no_aniso, 0, 15, pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler_no_aniso, passes::skybox_pass::linear_sampler_desc.set,
+                                 passes::skybox_pass::linear_sampler_desc.binding, pipeline_stage::FRAGMENT)
                     .on_execute([&](command_list& cmds) { _skybox.draw_batch(*_device, cmds); });
             });
 
         auto build_clusters =
             rgc->add_graph_pass("Build Light Clusters", queue_operation_type::COMPUTE, [&](graph_pass_builder& bldr) {
-                bldr.add_structured_buffer(cluster_grid_buffer, resource_access_type::READ_WRITE, 0,
-                                           passes::light_cluster_desc.binding_index)
+                bldr.add_structured_buffer(cluster_grid_buffer, resource_access_type::READ_WRITE,
+                                           passes::build_cluster_grid_pass::light_cluster_desc.set,
+                                           passes::build_cluster_grid_pass::light_cluster_desc.binding)
                     .allow_push_constants(
                         static_cast<uint32_t>(sizeof(passes::build_cluster_grid_pass::push_constants)))
                     .on_execute([&](command_list& cmds) {
@@ -629,12 +660,52 @@ namespace tempest::graphics
                     });
             });
 
+        auto cull_lights =
+            rgc->add_graph_pass("Cull Light Clusters", queue_operation_type::COMPUTE, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(build_clusters)
+                    .depends_on(upload_pass)
+                    .add_structured_buffer(cluster_grid_buffer, resource_access_type::READ,
+                                           passes::cull_light_cluster_pass::light_cluster_desc.set,
+                                           passes::cull_light_cluster_pass::light_cluster_desc.binding)
+                    .add_structured_buffer(light_buffer, resource_access_type::READ,
+                                           passes::cull_light_cluster_pass::light_parameter_desc.set,
+                                           passes::cull_light_cluster_pass::light_parameter_desc.binding)
+                    .add_structured_buffer(global_light_index_list_buffer, resource_access_type::READ_WRITE,
+                                           passes::cull_light_cluster_pass::global_light_index_list_desc.set,
+                                           passes::cull_light_cluster_pass::global_light_index_list_desc.binding)
+                    .add_structured_buffer(light_grid_range_buffer, resource_access_type::READ_WRITE,
+                                           passes::cull_light_cluster_pass::light_grid_desc.set,
+                                           passes::cull_light_cluster_pass::light_grid_desc.binding)
+                    .add_structured_buffer(global_index_count_buffer, resource_access_type::READ_WRITE,
+                                           passes::cull_light_cluster_pass::global_index_count_desc.set,
+                                           passes::cull_light_cluster_pass::global_index_count_desc.binding)
+                    .allow_push_constants(
+                        static_cast<uint32_t>(sizeof(passes::cull_light_cluster_pass::push_constants)))
+                    .on_execute([&](command_list& cmds) {
+                        passes::cull_light_cluster_pass::push_constants pc;
+                        pc.inv_projection = _scene_data.camera.inv_proj;
+                        pc.screen_bounds = math::vec4<float>(1920.0f, 1080.0f, 0.1f, 1000.0f); // w, h, min_z, max_z
+                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(16, 9, 24, 1);
+                        pc.light_count = _scene_data.point_light_count;
+
+                        _cull_light_clusters.execute(*_device, cmds,
+                                                     {
+                                                         .indirect_command_buffer = {},
+                                                         .offset = 0,
+                                                         .x = 1, // 1 * 16 = 16
+                                                         .y = 1, // 1 * 9 = 9
+                                                         .z = 6, // 6 * 4 = 24
+                                                     },
+                                                     pc);
+                    });
+            });
+
         _pbr_pass = rgc->add_graph_pass("PBR Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
             bldr.depends_on(_z_prepass_pass)
                 .depends_on(build_hi_z_pass)
                 .depends_on(_skybox_pass)
                 .depends_on(upload_pass)
-                .depends_on(build_clusters)
+                .depends_on(cull_lights)
                 .depends_on(_shadow_map_pass)
                 .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
                 .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
@@ -766,16 +837,19 @@ namespace tempest::graphics
         auto oit_blend_pass = rgc->add_graph_pass(
             "OIT Blend Pass", graphics::queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(_pbr_oit_resolve_pass)
-                    .add_color_attachment(color_buffer, graphics::resource_access_type::WRITE, graphics::load_op::LOAD,
-                                          graphics::store_op::STORE)
-                    .add_storage_image(moments_oit_images, resource_access_type::READ, 0,
-                                       passes::oit_moment_image_desc.binding_index)
-                    .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0,
-                                       passes::oit_zero_moment_image_desc.binding_index)
-                    .add_sampled_image(transparency_accumulator_buffer, 0, passes::oit_accum_image_desc.binding_index,
-                                       pipeline_stage::FRAGMENT)
-                    .add_sampler(_linear_sampler, 0, passes::linear_sampler_desc.binding_index,
-                                 pipeline_stage::FRAGMENT)
+                    .add_color_attachment(color_buffer, graphics::resource_access_type::READ_WRITE,
+                                          graphics::load_op::LOAD, graphics::store_op::STORE)
+                    .add_storage_image(moments_oit_images, resource_access_type::READ,
+                                       passes::pbr_oit_blend_pass::oit_moment_image_desc.set,
+                                       passes::pbr_oit_blend_pass::oit_moment_image_desc.binding)
+                    .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE,
+                                       passes::pbr_oit_blend_pass::oit_zero_moment_image_desc.set,
+                                       passes::pbr_oit_blend_pass::oit_zero_moment_image_desc.binding)
+                    .add_sampled_image(
+                        transparency_accumulator_buffer, passes::pbr_oit_blend_pass::oit_accum_image_desc.set,
+                        passes::pbr_oit_blend_pass::oit_accum_image_desc.binding, pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler, passes::pbr_oit_blend_pass::linear_sampler_desc.set,
+                                 passes::pbr_oit_blend_pass::linear_sampler_desc.binding, pipeline_stage::FRAGMENT)
                     .on_execute([&](auto& cmds) {
                         cmds.set_scissor_region(0, 0, 1920, 1080).set_viewport(0, 0, 1920, 1080, 0.0f, 1.0f, false);
                         _pbr_oit_blend.blend(*_device, cmds);
@@ -849,16 +923,18 @@ namespace tempest::graphics
 
         _device->unmap_buffer(staging_buffer);
 
-        _graph->update_external_sampled_images(_pbr_pass, _images, 0, passes::texture_array_desc.binding_index,
-                                               pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_z_prepass_pass, _images, 0, passes::texture_array_desc.binding_index,
-                                               pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_shadow_map_pass, _images, 0, passes::texture_array_desc.binding_index,
-                                               pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_pbr_oit_gather_pass, _images, 0,
-                                               passes::texture_array_desc.binding_index, pipeline_stage::FRAGMENT);
-        _graph->update_external_sampled_images(_pbr_oit_resolve_pass, _images, 0,
-                                               passes::texture_array_desc.binding_index, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_pbr_pass, _images, passes::pbr_pass::texture_array_desc.set,
+                                               passes::pbr_pass::texture_array_desc.binding, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_z_prepass_pass, _images, passes::pbr_pass::texture_array_desc.set,
+                                               passes::pbr_pass::texture_array_desc.binding, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(_shadow_map_pass, _images, passes::pbr_pass::texture_array_desc.set,
+                                               passes::pbr_pass::texture_array_desc.binding, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(
+            _pbr_oit_gather_pass, _images, passes::pbr_oit_gather_pass::texture_array_desc.set,
+            passes::pbr_oit_gather_pass::texture_array_desc.binding, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(
+            _pbr_oit_resolve_pass, _images, passes::pbr_oit_resolve_pass::texture_array_desc.set,
+            passes::pbr_oit_resolve_pass::texture_array_desc.binding, pipeline_stage::FRAGMENT);
 
         _z_prepass_pipeline = create_z_prepass_pipeline();
         _directional_shadow_map_pipeline = create_directional_shadow_map_pipeline();
@@ -1025,6 +1101,7 @@ namespace tempest::graphics
         _pbr_oit_blend.release(*_device);
         _skybox.release(*_device);
         _build_cluster_grid.release(*_device);
+        _cull_light_clusters.release(*_device);
 
         _swapchains.clear();
         _images.clear();
@@ -1289,8 +1366,9 @@ namespace tempest::graphics
         }
 
         _skybox_texture = ids[0];
-        _graph->update_external_sampled_images(_skybox_pass, span(&_skybox_texture, 1), 0,
-                                               passes::skybox_image_desc.binding_index, pipeline_stage::FRAGMENT);
+        _graph->update_external_sampled_images(
+            _skybox_pass, span(&_skybox_texture, 1), passes::skybox_pass::skybox_texture_desc.set,
+            passes::skybox_pass::skybox_texture_desc.binding, pipeline_stage::FRAGMENT);
     }
 
     void render_system::mark_dirty()
@@ -1308,10 +1386,21 @@ namespace tempest::graphics
         auto vertex_shader_source = core::read_bytes("assets/shaders/zprepass.vert.spv");
         auto fragment_shader_source = core::read_bytes("assets/shaders/zprepass.frag.spv");
 
+        // descriptor_binding_info set0_bindings[] = {
+        //     passes::scene_constant_buffer_desc, passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc,
+        //     passes::object_buffer_desc,         passes::instance_buffer_desc,    passes::materials_buffer_desc,
+        //     passes::linear_sampler_desc,        passes::texture_array_desc,
+        // };
+
         descriptor_binding_info set0_bindings[] = {
-            passes::scene_constant_buffer, passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc,
-            passes::object_buffer_desc,    passes::instance_buffer_desc,    passes::materials_buffer_desc,
-            passes::linear_sampler_desc,   passes::texture_array_desc,
+            passes::pbr_pass::scene_constant_buffer_desc.to_binding_info(),
+            passes::pbr_pass::vertex_pull_buffer_desc.to_binding_info(),
+            passes::pbr_pass::mesh_layout_buffer_desc.to_binding_info(),
+            passes::pbr_pass::object_buffer_desc.to_binding_info(),
+            passes::pbr_pass::instance_buffer_desc.to_binding_info(),
+            passes::pbr_pass::materials_buffer_desc.to_binding_info(),
+            passes::pbr_pass::linear_sampler_desc.to_binding_info(),
+            passes::pbr_pass::texture_array_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {
@@ -1567,10 +1656,20 @@ namespace tempest::graphics
         auto vertex_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.vert.spv");
         auto fragment_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.frag.spv");
 
+        //descriptor_binding_info set0_bindings[] = {
+        //    passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc, passes::object_buffer_desc,
+        //    passes::instance_buffer_desc,    passes::materials_buffer_desc,   passes::linear_sampler_desc,
+        //    passes::texture_array_desc,
+        //};
+
         descriptor_binding_info set0_bindings[] = {
-            passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc, passes::object_buffer_desc,
-            passes::instance_buffer_desc,    passes::materials_buffer_desc,   passes::linear_sampler_desc,
-            passes::texture_array_desc,
+            passes::pbr_pass::vertex_pull_buffer_desc.to_binding_info(),
+            passes::pbr_pass::mesh_layout_buffer_desc.to_binding_info(),
+            passes::pbr_pass::object_buffer_desc.to_binding_info(),
+            passes::pbr_pass::instance_buffer_desc.to_binding_info(),
+            passes::pbr_pass::materials_buffer_desc.to_binding_info(),
+            passes::pbr_pass::linear_sampler_desc.to_binding_info(),
+            passes::pbr_pass::texture_array_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {

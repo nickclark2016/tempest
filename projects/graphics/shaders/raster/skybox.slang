@@ -24,8 +24,8 @@ float2 direction_to_rectilinear(float3 dir) {
 }
 
 [vk_binding(0, 0)] StructuredBuffer<SceneGlobals> scene;
-[vk_binding(9, 0)] Texture2D skybox_texture;
-[vk_binding(15, 0)] SamplerState linear_sampler;
+[vk_binding(1, 0)] Texture2D skybox_texture;
+[vk_binding(2, 0)] SamplerState linear_sampler;
 
 [shader("vertex")]
 VertexOutput VSMain(uint index_id : SV_VertexID) {

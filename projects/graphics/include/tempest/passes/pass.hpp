@@ -7,106 +7,21 @@
 
 namespace tempest::graphics::passes
 {
-    inline constexpr descriptor_binding_info scene_constant_buffer = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-        .binding_index = 0,
-        .binding_count = 1,
-    };
+    struct descriptor_bind_point
+    {
+        descriptor_binding_type type;
+        uint32_t binding;
+        uint32_t set;
+        uint32_t count;
 
-    inline constexpr descriptor_binding_info vertex_pull_buffer_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER,
-        .binding_index = 1,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info mesh_layout_buffer_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER,
-        .binding_index = 2,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info object_buffer_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-        .binding_index = 3,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info instance_buffer_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-        .binding_index = 4,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info materials_buffer_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER,
-        .binding_index = 5,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info oit_moment_image_desc = {
-        .type = descriptor_binding_type::STORAGE_IMAGE,
-        .binding_index = 6,
-        .binding_count = 1, // 8 moments, 4 channels, 2 images
-    };
-
-    inline constexpr descriptor_binding_info oit_zero_moment_image_desc = {
-        .type = descriptor_binding_type::STORAGE_IMAGE,
-        .binding_index = 7,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info oit_accum_image_desc = {
-        .type = descriptor_binding_type::SAMPLED_IMAGE,
-        .binding_index = 8,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info oit_spinlock_buffer_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER,
-        .binding_index = 8,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info skybox_image_desc = {
-        .type = descriptor_binding_type::SAMPLED_IMAGE,
-        .binding_index = 9,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info linear_sampler_desc = {
-        .type = descriptor_binding_type::SAMPLER,
-        .binding_index = 15,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info texture_array_desc = {
-        .type = descriptor_binding_type::SAMPLED_IMAGE,
-        .binding_index = 16,
-        .binding_count = 512,
-    };
-
-    inline constexpr descriptor_binding_info light_parameter_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-        .binding_index = 0,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info shadow_map_parameter_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-        .binding_index = 1,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info shadow_map_mt_desc = {
-        .type = descriptor_binding_type::SAMPLED_IMAGE,
-        .binding_index = 2,
-        .binding_count = 1,
-    };
-
-    inline constexpr descriptor_binding_info light_cluster_desc = {
-        .type = descriptor_binding_type::STRUCTURED_BUFFER,
-        .binding_index = 0,
-        .binding_count = 1,
+        inline constexpr descriptor_binding_info to_binding_info() const noexcept
+        {
+            return {
+                .type = type,
+                .binding_index = binding,
+                .binding_count = count,
+            };
+        }
     };
 
     struct draw_command_state

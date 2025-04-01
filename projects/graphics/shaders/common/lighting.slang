@@ -27,4 +27,5 @@ struct Light
     Array<uint, 6> shadow_map_indices; // Up to 6 cascades, or 1 cascade per face of a cube map
     LightType type;
     uint shadow_map_count;
+    bool enabled;
 };

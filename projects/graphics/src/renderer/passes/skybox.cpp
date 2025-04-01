@@ -10,9 +10,9 @@ namespace tempest::graphics::passes
         auto fragment_shader_source = core::read_bytes("assets/shaders/skybox.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            scene_constant_buffer,
-            skybox_image_desc,
-            linear_sampler_desc,
+            skybox_pass::scene_constant_buffer_desc.to_binding_info(),
+            skybox_pass::skybox_texture_desc.to_binding_info(),
+            skybox_pass::linear_sampler_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {
