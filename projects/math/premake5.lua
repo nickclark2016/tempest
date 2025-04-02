@@ -13,40 +13,9 @@ scoped.group('Engine', function()
             'src/**.hpp',
         }
 
-        scoped.filter({
-            'toolset:msc*',
-        }, function()
-            files {
-                'asm/msc/**.s',
-            }
-
-            scoped.filter({
-                'files:**.s',
-            }, function()
-                buildaction "Masm"
-            end)
-        end)
-
-        scoped.filter({
-            'toolset:clang',
-        }, function()
-            files {
-                'asm/clang/**.s',
-            }
-        end)
-
         includedirs {
             'include',
         }
-
-        scoped.filter({
-            'toolset:clang',
-            'files:**.s',
-        }, function()
-            buildoptions {
-                '-masm=intel',
-            }
-        end)
 
         scoped.filter({
             'toolset:msc*'
@@ -58,17 +27,7 @@ scoped.group('Engine', function()
 
         warnings 'Extra'
 
-        scoped.usage("PUBLIC", function()
-            scoped.filter({
-                "toolset:clang",
-            }, function()
-                linkoptions {
-                    "-z noexecstack"
-                }
-            end)
-        end)
-
-        scoped.usage("INTERFACE", function()
+        scoped.usage('INTERFACE', function()
             externalincludedirs {
                 '%{root}/projects/math/include',
             }

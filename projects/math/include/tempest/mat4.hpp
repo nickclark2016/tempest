@@ -1,7 +1,6 @@
 #ifndef tempest_math_mat4_hpp__
 #define tempest_math_mat4_hpp__
 
-#include "math_intrin.hpp"
 #include "vec4.hpp"
 
 namespace tempest::math
@@ -141,62 +140,55 @@ namespace tempest::math
     template <>
     inline constexpr mat4<float>& mat4<float>::operator*=(const mat4& rhs) noexcept
     {
-        if (__builtin_is_constant_evaluated())
-        {
-            const auto t00 = columns[0][0] * rhs[0][0] + columns[1][0] * rhs[0][1] + columns[2][0] * rhs[0][2] +
-                             columns[3][0] * rhs[0][3];
-            const auto t10 = columns[0][1] * rhs[0][0] + columns[1][1] * rhs[0][1] + columns[2][1] * rhs[0][2] +
-                             columns[3][1] * rhs[0][3];
-            const auto t20 = columns[0][2] * rhs[0][0] + columns[1][2] * rhs[0][1] + columns[2][2] * rhs[0][2] +
-                             columns[3][2] * rhs[0][3];
-            const auto t30 = columns[0][3] * rhs[0][0] + columns[1][3] * rhs[0][1] + columns[2][3] * rhs[0][2] +
-                             columns[3][3] * rhs[0][3];
-            const auto t01 = columns[0][0] * rhs[1][0] + columns[1][0] * rhs[1][1] + columns[2][0] * rhs[1][2] +
-                             columns[3][0] * rhs[1][3];
-            const auto t11 = columns[0][1] * rhs[1][0] + columns[1][1] * rhs[1][1] + columns[2][1] * rhs[1][2] +
-                             columns[3][1] * rhs[1][3];
-            const auto t21 = columns[0][2] * rhs[1][0] + columns[1][2] * rhs[1][1] + columns[2][2] * rhs[1][2] +
-                             columns[3][2] * rhs[1][3];
-            const auto t31 = columns[0][3] * rhs[1][0] + columns[1][3] * rhs[1][1] + columns[2][3] * rhs[1][2] +
-                             columns[3][3] * rhs[1][3];
-            const auto t02 = columns[0][0] * rhs[2][0] + columns[1][0] * rhs[2][1] + columns[2][0] * rhs[2][2] +
-                             columns[3][0] * rhs[2][3];
-            const auto t12 = columns[0][1] * rhs[2][0] + columns[1][1] * rhs[2][1] + columns[2][1] * rhs[2][2] +
-                             columns[3][1] * rhs[2][3];
-            const auto t22 = columns[0][2] * rhs[2][0] + columns[1][2] * rhs[2][1] + columns[2][2] * rhs[2][2] +
-                             columns[3][2] * rhs[2][3];
-            const auto t32 = columns[0][3] * rhs[2][0] + columns[1][3] * rhs[2][1] + columns[2][3] * rhs[2][2] +
-                             columns[3][3] * rhs[2][3];
-            const auto t03 = columns[0][0] * rhs[3][0] + columns[1][0] * rhs[3][1] + columns[2][0] * rhs[3][2] +
-                             columns[3][0] * rhs[3][3];
-            const auto t13 = columns[0][1] * rhs[3][0] + columns[1][1] * rhs[3][1] + columns[2][1] * rhs[3][2] +
-                             columns[3][1] * rhs[3][3];
-            const auto t23 = columns[0][2] * rhs[3][0] + columns[1][2] * rhs[3][1] + columns[2][2] * rhs[3][2] +
-                             columns[3][2] * rhs[3][3];
-            const auto t33 = columns[0][3] * rhs[3][0] + columns[1][3] * rhs[3][1] + columns[2][3] * rhs[3][2] +
-                             columns[3][3] * rhs[3][3];
+        const auto t00 = columns[0][0] * rhs[0][0] + columns[1][0] * rhs[0][1] + columns[2][0] * rhs[0][2] +
+                         columns[3][0] * rhs[0][3];
+        const auto t10 = columns[0][1] * rhs[0][0] + columns[1][1] * rhs[0][1] + columns[2][1] * rhs[0][2] +
+                         columns[3][1] * rhs[0][3];
+        const auto t20 = columns[0][2] * rhs[0][0] + columns[1][2] * rhs[0][1] + columns[2][2] * rhs[0][2] +
+                         columns[3][2] * rhs[0][3];
+        const auto t30 = columns[0][3] * rhs[0][0] + columns[1][3] * rhs[0][1] + columns[2][3] * rhs[0][2] +
+                         columns[3][3] * rhs[0][3];
+        const auto t01 = columns[0][0] * rhs[1][0] + columns[1][0] * rhs[1][1] + columns[2][0] * rhs[1][2] +
+                         columns[3][0] * rhs[1][3];
+        const auto t11 = columns[0][1] * rhs[1][0] + columns[1][1] * rhs[1][1] + columns[2][1] * rhs[1][2] +
+                         columns[3][1] * rhs[1][3];
+        const auto t21 = columns[0][2] * rhs[1][0] + columns[1][2] * rhs[1][1] + columns[2][2] * rhs[1][2] +
+                         columns[3][2] * rhs[1][3];
+        const auto t31 = columns[0][3] * rhs[1][0] + columns[1][3] * rhs[1][1] + columns[2][3] * rhs[1][2] +
+                         columns[3][3] * rhs[1][3];
+        const auto t02 = columns[0][0] * rhs[2][0] + columns[1][0] * rhs[2][1] + columns[2][0] * rhs[2][2] +
+                         columns[3][0] * rhs[2][3];
+        const auto t12 = columns[0][1] * rhs[2][0] + columns[1][1] * rhs[2][1] + columns[2][1] * rhs[2][2] +
+                         columns[3][1] * rhs[2][3];
+        const auto t22 = columns[0][2] * rhs[2][0] + columns[1][2] * rhs[2][1] + columns[2][2] * rhs[2][2] +
+                         columns[3][2] * rhs[2][3];
+        const auto t32 = columns[0][3] * rhs[2][0] + columns[1][3] * rhs[2][1] + columns[2][3] * rhs[2][2] +
+                         columns[3][3] * rhs[2][3];
+        const auto t03 = columns[0][0] * rhs[3][0] + columns[1][0] * rhs[3][1] + columns[2][0] * rhs[3][2] +
+                         columns[3][0] * rhs[3][3];
+        const auto t13 = columns[0][1] * rhs[3][0] + columns[1][1] * rhs[3][1] + columns[2][1] * rhs[3][2] +
+                         columns[3][1] * rhs[3][3];
+        const auto t23 = columns[0][2] * rhs[3][0] + columns[1][2] * rhs[3][1] + columns[2][2] * rhs[3][2] +
+                         columns[3][2] * rhs[3][3];
+        const auto t33 = columns[0][3] * rhs[3][0] + columns[1][3] * rhs[3][1] + columns[2][3] * rhs[3][2] +
+                         columns[3][3] * rhs[3][3];
 
-            m00 = t00;
-            m10 = t10;
-            m20 = t20;
-            m30 = t30;
-            m01 = t01;
-            m11 = t11;
-            m21 = t21;
-            m31 = t31;
-            m02 = t02;
-            m12 = t12;
-            m22 = t22;
-            m32 = t32;
-            m03 = t03;
-            m13 = t13;
-            m23 = t23;
-            m33 = t33;
-        }
-        else
-        {
-            ::tempest_math_aligned_assign_mul_mat4_mat4(rhs.data, data);
-        }
+        m00 = t00;
+        m10 = t10;
+        m20 = t20;
+        m30 = t30;
+        m01 = t01;
+        m11 = t11;
+        m21 = t21;
+        m31 = t31;
+        m02 = t02;
+        m12 = t12;
+        m22 = t22;
+        m32 = t32;
+        m03 = t03;
+        m13 = t13;
+        m23 = t23;
+        m33 = t33;
 
         return *this;
     }
@@ -301,52 +293,27 @@ namespace tempest::math
 
     inline constexpr mat4<float> operator*(const mat4<float>& lhs, const mat4<float>& rhs) noexcept
     {
-        if (__builtin_is_constant_evaluated())
-        {
-            const auto t00 =
-                lhs[0][0] * rhs[0][0] + lhs[1][0] * rhs[0][1] + lhs[2][0] * rhs[0][2] + lhs[3][0] * rhs[0][3];
-            const auto t10 =
-                lhs[0][1] * rhs[0][0] + lhs[1][1] * rhs[0][1] + lhs[2][1] * rhs[0][2] + lhs[3][1] * rhs[0][3];
-            const auto t20 =
-                lhs[0][2] * rhs[0][0] + lhs[1][2] * rhs[0][1] + lhs[2][2] * rhs[0][2] + lhs[3][2] * rhs[0][3];
-            const auto t30 =
-                lhs[0][3] * rhs[0][0] + lhs[1][3] * rhs[0][1] + lhs[2][3] * rhs[0][2] + lhs[3][3] * rhs[0][3];
+        const auto t00 = lhs[0][0] * rhs[0][0] + lhs[1][0] * rhs[0][1] + lhs[2][0] * rhs[0][2] + lhs[3][0] * rhs[0][3];
+        const auto t10 = lhs[0][1] * rhs[0][0] + lhs[1][1] * rhs[0][1] + lhs[2][1] * rhs[0][2] + lhs[3][1] * rhs[0][3];
+        const auto t20 = lhs[0][2] * rhs[0][0] + lhs[1][2] * rhs[0][1] + lhs[2][2] * rhs[0][2] + lhs[3][2] * rhs[0][3];
+        const auto t30 = lhs[0][3] * rhs[0][0] + lhs[1][3] * rhs[0][1] + lhs[2][3] * rhs[0][2] + lhs[3][3] * rhs[0][3];
 
-            const auto t01 =
-                lhs[0][0] * rhs[1][0] + lhs[1][0] * rhs[1][1] + lhs[2][0] * rhs[1][2] + lhs[3][0] * rhs[1][3];
-            const auto t11 =
-                lhs[0][1] * rhs[1][0] + lhs[1][1] * rhs[1][1] + lhs[2][1] * rhs[1][2] + lhs[3][1] * rhs[1][3];
-            const auto t21 =
-                lhs[0][2] * rhs[1][0] + lhs[1][2] * rhs[1][1] + lhs[2][2] * rhs[1][2] + lhs[3][2] * rhs[1][3];
-            const auto t31 =
-                lhs[0][3] * rhs[1][0] + lhs[1][3] * rhs[1][1] + lhs[2][3] * rhs[1][2] + lhs[3][3] * rhs[1][3];
+        const auto t01 = lhs[0][0] * rhs[1][0] + lhs[1][0] * rhs[1][1] + lhs[2][0] * rhs[1][2] + lhs[3][0] * rhs[1][3];
+        const auto t11 = lhs[0][1] * rhs[1][0] + lhs[1][1] * rhs[1][1] + lhs[2][1] * rhs[1][2] + lhs[3][1] * rhs[1][3];
+        const auto t21 = lhs[0][2] * rhs[1][0] + lhs[1][2] * rhs[1][1] + lhs[2][2] * rhs[1][2] + lhs[3][2] * rhs[1][3];
+        const auto t31 = lhs[0][3] * rhs[1][0] + lhs[1][3] * rhs[1][1] + lhs[2][3] * rhs[1][2] + lhs[3][3] * rhs[1][3];
 
-            const auto t02 =
-                lhs[0][0] * rhs[2][0] + lhs[1][0] * rhs[2][1] + lhs[2][0] * rhs[2][2] + lhs[3][0] * rhs[2][3];
-            const auto t12 =
-                lhs[0][1] * rhs[2][0] + lhs[1][1] * rhs[2][1] + lhs[2][1] * rhs[2][2] + lhs[3][1] * rhs[2][3];
-            const auto t22 =
-                lhs[0][2] * rhs[2][0] + lhs[1][2] * rhs[2][1] + lhs[2][2] * rhs[2][2] + lhs[3][2] * rhs[2][3];
-            const auto t32 =
-                lhs[0][3] * rhs[2][0] + lhs[1][3] * rhs[2][1] + lhs[2][3] * rhs[2][2] + lhs[3][3] * rhs[2][3];
+        const auto t02 = lhs[0][0] * rhs[2][0] + lhs[1][0] * rhs[2][1] + lhs[2][0] * rhs[2][2] + lhs[3][0] * rhs[2][3];
+        const auto t12 = lhs[0][1] * rhs[2][0] + lhs[1][1] * rhs[2][1] + lhs[2][1] * rhs[2][2] + lhs[3][1] * rhs[2][3];
+        const auto t22 = lhs[0][2] * rhs[2][0] + lhs[1][2] * rhs[2][1] + lhs[2][2] * rhs[2][2] + lhs[3][2] * rhs[2][3];
+        const auto t32 = lhs[0][3] * rhs[2][0] + lhs[1][3] * rhs[2][1] + lhs[2][3] * rhs[2][2] + lhs[3][3] * rhs[2][3];
 
-            const auto t03 =
-                lhs[0][0] * rhs[3][0] + lhs[1][0] * rhs[3][1] + lhs[2][0] * rhs[3][2] + lhs[3][0] * rhs[3][3];
-            const auto t13 =
-                lhs[0][1] * rhs[3][0] + lhs[1][1] * rhs[3][1] + lhs[2][1] * rhs[3][2] + lhs[3][1] * rhs[3][3];
-            const auto t23 =
-                lhs[0][2] * rhs[3][0] + lhs[1][2] * rhs[3][1] + lhs[2][2] * rhs[3][2] + lhs[3][2] * rhs[3][3];
-            const auto t33 =
-                lhs[0][3] * rhs[3][0] + lhs[1][3] * rhs[3][1] + lhs[2][3] * rhs[3][2] + lhs[3][3] * rhs[3][3];
+        const auto t03 = lhs[0][0] * rhs[3][0] + lhs[1][0] * rhs[3][1] + lhs[2][0] * rhs[3][2] + lhs[3][0] * rhs[3][3];
+        const auto t13 = lhs[0][1] * rhs[3][0] + lhs[1][1] * rhs[3][1] + lhs[2][1] * rhs[3][2] + lhs[3][1] * rhs[3][3];
+        const auto t23 = lhs[0][2] * rhs[3][0] + lhs[1][2] * rhs[3][1] + lhs[2][2] * rhs[3][2] + lhs[3][2] * rhs[3][3];
+        const auto t33 = lhs[0][3] * rhs[3][0] + lhs[1][3] * rhs[3][1] + lhs[2][3] * rhs[3][2] + lhs[3][3] * rhs[3][3];
 
-            return mat4(t00, t10, t20, t30, t01, t11, t21, t31, t02, t12, t22, t32, t03, t13, t23, t33);
-        }
-        else
-        {
-            mat4<float> result;
-            ::tempest_math_aligned_mul_mat4_mat4(rhs.data, lhs.data, result.data);
-            return result;
-        }
+        return mat4(t00, t10, t20, t30, t01, t11, t21, t31, t02, t12, t22, t32, t03, t13, t23, t33);
     }
 
     template <typename T>

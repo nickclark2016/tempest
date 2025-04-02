@@ -24,7 +24,11 @@ scoped.group('Editor', function()
 
         warnings 'Extra'
 
-        linkgroups 'On'
+        scoped.filter({
+            'system:not windows'
+        }, function()
+            linkgroups 'On'
+        end)
 
         postbuildcommands {
             '{RMDIR} %{root}/projects/editor/assets', -- Ensure a clean assets directory before building it
