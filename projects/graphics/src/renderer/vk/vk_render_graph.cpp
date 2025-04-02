@@ -85,27 +85,15 @@ namespace tempest::graphics::vk
         }
 
         VkPipelineStageFlags2 compute_buffer_stage_access([[maybe_unused]] resource_access_type type,
-                                                          buffer_resource_usage usage, queue_operation_type ops)
+                                                          buffer_resource_usage usage,
+                                                          [[maybe_unused]] queue_operation_type ops)
         {
             switch (usage)
             {
             case buffer_resource_usage::CONSTANT:
             case buffer_resource_usage::STRUCTURED: {
-                switch (ops)
-                {
-                case queue_operation_type::GRAPHICS:
-                    [[fallthrough]];
-                case queue_operation_type::GRAPHICS_AND_TRANSFER:
-                    return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
-                           VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-                case queue_operation_type::COMPUTE:
-                    [[fallthrough]];
-                case queue_operation_type::COMPUTE_AND_TRANSFER:
-                    return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                default:
-                    break;
-                }
-                break;
+                return VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                       VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             }
             case buffer_resource_usage::VERTEX:
                 [[fallthrough]];
@@ -499,14 +487,14 @@ namespace tempest::graphics::vk
     buffer_create_info render_graph_resource_library::get_create_info(buffer_resource_handle handle) const noexcept
     {
         return find_if(_buffers_to_compile.begin(), _buffers_to_compile.end(),
-                    [handle](const auto& info) { return info.allocation == handle; })
+                       [handle](const auto& info) { return info.allocation == handle; })
             ->info;
     }
 
     image_create_info render_graph_resource_library::get_create_info(image_resource_handle handle) const noexcept
     {
         return find_if(_images_to_compile.begin(), _images_to_compile.end(),
-                    [handle](const auto& info) { return info.allocation == handle; })
+                       [handle](const auto& info) { return info.allocation == handle; })
             ->info;
     }
 

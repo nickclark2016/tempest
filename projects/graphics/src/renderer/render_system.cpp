@@ -646,7 +646,7 @@ namespace tempest::graphics
                         passes::build_cluster_grid_pass::push_constants pc;
                         pc.inv_projection = _scene_data.camera.inv_proj;
                         pc.screen_bounds = math::vec4<float>(1920.0f, 1080.0f, 0.1f, 1000.0f); // w, h, min_z, max_z
-                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(16, 9, 24, 1);
+                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(16, 9, 24, 120);
 
                         _build_cluster_grid.execute(*_device, cmds,
                                                     {
@@ -664,7 +664,7 @@ namespace tempest::graphics
             rgc->add_graph_pass("Cull Light Clusters", queue_operation_type::COMPUTE, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(build_clusters)
                     .depends_on(upload_pass)
-                    .add_structured_buffer(cluster_grid_buffer, resource_access_type::READ,
+                    .add_structured_buffer(cluster_grid_buffer, resource_access_type::READ_WRITE,
                                            passes::cull_light_cluster_pass::light_cluster_desc.set,
                                            passes::cull_light_cluster_pass::light_cluster_desc.binding)
                     .add_structured_buffer(light_buffer, resource_access_type::READ,
@@ -685,7 +685,7 @@ namespace tempest::graphics
                         passes::cull_light_cluster_pass::push_constants pc;
                         pc.inv_projection = _scene_data.camera.inv_proj;
                         pc.screen_bounds = math::vec4<float>(1920.0f, 1080.0f, 0.1f, 1000.0f); // w, h, min_z, max_z
-                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(16, 9, 24, 1);
+                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(1, 1, 6, 120);
                         pc.light_count = _scene_data.point_light_count;
 
                         _cull_light_clusters.execute(*_device, cmds,

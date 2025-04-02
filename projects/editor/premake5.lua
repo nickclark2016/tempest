@@ -35,7 +35,7 @@ scoped.group('Editor', function()
             '{MKDIR} %{root}/projects/editor/assets',
             '{LINKDIR} %{root}/projects/editor/assets/glTF-Sample-Assets ../../../vendor/glTF-Sample-Assets',
             '{LINKDIR} %{root}/projects/editor/assets/polyhaven ../../../vendor/polyhaven',
-            '{LINKDIR} %{root}/projects/editor/assets/shaders ../../../bin/%{cfg.buildcfg}/%{cfg.system}/%{cfg.architecture}/shaders',
+            '{LINKDIR} %{root}/projects/editor/assets/shaders ../../../bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}/shaders',
         }
     end)
 end)
