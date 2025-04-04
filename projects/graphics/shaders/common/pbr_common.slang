@@ -1,20 +1,14 @@
 // pbr_common.slang
 
 import "camera";
+import "clusters";
 import "consts";
 import "lighting";
 import "material";
 import "mesh";
+import "scene";
 import "tonemap.slang";
 import "vertex_pull";
-
-struct SceneGlobals {
-    Camera camera;
-    float2 screen_size;
-    float4 ambient_light;
-    Light sun;
-    uint point_light_count;
-};
 
 struct VertexOutput {
     float4 position         : SV_Position;
@@ -39,7 +33,7 @@ struct PBROutput {
     float depth;
 };
 
-[vk_binding(0, 0)] StructuredBuffer<SceneGlobals> scene;
+[vk_binding(0, 0)] ConstantBuffer<SceneGlobals, Std430DataLayout> scene;
 [vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
 [vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
 [vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;
@@ -51,6 +45,8 @@ struct PBROutput {
 [vk_binding(0, 1)] StructuredBuffer<Light> lights;
 [vk_binding(1, 1)] StructuredBuffer<ShadowMapParameter> shadow_map_params;
 [vk_binding(2, 1)] Texture2D shadow_map_mt;
+[vk_binding(3, 1)] StructuredBuffer<LightGridRange> light_grid;
+[vk_binding(4, 1)] StructuredBuffer<uint> global_light_index_list;
 
 half2 calculate_velocity(half4 new_position, half4 previous_position) {
     previous_position /= previous_position.w;
@@ -71,11 +67,11 @@ VertexOutput compute_vertex(uint vertex_id, uint instance_id) {
     Vertex v = pull_vertex(vertex_pull_buffer, meshes[instance.mesh_id], vertex_id);
 
     float4 world_pos = mul(instance.model_matrix, float4(v.position, 1.0));
-    float4 view_pos = mul(scene[0].camera.view, world_pos);
-    float4 clip_pos = mul(scene[0].camera.projection, view_pos);
+    float4 view_pos = mul(scene.camera.view, world_pos);
+    float4 clip_pos = mul(scene.camera.projection, view_pos);
 
     float4 prev_world_pos = mul(instance.prev_model_matrix, float4(v.position, 1.0));
-    float4 prev_clip_pos = mul(scene[0].camera.prev_projection, mul(scene[0].camera.prev_view, prev_world_pos));
+    float4 prev_clip_pos = mul(scene.camera.prev_projection, mul(scene.camera.prev_view, prev_world_pos));
 
     float3x3 model_3x3 = (float3x3) instance.model_matrix;
     float3x3 t_inv_model_3x3 = (float3x3) instance.transpose_inv_model_matrix;
@@ -102,13 +98,17 @@ VertexOutput compute_vertex(uint vertex_id, uint instance_id) {
 
 PBROutput compute_fragment(VertexOutput input) {
     LightingState lighting;
-    lighting.sun = scene[0].sun;
-    lighting.ambient_color_factor = scene[0].ambient_light.rgb;
+    lighting.sun = scene.sun;
+    lighting.ambient_color_factor = scene.ambient_light.rgb;
     lighting.point_and_spot_lights = lights;
     lighting.shadow_map_mt = shadow_map_mt;
     lighting.shadow_map_params = shadow_map_params;
     lighting.shadow_map_sampler = linear_sampler;
-    lighting.num_point_and_spot_lights = scene[0].point_light_count;
+    lighting.num_point_and_spot_lights = scene.point_light_count;
+    lighting.light_grid_counts = scene.tile_cluster_count_and_size.xyz;
+    lighting.light_grid_depth_bounds = scene.light_cluster_depth_range;
+    lighting.light_grid = light_grid; // Light grid for clustered lighting
+    lighting.global_light_list_indices = global_light_index_list; // For clustered lighting
 
     MaterialState material;
     material.mat = materials[input.material_id];
@@ -120,12 +120,12 @@ PBROutput compute_fragment(VertexOutput input) {
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
     
-    float3 view_dir = normalize(scene[0].camera.eye.xyz - input.world_position);
+    float3 view_dir = normalize(scene.camera.eye.xyz - input.world_position);
     pd.front_face = dot(view_dir, input.normal) > 0.0;
 
     fetch_pixel_data(material, pd, bindless_textures);
 
-    float4 color = evaluate_material(pd, material, lighting, scene[0].camera, input.world_position, input.view_position, bindless_textures);
+    float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position, input.view_position, input.current_position, bindless_textures);
     color.rgb = uncharted_2(color.rgb * 4.5);
     color.rgb = color.rgb * (1.0f / uncharted_2((11.2f).xxx));
 

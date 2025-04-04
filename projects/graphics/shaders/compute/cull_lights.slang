@@ -1,11 +1,13 @@
 import "../common/clusters";
 import "../common/lighting";
+import "../common/scene";
 
-[vk_binding(0, 0)] RWStructuredBuffer<ClusterBounds> clusters;
-[vk_binding(1, 0)] StructuredBuffer<Light> lights;
-[vk_binding(2, 0)] RWStructuredBuffer<uint> global_light_index_list;
-[vk_binding(3, 0)] RWStructuredBuffer<LightGridRange> light_grid;
-[vk_binding(4, 0)] RWStructuredBuffer<uint> global_index_count;
+[vk_binding(0, 0)] ConstantBuffer<SceneGlobals, Std430DataLayout> scene;
+[vk_binding(1, 0)] RWStructuredBuffer<ClusterBounds> clusters;
+[vk_binding(2, 0)] StructuredBuffer<Light> lights;
+[vk_binding(3, 0)] RWStructuredBuffer<uint> global_light_index_list;
+[vk_binding(4, 0)] RWStructuredBuffer<LightGridRange> light_grid;
+[vk_binding(5, 0)] RWStructuredBuffer<uint> global_index_count;
 
 groupshared Light shared_lights[16 * 9 * 4];
 
@@ -32,8 +34,9 @@ bool test_light_in_tile(uint light_index, uint tile_index) {
     float inv_square_range = shared_lights[light_index].position_falloff.w;
     float sq_range = 1.0f / inv_square_range;
     float3 center = shared_lights[light_index].position_falloff.xyz;
+    float3 view_pos = mul(scene.camera.view, float4(center, 1.0)).xyz;
 
-    float sq_distance = square_distance_point_aabb(center, tile_index);
+    float sq_distance = square_distance_point_aabb(view_pos, tile_index);
     return sq_distance <= sq_range;
 }
 
@@ -53,7 +56,7 @@ void CSMain(uint invocation_id : SV_GroupIndex, uint3 group_id : SV_GroupID, [vk
     uint visible_light_count = 0;
     uint visible_light_indices[128];
 
-    for (uint batch = 0; batch < num_batches; ++batch) {
+    for (uint batch = 0; batch < num_batches && visible_light_count < 128; ++batch) {
         uint light_index = batch * thread_count + invocation_id;
         light_index = min(light_index, light_count);
 
@@ -61,7 +64,7 @@ void CSMain(uint invocation_id : SV_GroupIndex, uint3 group_id : SV_GroupID, [vk
         shared_lights[invocation_id] = lights[light_index];
         GroupMemoryBarrierWithGroupSync();
 
-        for (uint light = 0; light < thread_count; ++light) {
+        for (uint light = 0; light < thread_count && visible_light_count < 128; ++light) {
             if (shared_lights[light].enabled) {
                 if (test_light_in_tile(light, tile_index)) {
                     visible_light_indices[visible_light_count] = batch * thread_count + light;

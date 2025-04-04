@@ -3,7 +3,7 @@ struct Constants {
     uint num_levels;
 };
 
-[[vk_binding(0, 0)]] ConstantBuffer<Constants> constants;
+[[vk_binding(0, 0)]] ConstantBuffer<Constants, Std430DataLayout> constants;
 [[vk_binding(1, 0)]] Texture2D<float> input_depth_buffer;
 [[vk_binding(2, 0)]] RWTexture2D<float> output_depth_buffer[5];
 [[vk_binding(7, 0)]] SamplerState linear_sampler;

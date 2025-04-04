@@ -1,6 +1,7 @@
 // material.slang
 
 import camera;
+import clusters;
 import consts;
 import lighting;
 
@@ -49,6 +50,10 @@ struct LightingState {
     Texture2D shadow_map_mt;
     StructuredBuffer<ShadowMapParameter> shadow_map_params;
     SamplerState shadow_map_sampler;
+    uint3 light_grid_counts; // (num_clusters_x, num_clusters_y, num_clusters_z) for clustered lighting
+    float2 light_grid_depth_bounds; // (min_depth, max_depth) for clustered lighting
+    StructuredBuffer<LightGridRange> light_grid;
+    StructuredBuffer<uint> global_light_list_indices;
 };
 
 struct PixelData {
@@ -329,34 +334,101 @@ float compute_square_falloff_attenuation(float3 pos_to_light, float inv_light_ra
     return (smooth * smooth) / max(distance_squared, 1e-4);
 }
 
-void evaluate_point_lights(const PixelData px, const MaterialState mat_state, const Camera camera, const float3 world_pos, const float3 view_pos, inout half4 color, const LightingState lighting) {
-    for (uint i = 0; i < lighting.num_point_and_spot_lights; ++i) {
-        const Light light = lighting.point_and_spot_lights[i];
+uint compute_cluster_z_index(float view_z, float z_near, float z_far, uint z_slice_count) {
+    view_z = min(view_z, -z_near);
+    float z_far_over_near = z_far / z_near;
 
-        float3 pos_to_light = light.position_falloff.xyz - world_pos;
-        half3 light_dir = half3(normalize(pos_to_light));
+    float log_factor = log(-view_z / z_near) / log(z_far_over_near);
+    uint z_index = uint(log_factor * z_slice_count);
 
-        half n_dot_l = saturate(dot(px.shading_normal, light_dir));
-
-        half3 base = compute_base_model(px, light, light_dir, mat_state, camera, world_pos, view_pos);
-
-        half visibility = 1.0h;
-
-        // If the normal is facing towards the light, compute shadows
-        if (n_dot_l > 0.0h) {
-            // TODO: Implement shadow mapping for point lights
-        }
-
-        float attenuation = compute_square_falloff_attenuation(pos_to_light, light.position_falloff.w);
-
-        half3 color_comp = (base.rgb * half3(light.color_intensity.rgb)) * (half(light.color_intensity.w * attenuation) * n_dot_l * visibility);
-        color.rgb += color_comp;
-    }
+    return min(z_index, z_slice_count - 1);
 }
 
-void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, inout half4 color) {
+Optional<uint3> get_tile_index_coords(float3 view_pos, const float4 proj_pos, float min_z, float max_z, uint3 grid_counts) {
+    if (view_pos.z > -min_z || view_pos.z < -max_z) {
+        // Outside the bounds of the light grid, return no tile index
+        return none;
+    }
+
+    float2 uv = (proj_pos.xy / proj_pos.w) * 0.5 + 0.5; // Normalize to [0, 1]
+
+    // This should really never happen
+    if (any(uv < 0.0h) || any(uv > 1.0h)) {
+        return none;
+    }
+
+    uint tile_x = min(uint(uv.x * grid_counts.x), grid_counts.x - 1);
+    uint tile_y = min(uint(uv.y * grid_counts.y), grid_counts.y - 1);
+    uint tile_z = compute_cluster_z_index(view_pos.z, min_z, max_z, grid_counts.z);
+
+    return uint3(tile_x, tile_y, tile_z);
+}
+
+void evaluate_point_lights(const PixelData px, const MaterialState mat_state, const Camera camera, const float3 world_pos, const float3 view_pos, const float4 proj_pos, inout half4 color, const LightingState lighting) {
+    // Determine if the pixel is in a light grid cell
+    var tile_index_coords_opt = get_tile_index_coords(view_pos, proj_pos, lighting.light_grid_depth_bounds.x, lighting.light_grid_depth_bounds.y, lighting.light_grid_counts);
+
+    if (let tile_index_coords = tile_index_coords_opt) {
+        uint tile_index = tile_index_coords.x +
+                            lighting.light_grid_counts.x * tile_index_coords.y +
+                            lighting.light_grid_counts.x * lighting.light_grid_counts.y * tile_index_coords.z;
+
+        var light_grid_range = lighting.light_grid[tile_index];
+        
+        var end_range = light_grid_range.offset + light_grid_range.count;
+        for (uint light_index = light_grid_range.offset; light_index < end_range; ++light_index) {
+            uint global_light_index = lighting.global_light_list_indices[light_index];
+            const var light = lighting.point_and_spot_lights[global_light_index];
+
+            float3 pos_to_light = light.position_falloff.xyz - world_pos;
+            half3 light_dir = half3(normalize(pos_to_light));
+
+            float n_dot_l = saturate(dot(px.shading_normal, light_dir));
+
+            const float3 base = compute_base_model(px, light, light_dir, mat_state, camera, world_pos, view_pos);
+
+            float visibility = 1.0h;
+
+            // If the normal is facing towards the light, compute shadows
+            if (n_dot_l > 0.0h) {
+                // TODO: Implement shadow mapping for point lights
+            }
+
+            float attenuation = compute_square_falloff_attenuation(pos_to_light, light.position_falloff.w);
+
+            const var color_comp = (base.rgb * float3(light.color_intensity.rgb)) * (float(light.color_intensity.w * attenuation) * n_dot_l * visibility);
+            color.rgb += half3(color_comp);
+        }
+
+    }
+
+    // for (uint i = 0; i < lighting.num_point_and_spot_lights; ++i) {
+    //     const Light light = lighting.point_and_spot_lights[i];
+
+    //     float3 pos_to_light = light.position_falloff.xyz - world_pos;
+    //     half3 light_dir = half3(normalize(pos_to_light));
+
+    //     half n_dot_l = saturate(dot(px.shading_normal, light_dir));
+
+    //     half3 base = compute_base_model(px, light, light_dir, mat_state, camera, world_pos, view_pos);
+
+    //     half visibility = 1.0h;
+
+    //     // If the normal is facing towards the light, compute shadows
+    //     if (n_dot_l > 0.0h) {
+    //         // TODO: Implement shadow mapping for point lights
+    //     }
+
+    //     float attenuation = compute_square_falloff_attenuation(pos_to_light, light.position_falloff.w);
+
+    //     half3 color_comp = (base.rgb * half3(light.color_intensity.rgb)) * (half(light.color_intensity.w * attenuation) * n_dot_l * visibility);
+    //     color.rgb += color_comp;
+    // }
+}
+
+void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, const float4 proj_pos, inout half4 color) {
     evaluate_directional_light(px, mat_state, camera, world_pos, view_pos, color, lighting);
-    evaluate_point_lights(px, mat_state, camera, world_pos, view_pos, color, lighting);
+    evaluate_point_lights(px, mat_state, camera, world_pos, view_pos, proj_pos, color, lighting);
 }
 
 half fetch_metallic(const MaterialState mat_state, float2 uv, Texture2D[] textures) {
@@ -461,10 +533,10 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
     color.rgb += emissive.rgb;
 }
 
-float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, Texture2D[] textures) {
+float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, const float4 proj_pos, Texture2D[] textures) {
     half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h);
 
-    evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, color);
+    evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, proj_pos, color);
     apply_emissive(mat_state, color, px.uv, textures);
 
     return color;

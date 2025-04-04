@@ -1086,8 +1086,8 @@ namespace tempest::graphics::vk
             }
 
             // apply barriers
-            std::vector<VkImageMemoryBarrier2> image_barriers_2;
-            std::vector<VkBufferMemoryBarrier2> buffer_barriers_2;
+            vector<VkImageMemoryBarrier2> image_barriers_2;
+            vector<VkBufferMemoryBarrier2> buffer_barriers_2;
 
             for (const auto& swap : pass_ref.external_swapchain_usage())
             {

@@ -58,37 +58,44 @@ namespace tempest::graphics::passes
             uint32_t light_count;
         };
 
+        static constexpr descriptor_bind_point scene_constants_desc = {
+            .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
+            .binding = 0,
+            .set = 0,
+            .count = 1,
+        };
+
         static constexpr descriptor_bind_point light_cluster_desc = {
             .type = descriptor_binding_type::STRUCTURED_BUFFER,
-            .binding = 0,
+            .binding = 1,
             .set = 0,
             .count = 1,
         };
 
         static constexpr descriptor_bind_point light_parameter_desc = {
             .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
-            .binding = 1,
+            .binding = 2,
             .set = 0,
             .count = 1,
         };
 
         static constexpr descriptor_bind_point global_light_index_list_desc = {
             .type = descriptor_binding_type::STRUCTURED_BUFFER,
-            .binding = 2,
+            .binding = 3,
             .set = 0,
             .count = 1,
         };
 
         static constexpr descriptor_bind_point light_grid_desc = {
             .type = descriptor_binding_type::STRUCTURED_BUFFER,
-            .binding = 3,
+            .binding = 4,
             .set = 0,
             .count = 1,
         };
 
-        static constexpr descriptor_bind_point global_index_count_desc = {
+        static constexpr descriptor_bind_point global_light_index_count_desc = {
             .type = descriptor_binding_type::STRUCTURED_BUFFER,
-            .binding = 4,
+            .binding = 5,
             .set = 0,
             .count = 1,
         };

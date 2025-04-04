@@ -67,11 +67,12 @@ namespace tempest::graphics::passes
         auto compute_shader_src = core::read_bytes("assets/shaders/cull_lights.comp.spv");
 
         descriptor_binding_info set0_bindings[] = {
+            cull_light_cluster_pass::scene_constants_desc.to_binding_info(),
             cull_light_cluster_pass::light_cluster_desc.to_binding_info(),
             cull_light_cluster_pass::light_parameter_desc.to_binding_info(),
             cull_light_cluster_pass::global_light_index_list_desc.to_binding_info(),
             cull_light_cluster_pass::light_grid_desc.to_binding_info(),
-            cull_light_cluster_pass::global_index_count_desc.to_binding_info(),
+            cull_light_cluster_pass::global_light_index_count_desc.to_binding_info(),
         };
 
         descriptor_set_layout_create_info layouts[] = {

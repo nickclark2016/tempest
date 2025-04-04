@@ -23,7 +23,7 @@ float2 direction_to_rectilinear(float3 dir) {
     return float2(x, y);
 }
 
-[vk_binding(0, 0)] StructuredBuffer<SceneGlobals> scene;
+[vk_binding(0, 0)] ConstantBuffer<SceneGlobals, Std430DataLayout> scene;
 [vk_binding(1, 0)] Texture2D skybox_texture;
 [vk_binding(2, 0)] SamplerState linear_sampler;
 
@@ -31,8 +31,8 @@ float2 direction_to_rectilinear(float3 dir) {
 VertexOutput VSMain(uint index_id : SV_VertexID) {
     var vertex = generate_quad_vertex(index_id);
 
-    float4 world_position = mul(scene[0].camera.inv_view, mul(scene[0].camera.inv_projection, vertex.position));
-    float3 view_direction = world_position.xyz - scene[0].camera.eye.xyz;
+    float4 world_position = mul(scene.camera.inv_view, mul(scene.camera.inv_projection, vertex.position));
+    float3 view_direction = world_position.xyz - scene.camera.eye.xyz;
 
     var output = VertexOutput(vertex.position, view_direction);
     return output;

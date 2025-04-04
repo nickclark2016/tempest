@@ -12,7 +12,7 @@ namespace tempest::graphics::passes
     {
       public:
         static constexpr descriptor_bind_point scene_constant_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
             .binding = 0,
             .set = 0,
             .count = 1,
@@ -84,6 +84,20 @@ namespace tempest::graphics::passes
         static constexpr descriptor_bind_point shadow_map_mt_desc = {
             .type = descriptor_binding_type::SAMPLED_IMAGE,
             .binding = 2,
+            .set = 1,
+            .count = 1,
+        };
+
+        static constexpr descriptor_bind_point light_grid_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding = 3,
+            .set = 1,
+            .count = 1,
+        };
+
+        static constexpr descriptor_bind_point global_light_index_count_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding = 4,
             .set = 1,
             .count = 1,
         };
@@ -100,7 +114,7 @@ namespace tempest::graphics::passes
     {
       public:
         static constexpr descriptor_bind_point scene_constant_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
             .binding = 0,
             .set = 0,
             .count = 1,
@@ -186,6 +200,20 @@ namespace tempest::graphics::passes
         static constexpr descriptor_bind_point shadow_map_mt_desc = {
             .type = descriptor_binding_type::SAMPLED_IMAGE,
             .binding = 2,
+            .set = 1,
+            .count = 1,
+        };
+
+        static constexpr descriptor_bind_point light_grid_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding = 3,
+            .set = 1,
+            .count = 1,
+        };
+
+        static constexpr descriptor_bind_point global_light_index_count_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding = 4,
             .set = 1,
             .count = 1,
         };
@@ -202,7 +230,7 @@ namespace tempest::graphics::passes
     {
       public:
         static constexpr descriptor_bind_point scene_constant_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
             .binding = 0,
             .set = 0,
             .count = 1,
@@ -288,6 +316,20 @@ namespace tempest::graphics::passes
         static constexpr descriptor_bind_point shadow_map_mt_desc = {
             .type = descriptor_binding_type::SAMPLED_IMAGE,
             .binding = 2,
+            .set = 1,
+            .count = 1,
+        };
+
+        static constexpr descriptor_bind_point light_grid_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding = 3,
+            .set = 1,
+            .count = 1,
+        };
+
+        static constexpr descriptor_bind_point global_light_index_count_desc = {
+            .type = descriptor_binding_type::STRUCTURED_BUFFER,
+            .binding = 4,
             .set = 1,
             .count = 1,
         };

@@ -27,7 +27,7 @@ struct FragmentOutput {
     float4 position       : SV_Target1;
 };
 
-[vk_binding(0, 0)] StructuredBuffer<SceneGlobals> scene;
+[vk_binding(0, 0)] ConstantBuffer<SceneGlobals, Std430DataLayout> scene;
 [vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
 [vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
 [vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;
@@ -44,8 +44,8 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     Vertex v = pull_vertex(vertex_pull_buffer, meshes[instance.mesh_id], vertex_id);
 
     float4 world_pos = mul(instance.model_matrix, float4(v.position, 1.0));
-    float4 view_pos = mul(scene[0].camera.view, world_pos);
-    float4 clip_pos = mul(scene[0].camera.projection, view_pos);
+    float4 view_pos = mul(scene.camera.view, world_pos);
+    float4 clip_pos = mul(scene.camera.projection, view_pos);
 
     float3x3 model_3x3 = (float3x3) instance.model_matrix;
     float3x3 t_inv_model_3x3 = (float3x3) instance.transpose_inv_model_matrix;

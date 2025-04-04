@@ -221,7 +221,7 @@ namespace tempest::graphics::vk
         vector<swapchain_resource_handle> _active_swapchain_set;
         flat_unordered_map<uint64_t, size_t> _pass_index_map;
 
-        abstract_allocator* _alloc;
+        [[maybe_unused]] abstract_allocator* _alloc;
         render_device* _device;
 
         render_graph_resource_state _last_known_state;

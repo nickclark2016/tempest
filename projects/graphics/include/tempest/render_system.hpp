@@ -140,6 +140,9 @@ namespace tempest::graphics
             math::vec2<float> screen_size;
             math::vec3<float> ambient_light;
             gpu_light sun;
+            math::vec4<uint32_t> light_grid_count_and_size; // x = light grid count, y = light grid size (in tiles), z =
+                                                            // padding, w = pixel width
+            math::vec2<float> light_grid_bounds; // x = min light grid bounds, y = max light grid bounds (z)
             uint32_t point_light_count{};
         };
 

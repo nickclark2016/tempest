@@ -235,7 +235,6 @@ namespace tempest::graphics::vk
         vkb::DispatchTable* _dispatch;
         render_device* _device;
         VkCommandPool _pool{VK_NULL_HANDLE};
-        VkCommandBuffer _buffer{VK_NULL_HANDLE};
         tempest::optional<command_list> _cmds;
         bool _is_recording{false};
     };

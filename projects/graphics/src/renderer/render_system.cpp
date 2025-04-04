@@ -299,7 +299,8 @@ namespace tempest::graphics
         };
         _scene_data.screen_size = math::vec2<float>(1920.0f, 1080.0f);
         _scene_data.ambient_light = math::vec3<float>(253, 242, 200) / 255.0f * 0.1f;
-        // _scene_data.ambient_light = math::vec3<float>(0.2f, 0.2f, 0.2f);
+        _scene_data.light_grid_count_and_size = math::vec4<uint32_t>(16, 9, 24, 120);
+        _scene_data.light_grid_bounds = math::vec2<float>(0.1f, 1000.0f);
 
         _hi_z_data = {
             .size = math::vec2<uint32_t>(1920, 1080),
@@ -485,7 +486,7 @@ namespace tempest::graphics
                                           store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
                     .add_color_attachment(positions_buffer, resource_access_type::WRITE, load_op::CLEAR,
                                           store_op::STORE, {0.0f, 0.0f, 0.0f, 0.0f})
-                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
+                    .add_constant_buffer(_scene_buffer, 0, 0)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                     .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -623,9 +624,8 @@ namespace tempest::graphics
                 bldr.depends_on(upload_pass)
                     .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
                                           store_op::STORE, {0.5f, 1.0f, 1.0f, 1.0f})
-                    .add_structured_buffer(_scene_buffer, resource_access_type::READ,
-                                           passes::skybox_pass::scene_constant_buffer_desc.set,
-                                           passes::skybox_pass::scene_constant_buffer_desc.binding)
+                    .add_constant_buffer(_scene_buffer, passes::skybox_pass::scene_constant_buffer_desc.set,
+                                         passes::skybox_pass::scene_constant_buffer_desc.binding)
                     .add_external_sampled_images(1, passes::skybox_pass::skybox_texture_desc.set,
                                                  passes::skybox_pass::skybox_texture_desc.binding,
                                                  pipeline_stage::FRAGMENT)
@@ -664,6 +664,8 @@ namespace tempest::graphics
             rgc->add_graph_pass("Cull Light Clusters", queue_operation_type::COMPUTE, [&](graph_pass_builder& bldr) {
                 bldr.depends_on(build_clusters)
                     .depends_on(upload_pass)
+                    .add_constant_buffer(_scene_buffer, passes::cull_light_cluster_pass::scene_constants_desc.set,
+                                         passes::cull_light_cluster_pass::scene_constants_desc.binding)
                     .add_structured_buffer(cluster_grid_buffer, resource_access_type::READ_WRITE,
                                            passes::cull_light_cluster_pass::light_cluster_desc.set,
                                            passes::cull_light_cluster_pass::light_cluster_desc.binding)
@@ -677,15 +679,15 @@ namespace tempest::graphics
                                            passes::cull_light_cluster_pass::light_grid_desc.set,
                                            passes::cull_light_cluster_pass::light_grid_desc.binding)
                     .add_structured_buffer(global_index_count_buffer, resource_access_type::READ_WRITE,
-                                           passes::cull_light_cluster_pass::global_index_count_desc.set,
-                                           passes::cull_light_cluster_pass::global_index_count_desc.binding)
+                                           passes::cull_light_cluster_pass::global_light_index_count_desc.set,
+                                           passes::cull_light_cluster_pass::global_light_index_count_desc.binding)
                     .allow_push_constants(
                         static_cast<uint32_t>(sizeof(passes::cull_light_cluster_pass::push_constants)))
                     .on_execute([&](command_list& cmds) {
                         passes::cull_light_cluster_pass::push_constants pc;
                         pc.inv_projection = _scene_data.camera.inv_proj;
                         pc.screen_bounds = math::vec4<float>(1920.0f, 1080.0f, 0.1f, 1000.0f); // w, h, min_z, max_z
-                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(1, 1, 6, 120);
+                        pc.workgroup_count_tile_size = math::vec4<uint32_t>(16, 9, 4, 120);
                         pc.light_count = _scene_data.point_light_count;
 
                         _cull_light_clusters.execute(*_device, cmds,
@@ -709,7 +711,7 @@ namespace tempest::graphics
                 .depends_on(_shadow_map_pass)
                 .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
                 .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
-                .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
+                .add_constant_buffer(_scene_buffer, 0, 0)
                 .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                 .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                 .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -719,6 +721,11 @@ namespace tempest::graphics
                 .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                 .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
                 .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 1)
+                .add_structured_buffer(light_grid_range_buffer, resource_access_type::READ,
+                                       passes::pbr_pass::light_grid_desc.set, passes::pbr_pass::light_grid_desc.binding)
+                .add_structured_buffer(global_light_index_list_buffer, resource_access_type::READ,
+                                       passes::pbr_pass::global_light_index_count_desc.set,
+                                       passes::pbr_pass::global_light_index_count_desc.binding)
                 .add_sampled_image(shadow_map_mt_buffer, 1, 2)
                 .add_indirect_argument_buffer(_indirect_buffer)
                 .add_index_buffer(_vertex_pull_buffer)
@@ -742,7 +749,7 @@ namespace tempest::graphics
                     .add_color_attachment(transparency_accumulator_buffer, resource_access_type::READ_WRITE,
                                           load_op::DONT_CARE, store_op::DONT_CARE, {0.0f, 0.0f, 0.0f, 0.0f})
                     .add_depth_attachment(depth_buffer, resource_access_type::READ, load_op::LOAD, store_op::STORE)
-                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
+                    .add_constant_buffer(_scene_buffer, 0, 0)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                     .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -754,6 +761,12 @@ namespace tempest::graphics
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
                     .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 1)
+                    .add_structured_buffer(light_grid_range_buffer, resource_access_type::READ,
+                                           passes::pbr_pass::light_grid_desc.set,
+                                           passes::pbr_pass::light_grid_desc.binding)
+                    .add_structured_buffer(global_light_index_list_buffer, resource_access_type::READ,
+                                           passes::pbr_pass::global_light_index_count_desc.set,
+                                           passes::pbr_pass::global_light_index_count_desc.binding)
                     .add_sampled_image(shadow_map_mt_buffer, 1, 2)
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
@@ -791,7 +804,7 @@ namespace tempest::graphics
                     .add_color_attachment(transparency_accumulator_buffer, resource_access_type::WRITE, load_op::CLEAR,
                                           store_op::STORE)
                     .add_depth_attachment(depth_buffer, resource_access_type::READ, load_op::LOAD, store_op::STORE)
-                    .add_structured_buffer(_scene_buffer, resource_access_type::READ, 0, 0)
+                    .add_constant_buffer(_scene_buffer, 0, 0)
                     .add_structured_buffer(_vertex_pull_buffer, resource_access_type::READ, 0, 1)
                     .add_structured_buffer(_mesh_layout_buffer, resource_access_type::READ, 0, 2)
                     .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
@@ -803,6 +816,12 @@ namespace tempest::graphics
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
                     .add_structured_buffer(dir_shadow_buffer, resource_access_type::READ, 1, 1)
+                    .add_structured_buffer(light_grid_range_buffer, resource_access_type::READ,
+                                           passes::pbr_pass::light_grid_desc.set,
+                                           passes::pbr_pass::light_grid_desc.binding)
+                    .add_structured_buffer(global_light_index_list_buffer, resource_access_type::READ,
+                                           passes::pbr_pass::global_light_index_count_desc.set,
+                                           passes::pbr_pass::global_light_index_count_desc.binding)
                     .add_sampled_image(shadow_map_mt_buffer, 1, 2)
                     .add_indirect_argument_buffer(_indirect_buffer)
                     .add_index_buffer(_vertex_pull_buffer)
@@ -1656,11 +1675,11 @@ namespace tempest::graphics
         auto vertex_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.vert.spv");
         auto fragment_shader_source = core::read_bytes("assets/shaders/directional_shadow_map.frag.spv");
 
-        //descriptor_binding_info set0_bindings[] = {
-        //    passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc, passes::object_buffer_desc,
-        //    passes::instance_buffer_desc,    passes::materials_buffer_desc,   passes::linear_sampler_desc,
-        //    passes::texture_array_desc,
-        //};
+        // descriptor_binding_info set0_bindings[] = {
+        //     passes::vertex_pull_buffer_desc, passes::mesh_layout_buffer_desc, passes::object_buffer_desc,
+        //     passes::instance_buffer_desc,    passes::materials_buffer_desc,   passes::linear_sampler_desc,
+        //     passes::texture_array_desc,
+        // };
 
         descriptor_binding_info set0_bindings[] = {
             passes::pbr_pass::vertex_pull_buffer_desc.to_binding_info(),

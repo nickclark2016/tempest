@@ -12,7 +12,7 @@ namespace tempest::graphics::passes
     {
       public:
         static constexpr descriptor_bind_point scene_constant_buffer_desc = {
-            .type = descriptor_binding_type::STRUCTURED_BUFFER_DYNAMIC,
+            .type = descriptor_binding_type::CONSTANT_BUFFER_DYNAMIC,
             .binding = 0,
             .set = 0,
             .count = 1,
