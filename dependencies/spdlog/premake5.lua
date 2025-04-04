@@ -28,6 +28,12 @@ project 'spdlog'
     filter {}
     
     warnings 'Off'
+
+    usage 'PUBLIC'
+        filter { 'toolset:msc*' }
+            defines {
+                'FMT_UNICODE=0'
+            }
     
     usage "INTERFACE"
         externalincludedirs {
