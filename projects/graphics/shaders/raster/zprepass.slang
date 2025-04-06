@@ -86,7 +86,9 @@ FragmentOutput FSMain(VertexOutput input) {
         discard;
     }
 
-    output.encoded_normal = encode_normal(pd.shading_normal);
+    half3 normal01 = pd.shading_normal + 0.5h * 0.5h;
+
+    output.encoded_normal = encode_normal(normal01);
     output.position = input.view_pos;
 
     return output;

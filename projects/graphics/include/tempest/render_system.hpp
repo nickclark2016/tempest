@@ -9,6 +9,7 @@
 #include <tempest/passes/clustered_lighting.hpp>
 #include <tempest/passes/pbr.hpp>
 #include <tempest/passes/skybox.hpp>
+#include <tempest/passes/ssao.hpp>
 
 #include <tempest/archetype.hpp>
 #include <tempest/flat_map.hpp>
@@ -142,7 +143,8 @@ namespace tempest::graphics
             gpu_light sun;
             math::vec4<uint32_t> light_grid_count_and_size; // x = light grid count, y = light grid size (in tiles), z =
                                                             // padding, w = pixel width
-            math::vec2<float> light_grid_bounds; // x = min light grid bounds, y = max light grid bounds (z)
+            math::vec2<float> light_grid_bounds;            // x = min light grid bounds, y = max light grid bounds (z)
+            float ssao_strength = 2.0f;
             uint32_t point_light_count{};
         };
 
@@ -277,6 +279,36 @@ namespace tempest::graphics
 
         void draw_profiler();
 
+        float ssao_radius() const noexcept
+        {
+            return _ssao_radius;
+        }
+
+        float ssao_bias() const noexcept
+        {
+            return _ssao_bias;
+        }
+
+        float ssao_strength() const noexcept
+        {
+            return _scene_data.ssao_strength;
+        }
+
+        void ssao_radius(float radius) noexcept
+        {
+            _ssao_radius = radius;
+        }
+
+        void ssao_bias(float bias) noexcept
+        {
+            _ssao_bias = bias;
+        }
+
+        void ssao_strength(float strength) noexcept
+        {
+            _scene_data.ssao_strength = strength;
+        }
+
       private:
         heap_allocator _allocator;
         ecs::archetype_registry* _registry;
@@ -361,6 +393,8 @@ namespace tempest::graphics
         passes::skybox_pass _skybox;
         passes::build_cluster_grid_pass _build_cluster_grid;
         passes::cull_light_cluster_pass _cull_light_clusters;
+        passes::ssao_pass _ssao_pass;
+        passes::ssao_blur_pass _ssao_blur_pass;
 
         shadow_map_parameters compute_shadow_map_cascades(const shadow_map_component& shadowing,
                                                           const ecs::transform_component& light_transform,
@@ -368,6 +402,9 @@ namespace tempest::graphics
 
         vector<mesh_layout> _load_meshes(span<core::mesh> meshes);
         void _load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
+
+        float _ssao_radius{0.5f};
+        float _ssao_bias{0.025f};
     };
 } // namespace tempest::graphics
 

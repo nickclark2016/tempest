@@ -8,5 +8,6 @@ struct SceneGlobals {
     Light sun;
     uint4 tile_cluster_count_and_size;
     float2 light_cluster_depth_range;
+    float ao_strength;
     uint point_light_count;
 };

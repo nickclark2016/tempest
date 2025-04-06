@@ -64,6 +64,7 @@ struct PixelData {
     half4 diffuse;
     half3 shading_normal;
     half2 uv;
+    half ambient_occlusion;
     half roughness;
     half metallic;
     half transmission_factor;
@@ -534,7 +535,7 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
 }
 
 float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, const float4 proj_pos, Texture2D[] textures) {
-    half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h);
+    half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h) * px.ambient_occlusion;
 
     evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, proj_pos, color);
     apply_emissive(mat_state, color, px.uv, textures);

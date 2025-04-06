@@ -188,6 +188,15 @@ namespace tempest::graphics
             .per_frame_memory = false,
         });
 
+        auto ambient_occlusion_buffer = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::R16_FLOAT,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "Ambient Occlusion Buffer",
+        });
+
         // Build resource buffers
         _vertex_pull_buffer = rgc->create_buffer({
             .size = 1024 * 1024 * 512,
@@ -220,6 +229,22 @@ namespace tempest::graphics
             .location = memory_location::DEVICE,
             .name = "Light Parameter Buffer",
             .per_frame_memory = true,
+        });
+
+        auto ssao_constants_buffer = rgc->create_buffer({
+            .size = sizeof(passes::ssao_pass::constants),
+            .location = memory_location::DEVICE,
+            .name = "SSAO Constants Buffer",
+            .per_frame_memory = true,
+        });
+
+        auto ssao_blur_image = rgc->create_image({
+            .width = 1920,
+            .height = 1080,
+            .fmt = resource_format::R16_FLOAT,
+            .type = image_type::IMAGE_2D,
+            .persistent = true,
+            .name = "SSAO Blur Image",
         });
 
         _materials_buffer = rgc->create_buffer({
@@ -314,10 +339,13 @@ namespace tempest::graphics
         _skybox.init(*_device);
         _build_cluster_grid.init(*_device);
         _cull_light_clusters.init(*_device);
+        _ssao_pass.init(*_device);
+        _ssao_blur_pass.init(*_device);
 
         auto upload_pass = rgc->add_graph_pass(
             "Upload Pass", queue_operation_type::TRANSFER,
-            [&, dir_shadow_buffer, light_buffer, global_index_count_buffer](graph_pass_builder& builder) {
+            [&, dir_shadow_buffer, light_buffer, global_index_count_buffer,
+             ssao_constants_buffer](graph_pass_builder& builder) {
                 builder.add_transfer_destination_buffer(_scene_buffer)
                     .add_transfer_destination_buffer(_object_buffer)
                     .add_transfer_destination_buffer(_instance_buffer)
@@ -326,9 +354,11 @@ namespace tempest::graphics
                     .add_transfer_destination_buffer(dir_shadow_buffer)
                     .add_transfer_destination_buffer(light_buffer)
                     .add_transfer_destination_buffer(global_index_count_buffer)
+                    .add_transfer_destination_buffer(ssao_constants_buffer)
                     .add_transfer_source_buffer(_device->get_staging_buffer())
                     .add_host_write_buffer(_device->get_staging_buffer())
-                    .on_execute([&, dir_shadow_buffer, light_buffer, global_index_count_buffer](command_list& cmds) {
+                    .on_execute([&, dir_shadow_buffer, light_buffer, global_index_count_buffer,
+                                 ssao_constants_buffer](command_list& cmds) {
                         staging_buffer_writer writer{*_device};
 
                         if (_last_updated_frame + _device->frames_in_flight() > _device->current_frame())
@@ -470,6 +500,22 @@ namespace tempest::graphics
 
                         span<const gpu_light> light_span{light_data};
                         writer.write(cmds, light_span, light_buffer);
+
+                        // Upload SSAO constants
+                        passes::ssao_pass::constants ssao_constants;
+                        ssao_constants.radius = _ssao_radius; // radius in view space
+                        ssao_constants.bias = _ssao_bias; // bias in view space
+                        ssao_constants.projection = _scene_data.camera.proj;
+                        ssao_constants.inv_projection = _scene_data.camera.inv_proj;
+                        ssao_constants.view = _scene_data.camera.view;
+                        ssao_constants.inv_view = _scene_data.camera.inv_view;
+                        ssao_constants.noise_scale = _ssao_pass.noise_scale(1920.0f, 1080.0f);
+
+                        tempest::copy_n(_ssao_pass.kernel().begin(), _ssao_pass.kernel().size(),
+                                        ssao_constants.kernel.begin());
+
+                        writer.write(cmds, span<const passes::ssao_pass::constants>(&ssao_constants, 1),
+                                     ssao_constants_buffer);
 
                         writer.finish();
 
@@ -631,7 +677,48 @@ namespace tempest::graphics
                                                  pipeline_stage::FRAGMENT)
                     .add_sampler(_linear_sampler_no_aniso, passes::skybox_pass::linear_sampler_desc.set,
                                  passes::skybox_pass::linear_sampler_desc.binding, pipeline_stage::FRAGMENT)
-                    .on_execute([&](command_list& cmds) { _skybox.draw_batch(*_device, cmds); });
+                    .on_execute([&](command_list& cmds) {
+                        cmds.set_scissor_region(0, 0, 1920, 1080).set_viewport(0, 0, 1920, 1080, 0, 1, false);
+                        _skybox.draw_batch(*_device, cmds);
+                    });
+            });
+
+        auto ssao_pass =
+            rgc->add_graph_pass("SSAO Generate Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(upload_pass)
+                    .add_color_attachment(ambient_occlusion_buffer, resource_access_type::READ_WRITE, load_op::CLEAR,
+                                          store_op::STORE, {1.0f, 1.0f, 1.0f, 1.0f})
+                    .add_constant_buffer(ssao_constants_buffer, passes::ssao_pass::scene_constants_buffer_desc.set,
+                                         passes::ssao_pass::scene_constants_buffer_desc.binding)
+                    .add_sampled_image(depth_buffer, passes::ssao_pass::depth_image_desc.set,
+                                       passes::ssao_pass::depth_image_desc.binding, pipeline_stage::FRAGMENT)
+                    .add_sampled_image(encoded_normals_buffer, passes::ssao_pass::normal_image_desc.set,
+                                       passes::ssao_pass::normal_image_desc.binding, pipeline_stage::FRAGMENT)
+                    .add_external_sampled_image(_ssao_pass.noise_image(), passes::ssao_pass::noise_image_desc.set,
+                                                passes::ssao_pass::noise_image_desc.binding, pipeline_stage::FRAGMENT)
+                    .add_sampler(_linear_sampler_no_aniso, passes::ssao_pass::linear_sampler_desc.set,
+                                 passes::ssao_pass::linear_sampler_desc.binding, pipeline_stage::FRAGMENT)
+                    .add_sampler(_point_sampler_no_aniso, passes::ssao_pass::point_sampler_desc.set,
+                                 passes::ssao_pass::point_sampler_desc.binding, pipeline_stage::FRAGMENT)
+                    .on_execute([&](command_list& cmds) {
+                        cmds.set_scissor_region(0, 0, 1920, 1080).set_viewport(0, 0, 1920, 1080, 0, 1, false);
+                        _ssao_pass.draw_batch(*_device, cmds);
+                    });
+            });
+
+        auto ssao_blur_pass =
+            rgc->add_graph_pass("SSAO Blur Pass", queue_operation_type::GRAPHICS, [&](graph_pass_builder& bldr) {
+                bldr.depends_on(ssao_pass)
+                    .add_color_attachment(ssao_blur_image, resource_access_type::READ_WRITE, load_op::CLEAR,
+                                          store_op::STORE)
+                    .add_sampled_image(ambient_occlusion_buffer, passes::ssao_blur_pass::ssao_image_desc.set,
+                                       passes::ssao_blur_pass::ssao_image_desc.binding)
+                    .add_sampler(_point_sampler_no_aniso, passes::ssao_blur_pass::point_sampler_desc.set,
+                                 passes::ssao_blur_pass::point_sampler_desc.binding, pipeline_stage::FRAGMENT)
+                    .on_execute([&](command_list& cmds) {
+                        cmds.set_scissor_region(0, 0, 1920, 1080).set_viewport(0, 0, 1920, 1080, 0, 1, false);
+                        _ssao_blur_pass.draw_batch(*_device, cmds);
+                    });
             });
 
         auto build_clusters =
@@ -708,6 +795,7 @@ namespace tempest::graphics
                 .depends_on(_skybox_pass)
                 .depends_on(upload_pass)
                 .depends_on(cull_lights)
+                .depends_on(ssao_blur_pass)
                 .depends_on(_shadow_map_pass)
                 .add_color_attachment(color_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
                 .add_depth_attachment(depth_buffer, resource_access_type::READ_WRITE, load_op::LOAD, store_op::STORE)
@@ -717,6 +805,8 @@ namespace tempest::graphics
                 .add_structured_buffer(_object_buffer, resource_access_type::READ, 0, 3)
                 .add_structured_buffer(_instance_buffer, resource_access_type::READ, 0, 4)
                 .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
+                .add_sampled_image(ssao_blur_image, passes::pbr_pass::ao_image_desc.set,
+                                   passes::pbr_pass::ao_image_desc.binding, pipeline_stage::FRAGMENT)
                 .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                 .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                 .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -757,6 +847,9 @@ namespace tempest::graphics
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                     .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
                     .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0, 7)
+                    .add_sampled_image(
+                        ssao_blur_image, passes::pbr_oit_gather_pass::ao_image_desc.set,
+                        passes::pbr_oit_gather_pass::ao_image_desc.binding, pipeline_stage::FRAGMENT)
                     .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -812,6 +905,9 @@ namespace tempest::graphics
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                     .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
                     .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0, 7)
+                    .add_sampled_image(
+                        ssao_blur_image, passes::pbr_oit_resolve_pass::ao_image_desc.set,
+                        passes::pbr_oit_resolve_pass::ao_image_desc.binding, pipeline_stage::FRAGMENT)
                     .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -1121,6 +1217,8 @@ namespace tempest::graphics
         _skybox.release(*_device);
         _build_cluster_grid.release(*_device);
         _cull_light_clusters.release(*_device);
+        _ssao_pass.release(*_device);
+        _ssao_blur_pass.release(*_device);
 
         _swapchains.clear();
         _images.clear();

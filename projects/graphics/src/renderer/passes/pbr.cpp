@@ -10,10 +10,15 @@ namespace tempest::graphics::passes
         auto fragment_shader_source = core::read_bytes("assets/shaders/pbr.frag.spv");
 
         descriptor_binding_info set0_bindings[] = {
-            pbr_pass::scene_constant_buffer_desc.to_binding_info(), pbr_pass::vertex_pull_buffer_desc.to_binding_info(),
-            pbr_pass::mesh_layout_buffer_desc.to_binding_info(),    pbr_pass::object_buffer_desc.to_binding_info(),
-            pbr_pass::instance_buffer_desc.to_binding_info(),       pbr_pass::materials_buffer_desc.to_binding_info(),
-            pbr_pass::linear_sampler_desc.to_binding_info(),        pbr_pass::texture_array_desc.to_binding_info(),
+            pbr_pass::scene_constant_buffer_desc.to_binding_info(),
+            pbr_pass::vertex_pull_buffer_desc.to_binding_info(),
+            pbr_pass::mesh_layout_buffer_desc.to_binding_info(),
+            pbr_pass::object_buffer_desc.to_binding_info(),
+            pbr_pass::instance_buffer_desc.to_binding_info(),
+            pbr_pass::materials_buffer_desc.to_binding_info(),
+            pbr_pass::ao_image_desc.to_binding_info(),
+            pbr_pass::linear_sampler_desc.to_binding_info(),
+            pbr_pass::texture_array_desc.to_binding_info(),
         };
 
         descriptor_binding_info set1_bindings[] = {
@@ -120,6 +125,7 @@ namespace tempest::graphics::passes
             pbr_oit_gather_pass::materials_buffer_desc.to_binding_info(),
             pbr_oit_gather_pass::oit_moment_image_desc.to_binding_info(),
             pbr_oit_gather_pass::oit_zero_moment_image_desc.to_binding_info(),
+            pbr_oit_gather_pass::ao_image_desc.to_binding_info(),
             pbr_oit_gather_pass::linear_sampler_desc.to_binding_info(),
             pbr_oit_gather_pass::texture_array_desc.to_binding_info(),
         };
@@ -222,6 +228,7 @@ namespace tempest::graphics::passes
             pbr_oit_resolve_pass::materials_buffer_desc.to_binding_info(),
             pbr_oit_resolve_pass::oit_moment_image_desc.to_binding_info(),
             pbr_oit_resolve_pass::oit_zero_moment_image_desc.to_binding_info(),
+            pbr_oit_resolve_pass::ao_image_desc.to_binding_info(),
             pbr_oit_resolve_pass::linear_sampler_desc.to_binding_info(),
             pbr_oit_resolve_pass::texture_array_desc.to_binding_info(),
         };

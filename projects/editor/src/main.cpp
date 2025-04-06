@@ -66,6 +66,23 @@ int main()
                 imgui::label(tempest::string_view(std::format("Target UPS: {:.2f}", 1.0f / dt)));
             });
 
+            imgui::create_window("SSAO Settings", [&]() {
+                auto& rs = engine.get_render_system();
+
+                auto new_radius = imgui::float_slider("SSAO Radius", 0.1f, 5.0f, rs.ssao_radius());
+                auto new_bias = imgui::float_slider("SSAO Bias", 0.001f, 0.1f, rs.ssao_bias());
+                auto new_strength = imgui::float_slider("SSAO Strength", 0.0f, 10.0f, rs.ssao_strength());
+
+                if (new_radius != rs.ssao_radius() || new_bias != rs.ssao_bias() || new_strength != rs.ssao_strength())
+                {
+                    // Update the SSAO settings in the render system
+                    rs.ssao_radius(new_radius);
+                    rs.ssao_bias(new_bias);
+                    rs.ssao_strength(new_strength);
+                    rs.mark_dirty();
+                }
+            });
+
             if (engine.get_render_system().settings().enable_profiling)
             {
                 engine.get_render_system().draw_profiler();
@@ -123,13 +140,12 @@ void initialize_lights(tempest::engine& engine)
 
 void initialize_models(tempest::engine& engine)
 {
-    // auto sponza_prefab =
-    // engine.get_asset_database().import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf",
-    //                                                         engine.get_archetype_registry());
-    // auto sponza_instance = engine.load_entity(sponza_prefab);
-    // auto sponza_transform = tempest::ecs::transform_component::identity();
-    // sponza_transform.scale({0.125f, 0.125f, 0.125f});
-    // engine.get_archetype_registry().assign_or_replace(sponza_instance, sponza_transform);
+    auto sponza_prefab = engine.get_asset_database().import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf",
+                                                            engine.get_archetype_registry());
+    auto sponza_instance = engine.load_entity(sponza_prefab);
+    auto sponza_transform = tempest::ecs::transform_component::identity();
+    sponza_transform.scale({0.125f, 0.125f, 0.125f});
+    engine.get_archetype_registry().assign_or_replace(sponza_instance, sponza_transform);
     //
     // auto lantern_prefab = engine.get_asset_database().import(
     //     "assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf", engine.get_archetype_registry());
@@ -140,29 +156,29 @@ void initialize_models(tempest::engine& engine)
     // lantern_transform.rotation({0.0f, tempest::math::as_radians(180.0f), 0.0f});
     // engine.get_archetype_registry().assign_or_replace(lantern_instance, lantern_transform);
 
-    auto chess_prefab = engine.get_asset_database().import(
-        "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf", engine.get_archetype_registry());
-
-    tempest::ecs::archetype_entity_hierarchy_view chess_view(engine.get_archetype_registry(), chess_prefab);
-    for (auto ent : chess_view)
-    {
-        auto material_comp = engine.get_archetype_registry().try_get<tempest::core::material_component>(ent);
-        if (material_comp)
-        {
-            engine.get_material_registry().update_material(
-                material_comp->material_id, [](tempest::core::material& comp) {
-                    if (auto mode = comp.get_string(tempest::core::material::alpha_mode_name);
-                        mode && *mode == "TRANSMISSIVE")
-                    {
-                        comp.set_scalar(tempest::core::material::transmissive_factor_name, 0.75f);
-                    }
-                });
-        }
-    }
-
-    auto chess_board = engine.load_entity(chess_prefab);
-    auto chess_board_tx = tempest::ecs::transform_component::identity();
-    engine.get_archetype_registry().assign_or_replace(chess_board, chess_board_tx);
+    // auto chess_prefab = engine.get_asset_database().import(
+    //     "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf", engine.get_archetype_registry());
+    //
+    // tempest::ecs::archetype_entity_hierarchy_view chess_view(engine.get_archetype_registry(), chess_prefab);
+    // for (auto ent : chess_view)
+    // {
+    //     auto material_comp = engine.get_archetype_registry().try_get<tempest::core::material_component>(ent);
+    //     if (material_comp)
+    //     {
+    //         engine.get_material_registry().update_material(
+    //             material_comp->material_id, [](tempest::core::material& comp) {
+    //                 if (auto mode = comp.get_string(tempest::core::material::alpha_mode_name);
+    //                     mode && *mode == "TRANSMISSIVE")
+    //                 {
+    //                     comp.set_scalar(tempest::core::material::transmissive_factor_name, 0.75f);
+    //                 }
+    //             });
+    //     }
+    // }
+    //
+    // auto chess_board = engine.load_entity(chess_prefab);
+    // auto chess_board_tx = tempest::ecs::transform_component::identity();
+    // engine.get_archetype_registry().assign_or_replace(chess_board, chess_board_tx);
 
     // (void)engine.load_entity(engine.get_asset_database().import(
     //     "assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf",

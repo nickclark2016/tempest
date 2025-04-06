@@ -96,7 +96,7 @@ VertexOutput compute_vertex(uint vertex_id, uint instance_id) {
     return result;
 }
 
-PBROutput compute_fragment(VertexOutput input) {
+PBROutput compute_fragment(VertexOutput input, Texture2D ao_texture) {
     LightingState lighting;
     lighting.sun = scene.sun;
     lighting.ambient_color_factor = scene.ambient_light.rgb;
@@ -123,9 +123,14 @@ PBROutput compute_fragment(VertexOutput input) {
     float3 view_dir = normalize(scene.camera.eye.xyz - input.world_position);
     pd.front_face = dot(view_dir, input.normal) > 0.0;
 
+    float2 screen_uv = input.position.xy / scene.screen_size;
+
     fetch_pixel_data(material, pd, bindless_textures);
+    half ao = (half) ao_texture.Sample(linear_sampler, screen_uv).r;
+    pd.ambient_occlusion = pow(ao, (half) scene.ao_strength);
 
     float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position, input.view_position, input.current_position, bindless_textures);
+
     color.rgb = uncharted_2(color.rgb * 4.5);
     color.rgb = color.rgb * (1.0f / uncharted_2((11.2f).xxx));
 

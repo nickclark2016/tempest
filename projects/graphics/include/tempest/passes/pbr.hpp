@@ -53,6 +53,13 @@ namespace tempest::graphics::passes
             .count = 1,
         };
 
+        static constexpr descriptor_bind_point ao_image_desc = {
+            .type = descriptor_binding_type::SAMPLED_IMAGE,
+            .binding = 6,
+            .set = 0,
+            .count = 1,
+        };
+
         static constexpr descriptor_bind_point linear_sampler_desc = {
             .type = descriptor_binding_type::SAMPLER,
             .binding = 15,
@@ -169,6 +176,13 @@ namespace tempest::graphics::passes
             .count = 1,
         };
 
+        static constexpr descriptor_bind_point ao_image_desc = {
+            .type = descriptor_binding_type::SAMPLED_IMAGE,
+            .binding = 8,
+            .set = 0,
+            .count = 1,
+        };
+
         static constexpr descriptor_bind_point linear_sampler_desc = {
             .type = descriptor_binding_type::SAMPLER,
             .binding = 15,
@@ -281,6 +295,13 @@ namespace tempest::graphics::passes
         static constexpr descriptor_bind_point oit_zero_moment_image_desc = {
             .type = descriptor_binding_type::STORAGE_IMAGE,
             .binding = 7,
+            .set = 0,
+            .count = 1,
+        };
+
+        static constexpr descriptor_bind_point ao_image_desc = {
+            .type = descriptor_binding_type::SAMPLED_IMAGE,
+            .binding = 8,
             .set = 0,
             .count = 1,
         };
