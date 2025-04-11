@@ -1,73 +1,42 @@
-#include <tempest/tempest.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/input.hpp>
+#include <tempest/rhi.hpp>
 
-#include <tempest/transform_component.hpp>
+namespace rhi = tempest::rhi;
 
-#include "fps_controller.hpp"
+static auto logger = tempest::logger::logger_factory::create({.prefix{"sandbox"}});
 
-int main()
-{
-    auto eng = tempest::engine::initialize();
-
-    auto [win, input_group] = eng.add_window(tempest::graphics::window_factory::create({
-        .title = "Tempest",
+int main() {
+    auto instance = rhi::vk::create_instance();
+    auto window = rhi::vk::create_window_surface({
         .width = 1920,
         .height = 1080,
-    }));
+        .name = "Sandbox",
+        .fullscreen = false,
+    });
+    
+    auto& device = instance->acquire_device(0);
+    auto& default_work_queue = device.get_primary_work_queue();
 
-    win->disable_cursor();
-
-    auto camera = eng.get_registry().acquire_entity();
-    eng.get_registry().assign(camera, tempest::graphics::camera_component{});
-    eng.get_registry().assign(camera, tempest::ecs::transform_component{});
-
-    eng.get_render_system().update_settings({
-        .should_show_settings = true,
-        .enable_imgui = true,
-        .aa_mode = tempest::graphics::anti_aliasing_mode::MSAA,
+    auto render_surface = device.create_render_surface({
+        .window = window.get(),
+        .min_image_count = 2,
+        .format = {
+            .space = rhi::color_space::SRGB_NONLINEAR,
+            .format = rhi::image_format::BGRA8_SRGB,
+        },
+        .present_mode = rhi::present_mode::IMMEDIATE,
+        .width = 1920,
+        .height = 1080,
+        .layers = 1,
     });
 
-    eng.on_initialize([](tempest::engine& eng) {
-        auto sponza = eng.load_asset("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
-        auto lantern = eng.load_asset("assets/glTF-Sample-Assets/Models/Lantern/glTF/Lantern.gltf");
+    while (!window->should_close())
+    {
+        tempest::core::input::poll();
 
-        tempest::ecs::transform_component lantern_scalar;
-        lantern_scalar.scale({0.1f});
+        auto cmds = default_work_queue.get_command_list();
+    }
 
-        eng.get_registry().assign(lantern, lantern_scalar);
-    });
-
-    fps_controller fps_ctrl;
-    fps_ctrl.set_position({10.0f, 4.0f, 0.0f});
-    fps_ctrl.set_rotation({0.0f, 270.0f, 0.0f});
-
-    bool was_escape_down_last_frame = false;
-
-    eng.on_update([&](tempest::engine& eng, float dt) {
-        fps_ctrl.update(*input_group.kb, *input_group.ms, dt);
-        auto& camera_data = eng.get_registry().get<tempest::graphics::camera_component>(camera);
-        auto& camera_tx = eng.get_registry().get<tempest::ecs::transform_component>(camera);
-
-        camera_data.aspect_ratio = static_cast<float>(win->width()) / static_cast<float>(win->height());
-        camera_data.vertical_fov = 90.0f;
-
-        camera_tx.position(fps_ctrl.eye_position());
-        camera_tx.rotation(fps_ctrl.eye_rotation());
-
-        if (input_group.kb->is_key_down(tempest::core::key::ESCAPE))
-        {
-            if (!was_escape_down_last_frame)
-            {
-                win->disable_cursor(!win->is_cursor_disabled());
-            }
-            was_escape_down_last_frame = true;
-        }
-        else
-        {
-            was_escape_down_last_frame = false;
-        }
-    });
-
-    eng.run();
-
-    return 0;
+    return instance ? 0 : 1;
 }

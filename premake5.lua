@@ -150,4 +150,5 @@ scoped.workspace('Tempest', function()
 
     include 'dependencies'
     include 'projects'
+    include 'sandbox'
 end)

@@ -96,6 +96,7 @@ namespace tempest::graphics::passes
 
             texture_data_descriptor noise_texture_desc{
                 .fmt = resource_format::RG32_FLOAT, // Use RGBA8 for the noise texture
+                .mips = {},
                 .name = "SSAO Noise Texture",
             };
 

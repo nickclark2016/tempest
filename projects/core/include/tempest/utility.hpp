@@ -4,6 +4,7 @@
 #include <tempest/compare.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/forward.hpp>
+#include <tempest/move.hpp>
 #include <tempest/to_underlying.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/unreachable.hpp>
@@ -15,17 +16,6 @@ namespace tempest
 
     template <size_t I, typename... Ts>
     struct tuple_element;
-
-    /// @brief Function used to indicate that an object may be moved from. Produces an xvalue expression from its
-    /// argument.
-    /// @tparam T Type of the object to move.
-    /// @param t Object to move.
-    /// @return Xvalue expression of the object.
-    template <typename T>
-    inline constexpr remove_reference_t<T>&& move(T&& t) noexcept
-    {
-        return static_cast<remove_reference_t<T>&&>(t);
-    }
 
     template <typename T>
     inline constexpr conditional_t<is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>, T&&, const T&>

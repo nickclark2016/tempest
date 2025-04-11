@@ -454,6 +454,12 @@ namespace tempest
     slot_map<T, Allocator>::iterator slot_map<T, Allocator>::find(key_type key) noexcept
     {
         const auto key_index = get_slot_map_key_id(key);
+
+        if (key_index >= _elements.size() * key_block::value_count)
+        {
+            return end();
+        }
+
         auto& block = _get_block(key);
         auto block_index = key_index % key_block::value_count;
 
@@ -514,27 +520,29 @@ namespace tempest
     {
         _first_free_element = 0;
 
-        for (auto& block : _elements)
+        for (key_block& block : _elements)
         {
-            size_t elem = 0;
-            for (size_t skip_field_index = 0; skip_field_index < key_block::element_count; ++skip_field_index)
+            // TODO: Investigate optimizing out the integer division
+            for (size_t i = 0; i < key_block::value_count; ++i)
             {
-                size_t skip_field = block.skip_field[skip_field_index];
-
-                for (size_t i = 0; i < sizeof(skip_field) * 8; ++i)
+                if (block.skip_field[i / key_block::element_count] &
+                    (1 << (i % key_block::skip_field_bits_per_element)))
                 {
-                    if (skip_field & (1 << i))
-                    {
-                        destroy_at(&block.jump_table[elem]);
-                    }
-                    ++elem;
+                    destroy_at(&block.typed_ptr()[i]);
                 }
-
-                // Reset the skip field
-                block.skip_field[skip_field_index] = 0;
             }
 
-            _initialize_block(block);
+            for (auto& sf : block.skip_field)
+            {
+                sf = 0;
+            }
+        }
+
+        size_t idx = 0;
+        for (key_block& block : _elements)
+        {
+            _initialize_block(block, idx);
+            idx += key_block::value_count;
         }
     }
 

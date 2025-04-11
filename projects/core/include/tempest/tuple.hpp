@@ -105,14 +105,14 @@ namespace tempest
 
             template <typename Tag, typename H, typename... R, enable_if_t<is_same_v<Tag, exact_args_tag>, int> = 0>
             constexpr tuple_impl(Tag, H&& head, R&&... rest)
-                : base{exact_args_tag{}, tempest::forward<Rest>(rest)...}, value{tempest::forward<Head>(head)}
+                : base{exact_args_tag{}, tempest::forward_like<Rest>(rest)...}, value{tempest::forward_like<Head>(head)}
             {
             }
 
             template <typename type2 = type,
                       enable_if_t<tuple_constructible_v<tuple_impl, const type2&, const Rest&...>, int> = 0>
             constexpr tuple_impl(const type& head, const Rest&... rest)
-                : tuple_impl(exact_args_tag{}, tempest::forward<Rest>(rest)...), value{head}
+                : tuple_impl(exact_args_tag{}, tempest::forward_like<Rest>(rest)...), value{head}
             {
             }
 
@@ -121,7 +121,7 @@ namespace tempest
                                                 tuple_constructible<tuple_impl, H, Rest...>>,
                                   int> = 0>
             constexpr tuple_impl(H&& head, R&&... rest)
-                : tuple_impl(exact_args_tag{}, tempest::forward<H>(head), tempest::forward<R>(rest)...)
+                : tuple_impl(exact_args_tag{}, tempest::forward_like<H>(head), tempest::forward_like<R>(rest)...)
             {
             }
 
@@ -201,7 +201,7 @@ namespace tempest
     {
         using res = tuple<detail::unwrapped_decay_t<Ts>...>;
 
-        return res(tempest::forward<Ts>(ts)...);
+        return res(tempest::forward_like<Ts>(ts)...);
     }
 
     template <size_t I, typename... Ts>
@@ -256,7 +256,7 @@ namespace tempest
 
     template <typename... Ts>
     template <typename... Us>
-    inline constexpr tuple<Ts...>::tuple(Us&&... us) : detail::tuple_impl<Ts...>{tempest::forward<Us>(us)...}
+    inline constexpr tuple<Ts...>::tuple(Us&&... us) : detail::tuple_impl<Ts...>{tempest::forward_like<Us>(us)...}
     {
     }
 

@@ -188,6 +188,9 @@ namespace tempest
 
     template <typename T>
     concept floating_point = is_floating_point_v<T>;
+
+    template <typename T>
+    concept enumeration = is_enum_v<T>;
 } // namespace tempest
 
 #endif // tempest_core_concepts_hpp
