@@ -7,6 +7,8 @@
 #include <tempest/optional.hpp>
 #include <tempest/tuple.hpp>
 
+#include <exception>
+
 namespace tempest::rhi::vk
 {
     namespace
@@ -56,7 +58,7 @@ namespace tempest::rhi::vk
                 return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
             default:
                 logger->critical("Invalid present mode: {}", static_cast<uint32_t>(mode));
-                terminate();
+                std::terminate();
             }
         }
 
@@ -122,7 +124,7 @@ namespace tempest::rhi::vk
                 return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
             default:
                 logger->critical("Invalid image format: {}", static_cast<uint32_t>(fmt));
-                terminate();
+                std::terminate();
             }
         }
 
@@ -162,7 +164,7 @@ namespace tempest::rhi::vk
                 return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
             default:
                 logger->critical("Invalid color space: {}", static_cast<uint32_t>(color_space));
-                terminate();
+                std::terminate();
             }
         }
     } // namespace
@@ -202,7 +204,7 @@ namespace tempest::rhi::vk
             auto result = bldr.build();
             if (!result)
             {
-                terminate();
+                std::terminate();
             }
 
             _devices[device_index] = make_unique<rhi::vk::device>(tempest::move(result).value(), &_vkb_instance);
@@ -261,7 +263,7 @@ namespace tempest::rhi::vk
         else
         {
             logger->critical("Failed to find a suitable queue family for the device.");
-            terminate();
+            std::terminate();
         }
 
         if (compute_queue_match && get<1>(*compute_queue_match) != get<1>(*default_queue_match))
