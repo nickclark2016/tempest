@@ -50,7 +50,7 @@ namespace tempest::graphics
                 return pipeline_stage::VERTEX;
             }
             case buffer_resource_usage::INDIRECT_ARGUMENT: {
-                return pipeline_stage::DRAW_INDIRECT;
+                return pipeline_stage::INDIRECT_COMMAND;
             }
             case buffer_resource_usage::TRANSFER_SOURCE:
                 [[fallthrough]];

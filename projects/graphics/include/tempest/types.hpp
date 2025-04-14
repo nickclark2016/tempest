@@ -150,7 +150,7 @@ namespace tempest::graphics
     {
         INFER,
         BEGIN,
-        DRAW_INDIRECT,
+        INDIRECT_COMMAND,
         VERTEX,
         FRAGMENT,
         COLOR_OUTPUT,

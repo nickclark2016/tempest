@@ -7,7 +7,7 @@
 namespace tempest
 {
     template <enumeration EnumType>
-    
+
     class enum_mask
     {
       public:
@@ -40,6 +40,7 @@ namespace tempest
 
         constexpr EnumType value() const noexcept;
         constexpr operator EnumType() const noexcept;
+        constexpr operator bool() const noexcept;
 
       private:
         EnumType _value{};
@@ -193,6 +194,21 @@ namespace tempest
     constexpr enum_mask<EnumType>::operator EnumType() const noexcept
     {
         return _value;
+    }
+
+    template <enumeration EnumType>
+    constexpr enum_mask<EnumType>::operator bool() const noexcept
+    {
+        return to_underlying(_value) != 0;
+    }
+
+    template <typename EnumType, typename... EnumTypes>
+        requires(same_as<EnumType, EnumTypes> && ...)
+    constexpr enum_mask<EnumType> make_enum_mask(EnumType value, EnumTypes... values) noexcept
+    {
+        auto v = to_underlying(value);
+        ((v |= to_underlying(values)), ...);
+        return enum_mask<EnumType>(static_cast<EnumType>(v));
     }
 } // namespace tempest
 

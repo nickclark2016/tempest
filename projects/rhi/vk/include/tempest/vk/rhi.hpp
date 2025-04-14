@@ -1,11 +1,15 @@
 #ifndef tempest_rhi_vk_rhi_hpp
 #define tempest_rhi_vk_rhi_hpp
 
+#include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/slot_map.hpp>
 
 #include <VkBootstrap.h>
+#include <vk_mem_alloc.h>
+
+#include <queue>
 
 namespace tempest::rhi::vk
 {
@@ -29,31 +33,88 @@ namespace tempest::rhi::vk
         friend unique_ptr<rhi::instance> create_instance() noexcept;
     };
 
+    struct work_group
+    {
+        VkCommandPool pool;
+        vector<VkCommandBuffer> cmd_buffers;
+        // Maintain a parallel vector of handles
+        vector<typed_rhi_handle<rhi_handle_type::command_list>> cmd_buffer_handles;
+
+        int32_t current_buffer_index = -1;
+
+        vkb::DispatchTable* dispatch;
+        device* parent;
+
+        void reset() noexcept;
+        typed_rhi_handle<rhi_handle_type::command_list> acquire_next_command_buffer() noexcept;
+        optional<typed_rhi_handle<rhi_handle_type::command_list>> current_command_buffer() const noexcept;
+    };
+
     class work_queue : public rhi::work_queue
     {
       public:
         work_queue() = default;
-        explicit work_queue(vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index) noexcept;
+        explicit work_queue(device* parent, vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index,
+                            uint32_t fif) noexcept;
         ~work_queue() override;
 
-        typed_rhi_handle<rhi_handle_type::command_list> get_command_list() noexcept override;
+        typed_rhi_handle<rhi_handle_type::command_list> get_next_command_list(
+            uint32_t frame_in_flight) noexcept override;
 
         bool submit(span<const submit_info> infos,
                     typed_rhi_handle<rhi_handle_type::fence> fence =
                         typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept override;
         bool present(const present_info& info) noexcept override;
 
+        void start_frame(uint32_t frame_in_flight);
+
+        // commands
+        void begin_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                bool one_time_submit) noexcept override;
+        void end_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept override;
+        void transition_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                              span<const image_barrier> image_barriers) noexcept override;
+        void clear_color_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                               typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r, float g,
+                               float b, float a) noexcept override;
+
       private:
         vkb::DispatchTable* _dispatch;
         VkQueue _queue;
         uint32_t _queue_family_index;
+
+        vector<work_group> _work_groups;
+        device* _parent;
+
+        stack_allocator _allocator{64 * 1024};
     };
 
     struct image
     {
+        VmaAllocation allocation;
+        VmaAllocationInfo allocation_info;
         VkImage image;
         VkImageView image_view;
         bool swapchain_image;
+        VkImageAspectFlags image_aspect;
+    };
+
+    struct buffer
+    {
+        VmaAllocation allocation;
+        VmaAllocationInfo allocation_info;
+        VkBuffer buffer;
+    };
+
+    struct fence
+    {
+        VkFence fence;
+    };
+
+    struct semaphore
+    {
+        VkSemaphore semaphore;
+        semaphore_type type;
     };
 
     struct swapchain
@@ -61,6 +122,29 @@ namespace tempest::rhi::vk
         vkb::Swapchain swapchain;
         VkSurfaceKHR surface;
         vector<typed_rhi_handle<rhi_handle_type::image>> images;
+    };
+
+    struct delete_queue
+    {
+        VmaAllocator allocator{};
+        vkb::DispatchTable* dispatch{};
+        vkb::Instance* instance{};
+
+        struct delete_resource
+        {
+            uint64_t last_used_frame{};
+            VkObjectType type{};
+            void* handle{};
+            VmaAllocation allocation{};
+        };
+
+        void enqueue(VkObjectType type, void* handle, uint64_t frame);
+        void enqueue(VkObjectType type, void* handle, VmaAllocation allocation, uint64_t frame);
+        void release_resources(uint64_t frame);
+        void release_resource(delete_resource res);
+        void release_all_immediately();
+
+        std::queue<delete_resource> dq{};
     };
 
     class device : public rhi::device
@@ -95,22 +179,52 @@ namespace tempest::rhi::vk
         span<const typed_rhi_handle<rhi_handle_type::image>> get_render_surfaces(
             typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept override;
         expected<swapchain_image_acquire_info_result, swapchain_error_code> acquire_next_image(
+            typed_rhi_handle<rhi_handle_type::render_surface> swapchain,
             typed_rhi_handle<rhi_handle_type::semaphore> signal_sem,
-            typed_rhi_handle<rhi_handle_type::fence> signal_fence) noexcept;
+            typed_rhi_handle<rhi_handle_type::fence> signal_fence) noexcept override;
+
+        bool is_signaled(typed_rhi_handle<rhi_handle_type::fence> fence) const noexcept override;
+        bool reset(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept override;
+        bool wait(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept override;
+
+        void start_frame() override;
+        void end_frame() override;
+
+        uint32_t frames_in_flight() const noexcept override;
 
         typed_rhi_handle<rhi_handle_type::image> acquire_image(image img) noexcept;
+
+        typed_rhi_handle<rhi_handle_type::command_list> acquire_command_list(VkCommandBuffer buf) noexcept;
+        VkCommandBuffer get_command_buffer(typed_rhi_handle<rhi_handle_type::command_list> handle) const noexcept;
+        void release_command_list(typed_rhi_handle<rhi_handle_type::command_list> handle) noexcept;
+
+        VkFence get_fence(typed_rhi_handle<rhi_handle_type::fence> handle) const noexcept;
+        VkSemaphore get_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) const noexcept;
+        VkSwapchainKHR get_swapchain(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept;
+        optional<vk::image> get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept;
 
       private:
         vkb::Instance* _vkb_instance;
         vkb::Device _vkb_device;
         vkb::DispatchTable _dispatch_table;
+        VmaAllocator _vma_allocator{};
 
         optional<work_queue> _primary_work_queue;
         optional<work_queue> _dedicated_transfer_queue;
         optional<work_queue> _dedicated_compute_queue;
 
+        delete_queue _delete_queue;
+
+        slot_map<buffer> _buffers;
+        slot_map<fence> _fences;
         slot_map<image> _images;
+        slot_map<semaphore> _semaphores;
         slot_map<swapchain> _swapchains;
+
+        slot_map<VkCommandBuffer> _command_buffers;
+
+        uint64_t _current_frame{0};
+        static constexpr uint64_t num_frames_in_flight = 2;
     };
 
     unique_ptr<rhi::instance> create_instance() noexcept;

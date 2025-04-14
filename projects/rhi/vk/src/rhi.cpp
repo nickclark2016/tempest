@@ -128,7 +128,7 @@ namespace tempest::rhi::vk
             }
         }
 
-        VkColorSpaceKHR to_vulkan(rhi::color_space color_space)
+        constexpr VkColorSpaceKHR to_vulkan(rhi::color_space color_space)
         {
             switch (color_space)
             {
@@ -164,6 +164,476 @@ namespace tempest::rhi::vk
                 return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
             default:
                 logger->critical("Invalid color space: {}", static_cast<uint32_t>(color_space));
+                std::terminate();
+            }
+        }
+
+        constexpr VkImageUsageFlags to_vulkan(enum_mask<rhi::image_usage> usage)
+        {
+            VkImageUsageFlags flags = 0;
+
+            if ((usage & rhi::image_usage::COLOR_ATTACHMENT) == rhi::image_usage::COLOR_ATTACHMENT)
+            {
+                flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            }
+
+            if ((usage & rhi::image_usage::DEPTH_ATTACHMENT) == rhi::image_usage::DEPTH_ATTACHMENT)
+            {
+                flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            }
+
+            if ((usage & rhi::image_usage::STENCIL_ATTACHMENT) == rhi::image_usage::STENCIL_ATTACHMENT)
+            {
+                flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            }
+
+            if ((usage & rhi::image_usage::STORAGE) == rhi::image_usage::STORAGE)
+            {
+                flags |= VK_IMAGE_USAGE_STORAGE_BIT;
+            }
+
+            if ((usage & rhi::image_usage::SAMPLED) == rhi::image_usage::SAMPLED)
+            {
+                flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
+            }
+
+            if ((usage & rhi::image_usage::TRANSFER_SRC) == rhi::image_usage::TRANSFER_SRC)
+            {
+                flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            }
+
+            if ((usage & rhi::image_usage::TRANSFER_DST) == rhi::image_usage::TRANSFER_DST)
+            {
+                flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            }
+
+            return flags;
+        }
+
+        constexpr VkBufferUsageFlags to_vulkan(enum_mask<rhi::buffer_usage> usage)
+        {
+            VkBufferUsageFlags flags = 0;
+
+            if ((usage & rhi::buffer_usage::VERTEX) == rhi::buffer_usage::VERTEX)
+            {
+                flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            }
+
+            if ((usage & rhi::buffer_usage::INDEX) == rhi::buffer_usage::INDEX)
+            {
+                flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+            }
+
+            if ((usage & rhi::buffer_usage::INDIRECT) == rhi::buffer_usage::INDIRECT)
+            {
+                flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+            }
+
+            if ((usage & rhi::buffer_usage::CONSTANT) == rhi::buffer_usage::CONSTANT)
+            {
+                flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+            }
+
+            if ((usage & rhi::buffer_usage::STORAGE) == rhi::buffer_usage::STORAGE)
+            {
+                flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            }
+
+            if ((usage & rhi::buffer_usage::TRANSFER_SRC) == rhi::buffer_usage::TRANSFER_SRC)
+            {
+                flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            }
+
+            if ((usage & rhi::buffer_usage::TRANSFER_DST) == rhi::buffer_usage::TRANSFER_DST)
+            {
+                flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            }
+
+            return flags;
+        }
+
+        constexpr VkImageType to_vulkan(rhi::image_type type)
+        {
+            switch (type)
+            {
+            case rhi::image_type::IMAGE_1D:
+                return VK_IMAGE_TYPE_1D;
+            case rhi::image_type::IMAGE_2D:
+                return VK_IMAGE_TYPE_2D;
+            case rhi::image_type::IMAGE_3D:
+                return VK_IMAGE_TYPE_3D;
+            case rhi::image_type::IMAGE_CUBE:
+                return VK_IMAGE_TYPE_2D;
+            case rhi::image_type::IMAGE_1D_ARRAY:
+                return VK_IMAGE_TYPE_1D;
+            case rhi::image_type::IMAGE_2D_ARRAY:
+                return VK_IMAGE_TYPE_2D;
+            case rhi::image_type::IMAGE_CUBE_ARRAY:
+                return VK_IMAGE_TYPE_2D;
+            }
+
+            unreachable();
+        }
+
+        constexpr VkSampleCountFlagBits to_vulkan(rhi::image_sample_count count)
+        {
+            switch (count)
+            {
+            case rhi::image_sample_count::SAMPLE_COUNT_1:
+                return VK_SAMPLE_COUNT_1_BIT;
+            case rhi::image_sample_count::SAMPLE_COUNT_2:
+                return VK_SAMPLE_COUNT_2_BIT;
+            case rhi::image_sample_count::SAMPLE_COUNT_4:
+                return VK_SAMPLE_COUNT_4_BIT;
+            case rhi::image_sample_count::SAMPLE_COUNT_8:
+                return VK_SAMPLE_COUNT_8_BIT;
+            case rhi::image_sample_count::SAMPLE_COUNT_16:
+                return VK_SAMPLE_COUNT_16_BIT;
+            case rhi::image_sample_count::SAMPLE_COUNT_32:
+                return VK_SAMPLE_COUNT_32_BIT;
+            case rhi::image_sample_count::SAMPLE_COUNT_64:
+                return VK_SAMPLE_COUNT_64_BIT;
+            }
+
+            unreachable();
+        }
+
+        constexpr VkImageTiling to_vulkan(rhi::image_tiling_type tiling)
+        {
+            switch (tiling)
+            {
+            case rhi::image_tiling_type::OPTIMAL:
+                return VK_IMAGE_TILING_OPTIMAL;
+            case rhi::image_tiling_type::LINEAR:
+                return VK_IMAGE_TILING_LINEAR;
+            }
+
+            unreachable();
+        }
+
+        constexpr VkSemaphoreType to_vulkan(rhi::semaphore_type type)
+        {
+            switch (type)
+            {
+            case rhi::semaphore_type::TIMELINE:
+                return VK_SEMAPHORE_TYPE_TIMELINE;
+            case rhi::semaphore_type::BINARY:
+                return VK_SEMAPHORE_TYPE_BINARY;
+            }
+            unreachable();
+        }
+
+        constexpr VkPipelineStageFlags2 to_vulkan(enum_mask<rhi::pipeline_stage> stages)
+        {
+            VkPipelineStageFlags2 flags = 0;
+
+            if (stages & rhi::pipeline_stage::TOP)
+            {
+                flags |= VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::BOTTOM)
+            {
+                flags |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::INDIRECT_COMMAND)
+            {
+                flags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::VERTEX_ATTRIBUTE_INPUT)
+            {
+                flags |= VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::VERTEX_SHADER)
+            {
+                flags |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::TESSELLATION_CONTROL_SHADER)
+            {
+                flags |= VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::TESSELLATION_EVALUATION_SHADER)
+            {
+                flags |= VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::GEOMETRY_SHADER)
+            {
+                flags |= VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::FRAGMENT_SHADER)
+            {
+                flags |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::EARLY_FRAGMENT_TESTS)
+            {
+                flags |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::LATE_FRAGMENT_TESTS)
+            {
+                flags |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::COLOR_ATTACHMENT_OUTPUT)
+            {
+                flags |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::COMPUTE_SHADER)
+            {
+                flags |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::COPY)
+            {
+                flags |= VK_PIPELINE_STAGE_2_COPY_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::RESOLVE)
+            {
+                flags |= VK_PIPELINE_STAGE_2_RESOLVE_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::BLIT)
+            {
+                flags |= VK_PIPELINE_STAGE_2_BLIT_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::CLEAR)
+            {
+                flags |= VK_PIPELINE_STAGE_2_CLEAR_BIT;
+            }
+
+            if (stages & rhi::pipeline_stage::ALL_TRANSFER)
+            {
+                flags |= VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+            }
+
+            return flags;
+        }
+
+        constexpr VkAccessFlags2 to_vulkan(enum_mask<memory_access> access)
+        {
+            VkAccessFlags2 flags = 0;
+
+            if (access & memory_access::INDIRECT_COMMAND_READ)
+            {
+                flags |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+            }
+
+            if (access & memory_access::INDEX_READ)
+            {
+                flags |= VK_ACCESS_2_INDEX_READ_BIT;
+            }
+
+            if (access & memory_access::VERTEX_ATTRIBUTE_READ)
+            {
+                flags |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+            }
+
+            if (access & memory_access::CONSTANT_BUFFER_READ)
+            {
+                flags |= VK_ACCESS_2_UNIFORM_READ_BIT;
+            }
+
+            if (access & memory_access::SHADER_READ)
+            {
+                flags |= VK_ACCESS_2_SHADER_READ_BIT;
+            }
+
+            if (access & memory_access::SHADER_WRITE)
+            {
+                flags |= VK_ACCESS_2_SHADER_WRITE_BIT;
+            }
+
+            if (access & memory_access::COLOR_ATTACHMENT_READ)
+            {
+                flags |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+            }
+
+            if (access & memory_access::COLOR_ATTACHMENT_WRITE)
+            {
+                flags |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            }
+
+            if (access & memory_access::DEPTH_STENCIL_ATTACHMENT_READ)
+            {
+                flags |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+            }
+
+            if (access & memory_access::DEPTH_STENCIL_ATTACHMENT_WRITE)
+            {
+                flags |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            }
+
+            if (access & memory_access::TRANSFER_READ)
+            {
+                flags |= VK_ACCESS_2_TRANSFER_READ_BIT;
+            }
+
+            if (access & memory_access::TRANSFER_WRITE)
+            {
+                flags |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            }
+
+            if (access & memory_access::HOST_READ)
+            {
+                flags |= VK_ACCESS_2_HOST_READ_BIT;
+            }
+
+            if (access & memory_access::HOST_WRITE)
+            {
+                flags |= VK_ACCESS_2_HOST_WRITE_BIT;
+            }
+
+            if (access & memory_access::MEMORY_READ)
+            {
+                flags |= VK_ACCESS_2_MEMORY_READ_BIT;
+            }
+
+            if (access & memory_access::MEMORY_WRITE)
+            {
+                flags |= VK_ACCESS_2_MEMORY_WRITE_BIT;
+            }
+
+            if (access & memory_access::SHADER_SAMPLED_READ)
+            {
+                flags |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+            }
+
+            if (access & memory_access::SHADER_STORAGE_READ)
+            {
+                flags |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+            }
+
+            if (access & memory_access::SHADER_STORAGE_WRITE)
+            {
+                flags |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+            }
+
+            return flags;
+        }
+
+        constexpr VkImageLayout to_vulkan(rhi::image_layout layout)
+        {
+            switch (layout)
+            {
+            case rhi::image_layout::UNDEFINED:
+                return VK_IMAGE_LAYOUT_UNDEFINED;
+            case rhi::image_layout::GENERAL:
+                return VK_IMAGE_LAYOUT_GENERAL;
+            case rhi::image_layout::COLOR_ATTACHMENT:
+                return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            case rhi::image_layout::DEPTH_STENCIL_READ_WRITE:
+                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            case rhi::image_layout::DEPTH_STENCIL_READ_ONLY:
+                return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            case rhi::image_layout::SHADER_READ_ONLY:
+                return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            case rhi::image_layout::TRANSFER_SRC:
+                return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            case rhi::image_layout::TRANSFER_DST:
+                return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            case rhi::image_layout::DEPTH:
+                return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            case rhi::image_layout::DEPTH_READ_ONLY:
+                return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+            case rhi::image_layout::STENCIL:
+                return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+            case rhi::image_layout::STENCIL_READ_ONLY:
+                return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+            case rhi::image_layout::PRESENT:
+                return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            }
+
+            unreachable();
+        }
+
+        constexpr VkImageViewType get_compatible_view_type(rhi::image_type type)
+        {
+            switch (type)
+            {
+            case rhi::image_type::IMAGE_1D:
+                return VK_IMAGE_VIEW_TYPE_1D;
+            case rhi::image_type::IMAGE_2D:
+                return VK_IMAGE_VIEW_TYPE_2D;
+            case rhi::image_type::IMAGE_3D:
+                return VK_IMAGE_VIEW_TYPE_3D;
+            case rhi::image_type::IMAGE_CUBE:
+                return VK_IMAGE_VIEW_TYPE_CUBE;
+            case rhi::image_type::IMAGE_1D_ARRAY:
+                return VK_IMAGE_VIEW_TYPE_1D_ARRAY;
+            case rhi::image_type::IMAGE_2D_ARRAY:
+                return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+            case rhi::image_type::IMAGE_CUBE_ARRAY:
+                return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+            }
+
+            unreachable();
+        }
+
+        constexpr VkImageAspectFlags compute_aspect_flags(image_format fmt)
+        {
+            switch (fmt)
+            {
+            case rhi::image_format::D16_UNORM:
+            case rhi::image_format::D24_UNORM:
+            case rhi::image_format::D32_FLOAT:
+                return VK_IMAGE_ASPECT_DEPTH_BIT;
+            case rhi::image_format::D16_UNORM_S8_UINT:
+            case rhi::image_format::D24_UNORM_S8_UINT:
+            case rhi::image_format::D32_FLOAT_S8_UINT:
+                return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            case rhi::image_format::S8_UINT:
+                return VK_IMAGE_ASPECT_STENCIL_BIT;
+            case rhi::image_format::R8_UNORM:
+            case rhi::image_format::R8_SNORM:
+            case rhi::image_format::R16_UNORM:
+            case rhi::image_format::R16_SNORM:
+            case rhi::image_format::R16_FLOAT:
+            case rhi::image_format::R32_FLOAT:
+            case rhi::image_format::RG8_UNORM:
+            case rhi::image_format::RG8_SNORM:
+            case rhi::image_format::RG16_UNORM:
+            case rhi::image_format::RG16_SNORM:
+            case rhi::image_format::RG16_FLOAT:
+            case rhi::image_format::RG32_FLOAT:
+            case rhi::image_format::RGBA8_UNORM:
+            case rhi::image_format::RGBA8_SNORM:
+            case rhi::image_format::RGBA8_SRGB:
+            case rhi::image_format::BGRA8_SRGB:
+            case rhi::image_format::RGBA16_UNORM:
+            case rhi::image_format::RGBA16_SNORM:
+            case rhi::image_format::RGBA16_FLOAT:
+            case rhi::image_format::RGBA32_FLOAT:
+            case rhi::image_format::A2BGR10_UNORM_PACK32:
+                return VK_IMAGE_ASPECT_COLOR_BIT;
+            }
+
+            logger->critical("Invalid image format: {}", to_underlying(fmt));
+            std::terminate();
+        }
+
+        constexpr VmaMemoryUsage to_vma(rhi::memory_location location)
+        {
+            switch (location)
+            {
+            case rhi::memory_location::DEVICE:
+                return VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+            case rhi::memory_location::HOST:
+                return VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+            case rhi::memory_location::AUTO:
+                return VMA_MEMORY_USAGE_AUTO;
+            default:
+                logger->critical("Invalid memory location: {}", static_cast<uint32_t>(location));
                 std::terminate();
             }
         }
@@ -213,9 +683,141 @@ namespace tempest::rhi::vk
         return *_devices[device_index];
     }
 
+    void delete_queue::enqueue(VkObjectType type, void* handle, uint64_t frame)
+    {
+        dq.push({
+            .last_used_frame = frame,
+            .type = type,
+            .handle = handle,
+        });
+    }
+
+    void delete_queue::enqueue(VkObjectType type, void* handle, VmaAllocation allocation, uint64_t frame)
+    {
+        dq.push({
+            .last_used_frame = frame,
+            .type = type,
+            .handle = handle,
+            .allocation = allocation,
+        });
+    }
+
+    void delete_queue::release_resources(uint64_t frame)
+    {
+        while (!dq.empty())
+        {
+            const auto& front = dq.front();
+            if (front.last_used_frame >= frame)
+            {
+                return;
+            }
+
+            release_resource(front);
+
+            dq.pop();
+        }
+    }
+
+    void delete_queue::release_resource(delete_resource res)
+    {
+        switch (res.type)
+        {
+        case VK_OBJECT_TYPE_BUFFER:
+            vmaDestroyBuffer(allocator, static_cast<VkBuffer>(res.handle), res.allocation);
+            break;
+        case VK_OBJECT_TYPE_FENCE:
+            dispatch->destroyFence(static_cast<VkFence>(res.handle), nullptr);
+            break;
+        case VK_OBJECT_TYPE_IMAGE:
+            vmaDestroyImage(allocator, static_cast<VkImage>(res.handle), res.allocation);
+            break;
+        case VK_OBJECT_TYPE_IMAGE_VIEW:
+            dispatch->destroyImageView(static_cast<VkImageView>(res.handle), nullptr);
+            break;
+        case VK_OBJECT_TYPE_SEMAPHORE:
+            dispatch->destroySemaphore(static_cast<VkSemaphore>(res.handle), nullptr);
+            break;
+        case VK_OBJECT_TYPE_SURFACE_KHR:
+            vkb::destroy_surface(*instance, static_cast<VkSurfaceKHR>(res.handle));
+            break;
+        case VK_OBJECT_TYPE_SWAPCHAIN_KHR:
+            dispatch->destroySwapchainKHR(static_cast<VkSwapchainKHR>(res.handle), nullptr);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void delete_queue::release_all_immediately()
+    {
+        dispatch->deviceWaitIdle();
+        while (!dq.empty())
+        {
+            release_resource(dq.front());
+            dq.pop();
+        }
+    }
+
     device::device(vkb::Device dev, vkb::Instance* instance)
         : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()}
     {
+        VmaVulkanFunctions fns = {
+            .vkGetInstanceProcAddr = _vkb_instance->fp_vkGetInstanceProcAddr,
+            .vkGetDeviceProcAddr = _vkb_device.fp_vkGetDeviceProcAddr,
+            .vkGetPhysicalDeviceProperties = nullptr,
+            .vkGetPhysicalDeviceMemoryProperties = nullptr,
+            .vkAllocateMemory = nullptr,
+            .vkFreeMemory = nullptr,
+            .vkMapMemory = nullptr,
+            .vkUnmapMemory = nullptr,
+            .vkFlushMappedMemoryRanges = nullptr,
+            .vkInvalidateMappedMemoryRanges = nullptr,
+            .vkBindBufferMemory = nullptr,
+            .vkBindImageMemory = nullptr,
+            .vkGetBufferMemoryRequirements = nullptr,
+            .vkGetImageMemoryRequirements = nullptr,
+            .vkCreateBuffer = nullptr,
+            .vkDestroyBuffer = nullptr,
+            .vkCreateImage = nullptr,
+            .vkDestroyImage = nullptr,
+            .vkCmdCopyBuffer = nullptr,
+            .vkGetBufferMemoryRequirements2KHR = nullptr,
+            .vkGetImageMemoryRequirements2KHR = nullptr,
+            .vkBindBufferMemory2KHR = nullptr,
+            .vkBindImageMemory2KHR = nullptr,
+            .vkGetPhysicalDeviceMemoryProperties2KHR = nullptr,
+            .vkGetDeviceBufferMemoryRequirements = nullptr,
+            .vkGetDeviceImageMemoryRequirements = nullptr,
+        };
+
+        VmaAllocatorCreateInfo ci = {
+            .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+            .physicalDevice = _vkb_device.physical_device.physical_device,
+            .device = _vkb_device.device,
+            .preferredLargeHeapBlockSize = 0,
+            .pAllocationCallbacks = nullptr,
+            .pDeviceMemoryCallbacks = nullptr,
+            .pHeapSizeLimit = nullptr,
+            .pVulkanFunctions = &fns,
+            .instance = _vkb_instance->instance,
+            .vulkanApiVersion = VK_API_VERSION_1_3,
+            .pTypeExternalMemoryHandleTypes = nullptr,
+        };
+
+        const auto result = vmaCreateAllocator(&ci, &_vma_allocator);
+
+        if (result != VK_SUCCESS)
+        {
+            logger->critical("Failed to create VMA allocator: {}", to_underlying(result));
+            std::terminate();
+        }
+
+        _delete_queue = delete_queue{
+            .allocator = _vma_allocator,
+            .dispatch = &_dispatch_table,
+            .instance = _vkb_instance,
+        };
+
         auto& queue_families = _vkb_device.queue_families;
         flat_unordered_map<uint32_t, uint32_t> queues_allocated;
 
@@ -258,7 +860,8 @@ namespace tempest::rhi::vk
         {
             VkQueue queue;
             _dispatch_table.getDeviceQueue(get<1>(*default_queue_match), get<2>(*default_queue_match), &queue);
-            _primary_work_queue.emplace(&_dispatch_table, queue, get<1>(*default_queue_match));
+            _primary_work_queue.emplace(this, &_dispatch_table, queue, get<1>(*default_queue_match),
+                                        frames_in_flight());
         }
         else
         {
@@ -270,20 +873,28 @@ namespace tempest::rhi::vk
         {
             VkQueue queue;
             _dispatch_table.getDeviceQueue(get<1>(*compute_queue_match), get<2>(*compute_queue_match), &queue);
-            _dedicated_compute_queue.emplace(&_dispatch_table, queue, get<1>(*compute_queue_match));
+            _dedicated_compute_queue.emplace(this, &_dispatch_table, queue, get<1>(*compute_queue_match),
+                                             frames_in_flight());
         }
 
         if (transfer_queue_match && get<1>(*transfer_queue_match) != get<1>(*default_queue_match))
         {
             VkQueue queue;
             _dispatch_table.getDeviceQueue(get<1>(*transfer_queue_match), get<2>(*transfer_queue_match), &queue);
-            _dedicated_transfer_queue.emplace(&_dispatch_table, queue, get<1>(*transfer_queue_match));
+            _dedicated_transfer_queue.emplace(this, &_dispatch_table, queue, get<1>(*transfer_queue_match),
+                                              frames_in_flight());
         }
     }
 
     device::~device()
     {
         _dispatch_table.deviceWaitIdle();
+
+        _primary_work_queue = nullopt;
+        _dedicated_compute_queue = nullopt;
+        _dedicated_transfer_queue = nullopt;
+
+        _delete_queue.release_all_immediately();
 
         for (auto img : _images)
         {
@@ -293,10 +904,19 @@ namespace tempest::rhi::vk
             }
             if (img.image && !img.swapchain_image)
             {
-                _dispatch_table.destroyImage(img.image, nullptr);
+                vmaDestroyImage(_vma_allocator, img.image, img.allocation);
             }
         }
         _images.clear();
+
+        for (auto buf : _buffers)
+        {
+            if (buf.buffer)
+            {
+                vmaDestroyBuffer(_vma_allocator, buf.buffer, buf.allocation);
+            }
+        }
+        _buffers.clear();
 
         for (auto sc : _swapchains)
         {
@@ -305,27 +925,271 @@ namespace tempest::rhi::vk
         }
         _swapchains.clear();
 
+        for (auto fence : _fences)
+        {
+            _dispatch_table.destroyFence(fence.fence, nullptr);
+        }
+        _fences.clear();
+
+        for (auto sem : _semaphores)
+        {
+            _dispatch_table.destroySemaphore(sem.semaphore, nullptr);
+        }
+        _semaphores.clear();
+
+        vmaDestroyAllocator(_vma_allocator);
         vkb::destroy_device(_vkb_device);
     }
 
     typed_rhi_handle<rhi_handle_type::buffer> device::create_buffer(const buffer_desc& desc) noexcept
     {
-        return typed_rhi_handle<rhi_handle_type::buffer>::null_handle;
+        VkBufferCreateInfo buffer_ci = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .size = desc.size,
+            .usage = to_vulkan(desc.usage) | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+        };
+
+        VmaAllocationCreateInfo allocation_ci = {
+            .flags = 0,
+            .usage = to_vma(desc.location),
+            .requiredFlags = 0,
+            .preferredFlags = 0,
+            .memoryTypeBits = 0,
+            .pool = nullptr,
+            .pUserData = nullptr,
+            .priority = 0,
+        };
+
+        switch (desc.access_pattern)
+        {
+        case rhi::host_access_pattern::RANDOM:
+            allocation_ci.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            break;
+        case rhi::host_access_pattern::SEQUENTIAL:
+            allocation_ci.flags |=
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            break;
+        default:
+            break;
+        }
+
+        switch (desc.access_type)
+        {
+        case rhi::host_access_type::COHERENT:
+            allocation_ci.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            break;
+        default:
+            break;
+        }
+
+        VmaAllocation allocation;
+        VkBuffer buffer;
+        VmaAllocationInfo allocation_info;
+
+        auto result =
+            vmaCreateBuffer(_vma_allocator, &buffer_ci, &allocation_ci, &buffer, &allocation, &allocation_info);
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create buffer: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::buffer>::null_handle;
+        }
+
+        vk::buffer buf = {
+            .allocation = allocation,
+            .allocation_info = allocation_info,
+            .buffer = buffer,
+        };
+
+        auto new_key = _buffers.insert(buf);
+        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
+        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
+
+        return typed_rhi_handle<rhi_handle_type::buffer>{
+            .id = new_key_id,
+            .generation = new_key_gen,
+        };
     }
 
     typed_rhi_handle<rhi_handle_type::image> device::create_image(const image_desc& desc) noexcept
     {
-        return typed_rhi_handle<rhi_handle_type::image>::null_handle;
+        VkImageCreateInfo ci = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = to_vulkan(desc.type),
+            .format = to_vulkan(desc.format),
+            .extent =
+                {
+                    .width = desc.width,
+                    .height = desc.height,
+                    .depth = desc.depth,
+                },
+            .mipLevels = desc.mip_levels,
+            .arrayLayers = desc.array_layers,
+            .samples = to_vulkan(desc.sample_count),
+            .tiling = to_vulkan(desc.tiling),
+            .usage = to_vulkan(desc.usage),
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+
+        VmaAllocationCreateInfo allocation_ci = {
+            .flags = 0,
+            .usage = to_vma(desc.location),
+            .requiredFlags = 0,
+            .preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            .memoryTypeBits = 0,
+            .pool = nullptr,
+            .pUserData = nullptr,
+            .priority = 0,
+        };
+
+        // If the image is a render target, we should use a dedicated allocation
+
+        if (desc.usage & rhi::image_usage::COLOR_ATTACHMENT || desc.usage & rhi::image_usage::DEPTH_ATTACHMENT ||
+            desc.usage & rhi::image_usage::STENCIL_ATTACHMENT)
+        {
+            allocation_ci.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+        }
+
+        VmaAllocation allocation;
+        VkImage image;
+        VmaAllocationInfo allocation_info;
+
+        auto result = vmaCreateImage(_vma_allocator, &ci, &allocation_ci, &image, &allocation, &allocation_info);
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create image: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::image>::null_handle;
+        }
+
+        VkImageViewCreateInfo view_ci = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = image,
+            .viewType = get_compatible_view_type(desc.type),
+            .format = ci.format,
+            .components =
+                {
+                    .r = VK_COMPONENT_SWIZZLE_R,
+                    .g = VK_COMPONENT_SWIZZLE_G,
+                    .b = VK_COMPONENT_SWIZZLE_B,
+                    .a = VK_COMPONENT_SWIZZLE_A,
+                },
+            .subresourceRange =
+                {
+                    .aspectMask = compute_aspect_flags(desc.format),
+                    .baseMipLevel = 0,
+                    .levelCount = desc.mip_levels,
+                    .baseArrayLayer = 0,
+                    .layerCount = desc.array_layers,
+                },
+        };
+
+        VkImageView image_view;
+        result = _dispatch_table.createImageView(&view_ci, nullptr, &image_view);
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create image view: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::image>::null_handle;
+        }
+
+        vk::image img = {.allocation = allocation,
+                         .allocation_info = allocation_info,
+                         .image = image,
+                         .image_view = image_view,
+                         .swapchain_image = false,
+                         .image_aspect = view_ci.subresourceRange.aspectMask};
+
+        auto new_key = _images.insert(img);
+        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
+        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
+
+        return typed_rhi_handle<rhi_handle_type::image>{
+            .id = new_key_id,
+            .generation = new_key_gen,
+        };
     }
 
     typed_rhi_handle<rhi_handle_type::fence> device::create_fence(const fence_info& info) noexcept
     {
-        return typed_rhi_handle<rhi_handle_type::fence>::null_handle;
+        VkFenceCreateInfo fence_ci = {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+        };
+
+        if (info.signaled)
+        {
+            fence_ci.flags |= VK_FENCE_CREATE_SIGNALED_BIT;
+        }
+
+        VkFence fence;
+        auto result = _dispatch_table.createFence(&fence_ci, nullptr, &fence);
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create fence: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::fence>::null_handle;
+        }
+
+        vk::fence new_fence = {
+            .fence = fence,
+        };
+
+        auto new_key = _fences.insert(new_fence);
+        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
+        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
+
+        return typed_rhi_handle<rhi_handle_type::fence>{
+            .id = new_key_id,
+            .generation = new_key_gen,
+        };
     }
 
     typed_rhi_handle<rhi_handle_type::semaphore> device::create_semaphore(const semaphore_info& info) noexcept
     {
-        return typed_rhi_handle<rhi_handle_type::semaphore>::null_handle;
+        VkSemaphoreTypeCreateInfo sem_type_ci = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+            .pNext = nullptr,
+            .semaphoreType = to_vulkan(info.type),
+            .initialValue = info.initial_value,
+        };
+
+        VkSemaphoreCreateInfo sem_ci = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            .pNext = &sem_type_ci,
+            .flags = 0,
+        };
+
+        VkSemaphore semaphore;
+        auto result = _dispatch_table.createSemaphore(&sem_ci, nullptr, &semaphore);
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create semaphore: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::semaphore>::null_handle;
+        }
+
+        vk::semaphore new_semaphore = {
+            .semaphore = semaphore,
+            .type = info.type,
+        };
+
+        auto new_key = _semaphores.insert(new_semaphore);
+        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
+        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
+
+        return typed_rhi_handle<rhi_handle_type::semaphore>{
+            .id = new_key_id,
+            .generation = new_key_gen,
+        };
     }
 
     typed_rhi_handle<rhi_handle_type::render_surface> device::create_render_surface(
@@ -393,15 +1257,18 @@ namespace tempest::rhi::vk
         {
             return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
         }
-        
+
         auto image_views = image_views_result.value();
 
         for (size_t i = 0; i < images.size(); ++i)
         {
             sc.images.push_back(acquire_image({
+                .allocation = {},
+                .allocation_info = {},
                 .image = images[i],
                 .image_view = image_views[i],
                 .swapchain_image = true,
+                .image_aspect = VK_IMAGE_ASPECT_COLOR_BIT,
             }));
         }
 
@@ -415,22 +1282,80 @@ namespace tempest::rhi::vk
 
     void device::destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
     {
+        auto buf_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto buf_it = _buffers.find(buf_key);
+        if (buf_it != _buffers.end())
+        {
+            _delete_queue.enqueue(VK_OBJECT_TYPE_BUFFER, buf_it->buffer, buf_it->allocation,
+                                  _current_frame + num_frames_in_flight);
+            _buffers.erase(buf_key);
+        }
     }
 
     void device::destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept
     {
+        auto img_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto img_it = _images.find(img_key);
+        if (img_it != _images.end())
+        {
+            // Delete the image view
+            if (img_it->image_view)
+            {
+                _delete_queue.enqueue(VK_OBJECT_TYPE_IMAGE_VIEW, img_it->image_view,
+                                      _current_frame + num_frames_in_flight);
+            }
+
+            // Delete the image
+            if (img_it->image && !img_it->swapchain_image)
+            {
+                _delete_queue.enqueue(VK_OBJECT_TYPE_IMAGE, img_it->image, img_it->allocation,
+                                      _current_frame + num_frames_in_flight);
+            }
+
+            _images.erase(img_key);
+        }
     }
 
     void device::destroy_fence(typed_rhi_handle<rhi_handle_type::fence> handle) noexcept
     {
+        auto fence_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto fence_it = _fences.find(fence_key);
+        if (fence_it != _fences.end())
+        {
+            _delete_queue.enqueue(VK_OBJECT_TYPE_FENCE, fence_it->fence, _current_frame + num_frames_in_flight);
+            _fences.erase(fence_key);
+        }
     }
 
     void device::destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept
     {
+        auto sem_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto sem_it = _semaphores.find(sem_key);
+        if (sem_it != _semaphores.end())
+        {
+            _delete_queue.enqueue(VK_OBJECT_TYPE_SEMAPHORE, sem_it->semaphore, _current_frame + num_frames_in_flight);
+            _semaphores.erase(sem_key);
+        }
     }
 
     void device::destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept
     {
+        auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto swapchain_it = _swapchains.find(swapchain_key);
+        if (swapchain_it != _swapchains.end())
+        {
+            for (auto img_handle : swapchain_it->images)
+            {
+                destroy_image(img_handle);
+            }
+
+            _delete_queue.enqueue(VK_OBJECT_TYPE_SWAPCHAIN_KHR, swapchain_it->swapchain,
+                                  _current_frame + num_frames_in_flight);
+            _delete_queue.enqueue(VK_OBJECT_TYPE_SURFACE_KHR, swapchain_it->surface,
+                                  _current_frame + num_frames_in_flight);
+
+            _swapchains.erase(swapchain_key);
+        }
     }
 
     rhi::work_queue& device::get_primary_work_queue() noexcept
@@ -462,22 +1387,165 @@ namespace tempest::rhi::vk
         }
     }
 
-    render_surface_info device::query_render_surface_info(const rhi::window_surface& window) noexcept
+    render_surface_info device::query_render_surface_info([[maybe_unused]] const rhi::window_surface& window) noexcept
     {
         return render_surface_info{};
     }
 
     span<const typed_rhi_handle<rhi_handle_type::image>> device::get_render_surfaces(
-        typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept
+        [[maybe_unused]] typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept
     {
         return span<const typed_rhi_handle<rhi_handle_type::image>>{};
     }
 
     expected<swapchain_image_acquire_info_result, swapchain_error_code> device::acquire_next_image(
+        typed_rhi_handle<rhi_handle_type::render_surface> swapchain,
         typed_rhi_handle<rhi_handle_type::semaphore> signal_sem,
         typed_rhi_handle<rhi_handle_type::fence> signal_fence) noexcept
     {
+        VkFence fence_to_signal = VK_NULL_HANDLE;
+        VkSemaphore semaphore_to_signal = VK_NULL_HANDLE;
+
+        auto swapchain_key = create_slot_map_key<uint64_t>(swapchain.id, swapchain.generation);
+        auto swapchain_it = _swapchains.find(swapchain_key);
+
+        if (swapchain_it == _swapchains.end())
+        {
+            return unexpected{swapchain_error_code::INVALID_SWAPCHAIN_ARGUMENT};
+        }
+
+        if (signal_fence)
+        {
+            auto fence_key = create_slot_map_key<uint64_t>(signal_fence.id, signal_fence.generation);
+            auto fence_it = _fences.find(fence_key);
+            if (fence_it != _fences.end())
+            {
+                fence_to_signal = fence_it->fence;
+            }
+        }
+
+        if (signal_sem)
+        {
+            auto sem_key = create_slot_map_key<uint64_t>(signal_sem.id, signal_sem.generation);
+            auto sem_it = _semaphores.find(sem_key);
+            if (sem_it != _semaphores.end())
+            {
+                assert(sem_it->type == rhi::semaphore_type::BINARY);
+                semaphore_to_signal = sem_it->semaphore;
+            }
+        }
+
+        VkAcquireNextImageInfoKHR acquire_info = {
+            .sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
+            .pNext = nullptr,
+            .swapchain = swapchain_it->swapchain,
+            .timeout = numeric_limits<uint32_t>::max(),
+            .semaphore = semaphore_to_signal,
+            .fence = fence_to_signal,
+            .deviceMask = 1,
+        };
+
+        uint32_t image_index;
+        auto result = _dispatch_table.acquireNextImage2KHR(&acquire_info, &image_index);
+
+        switch (result)
+        {
+        case VK_SUCCESS: {
+            auto image = swapchain_it->images[image_index];
+            return swapchain_image_acquire_info_result{
+                .image = image,
+                .image_index = image_index,
+            };
+        }
+        case VK_SUBOPTIMAL_KHR:
+            return unexpected{swapchain_error_code::SUBOPTIMAL};
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return unexpected{swapchain_error_code::OUT_OF_DATE};
+        default:
+            logger->error("Failed to acquire next image: {}", to_underlying(result));
+            break;
+        }
+
         return unexpected{swapchain_error_code::FAILURE};
+    }
+
+    bool device::is_signaled(typed_rhi_handle<rhi_handle_type::fence> fence) const noexcept
+    {
+        auto fence_key = create_slot_map_key<uint64_t>(fence.id, fence.generation);
+        auto fence_it = _fences.find(fence_key);
+        if (fence_it != _fences.end())
+        {
+            auto result = _dispatch_table.getFenceStatus(fence_it->fence);
+            return result == VK_SUCCESS;
+        }
+        return false;
+    }
+
+    bool device::reset(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept
+    {
+        vector<VkFence> vk_fences;
+
+        for (auto fence : fences)
+        {
+            auto fence_key = create_slot_map_key<uint64_t>(fence.id, fence.generation);
+            auto fence_it = _fences.find(fence_key);
+            if (fence_it != _fences.end())
+            {
+                vk_fences.push_back(fence_it->fence);
+            }
+        }
+
+        auto result = _dispatch_table.resetFences(static_cast<uint32_t>(vk_fences.size()), vk_fences.data());
+        return result == VK_SUCCESS;
+    }
+
+    bool device::wait(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept
+    {
+        vector<VkFence> vk_fences;
+        for (auto fence : fences)
+        {
+            auto fence_key = create_slot_map_key<uint64_t>(fence.id, fence.generation);
+            auto fence_it = _fences.find(fence_key);
+            if (fence_it != _fences.end())
+            {
+                vk_fences.push_back(fence_it->fence);
+            }
+        }
+        auto result = _dispatch_table.waitForFences(static_cast<uint32_t>(vk_fences.size()), vk_fences.data(), VK_TRUE,
+                                                    numeric_limits<uint64_t>::max());
+        return result == VK_SUCCESS;
+    }
+
+    void device::start_frame()
+    {
+        _delete_queue.release_resources(_current_frame);
+
+        uint32_t frame_in_flight = _current_frame % num_frames_in_flight;
+
+        if (_primary_work_queue)
+        {
+            _primary_work_queue->start_frame(frame_in_flight);
+        }
+
+        if (_dedicated_compute_queue)
+        {
+            _dedicated_compute_queue->start_frame(frame_in_flight);
+        }
+
+        if (_dedicated_transfer_queue)
+        {
+            _dedicated_transfer_queue->start_frame(frame_in_flight);
+        }
+    }
+
+    void device::end_frame()
+    {
+        _current_frame++;
+    }
+
+    uint32_t device::frames_in_flight() const noexcept
+    {
+        return num_frames_in_flight;
     }
 
     typed_rhi_handle<rhi_handle_type::image> device::acquire_image(image img) noexcept
@@ -490,29 +1558,386 @@ namespace tempest::rhi::vk
         return typed_rhi_handle<rhi_handle_type::image>(new_key_id, new_key_gen);
     }
 
-    work_queue::work_queue(vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index) noexcept
-        : _dispatch(dispatch), _queue(queue), _queue_family_index(queue_family_index)
+    typed_rhi_handle<rhi_handle_type::command_list> device::acquire_command_list(VkCommandBuffer buf) noexcept
     {
+        auto new_key = _command_buffers.insert(buf);
+        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
+        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
+
+        return {
+            .id = new_key_id,
+            .generation = new_key_gen,
+        };
+    }
+
+    VkCommandBuffer device::get_command_buffer(typed_rhi_handle<rhi_handle_type::command_list> handle) const noexcept
+    {
+        auto buf_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto buf_it = _command_buffers.find(buf_key);
+        if (buf_it != _command_buffers.end())
+        {
+            return *buf_it;
+        }
+
+        return VK_NULL_HANDLE;
+    }
+
+    void device::release_command_list(typed_rhi_handle<rhi_handle_type::command_list> handle) noexcept
+    {
+        auto buf_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto buf_it = _command_buffers.find(buf_key);
+        if (buf_it != _command_buffers.end())
+        {
+            _command_buffers.erase(buf_key);
+        }
+    }
+
+    VkFence device::get_fence(typed_rhi_handle<rhi_handle_type::fence> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _fences.find(key);
+        if (it != _fences.end())
+        {
+            return it->fence;
+        }
+        return VK_NULL_HANDLE;
+    }
+
+    VkSemaphore device::get_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _semaphores.find(key);
+        if (it != _semaphores.end())
+        {
+            return it->semaphore;
+        }
+        return VK_NULL_HANDLE;
+    }
+
+    VkSwapchainKHR device::get_swapchain(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _swapchains.find(key);
+        if (it != _swapchains.end())
+        {
+            return it->swapchain;
+        }
+        return VK_NULL_HANDLE;
+    }
+
+    optional<vk::image> device::get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _images.find(key);
+        if (it != _images.end())
+        {
+            return *it;
+        }
+        return none();
+    }
+
+    work_queue::work_queue(device* parent, vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index,
+                           uint32_t fif) noexcept
+        : _dispatch(dispatch), _queue(queue), _queue_family_index(queue_family_index), _parent{parent}
+    {
+        _work_groups.resize(fif);
+
+        VkCommandPoolCreateInfo pool_ci = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queueFamilyIndex = _queue_family_index,
+        };
+
+        for (auto& wg : _work_groups)
+        {
+            _dispatch->createCommandPool(&pool_ci, nullptr, &wg.pool);
+            wg.dispatch = _dispatch;
+            wg.parent = _parent;
+        }
     }
 
     work_queue::~work_queue()
     {
-        // TODO: Release command pool and other resources
+        _dispatch->queueWaitIdle(_queue); // Ensure the queue is done before working on it
+
+        for (auto wg : _work_groups)
+        {
+            if (!wg.cmd_buffers.empty())
+            {
+                _dispatch->freeCommandBuffers(wg.pool, static_cast<uint32_t>(wg.cmd_buffers.size()),
+                                              wg.cmd_buffers.data());
+            }
+            _dispatch->destroyCommandPool(wg.pool, nullptr);
+        }
     }
 
-    typed_rhi_handle<rhi_handle_type::command_list> work_queue::get_command_list() noexcept
+    typed_rhi_handle<rhi_handle_type::command_list> work_queue::get_next_command_list(uint32_t frame_in_flight) noexcept
     {
-        return typed_rhi_handle<rhi_handle_type::command_list>::null_handle;
+        auto& wg = _work_groups[frame_in_flight];
+        return wg.acquire_next_command_buffer();
     }
 
     bool work_queue::submit(span<const submit_info> infos, typed_rhi_handle<rhi_handle_type::fence> fence) noexcept
     {
-        return false;
+        if (infos.empty())
+        {
+            return false;
+        }
+
+        auto submit_infos = _allocator.allocate_typed<VkSubmitInfo2>(infos.size());
+
+        for (size_t i = 0; i < infos.size(); ++i)
+        {
+            auto wait_sems = _allocator.allocate_typed<VkSemaphoreSubmitInfo>(infos[i].wait_semaphores.size());
+            auto signal_sems = _allocator.allocate_typed<VkSemaphoreSubmitInfo>(infos[i].signal_semaphores.size());
+            auto cmds = _allocator.allocate_typed<VkCommandBufferSubmitInfo>(infos[i].command_lists.size());
+
+            for (size_t j = 0; j < infos[i].wait_semaphores.size(); ++j)
+            {
+                wait_sems[j] = {
+                    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                    .pNext = nullptr,
+                    .semaphore = _parent->get_semaphore(infos[i].wait_semaphores[j].semaphore),
+                    .value = infos[i].wait_semaphores[j].value,
+                    .stageMask = to_vulkan(infos[i].wait_semaphores[j].stages),
+                    .deviceIndex = 1,
+                };
+            }
+
+            for (size_t j = 0; j < infos[i].signal_semaphores.size(); ++j)
+            {
+                signal_sems[j] = {
+                    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                    .pNext = nullptr,
+                    .semaphore = _parent->get_semaphore(infos[i].signal_semaphores[j].semaphore),
+                    .value = infos[i].signal_semaphores[j].value,
+                    .stageMask = to_vulkan(infos[i].signal_semaphores[j].stages),
+                    .deviceIndex = 1,
+                };
+            }
+
+            for (size_t j = 0; j < infos[i].command_lists.size(); ++j)
+            {
+                cmds[j] = {
+                    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                    .pNext = nullptr,
+                    .commandBuffer = _parent->get_command_buffer(infos[i].command_lists[j]),
+                    .deviceMask = 1,
+                };
+            }
+
+            submit_infos[i] = {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                .pNext = nullptr,
+                .flags = 0,
+                .waitSemaphoreInfoCount = static_cast<uint32_t>(infos[i].wait_semaphores.size()),
+                .pWaitSemaphoreInfos = wait_sems,
+                .commandBufferInfoCount = static_cast<uint32_t>(infos[i].command_lists.size()),
+                .pCommandBufferInfos = cmds,
+                .signalSemaphoreInfoCount = static_cast<uint32_t>(infos[i].signal_semaphores.size()),
+                .pSignalSemaphoreInfos = signal_sems,
+            };
+        }
+
+        VkFence vk_fence = VK_NULL_HANDLE;
+        if (fence)
+        {
+            vk_fence = _parent->get_fence(fence);
+        }
+
+        auto result = _dispatch->queueSubmit2(_queue, static_cast<uint32_t>(infos.size()), submit_infos, vk_fence);
+
+        _allocator.reset();
+
+        return result == VK_SUCCESS;
     }
 
     bool work_queue::present(const present_info& info) noexcept
     {
-        return false;
+        auto swapchains = _allocator.allocate_typed<VkSwapchainKHR>(info.swapchain_images.size());
+        auto image_indices = _allocator.allocate_typed<uint32_t>(info.swapchain_images.size());
+        auto wait_sems = _allocator.allocate_typed<VkSemaphore>(info.wait_semaphores.size());
+        auto results = _allocator.allocate_typed<VkResult>(info.swapchain_images.size());
+
+        for (size_t i = 0; i < info.swapchain_images.size(); ++i)
+        {
+            swapchains[i] = _parent->get_swapchain(info.swapchain_images[i].render_surface);
+            image_indices[i] = info.swapchain_images[i].image_index;
+        }
+
+        for (size_t i = 0; i < info.wait_semaphores.size(); ++i)
+        {
+            wait_sems[i] = _parent->get_semaphore(info.wait_semaphores[i]);
+        }
+
+        VkPresentInfoKHR present_info = {
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext = nullptr,
+            .waitSemaphoreCount = static_cast<uint32_t>(info.wait_semaphores.size()),
+            .pWaitSemaphores = wait_sems,
+            .swapchainCount = static_cast<uint32_t>(info.swapchain_images.size()),
+            .pSwapchains = swapchains,
+            .pImageIndices = image_indices,
+            .pResults = results,
+        };
+
+        auto result = _dispatch->queuePresentKHR(_queue, &present_info);
+
+        _allocator.reset();
+
+        return result != VK_SUCCESS;
+    }
+
+    void work_queue::start_frame(uint32_t frame_in_flight)
+    {
+        _work_groups[frame_in_flight].reset();
+    }
+
+    void work_queue::begin_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                        bool one_time_submit) noexcept
+    {
+        VkCommandBufferBeginInfo begin_info = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .pInheritanceInfo = nullptr,
+        };
+
+        if (one_time_submit)
+        {
+            begin_info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        }
+
+        _dispatch->beginCommandBuffer(_parent->get_command_buffer(command_list), &begin_info);
+    }
+
+    void work_queue::end_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept
+    {
+        _dispatch->endCommandBuffer(_parent->get_command_buffer(command_list));
+    }
+
+    void work_queue::transition_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                      span<const image_barrier> image_barriers) noexcept
+    {
+        VkImageMemoryBarrier2* img_mem_barriers =
+            _allocator.allocate_typed<VkImageMemoryBarrier2>(image_barriers.size());
+
+        for (size_t i = 0; i < image_barriers.size(); ++i)
+        {
+            auto img = _parent->get_image(image_barriers[i].image);
+
+            img_mem_barriers[i] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = to_vulkan(image_barriers[i].src_stages),
+                .srcAccessMask = to_vulkan(image_barriers[i].src_access),
+                .dstStageMask = to_vulkan(image_barriers[i].dst_stages),
+                .dstAccessMask = to_vulkan(image_barriers[i].dst_access),
+                .oldLayout = to_vulkan(image_barriers[i].old_layout),
+                .newLayout = to_vulkan(image_barriers[i].new_layout),
+                .srcQueueFamilyIndex =
+                    image_barriers[i].src_queue
+                        ? static_cast<vk::work_queue*>(image_barriers[i].src_queue)->_queue_family_index
+                        : VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex =
+                    image_barriers[i].dst_queue
+                        ? static_cast<vk::work_queue*>(image_barriers[i].dst_queue)->_queue_family_index
+                        : VK_QUEUE_FAMILY_IGNORED,
+                .image = img->image,
+                .subresourceRange =
+                    {
+                        .aspectMask = img->image_aspect,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+            };
+        }
+
+        VkDependencyInfo dep_info = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 0,
+            .pBufferMemoryBarriers = nullptr,
+            .imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers.size()),
+            .pImageMemoryBarriers = img_mem_barriers,
+        };
+
+        _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info);
+    }
+
+    void work_queue::clear_color_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                       typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r,
+                                       float g, float b, float a) noexcept
+    {
+        VkImageSubresourceRange subresource_range = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        };
+
+        VkClearColorValue clear_color = {
+            .float32 = {r, g, b, a},
+        };
+
+        _dispatch->cmdClearColorImage(_parent->get_command_buffer(command_list), _parent->get_image(image)->image,
+                                      to_vulkan(layout), &clear_color, 1, &subresource_range);
+    }
+
+    void work_group::reset() noexcept
+    {
+        current_buffer_index = -1;
+        dispatch->resetCommandPool(pool, 0);
+    }
+
+    typed_rhi_handle<rhi_handle_type::command_list> work_group::acquire_next_command_buffer() noexcept
+    {
+        ++current_buffer_index;
+
+        // If there are no command buffers available, create a new one
+        if (current_buffer_index >= static_cast<ptrdiff_t>(cmd_buffer_handles.size()))
+        {
+            VkCommandBufferAllocateInfo cmd_buffer_ci = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .commandPool = pool,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = 4,
+            };
+
+            array<VkCommandBuffer, 4> cmds{};
+            auto result = dispatch->allocateCommandBuffers(&cmd_buffer_ci, cmds.data());
+            if (result != VK_SUCCESS)
+            {
+                logger->error("Failed to allocate command buffer: {}", to_underlying(result));
+                return typed_rhi_handle<rhi_handle_type::command_list>::null_handle;
+            }
+
+            for (auto cmd : cmds)
+            {
+                cmd_buffers.push_back(cmd);
+                cmd_buffer_handles.push_back(parent->acquire_command_list(cmd));
+            }
+        }
+
+        return cmd_buffer_handles[current_buffer_index];
+    }
+
+    optional<typed_rhi_handle<rhi_handle_type::command_list>> work_group::current_command_buffer() const noexcept
+    {
+        if (current_buffer_index < static_cast<ptrdiff_t>(cmd_buffer_handles.size()))
+        {
+            return some(cmd_buffer_handles[current_buffer_index]);
+        }
+
+        return none();
     }
 
     unique_ptr<rhi::instance> create_instance() noexcept
@@ -589,6 +2014,14 @@ namespace tempest::rhi::vk
             .fragmentShaderSampleInterlock = VK_TRUE,
             .fragmentShaderPixelInterlock = VK_TRUE,
             .fragmentShaderShadingRateInterlock = VK_FALSE,
+        };
+
+        VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+            .pNext = nullptr,
+            .bufferDeviceAddress = VK_TRUE,
+            .bufferDeviceAddressCaptureReplay = VK_TRUE,
+            .bufferDeviceAddressMultiDevice = VK_FALSE,
         };
 
         vkb::PhysicalDeviceSelector selector =
@@ -678,7 +2111,7 @@ namespace tempest::rhi::vk
                 })
                 .set_required_features_12({
                     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-                    .pNext = nullptr,
+                    .pNext = &buffer_device_address,
                     .samplerMirrorClampToEdge = VK_FALSE,
                     .drawIndirectCount = VK_FALSE,
                     .storageBuffer8BitAccess = VK_TRUE,

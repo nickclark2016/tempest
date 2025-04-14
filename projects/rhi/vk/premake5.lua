@@ -23,6 +23,7 @@ scoped.group('Engine', function()
                 'logger',
                 'rhi-api',
                 'vk-bootstrap',
+                'vma',
             }
 
             warnings 'Extra'

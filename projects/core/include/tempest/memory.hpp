@@ -224,6 +224,14 @@ namespace tempest
         void free_marker(size_t marker);
 
         void release();
+        void reset();
+
+        template <typename T>
+        T* allocate_typed(size_t count, source_location loc = source_location::current())
+        {
+            void* ptr = allocate(sizeof(T) * count, alignof(T), loc);
+            return static_cast<T*>(ptr);
+        }
 
       private:
         byte* _buffer{0};

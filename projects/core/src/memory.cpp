@@ -101,6 +101,11 @@ namespace tempest
         }
     }
 
+    void stack_allocator::reset()
+    {
+        _allocated_bytes = 0;
+    }
+
     heap_allocator::heap_allocator(size_t bytes)
         : _memory{reinterpret_cast<byte*>(std::malloc(bytes))}, _allocated_size{0}, _max_size{bytes}
     {

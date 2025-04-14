@@ -629,7 +629,7 @@ namespace tempest
         auto block_index = key_index % key_block::value_count;
 
         auto& skip_field_entry = block.skip_field[block_index / key_block::skip_field_bits_per_element];
-        skip_field_entry &= 1 << (block_index % key_block::skip_field_bits_per_element);
+        skip_field_entry &= ~(1 << (block_index % key_block::skip_field_bits_per_element));
     }
 
     template <typename T, typename Allocator>
@@ -772,8 +772,7 @@ namespace tempest
     template <typename T, typename Allocator>
     inline slot_map_iterator<T, Allocator>& slot_map_iterator<T, Allocator>::operator++() noexcept
     {
-        ++_index;
-        _map->_search_for_free_element(_index);
+        _index = _map->_search_for_free_element(_index + 1);
 
         return *this;
     }
