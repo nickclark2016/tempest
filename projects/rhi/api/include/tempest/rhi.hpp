@@ -330,9 +330,6 @@ namespace tempest::rhi
         uint32_t width;
         uint32_t height;
         uint32_t layers;
-
-        typed_rhi_handle<rhi_handle_type::render_surface> render_surface =
-            typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
     };
 
     struct window_surface_desc
@@ -353,6 +350,8 @@ namespace tempest::rhi
 
     struct swapchain_image_acquire_info_result
     {
+        typed_rhi_handle<rhi_handle_type::fence> frame_complete_fence;
+        typed_rhi_handle<rhi_handle_type::semaphore> acquire_sem;
         typed_rhi_handle<rhi_handle_type::image> image;
         uint32_t image_index;
     };
@@ -435,13 +434,14 @@ namespace tempest::rhi
         virtual work_queue& get_dedicated_transfer_queue() noexcept = 0;
         virtual work_queue& get_dedicated_compute_queue() noexcept = 0;
 
+        virtual void recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
+                                             const render_surface_desc& desc) noexcept = 0;
+
         virtual render_surface_info query_render_surface_info(const window_surface& window) noexcept = 0;
         virtual span<const typed_rhi_handle<rhi_handle_type::image>> get_render_surfaces(
             typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept = 0;
         virtual expected<swapchain_image_acquire_info_result, swapchain_error_code> acquire_next_image(
             typed_rhi_handle<rhi_handle_type::render_surface> swapchain,
-            typed_rhi_handle<rhi_handle_type::semaphore> signal_sem =
-                typed_rhi_handle<rhi_handle_type::semaphore>::null_handle,
             typed_rhi_handle<rhi_handle_type::fence> signal_fence =
                 typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept = 0;
 
@@ -508,7 +508,7 @@ namespace tempest::rhi
         virtual bool submit(span<const submit_info> infos,
                             typed_rhi_handle<rhi_handle_type::fence> fence =
                                 typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept = 0;
-        virtual bool present(const present_info& info) noexcept = 0;
+        virtual present_result present(const present_info& info) noexcept = 0;
 
         // Commands
         struct image_barrier
@@ -530,8 +530,8 @@ namespace tempest::rhi
         virtual void transition_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                       span<const image_barrier> image_barriers) noexcept = 0;
         virtual void clear_color_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                       typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r, float g, float b,
-                                       float a) noexcept = 0;
+                                       typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r,
+                                       float g, float b, float a) noexcept = 0;
 
       protected:
         work_queue() = default;

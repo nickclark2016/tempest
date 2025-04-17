@@ -1195,89 +1195,7 @@ namespace tempest::rhi::vk
     typed_rhi_handle<rhi_handle_type::render_surface> device::create_render_surface(
         const render_surface_desc& desc) noexcept
     {
-        auto existing_swapchain_key =
-            create_slot_map_key<uint64_t>(desc.render_surface.id, desc.render_surface.generation);
-        auto existing_swapchain_it = _swapchains.find(existing_swapchain_key);
-
-        VkSurfaceKHR surface;
-        if (existing_swapchain_it != _swapchains.end())
-        {
-            surface = existing_swapchain_it->surface;
-        }
-        else
-        {
-            auto window = static_cast<vk::window_surface*>(desc.window);
-            auto surf_res = window->get_surface(_vkb_instance->instance);
-            if (!surf_res)
-            {
-                logger->error("Failed to create render surface for window: {}", desc.window->name().c_str());
-                return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
-            }
-
-            surface = surf_res.value();
-        }
-
-        vkb::SwapchainBuilder swap_bldr =
-            vkb::SwapchainBuilder(_vkb_device.physical_device, _vkb_device, surface)
-                .add_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                .set_required_min_image_count(desc.min_image_count)
-                .set_desired_extent(desc.width, desc.height)
-                .set_desired_present_mode(to_vulkan(desc.present_mode))
-                .set_desired_format({
-                    .format = to_vulkan(desc.format.format),
-                    .colorSpace = to_vulkan(desc.format.space),
-                })
-                .set_image_array_layer_count(desc.layers);
-
-        auto result = swap_bldr.build();
-        if (!result)
-        {
-            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
-        }
-
-        auto vkb_sc = result.value();
-
-        swapchain sc = {
-            .swapchain = vkb_sc,
-            .surface = surface,
-            .images = {},
-        };
-
-        auto images_result = sc.swapchain.get_images();
-        if (!images_result)
-        {
-            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
-        }
-
-        auto images = images_result.value();
-        sc.images.reserve(images.size());
-
-        auto image_views_result = sc.swapchain.get_image_views();
-        if (!image_views_result)
-        {
-            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
-        }
-
-        auto image_views = image_views_result.value();
-
-        for (size_t i = 0; i < images.size(); ++i)
-        {
-            sc.images.push_back(acquire_image({
-                .allocation = {},
-                .allocation_info = {},
-                .image = images[i],
-                .image_view = image_views[i],
-                .swapchain_image = true,
-                .image_aspect = VK_IMAGE_ASPECT_COLOR_BIT,
-            }));
-        }
-
-        auto new_key = _swapchains.insert(sc);
-
-        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
-        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
-
-        return typed_rhi_handle<rhi_handle_type::render_surface>(new_key_id, new_key_gen);
+        return create_render_surface(desc, typed_rhi_handle<rhi_handle_type::render_surface>::null_handle);
     }
 
     void device::destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
@@ -1358,6 +1276,33 @@ namespace tempest::rhi::vk
         }
     }
 
+    void device::recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
+                                         const render_surface_desc& desc) noexcept
+    {
+        auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto swapchain_it = _swapchains.find(swapchain_key);
+        if (swapchain_it == _swapchains.end())
+        {
+            logger->error("Failed to recreate render surface: invalid handle");
+            return;
+        }
+
+        auto old_swapchain = swapchain_it->swapchain;
+
+        // Get a copy of the old swapchain's images
+        auto old_images = swapchain_it->images;
+
+        // Create the new swapchain
+        create_render_surface(desc, handle);
+
+        // Destroy the old swapchain
+        for (auto img_handle : old_images)
+        {
+            destroy_image(img_handle);
+        }
+        _delete_queue.enqueue(VK_OBJECT_TYPE_SWAPCHAIN_KHR, old_swapchain, _current_frame + num_frames_in_flight);
+    }
+
     rhi::work_queue& device::get_primary_work_queue() noexcept
     {
         return *_primary_work_queue;
@@ -1400,11 +1345,9 @@ namespace tempest::rhi::vk
 
     expected<swapchain_image_acquire_info_result, swapchain_error_code> device::acquire_next_image(
         typed_rhi_handle<rhi_handle_type::render_surface> swapchain,
-        typed_rhi_handle<rhi_handle_type::semaphore> signal_sem,
         typed_rhi_handle<rhi_handle_type::fence> signal_fence) noexcept
     {
         VkFence fence_to_signal = VK_NULL_HANDLE;
-        VkSemaphore semaphore_to_signal = VK_NULL_HANDLE;
 
         auto swapchain_key = create_slot_map_key<uint64_t>(swapchain.id, swapchain.generation);
         auto swapchain_it = _swapchains.find(swapchain_key);
@@ -1424,16 +1367,8 @@ namespace tempest::rhi::vk
             }
         }
 
-        if (signal_sem)
-        {
-            auto sem_key = create_slot_map_key<uint64_t>(signal_sem.id, signal_sem.generation);
-            auto sem_it = _semaphores.find(sem_key);
-            if (sem_it != _semaphores.end())
-            {
-                assert(sem_it->type == rhi::semaphore_type::BINARY);
-                semaphore_to_signal = sem_it->semaphore;
-            }
-        }
+        VkSemaphore semaphore_to_signal =
+            get_semaphore(swapchain_it->frames[_current_frame % frames_in_flight()].image_acquired);
 
         VkAcquireNextImageInfoKHR acquire_info = {
             .sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
@@ -1450,15 +1385,26 @@ namespace tempest::rhi::vk
 
         switch (result)
         {
+        case VK_SUBOPTIMAL_KHR:
+            [[fallthrough]];
         case VK_SUCCESS: {
             auto image = swapchain_it->images[image_index];
+            auto& fif = swapchain_it->frames[_current_frame % frames_in_flight()];
+
+            // We are using this frame, so we need to reset the fence
+            auto vk_fence = get_fence(fif.frame_ready);
+            if (vk_fence != VK_NULL_HANDLE)
+            {
+                _dispatch_table.resetFences(1, &vk_fence);
+            }
+
             return swapchain_image_acquire_info_result{
+                .frame_complete_fence = fif.frame_ready,
+                .acquire_sem = fif.image_acquired,
                 .image = image,
                 .image_index = image_index,
             };
         }
-        case VK_SUBOPTIMAL_KHR:
-            return unexpected{swapchain_error_code::SUBOPTIMAL};
         case VK_ERROR_OUT_OF_DATE_KHR:
             return unexpected{swapchain_error_code::OUT_OF_DATE};
         default:
@@ -1518,6 +1464,19 @@ namespace tempest::rhi::vk
 
     void device::start_frame()
     {
+        // Get all of the swapchains frame ready fences
+        vector<VkFence> fences_to_wait;
+        for (auto& sc : _swapchains)
+        {
+            auto& fif = sc.frames[_current_frame % num_frames_in_flight];
+            auto fence = get_fence(fif.frame_ready);
+
+            if (fence != VK_NULL_HANDLE)
+            {
+                _dispatch_table.waitForFences(1, &fence, VK_TRUE, numeric_limits<uint64_t>::max());
+            }
+        }
+
         _delete_queue.release_resources(_current_frame);
 
         uint32_t frame_in_flight = _current_frame % num_frames_in_flight;
@@ -1590,6 +1549,121 @@ namespace tempest::rhi::vk
         {
             _command_buffers.erase(buf_key);
         }
+    }
+
+    typed_rhi_handle<rhi_handle_type::render_surface> device::create_render_surface(
+        const rhi::render_surface_desc& desc, typed_rhi_handle<rhi_handle_type::render_surface> old_swapchain) noexcept
+    {
+        auto window = static_cast<vk::window_surface*>(desc.window);
+        auto surf_res = window->get_surface(_vkb_instance->instance);
+        if (!surf_res)
+        {
+            logger->error("Failed to create render surface for window: {}", desc.window->name().c_str());
+            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+        }
+
+        VkSurfaceKHR surface = surf_res.value();
+
+        vkb::SwapchainBuilder swap_bldr =
+            vkb::SwapchainBuilder(_vkb_device.physical_device, _vkb_device, surface)
+                .add_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                .set_required_min_image_count(desc.min_image_count)
+                .set_desired_extent(desc.width, desc.height)
+                .set_desired_present_mode(to_vulkan(desc.present_mode))
+                .set_desired_format({
+                    .format = to_vulkan(desc.format.format),
+                    .colorSpace = to_vulkan(desc.format.space),
+                })
+                .set_image_array_layer_count(desc.layers);
+
+        auto old_swapchain_it =
+            _swapchains.find(create_slot_map_key<uint64_t>(old_swapchain.id, old_swapchain.generation));
+        if (old_swapchain_it != _swapchains.end())
+        {
+            swap_bldr.set_old_swapchain(old_swapchain_it->swapchain);
+        }
+
+        auto result = swap_bldr.build();
+        if (!result)
+        {
+            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+        }
+
+        auto vkb_sc = result.value();
+
+        swapchain sc = {
+            .swapchain = vkb_sc,
+            .surface = surface,
+            .images = {},
+            .frames = {},
+        };
+
+        auto images_result = sc.swapchain.get_images();
+        if (!images_result)
+        {
+            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+        }
+
+        auto images = images_result.value();
+
+        auto image_views_result = sc.swapchain.get_image_views();
+        if (!image_views_result)
+        {
+            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+        }
+
+        auto image_views = image_views_result.value();
+
+        for (size_t i = 0; i < images.size(); ++i)
+        {
+            sc.images.push_back(acquire_image({
+                .allocation = {},
+                .allocation_info = {},
+                .image = images[i],
+                .image_view = image_views[i],
+                .swapchain_image = true,
+                .image_aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+            }));
+        }
+
+        if (old_swapchain_it != _swapchains.end())
+        {
+            // Copy the old swapchain's sync objects to the new swapchain
+            sc.frames = old_swapchain_it->frames;
+
+            // Replace the old swapchain in the map
+            *old_swapchain_it = tempest::move(sc);
+            return old_swapchain;
+        }
+        else
+        {
+            for (size_t i = 0; i < num_frames_in_flight; ++i)
+            {
+                // Allocate a fence for each frame in flight
+                // Allocate a semaphore for each frame in flight
+
+                auto fence = create_fence({
+                    .signaled = true,
+                });
+                auto sem = create_semaphore({
+                    .type = rhi::semaphore_type::BINARY,
+                    .initial_value = 0,
+                });
+
+                fif_data fif = {
+                    .frame_ready = fence,
+                    .image_acquired = sem,
+                };
+
+                sc.frames.push_back(fif);
+            }
+        }
+
+        auto new_key = _swapchains.insert(sc);
+        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
+        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
+
+        return typed_rhi_handle<rhi_handle_type::render_surface>(new_key_id, new_key_gen);
     }
 
     VkFence device::get_fence(typed_rhi_handle<rhi_handle_type::fence> handle) const noexcept
@@ -1753,7 +1827,7 @@ namespace tempest::rhi::vk
         return result == VK_SUCCESS;
     }
 
-    bool work_queue::present(const present_info& info) noexcept
+    rhi::work_queue::present_result work_queue::present(const present_info& info) noexcept
     {
         auto swapchains = _allocator.allocate_typed<VkSwapchainKHR>(info.swapchain_images.size());
         auto image_indices = _allocator.allocate_typed<uint32_t>(info.swapchain_images.size());
@@ -1786,7 +1860,18 @@ namespace tempest::rhi::vk
 
         _allocator.reset();
 
-        return result != VK_SUCCESS;
+        switch (result)
+        {
+        case VK_SUCCESS:
+            return rhi::work_queue::present_result::SUCCESS;
+        case VK_SUBOPTIMAL_KHR:
+            return rhi::work_queue::present_result::SUBOPTIMAL;
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return rhi::work_queue::present_result::OUT_OF_DATE;
+        default:
+            logger->error("Failed to present swapchain: {}", to_underlying(result));
+            return rhi::work_queue::present_result::ERROR;
+        }
     }
 
     void work_queue::start_frame(uint32_t frame_in_flight)

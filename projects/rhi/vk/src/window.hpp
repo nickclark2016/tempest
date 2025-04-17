@@ -44,20 +44,24 @@ namespace tempest::rhi::vk
             return glfwWindowShouldClose(_window);
         }
 
-        expected<VkSurfaceKHR, VkResult> get_surface(VkInstance instance) const noexcept
+        expected<VkSurfaceKHR, VkResult> get_surface(VkInstance instance) noexcept
         {
-            VkSurfaceKHR surface;
-            auto result = glfwCreateWindowSurface(instance, _window, nullptr, &surface);
-            if (result != VK_SUCCESS)
+            if (_surface == VK_NULL_HANDLE)
             {
-                return unexpected{result};
+                auto result = glfwCreateWindowSurface(instance, _window, nullptr, &_surface);
+                if (result != VK_SUCCESS)
+                {
+                    return unexpected{result};
+                }
             }
-            return surface;
+
+            return _surface;
         }
 
       private:
         GLFWwindow* _window;
         string _name;
+        VkSurfaceKHR _surface = VK_NULL_HANDLE;
     };
 } // namespace tempest::rhi::vk
 

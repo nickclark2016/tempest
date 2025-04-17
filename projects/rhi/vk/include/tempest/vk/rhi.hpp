@@ -1,6 +1,7 @@
 #ifndef tempest_rhi_vk_rhi_hpp
 #define tempest_rhi_vk_rhi_hpp
 
+#include <tempest/inplace_vector.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
@@ -64,7 +65,7 @@ namespace tempest::rhi::vk
         bool submit(span<const submit_info> infos,
                     typed_rhi_handle<rhi_handle_type::fence> fence =
                         typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept override;
-        bool present(const present_info& info) noexcept override;
+        rhi::work_queue::present_result present(const present_info& info) noexcept override;
 
         void start_frame(uint32_t frame_in_flight);
 
@@ -117,11 +118,18 @@ namespace tempest::rhi::vk
         semaphore_type type;
     };
 
+    struct fif_data
+    {
+        typed_rhi_handle<rhi_handle_type::fence> frame_ready;
+        typed_rhi_handle<rhi_handle_type::semaphore> image_acquired;
+    };
+
     struct swapchain
     {
         vkb::Swapchain swapchain;
         VkSurfaceKHR surface;
-        vector<typed_rhi_handle<rhi_handle_type::image>> images;
+        inplace_vector<typed_rhi_handle<rhi_handle_type::image>, 8> images;
+        inplace_vector<fif_data, 4> frames;
     };
 
     struct delete_queue
@@ -171,6 +179,9 @@ namespace tempest::rhi::vk
         void destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept override;
         void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept override;
 
+        void recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
+                                     const render_surface_desc& desc) noexcept override;
+
         rhi::work_queue& get_primary_work_queue() noexcept override;
         rhi::work_queue& get_dedicated_transfer_queue() noexcept override;
         rhi::work_queue& get_dedicated_compute_queue() noexcept override;
@@ -180,7 +191,6 @@ namespace tempest::rhi::vk
             typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept override;
         expected<swapchain_image_acquire_info_result, swapchain_error_code> acquire_next_image(
             typed_rhi_handle<rhi_handle_type::render_surface> swapchain,
-            typed_rhi_handle<rhi_handle_type::semaphore> signal_sem,
             typed_rhi_handle<rhi_handle_type::fence> signal_fence) noexcept override;
 
         bool is_signaled(typed_rhi_handle<rhi_handle_type::fence> fence) const noexcept override;
@@ -197,6 +207,10 @@ namespace tempest::rhi::vk
         typed_rhi_handle<rhi_handle_type::command_list> acquire_command_list(VkCommandBuffer buf) noexcept;
         VkCommandBuffer get_command_buffer(typed_rhi_handle<rhi_handle_type::command_list> handle) const noexcept;
         void release_command_list(typed_rhi_handle<rhi_handle_type::command_list> handle) noexcept;
+
+        typed_rhi_handle<rhi_handle_type::render_surface> create_render_surface(
+            const rhi::render_surface_desc& desc,
+            typed_rhi_handle<rhi_handle_type::render_surface> old_swapchain) noexcept;
 
         VkFence get_fence(typed_rhi_handle<rhi_handle_type::fence> handle) const noexcept;
         VkSemaphore get_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) const noexcept;
