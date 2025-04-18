@@ -748,7 +748,7 @@ namespace tempest::rhi::vk
         }
     }
 
-    void delete_queue::release_all_immediately()
+    void delete_queue::destroy()
     {
         dispatch->deviceWaitIdle();
         while (!dq.empty())
@@ -759,7 +759,8 @@ namespace tempest::rhi::vk
     }
 
     device::device(vkb::Device dev, vkb::Instance* instance)
-        : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()}
+        : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()},
+          _global_timeline{_dispatch_table}, _resource_tracker{this, _dispatch_table, _global_timeline}
     {
         VmaVulkanFunctions fns = {
             .vkGetInstanceProcAddr = _vkb_instance->fp_vkGetInstanceProcAddr,
@@ -860,8 +861,8 @@ namespace tempest::rhi::vk
         {
             VkQueue queue;
             _dispatch_table.getDeviceQueue(get<1>(*default_queue_match), get<2>(*default_queue_match), &queue);
-            _primary_work_queue.emplace(this, &_dispatch_table, queue, get<1>(*default_queue_match),
-                                        frames_in_flight());
+            _primary_work_queue.emplace(this, &_dispatch_table, queue, get<1>(*default_queue_match), frames_in_flight(),
+                                        &_resource_tracker);
         }
         else
         {
@@ -874,7 +875,7 @@ namespace tempest::rhi::vk
             VkQueue queue;
             _dispatch_table.getDeviceQueue(get<1>(*compute_queue_match), get<2>(*compute_queue_match), &queue);
             _dedicated_compute_queue.emplace(this, &_dispatch_table, queue, get<1>(*compute_queue_match),
-                                             frames_in_flight());
+                                             frames_in_flight(), &_resource_tracker);
         }
 
         if (transfer_queue_match && get<1>(*transfer_queue_match) != get<1>(*default_queue_match))
@@ -882,7 +883,7 @@ namespace tempest::rhi::vk
             VkQueue queue;
             _dispatch_table.getDeviceQueue(get<1>(*transfer_queue_match), get<2>(*transfer_queue_match), &queue);
             _dedicated_transfer_queue.emplace(this, &_dispatch_table, queue, get<1>(*transfer_queue_match),
-                                              frames_in_flight());
+                                              frames_in_flight(), &_resource_tracker);
         }
     }
 
@@ -894,7 +895,10 @@ namespace tempest::rhi::vk
         _dedicated_compute_queue = nullopt;
         _dedicated_transfer_queue = nullopt;
 
-        _delete_queue.release_all_immediately();
+        _delete_queue.destroy();
+
+        _resource_tracker.destroy();
+        _global_timeline.destroy();
 
         for (auto img : _images)
         {
@@ -1102,12 +1106,15 @@ namespace tempest::rhi::vk
             return typed_rhi_handle<rhi_handle_type::image>::null_handle;
         }
 
-        vk::image img = {.allocation = allocation,
-                         .allocation_info = allocation_info,
-                         .image = image,
-                         .image_view = image_view,
-                         .swapchain_image = false,
-                         .image_aspect = view_ci.subresourceRange.aspectMask};
+        vk::image img = {
+            .allocation = allocation,
+            .allocation_info = allocation_info,
+            .image = image,
+            .image_view = image_view,
+            .swapchain_image = false,
+            .image_aspect = view_ci.subresourceRange.aspectMask,
+            .create_info = ci,
+        };
 
         auto new_key = _images.insert(img);
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
@@ -1200,37 +1207,48 @@ namespace tempest::rhi::vk
 
     void device::destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
     {
-        auto buf_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
-        auto buf_it = _buffers.find(buf_key);
-        if (buf_it != _buffers.end())
+        // If the buffer is tracked, handle it through the resource tracker
+        if (_resource_tracker.is_tracked(handle))
         {
-            _delete_queue.enqueue(VK_OBJECT_TYPE_BUFFER, buf_it->buffer, buf_it->allocation,
-                                  _current_frame + num_frames_in_flight);
-            _buffers.erase(buf_key);
+            _resource_tracker.release(handle);
+        }
+        else
+        {
+            auto buf_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+            auto buf_it = _buffers.find(buf_key);
+            if (buf_it != _buffers.end())
+            {
+                _delete_queue.enqueue(VK_OBJECT_TYPE_BUFFER, buf_it->buffer, buf_it->allocation,
+                                      _current_frame + num_frames_in_flight);
+                _buffers.erase(buf_key);
+            }
         }
     }
 
     void device::destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept
     {
-        auto img_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
-        auto img_it = _images.find(img_key);
-        if (img_it != _images.end())
+        // If the image is tracked, handle it through the resource tracker
+        if (_resource_tracker.is_tracked(handle))
         {
-            // Delete the image view
-            if (img_it->image_view)
+            _resource_tracker.release(handle);
+        }
+        else
+        {
+            auto img_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+            auto img_it = _images.find(img_key);
+            if (img_it != _images.end())
             {
-                _delete_queue.enqueue(VK_OBJECT_TYPE_IMAGE_VIEW, img_it->image_view,
-                                      _current_frame + num_frames_in_flight);
+                if (img_it->image_view)
+                {
+                    _dispatch_table.destroyImageView(img_it->image_view, nullptr);
+                }
+                if (img_it->image && !img_it->swapchain_image)
+                {
+                    _delete_queue.enqueue(VK_OBJECT_TYPE_IMAGE, img_it->image, img_it->allocation,
+                                          _current_frame + num_frames_in_flight);
+                }
+                _images.erase(img_key);
             }
-
-            // Delete the image
-            if (img_it->image && !img_it->swapchain_image)
-            {
-                _delete_queue.enqueue(VK_OBJECT_TYPE_IMAGE, img_it->image, img_it->allocation,
-                                      _current_frame + num_frames_in_flight);
-            }
-
-            _images.erase(img_key);
         }
     }
 
@@ -1298,6 +1316,7 @@ namespace tempest::rhi::vk
         // Destroy the old swapchain
         for (auto img_handle : old_images)
         {
+            _resource_tracker.untrack(img_handle);
             destroy_image(img_handle);
         }
         _delete_queue.enqueue(VK_OBJECT_TYPE_SWAPCHAIN_KHR, old_swapchain, _current_frame + num_frames_in_flight);
@@ -1401,6 +1420,7 @@ namespace tempest::rhi::vk
             return swapchain_image_acquire_info_result{
                 .frame_complete_fence = fif.frame_ready,
                 .acquire_sem = fif.image_acquired,
+                .render_complete_sem = fif.render_complete,
                 .image = image,
                 .image_index = image_index,
             };
@@ -1479,6 +1499,8 @@ namespace tempest::rhi::vk
 
         _delete_queue.release_resources(_current_frame);
 
+        _resource_tracker.try_release();
+
         uint32_t frame_in_flight = _current_frame % num_frames_in_flight;
 
         if (_primary_work_queue)
@@ -1500,6 +1522,11 @@ namespace tempest::rhi::vk
     void device::end_frame()
     {
         _current_frame++;
+    }
+
+    uint32_t device::frame_in_flight() const noexcept
+    {
+        return _current_frame % frames_in_flight();
     }
 
     uint32_t device::frames_in_flight() const noexcept
@@ -1623,6 +1650,29 @@ namespace tempest::rhi::vk
                 .image_view = image_views[i],
                 .swapchain_image = true,
                 .image_aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                .create_info =
+                    {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                        .pNext = nullptr,
+                        .flags = 0,
+                        .imageType = VK_IMAGE_TYPE_2D,
+                        .format = to_vulkan(desc.format.format),
+                        .extent =
+                            {
+                                .width = desc.width,
+                                .height = desc.height,
+                                .depth = 1,
+                            },
+                        .mipLevels = 1,
+                        .arrayLayers = desc.layers,
+                        .samples = VK_SAMPLE_COUNT_1_BIT,
+                        .tiling = VK_IMAGE_TILING_OPTIMAL,
+                        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                        .queueFamilyIndexCount = 0,
+                        .pQueueFamilyIndices = nullptr,
+                        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    },
             }));
         }
 
@@ -1640,19 +1690,26 @@ namespace tempest::rhi::vk
             for (size_t i = 0; i < num_frames_in_flight; ++i)
             {
                 // Allocate a fence for each frame in flight
-                // Allocate a semaphore for each frame in flight
+                // Allocate two semaphores for each frame in flight
 
                 auto fence = create_fence({
                     .signaled = true,
                 });
-                auto sem = create_semaphore({
+
+                auto image_acquired = create_semaphore({
+                    .type = rhi::semaphore_type::BINARY,
+                    .initial_value = 0,
+                });
+
+                auto render_complete = create_semaphore({
                     .type = rhi::semaphore_type::BINARY,
                     .initial_value = 0,
                 });
 
                 fif_data fif = {
                     .frame_ready = fence,
-                    .image_acquired = sem,
+                    .image_acquired = image_acquired,
+                    .render_complete = render_complete,
                 };
 
                 sc.frames.push_back(fif);
@@ -1699,6 +1756,17 @@ namespace tempest::rhi::vk
         return VK_NULL_HANDLE;
     }
 
+    optional<vk::buffer> device::get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _buffers.find(key);
+        if (it != _buffers.end())
+        {
+            return *it;
+        }
+        return none();
+    }
+
     optional<vk::image> device::get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
@@ -1710,9 +1778,39 @@ namespace tempest::rhi::vk
         return none();
     }
 
+    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _buffers.find(key);
+        if (it != _buffers.end())
+        {
+            vmaDestroyBuffer(_vma_allocator, it->buffer, it->allocation);
+            _buffers.erase(key);
+        }
+    }
+
+    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::image> handle) noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _images.find(key);
+        if (it != _images.end())
+        {
+            if (it->image_view)
+            {
+                _dispatch_table.destroyImageView(it->image_view, nullptr);
+            }
+            if (it->image && !it->swapchain_image)
+            {
+                vmaDestroyImage(_vma_allocator, it->image, it->allocation);
+            }
+            _images.erase(key);
+        }
+    }
+
     work_queue::work_queue(device* parent, vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index,
-                           uint32_t fif) noexcept
-        : _dispatch(dispatch), _queue(queue), _queue_family_index(queue_family_index), _parent{parent}
+                           uint32_t fif, resource_tracker* res_tracker) noexcept
+        : _dispatch(dispatch), _queue(queue), _queue_family_index(queue_family_index), _parent{parent},
+          _res_tracker{res_tracker}
     {
         _work_groups.resize(fif);
 
@@ -1746,9 +1844,9 @@ namespace tempest::rhi::vk
         }
     }
 
-    typed_rhi_handle<rhi_handle_type::command_list> work_queue::get_next_command_list(uint32_t frame_in_flight) noexcept
+    typed_rhi_handle<rhi_handle_type::command_list> work_queue::get_next_command_list() noexcept
     {
-        auto& wg = _work_groups[frame_in_flight];
+        auto& wg = _work_groups[_parent->frame_in_flight()];
         return wg.acquire_next_command_buffer();
     }
 
@@ -1759,12 +1857,25 @@ namespace tempest::rhi::vk
             return false;
         }
 
+        auto& global_timeline = _res_tracker->get_timeline();
+        auto timestamp = global_timeline.increment_and_get_timestamp();
+        auto timeline_sem = global_timeline.timeline_sem();
+
         auto submit_infos = _allocator.allocate_typed<VkSubmitInfo2>(infos.size());
 
         for (size_t i = 0; i < infos.size(); ++i)
         {
-            auto wait_sems = _allocator.allocate_typed<VkSemaphoreSubmitInfo>(infos[i].wait_semaphores.size());
-            auto signal_sems = _allocator.allocate_typed<VkSemaphoreSubmitInfo>(infos[i].signal_semaphores.size());
+            auto wait_count = static_cast<uint32_t>(infos[i].wait_semaphores.size());
+            auto signal_count = static_cast<uint32_t>(infos[i].signal_semaphores.size());
+
+            // If this is the last submit in the frame, use this to signal the timeline semaphore
+            if (i == infos.size() - 1)
+            {
+                signal_count++;
+            }
+
+            auto wait_sems = _allocator.allocate_typed<VkSemaphoreSubmitInfo>(wait_count);
+            auto signal_sems = _allocator.allocate_typed<VkSemaphoreSubmitInfo>(signal_count);
             auto cmds = _allocator.allocate_typed<VkCommandBufferSubmitInfo>(infos[i].command_lists.size());
 
             for (size_t j = 0; j < infos[i].wait_semaphores.size(); ++j)
@@ -1791,6 +1902,19 @@ namespace tempest::rhi::vk
                 };
             }
 
+            // If this is the last submit in the frame, signal the timeline semaphore
+            if (i == infos.size() - 1)
+            {
+                signal_sems[signal_count - 1] = {
+                    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                    .pNext = nullptr,
+                    .semaphore = timeline_sem,
+                    .value = timestamp,
+                    .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                    .deviceIndex = 1,
+                };
+            }
+
             for (size_t j = 0; j < infos[i].command_lists.size(); ++j)
             {
                 cmds[j] = {
@@ -1805,11 +1929,11 @@ namespace tempest::rhi::vk
                 .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
                 .pNext = nullptr,
                 .flags = 0,
-                .waitSemaphoreInfoCount = static_cast<uint32_t>(infos[i].wait_semaphores.size()),
+                .waitSemaphoreInfoCount = wait_count,
                 .pWaitSemaphoreInfos = wait_sems,
                 .commandBufferInfoCount = static_cast<uint32_t>(infos[i].command_lists.size()),
                 .pCommandBufferInfos = cmds,
-                .signalSemaphoreInfoCount = static_cast<uint32_t>(infos[i].signal_semaphores.size()),
+                .signalSemaphoreInfoCount = signal_count,
                 .pSignalSemaphoreInfos = signal_sems,
             };
         }
@@ -1823,6 +1947,21 @@ namespace tempest::rhi::vk
         auto result = _dispatch->queueSubmit2(_queue, static_cast<uint32_t>(infos.size()), submit_infos, vk_fence);
 
         _allocator.reset();
+
+        // Track all the resources used in this submit
+        for (const auto& buf : used_buffers)
+        {
+            _res_tracker->track(buf, timestamp);
+        }
+
+        for (const auto& img : used_images)
+        {
+            _res_tracker->track(img, timestamp);
+        }
+
+        // Clear the used resources for the next submit
+        used_buffers.clear();
+        used_images.clear();
 
         return result == VK_SUCCESS;
     }
@@ -1939,6 +2078,9 @@ namespace tempest::rhi::vk
                         .layerCount = VK_REMAINING_ARRAY_LAYERS,
                     },
             };
+
+            // Track the image barrier for the resource tracker
+            used_images.push_back(image_barriers[i].image);
         }
 
         VkDependencyInfo dep_info = {
@@ -1974,6 +2116,324 @@ namespace tempest::rhi::vk
 
         _dispatch->cmdClearColorImage(_parent->get_command_buffer(command_list), _parent->get_image(image)->image,
                                       to_vulkan(layout), &clear_color, 1, &subresource_range);
+
+        // Track the image for the resource tracker
+        used_images.push_back(image);
+    }
+
+    void work_queue::blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::image> src,
+                          typed_rhi_handle<rhi_handle_type::image> dst) noexcept
+    {
+        VkImageBlit blit_region = {
+            .srcSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            .srcOffsets =
+                {
+                    {
+                        .x = 0,
+                        .y = 0,
+                        .z = 0,
+                    },
+                    {
+                        .x = static_cast<int32_t>(_parent->get_image(src)->create_info.extent.width),
+                        .y = static_cast<int32_t>(_parent->get_image(src)->create_info.extent.height),
+                        .z = static_cast<int32_t>(_parent->get_image(src)->create_info.extent.depth),
+                    },
+                },
+            .dstSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = 0,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            .dstOffsets =
+                {
+                    {
+                        .x = 0,
+                        .y = 0,
+                        .z = 0,
+                    },
+                    {
+                        .x = static_cast<int32_t>(_parent->get_image(dst)->create_info.extent.width),
+                        .y = static_cast<int32_t>(_parent->get_image(dst)->create_info.extent.height),
+                        .z = static_cast<int32_t>(_parent->get_image(dst)->create_info.extent.depth),
+                    },
+                },
+        };
+        _dispatch->cmdBlitImage(_parent->get_command_buffer(command_list), _parent->get_image(src)->image,
+                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, _parent->get_image(dst)->image,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit_region, VK_FILTER_LINEAR);
+
+        // Track the images for the resource tracker
+        used_images.push_back(src);
+        used_images.push_back(dst);
+    }
+
+    void work_queue::generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                        typed_rhi_handle<rhi_handle_type::image> img, image_layout current_layout,
+                                        uint32_t base_mip, uint32_t mip_count) noexcept
+    {
+        // Transition image to general layout
+        // Source should wait for all previous operations to complete
+
+        auto image = _parent->get_image(img);
+
+        VkImageMemoryBarrier2 pre_barrier = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .srcAccessMask = 0,
+            .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .oldLayout = to_vulkan(current_layout),
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = _queue_family_index,
+            .dstQueueFamilyIndex = _queue_family_index,
+            .image = image->image,
+            .subresourceRange =
+                {
+                    .aspectMask = _parent->get_image(img)->image_aspect,
+                    .baseMipLevel = base_mip,
+                    .levelCount = mip_count,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+        };
+
+        auto width = image->create_info.extent.width;
+        auto height = image->create_info.extent.height;
+
+        auto mip_width = width;
+        auto mip_height = height;
+
+        auto blits = _allocator.allocate_typed<VkImageBlit>(mip_count - 1);
+
+        // From mips 1 to mip_count - 1, blit from mip 0 to mip i
+        for (size_t i = 1; i < mip_count; ++i)
+        {
+            // Get mip width and height
+            mip_width = std::max(1u, width >> i);
+            mip_height = std::max(1u, height >> i);
+
+            blits[i - 1] = {
+                .srcSubresource =
+                    {
+                        .aspectMask = image->image_aspect,
+                        .mipLevel = base_mip,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                .srcOffsets =
+                    {
+                        {
+                            .x = 0,
+                            .y = 0,
+                            .z = 0,
+                        },
+                        {
+                            .x = static_cast<int32_t>(width),
+                            .y = static_cast<int32_t>(height),
+                            .z = 1,
+                        },
+                    },
+                .dstSubresource =
+                    {
+                        .aspectMask = image->image_aspect,
+                        .mipLevel = base_mip + static_cast<uint32_t>(i),
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                .dstOffsets =
+                    {
+                        {
+                            .x = 0,
+                            .y = 0,
+                            .z = 0,
+                        },
+                        {
+                            .x = static_cast<int32_t>(mip_width),
+                            .y = static_cast<int32_t>(mip_height),
+                            .z = 1,
+                        },
+                    },
+            };
+        }
+
+        // Transition image to original layout
+        VkImageMemoryBarrier2 post_barrier = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = to_vulkan(current_layout),
+            .srcQueueFamilyIndex = _queue_family_index,
+            .dstQueueFamilyIndex = _queue_family_index,
+            .image = image->image,
+            .subresourceRange =
+                {
+                    .aspectMask = image->image_aspect,
+                    .baseMipLevel = base_mip,
+                    .levelCount = mip_count,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+        };
+
+        VkDependencyInfo dep_info_pre = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 0,
+            .pBufferMemoryBarriers = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &pre_barrier,
+        };
+
+        VkDependencyInfo dep_info_post = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 0,
+            .pBufferMemoryBarriers = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &post_barrier,
+        };
+
+        // Record the commands
+        _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info_pre);
+        _dispatch->cmdBlitImage(_parent->get_command_buffer(command_list), image->image, VK_IMAGE_LAYOUT_GENERAL,
+                                image->image, VK_IMAGE_LAYOUT_GENERAL, mip_count - 1, blits, VK_FILTER_LINEAR);
+        _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info_post);
+        _allocator.reset();
+    }
+
+    void work_queue::copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::buffer> dst,
+                          size_t src_offset, size_t dst_offset, size_t byte_count) noexcept
+    {
+        VkBufferCopy copy_region = {
+            .srcOffset = src_offset,
+            .dstOffset = dst_offset,
+            .size = byte_count,
+        };
+
+        _dispatch->cmdCopyBuffer(_parent->get_command_buffer(command_list), _parent->get_buffer(src)->buffer,
+                                 _parent->get_buffer(dst)->buffer, 1, &copy_region);
+
+        // Track the buffers for the resource tracker
+        used_buffers.push_back(src);
+        used_buffers.push_back(dst);
+    }
+
+    void work_queue::fill(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::buffer> handle, size_t offset, size_t size,
+                          uint32_t data) noexcept
+    {
+        _dispatch->cmdFillBuffer(_parent->get_command_buffer(command_list), _parent->get_buffer(handle)->buffer, offset,
+                                 size, data);
+
+        // Track the buffer for the resource tracker
+        used_buffers.push_back(handle);
+    }
+
+    void work_queue::pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                       span<const image_barrier> image_barriers,
+                                       span<const buffer_barrier> buffer_barriers) noexcept
+    {
+        auto img_barriers = _allocator.allocate_typed<VkImageMemoryBarrier2>(image_barriers.size());
+        auto buf_barriers = _allocator.allocate_typed<VkBufferMemoryBarrier2>(buffer_barriers.size());
+
+        for (size_t i = 0; i < image_barriers.size(); ++i)
+        {
+            auto img = _parent->get_image(image_barriers[i].image);
+            img_barriers[i] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = to_vulkan(image_barriers[i].src_stages),
+                .srcAccessMask = to_vulkan(image_barriers[i].src_access),
+                .dstStageMask = to_vulkan(image_barriers[i].dst_stages),
+                .dstAccessMask = to_vulkan(image_barriers[i].dst_access),
+                .oldLayout = to_vulkan(image_barriers[i].old_layout),
+                .newLayout = to_vulkan(image_barriers[i].new_layout),
+                .srcQueueFamilyIndex =
+                    image_barriers[i].src_queue
+                        ? static_cast<vk::work_queue*>(image_barriers[i].src_queue)->_queue_family_index
+                        : VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex =
+                    image_barriers[i].dst_queue
+                        ? static_cast<vk::work_queue*>(image_barriers[i].dst_queue)->_queue_family_index
+                        : VK_QUEUE_FAMILY_IGNORED,
+                .image = img->image,
+                .subresourceRange =
+                    {
+                        .aspectMask = img->image_aspect,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+            };
+
+            // Track the image barrier for the resource tracker
+            used_images.push_back(image_barriers[i].image);
+        }
+
+        for (size_t i = 0; i < buffer_barriers.size(); ++i)
+        {
+            auto buf = _parent->get_buffer(buffer_barriers[i].buffer);
+            buf_barriers[i] = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = to_vulkan(buffer_barriers[i].src_stages),
+                .srcAccessMask = to_vulkan(buffer_barriers[i].src_access),
+                .dstStageMask = to_vulkan(buffer_barriers[i].dst_stages),
+                .dstAccessMask = to_vulkan(buffer_barriers[i].dst_access),
+                .srcQueueFamilyIndex =
+                    buffer_barriers[i].src_queue
+                        ? static_cast<vk::work_queue*>(buffer_barriers[i].src_queue)->_queue_family_index
+                        : VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex =
+                    buffer_barriers[i].dst_queue
+                        ? static_cast<vk::work_queue*>(buffer_barriers[i].dst_queue)->_queue_family_index
+                        : VK_QUEUE_FAMILY_IGNORED,
+                .buffer = buf->buffer,
+                .offset = buffer_barriers[i].offset,
+                .size = buffer_barriers[i].size,
+            };
+
+            // Track the buffer barrier for the resource tracker
+            used_buffers.push_back(buffer_barriers[i].buffer);
+        }
+
+        VkDependencyInfo dep_info = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers.size()),
+            .pBufferMemoryBarriers = buf_barriers,
+            .imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers.size()),
+            .pImageMemoryBarriers = img_barriers,
+        };
+
+        _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info);
+
+        _allocator.reset();
     }
 
     void work_group::reset() noexcept
@@ -2234,7 +2694,7 @@ namespace tempest::rhi::vk
                     .shaderSubgroupExtendedTypes = VK_FALSE,
                     .separateDepthStencilLayouts = VK_TRUE,
                     .hostQueryReset = VK_TRUE,
-                    .timelineSemaphore = VK_FALSE,
+                    .timelineSemaphore = VK_TRUE,
                     .bufferDeviceAddress = VK_TRUE,
                     .bufferDeviceAddressCaptureReplay = VK_FALSE,
                     .bufferDeviceAddressMultiDevice = VK_FALSE,

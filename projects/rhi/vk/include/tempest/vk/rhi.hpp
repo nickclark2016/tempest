@@ -6,6 +6,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/slot_map.hpp>
+#include <tempest/vk/rhi_resource_tracker.hpp>
 
 #include <VkBootstrap.h>
 #include <vk_mem_alloc.h>
@@ -43,8 +44,8 @@ namespace tempest::rhi::vk
 
         int32_t current_buffer_index = -1;
 
-        vkb::DispatchTable* dispatch;
-        device* parent;
+        vkb::DispatchTable* dispatch{};
+        device* parent{};
 
         void reset() noexcept;
         typed_rhi_handle<rhi_handle_type::command_list> acquire_next_command_buffer() noexcept;
@@ -56,11 +57,10 @@ namespace tempest::rhi::vk
       public:
         work_queue() = default;
         explicit work_queue(device* parent, vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index,
-                            uint32_t fif) noexcept;
+                            uint32_t fif, resource_tracker* res_tracker) noexcept;
         ~work_queue() override;
 
-        typed_rhi_handle<rhi_handle_type::command_list> get_next_command_list(
-            uint32_t frame_in_flight) noexcept override;
+        typed_rhi_handle<rhi_handle_type::command_list> get_next_command_list() noexcept override;
 
         bool submit(span<const submit_info> infos,
                     typed_rhi_handle<rhi_handle_type::fence> fence =
@@ -73,11 +73,33 @@ namespace tempest::rhi::vk
         void begin_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                 bool one_time_submit) noexcept override;
         void end_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept override;
+
+        // Image commands
         void transition_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                               span<const image_barrier> image_barriers) noexcept override;
         void clear_color_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r, float g,
                                float b, float a) noexcept override;
+        void blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::image> src,
+                  typed_rhi_handle<rhi_handle_type::image> dst) noexcept override;
+        void generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                typed_rhi_handle<rhi_handle_type::image> img, image_layout current_layout,
+                                uint32_t base_mip, uint32_t mip_count) noexcept override;
+
+        // Buffer commands
+        void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::buffer> dst,
+                  size_t src_offset = 0, size_t dst_offset = 0,
+                  size_t byte_count = numeric_limits<size_t>::max()) noexcept override;
+        void fill(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::buffer> handle, size_t offset, size_t size,
+                  uint32_t data) noexcept override;
+
+        // Barrier commands
+        void pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                               span<const image_barrier> image_barriers,
+                               span<const buffer_barrier> buffer_barriers) noexcept override;
 
       private:
         vkb::DispatchTable* _dispatch;
@@ -87,7 +109,13 @@ namespace tempest::rhi::vk
         vector<work_group> _work_groups;
         device* _parent;
 
+        resource_tracker* _res_tracker;
+
         stack_allocator _allocator{64 * 1024};
+
+        // Set of all used buffers, images, etc
+        vector<typed_rhi_handle<rhi_handle_type::buffer>> used_buffers;
+        vector<typed_rhi_handle<rhi_handle_type::image>> used_images;
     };
 
     struct image
@@ -98,6 +126,7 @@ namespace tempest::rhi::vk
         VkImageView image_view;
         bool swapchain_image;
         VkImageAspectFlags image_aspect;
+        VkImageCreateInfo create_info;
     };
 
     struct buffer
@@ -122,6 +151,7 @@ namespace tempest::rhi::vk
     {
         typed_rhi_handle<rhi_handle_type::fence> frame_ready;
         typed_rhi_handle<rhi_handle_type::semaphore> image_acquired;
+        typed_rhi_handle<rhi_handle_type::semaphore> render_complete;
     };
 
     struct swapchain
@@ -150,7 +180,7 @@ namespace tempest::rhi::vk
         void enqueue(VkObjectType type, void* handle, VmaAllocation allocation, uint64_t frame);
         void release_resources(uint64_t frame);
         void release_resource(delete_resource res);
-        void release_all_immediately();
+        void destroy();
 
         std::queue<delete_resource> dq{};
     };
@@ -200,6 +230,7 @@ namespace tempest::rhi::vk
         void start_frame() override;
         void end_frame() override;
 
+        uint32_t frame_in_flight() const noexcept;
         uint32_t frames_in_flight() const noexcept override;
 
         typed_rhi_handle<rhi_handle_type::image> acquire_image(image img) noexcept;
@@ -215,7 +246,12 @@ namespace tempest::rhi::vk
         VkFence get_fence(typed_rhi_handle<rhi_handle_type::fence> handle) const noexcept;
         VkSemaphore get_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) const noexcept;
         VkSwapchainKHR get_swapchain(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept;
+
+        optional<vk::buffer> get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept;
         optional<vk::image> get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept;
+
+        void release_resource_immediate(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept;
+        void release_resource_immediate(typed_rhi_handle<rhi_handle_type::image> handle) noexcept;
 
       private:
         vkb::Instance* _vkb_instance;
@@ -239,6 +275,10 @@ namespace tempest::rhi::vk
 
         uint64_t _current_frame{0};
         static constexpr uint64_t num_frames_in_flight = 2;
+
+        // Resource tracking
+        global_timeline _global_timeline;
+        resource_tracker _resource_tracker;
     };
 
     unique_ptr<rhi::instance> create_instance() noexcept;

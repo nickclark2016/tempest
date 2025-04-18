@@ -920,7 +920,7 @@ namespace tempest::graphics::vk
         for (auto& swapchain : _active_swapchain_set)
         {
             auto signal_sem = _device->acquire_semaphore();
-            auto render_complete_sem = _device->acquire_semaphore();
+            auto render_complete = _device->acquire_semaphore();
             auto swap = _device->access_swapchain(swapchain);
             auto acquire_result = dispatch->acquireNextImageKHR(swap->sc.swapchain, UINT_MAX, signal_sem,
                                                                 VK_NULL_HANDLE, &swap->image_index);
@@ -939,7 +939,7 @@ namespace tempest::graphics::vk
                 }
 
                 _device->release_semaphore(std::move(signal_sem));
-                _device->release_semaphore(std::move(render_complete_sem));
+                _device->release_semaphore(std::move(render_complete));
 
                 _device->recreate_swapchain(swapchain);
                 _device->end_frame();
@@ -950,7 +950,7 @@ namespace tempest::graphics::vk
 
             image_acquired_sems.push_back(signal_sem);
             wait_stages.push_back(VK_PIPELINE_STAGE_TRANSFER_BIT);
-            render_complete_sems.push_back(render_complete_sem);
+            render_complete_sems.push_back(render_complete);
             swapchains.push_back(swap->sc.swapchain);
             image_indices.push_back(swap->image_index);
         }

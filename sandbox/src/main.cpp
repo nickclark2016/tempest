@@ -3,8 +3,9 @@
 
 namespace rhi = tempest::rhi;
 
-static void recreate_swapchain(rhi::device& device, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface,
-                        rhi::window_surface& window)
+static void recreate_swapchain(rhi::device& device,
+                               rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface,
+                               rhi::window_surface& window)
 {
     device.recreate_render_surface(render_surface, {
                                                        .window = &window,
@@ -49,14 +50,23 @@ int main()
     });
 
     auto num_frames_in_flight = device.frames_in_flight();
-    auto render_complete_sems = tempest::vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore>>();
-
-    for (uint32_t i = 0; i < num_frames_in_flight; ++i)
-    {
-        render_complete_sems.push_back(device.create_semaphore({}));
-    }
-
     uint32_t frame_in_flight = 0;
+
+    auto color_buffer = device.create_image({
+        .format = rhi::image_format::BGRA8_SRGB,
+        .type = rhi::image_type::IMAGE_2D,
+        .width = 1920,
+        .height = 1080,
+        .depth = 1,
+        .array_layers = 1,
+        .mip_levels = 1,
+        .sample_count = rhi::image_sample_count::SAMPLE_COUNT_1,
+        .tiling = rhi::image_tiling_type::OPTIMAL,
+        .location = rhi::memory_location::DEVICE,
+        .usage = tempest::make_enum_mask(rhi::image_usage::TRANSFER_SRC, rhi::image_usage::TRANSFER_DST,
+                                         rhi::image_usage::COLOR_ATTACHMENT),
+        .name = "Color Buffer",
+    });
 
     while (!window->should_close())
     {
@@ -80,34 +90,64 @@ int main()
             }
         }
 
-        auto cmds = default_work_queue.get_next_command_list(frame_in_flight);
+        auto cmds = default_work_queue.get_next_command_list();
         default_work_queue.begin_command_list(cmds, true);
 
-        rhi::work_queue::image_barrier undefined_color_barrier = {
-            .image = acquire_result->image,
+        // Transition the color buffer to TRANSFER_DST layout
+        rhi::work_queue::image_barrier color_barrier{
+            .image = color_buffer,
             .old_layout = rhi::image_layout::UNDEFINED,
             .new_layout = rhi::image_layout::TRANSFER_DST,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::ALL_TRANSFER),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR, rhi::pipeline_stage::ALL_TRANSFER),
+            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::TOP),
+            .src_access = tempest::make_enum_mask(rhi::memory_access::NONE),
+            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR),
             .dst_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
         };
 
-        default_work_queue.transition_image(cmds, tempest::span(&undefined_color_barrier, 1));
-        default_work_queue.clear_color_image(cmds, acquire_result->image, rhi::image_layout::TRANSFER_DST, 1.0f, 1.0f,
-                                             0.0f, 1.0f);
+        default_work_queue.transition_image(cmds, tempest::span(&color_barrier, 1));
 
-        rhi::work_queue::image_barrier color_present_barrier = {
+        // Clear the color buffer
+        default_work_queue.clear_color_image(cmds, color_buffer, rhi::image_layout::TRANSFER_DST, 1.0f, 0.0f, 1.0f,
+                                             1.0f);
+
+        // Transition the color buffer to TRANSFER_SRC
+        // Transition the swapchain image to TRANSFER_DST layout
+        tempest::array color_swap_barriers = {
+            rhi::work_queue::image_barrier{
+                .image = acquire_result->image,
+                .old_layout = rhi::image_layout::UNDEFINED,
+                .new_layout = rhi::image_layout::TRANSFER_DST,
+                .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::ALL_TRANSFER),
+                .src_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
+                .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::BLIT),
+                .dst_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
+            },
+            rhi::work_queue::image_barrier{
+                .image = color_buffer,
+                .old_layout = rhi::image_layout::TRANSFER_DST,
+                .new_layout = rhi::image_layout::TRANSFER_SRC,
+                .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR),
+                .src_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
+                .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::BLIT),
+                .dst_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_READ),
+            },
+        };
+        default_work_queue.transition_image(cmds, color_swap_barriers);
+
+        // Blit the color buffer to the swapchain image
+        default_work_queue.blit(cmds, color_buffer, acquire_result->image);
+
+        // Transition the swapchain image to PRESENT layout
+        rhi::work_queue::image_barrier present_barrier{
             .image = acquire_result->image,
             .old_layout = rhi::image_layout::TRANSFER_DST,
             .new_layout = rhi::image_layout::PRESENT,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR, rhi::pipeline_stage::ALL_TRANSFER),
+            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::BLIT),
             .src_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
             .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::BOTTOM),
             .dst_access = tempest::make_enum_mask(rhi::memory_access::NONE),
         };
-
-        default_work_queue.transition_image(cmds, tempest::span(&color_present_barrier, 1));
+        default_work_queue.transition_image(cmds, tempest::span(&present_barrier, 1));
 
         default_work_queue.end_command_list(cmds);
 
@@ -119,7 +159,7 @@ int main()
             .stages = tempest::make_enum_mask(rhi::pipeline_stage::ALL_TRANSFER),
         });
         submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
-            .semaphore = render_complete_sems[frame_in_flight],
+            .semaphore = acquire_result->render_complete_sem,
             .value = 1,
             .stages = tempest::make_enum_mask(rhi::pipeline_stage::BOTTOM),
         });
@@ -131,7 +171,7 @@ int main()
             .render_surface = render_surface,
             .image_index = acquire_result.value().image_index,
         });
-        present_info.wait_semaphores.push_back(render_complete_sems[frame_in_flight]);
+        present_info.wait_semaphores.push_back(acquire_result->render_complete_sem);
 
         auto present_result = default_work_queue.present(present_info);
         if (present_result == rhi::work_queue::present_result::OUT_OF_DATE ||

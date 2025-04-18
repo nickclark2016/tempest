@@ -244,6 +244,15 @@ namespace tempest
             }
         }
     };
+
+    template <typename... Ts>
+        requires(sizeof...(Ts) > 0)
+    inline size_t hash_combine(Ts... keys) noexcept
+    {
+        size_t hv = 0;
+        ((hv ^= hash<Ts>()(forward<Ts>(keys)) + 0x9e3779b9 + (hv << 6) + (hv >> 2)), ...);
+        return hv;
+    }
 } // namespace tempest
 
 #endif // tempest_core_hash_hpp
