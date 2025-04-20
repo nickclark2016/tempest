@@ -63,10 +63,21 @@ int main()
         .sample_count = rhi::image_sample_count::SAMPLE_COUNT_1,
         .tiling = rhi::image_tiling_type::OPTIMAL,
         .location = rhi::memory_location::DEVICE,
-        .usage = tempest::make_enum_mask(rhi::image_usage::TRANSFER_SRC, rhi::image_usage::TRANSFER_DST,
-                                         rhi::image_usage::COLOR_ATTACHMENT),
+        .usage = tempest::make_enum_mask(rhi::image_usage::TRANSFER_SRC, rhi::image_usage::COLOR_ATTACHMENT),
         .name = "Color Buffer",
     });
+
+    tempest::vector<rhi::descriptor_binding_layout> image_desc_set_bindings;
+    image_desc_set_bindings.push_back(rhi::descriptor_binding_layout{
+        .binding_index = 0,
+        .type = rhi::descriptor_type::SAMPLED_IMAGE,
+        .count = 1,
+        .stages = tempest::make_enum_mask(rhi::shader_stage::FRAGMENT),
+        .flags = tempest::make_enum_mask(rhi::descriptor_binding_flags::PARTIALLY_BOUND,
+                                         rhi::descriptor_binding_flags::VARIABLE_LENGTH),
+    });
+
+    auto image_desc_set_layout = device.create_descriptor_set_layout(image_desc_set_bindings);
 
     while (!window->should_close())
     {
@@ -93,22 +104,37 @@ int main()
         auto cmds = default_work_queue.get_next_command_list();
         default_work_queue.begin_command_list(cmds, true);
 
-        // Transition the color buffer to TRANSFER_DST layout
+        // Transition the color buffer to COLOR_ATTACHMENT layout
         rhi::work_queue::image_barrier color_barrier{
             .image = color_buffer,
             .old_layout = rhi::image_layout::UNDEFINED,
-            .new_layout = rhi::image_layout::TRANSFER_DST,
+            .new_layout = rhi::image_layout::COLOR_ATTACHMENT,
             .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::TOP),
             .src_access = tempest::make_enum_mask(rhi::memory_access::NONE),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
+            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::COLOR_ATTACHMENT_OUTPUT),
+            .dst_access = tempest::make_enum_mask(rhi::memory_access::COLOR_ATTACHMENT_WRITE),
         };
 
         default_work_queue.transition_image(cmds, tempest::span(&color_barrier, 1));
 
-        // Clear the color buffer
-        default_work_queue.clear_color_image(cmds, color_buffer, rhi::image_layout::TRANSFER_DST, 1.0f, 0.0f, 1.0f,
-                                             1.0f);
+        // Dynamic rendering to color buffer
+        rhi::work_queue::render_pass_info render_pass_info{};
+
+        render_pass_info.x = 0;
+        render_pass_info.y = 0;
+        render_pass_info.width = 1920;
+        render_pass_info.height = 1080;
+
+        render_pass_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = color_buffer,
+            .layout = rhi::image_layout::COLOR_ATTACHMENT,
+            .clear_color = {1.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::CLEAR,
+            .store_op = rhi::work_queue::store_op::STORE,
+        });
+
+        default_work_queue.begin_rendering(cmds, render_pass_info);
+        default_work_queue.end_rendering(cmds);
 
         // Transition the color buffer to TRANSFER_SRC
         // Transition the swapchain image to TRANSFER_DST layout
@@ -124,10 +150,10 @@ int main()
             },
             rhi::work_queue::image_barrier{
                 .image = color_buffer,
-                .old_layout = rhi::image_layout::TRANSFER_DST,
+                .old_layout = rhi::image_layout::COLOR_ATTACHMENT,
                 .new_layout = rhi::image_layout::TRANSFER_SRC,
-                .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR),
-                .src_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
+                .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::COLOR_ATTACHMENT_OUTPUT),
+                .src_access = tempest::make_enum_mask(rhi::memory_access::COLOR_ATTACHMENT_WRITE),
                 .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::BLIT),
                 .dst_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_READ),
             },

@@ -7,6 +7,7 @@
 #include <tempest/expected.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/vector.hpp>
@@ -46,12 +47,16 @@ namespace tempest::rhi
         virtual typed_rhi_handle<rhi_handle_type::semaphore> create_semaphore(const semaphore_info& info) noexcept = 0;
         virtual typed_rhi_handle<rhi_handle_type::render_surface> create_render_surface(
             const render_surface_desc& desc) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::descriptor_set_layout> create_descriptor_set_layout(
+            const vector<descriptor_binding_layout>& desc) noexcept = 0;
 
         virtual void destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
         virtual void destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept = 0;
         virtual void destroy_fence(typed_rhi_handle<rhi_handle_type::fence> handle) noexcept = 0;
         virtual void destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept = 0;
         virtual void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept = 0;
+        virtual void destroy_descriptor_set_layout(
+            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept = 0;
 
         virtual work_queue& get_primary_work_queue() noexcept = 0;
         virtual work_queue& get_dedicated_transfer_queue() noexcept = 0;
@@ -159,6 +164,58 @@ namespace tempest::rhi
             size_t size = numeric_limits<size_t>::max();
         };
 
+        enum class load_op
+        {
+            LOAD,
+            CLEAR,
+            DONT_CARE,
+        };
+
+        enum class store_op
+        {
+            STORE,
+            DONT_CARE,
+        };
+
+        struct color_attachment_info
+        {
+            typed_rhi_handle<rhi_handle_type::image> image;
+            image_layout layout;
+            float clear_color[4];
+            load_op load_op;
+            store_op store_op;
+        };
+
+        struct depth_attachment_info
+        {
+            typed_rhi_handle<rhi_handle_type::image> image;
+            image_layout layout;
+            float clear_depth;
+            load_op load_op;
+            store_op store_op;
+        };
+
+        struct stencil_attachment_info
+        {
+            typed_rhi_handle<rhi_handle_type::image> image;
+            image_layout layout;
+            uint32_t clear_stencil;
+            load_op load_op;
+            store_op store_op;
+        };
+
+        struct render_pass_info
+        {
+            vector<color_attachment_info> color_attachments;
+            optional<depth_attachment_info> depth_attachment;
+            optional<stencil_attachment_info> stencil_attachment;
+            int32_t x;
+            int32_t y;
+            uint32_t width;
+            uint32_t height;
+            uint32_t layers;
+        };
+
         virtual void begin_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                         bool one_time_submit) noexcept = 0;
         virtual void end_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept = 0;
@@ -191,6 +248,11 @@ namespace tempest::rhi
                                        span<const image_barrier> img_barriers,
                                        span<const buffer_barrier> buf_barriers) noexcept = 0;
 
+        // Rendering commands
+        virtual void begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                     const render_pass_info& render_pass_info) noexcept = 0;
+        virtual void end_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept = 0;
+
       protected:
         work_queue() = default;
     };
@@ -212,6 +274,25 @@ namespace tempest::rhi
 
       protected:
         window_surface() = default;
+    };
+
+    class descriptor_context
+    {
+      public:
+        descriptor_context(const descriptor_context&) = delete;
+        descriptor_context(descriptor_context&&) noexcept = delete;
+        virtual ~descriptor_context() = default;
+
+        descriptor_context& operator=(const descriptor_context&) = delete;
+        descriptor_context& operator=(descriptor_context&&) noexcept = delete;
+
+        virtual void commit(uint32_t set_index, const descriptor_resource_binding& binding,
+                            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::descriptor_set> get_active_descriptor_set(
+            uint32_t index) const noexcept = 0;
+
+      protected:
+        descriptor_context() = default;
     };
 } // namespace tempest::rhi
 

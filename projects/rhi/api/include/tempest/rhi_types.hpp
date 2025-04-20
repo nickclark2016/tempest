@@ -2,6 +2,7 @@
 #define tempest_rhi_rhi_types_hpp
 
 #include <tempest/enum.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/string.hpp>
@@ -25,6 +26,8 @@ namespace tempest::rhi
         fence,
         semaphore,
         render_surface,
+        descriptor_set,
+        descriptor_set_layout,
     };
 
     template <rhi_handle_type T>
@@ -387,6 +390,104 @@ namespace tempest::rhi
         SHADER_SAMPLED_READ = 0x10000,
         SHADER_STORAGE_READ = 0x20000,
         SHADER_STORAGE_WRITE = 0x40000,
+    };
+
+    enum class shader_stage
+    {
+        NONE = 0x00000,
+        VERTEX = 0x00001,
+        TESSELLATION_CONTROL = 0x00002,
+        TESSELLATION_EVALUATION = 0x00004,
+        GEOMETRY = 0x00008,
+        FRAGMENT = 0x00010,
+        COMPUTE = 0x00020,
+    };
+
+    enum class descriptor_type
+    {
+        SAMPLER,
+        COMBINED_IMAGE_SAMPLER,
+        SAMPLED_IMAGE,
+        STORAGE_IMAGE,
+        UNIFORM_BUFFER,
+        STORAGE_BUFFER,
+        UNIFORM_TEXEL_BUFFER,
+        STORAGE_TEXEL_BUFFER,
+        INPUT_ATTACHMENT,
+    };
+
+    enum class descriptor_binding_flags
+    {
+        NONE = 0x00,
+        PARTIALLY_BOUND = 0x01,
+        VARIABLE_LENGTH = 0x02,
+    };
+
+    struct descriptor_binding_layout
+    {
+        uint32_t binding_index;
+        descriptor_type type;
+        uint32_t count;
+        enum_mask<shader_stage> stages;
+        enum_mask<descriptor_binding_flags> flags = make_enum_mask(descriptor_binding_flags::NONE);
+
+        bool operator==(const descriptor_binding_layout& other) const noexcept;
+        bool operator!=(const descriptor_binding_layout& other) const noexcept;
+    };
+
+    inline bool descriptor_binding_layout::operator==(const descriptor_binding_layout& other) const noexcept
+    {
+        return binding_index == other.binding_index && type == other.type && count == other.count &&
+               stages == other.stages && flags == other.flags;
+    }
+
+    inline bool descriptor_binding_layout::operator!=(const descriptor_binding_layout& other) const noexcept
+    {
+        return !(*this == other);
+    }
+
+    class descriptor_resource_binding
+    {
+      public:
+        struct image_binding
+        {
+            typed_rhi_handle<rhi_handle_type::image> image;
+            typed_rhi_handle<rhi_handle_type::sampler> sampler;
+            image_layout layout = image_layout::UNDEFINED;
+
+            bool operator==(const image_binding& other) const noexcept;
+            bool operator!=(const image_binding& other) const noexcept;
+        };
+
+        struct buffer_binding
+        {
+            typed_rhi_handle<rhi_handle_type::buffer> buffer;
+            size_t offset = 0;
+            size_t size = numeric_limits<size_t>::max();
+
+            bool operator==(const buffer_binding& other) const noexcept;
+            bool operator!=(const buffer_binding& other) const noexcept;
+        };
+
+        void bind_image(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image,
+                        rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> sampler,
+                        rhi::image_layout layout = rhi::image_layout::UNDEFINED) noexcept;
+
+        void bind_buffer(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer,
+                         size_t offset = 0, size_t size = numeric_limits<size_t>::max()) noexcept;
+
+        const flat_unordered_map<uint64_t, image_binding>& get_image_bindings() const noexcept;
+        const flat_unordered_map<uint64_t, buffer_binding>& get_buffer_bindings() const noexcept;
+
+        bool operator==(const descriptor_resource_binding& other) const noexcept;
+        bool operator!=(const descriptor_resource_binding& other) const noexcept;
+
+        static uint64_t make_key(uint32_t set, uint32_t binding) noexcept;
+        static void split_key(uint64_t key, uint32_t& set, uint32_t& binding) noexcept;
+
+      private:
+        flat_unordered_map<uint64_t, image_binding> _image_bindings;
+        flat_unordered_map<uint64_t, buffer_binding> _buffer_bindings;
     };
 } // namespace tempest::rhi
 

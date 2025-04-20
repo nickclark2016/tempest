@@ -51,14 +51,18 @@ namespace tempest::rhi::vk
 
         void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer, uint64_t timeline_value);
         void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image, uint64_t timeline_value);
+        void track(rhi::typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout, uint64_t timeline_value);
         void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer);
         void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout);
 
         bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer) const noexcept;
         bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout) const noexcept;
 
         void release(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer);
         void release(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image);
+        void release(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout);
 
         global_timeline& get_timeline() noexcept
         {
@@ -78,7 +82,7 @@ namespace tempest::rhi::vk
         {
             VkObjectType object;
             uint64_t timeline_value;
-            bool deletion_requested;
+            uint64_t deletion_request_count;
         };
 
         device* _device;
@@ -88,6 +92,8 @@ namespace tempest::rhi::vk
         // All tracked resources
         flat_unordered_map<rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>, tracking_state> _tracked_buffers;
         flat_unordered_map<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>, tracking_state> _tracked_images;
+        flat_unordered_map<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>, tracking_state>
+            _tracked_desc_set_layouts;
     };
 } // namespace tempest::rhi::vk
 

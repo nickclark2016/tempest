@@ -557,6 +557,109 @@ namespace tempest::rhi::vk
             unreachable();
         }
 
+        constexpr VkAttachmentLoadOp to_vulkan(rhi::work_queue::load_op op)
+        {
+            switch (op)
+            {
+            case rhi::work_queue::load_op::LOAD:
+                return VK_ATTACHMENT_LOAD_OP_LOAD;
+            case rhi::work_queue::load_op::CLEAR:
+                return VK_ATTACHMENT_LOAD_OP_CLEAR;
+            case rhi::work_queue::load_op::DONT_CARE:
+                return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            }
+            unreachable();
+        }
+
+        constexpr VkAttachmentStoreOp to_vulkan(rhi::work_queue::store_op op)
+        {
+            switch (op)
+            {
+            case rhi::work_queue::store_op::STORE:
+                return VK_ATTACHMENT_STORE_OP_STORE;
+            case rhi::work_queue::store_op::DONT_CARE:
+                return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            }
+            unreachable();
+        }
+
+        constexpr VkDescriptorType to_vulkan(rhi::descriptor_type type)
+        {
+            switch (type)
+            {
+            case rhi::descriptor_type::SAMPLER:
+                return VK_DESCRIPTOR_TYPE_SAMPLER;
+            case rhi::descriptor_type::COMBINED_IMAGE_SAMPLER:
+                return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            case rhi::descriptor_type::SAMPLED_IMAGE:
+                return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            case rhi::descriptor_type::STORAGE_IMAGE:
+                return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            case rhi::descriptor_type::UNIFORM_BUFFER:
+                return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            case rhi::descriptor_type::STORAGE_BUFFER:
+                return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case rhi::descriptor_type::UNIFORM_TEXEL_BUFFER:
+                return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+            case rhi::descriptor_type::STORAGE_TEXEL_BUFFER:
+                return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+            case rhi::descriptor_type::INPUT_ATTACHMENT:
+                return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+            }
+            unreachable();
+        }
+
+        constexpr VkShaderStageFlags to_vulkan(enum_mask<rhi::shader_stage> stages)
+        {
+            VkShaderStageFlags flags = 0;
+
+            if (stages & rhi::shader_stage::VERTEX)
+            {
+                flags |= VK_SHADER_STAGE_VERTEX_BIT;
+            }
+
+            if (stages & rhi::shader_stage::TESSELLATION_CONTROL)
+            {
+                flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+            }
+
+            if (stages & rhi::shader_stage::TESSELLATION_EVALUATION)
+            {
+                flags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+            }
+
+            if (stages & rhi::shader_stage::GEOMETRY)
+            {
+                flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
+            }
+
+            if (stages & rhi::shader_stage::FRAGMENT)
+            {
+                flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+            }
+
+            if (stages & rhi::shader_stage::COMPUTE)
+            {
+                flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+            }
+
+            return flags;
+        }
+
+        constexpr VkDescriptorBindingFlags to_vulkan(enum_mask<rhi::descriptor_binding_flags> flags)
+        {
+            VkDescriptorBindingFlags vk_flags = 0;
+            if (flags & rhi::descriptor_binding_flags::PARTIALLY_BOUND)
+            {
+                vk_flags |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+            }
+            if (flags & rhi::descriptor_binding_flags::VARIABLE_LENGTH)
+            {
+                vk_flags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+            }
+            return vk_flags;
+        }
+
         constexpr VkImageViewType get_compatible_view_type(rhi::image_type type)
         {
             switch (type)
@@ -760,7 +863,8 @@ namespace tempest::rhi::vk
 
     device::device(vkb::Device dev, vkb::Instance* instance)
         : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()},
-          _global_timeline{_dispatch_table}, _resource_tracker{this, _dispatch_table, _global_timeline}
+          _global_timeline{_dispatch_table}, _resource_tracker{this, _dispatch_table, _global_timeline},
+          _descriptor_set_layout_cache{this}
     {
         VmaVulkanFunctions fns = {
             .vkGetInstanceProcAddr = _vkb_instance->fp_vkGetInstanceProcAddr,
@@ -899,6 +1003,7 @@ namespace tempest::rhi::vk
 
         _resource_tracker.destroy();
         _global_timeline.destroy();
+        _descriptor_set_layout_cache.destroy();
 
         for (auto img : _images)
         {
@@ -1205,6 +1310,12 @@ namespace tempest::rhi::vk
         return create_render_surface(desc, typed_rhi_handle<rhi_handle_type::render_surface>::null_handle);
     }
 
+    typed_rhi_handle<rhi_handle_type::descriptor_set_layout> device::create_descriptor_set_layout(
+        const vector<descriptor_binding_layout>& desc) noexcept
+    {
+        return _descriptor_set_layout_cache.get_or_create_layout(desc);
+    }
+
     void device::destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
     {
         // If the buffer is tracked, handle it through the resource tracker
@@ -1292,6 +1403,11 @@ namespace tempest::rhi::vk
 
             _swapchains.erase(swapchain_key);
         }
+    }
+
+    void device::destroy_descriptor_set_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
+    {
+        _descriptor_set_layout_cache.release_layout(handle);
     }
 
     void device::recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
@@ -1756,7 +1872,7 @@ namespace tempest::rhi::vk
         return VK_NULL_HANDLE;
     }
 
-    optional<vk::buffer> device::get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept
+    optional<const vk::buffer&> device::get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _buffers.find(key);
@@ -1767,7 +1883,7 @@ namespace tempest::rhi::vk
         return none();
     }
 
-    optional<vk::image> device::get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
+    optional<const vk::image&> device::get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _images.find(key);
@@ -1805,6 +1921,11 @@ namespace tempest::rhi::vk
             }
             _images.erase(key);
         }
+    }
+
+    bool device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
+    {
+        return _descriptor_set_layout_cache.release_layout(handle);
     }
 
     work_queue::work_queue(device* parent, vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index,
@@ -1949,19 +2070,25 @@ namespace tempest::rhi::vk
         _allocator.reset();
 
         // Track all the resources used in this submit
-        for (const auto& buf : used_buffers)
+        for (const auto& info : infos)
         {
-            _res_tracker->track(buf, timestamp);
-        }
+            for (const auto& cmd_list : info.command_lists)
+            {
+                for (const auto& buf : used_buffers[cmd_list])
+                {
+                    _res_tracker->track(buf, timestamp);
+                }
 
-        for (const auto& img : used_images)
-        {
-            _res_tracker->track(img, timestamp);
-        }
+                used_buffers.erase(cmd_list);
 
-        // Clear the used resources for the next submit
-        used_buffers.clear();
-        used_images.clear();
+                for (const auto& img : used_images[cmd_list])
+                {
+                    _res_tracker->track(img, timestamp);
+                }
+
+                used_images.erase(cmd_list);
+            }
+        }
 
         return result == VK_SUCCESS;
     }
@@ -2080,7 +2207,7 @@ namespace tempest::rhi::vk
             };
 
             // Track the image barrier for the resource tracker
-            used_images.push_back(image_barriers[i].image);
+            used_images[command_list].push_back(image_barriers[i].image);
         }
 
         VkDependencyInfo dep_info = {
@@ -2118,7 +2245,7 @@ namespace tempest::rhi::vk
                                       to_vulkan(layout), &clear_color, 1, &subresource_range);
 
         // Track the image for the resource tracker
-        used_images.push_back(image);
+        used_images[command_list].push_back(image);
     }
 
     void work_queue::blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -2172,8 +2299,8 @@ namespace tempest::rhi::vk
                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit_region, VK_FILTER_LINEAR);
 
         // Track the images for the resource tracker
-        used_images.push_back(src);
-        used_images.push_back(dst);
+        used_images[command_list].push_back(src);
+        used_images[command_list].push_back(dst);
     }
 
     void work_queue::generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -2335,8 +2462,8 @@ namespace tempest::rhi::vk
                                  _parent->get_buffer(dst)->buffer, 1, &copy_region);
 
         // Track the buffers for the resource tracker
-        used_buffers.push_back(src);
-        used_buffers.push_back(dst);
+        used_buffers[command_list].push_back(src);
+        used_buffers[command_list].push_back(dst);
     }
 
     void work_queue::fill(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -2347,7 +2474,7 @@ namespace tempest::rhi::vk
                                  size, data);
 
         // Track the buffer for the resource tracker
-        used_buffers.push_back(handle);
+        used_buffers[command_list].push_back(handle);
     }
 
     void work_queue::pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -2389,7 +2516,7 @@ namespace tempest::rhi::vk
             };
 
             // Track the image barrier for the resource tracker
-            used_images.push_back(image_barriers[i].image);
+            used_images[command_list].push_back(image_barriers[i].image);
         }
 
         for (size_t i = 0; i < buffer_barriers.size(); ++i)
@@ -2416,7 +2543,7 @@ namespace tempest::rhi::vk
             };
 
             // Track the buffer barrier for the resource tracker
-            used_buffers.push_back(buffer_barriers[i].buffer);
+            used_buffers[command_list].push_back(buffer_barriers[i].buffer);
         }
 
         VkDependencyInfo dep_info = {
@@ -2434,6 +2561,130 @@ namespace tempest::rhi::vk
         _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info);
 
         _allocator.reset();
+    }
+
+    void work_queue::begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                     const render_pass_info& render_pass_info) noexcept
+    {
+        auto color_attachments =
+            render_pass_info.color_attachments.empty()
+                ? nullptr
+                : _allocator.allocate_typed<VkRenderingAttachmentInfo>(render_pass_info.color_attachments.size());
+        auto depth_attachment =
+            render_pass_info.depth_attachment ? _allocator.allocate_typed<VkRenderingAttachmentInfo>(1) : nullptr;
+        auto stencil_attachment =
+            render_pass_info.stencil_attachment ? _allocator.allocate_typed<VkRenderingAttachmentInfo>(1) : nullptr;
+
+        for (size_t i = 0; i < render_pass_info.color_attachments.size(); ++i)
+        {
+            color_attachments[i] = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .pNext = nullptr,
+                .imageView = _parent->get_image(render_pass_info.color_attachments[i].image)->image_view,
+                .imageLayout = to_vulkan(render_pass_info.color_attachments[i].layout),
+                .resolveMode = VK_RESOLVE_MODE_NONE,
+                .resolveImageView = VK_NULL_HANDLE,
+                .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .loadOp = to_vulkan(render_pass_info.color_attachments[i].load_op),
+                .storeOp = to_vulkan(render_pass_info.color_attachments[i].store_op),
+                .clearValue =
+                    {
+                        .color =
+                            {
+                                render_pass_info.color_attachments[i].clear_color[0],
+                                render_pass_info.color_attachments[i].clear_color[1],
+                                render_pass_info.color_attachments[i].clear_color[2],
+                                render_pass_info.color_attachments[i].clear_color[3],
+                            },
+                    },
+            };
+            // Track the image for the resource tracker
+            used_images[command_list].push_back(render_pass_info.color_attachments[i].image);
+        }
+
+        if (render_pass_info.depth_attachment)
+        {
+            *depth_attachment = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .pNext = nullptr,
+                .imageView = _parent->get_image(render_pass_info.depth_attachment->image)->image_view,
+                .imageLayout = to_vulkan(render_pass_info.depth_attachment->layout),
+                .resolveMode = VK_RESOLVE_MODE_NONE,
+                .resolveImageView = VK_NULL_HANDLE,
+                .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .loadOp = to_vulkan(render_pass_info.depth_attachment->load_op),
+                .storeOp = to_vulkan(render_pass_info.depth_attachment->store_op),
+                .clearValue =
+                    {
+                        .depthStencil =
+                            {
+                                .depth = render_pass_info.depth_attachment->clear_depth,
+                                .stencil = 0,
+                            },
+                    },
+            };
+            // Track the image for the resource tracker
+            used_images[command_list].push_back(render_pass_info.depth_attachment->image);
+        }
+
+        if (render_pass_info.stencil_attachment)
+        {
+            *stencil_attachment = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .pNext = nullptr,
+                .imageView = _parent->get_image(render_pass_info.stencil_attachment->image)->image_view,
+                .imageLayout = to_vulkan(render_pass_info.stencil_attachment->layout),
+                .resolveMode = VK_RESOLVE_MODE_NONE,
+                .resolveImageView = VK_NULL_HANDLE,
+                .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .loadOp = to_vulkan(render_pass_info.stencil_attachment->load_op),
+                .storeOp = to_vulkan(render_pass_info.stencil_attachment->store_op),
+                .clearValue =
+                    {
+                        .depthStencil =
+                            {
+                                .depth = 0.0f,
+                                .stencil = render_pass_info.stencil_attachment->clear_stencil,
+                            },
+                    },
+            };
+            // Track the image for the resource tracker
+            used_images[command_list].push_back(render_pass_info.stencil_attachment->image);
+        }
+
+        VkRenderingInfo render_info = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .renderArea =
+                {
+                    .offset =
+                        {
+                            .x = render_pass_info.x,
+                            .y = render_pass_info.y,
+                        },
+                    .extent =
+                        {
+                            .width = render_pass_info.width,
+                            .height = render_pass_info.height,
+                        },
+                },
+            .layerCount = 1,
+            .viewMask = 0,
+            .colorAttachmentCount = static_cast<uint32_t>(render_pass_info.color_attachments.size()),
+            .pColorAttachments = color_attachments,
+            .pDepthAttachment = depth_attachment ? depth_attachment : nullptr,
+            .pStencilAttachment = stencil_attachment ? stencil_attachment : nullptr,
+        };
+
+        _dispatch->cmdBeginRendering(_parent->get_command_buffer(command_list), &render_info);
+        _allocator.reset();
+    }
+
+    void work_queue::end_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        _dispatch->cmdEndRendering(cmds);
     }
 
     void work_group::reset() noexcept
@@ -2736,5 +2987,138 @@ namespace tempest::rhi::vk
         vector<vkb::PhysicalDevice> vkb_devices(devices->begin(), devices->end());
 
         return make_unique<rhi::vk::instance>(tempest::move(instance), tempest::move(vkb_devices));
+    }
+
+    descriptor_set_layout_cache::descriptor_set_layout_cache(device* dev) noexcept : _dev{dev}
+    {
+    }
+
+    typed_rhi_handle<rhi_handle_type::descriptor_set_layout> descriptor_set_layout_cache::get_or_create_layout(
+        const vector<descriptor_binding_layout>& desc) noexcept
+    {
+        // Check if the layout already exists in the cache
+        size_t hash = _compute_cache_hash(desc);
+
+        cache_key key = {
+            .desc = desc,
+            .hash = hash,
+        };
+
+        auto cache_entry_it = _cache.find(key);
+        if (cache_entry_it != _cache.end())
+        {
+            auto sk = cache_entry_it->second;
+            auto& cache_value = *_cache_slots.find(create_slot_map_key<uint64_t>(sk.id, sk.generation));
+            cache_value.ref_count++;
+            return sk;
+        }
+
+        // Build the descriptor set layout
+        auto bindings = _allocator.allocate_typed<VkDescriptorSetLayoutBinding>(desc.size());
+        auto binding_flags = _allocator.allocate_typed<VkDescriptorBindingFlags>(desc.size());
+
+        for (size_t i = 0; i < desc.size(); ++i)
+        {
+            bindings[i] = {
+                .binding = static_cast<uint32_t>(i),
+                .descriptorType = to_vulkan(desc[i].type),
+                .descriptorCount = desc[i].count,
+                .stageFlags = to_vulkan(desc[i].stages),
+                .pImmutableSamplers = nullptr,
+            };
+
+            binding_flags[i] = to_vulkan(desc[i].flags);
+        }
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+            .pNext = nullptr,
+            .bindingCount = static_cast<uint32_t>(desc.size()),
+            .pBindingFlags = binding_flags,
+        };
+
+        VkDescriptorSetLayoutCreateInfo layout_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = &binding_flags_info,
+            .flags = 0,
+            .bindingCount = static_cast<uint32_t>(desc.size()),
+            .pBindings = bindings,
+        };
+
+        VkDescriptorSetLayout layout;
+        auto result = _dev->get_dispatch_table().createDescriptorSetLayout(&layout_info, nullptr, &layout);
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create descriptor set layout: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::descriptor_set_layout>::null_handle;
+        }
+
+        // Create a new cache entry
+        slot_entry entry = {
+            .key = tempest::move(key),
+            .layout = layout,
+            .ref_count = 1,
+        };
+
+        auto slot = _cache_slots.insert(entry);
+
+        auto typed_key = typed_rhi_handle<rhi_handle_type::descriptor_set_layout>{
+            .id = get_slot_map_key_id(slot),
+            .generation = get_slot_map_key_generation(slot),
+        };
+
+        _cache[key] = typed_key;
+
+        return typed_key;
+    }
+
+    bool descriptor_set_layout_cache::release_layout(
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout) noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(layout.id, layout.generation);
+
+        auto cache_entry_it = _cache_slots.find(key);
+        if (cache_entry_it == _cache_slots.end())
+        {
+            logger->error("Failed to release descriptor set layout: layout not found in cache");
+            return false;
+        }
+
+        slot_entry& cache_value = *cache_entry_it;
+        cache_value.ref_count--;
+
+        // If the ref count is zero, add it to the deletion queue
+        if (cache_value.ref_count == 0)
+        {
+            _dev->get_dispatch_table().destroyDescriptorSetLayout(cache_value.layout, nullptr);
+
+            _cache.erase(cache_value.key);
+            _cache_slots.erase(key);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    void descriptor_set_layout_cache::destroy() noexcept
+    {
+        for (auto& [key, layout, ref_count] : _cache_slots)
+        {
+            _dev->get_dispatch_table().destroyDescriptorSetLayout(layout, nullptr);
+        }
+        _cache_slots.clear();
+    }
+
+    size_t descriptor_set_layout_cache::_compute_cache_hash(
+        const vector<descriptor_binding_layout>& desc) const noexcept
+    {
+        size_t hash = 0;
+        for (const auto& binding : desc)
+        {
+            hash = hash_combine(hash, binding.binding_index, to_underlying(binding.type), binding.count,
+                                to_underlying(binding.stages.value()), to_underlying(binding.flags.value()));
+        }
+        return hash;
     }
 } // namespace tempest::rhi::vk

@@ -101,6 +101,11 @@ namespace tempest::rhi::vk
                                span<const image_barrier> image_barriers,
                                span<const buffer_barrier> buffer_barriers) noexcept override;
 
+        // Rendering commands
+        void begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                             const render_pass_info& render_pass_info) noexcept override;
+        void end_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept override;
+
       private:
         vkb::DispatchTable* _dispatch;
         VkQueue _queue;
@@ -114,8 +119,13 @@ namespace tempest::rhi::vk
         stack_allocator _allocator{64 * 1024};
 
         // Set of all used buffers, images, etc
-        vector<typed_rhi_handle<rhi_handle_type::buffer>> used_buffers;
-        vector<typed_rhi_handle<rhi_handle_type::image>> used_images;
+        flat_unordered_map<typed_rhi_handle<rhi_handle_type::command_list>,
+                           vector<typed_rhi_handle<rhi_handle_type::buffer>>>
+            used_buffers;
+
+        flat_unordered_map<typed_rhi_handle<rhi_handle_type::command_list>,
+                           vector<typed_rhi_handle<rhi_handle_type::image>>>
+            used_images;
     };
 
     struct image
@@ -185,6 +195,66 @@ namespace tempest::rhi::vk
         std::queue<delete_resource> dq{};
     };
 
+    class descriptor_set_layout_cache
+    {
+      public:
+        struct cache_key
+        {
+            vector<descriptor_binding_layout> desc;
+            size_t hash;
+
+            bool operator==(const cache_key& other) const noexcept
+            {
+                // Check against hash first, because it's a cheaper condition with a reasonable chance of being true
+                return hash == other.hash && desc == other.desc;
+            }
+
+            bool operator!=(const cache_key& other) const noexcept
+            {
+                return !(*this == other);
+            }
+        };
+
+        struct slot_entry
+        {
+            cache_key key;
+            VkDescriptorSetLayout layout;
+            uint32_t ref_count;
+        };
+
+        struct cache_key_hash
+        {
+            size_t operator()(const cache_key& key) const noexcept
+            {
+                return key.hash;
+            }
+        };
+
+        descriptor_set_layout_cache(device* dev) noexcept;
+        descriptor_set_layout_cache(const descriptor_set_layout_cache&) = delete;
+        descriptor_set_layout_cache(descriptor_set_layout_cache&&) noexcept = delete;
+        ~descriptor_set_layout_cache() noexcept = default;
+
+        descriptor_set_layout_cache& operator=(const descriptor_set_layout_cache&) = delete;
+        descriptor_set_layout_cache& operator=(descriptor_set_layout_cache&&) noexcept = delete;
+
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> get_or_create_layout(
+            const vector<descriptor_binding_layout>& desc) noexcept;
+
+        bool release_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept;
+
+        void destroy() noexcept;
+
+      private:
+        flat_unordered_map<cache_key, typed_rhi_handle<rhi_handle_type::descriptor_set_layout>, cache_key_hash> _cache;
+        slot_map<slot_entry> _cache_slots;
+        device* _dev;
+
+        size_t _compute_cache_hash(const vector<descriptor_binding_layout>& desc) const noexcept;
+
+        stack_allocator _allocator{16 * 1024};
+    };
+
     class device : public rhi::device
     {
       public:
@@ -202,12 +272,16 @@ namespace tempest::rhi::vk
         typed_rhi_handle<rhi_handle_type::semaphore> create_semaphore(const semaphore_info& info) noexcept override;
         typed_rhi_handle<rhi_handle_type::render_surface> create_render_surface(
             const render_surface_desc& desc) noexcept override;
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> create_descriptor_set_layout(
+            const vector<descriptor_binding_layout>& desc) noexcept override;
 
         void destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept override;
         void destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept override;
         void destroy_fence(typed_rhi_handle<rhi_handle_type::fence> handle) noexcept override;
         void destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept override;
         void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept override;
+        void destroy_descriptor_set_layout(
+            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept override;
 
         void recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
                                      const render_surface_desc& desc) noexcept override;
@@ -247,11 +321,17 @@ namespace tempest::rhi::vk
         VkSemaphore get_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) const noexcept;
         VkSwapchainKHR get_swapchain(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept;
 
-        optional<vk::buffer> get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept;
-        optional<vk::image> get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept;
+        optional<const vk::buffer&> get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept;
+        optional<const vk::image&> get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept;
 
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept;
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::image> handle) noexcept;
+        bool release_resource_immediate(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept;
+
+        const vkb::DispatchTable& get_dispatch_table() const noexcept
+        {
+            return _dispatch_table;
+        }
 
       private:
         vkb::Instance* _vkb_instance;
@@ -279,6 +359,9 @@ namespace tempest::rhi::vk
         // Resource tracking
         global_timeline _global_timeline;
         resource_tracker _resource_tracker;
+
+        // Descriptor layout cache
+        descriptor_set_layout_cache _descriptor_set_layout_cache;
     };
 
     unique_ptr<rhi::instance> create_instance() noexcept;

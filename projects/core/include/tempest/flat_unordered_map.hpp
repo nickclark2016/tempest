@@ -64,7 +64,7 @@ namespace tempest
             using difference_type = ptrdiff_t;
 
             using map_type = conditional_t<Const, const flat_unordered_map<K, V, Hash, KeyEqual, Allocator>,
-                                                    flat_unordered_map<K, V, Hash, KeyEqual, Allocator>>;
+                                           flat_unordered_map<K, V, Hash, KeyEqual, Allocator>>;
 
             flat_unordered_map_iterator() noexcept = default;
             flat_unordered_map_iterator(size_t idx, map_type* map) noexcept;
@@ -183,6 +183,9 @@ namespace tempest
         void clear() noexcept;
 
         V& operator[](const K& key);
+
+        bool operator==(const flat_unordered_map& other) const noexcept;
+        bool operator!=(const flat_unordered_map& other) const noexcept;
 
       private:
         static constexpr size_t _page_size{detail::metadata_group::group_size};
@@ -954,6 +957,48 @@ namespace tempest
             return &_map->_data_pages[_index / _map->_page_size][_index % _map->_page_size];
         }
     } // namespace detail
+
+    template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
+    inline bool flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::operator==(
+        const flat_unordered_map& other) const noexcept
+    {
+        if (size() != other.size())
+        {
+            return false;
+        }
+
+        for (const auto& item : *this)
+        {
+            auto it = other.find(item.first);
+            if (it == other.end() || it->second != item.second)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
+    inline bool flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::operator!=(
+        const flat_unordered_map& other) const noexcept
+    {
+        if (size() != other.size())
+        {
+            return true;
+        }
+
+        for (const auto& item : *this)
+        {
+            auto it = other.find(item.first);
+            if (it == other.end() || it->second != item.second)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, typename Pred>
     inline typename flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::size_type erase_if(
