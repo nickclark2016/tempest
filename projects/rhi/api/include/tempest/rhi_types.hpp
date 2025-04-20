@@ -453,7 +453,7 @@ namespace tempest::rhi
         {
             typed_rhi_handle<rhi_handle_type::image> image;
             typed_rhi_handle<rhi_handle_type::sampler> sampler;
-            image_layout layout = image_layout::UNDEFINED;
+            image_layout layout;
 
             bool operator==(const image_binding& other) const noexcept;
             bool operator!=(const image_binding& other) const noexcept;
@@ -462,8 +462,8 @@ namespace tempest::rhi
         struct buffer_binding
         {
             typed_rhi_handle<rhi_handle_type::buffer> buffer;
-            size_t offset = 0;
-            size_t size = numeric_limits<size_t>::max();
+            size_t offset;
+            size_t size;
 
             bool operator==(const buffer_binding& other) const noexcept;
             bool operator!=(const buffer_binding& other) const noexcept;

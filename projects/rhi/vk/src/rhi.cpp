@@ -2591,10 +2591,13 @@ namespace tempest::rhi::vk
                     {
                         .color =
                             {
-                                render_pass_info.color_attachments[i].clear_color[0],
-                                render_pass_info.color_attachments[i].clear_color[1],
-                                render_pass_info.color_attachments[i].clear_color[2],
-                                render_pass_info.color_attachments[i].clear_color[3],
+                                .float32 =
+                                    {
+                                        render_pass_info.color_attachments[i].clear_color[0],
+                                        render_pass_info.color_attachments[i].clear_color[1],
+                                        render_pass_info.color_attachments[i].clear_color[2],
+                                        render_pass_info.color_attachments[i].clear_color[3],
+                                    },
                             },
                     },
             };

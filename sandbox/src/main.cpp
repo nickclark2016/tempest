@@ -77,7 +77,7 @@ int main()
                                          rhi::descriptor_binding_flags::VARIABLE_LENGTH),
     });
 
-    auto image_desc_set_layout = device.create_descriptor_set_layout(image_desc_set_bindings);
+    [[maybe_unused]] auto image_desc_set_layout = device.create_descriptor_set_layout(image_desc_set_bindings);
 
     while (!window->should_close())
     {

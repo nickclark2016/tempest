@@ -226,7 +226,7 @@ namespace tempest::rhi::vk
                 // For each time a descriptor set had its deletion requested, we need to release the resource
                 // as it is cached
 
-                for (auto i = 0; i < it->second.deletion_request_count; ++i)
+                for (size_t i = 0; i < it->second.deletion_request_count; ++i)
                 {
                     auto done = _device->release_resource_immediate(it->first);
                     if (done)
