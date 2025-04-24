@@ -23,7 +23,7 @@ scoped.group('Engine', function()
             '{MKDIR} "%{cfg.targetdir}/shaders"',
         }
 
-        uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan' }
+        uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan', 'rhi-api', 'rhi-vk' }
 
         scoped.usage("PUBLIC", function()
             uses {

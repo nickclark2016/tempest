@@ -5,6 +5,7 @@
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/string.hpp>
 
 namespace tempest::rhi
@@ -26,8 +27,8 @@ namespace tempest::rhi
         fence,
         semaphore,
         render_surface,
-        descriptor_set,
         descriptor_set_layout,
+        pipeline_layout,
     };
 
     template <rhi_handle_type T>
@@ -146,13 +147,12 @@ namespace tempest::rhi
 
     enum class buffer_usage
     {
-        VERTEX = 0x00000001,
-        INDEX = 0x00000002,
-        INDIRECT = 0x00000004,
-        CONSTANT = 0x00000008,
-        STORAGE = 0x00000010,
-        TRANSFER_SRC = 0x00000020,
-        TRANSFER_DST = 0x00000040,
+        INDEX = 0x00000001,
+        INDIRECT = 0x00000002,
+        CONSTANT = 0x00000004,
+        STORAGE = 0x00000008,
+        TRANSFER_SRC = 0x00000010,
+        TRANSFER_DST = 0x00000020,
     };
 
     enum class image_usage
@@ -488,6 +488,231 @@ namespace tempest::rhi
       private:
         flat_unordered_map<uint64_t, image_binding> _image_bindings;
         flat_unordered_map<uint64_t, buffer_binding> _buffer_bindings;
+    };
+
+    struct push_constant_range
+    {
+        uint32_t offset;
+        uint32_t range;
+        enum_mask<shader_stage> stages;
+    };
+
+    struct pipeline_layout_desc
+    {
+        vector<typed_rhi_handle<rhi_handle_type::descriptor_set_layout>> descriptor_set_layouts;
+        vector<push_constant_range> push_constants;
+    };
+
+    inline bool operator==(const push_constant_range& lhs, const push_constant_range& rhs) noexcept
+    {
+        return lhs.offset == rhs.offset && lhs.range == rhs.range && lhs.stages == rhs.stages;
+    }
+
+    inline bool operator!=(const push_constant_range& lhs, const push_constant_range& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    inline bool operator==(const pipeline_layout_desc& lhs, const pipeline_layout_desc& rhs) noexcept
+    {
+        return lhs.descriptor_set_layouts == rhs.descriptor_set_layouts && lhs.push_constants == rhs.push_constants;
+    }
+
+    enum class primitive_topology
+    {
+        POINT_LIST,
+        LINE_LIST,
+        LINE_STRIP,
+        TRIANGLE_LIST,
+        TRIANGLE_STRIP,
+        TRIANGLE_FAN
+    };
+
+    enum class index_format
+    {
+        UINT8,
+        UINT16,
+        UINT32,
+    };
+
+    struct input_assembly_desc
+    {
+        primitive_topology topology;
+    };
+
+    struct tessellation_desc
+    {
+        uint32_t patch_control_points;
+    };
+
+    enum class polygon_mode
+    {
+        FILL,
+        LINE,
+        POINT,
+    };
+
+    enum class cull_mode
+    {
+        NONE = 0x00,
+        FRONT = 0x01,
+        BACK = 0x02,
+    };
+
+    enum class vertex_winding
+    {
+        CLOCKWISE,
+        COUNTER_CLOCKWISE,
+    };
+
+    struct depth_bias
+    {
+        float constant_factor;
+        float clamp;
+        float slope_factor;
+    };
+
+    struct rasterization_state
+    {
+        bool depth_clamp_enable;
+        bool rasterizer_discard_enable;
+        polygon_mode polygon_mode;
+        enum_mask<cull_mode> cull_mode;
+        vertex_winding vertex_winding;
+        optional<depth_bias> depth_bias;
+        float line_width;
+    };
+
+    struct sample_shading
+    {
+        float min_sample_shading;
+        vector<uint32_t> sample_mask;
+    };
+
+    struct multisample_state
+    {
+        image_sample_count sample_count;
+        optional<sample_shading> sample_shading;
+        bool alpha_to_coverage;
+        bool alpha_to_one;
+    };
+
+    enum class compare_op
+    {
+        NEVER,
+        LESS,
+        EQUAL,
+        LESS_EQUAL,
+        GREATER,
+        NOT_EQUAL,
+        GREATER_EQUAL,
+        ALWAYS,
+    };
+
+    enum class stencil_op
+    {
+        KEEP,
+        ZERO,
+        REPLACE,
+        INCREMENT_AND_CLAMP,
+        DECREMENT_AND_CLAMP,
+        INVERT,
+        INCREMENT_AND_WRAP,
+        DECREMENT_AND_WRAP,
+    };
+
+    struct stencil_op_state
+    {
+        stencil_op fail_op;
+        stencil_op pass_op;
+        stencil_op depth_fail_op;
+        compare_op compare_op;
+        uint32_t compare_mask;
+        uint32_t write_mask;
+        uint32_t reference;
+    };
+
+    struct depth_test
+    {
+        bool write_enable;
+        compare_op compare_op;
+        bool depth_bounds_test_enable;
+        float min_depth_bounds;
+        float max_depth_bounds;
+    };
+
+    struct stencil_test
+    {
+        stencil_op_state front;
+        stencil_op_state back;
+    };
+
+    struct depth_stencil_state
+    {
+        optional<depth_test> depth;
+        optional<stencil_test> stencil;
+    };
+
+    enum class blend_factor
+    {
+        ZERO,
+        ONE,
+        SRC_COLOR,
+        ONE_MINUS_SRC_COLOR,
+        DST_COLOR,
+        ONE_MINUS_DST_COLOR,
+        SRC_ALPHA,
+        ONE_MINUS_SRC_ALPHA,
+        DST_ALPHA,
+        ONE_MINUS_DST_ALPHA,
+        CONSTANT_COLOR,
+        ONE_MINUS_CONSTANT_COLOR,
+        CONSTANT_ALPHA,
+        ONE_MINUS_CONSTANT_ALPHA,
+    };
+
+    enum class blend_op
+    {
+        ADD,
+        SUBTRACT,
+        REVERSE_SUBTRACT,
+        MIN,
+        MAX,
+    };
+
+    struct color_blend_attachment
+    {
+        bool blend_enable;
+        blend_factor src_color_blend_factor;
+        blend_factor dst_color_blend_factor;
+        blend_op color_blend_op;
+        blend_factor src_alpha_blend_factor;
+        blend_factor dst_alpha_blend_factor;
+        blend_op alpha_blend_op;
+    };
+
+    struct color_blend_state
+    {
+        vector<color_blend_attachment> attachments;
+        array<float, 4> blend_constants;
+    };
+
+    struct graphics_pipeline_desc
+    {
+        vector<byte> vertex_shader;
+        vector<byte> tessellation_control_shader;
+        vector<byte> tessellation_evaluation_shader;
+        vector<byte> geometry_shader;
+        vector<byte> fragment_shader;
+
+        input_assembly_desc input_assembly;
+        optional<tessellation_desc> tessellation;
+        multisample_state multisample;
+        rasterization_state rasterization;
+        depth_stencil_state depth_stencil;
+        color_blend_state color_blend;
+
+        typed_rhi_handle<rhi_handle_type::pipeline_layout> layout;
     };
 } // namespace tempest::rhi
 

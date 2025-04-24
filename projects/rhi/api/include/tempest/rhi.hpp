@@ -5,6 +5,7 @@
 
 #include <tempest/enum.hpp>
 #include <tempest/expected.hpp>
+#include <tempest/input.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/optional.hpp>
@@ -49,6 +50,10 @@ namespace tempest::rhi
             const render_surface_desc& desc) noexcept = 0;
         virtual typed_rhi_handle<rhi_handle_type::descriptor_set_layout> create_descriptor_set_layout(
             const vector<descriptor_binding_layout>& desc) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::pipeline_layout> create_pipeline_layout(
+            const pipeline_layout_desc& desc) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::graphics_pipeline> create_graphics_pipeline(
+            const graphics_pipeline_desc& desc) noexcept = 0;
 
         virtual void destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
         virtual void destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept = 0;
@@ -57,6 +62,9 @@ namespace tempest::rhi
         virtual void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept = 0;
         virtual void destroy_descriptor_set_layout(
             typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept = 0;
+        virtual void destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept = 0;
+        virtual void destroy_graphics_pipeline(
+            typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept = 0;
 
         virtual work_queue& get_primary_work_queue() noexcept = 0;
         virtual work_queue& get_dedicated_transfer_queue() noexcept = 0;
@@ -252,6 +260,12 @@ namespace tempest::rhi
         virtual void begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                      const render_pass_info& render_pass_info) noexcept = 0;
         virtual void end_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept = 0;
+        virtual void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::graphics_pipeline> pipeline) noexcept = 0;
+        virtual void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t draw_count,
+                          uint32_t stride) noexcept = 0;
+
 
       protected:
         work_queue() = default;
@@ -271,6 +285,21 @@ namespace tempest::rhi
         virtual uint32_t height() const noexcept = 0;
         virtual string name() const noexcept = 0;
         virtual bool should_close() const noexcept = 0;
+        virtual bool minimized() const noexcept = 0;
+
+        virtual void close() = 0;
+
+        // Set up input callbacks
+        virtual void register_keyboard_callback(function<void(const core::key_state&)>&& cb) = 0;
+        virtual void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) = 0;
+        virtual void register_cursor_callback(function<void(float, float)>&& cb) = 0;
+        virtual void register_scroll_callback(function<void(float, float)>&& cb) = 0;
+
+        // Set up other miscellaneous callbacks
+        virtual void register_close_callback(function<void()>&& cb) = 0;
+        virtual void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) = 0;
+        virtual void register_focus_callback(function<void(bool)>&& cb) = 0;
+        virtual void register_minimize_callback(function<void(bool)>&& cb) = 0;
 
       protected:
         window_surface() = default;
@@ -288,7 +317,7 @@ namespace tempest::rhi
 
         virtual void commit(uint32_t set_index, const descriptor_resource_binding& binding,
                             typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::descriptor_set> get_active_descriptor_set(
+        virtual typed_rhi_handle<rhi_handle_type::descriptor_set_layout> get_active_descriptor_set(
             uint32_t index) const noexcept = 0;
 
       protected:

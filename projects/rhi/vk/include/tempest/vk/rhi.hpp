@@ -105,6 +105,11 @@ namespace tempest::rhi::vk
         void begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                              const render_pass_info& render_pass_info) noexcept override;
         void end_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept override;
+        void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::graphics_pipeline> pipeline) noexcept override;
+        void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t draw_count,
+                  uint32_t stride) noexcept override;
 
       private:
         vkb::DispatchTable* _dispatch;
@@ -126,6 +131,9 @@ namespace tempest::rhi::vk
         flat_unordered_map<typed_rhi_handle<rhi_handle_type::command_list>,
                            vector<typed_rhi_handle<rhi_handle_type::image>>>
             used_images;
+        flat_unordered_map<typed_rhi_handle<rhi_handle_type::command_list>,
+                           vector<typed_rhi_handle<rhi_handle_type::graphics_pipeline>>>
+            used_gfx_pipelines;
     };
 
     struct image
@@ -170,6 +178,15 @@ namespace tempest::rhi::vk
         VkSurfaceKHR surface;
         inplace_vector<typed_rhi_handle<rhi_handle_type::image>, 8> images;
         inplace_vector<fif_data, 4> frames;
+    };
+
+    struct graphics_pipeline
+    {
+        inplace_vector<VkShaderModule, 5> shader_modules;
+        VkPipeline pipeline;
+        VkPipelineLayout layout;
+
+        graphics_pipeline_desc desc;
     };
 
     struct delete_queue
@@ -243,7 +260,12 @@ namespace tempest::rhi::vk
 
         bool release_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept;
 
+        VkDescriptorSetLayout get_layout(
+            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) const noexcept;
+
         void destroy() noexcept;
+
+        bool add_usage(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept;
 
       private:
         flat_unordered_map<cache_key, typed_rhi_handle<rhi_handle_type::descriptor_set_layout>, cache_key_hash> _cache;
@@ -253,6 +275,68 @@ namespace tempest::rhi::vk
         size_t _compute_cache_hash(const vector<descriptor_binding_layout>& desc) const noexcept;
 
         stack_allocator _allocator{16 * 1024};
+    };
+
+    class pipeline_layout_cache
+    {
+      public:
+        struct cache_key
+        {
+            pipeline_layout_desc desc;
+            size_t hash;
+
+            bool operator==(const cache_key& other) const noexcept
+            {
+                // Check against hash first, because it's a cheaper condition with a reasonable chance of being true
+                return hash == other.hash && desc == other.desc;
+            }
+
+            bool operator!=(const cache_key& other) const noexcept
+            {
+                return !(*this == other);
+            }
+        };
+
+        struct slot_entry
+        {
+            cache_key key;
+            VkPipelineLayout layout;
+            uint32_t ref_count;
+        };
+
+        struct cache_key_hash
+        {
+            size_t operator()(const cache_key& key) const noexcept
+            {
+                return key.hash;
+            }
+        };
+
+        pipeline_layout_cache(device* dev) noexcept;
+        pipeline_layout_cache(const pipeline_layout_cache&) = delete;
+        pipeline_layout_cache(pipeline_layout_cache&&) noexcept = delete;
+        ~pipeline_layout_cache() noexcept = default;
+
+        pipeline_layout_cache& operator=(const pipeline_layout_cache&) = delete;
+        pipeline_layout_cache& operator=(pipeline_layout_cache&&) noexcept = delete;
+
+        typed_rhi_handle<rhi_handle_type::pipeline_layout> get_or_create_layout(
+            const pipeline_layout_desc& desc) noexcept;
+
+        bool release_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept;
+
+        VkPipelineLayout get_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) const noexcept;
+
+        void destroy() noexcept;
+
+        bool add_usage(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept;
+
+      private:
+        flat_unordered_map<cache_key, typed_rhi_handle<rhi_handle_type::pipeline_layout>, cache_key_hash> _cache;
+        slot_map<slot_entry> _cache_slots;
+        device* _dev;
+        size_t _compute_cache_hash(const pipeline_layout_desc& desc) const noexcept;
+        stack_allocator _allocator{4 * 1024};
     };
 
     class device : public rhi::device
@@ -274,6 +358,10 @@ namespace tempest::rhi::vk
             const render_surface_desc& desc) noexcept override;
         typed_rhi_handle<rhi_handle_type::descriptor_set_layout> create_descriptor_set_layout(
             const vector<descriptor_binding_layout>& desc) noexcept override;
+        typed_rhi_handle<rhi_handle_type::pipeline_layout> create_pipeline_layout(
+            const pipeline_layout_desc& desc) noexcept override;
+        typed_rhi_handle<rhi_handle_type::graphics_pipeline> create_graphics_pipeline(
+            const graphics_pipeline_desc& desc) noexcept override;
 
         void destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept override;
         void destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept override;
@@ -282,6 +370,8 @@ namespace tempest::rhi::vk
         void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept override;
         void destroy_descriptor_set_layout(
             typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept override;
+        void destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept override;
+        void destroy_graphics_pipeline(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept override;
 
         void recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
                                      const render_surface_desc& desc) noexcept override;
@@ -320,13 +410,19 @@ namespace tempest::rhi::vk
         VkFence get_fence(typed_rhi_handle<rhi_handle_type::fence> handle) const noexcept;
         VkSemaphore get_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) const noexcept;
         VkSwapchainKHR get_swapchain(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept;
+        VkDescriptorSetLayout get_descriptor_set_layout(
+            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) const noexcept;
 
         optional<const vk::buffer&> get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept;
         optional<const vk::image&> get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept;
+        optional<const vk::graphics_pipeline&> get_graphics_pipeline(
+            typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) const noexcept;
 
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept;
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::image> handle) noexcept;
         bool release_resource_immediate(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept;
+        bool release_resource_immediate(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept;
+        void release_resource_immediate(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept;
 
         const vkb::DispatchTable& get_dispatch_table() const noexcept
         {
@@ -350,6 +446,7 @@ namespace tempest::rhi::vk
         slot_map<image> _images;
         slot_map<semaphore> _semaphores;
         slot_map<swapchain> _swapchains;
+        slot_map<graphics_pipeline> _graphics_pipelines;
 
         slot_map<VkCommandBuffer> _command_buffers;
 
@@ -362,6 +459,7 @@ namespace tempest::rhi::vk
 
         // Descriptor layout cache
         descriptor_set_layout_cache _descriptor_set_layout_cache;
+        pipeline_layout_cache _pipeline_layout_cache;
     };
 
     unique_ptr<rhi::instance> create_instance() noexcept;

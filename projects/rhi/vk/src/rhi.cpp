@@ -214,11 +214,6 @@ namespace tempest::rhi::vk
         {
             VkBufferUsageFlags flags = 0;
 
-            if ((usage & rhi::buffer_usage::VERTEX) == rhi::buffer_usage::VERTEX)
-            {
-                flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-            }
-
             if ((usage & rhi::buffer_usage::INDEX) == rhi::buffer_usage::INDEX)
             {
                 flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
@@ -660,6 +655,168 @@ namespace tempest::rhi::vk
             return vk_flags;
         }
 
+        constexpr VkPrimitiveTopology to_vulkan(rhi::primitive_topology topo)
+        {
+            switch (topo)
+            {
+            case rhi::primitive_topology::POINT_LIST:
+                return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+            case rhi::primitive_topology::LINE_LIST:
+                return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+            case rhi::primitive_topology::LINE_STRIP:
+                return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+            case rhi::primitive_topology::TRIANGLE_LIST:
+                return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            case rhi::primitive_topology::TRIANGLE_STRIP:
+                return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+            case rhi::primitive_topology::TRIANGLE_FAN:
+                return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+            }
+            unreachable();
+        }
+
+        constexpr VkFrontFace to_vulkan(rhi::vertex_winding face)
+        {
+            switch (face)
+            {
+            case rhi::vertex_winding::COUNTER_CLOCKWISE:
+                return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+            case rhi::vertex_winding::CLOCKWISE:
+                return VK_FRONT_FACE_CLOCKWISE;
+            }
+            unreachable();
+        }
+
+        constexpr VkCullModeFlags to_vulkan(enum_mask<rhi::cull_mode> mode)
+        {
+            VkCullModeFlags flags = 0;
+            if (mode & rhi::cull_mode::FRONT)
+            {
+                flags |= VK_CULL_MODE_FRONT_BIT;
+            }
+            if (mode & rhi::cull_mode::BACK)
+            {
+                flags |= VK_CULL_MODE_BACK_BIT;
+            }
+            return flags;
+        }
+
+        constexpr VkPolygonMode to_vulkan(rhi::polygon_mode mode)
+        {
+            switch (mode)
+            {
+            case rhi::polygon_mode::FILL:
+                return VK_POLYGON_MODE_FILL;
+            case rhi::polygon_mode::LINE:
+                return VK_POLYGON_MODE_LINE;
+            case rhi::polygon_mode::POINT:
+                return VK_POLYGON_MODE_POINT;
+            }
+            unreachable();
+        }
+
+        constexpr VkCompareOp to_vulkan(rhi::compare_op op)
+        {
+            switch (op)
+            {
+            case rhi::compare_op::NEVER:
+                return VK_COMPARE_OP_NEVER;
+            case rhi::compare_op::LESS:
+                return VK_COMPARE_OP_LESS;
+            case rhi::compare_op::EQUAL:
+                return VK_COMPARE_OP_EQUAL;
+            case rhi::compare_op::LESS_EQUAL:
+                return VK_COMPARE_OP_LESS_OR_EQUAL;
+            case rhi::compare_op::GREATER:
+                return VK_COMPARE_OP_GREATER;
+            case rhi::compare_op::NOT_EQUAL:
+                return VK_COMPARE_OP_NOT_EQUAL;
+            case rhi::compare_op::GREATER_EQUAL:
+                return VK_COMPARE_OP_GREATER_OR_EQUAL;
+            case rhi::compare_op::ALWAYS:
+                return VK_COMPARE_OP_ALWAYS;
+            }
+            unreachable();
+        }
+
+        constexpr VkStencilOp to_vulkan(rhi::stencil_op op)
+        {
+            switch (op)
+            {
+            case rhi::stencil_op::KEEP:
+                return VK_STENCIL_OP_KEEP;
+            case rhi::stencil_op::ZERO:
+                return VK_STENCIL_OP_ZERO;
+            case rhi::stencil_op::REPLACE:
+                return VK_STENCIL_OP_REPLACE;
+            case rhi::stencil_op::INCREMENT_AND_CLAMP:
+                return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+            case rhi::stencil_op::DECREMENT_AND_CLAMP:
+                return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+            case rhi::stencil_op::INVERT:
+                return VK_STENCIL_OP_INVERT;
+            case rhi::stencil_op::INCREMENT_AND_WRAP:
+                return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+            case rhi::stencil_op::DECREMENT_AND_WRAP:
+                return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+            }
+            unreachable();
+        }
+
+        constexpr VkBlendFactor to_vulkan(rhi::blend_factor factor)
+        {
+            switch (factor)
+            {
+            case rhi::blend_factor::ZERO:
+                return VK_BLEND_FACTOR_ZERO;
+            case rhi::blend_factor::ONE:
+                return VK_BLEND_FACTOR_ONE;
+            case rhi::blend_factor::SRC_COLOR:
+                return VK_BLEND_FACTOR_SRC_COLOR;
+            case rhi::blend_factor::ONE_MINUS_SRC_COLOR:
+                return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+            case rhi::blend_factor::DST_COLOR:
+                return VK_BLEND_FACTOR_DST_COLOR;
+            case rhi::blend_factor::ONE_MINUS_DST_COLOR:
+                return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+            case rhi::blend_factor::SRC_ALPHA:
+                return VK_BLEND_FACTOR_SRC_ALPHA;
+            case rhi::blend_factor::ONE_MINUS_SRC_ALPHA:
+                return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            case rhi::blend_factor::DST_ALPHA:
+                return VK_BLEND_FACTOR_DST_ALPHA;
+            case rhi::blend_factor::ONE_MINUS_DST_ALPHA:
+                return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+            case rhi::blend_factor::CONSTANT_COLOR:
+                return VK_BLEND_FACTOR_CONSTANT_COLOR;
+            case rhi::blend_factor::ONE_MINUS_CONSTANT_COLOR:
+                return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+            case rhi::blend_factor::CONSTANT_ALPHA:
+                return VK_BLEND_FACTOR_CONSTANT_ALPHA;
+            case rhi::blend_factor::ONE_MINUS_CONSTANT_ALPHA:
+                return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+            }
+            unreachable();
+        }
+
+        constexpr VkBlendOp to_vulkan(rhi::blend_op op)
+        {
+            switch (op)
+            {
+            case rhi::blend_op::ADD:
+                return VK_BLEND_OP_ADD;
+            case rhi::blend_op::SUBTRACT:
+                return VK_BLEND_OP_SUBTRACT;
+            case rhi::blend_op::REVERSE_SUBTRACT:
+                return VK_BLEND_OP_REVERSE_SUBTRACT;
+            case rhi::blend_op::MIN:
+                return VK_BLEND_OP_MIN;
+            case rhi::blend_op::MAX:
+                return VK_BLEND_OP_MAX;
+            }
+            unreachable();
+        }
+
         constexpr VkImageViewType get_compatible_view_type(rhi::image_type type)
         {
             switch (type)
@@ -864,7 +1021,7 @@ namespace tempest::rhi::vk
     device::device(vkb::Device dev, vkb::Instance* instance)
         : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()},
           _global_timeline{_dispatch_table}, _resource_tracker{this, _dispatch_table, _global_timeline},
-          _descriptor_set_layout_cache{this}
+          _descriptor_set_layout_cache{this}, _pipeline_layout_cache{this}
     {
         VmaVulkanFunctions fns = {
             .vkGetInstanceProcAddr = _vkb_instance->fp_vkGetInstanceProcAddr,
@@ -1316,6 +1473,307 @@ namespace tempest::rhi::vk
         return _descriptor_set_layout_cache.get_or_create_layout(desc);
     }
 
+    typed_rhi_handle<rhi_handle_type::pipeline_layout> device::create_pipeline_layout(
+        const pipeline_layout_desc& desc) noexcept
+    {
+        return _pipeline_layout_cache.get_or_create_layout(desc);
+    }
+
+    typed_rhi_handle<rhi_handle_type::graphics_pipeline> device::create_graphics_pipeline(
+        const graphics_pipeline_desc& desc) noexcept
+    {
+        auto pipeline_layout = _pipeline_layout_cache.get_layout(desc.layout);
+        if (!pipeline_layout)
+        {
+            logger->error("Failed to create graphics pipeline: invalid pipeline layout");
+            return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+        }
+
+        // Lambda to create shader modules and stages
+        // Returns a pair of shader modules and shader stages
+
+        auto create_shader_stage =
+            [&](const vector<byte>& shader_code,
+                VkShaderStageFlagBits stage) -> pair<VkShaderModule, VkPipelineShaderStageCreateInfo> {
+            VkShaderModuleCreateInfo shader_ci = {
+                .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .codeSize = shader_code.size(),
+                .pCode = reinterpret_cast<const uint32_t*>(shader_code.data()),
+            };
+            VkShaderModule shader_module;
+            auto result = _dispatch_table.createShaderModule(&shader_ci, nullptr, &shader_module);
+            if (result != VK_SUCCESS)
+            {
+                logger->error("Failed to create shader module: {}", to_underlying(result));
+                return make_pair(VkShaderModule{}, VkPipelineShaderStageCreateInfo{});
+            }
+            VkPipelineShaderStageCreateInfo stage_ci = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .stage = stage,
+                .module = shader_module,
+                .pName = "main",
+                .pSpecializationInfo = nullptr,
+            };
+            return make_pair(shader_module, stage_ci);
+        };
+
+        inplace_vector<VkShaderModule, 5> shader_modules;
+        inplace_vector<VkPipelineShaderStageCreateInfo, 5> shader_stages;
+        if (!desc.vertex_shader.empty())
+        {
+            auto [mod, stage_ci] = create_shader_stage(desc.vertex_shader, VK_SHADER_STAGE_VERTEX_BIT);
+            if (mod == VkShaderModule{})
+            {
+                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+            }
+
+            shader_modules.push_back(mod);
+            shader_stages.push_back(stage_ci);
+        }
+
+        if (!desc.tessellation_control_shader.empty())
+        {
+            auto [mod, stage_ci] =
+                create_shader_stage(desc.tessellation_control_shader, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
+            if (mod == VkShaderModule{})
+            {
+                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+            }
+            shader_modules.push_back(mod);
+            shader_stages.push_back(stage_ci);
+        }
+
+        if (!desc.tessellation_evaluation_shader.empty())
+        {
+            auto [mod, stage_ci] =
+                create_shader_stage(desc.tessellation_evaluation_shader, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+            if (mod == VkShaderModule{})
+            {
+                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+            }
+            shader_modules.push_back(mod);
+            shader_stages.push_back(stage_ci);
+        }
+
+        if (!desc.geometry_shader.empty())
+        {
+            auto [mod, stage_ci] = create_shader_stage(desc.geometry_shader, VK_SHADER_STAGE_GEOMETRY_BIT);
+            if (mod == VkShaderModule{})
+            {
+                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+            }
+            shader_modules.push_back(mod);
+            shader_stages.push_back(stage_ci);
+        }
+
+        if (!desc.fragment_shader.empty())
+        {
+            auto [mod, stage_ci] = create_shader_stage(desc.fragment_shader, VK_SHADER_STAGE_FRAGMENT_BIT);
+            if (mod == VkShaderModule{})
+            {
+                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+            }
+            shader_modules.push_back(mod);
+            shader_stages.push_back(stage_ci);
+        }
+
+        VkPipelineVertexInputStateCreateInfo vertex_input_ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .vertexBindingDescriptionCount = 0,
+            .pVertexBindingDescriptions = nullptr,
+            .vertexAttributeDescriptionCount = 0,
+            .pVertexAttributeDescriptions = nullptr,
+        };
+
+        VkPipelineInputAssemblyStateCreateInfo input_assembly_ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .topology = to_vulkan(desc.input_assembly.topology),
+            .primitiveRestartEnable = VK_FALSE,
+        };
+
+        VkPipelineTessellationStateCreateInfo tessellation_ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .patchControlPoints = desc.tessellation ? desc.tessellation->patch_control_points : 0,
+        };
+
+        VkPipelineRasterizationStateCreateInfo rasterization_ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .depthClampEnable = desc.rasterization.depth_clamp_enable ? VK_TRUE : VK_FALSE,
+            .rasterizerDiscardEnable = desc.rasterization.rasterizer_discard_enable ? VK_TRUE : VK_FALSE,
+            .polygonMode = to_vulkan(desc.rasterization.polygon_mode),
+            .cullMode = to_vulkan(desc.rasterization.cull_mode),
+            .frontFace = to_vulkan(desc.rasterization.vertex_winding),
+            .depthBiasEnable = desc.rasterization.depth_bias ? VK_TRUE : VK_FALSE,
+            .depthBiasConstantFactor =
+                desc.rasterization.depth_bias ? desc.rasterization.depth_bias->constant_factor : 0.0f,
+            .depthBiasClamp = desc.rasterization.depth_bias ? desc.rasterization.depth_bias->clamp : 0.0f,
+            .depthBiasSlopeFactor = desc.rasterization.depth_bias ? desc.rasterization.depth_bias->slope_factor : 0.0f,
+            .lineWidth = desc.rasterization.line_width,
+        };
+
+        VkPipelineMultisampleStateCreateInfo multisample_state = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .rasterizationSamples = to_vulkan(desc.multisample.sample_count),
+            .sampleShadingEnable = desc.multisample.sample_shading ? VK_TRUE : VK_FALSE,
+            .minSampleShading =
+                desc.multisample.sample_shading ? desc.multisample.sample_shading->min_sample_shading : 0.0f,
+            .pSampleMask =
+                desc.multisample.sample_shading ? desc.multisample.sample_shading->sample_mask.data() : nullptr,
+            .alphaToCoverageEnable = desc.multisample.alpha_to_coverage ? VK_TRUE : VK_FALSE,
+            .alphaToOneEnable = desc.multisample.alpha_to_one ? VK_TRUE : VK_FALSE,
+        };
+
+        VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .depthTestEnable = desc.depth_stencil.depth ? VK_TRUE : VK_FALSE,
+            .depthWriteEnable =
+                desc.depth_stencil.depth ? desc.depth_stencil.depth->write_enable ? VK_TRUE : VK_FALSE : VK_FALSE,
+            .depthCompareOp =
+                desc.depth_stencil.depth ? to_vulkan(desc.depth_stencil.depth->compare_op) : VK_COMPARE_OP_ALWAYS,
+            .depthBoundsTestEnable = desc.depth_stencil.depth
+                                         ? desc.depth_stencil.depth->depth_bounds_test_enable ? VK_TRUE : VK_FALSE
+                                         : VK_FALSE,
+            .stencilTestEnable = desc.depth_stencil.stencil ? VK_TRUE : VK_FALSE,
+            .front =
+                {
+                    .failOp = desc.depth_stencil.stencil ? to_vulkan(desc.depth_stencil.stencil->front.fail_op)
+                                                         : VK_STENCIL_OP_KEEP,
+                    .passOp = desc.depth_stencil.stencil ? to_vulkan(desc.depth_stencil.stencil->front.pass_op)
+                                                         : VK_STENCIL_OP_KEEP,
+                    .depthFailOp = desc.depth_stencil.stencil
+                                       ? to_vulkan(desc.depth_stencil.stencil->front.depth_fail_op)
+                                       : VK_STENCIL_OP_KEEP,
+                    .compareOp = desc.depth_stencil.stencil ? to_vulkan(desc.depth_stencil.stencil->front.compare_op)
+                                                            : VK_COMPARE_OP_ALWAYS,
+                    .compareMask = desc.depth_stencil.stencil ? desc.depth_stencil.stencil->front.compare_mask : 0,
+                    .writeMask = desc.depth_stencil.stencil ? desc.depth_stencil.stencil->front.write_mask : 0,
+                    .reference = desc.depth_stencil.stencil ? desc.depth_stencil.stencil->front.reference : 0,
+                },
+            .back =
+                {
+                    .failOp = desc.depth_stencil.stencil ? to_vulkan(desc.depth_stencil.stencil->back.fail_op)
+                                                         : VK_STENCIL_OP_KEEP,
+                    .passOp = desc.depth_stencil.stencil ? to_vulkan(desc.depth_stencil.stencil->back.pass_op)
+                                                         : VK_STENCIL_OP_KEEP,
+                    .depthFailOp = desc.depth_stencil.stencil
+                                       ? to_vulkan(desc.depth_stencil.stencil->back.depth_fail_op)
+                                       : VK_STENCIL_OP_KEEP,
+                    .compareOp = desc.depth_stencil.stencil ? to_vulkan(desc.depth_stencil.stencil->back.compare_op)
+                                                            : VK_COMPARE_OP_ALWAYS,
+                    .compareMask = desc.depth_stencil.stencil ? desc.depth_stencil.stencil->back.compare_mask : 0,
+                    .writeMask = desc.depth_stencil.stencil ? desc.depth_stencil.stencil->back.write_mask : 0,
+                    .reference = desc.depth_stencil.stencil ? desc.depth_stencil.stencil->back.reference : 0,
+                },
+            .minDepthBounds = desc.depth_stencil.depth ? desc.depth_stencil.depth->min_depth_bounds : 0.0f,
+            .maxDepthBounds = desc.depth_stencil.depth ? desc.depth_stencil.depth->max_depth_bounds : 0.0f,
+        };
+
+        auto color_blend_attachments = vector<VkPipelineColorBlendAttachmentState>(desc.color_blend.attachments.size());
+        for (size_t i = 0; i < desc.color_blend.attachments.size(); ++i)
+        {
+            color_blend_attachments[i] = {
+                .blendEnable = desc.color_blend.attachments[i].blend_enable ? VK_TRUE : VK_FALSE,
+                .srcColorBlendFactor = to_vulkan(desc.color_blend.attachments[i].src_color_blend_factor),
+                .dstColorBlendFactor = to_vulkan(desc.color_blend.attachments[i].dst_color_blend_factor),
+                .colorBlendOp = to_vulkan(desc.color_blend.attachments[i].color_blend_op),
+                .srcAlphaBlendFactor = to_vulkan(desc.color_blend.attachments[i].src_alpha_blend_factor),
+                .dstAlphaBlendFactor = to_vulkan(desc.color_blend.attachments[i].dst_alpha_blend_factor),
+                .alphaBlendOp = to_vulkan(desc.color_blend.attachments[i].alpha_blend_op),
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+                                  VK_COLOR_COMPONENT_A_BIT,
+            };
+        }
+
+        VkPipelineColorBlendStateCreateInfo color_blend_ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .attachmentCount = static_cast<uint32_t>(color_blend_attachments.size()),
+            .pAttachments = color_blend_attachments.empty() ? nullptr : color_blend_attachments.data(),
+            .blendConstants =
+                {
+                    desc.color_blend.blend_constants[0],
+                    desc.color_blend.blend_constants[1],
+                    desc.color_blend.blend_constants[2],
+                    desc.color_blend.blend_constants[3],
+                },
+        };
+
+        array dynamic_states = {
+            VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+            VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamic_state = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()),
+            .pDynamicStates = dynamic_states.data(),
+        };
+
+        VkGraphicsPipelineCreateInfo ci = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = nullptr,
+            .stageCount = static_cast<uint32_t>(shader_stages.size()),
+            .pStages = shader_stages.data(),
+            .pVertexInputState = &vertex_input_ci,
+            .pInputAssemblyState = &input_assembly_ci,
+            .pTessellationState = desc.tessellation ? &tessellation_ci : nullptr,
+            .pViewportState = nullptr,
+            .pRasterizationState = &rasterization_ci,
+            .pMultisampleState = &multisample_state,
+            .pDepthStencilState = &depth_stencil_state,
+            .pColorBlendState = &color_blend_ci,
+            .pDynamicState = &dynamic_state,
+            .layout = pipeline_layout,
+            .renderPass = nullptr,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = 0,
+        };
+
+        VkPipeline pipeline;
+        auto result = _dispatch_table.createGraphicsPipelines(VK_NULL_HANDLE, 1, &ci, nullptr, &pipeline);
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create graphics pipeline: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+        }
+
+        graphics_pipeline gp = {
+            .shader_modules = tempest::move(shader_modules),
+            .pipeline = pipeline,
+            .layout = pipeline_layout,
+            .desc = tempest::move(desc),
+        };
+
+        auto new_key = _graphics_pipelines.insert(gp);
+        auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
+        auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
+
+        return typed_rhi_handle<rhi_handle_type::graphics_pipeline>{
+            .id = new_key_id,
+            .generation = new_key_gen,
+        };
+    }
+
     void device::destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
     {
         // If the buffer is tracked, handle it through the resource tracker
@@ -1408,6 +1866,30 @@ namespace tempest::rhi::vk
     void device::destroy_descriptor_set_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
     {
         _descriptor_set_layout_cache.release_layout(handle);
+    }
+
+    void device::destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    {
+        _pipeline_layout_cache.release_layout(handle);
+    }
+
+    void device::destroy_graphics_pipeline(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept
+    {
+        if (_resource_tracker.is_tracked(handle))
+        {
+            _resource_tracker.release(handle);
+        }
+        else
+        {
+            auto pipeline_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+            auto pipeline_it = this->_graphics_pipelines.find(pipeline_key);
+            if (pipeline_it != this->_graphics_pipelines.end())
+            {
+                _delete_queue.enqueue(VK_OBJECT_TYPE_PIPELINE, pipeline_it->pipeline,
+                                      _current_frame + num_frames_in_flight);
+                this->_graphics_pipelines.erase(pipeline_key);
+            }
+        }
     }
 
     void device::recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
@@ -1872,6 +2354,12 @@ namespace tempest::rhi::vk
         return VK_NULL_HANDLE;
     }
 
+    VkDescriptorSetLayout device::get_descriptor_set_layout(
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) const noexcept
+    {
+        return _descriptor_set_layout_cache.get_layout(handle);
+    }
+
     optional<const vk::buffer&> device::get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
@@ -1891,6 +2379,19 @@ namespace tempest::rhi::vk
         {
             return *it;
         }
+        return none();
+    }
+
+    optional<const vk::graphics_pipeline&> device::get_graphics_pipeline(
+        typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _graphics_pipelines.find(key);
+        if (it != _graphics_pipelines.end())
+        {
+            return *it;
+        }
+
         return none();
     }
 
@@ -1926,6 +2427,30 @@ namespace tempest::rhi::vk
     bool device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
     {
         return _descriptor_set_layout_cache.release_layout(handle);
+    }
+
+    bool device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    {
+        return _pipeline_layout_cache.release_layout(handle);
+    }
+
+    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _graphics_pipelines.find(key);
+        if (it != _graphics_pipelines.end())
+        {
+            _dispatch_table.destroyPipeline(it->pipeline, nullptr);
+
+            release_resource_immediate(it->desc.layout);
+
+            for (auto& shader : it->shader_modules)
+            {
+                _dispatch_table.destroyShaderModule(shader, nullptr);
+            }
+
+            _graphics_pipelines.erase(key);
+        }
     }
 
     work_queue::work_queue(device* parent, vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index,
@@ -2078,15 +2603,19 @@ namespace tempest::rhi::vk
                 {
                     _res_tracker->track(buf, timestamp);
                 }
-
                 used_buffers.erase(cmd_list);
 
                 for (const auto& img : used_images[cmd_list])
                 {
                     _res_tracker->track(img, timestamp);
                 }
-
                 used_images.erase(cmd_list);
+
+                for (const auto& pipe : used_gfx_pipelines[cmd_list])
+                {
+                    _res_tracker->track(pipe, timestamp);
+                }
+                used_gfx_pipelines.erase(cmd_list);
             }
         }
 
@@ -2690,6 +3219,29 @@ namespace tempest::rhi::vk
         _dispatch->cmdEndRendering(cmds);
     }
 
+    void work_queue::bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::graphics_pipeline> pipeline) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        auto pipe = _parent->get_graphics_pipeline(pipeline);
+        _dispatch->cmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe->pipeline);
+
+        // Track the pipeline for the resource tracker
+        used_gfx_pipelines[command_list].push_back(pipeline);
+    }
+
+    void work_queue::draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t draw_count,
+                          uint32_t stride) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        auto buf = _parent->get_buffer(indirect_buffer);
+        _dispatch->cmdDrawIndirectCount(cmds, buf->buffer, 0, buf->buffer, 0, draw_count, stride);
+
+        // Track the buffer for the resource tracker
+        used_buffers[command_list].push_back(indirect_buffer);
+    }
+
     void work_group::reset() noexcept
     {
         current_buffer_index = -1;
@@ -2771,7 +3323,13 @@ namespace tempest::rhi::vk
 
         auto instance = tempest::move(result).value();
 
-        VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state = {
+        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dynamic_state = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+            .pNext = nullptr,
+            .extendedDynamicState = VK_TRUE,
+        };
+
+        VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3 = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT,
             .pNext = nullptr,
             .extendedDynamicState3TessellationDomainOrigin = VK_FALSE,
@@ -2979,6 +3537,7 @@ namespace tempest::rhi::vk
                     .maintenance4 = VK_FALSE,
                 })
                 .add_required_extension_features(extended_dynamic_state)
+                .add_required_extension_features(extended_dynamic_state3)
                 .add_required_extension_features(fragment_shader_interlock);
 
         auto devices = selector.select_devices();
@@ -3104,6 +3663,19 @@ namespace tempest::rhi::vk
         return false;
     }
 
+    VkDescriptorSetLayout descriptor_set_layout_cache::get_layout(
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto cache_entry_it = _cache_slots.find(key);
+        if (cache_entry_it == _cache_slots.end())
+        {
+            logger->error("Failed to get descriptor set layout: layout not found in cache");
+            return VK_NULL_HANDLE;
+        }
+        return cache_entry_it->layout;
+    }
+
     void descriptor_set_layout_cache::destroy() noexcept
     {
         for (auto& [key, layout, ref_count] : _cache_slots)
@@ -3111,6 +3683,22 @@ namespace tempest::rhi::vk
             _dev->get_dispatch_table().destroyDescriptorSetLayout(layout, nullptr);
         }
         _cache_slots.clear();
+        _cache.clear();
+    }
+
+    bool descriptor_set_layout_cache::add_usage(
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto cache_entry_it = _cache_slots.find(key);
+        if (cache_entry_it == _cache_slots.end())
+        {
+            logger->error("Failed to add usage: layout not found in cache");
+            return false;
+        }
+        slot_entry& cache_value = *cache_entry_it;
+        cache_value.ref_count++;
+        return true;
     }
 
     size_t descriptor_set_layout_cache::_compute_cache_hash(
@@ -3123,5 +3711,164 @@ namespace tempest::rhi::vk
                                 to_underlying(binding.stages.value()), to_underlying(binding.flags.value()));
         }
         return hash;
+    }
+
+    pipeline_layout_cache::pipeline_layout_cache(device* dev) noexcept : _dev{dev}
+    {
+    }
+
+    typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout_cache::get_or_create_layout(
+        const pipeline_layout_desc& desc) noexcept
+    {
+        size_t hash = _compute_cache_hash(desc);
+        cache_key key = {
+            .desc = desc,
+            .hash = hash,
+        };
+
+        auto cache_entry_it = _cache.find(key);
+        if (cache_entry_it != _cache.end())
+        {
+            auto sk = cache_entry_it->second;
+            auto& cache_value = *_cache_slots.find(create_slot_map_key<uint64_t>(sk.id, sk.generation));
+            cache_value.ref_count++;
+            return sk;
+        }
+
+        // Build the pipeline layout
+        auto set_layouts = _allocator.allocate_typed<VkDescriptorSetLayout>(desc.descriptor_set_layouts.size());
+        for (size_t i = 0; i < desc.descriptor_set_layouts.size(); ++i)
+        {
+            set_layouts[i] = _dev->get_descriptor_set_layout(desc.descriptor_set_layouts[i]);
+        }
+
+        auto push_constant_ranges = _allocator.allocate_typed<VkPushConstantRange>(desc.push_constants.size());
+        for (size_t i = 0; i < desc.push_constants.size(); ++i)
+        {
+            push_constant_ranges[i] = {
+                .stageFlags = to_vulkan(desc.push_constants[i].stages),
+                .offset = desc.push_constants[i].offset,
+                .size = desc.push_constants[i].range,
+            };
+        }
+
+        VkPipelineLayoutCreateInfo layout_info = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = static_cast<uint32_t>(desc.descriptor_set_layouts.size()),
+            .pSetLayouts = set_layouts,
+            .pushConstantRangeCount = static_cast<uint32_t>(desc.push_constants.size()),
+            .pPushConstantRanges = push_constant_ranges,
+        };
+
+        VkPipelineLayout layout;
+        auto result = _dev->get_dispatch_table().createPipelineLayout(&layout_info, nullptr, &layout);
+
+        if (result != VK_SUCCESS)
+        {
+            logger->error("Failed to create pipeline layout: {}", to_underlying(result));
+            return typed_rhi_handle<rhi_handle_type::pipeline_layout>::null_handle;
+        }
+
+        // Create a new cache entry
+        slot_entry entry = {
+            .key = tempest::move(key),
+            .layout = layout,
+            .ref_count = 1,
+        };
+
+        auto slot = _cache_slots.insert(entry);
+        auto typed_key = typed_rhi_handle<rhi_handle_type::pipeline_layout>{
+            .id = get_slot_map_key_id(slot),
+            .generation = get_slot_map_key_generation(slot),
+        };
+
+        _cache[key] = typed_key;
+        return typed_key;
+    }
+
+    VkPipelineLayout pipeline_layout_cache::get_layout(
+        typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) const noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto cache_entry_it = _cache_slots.find(key);
+        if (cache_entry_it == _cache_slots.end())
+        {
+            logger->error("Failed to get pipeline layout: layout not found in cache");
+            return VK_NULL_HANDLE;
+        }
+        return cache_entry_it->layout;
+    }
+
+    void pipeline_layout_cache::destroy() noexcept
+    {
+        for (auto& [key, layout, ref_count] : _cache_slots)
+        {
+            _dev->get_dispatch_table().destroyPipelineLayout(layout, nullptr);
+        }
+        _cache_slots.clear();
+        _cache.clear();
+    }
+
+    size_t pipeline_layout_cache::_compute_cache_hash(const pipeline_layout_desc& desc) const noexcept
+    {
+        size_t hc = 0;
+
+        for (const auto& set_layout : desc.descriptor_set_layouts)
+        {
+            hc = hash_combine(hc, set_layout);
+        }
+
+        for (const auto& push_constant : desc.push_constants)
+        {
+            hc = hash_combine(hc, to_underlying(push_constant.stages.value()), push_constant.offset,
+                              push_constant.range);
+        }
+
+        return hc;
+    }
+
+    bool pipeline_layout_cache::release_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto cache_entry_it = _cache_slots.find(key);
+        if (cache_entry_it == _cache_slots.end())
+        {
+            logger->error("Failed to release pipeline layout: layout not found in cache");
+            return false;
+        }
+        slot_entry& cache_value = *cache_entry_it;
+        cache_value.ref_count--;
+        // If the ref count is zero, add it to the deletion queue
+        if (cache_value.ref_count == 0)
+        {
+            _dev->get_dispatch_table().destroyPipelineLayout(cache_value.layout, nullptr);
+
+            // Release the descriptor set layouts
+            for (auto& set_layout : cache_value.key.desc.descriptor_set_layouts)
+            {
+                _dev->release_resource_immediate(set_layout);
+            }
+
+            _cache.erase(cache_value.key);
+            _cache_slots.erase(key);
+            return true;
+        }
+        return false;
+    }
+
+    bool pipeline_layout_cache::add_usage(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    {
+        auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto cache_entry_it = _cache_slots.find(key);
+        if (cache_entry_it == _cache_slots.end())
+        {
+            logger->error("Failed to add usage: layout not found in cache");
+            return false;
+        }
+        slot_entry& cache_value = *cache_entry_it;
+        cache_value.ref_count++;
+        return true;
     }
 } // namespace tempest::rhi::vk

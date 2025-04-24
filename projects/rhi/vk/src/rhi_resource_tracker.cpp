@@ -99,19 +99,19 @@ namespace tempest::rhi::vk
         }
     }
 
-    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set,
+    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline,
                                  uint64_t timeline_value)
     {
-        auto it = _tracked_desc_set_layouts.find(desc_set);
-        if (it != _tracked_desc_set_layouts.end())
+        auto it = _tracked_graphics_pipelines.find(pipeline);
+        if (it != _tracked_graphics_pipelines.end())
         {
             it->second.timeline_value = timeline_value;
             it->second.deletion_request_count = 0;
         }
         else
         {
-            _tracked_desc_set_layouts[desc_set] = {
-                .object = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+            _tracked_graphics_pipelines[pipeline] = {
+                .object = VK_OBJECT_TYPE_PIPELINE,
                 .timeline_value = timeline_value,
                 .deletion_request_count = 0,
             };
@@ -136,15 +136,6 @@ namespace tempest::rhi::vk
         }
     }
 
-    void resource_tracker::untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set)
-    {
-        auto it = _tracked_desc_set_layouts.find(desc_set);
-        if (it != _tracked_desc_set_layouts.end())
-        {
-            _tracked_desc_set_layouts.erase(it);
-        }
-    }
-
     bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer) const noexcept
     {
         return _tracked_buffers.find(buffer) != _tracked_buffers.end();
@@ -156,9 +147,9 @@ namespace tempest::rhi::vk
     }
 
     bool resource_tracker::is_tracked(
-        rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout) const noexcept
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline) const noexcept
     {
-        return _tracked_desc_set_layouts.find(layout) != _tracked_desc_set_layouts.end();
+        return _tracked_graphics_pipelines.find(pipeline) != _tracked_graphics_pipelines.end();
     }
 
     void resource_tracker::release(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
@@ -179,12 +170,12 @@ namespace tempest::rhi::vk
         }
     }
 
-    void resource_tracker::release(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout)
+    void resource_tracker::release(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline)
     {
-        auto it = _tracked_desc_set_layouts.find(layout);
-        if (it != _tracked_desc_set_layouts.end())
+        auto it = _tracked_graphics_pipelines.find(pipeline);
+        if (it != _tracked_graphics_pipelines.end())
         {
-            it->second.deletion_request_count++;
+            it->second.deletion_request_count = 1;
         }
     }
 
@@ -219,22 +210,12 @@ namespace tempest::rhi::vk
             }
         }
 
-        for (auto it = _tracked_desc_set_layouts.begin(); it != _tracked_desc_set_layouts.end();)
+        for (auto it = _tracked_graphics_pipelines.begin(); it != _tracked_graphics_pipelines.end();)
         {
             if (it->second.deletion_request_count && it->second.timeline_value <= completed_value)
             {
-                // For each time a descriptor set had its deletion requested, we need to release the resource
-                // as it is cached
-
-                for (size_t i = 0; i < it->second.deletion_request_count; ++i)
-                {
-                    auto done = _device->release_resource_immediate(it->first);
-                    if (done)
-                    {
-                        it = _tracked_desc_set_layouts.erase(it);
-                        break;
-                    }
-                }
+                _device->release_resource_immediate(it->first);
+                it = _tracked_graphics_pipelines.erase(it);
             }
             else
             {
