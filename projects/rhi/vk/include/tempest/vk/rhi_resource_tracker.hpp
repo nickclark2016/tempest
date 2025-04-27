@@ -2,6 +2,7 @@
 #define tempest_rhi_rhi_resource_tracker_hpp
 
 #include <tempest/flat_unordered_map.hpp>
+#include <tempest/inplace_vector.hpp>
 #include <tempest/rhi_types.hpp>
 
 #include <VkBootstrap.h>
@@ -11,36 +12,61 @@
 namespace tempest::rhi::vk
 {
     class device;
+    class work_queue;
 
-    class global_timeline
+    // resource key type
+    // 8 bits for rhi handle type
+    // 24 bits for generation
+    // 32 bits for id
+
+    using resource_key = uint64_t;
+
+    inline constexpr resource_key make_resource_key(rhi::rhi_handle_type type, uint32_t generation,
+                                                    uint32_t id) noexcept
     {
-      public:
-        global_timeline(vkb::DispatchTable& dispatch);
-        global_timeline(const global_timeline&) = delete;
-        global_timeline(global_timeline&&) noexcept = delete;
+        return (static_cast<resource_key>(type) << 56) | (static_cast<resource_key>(generation) << 32) |
+               static_cast<resource_key>(id);
+    }
 
-        ~global_timeline() = default;
+    inline constexpr void extract_resource_key(resource_key key, rhi::rhi_handle_type& type, uint32_t& generation,
+                                               uint32_t& id) noexcept
+    {
+        type = static_cast<rhi::rhi_handle_type>((key >> 56) & 0xFF);
+        generation = static_cast<uint32_t>((key >> 32) & 0xFFFFFF);
+        id = static_cast<uint32_t>(key & 0xFFFFFFFF);
+    }
 
-        global_timeline& operator=(const global_timeline&) = delete;
-        global_timeline& operator=(global_timeline&&) noexcept = delete;
+    template <rhi::rhi_handle_type T>
+    inline constexpr typed_rhi_handle<T> extract_resource_key(resource_key key)
+    {
+        rhi::rhi_handle_type type;
+        uint32_t generation;
+        uint32_t id;
+        extract_resource_key(key, type, generation, id);
 
-        VkSemaphore timeline_sem() const noexcept;
-        uint64_t get_current_timestamp() const noexcept;
-        uint64_t increment_and_get_timestamp() noexcept;
+        assert(type == T);
 
-        void destroy() noexcept;
+        return typed_rhi_handle<T>{.id = id, .generation = generation};
+    }
 
-      private:
-        vkb::DispatchTable* _dispatch;
-        std::atomic<uint64_t> _current_timestamp; // Probably will never wrap
+    struct resource_usage_record
+    {
+        work_queue* queue;
+        uint64_t timeline_value;
+    };
 
-        VkSemaphore _timeline_sem{VK_NULL_HANDLE};
+    struct tracked_resource
+    {
+        void (*destroy_fn)(uint64_t, device*); // key, device
+        uint64_t key;
+        bool delete_requested;
+        inplace_vector<resource_usage_record, 8> usage_records;
     };
 
     class resource_tracker
     {
       public:
-        resource_tracker(device* dev, vkb::DispatchTable& dispatch, global_timeline& timeline);
+        resource_tracker(device* dev, vkb::DispatchTable& dispatch);
         resource_tracker(const resource_tracker&) = delete;
         resource_tracker(resource_tracker&&) noexcept = delete;
 
@@ -49,51 +75,32 @@ namespace tempest::rhi::vk
         resource_tracker& operator=(const resource_tracker&) = delete;
         resource_tracker& operator=(resource_tracker&&) noexcept = delete;
 
-        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer, uint64_t timeline_value);
-        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image, uint64_t timeline_value);
-        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline, uint64_t timeline_value);
-        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer);
-        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image);
-        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline);
+        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer, uint64_t timeline_value,
+                   vk::work_queue* queue);
+        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image, uint64_t timeline_value,
+                   vk::work_queue* queue);
+        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline, uint64_t timeline_value,
+                   vk::work_queue* queue);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer, vk::work_queue* queue);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image, vk::work_queue* queue);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline, vk::work_queue* queue);
 
-        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer) const noexcept;
-        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image) const noexcept;
-        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline) const noexcept;
 
-        void release(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer);
-        void release(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image);
-        void release(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline);
-
-        global_timeline& get_timeline() noexcept
-        {
-            return *_timeline;
-        }
-
-        const global_timeline& get_timeline() const noexcept
-        {
-            return *_timeline;
-        }
+        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer);
+        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image);
+        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline);
 
         void try_release() noexcept;
         void destroy() noexcept;
 
       private:
-        struct tracking_state
-        {
-            VkObjectType object;
-            uint64_t timeline_value;
-            uint64_t deletion_request_count;
-        };
-
         device* _device;
-        vkb::DispatchTable* _dispatch;
-        global_timeline* _timeline;
+        [[maybe_unused]] vkb::DispatchTable* _dispatch;
 
-        // All tracked resources
-        flat_unordered_map<rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>, tracking_state> _tracked_buffers;
-        flat_unordered_map<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>, tracking_state> _tracked_images;
-        flat_unordered_map<rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline>, tracking_state>
-            _tracked_graphics_pipelines;
+        flat_unordered_map<resource_key, tracked_resource> _tracked_resources;
     };
 } // namespace tempest::rhi::vk
 

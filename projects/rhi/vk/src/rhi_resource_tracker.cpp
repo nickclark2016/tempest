@@ -1,5 +1,6 @@
 #include <tempest/vk/rhi_resource_tracker.hpp>
 
+#include <tempest/algorithm.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/vk/rhi.hpp>
@@ -9,213 +10,309 @@ namespace tempest::rhi::vk
     namespace
     {
         auto logger = logger::logger_factory::create({.prefix{"tempest::rhi::vk::rhi_resource_tracker"}});
-    }
 
-    global_timeline::global_timeline(vkb::DispatchTable& dispatch) : _dispatch{&dispatch}
-    {
-        VkSemaphoreTypeCreateInfo sem_type_ci = {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-            .pNext = nullptr,
-            .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
-            .initialValue = 0,
-        };
-
-        VkSemaphoreCreateInfo sem_ci = {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-            .pNext = &sem_type_ci,
-            .flags = 0,
-        };
-
-        VkResult result = _dispatch->createSemaphore(&sem_ci, nullptr, &_timeline_sem);
-        if (result != VK_SUCCESS)
+        void release_buffer(uint64_t key, device* dev)
         {
-            logger->error("Failed to create global timeline semaphore: {}", to_underlying(result));
-            _timeline_sem = VK_NULL_HANDLE;
+            auto resource_key = extract_resource_key<rhi_handle_type::BUFFER>(key);
+            dev->release_resource_immediate(resource_key);
         }
-    }
 
-    VkSemaphore global_timeline::timeline_sem() const noexcept
-    {
-        return _timeline_sem;
-    }
-
-    uint64_t global_timeline::get_current_timestamp() const noexcept
-    {
-        return _current_timestamp.load();
-    }
-
-    uint64_t global_timeline::increment_and_get_timestamp() noexcept
-    {
-        return _current_timestamp.fetch_add(1) + 1;
-    }
-
-    void global_timeline::destroy() noexcept
-    {
-        if (_timeline_sem != VK_NULL_HANDLE)
+        void release_image(uint64_t key, device* dev)
         {
-            _dispatch->destroySemaphore(_timeline_sem, nullptr);
-            _timeline_sem = VK_NULL_HANDLE;
+            auto resource_key = extract_resource_key<rhi_handle_type::IMAGE>(key);
+            dev->release_resource_immediate(resource_key);
         }
-    }
 
-    resource_tracker::resource_tracker(device* dev, vkb::DispatchTable& dispatch, global_timeline& timeline)
-        : _device{dev}, _dispatch{&dispatch}, _timeline{&timeline}
-    {
-    }
-
-    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer, uint64_t timeline_value)
-    {
-        auto it = _tracked_buffers.find(buffer);
-        if (it != _tracked_buffers.end())
+        void release_graphics_pipeline(uint64_t key, device* dev)
         {
-            it->second.timeline_value = timeline_value;
-            it->second.deletion_request_count = 0;
+            auto resource_key = extract_resource_key<rhi_handle_type::GRAPHICS_PIPELINE>(key);
+            dev->release_resource_immediate(resource_key);
+        }
+    } // namespace
+
+    resource_tracker::resource_tracker(device* dev, vkb::DispatchTable& dispatch) : _device{dev}, _dispatch{&dispatch}
+    {
+    }
+
+    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer, uint64_t timeline_value,
+                                 vk::work_queue* queue)
+    {
+        auto key = make_resource_key(rhi::rhi_handle_type::BUFFER, buffer.generation, buffer.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
+        {
+            _tracked_resources[key] = tracked_resource{
+                .destroy_fn = &release_buffer,
+                .key = key,
+                .delete_requested = false,
+                .usage_records = {},
+            };
+
+            auto& resource = _tracked_resources[key];
+            resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
         }
         else
         {
-            _tracked_buffers[buffer] = {
-                .object = VK_OBJECT_TYPE_BUFFER,
-                .timeline_value = timeline_value,
-                .deletion_request_count = 0,
-            };
+            auto resource = it->second;
+
+            if (resource.delete_requested)
+            {
+                logger->error("Resource {} is already marked for deletion", key);
+                return;
+            }
+
+            // Check if the resource is already tracking usage on the queue and queue index
+            auto usage_it =
+                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            if (usage_it == resource.usage_records.end())
+            {
+                resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
+            }
+            else
+            {
+                usage_it->timeline_value = tempest::max(usage_it->timeline_value, timeline_value);
+            }
         }
     }
 
-    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image, uint64_t timeline_value)
+    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image, uint64_t timeline_value,
+                                 work_queue* queue)
     {
-        auto it = _tracked_images.find(image);
-        if (it != _tracked_images.end())
+        auto key = make_resource_key(rhi::rhi_handle_type::IMAGE, image.generation, image.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
         {
-            it->second.timeline_value = timeline_value;
-            it->second.deletion_request_count = 0;
+            _tracked_resources[key] = tracked_resource{
+                .destroy_fn = release_image,
+                .key = key,
+                .delete_requested = false,
+                .usage_records = {},
+            };
+            auto& resource = _tracked_resources[key];
+            resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
         }
         else
         {
-            _tracked_images[image] = {
-                .object = VK_OBJECT_TYPE_IMAGE,
-                .timeline_value = timeline_value,
-                .deletion_request_count = 0,
-            };
+            auto resource = it->second;
+            if (resource.delete_requested)
+            {
+                logger->error("Resource {} is already marked for deletion", key);
+                return;
+            }
+            // Check if the resource is already tracking usage on the queue and queue index
+            auto usage_it =
+                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            if (usage_it == resource.usage_records.end())
+            {
+                resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
+            }
+            else
+            {
+                usage_it->timeline_value = tempest::max(usage_it->timeline_value, timeline_value);
+            }
         }
     }
 
-    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline,
-                                 uint64_t timeline_value)
+    void resource_tracker::track(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline,
+                                 uint64_t timeline_value, work_queue* queue)
     {
-        auto it = _tracked_graphics_pipelines.find(pipeline);
-        if (it != _tracked_graphics_pipelines.end())
+        auto key = make_resource_key(rhi::rhi_handle_type::GRAPHICS_PIPELINE, pipeline.generation, pipeline.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
         {
-            it->second.timeline_value = timeline_value;
-            it->second.deletion_request_count = 0;
+            _tracked_resources[key] = tracked_resource{
+                .destroy_fn = release_graphics_pipeline,
+                .key = key,
+                .delete_requested = false,
+                .usage_records = {},
+            };
+            auto& resource = _tracked_resources[key];
+            resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
         }
         else
         {
-            _tracked_graphics_pipelines[pipeline] = {
-                .object = VK_OBJECT_TYPE_PIPELINE,
-                .timeline_value = timeline_value,
-                .deletion_request_count = 0,
-            };
+            auto resource = it->second;
+            if (resource.delete_requested)
+            {
+                logger->error("Resource {} is already marked for deletion", key);
+                return;
+            }
+            // Check if the resource is already tracking usage on the queue and queue index
+            auto usage_it =
+                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            if (usage_it == resource.usage_records.end())
+            {
+                resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
+            }
+            else
+            {
+                usage_it->timeline_value = tempest::max(usage_it->timeline_value, timeline_value);
+            }
         }
     }
 
-    void resource_tracker::untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
+    void resource_tracker::untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer, work_queue* queue)
     {
-        auto it = _tracked_buffers.find(buffer);
-        if (it != _tracked_buffers.end())
+        auto key = make_resource_key(rhi::rhi_handle_type::BUFFER, buffer.generation, buffer.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
         {
-            _tracked_buffers.erase(it);
+            logger->error("Resource {} is not tracked", key);
+            return;
         }
-    }
-
-    void resource_tracker::untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image)
-    {
-        auto it = _tracked_images.find(image);
-        if (it != _tracked_images.end())
+        auto& resource = it->second;
+        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+        if (usage_it != resource.usage_records.end())
         {
-            _tracked_images.erase(it);
+            resource.usage_records.erase(usage_it);
         }
     }
 
-    bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer) const noexcept
+    void resource_tracker::untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image, work_queue* queue)
     {
-        return _tracked_buffers.find(buffer) != _tracked_buffers.end();
+        auto key = make_resource_key(rhi::rhi_handle_type::IMAGE, image.generation, image.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
+        {
+            logger->error("Resource {} is not tracked", key);
+            return;
+        }
+        auto& resource = it->second;
+        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+        if (usage_it != resource.usage_records.end())
+        {
+            resource.usage_records.erase(usage_it);
+        }
     }
 
-    bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image) const noexcept
+    void resource_tracker::untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline,
+                                   work_queue* queue)
     {
-        return _tracked_images.find(image) != _tracked_images.end();
+        auto key = make_resource_key(rhi::rhi_handle_type::GRAPHICS_PIPELINE, pipeline.generation, pipeline.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
+        {
+            logger->error("Resource {} is not tracked", key);
+            return;
+        }
+        auto& resource = it->second;
+        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+        if (usage_it != resource.usage_records.end())
+        {
+            resource.usage_records.erase(usage_it);
+        }
+    }
+
+    bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer) const noexcept
+    {
+        auto key = make_resource_key(rhi::rhi_handle_type::BUFFER, buffer.generation, buffer.id);
+        return _tracked_resources.find(key) != _tracked_resources.end();
+    }
+
+    bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image) const noexcept
+    {
+        auto key = make_resource_key(rhi::rhi_handle_type::IMAGE, image.generation, image.id);
+        return _tracked_resources.find(key) != _tracked_resources.end();
     }
 
     bool resource_tracker::is_tracked(
-        rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline) const noexcept
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline) const noexcept
     {
-        return _tracked_graphics_pipelines.find(pipeline) != _tracked_graphics_pipelines.end();
+        auto key = make_resource_key(rhi::rhi_handle_type::GRAPHICS_PIPELINE, pipeline.generation, pipeline.id);
+        return _tracked_resources.find(key) != _tracked_resources.end();
     }
 
-    void resource_tracker::release(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
+    void resource_tracker::request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer)
     {
-        auto it = _tracked_buffers.find(buffer);
-        if (it != _tracked_buffers.end())
+        auto key = make_resource_key(rhi::rhi_handle_type::BUFFER, buffer.generation, buffer.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
         {
-            it->second.deletion_request_count = 1;
+            logger->error("Resource {} is not tracked", key);
+            return;
         }
+        auto& resource = it->second;
+        if (resource.delete_requested)
+        {
+            logger->error("Resource {} is already marked for deletion", key);
+            return;
+        }
+        resource.delete_requested = true;
     }
 
-    void resource_tracker::release(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image)
+    void resource_tracker::request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image)
     {
-        auto it = _tracked_images.find(image);
-        if (it != _tracked_images.end())
+        auto key = make_resource_key(rhi::rhi_handle_type::IMAGE, image.generation, image.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
         {
-            it->second.deletion_request_count = 1;
+            logger->error("Resource {} is not tracked", key);
+            return;
         }
+        auto& resource = it->second;
+        if (resource.delete_requested)
+        {
+            logger->error("Resource {} is already marked for deletion", key);
+            return;
+        }
+        resource.delete_requested = true;
     }
 
-    void resource_tracker::release(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline)
+    void resource_tracker::request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline)
     {
-        auto it = _tracked_graphics_pipelines.find(pipeline);
-        if (it != _tracked_graphics_pipelines.end())
+        auto key = make_resource_key(rhi::rhi_handle_type::GRAPHICS_PIPELINE, pipeline.generation, pipeline.id);
+        auto it = _tracked_resources.find(key);
+        if (it == _tracked_resources.end())
         {
-            it->second.deletion_request_count = 1;
+            logger->error("Resource {} is not tracked", key);
+            return;
         }
+        auto& resource = it->second;
+        if (resource.delete_requested)
+        {
+            logger->error("Resource {} is already marked for deletion", key);
+            return;
+        }
+        resource.delete_requested = true;
     }
 
     void resource_tracker::try_release() noexcept
     {
-        uint64_t completed_value = 0;
-        _dispatch->getSemaphoreCounterValue(_timeline->timeline_sem(), &completed_value);
+        // Compute once and reuse for all resources
+        // Limits the number of calls to vulkan
+        auto timeline_values = _device->compute_current_work_queue_timeline_values();
 
-        for (auto it = _tracked_buffers.begin(); it != _tracked_buffers.end();)
+        for (auto it = _tracked_resources.begin(); it != _tracked_resources.end();)
         {
-            if (it->second.deletion_request_count && it->second.timeline_value <= completed_value)
+            auto& resource = it->second;
+            if (resource.delete_requested)
             {
-                _device->release_resource_immediate(it->first);
-                it = _tracked_buffers.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
+                bool can_release = true;
 
-        for (auto it = _tracked_images.begin(); it != _tracked_images.end();)
-        {
-            if (it->second.deletion_request_count && it->second.timeline_value <= completed_value)
-            {
-                _device->release_resource_immediate(it->first);
-                it = _tracked_images.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
+                for (const auto& record : resource.usage_records)
+                {
+                    if (timeline_values[record.queue] < record.timeline_value)
+                    {
+                        can_release = false;
+                        break;
+                    }
+                }
 
-        for (auto it = _tracked_graphics_pipelines.begin(); it != _tracked_graphics_pipelines.end();)
-        {
-            if (it->second.deletion_request_count && it->second.timeline_value <= completed_value)
-            {
-                _device->release_resource_immediate(it->first);
-                it = _tracked_graphics_pipelines.erase(it);
+                if (can_release)
+                {
+                    resource.destroy_fn(resource.key, _device);
+                    it = _tracked_resources.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
             }
             else
             {
@@ -226,14 +323,13 @@ namespace tempest::rhi::vk
 
     void resource_tracker::destroy() noexcept
     {
-        for (const auto& [key, _] : _tracked_buffers)
+        for (auto& [key, resource] : _tracked_resources)
         {
-            _device->release_resource_immediate(key);
+            if (resource.delete_requested)
+            {
+                resource.destroy_fn(resource.key, _device);
+            }
         }
-
-        for (const auto& [key, _] : _tracked_images)
-        {
-            _device->release_resource_immediate(key);
-        }
+        _tracked_resources.clear();
     }
 } // namespace tempest::rhi::vk

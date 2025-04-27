@@ -12,7 +12,7 @@ namespace tempest::rhi::vk
     class window_surface : public rhi::window_surface
     {
       public:
-        window_surface(GLFWwindow* win, string name) noexcept;
+        window_surface(GLFWwindow* win, string name, uint32_t width, uint32_t height) noexcept;
         window_surface(const window_surface&) = delete;
         window_surface(window_surface&&) noexcept = delete;
         ~window_surface() override;
@@ -70,14 +70,14 @@ namespace tempest::rhi::vk
             _window = nullptr;
         }
 
-        void register_keyboard_callback(function<void(const core::key_state&)>&& cb) override;
-        void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) override;
-        void register_cursor_callback(function<void(float, float)>&& cb) override;
-        void register_scroll_callback(function<void(float, float)>&& cb) override;
-        void register_close_callback(function<void()>&& cb) noexcept;
-        void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept;
-        void register_focus_callback(function<void(bool)>&& cb) noexcept;
-        void register_minimize_callback(function<void(bool)>&& cb) noexcept;
+        void register_keyboard_callback(function<void(const core::key_state&)>&& cb) noexcept override;
+        void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) noexcept override;
+        void register_cursor_callback(function<void(float, float)>&& cb) noexcept override;
+        void register_scroll_callback(function<void(float, float)>&& cb) noexcept override;
+        void register_close_callback(function<void()>&& cb) noexcept override;
+        void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept override;
+        void register_focus_callback(function<void(bool)>&& cb) noexcept override;
+        void register_minimize_callback(function<void(bool)>&& cb) noexcept override;
 
         void execute_keyboard_callbacks(const core::key_state& state) const noexcept;
         void execute_mouse_callbacks(const core::mouse_button_state& state) const noexcept;

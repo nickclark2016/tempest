@@ -42,48 +42,48 @@ namespace tempest::rhi
         device& operator=(const device&) = delete;
         device& operator=(device&&) noexcept = delete;
 
-        virtual typed_rhi_handle<rhi_handle_type::buffer> create_buffer(const buffer_desc& desc) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::image> create_image(const image_desc& desc) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::fence> create_fence(const fence_info& info) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::semaphore> create_semaphore(const semaphore_info& info) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::render_surface> create_render_surface(
+        virtual typed_rhi_handle<rhi_handle_type::BUFFER> create_buffer(const buffer_desc& desc) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::IMAGE> create_image(const image_desc& desc) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::FENCE> create_fence(const fence_info& info) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::SEMAPHORE> create_semaphore(const semaphore_info& info) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> create_render_surface(
             const render_surface_desc& desc) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::descriptor_set_layout> create_descriptor_set_layout(
+        virtual typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> create_descriptor_set_layout(
             const vector<descriptor_binding_layout>& desc) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::pipeline_layout> create_pipeline_layout(
+        virtual typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> create_pipeline_layout(
             const pipeline_layout_desc& desc) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::graphics_pipeline> create_graphics_pipeline(
+        virtual typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> create_graphics_pipeline(
             const graphics_pipeline_desc& desc) noexcept = 0;
 
-        virtual void destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
-        virtual void destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept = 0;
-        virtual void destroy_fence(typed_rhi_handle<rhi_handle_type::fence> handle) noexcept = 0;
-        virtual void destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept = 0;
-        virtual void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept = 0;
+        virtual void destroy_buffer(typed_rhi_handle<rhi_handle_type::BUFFER> handle) noexcept = 0;
+        virtual void destroy_image(typed_rhi_handle<rhi_handle_type::IMAGE> handle) noexcept = 0;
+        virtual void destroy_fence(typed_rhi_handle<rhi_handle_type::FENCE> handle) noexcept = 0;
+        virtual void destroy_semaphore(typed_rhi_handle<rhi_handle_type::SEMAPHORE> handle) noexcept = 0;
+        virtual void destroy_render_surface(typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> handle) noexcept = 0;
         virtual void destroy_descriptor_set_layout(
-            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept = 0;
-        virtual void destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept = 0;
+            typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> handle) noexcept = 0;
+        virtual void destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> handle) noexcept = 0;
         virtual void destroy_graphics_pipeline(
-            typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept = 0;
+            typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> handle) noexcept = 0;
 
         virtual work_queue& get_primary_work_queue() noexcept = 0;
         virtual work_queue& get_dedicated_transfer_queue() noexcept = 0;
         virtual work_queue& get_dedicated_compute_queue() noexcept = 0;
 
-        virtual void recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
+        virtual void recreate_render_surface(typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> handle,
                                              const render_surface_desc& desc) noexcept = 0;
 
         virtual render_surface_info query_render_surface_info(const window_surface& window) noexcept = 0;
-        virtual span<const typed_rhi_handle<rhi_handle_type::image>> get_render_surfaces(
-            typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept = 0;
+        virtual span<const typed_rhi_handle<rhi_handle_type::IMAGE>> get_render_surfaces(
+            typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> handle) noexcept = 0;
         virtual expected<swapchain_image_acquire_info_result, swapchain_error_code> acquire_next_image(
-            typed_rhi_handle<rhi_handle_type::render_surface> swapchain,
-            typed_rhi_handle<rhi_handle_type::fence> signal_fence =
-                typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept = 0;
+            typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> swapchain,
+            typed_rhi_handle<rhi_handle_type::FENCE> signal_fence =
+                typed_rhi_handle<rhi_handle_type::FENCE>::null_handle) noexcept = 0;
 
-        virtual bool is_signaled(typed_rhi_handle<rhi_handle_type::fence> fence) const noexcept = 0;
-        virtual bool reset(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept = 0;
-        virtual bool wait(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept = 0;
+        virtual bool is_signaled(typed_rhi_handle<rhi_handle_type::FENCE> fence) const noexcept = 0;
+        virtual bool reset(span<const typed_rhi_handle<rhi_handle_type::FENCE>> fences) const noexcept = 0;
+        virtual bool wait(span<const typed_rhi_handle<rhi_handle_type::FENCE>> fences) const noexcept = 0;
 
         virtual void start_frame() = 0;
         virtual void end_frame() = 0;
@@ -99,28 +99,28 @@ namespace tempest::rhi
       public:
         struct semaphore_submit_info
         {
-            typed_rhi_handle<rhi_handle_type::semaphore> semaphore;
+            typed_rhi_handle<rhi_handle_type::SEMAPHORE> semaphore;
             uint64_t value;
             enum_mask<pipeline_stage> stages;
         };
 
         struct submit_info
         {
-            vector<typed_rhi_handle<rhi_handle_type::command_list>> command_lists;
+            vector<typed_rhi_handle<rhi_handle_type::COMMAND_LIST>> command_lists;
             vector<semaphore_submit_info> wait_semaphores;
             vector<semaphore_submit_info> signal_semaphores;
         };
 
         struct swapchain_image_present_info
         {
-            typed_rhi_handle<rhi_handle_type::render_surface> render_surface;
+            typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> render_surface;
             uint32_t image_index;
         };
 
         struct present_info
         {
             vector<swapchain_image_present_info> swapchain_images;
-            vector<typed_rhi_handle<rhi_handle_type::semaphore>> wait_semaphores;
+            vector<typed_rhi_handle<rhi_handle_type::SEMAPHORE>> wait_semaphores;
         };
 
         enum class present_result
@@ -138,17 +138,17 @@ namespace tempest::rhi
         work_queue& operator=(const work_queue&) = delete;
         work_queue& operator=(work_queue&&) noexcept = delete;
 
-        virtual typed_rhi_handle<rhi_handle_type::command_list> get_next_command_list() noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::COMMAND_LIST> get_next_command_list() noexcept = 0;
 
         virtual bool submit(span<const submit_info> infos,
-                            typed_rhi_handle<rhi_handle_type::fence> fence =
-                                typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept = 0;
+                            typed_rhi_handle<rhi_handle_type::FENCE> fence =
+                                typed_rhi_handle<rhi_handle_type::FENCE>::null_handle) noexcept = 0;
         virtual present_result present(const present_info& info) noexcept = 0;
 
         // Commands
         struct image_barrier
         {
-            typed_rhi_handle<rhi_handle_type::image> image;
+            typed_rhi_handle<rhi_handle_type::IMAGE> image;
             image_layout old_layout;
             image_layout new_layout;
             enum_mask<pipeline_stage> src_stages;
@@ -161,7 +161,7 @@ namespace tempest::rhi
 
         struct buffer_barrier
         {
-            typed_rhi_handle<rhi_handle_type::buffer> buffer;
+            typed_rhi_handle<rhi_handle_type::BUFFER> buffer;
             enum_mask<pipeline_stage> src_stages;
             enum_mask<memory_access> src_access;
             enum_mask<pipeline_stage> dst_stages;
@@ -187,7 +187,7 @@ namespace tempest::rhi
 
         struct color_attachment_info
         {
-            typed_rhi_handle<rhi_handle_type::image> image;
+            typed_rhi_handle<rhi_handle_type::IMAGE> image;
             image_layout layout;
             float clear_color[4];
             load_op load_op;
@@ -196,7 +196,7 @@ namespace tempest::rhi
 
         struct depth_attachment_info
         {
-            typed_rhi_handle<rhi_handle_type::image> image;
+            typed_rhi_handle<rhi_handle_type::IMAGE> image;
             image_layout layout;
             float clear_depth;
             load_op load_op;
@@ -205,7 +205,7 @@ namespace tempest::rhi
 
         struct stencil_attachment_info
         {
-            typed_rhi_handle<rhi_handle_type::image> image;
+            typed_rhi_handle<rhi_handle_type::IMAGE> image;
             image_layout layout;
             uint32_t clear_stencil;
             load_op load_op;
@@ -224,46 +224,46 @@ namespace tempest::rhi
             uint32_t layers;
         };
 
-        virtual void begin_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+        virtual void begin_command_list(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                         bool one_time_submit) noexcept = 0;
-        virtual void end_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept = 0;
+        virtual void end_command_list(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list) noexcept = 0;
 
         // Image Commands
-        virtual void transition_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+        virtual void transition_image(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                       span<const image_barrier> image_barriers) noexcept = 0;
-        virtual void clear_color_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                       typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r,
+        virtual void clear_color_image(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                                       typed_rhi_handle<rhi_handle_type::IMAGE> image, image_layout layout, float r,
                                        float g, float b, float a) noexcept = 0;
-        virtual void blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::image> src,
-                          typed_rhi_handle<rhi_handle_type::image> dst) noexcept = 0;
-        virtual void generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                        typed_rhi_handle<rhi_handle_type::image> img, image_layout current_layout,
+        virtual void blit(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::IMAGE> src,
+                          typed_rhi_handle<rhi_handle_type::IMAGE> dst) noexcept = 0;
+        virtual void generate_mip_chain(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                                        typed_rhi_handle<rhi_handle_type::IMAGE> img, image_layout current_layout,
                                         uint32_t base_mip = 0,
                                         uint32_t mip_count = numeric_limits<uint32_t>::max()) = 0;
 
         // Buffer Commands
-        virtual void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::buffer> dst,
+        virtual void copy(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::BUFFER> src, typed_rhi_handle<rhi_handle_type::BUFFER> dst,
                           size_t src_offset = 0, size_t dst_offset = 0,
                           size_t byte_count = numeric_limits<size_t>::max()) noexcept = 0;
-        virtual void fill(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::buffer> handle, size_t offset, size_t size,
+        virtual void fill(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::BUFFER> handle, size_t offset, size_t size,
                           uint32_t data) noexcept = 0;
 
         // Barrier commands
-        virtual void pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+        virtual void pipeline_barriers(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                        span<const image_barrier> img_barriers,
                                        span<const buffer_barrier> buf_barriers) noexcept = 0;
 
         // Rendering commands
-        virtual void begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+        virtual void begin_rendering(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                      const render_pass_info& render_pass_info) noexcept = 0;
-        virtual void end_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept = 0;
-        virtual void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::graphics_pipeline> pipeline) noexcept = 0;
-        virtual void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t draw_count,
+        virtual void end_rendering(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list) noexcept = 0;
+        virtual void bind(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> pipeline) noexcept = 0;
+        virtual void draw(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::BUFFER> indirect_buffer, uint32_t draw_count,
                           uint32_t stride) noexcept = 0;
 
 
@@ -290,16 +290,16 @@ namespace tempest::rhi
         virtual void close() = 0;
 
         // Set up input callbacks
-        virtual void register_keyboard_callback(function<void(const core::key_state&)>&& cb) = 0;
-        virtual void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) = 0;
-        virtual void register_cursor_callback(function<void(float, float)>&& cb) = 0;
-        virtual void register_scroll_callback(function<void(float, float)>&& cb) = 0;
+        virtual void register_keyboard_callback(function<void(const core::key_state&)>&& cb) noexcept = 0;
+        virtual void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) noexcept = 0;
+        virtual void register_cursor_callback(function<void(float, float)>&& cb) noexcept = 0;
+        virtual void register_scroll_callback(function<void(float, float)>&& cb) noexcept = 0;
 
         // Set up other miscellaneous callbacks
-        virtual void register_close_callback(function<void()>&& cb) = 0;
-        virtual void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) = 0;
-        virtual void register_focus_callback(function<void(bool)>&& cb) = 0;
-        virtual void register_minimize_callback(function<void(bool)>&& cb) = 0;
+        virtual void register_close_callback(function<void()>&& cb) noexcept = 0;
+        virtual void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept = 0;
+        virtual void register_focus_callback(function<void(bool)>&& cb) noexcept = 0;
+        virtual void register_minimize_callback(function<void(bool)>&& cb) noexcept = 0;
 
       protected:
         window_surface() = default;
@@ -316,8 +316,8 @@ namespace tempest::rhi
         descriptor_context& operator=(descriptor_context&&) noexcept = delete;
 
         virtual void commit(uint32_t set_index, const descriptor_resource_binding& binding,
-                            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::descriptor_set_layout> get_active_descriptor_set(
+                            typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> layout) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> get_active_descriptor_set(
             uint32_t index) const noexcept = 0;
 
       protected:

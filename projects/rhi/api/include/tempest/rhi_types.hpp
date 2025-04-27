@@ -18,17 +18,17 @@ namespace tempest::rhi
 
     enum class rhi_handle_type
     {
-        buffer,
-        image,
-        sampler,
-        graphics_pipeline,
-        compute_pipeline,
-        command_list,
-        fence,
-        semaphore,
-        render_surface,
-        descriptor_set_layout,
-        pipeline_layout,
+        BUFFER,
+        IMAGE,
+        SAMPLER,
+        GRAPHICS_PIPELINE,
+        COMPUTE_PIPELINE,
+        COMMAND_LIST,
+        FENCE,
+        SEMAPHORE,
+        RENDER_SURFACE,
+        DESCRIPTOR_SET_LAYOUT,
+        PIPELINE_LAYOUT,
     };
 
     template <rhi_handle_type T>
@@ -334,10 +334,10 @@ namespace tempest::rhi
 
     struct swapchain_image_acquire_info_result
     {
-        typed_rhi_handle<rhi_handle_type::fence> frame_complete_fence;
-        typed_rhi_handle<rhi_handle_type::semaphore> acquire_sem;
-        typed_rhi_handle<rhi_handle_type::semaphore> render_complete_sem;
-        typed_rhi_handle<rhi_handle_type::image> image;
+        typed_rhi_handle<rhi_handle_type::FENCE> frame_complete_fence;
+        typed_rhi_handle<rhi_handle_type::SEMAPHORE> acquire_sem;
+        typed_rhi_handle<rhi_handle_type::SEMAPHORE> render_complete_sem;
+        typed_rhi_handle<rhi_handle_type::IMAGE> image;
         uint32_t image_index;
     };
 
@@ -451,8 +451,8 @@ namespace tempest::rhi
       public:
         struct image_binding
         {
-            typed_rhi_handle<rhi_handle_type::image> image;
-            typed_rhi_handle<rhi_handle_type::sampler> sampler;
+            typed_rhi_handle<rhi_handle_type::IMAGE> image;
+            typed_rhi_handle<rhi_handle_type::SAMPLER> sampler;
             image_layout layout;
 
             bool operator==(const image_binding& other) const noexcept;
@@ -461,7 +461,7 @@ namespace tempest::rhi
 
         struct buffer_binding
         {
-            typed_rhi_handle<rhi_handle_type::buffer> buffer;
+            typed_rhi_handle<rhi_handle_type::BUFFER> buffer;
             size_t offset;
             size_t size;
 
@@ -469,11 +469,11 @@ namespace tempest::rhi
             bool operator!=(const buffer_binding& other) const noexcept;
         };
 
-        void bind_image(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image,
-                        rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> sampler,
+        void bind_image(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image,
+                        rhi::typed_rhi_handle<rhi::rhi_handle_type::SAMPLER> sampler,
                         rhi::image_layout layout = rhi::image_layout::UNDEFINED) noexcept;
 
-        void bind_buffer(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer,
+        void bind_buffer(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer,
                          size_t offset = 0, size_t size = numeric_limits<size_t>::max()) noexcept;
 
         const flat_unordered_map<uint64_t, image_binding>& get_image_bindings() const noexcept;
@@ -499,7 +499,7 @@ namespace tempest::rhi
 
     struct pipeline_layout_desc
     {
-        vector<typed_rhi_handle<rhi_handle_type::descriptor_set_layout>> descriptor_set_layouts;
+        vector<typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT>> descriptor_set_layouts;
         vector<push_constant_range> push_constants;
     };
 
@@ -699,6 +699,10 @@ namespace tempest::rhi
 
     struct graphics_pipeline_desc
     {
+        vector<image_format> color_attachment_formats;
+        optional<image_format> depth_attachment_format;
+        optional<image_format> stencil_attachment_format;
+
         vector<byte> vertex_shader;
         vector<byte> tessellation_control_shader;
         vector<byte> tessellation_evaluation_shader;
@@ -712,7 +716,7 @@ namespace tempest::rhi
         depth_stencil_state depth_stencil;
         color_blend_state color_blend;
 
-        typed_rhi_handle<rhi_handle_type::pipeline_layout> layout;
+        typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> layout;
     };
 } // namespace tempest::rhi
 

@@ -994,8 +994,14 @@ namespace tempest::rhi::vk
         case VK_OBJECT_TYPE_IMAGE_VIEW:
             dispatch->destroyImageView(static_cast<VkImageView>(res.handle), nullptr);
             break;
+        case VK_OBJECT_TYPE_PIPELINE:
+            dispatch->destroyPipeline(static_cast<VkPipeline>(res.handle), nullptr);
+            break;
         case VK_OBJECT_TYPE_SEMAPHORE:
             dispatch->destroySemaphore(static_cast<VkSemaphore>(res.handle), nullptr);
+            break;
+        case VK_OBJECT_TYPE_SHADER_MODULE:
+            dispatch->destroyShaderModule(static_cast<VkShaderModule>(res.handle), nullptr);
             break;
         case VK_OBJECT_TYPE_SURFACE_KHR:
             vkb::destroy_surface(*instance, static_cast<VkSurfaceKHR>(res.handle));
@@ -1020,8 +1026,7 @@ namespace tempest::rhi::vk
 
     device::device(vkb::Device dev, vkb::Instance* instance)
         : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()},
-          _global_timeline{_dispatch_table}, _resource_tracker{this, _dispatch_table, _global_timeline},
-          _descriptor_set_layout_cache{this}, _pipeline_layout_cache{this}
+          _resource_tracker{this, _dispatch_table}, _descriptor_set_layout_cache{this}, _pipeline_layout_cache{this}
     {
         VmaVulkanFunctions fns = {
             .vkGetInstanceProcAddr = _vkb_instance->fp_vkGetInstanceProcAddr,
@@ -1159,8 +1164,8 @@ namespace tempest::rhi::vk
         _delete_queue.destroy();
 
         _resource_tracker.destroy();
-        _global_timeline.destroy();
         _descriptor_set_layout_cache.destroy();
+        _pipeline_layout_cache.destroy();
 
         for (auto img : _images)
         {
@@ -1207,7 +1212,7 @@ namespace tempest::rhi::vk
         vkb::destroy_device(_vkb_device);
     }
 
-    typed_rhi_handle<rhi_handle_type::buffer> device::create_buffer(const buffer_desc& desc) noexcept
+    typed_rhi_handle<rhi_handle_type::BUFFER> device::create_buffer(const buffer_desc& desc) noexcept
     {
         VkBufferCreateInfo buffer_ci = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1262,7 +1267,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create buffer: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::buffer>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::BUFFER>::null_handle;
         }
 
         vk::buffer buf = {
@@ -1275,13 +1280,13 @@ namespace tempest::rhi::vk
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
         auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
 
-        return typed_rhi_handle<rhi_handle_type::buffer>{
+        return typed_rhi_handle<rhi_handle_type::BUFFER>{
             .id = new_key_id,
             .generation = new_key_gen,
         };
     }
 
-    typed_rhi_handle<rhi_handle_type::image> device::create_image(const image_desc& desc) noexcept
+    typed_rhi_handle<rhi_handle_type::IMAGE> device::create_image(const image_desc& desc) noexcept
     {
         VkImageCreateInfo ci = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1333,7 +1338,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create image: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::image>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::IMAGE>::null_handle;
         }
 
         VkImageViewCreateInfo view_ci = {
@@ -1365,7 +1370,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create image view: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::image>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::IMAGE>::null_handle;
         }
 
         vk::image img = {
@@ -1382,13 +1387,13 @@ namespace tempest::rhi::vk
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
         auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
 
-        return typed_rhi_handle<rhi_handle_type::image>{
+        return typed_rhi_handle<rhi_handle_type::IMAGE>{
             .id = new_key_id,
             .generation = new_key_gen,
         };
     }
 
-    typed_rhi_handle<rhi_handle_type::fence> device::create_fence(const fence_info& info) noexcept
+    typed_rhi_handle<rhi_handle_type::FENCE> device::create_fence(const fence_info& info) noexcept
     {
         VkFenceCreateInfo fence_ci = {
             .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -1406,7 +1411,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create fence: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::fence>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::FENCE>::null_handle;
         }
 
         vk::fence new_fence = {
@@ -1417,13 +1422,13 @@ namespace tempest::rhi::vk
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
         auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
 
-        return typed_rhi_handle<rhi_handle_type::fence>{
+        return typed_rhi_handle<rhi_handle_type::FENCE>{
             .id = new_key_id,
             .generation = new_key_gen,
         };
     }
 
-    typed_rhi_handle<rhi_handle_type::semaphore> device::create_semaphore(const semaphore_info& info) noexcept
+    typed_rhi_handle<rhi_handle_type::SEMAPHORE> device::create_semaphore(const semaphore_info& info) noexcept
     {
         VkSemaphoreTypeCreateInfo sem_type_ci = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
@@ -1443,7 +1448,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create semaphore: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::semaphore>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::SEMAPHORE>::null_handle;
         }
 
         vk::semaphore new_semaphore = {
@@ -1455,38 +1460,38 @@ namespace tempest::rhi::vk
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
         auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
 
-        return typed_rhi_handle<rhi_handle_type::semaphore>{
+        return typed_rhi_handle<rhi_handle_type::SEMAPHORE>{
             .id = new_key_id,
             .generation = new_key_gen,
         };
     }
 
-    typed_rhi_handle<rhi_handle_type::render_surface> device::create_render_surface(
+    typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> device::create_render_surface(
         const render_surface_desc& desc) noexcept
     {
-        return create_render_surface(desc, typed_rhi_handle<rhi_handle_type::render_surface>::null_handle);
+        return create_render_surface(desc, typed_rhi_handle<rhi_handle_type::RENDER_SURFACE>::null_handle);
     }
 
-    typed_rhi_handle<rhi_handle_type::descriptor_set_layout> device::create_descriptor_set_layout(
+    typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> device::create_descriptor_set_layout(
         const vector<descriptor_binding_layout>& desc) noexcept
     {
         return _descriptor_set_layout_cache.get_or_create_layout(desc);
     }
 
-    typed_rhi_handle<rhi_handle_type::pipeline_layout> device::create_pipeline_layout(
+    typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> device::create_pipeline_layout(
         const pipeline_layout_desc& desc) noexcept
     {
         return _pipeline_layout_cache.get_or_create_layout(desc);
     }
 
-    typed_rhi_handle<rhi_handle_type::graphics_pipeline> device::create_graphics_pipeline(
+    typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> device::create_graphics_pipeline(
         const graphics_pipeline_desc& desc) noexcept
     {
         auto pipeline_layout = _pipeline_layout_cache.get_layout(desc.layout);
         if (!pipeline_layout)
         {
             logger->error("Failed to create graphics pipeline: invalid pipeline layout");
-            return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>::null_handle;
         }
 
         // Lambda to create shader modules and stages
@@ -1528,7 +1533,7 @@ namespace tempest::rhi::vk
             auto [mod, stage_ci] = create_shader_stage(desc.vertex_shader, VK_SHADER_STAGE_VERTEX_BIT);
             if (mod == VkShaderModule{})
             {
-                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+                return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>::null_handle;
             }
 
             shader_modules.push_back(mod);
@@ -1541,7 +1546,7 @@ namespace tempest::rhi::vk
                 create_shader_stage(desc.tessellation_control_shader, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
             if (mod == VkShaderModule{})
             {
-                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+                return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>::null_handle;
             }
             shader_modules.push_back(mod);
             shader_stages.push_back(stage_ci);
@@ -1553,7 +1558,7 @@ namespace tempest::rhi::vk
                 create_shader_stage(desc.tessellation_evaluation_shader, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
             if (mod == VkShaderModule{})
             {
-                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+                return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>::null_handle;
             }
             shader_modules.push_back(mod);
             shader_stages.push_back(stage_ci);
@@ -1564,7 +1569,7 @@ namespace tempest::rhi::vk
             auto [mod, stage_ci] = create_shader_stage(desc.geometry_shader, VK_SHADER_STAGE_GEOMETRY_BIT);
             if (mod == VkShaderModule{})
             {
-                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+                return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>::null_handle;
             }
             shader_modules.push_back(mod);
             shader_stages.push_back(stage_ci);
@@ -1575,7 +1580,7 @@ namespace tempest::rhi::vk
             auto [mod, stage_ci] = create_shader_stage(desc.fragment_shader, VK_SHADER_STAGE_FRAGMENT_BIT);
             if (mod == VkShaderModule{})
             {
-                return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+                return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>::null_handle;
             }
             shader_modules.push_back(mod);
             shader_stages.push_back(stage_ci);
@@ -1704,6 +1709,8 @@ namespace tempest::rhi::vk
             .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
+            .logicOpEnable = VK_FALSE,
+            .logicOp = VK_LOGIC_OP_NO_OP,
             .attachmentCount = static_cast<uint32_t>(color_blend_attachments.size()),
             .pAttachments = color_blend_attachments.empty() ? nullptr : color_blend_attachments.data(),
             .blendConstants =
@@ -1728,9 +1735,29 @@ namespace tempest::rhi::vk
             .pDynamicStates = dynamic_states.data(),
         };
 
+        auto color_attachments = tempest::vector<VkFormat>(desc.color_attachment_formats.size());
+
+        for (size_t i = 0; i < desc.color_attachment_formats.size(); ++i)
+        {
+            color_attachments[i] = to_vulkan(desc.color_attachment_formats[i]);
+        }
+
+        VkPipelineRenderingCreateInfo pipeline_rendering_ci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .pNext = nullptr,
+            .viewMask = 0,
+            .colorAttachmentCount = static_cast<uint32_t>(color_attachments.size()),
+            .pColorAttachmentFormats = color_attachments.empty() ? nullptr : color_attachments.data(),
+            .depthAttachmentFormat =
+                desc.depth_attachment_format ? to_vulkan(*desc.depth_attachment_format) : VK_FORMAT_UNDEFINED,
+            .stencilAttachmentFormat =
+                desc.stencil_attachment_format ? to_vulkan(*desc.stencil_attachment_format) : VK_FORMAT_UNDEFINED,
+        };
+
         VkGraphicsPipelineCreateInfo ci = {
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = nullptr,
+            .pNext = &pipeline_rendering_ci,
+            .flags = 0,
             .stageCount = static_cast<uint32_t>(shader_stages.size()),
             .pStages = shader_stages.data(),
             .pVertexInputState = &vertex_input_ci,
@@ -1754,7 +1781,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create graphics pipeline: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>::null_handle;
         }
 
         graphics_pipeline gp = {
@@ -1768,18 +1795,18 @@ namespace tempest::rhi::vk
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
         auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
 
-        return typed_rhi_handle<rhi_handle_type::graphics_pipeline>{
+        return typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE>{
             .id = new_key_id,
             .generation = new_key_gen,
         };
     }
 
-    void device::destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
+    void device::destroy_buffer(typed_rhi_handle<rhi_handle_type::BUFFER> handle) noexcept
     {
         // If the buffer is tracked, handle it through the resource tracker
         if (_resource_tracker.is_tracked(handle))
         {
-            _resource_tracker.release(handle);
+            _resource_tracker.request_release(handle);
         }
         else
         {
@@ -1794,12 +1821,12 @@ namespace tempest::rhi::vk
         }
     }
 
-    void device::destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept
+    void device::destroy_image(typed_rhi_handle<rhi_handle_type::IMAGE> handle) noexcept
     {
         // If the image is tracked, handle it through the resource tracker
         if (_resource_tracker.is_tracked(handle))
         {
-            _resource_tracker.release(handle);
+            _resource_tracker.request_release(handle);
         }
         else
         {
@@ -1821,7 +1848,7 @@ namespace tempest::rhi::vk
         }
     }
 
-    void device::destroy_fence(typed_rhi_handle<rhi_handle_type::fence> handle) noexcept
+    void device::destroy_fence(typed_rhi_handle<rhi_handle_type::FENCE> handle) noexcept
     {
         auto fence_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto fence_it = _fences.find(fence_key);
@@ -1832,7 +1859,7 @@ namespace tempest::rhi::vk
         }
     }
 
-    void device::destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept
+    void device::destroy_semaphore(typed_rhi_handle<rhi_handle_type::SEMAPHORE> handle) noexcept
     {
         auto sem_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto sem_it = _semaphores.find(sem_key);
@@ -1843,7 +1870,7 @@ namespace tempest::rhi::vk
         }
     }
 
-    void device::destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept
+    void device::destroy_render_surface(typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> handle) noexcept
     {
         auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto swapchain_it = _swapchains.find(swapchain_key);
@@ -1863,21 +1890,21 @@ namespace tempest::rhi::vk
         }
     }
 
-    void device::destroy_descriptor_set_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
+    void device::destroy_descriptor_set_layout(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> handle) noexcept
     {
         _descriptor_set_layout_cache.release_layout(handle);
     }
 
-    void device::destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    void device::destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> handle) noexcept
     {
         _pipeline_layout_cache.release_layout(handle);
     }
 
-    void device::destroy_graphics_pipeline(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept
+    void device::destroy_graphics_pipeline(typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> handle) noexcept
     {
         if (_resource_tracker.is_tracked(handle))
         {
-            _resource_tracker.release(handle);
+            _resource_tracker.request_release(handle);
         }
         else
         {
@@ -1885,6 +1912,14 @@ namespace tempest::rhi::vk
             auto pipeline_it = this->_graphics_pipelines.find(pipeline_key);
             if (pipeline_it != this->_graphics_pipelines.end())
             {
+                for (auto shader_module : pipeline_it->shader_modules)
+                {
+                    _delete_queue.enqueue(VK_OBJECT_TYPE_SHADER_MODULE, shader_module,
+                                          _current_frame + num_frames_in_flight);
+                }
+
+                _pipeline_layout_cache.release_layout(pipeline_it->desc.layout);
+
                 _delete_queue.enqueue(VK_OBJECT_TYPE_PIPELINE, pipeline_it->pipeline,
                                       _current_frame + num_frames_in_flight);
                 this->_graphics_pipelines.erase(pipeline_key);
@@ -1892,7 +1927,7 @@ namespace tempest::rhi::vk
         }
     }
 
-    void device::recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
+    void device::recreate_render_surface(typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> handle,
                                          const render_surface_desc& desc) noexcept
     {
         auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
@@ -1914,7 +1949,7 @@ namespace tempest::rhi::vk
         // Destroy the old swapchain
         for (auto img_handle : old_images)
         {
-            _resource_tracker.untrack(img_handle);
+            _resource_tracker.untrack(img_handle, &*_primary_work_queue);
             destroy_image(img_handle);
         }
         _delete_queue.enqueue(VK_OBJECT_TYPE_SWAPCHAIN_KHR, old_swapchain, _current_frame + num_frames_in_flight);
@@ -1954,15 +1989,15 @@ namespace tempest::rhi::vk
         return render_surface_info{};
     }
 
-    span<const typed_rhi_handle<rhi_handle_type::image>> device::get_render_surfaces(
-        [[maybe_unused]] typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept
+    span<const typed_rhi_handle<rhi_handle_type::IMAGE>> device::get_render_surfaces(
+        [[maybe_unused]] typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> handle) noexcept
     {
-        return span<const typed_rhi_handle<rhi_handle_type::image>>{};
+        return span<const typed_rhi_handle<rhi_handle_type::IMAGE>>{};
     }
 
     expected<swapchain_image_acquire_info_result, swapchain_error_code> device::acquire_next_image(
-        typed_rhi_handle<rhi_handle_type::render_surface> swapchain,
-        typed_rhi_handle<rhi_handle_type::fence> signal_fence) noexcept
+        typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> swapchain,
+        typed_rhi_handle<rhi_handle_type::FENCE> signal_fence) noexcept
     {
         VkFence fence_to_signal = VK_NULL_HANDLE;
 
@@ -2033,7 +2068,7 @@ namespace tempest::rhi::vk
         return unexpected{swapchain_error_code::FAILURE};
     }
 
-    bool device::is_signaled(typed_rhi_handle<rhi_handle_type::fence> fence) const noexcept
+    bool device::is_signaled(typed_rhi_handle<rhi_handle_type::FENCE> fence) const noexcept
     {
         auto fence_key = create_slot_map_key<uint64_t>(fence.id, fence.generation);
         auto fence_it = _fences.find(fence_key);
@@ -2045,7 +2080,7 @@ namespace tempest::rhi::vk
         return false;
     }
 
-    bool device::reset(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept
+    bool device::reset(span<const typed_rhi_handle<rhi_handle_type::FENCE>> fences) const noexcept
     {
         vector<VkFence> vk_fences;
 
@@ -2063,7 +2098,7 @@ namespace tempest::rhi::vk
         return result == VK_SUCCESS;
     }
 
-    bool device::wait(span<const typed_rhi_handle<rhi_handle_type::fence>> fences) const noexcept
+    bool device::wait(span<const typed_rhi_handle<rhi_handle_type::FENCE>> fences) const noexcept
     {
         vector<VkFence> vk_fences;
         for (auto fence : fences)
@@ -2132,17 +2167,17 @@ namespace tempest::rhi::vk
         return num_frames_in_flight;
     }
 
-    typed_rhi_handle<rhi_handle_type::image> device::acquire_image(image img) noexcept
+    typed_rhi_handle<rhi_handle_type::IMAGE> device::acquire_image(image img) noexcept
     {
         auto new_key = _images.insert(img);
 
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
         auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
 
-        return typed_rhi_handle<rhi_handle_type::image>(new_key_id, new_key_gen);
+        return typed_rhi_handle<rhi_handle_type::IMAGE>(new_key_id, new_key_gen);
     }
 
-    typed_rhi_handle<rhi_handle_type::command_list> device::acquire_command_list(VkCommandBuffer buf) noexcept
+    typed_rhi_handle<rhi_handle_type::COMMAND_LIST> device::acquire_command_list(VkCommandBuffer buf) noexcept
     {
         auto new_key = _command_buffers.insert(buf);
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
@@ -2154,7 +2189,7 @@ namespace tempest::rhi::vk
         };
     }
 
-    VkCommandBuffer device::get_command_buffer(typed_rhi_handle<rhi_handle_type::command_list> handle) const noexcept
+    VkCommandBuffer device::get_command_buffer(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> handle) const noexcept
     {
         auto buf_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto buf_it = _command_buffers.find(buf_key);
@@ -2166,7 +2201,7 @@ namespace tempest::rhi::vk
         return VK_NULL_HANDLE;
     }
 
-    void device::release_command_list(typed_rhi_handle<rhi_handle_type::command_list> handle) noexcept
+    void device::release_command_list(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> handle) noexcept
     {
         auto buf_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto buf_it = _command_buffers.find(buf_key);
@@ -2176,15 +2211,15 @@ namespace tempest::rhi::vk
         }
     }
 
-    typed_rhi_handle<rhi_handle_type::render_surface> device::create_render_surface(
-        const rhi::render_surface_desc& desc, typed_rhi_handle<rhi_handle_type::render_surface> old_swapchain) noexcept
+    typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> device::create_render_surface(
+        const rhi::render_surface_desc& desc, typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> old_swapchain) noexcept
     {
         auto window = static_cast<vk::window_surface*>(desc.window);
         auto surf_res = window->get_surface(_vkb_instance->instance);
         if (!surf_res)
         {
             logger->error("Failed to create render surface for window: {}", desc.window->name().c_str());
-            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::RENDER_SURFACE>::null_handle;
         }
 
         VkSurfaceKHR surface = surf_res.value();
@@ -2211,7 +2246,7 @@ namespace tempest::rhi::vk
         auto result = swap_bldr.build();
         if (!result)
         {
-            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::RENDER_SURFACE>::null_handle;
         }
 
         auto vkb_sc = result.value();
@@ -2226,7 +2261,7 @@ namespace tempest::rhi::vk
         auto images_result = sc.swapchain.get_images();
         if (!images_result)
         {
-            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::RENDER_SURFACE>::null_handle;
         }
 
         auto images = images_result.value();
@@ -2234,7 +2269,7 @@ namespace tempest::rhi::vk
         auto image_views_result = sc.swapchain.get_image_views();
         if (!image_views_result)
         {
-            return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::RENDER_SURFACE>::null_handle;
         }
 
         auto image_views = image_views_result.value();
@@ -2318,10 +2353,10 @@ namespace tempest::rhi::vk
         auto new_key_id = get_slot_map_key_id<uint64_t>(new_key);
         auto new_key_gen = get_slot_map_key_generation<uint64_t>(new_key);
 
-        return typed_rhi_handle<rhi_handle_type::render_surface>(new_key_id, new_key_gen);
+        return typed_rhi_handle<rhi_handle_type::RENDER_SURFACE>(new_key_id, new_key_gen);
     }
 
-    VkFence device::get_fence(typed_rhi_handle<rhi_handle_type::fence> handle) const noexcept
+    VkFence device::get_fence(typed_rhi_handle<rhi_handle_type::FENCE> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _fences.find(key);
@@ -2332,7 +2367,7 @@ namespace tempest::rhi::vk
         return VK_NULL_HANDLE;
     }
 
-    VkSemaphore device::get_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) const noexcept
+    VkSemaphore device::get_semaphore(typed_rhi_handle<rhi_handle_type::SEMAPHORE> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _semaphores.find(key);
@@ -2343,7 +2378,7 @@ namespace tempest::rhi::vk
         return VK_NULL_HANDLE;
     }
 
-    VkSwapchainKHR device::get_swapchain(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept
+    VkSwapchainKHR device::get_swapchain(typed_rhi_handle<rhi_handle_type::RENDER_SURFACE> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _swapchains.find(key);
@@ -2355,12 +2390,12 @@ namespace tempest::rhi::vk
     }
 
     VkDescriptorSetLayout device::get_descriptor_set_layout(
-        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) const noexcept
+        typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> handle) const noexcept
     {
         return _descriptor_set_layout_cache.get_layout(handle);
     }
 
-    optional<const vk::buffer&> device::get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept
+    optional<const vk::buffer&> device::get_buffer(typed_rhi_handle<rhi_handle_type::BUFFER> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _buffers.find(key);
@@ -2371,7 +2406,7 @@ namespace tempest::rhi::vk
         return none();
     }
 
-    optional<const vk::image&> device::get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
+    optional<const vk::image&> device::get_image(typed_rhi_handle<rhi_handle_type::IMAGE> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _images.find(key);
@@ -2383,7 +2418,7 @@ namespace tempest::rhi::vk
     }
 
     optional<const vk::graphics_pipeline&> device::get_graphics_pipeline(
-        typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) const noexcept
+        typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _graphics_pipelines.find(key);
@@ -2395,7 +2430,7 @@ namespace tempest::rhi::vk
         return none();
     }
 
-    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept
+    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::BUFFER> handle) noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _buffers.find(key);
@@ -2406,7 +2441,7 @@ namespace tempest::rhi::vk
         }
     }
 
-    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::image> handle) noexcept
+    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::IMAGE> handle) noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _images.find(key);
@@ -2424,17 +2459,17 @@ namespace tempest::rhi::vk
         }
     }
 
-    bool device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
+    bool device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> handle) noexcept
     {
         return _descriptor_set_layout_cache.release_layout(handle);
     }
 
-    bool device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    bool device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> handle) noexcept
     {
         return _pipeline_layout_cache.release_layout(handle);
     }
 
-    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept
+    void device::release_resource_immediate(typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> handle) noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto it = _graphics_pipelines.find(key);
@@ -2451,6 +2486,28 @@ namespace tempest::rhi::vk
 
             _graphics_pipelines.erase(key);
         }
+    }
+
+    flat_unordered_map<const work_queue*, uint64_t> device::compute_current_work_queue_timeline_values() const noexcept
+    {
+        flat_unordered_map<const work_queue*, uint64_t> timeline_values;
+
+        if (_primary_work_queue)
+        {
+            timeline_values[&*_primary_work_queue] = _primary_work_queue->query_completed_timeline_value();
+        }
+
+        if (_dedicated_compute_queue)
+        {
+            timeline_values[&*_dedicated_compute_queue] = _dedicated_compute_queue->query_completed_timeline_value();
+        }
+
+        if (_dedicated_transfer_queue)
+        {
+            timeline_values[&*_dedicated_transfer_queue] = _dedicated_transfer_queue->query_completed_timeline_value();
+        }
+
+        return timeline_values;
     }
 
     work_queue::work_queue(device* parent, vkb::DispatchTable* dispatch, VkQueue queue, uint32_t queue_family_index,
@@ -2473,11 +2530,28 @@ namespace tempest::rhi::vk
             wg.dispatch = _dispatch;
             wg.parent = _parent;
         }
+
+        VkSemaphoreTypeCreateInfo timeline_sem_type_ci = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+            .pNext = nullptr,
+            .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+            .initialValue = 0,
+        };
+
+        VkSemaphoreCreateInfo sem_ci = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            .pNext = &timeline_sem_type_ci,
+            .flags = 0,
+        };
+
+        _dispatch->createSemaphore(&sem_ci, nullptr, &_resource_tracking_sem);
     }
 
     work_queue::~work_queue()
     {
         _dispatch->queueWaitIdle(_queue); // Ensure the queue is done before working on it
+
+        _dispatch->destroySemaphore(_resource_tracking_sem, nullptr);
 
         for (auto wg : _work_groups)
         {
@@ -2490,22 +2564,21 @@ namespace tempest::rhi::vk
         }
     }
 
-    typed_rhi_handle<rhi_handle_type::command_list> work_queue::get_next_command_list() noexcept
+    typed_rhi_handle<rhi_handle_type::COMMAND_LIST> work_queue::get_next_command_list() noexcept
     {
         auto& wg = _work_groups[_parent->frame_in_flight()];
         return wg.acquire_next_command_buffer();
     }
 
-    bool work_queue::submit(span<const submit_info> infos, typed_rhi_handle<rhi_handle_type::fence> fence) noexcept
+    bool work_queue::submit(span<const submit_info> infos, typed_rhi_handle<rhi_handle_type::FENCE> fence) noexcept
     {
         if (infos.empty())
         {
             return false;
         }
 
-        auto& global_timeline = _res_tracker->get_timeline();
-        auto timestamp = global_timeline.increment_and_get_timestamp();
-        auto timeline_sem = global_timeline.timeline_sem();
+        auto timestamp = _next_timeline_value++;
+        auto timeline_sem = get_timeline_semaphore();
 
         auto submit_infos = _allocator.allocate_typed<VkSubmitInfo2>(infos.size());
 
@@ -2601,19 +2674,19 @@ namespace tempest::rhi::vk
             {
                 for (const auto& buf : used_buffers[cmd_list])
                 {
-                    _res_tracker->track(buf, timestamp);
+                    _res_tracker->track(buf, timestamp, this);
                 }
                 used_buffers.erase(cmd_list);
 
                 for (const auto& img : used_images[cmd_list])
                 {
-                    _res_tracker->track(img, timestamp);
+                    _res_tracker->track(img, timestamp, this);
                 }
                 used_images.erase(cmd_list);
 
                 for (const auto& pipe : used_gfx_pipelines[cmd_list])
                 {
-                    _res_tracker->track(pipe, timestamp);
+                    _res_tracker->track(pipe, timestamp, this);
                 }
                 used_gfx_pipelines.erase(cmd_list);
             }
@@ -2674,7 +2747,7 @@ namespace tempest::rhi::vk
         _work_groups[frame_in_flight].reset();
     }
 
-    void work_queue::begin_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+    void work_queue::begin_command_list(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                         bool one_time_submit) noexcept
     {
         VkCommandBufferBeginInfo begin_info = {
@@ -2692,12 +2765,12 @@ namespace tempest::rhi::vk
         _dispatch->beginCommandBuffer(_parent->get_command_buffer(command_list), &begin_info);
     }
 
-    void work_queue::end_command_list(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept
+    void work_queue::end_command_list(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list) noexcept
     {
         _dispatch->endCommandBuffer(_parent->get_command_buffer(command_list));
     }
 
-    void work_queue::transition_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+    void work_queue::transition_image(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                       span<const image_barrier> image_barriers) noexcept
     {
         VkImageMemoryBarrier2* img_mem_barriers =
@@ -2754,8 +2827,8 @@ namespace tempest::rhi::vk
         _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info);
     }
 
-    void work_queue::clear_color_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                       typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r,
+    void work_queue::clear_color_image(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                                       typed_rhi_handle<rhi_handle_type::IMAGE> image, image_layout layout, float r,
                                        float g, float b, float a) noexcept
     {
         VkImageSubresourceRange subresource_range = {
@@ -2777,9 +2850,9 @@ namespace tempest::rhi::vk
         used_images[command_list].push_back(image);
     }
 
-    void work_queue::blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::image> src,
-                          typed_rhi_handle<rhi_handle_type::image> dst) noexcept
+    void work_queue::blit(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::IMAGE> src,
+                          typed_rhi_handle<rhi_handle_type::IMAGE> dst) noexcept
     {
         VkImageBlit blit_region = {
             .srcSubresource =
@@ -2832,8 +2905,8 @@ namespace tempest::rhi::vk
         used_images[command_list].push_back(dst);
     }
 
-    void work_queue::generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                        typed_rhi_handle<rhi_handle_type::image> img, image_layout current_layout,
+    void work_queue::generate_mip_chain(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                                        typed_rhi_handle<rhi_handle_type::IMAGE> img, image_layout current_layout,
                                         uint32_t base_mip, uint32_t mip_count) noexcept
     {
         // Transition image to general layout
@@ -2977,8 +3050,8 @@ namespace tempest::rhi::vk
         _allocator.reset();
     }
 
-    void work_queue::copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::buffer> dst,
+    void work_queue::copy(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::BUFFER> src, typed_rhi_handle<rhi_handle_type::BUFFER> dst,
                           size_t src_offset, size_t dst_offset, size_t byte_count) noexcept
     {
         VkBufferCopy copy_region = {
@@ -2995,8 +3068,8 @@ namespace tempest::rhi::vk
         used_buffers[command_list].push_back(dst);
     }
 
-    void work_queue::fill(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::buffer> handle, size_t offset, size_t size,
+    void work_queue::fill(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::BUFFER> handle, size_t offset, size_t size,
                           uint32_t data) noexcept
     {
         _dispatch->cmdFillBuffer(_parent->get_command_buffer(command_list), _parent->get_buffer(handle)->buffer, offset,
@@ -3006,7 +3079,7 @@ namespace tempest::rhi::vk
         used_buffers[command_list].push_back(handle);
     }
 
-    void work_queue::pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+    void work_queue::pipeline_barriers(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                        span<const image_barrier> image_barriers,
                                        span<const buffer_barrier> buffer_barriers) noexcept
     {
@@ -3092,7 +3165,7 @@ namespace tempest::rhi::vk
         _allocator.reset();
     }
 
-    void work_queue::begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+    void work_queue::begin_rendering(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
                                      const render_pass_info& render_pass_info) noexcept
     {
         auto color_attachments =
@@ -3213,14 +3286,14 @@ namespace tempest::rhi::vk
         _allocator.reset();
     }
 
-    void work_queue::end_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list) noexcept
+    void work_queue::end_rendering(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list) noexcept
     {
         auto cmds = _parent->get_command_buffer(command_list);
         _dispatch->cmdEndRendering(cmds);
     }
 
-    void work_queue::bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::graphics_pipeline> pipeline) noexcept
+    void work_queue::bind(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::GRAPHICS_PIPELINE> pipeline) noexcept
     {
         auto cmds = _parent->get_command_buffer(command_list);
         auto pipe = _parent->get_graphics_pipeline(pipeline);
@@ -3230,8 +3303,8 @@ namespace tempest::rhi::vk
         used_gfx_pipelines[command_list].push_back(pipeline);
     }
 
-    void work_queue::draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t draw_count,
+    void work_queue::draw(typed_rhi_handle<rhi_handle_type::COMMAND_LIST> command_list,
+                          typed_rhi_handle<rhi_handle_type::BUFFER> indirect_buffer, uint32_t draw_count,
                           uint32_t stride) noexcept
     {
         auto cmds = _parent->get_command_buffer(command_list);
@@ -3248,7 +3321,7 @@ namespace tempest::rhi::vk
         dispatch->resetCommandPool(pool, 0);
     }
 
-    typed_rhi_handle<rhi_handle_type::command_list> work_group::acquire_next_command_buffer() noexcept
+    typed_rhi_handle<rhi_handle_type::COMMAND_LIST> work_group::acquire_next_command_buffer() noexcept
     {
         ++current_buffer_index;
 
@@ -3268,7 +3341,7 @@ namespace tempest::rhi::vk
             if (result != VK_SUCCESS)
             {
                 logger->error("Failed to allocate command buffer: {}", to_underlying(result));
-                return typed_rhi_handle<rhi_handle_type::command_list>::null_handle;
+                return typed_rhi_handle<rhi_handle_type::COMMAND_LIST>::null_handle;
             }
 
             for (auto cmd : cmds)
@@ -3281,7 +3354,7 @@ namespace tempest::rhi::vk
         return cmd_buffer_handles[current_buffer_index];
     }
 
-    optional<typed_rhi_handle<rhi_handle_type::command_list>> work_group::current_command_buffer() const noexcept
+    optional<typed_rhi_handle<rhi_handle_type::COMMAND_LIST>> work_group::current_command_buffer() const noexcept
     {
         if (current_buffer_index < static_cast<ptrdiff_t>(cmd_buffer_handles.size()))
         {
@@ -3555,7 +3628,7 @@ namespace tempest::rhi::vk
     {
     }
 
-    typed_rhi_handle<rhi_handle_type::descriptor_set_layout> descriptor_set_layout_cache::get_or_create_layout(
+    typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> descriptor_set_layout_cache::get_or_create_layout(
         const vector<descriptor_binding_layout>& desc) noexcept
     {
         // Check if the layout already exists in the cache
@@ -3582,7 +3655,7 @@ namespace tempest::rhi::vk
         for (size_t i = 0; i < desc.size(); ++i)
         {
             bindings[i] = {
-                .binding = static_cast<uint32_t>(i),
+                .binding = desc[i].binding_index,
                 .descriptorType = to_vulkan(desc[i].type),
                 .descriptorCount = desc[i].count,
                 .stageFlags = to_vulkan(desc[i].stages),
@@ -3612,7 +3685,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create descriptor set layout: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::descriptor_set_layout>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT>::null_handle;
         }
 
         // Create a new cache entry
@@ -3624,7 +3697,7 @@ namespace tempest::rhi::vk
 
         auto slot = _cache_slots.insert(entry);
 
-        auto typed_key = typed_rhi_handle<rhi_handle_type::descriptor_set_layout>{
+        auto typed_key = typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT>{
             .id = get_slot_map_key_id(slot),
             .generation = get_slot_map_key_generation(slot),
         };
@@ -3635,7 +3708,7 @@ namespace tempest::rhi::vk
     }
 
     bool descriptor_set_layout_cache::release_layout(
-        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout) noexcept
+        typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> layout) noexcept
     {
         auto key = create_slot_map_key<uint64_t>(layout.id, layout.generation);
 
@@ -3664,7 +3737,7 @@ namespace tempest::rhi::vk
     }
 
     VkDescriptorSetLayout descriptor_set_layout_cache::get_layout(
-        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) const noexcept
+        typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto cache_entry_it = _cache_slots.find(key);
@@ -3687,7 +3760,7 @@ namespace tempest::rhi::vk
     }
 
     bool descriptor_set_layout_cache::add_usage(
-        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept
+        typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> handle) noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto cache_entry_it = _cache_slots.find(key);
@@ -3717,7 +3790,7 @@ namespace tempest::rhi::vk
     {
     }
 
-    typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout_cache::get_or_create_layout(
+    typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> pipeline_layout_cache::get_or_create_layout(
         const pipeline_layout_desc& desc) noexcept
     {
         size_t hash = _compute_cache_hash(desc);
@@ -3736,13 +3809,17 @@ namespace tempest::rhi::vk
         }
 
         // Build the pipeline layout
-        auto set_layouts = _allocator.allocate_typed<VkDescriptorSetLayout>(desc.descriptor_set_layouts.size());
+        auto set_layouts = desc.descriptor_set_layouts.empty()
+                               ? nullptr
+                               : _allocator.allocate_typed<VkDescriptorSetLayout>(desc.descriptor_set_layouts.size());
         for (size_t i = 0; i < desc.descriptor_set_layouts.size(); ++i)
         {
             set_layouts[i] = _dev->get_descriptor_set_layout(desc.descriptor_set_layouts[i]);
         }
 
-        auto push_constant_ranges = _allocator.allocate_typed<VkPushConstantRange>(desc.push_constants.size());
+        auto push_constant_ranges = desc.push_constants.empty()
+                                        ? nullptr
+                                        : _allocator.allocate_typed<VkPushConstantRange>(desc.push_constants.size());
         for (size_t i = 0; i < desc.push_constants.size(); ++i)
         {
             push_constant_ranges[i] = {
@@ -3768,7 +3845,7 @@ namespace tempest::rhi::vk
         if (result != VK_SUCCESS)
         {
             logger->error("Failed to create pipeline layout: {}", to_underlying(result));
-            return typed_rhi_handle<rhi_handle_type::pipeline_layout>::null_handle;
+            return typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT>::null_handle;
         }
 
         // Create a new cache entry
@@ -3779,7 +3856,7 @@ namespace tempest::rhi::vk
         };
 
         auto slot = _cache_slots.insert(entry);
-        auto typed_key = typed_rhi_handle<rhi_handle_type::pipeline_layout>{
+        auto typed_key = typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT>{
             .id = get_slot_map_key_id(slot),
             .generation = get_slot_map_key_generation(slot),
         };
@@ -3789,7 +3866,7 @@ namespace tempest::rhi::vk
     }
 
     VkPipelineLayout pipeline_layout_cache::get_layout(
-        typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) const noexcept
+        typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> handle) const noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto cache_entry_it = _cache_slots.find(key);
@@ -3829,7 +3906,7 @@ namespace tempest::rhi::vk
         return hc;
     }
 
-    bool pipeline_layout_cache::release_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    bool pipeline_layout_cache::release_layout(typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> handle) noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto cache_entry_it = _cache_slots.find(key);
@@ -3858,7 +3935,7 @@ namespace tempest::rhi::vk
         return false;
     }
 
-    bool pipeline_layout_cache::add_usage(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept
+    bool pipeline_layout_cache::add_usage(typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> handle) noexcept
     {
         auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto cache_entry_it = _cache_slots.find(key);

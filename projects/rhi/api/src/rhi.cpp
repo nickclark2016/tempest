@@ -24,15 +24,15 @@ namespace tempest::rhi
     }
 
     void descriptor_resource_binding::bind_image(uint32_t set, uint32_t binding,
-                                                 typed_rhi_handle<rhi_handle_type::image> image,
-                                                 typed_rhi_handle<rhi_handle_type::sampler> sampler,
+                                                 typed_rhi_handle<rhi_handle_type::IMAGE> image,
+                                                 typed_rhi_handle<rhi_handle_type::SAMPLER> sampler,
                                                  image_layout layout) noexcept
     {
         _image_bindings[make_key(set, binding)] = {image, sampler, layout};
     }
 
     void descriptor_resource_binding::bind_buffer(uint32_t set, uint32_t binding,
-                                                  typed_rhi_handle<rhi_handle_type::buffer> buffer, size_t offset,
+                                                  typed_rhi_handle<rhi_handle_type::BUFFER> buffer, size_t offset,
                                                   size_t size) noexcept
     {
         _buffer_bindings[make_key(set, binding)] = {buffer, offset, size};

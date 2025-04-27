@@ -1,4 +1,5 @@
 #include <tempest/input.hpp>
+#include <tempest/pipelines/pbr_pipeline.hpp>
 #include <tempest/render_pipeline.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/tuple.hpp>
@@ -88,6 +89,10 @@ struct clear_render_pipeline : tempest::graphics::render_pipeline
         }
         return render_result::SUCCESS;
     }
+
+    void destroy([[maybe_unused]] tempest::graphics::renderer&, [[maybe_unused]] rhi::device&) override
+    {
+    }
 };
 
 int main()
@@ -108,8 +113,17 @@ int main()
         .fullscreen = false,
     });
 
+    auto win3 = renderer.create_window({
+        .width = 1920,
+        .height = 1080,
+        .name = "Window 3",
+        .fullscreen = false,
+    });
+
     renderer.register_window(win1.get(), tempest::make_unique<clear_render_pipeline>(1.0f, 0.0f, 0.0f, 1.0f));
     renderer.register_window(win2.get(), tempest::make_unique<clear_render_pipeline>(0.0f, 1.0f, 0.0f, 1.0f));
+    renderer.register_window(win3.get(),
+                             tempest::make_unique<tempest::graphics::pbr_pipeline>(win3->width(), win3->height()));
 
     while (true)
     {

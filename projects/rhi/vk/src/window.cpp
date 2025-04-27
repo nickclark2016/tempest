@@ -13,7 +13,8 @@ namespace tempest::rhi::vk
         auto logger = logger::logger_factory::create({.prefix{"tempest::graphics::vk::window_surface"}});
     }
 
-    window_surface::window_surface(GLFWwindow* win, string name) noexcept : _window(win), _name(tempest::move(name))
+    window_surface::window_surface(GLFWwindow* win, string name, uint32_t width, uint32_t height) noexcept
+        : _window(win), _name(tempest::move(name)), _width(width), _height(height)
     {
     }
 
@@ -25,22 +26,22 @@ namespace tempest::rhi::vk
         }
     }
 
-    void window_surface::register_keyboard_callback(function<void(const core::key_state&)>&& cb)
+    void window_surface::register_keyboard_callback(function<void(const core::key_state&)>&& cb) noexcept
     {
         _keyboard_callbacks.push_back(tempest::move(cb));
     }
 
-    void window_surface::register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb)
+    void window_surface::register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) noexcept
     {
         _mouse_callbacks.push_back(tempest::move(cb));
     }
 
-    void window_surface::register_cursor_callback(function<void(float, float)>&& cb)
+    void window_surface::register_cursor_callback(function<void(float, float)>&& cb) noexcept
     {
         _cursor_callbacks.push_back(tempest::move(cb));
     }
 
-    void window_surface::register_scroll_callback(function<void(float, float)>&& cb)
+    void window_surface::register_scroll_callback(function<void(float, float)>&& cb) noexcept
     {
         _scroll_callbacks.push_back(tempest::move(cb));
     }
@@ -142,7 +143,7 @@ namespace tempest::rhi::vk
             return nullptr;
         }
 
-        auto win = make_unique<window_surface>(window, desc.name);
+        auto win = make_unique<window_surface>(window, desc.name, desc.width, desc.height);
 
         glfwSetWindowUserPointer(window, win.get());
 

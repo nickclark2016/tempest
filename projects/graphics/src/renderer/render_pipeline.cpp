@@ -43,7 +43,13 @@ namespace tempest::graphics
 
     void renderer::unregister_window(rhi::window_surface* window)
     {
-        tempest::erase_if(_windows, [window](const auto& payload) { return payload.win == window; });
+        auto it = tempest::find_if(_windows.begin(), _windows.end(),
+                                   [window](const auto& payload) { return payload.win == window; });
+        if (it != _windows.end())
+        {
+            it->pipeline->destroy(*this, *_rhi_device);
+            _windows.erase(it);
+        }
     }
 
     bool renderer::render()
@@ -56,6 +62,7 @@ namespace tempest::graphics
 
             if (window.should_close())
             {
+                it->pipeline->destroy(*this, *_rhi_device);
                 it = _windows.erase(it);
                 continue;
             }
@@ -92,6 +99,7 @@ namespace tempest::graphics
                 }
                 else if (error_code == rhi::swapchain_error_code::FAILURE)
                 {
+                    it->pipeline->destroy(*this, *_rhi_device);
                     it->win->close();
                     it = _windows.erase(it);
                     continue;
@@ -129,6 +137,7 @@ namespace tempest::graphics
             }
             else if (result == render_pipeline::render_result::FAILURE)
             {
+                it->pipeline->destroy(*this, *_rhi_device);
                 it = _windows.erase(it);
                 continue;
             }
