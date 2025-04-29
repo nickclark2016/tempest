@@ -266,7 +266,6 @@ namespace tempest::rhi
                           typed_rhi_handle<rhi_handle_type::BUFFER> indirect_buffer, uint32_t draw_count,
                           uint32_t stride) noexcept = 0;
 
-
       protected:
         work_queue() = default;
     };
@@ -315,10 +314,39 @@ namespace tempest::rhi
         descriptor_context& operator=(const descriptor_context&) = delete;
         descriptor_context& operator=(descriptor_context&&) noexcept = delete;
 
-        virtual void commit(uint32_t set_index, const descriptor_resource_binding& binding,
-                            typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> layout) noexcept = 0;
-        virtual typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> get_active_descriptor_set(
-            uint32_t index) const noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> allocate_descriptor_set(
+            typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT> layout) noexcept = 0;
+
+        virtual void write_combined_image_sampler(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> set,
+                                                  uint32_t binding, uint32_t array_element,
+                                                  typed_rhi_handle<rhi_handle_type::SAMPLER> sampler,
+                                                  typed_rhi_handle<rhi_handle_type::IMAGE> image,
+                                                  image_layout layout) noexcept = 0;
+
+        virtual void write_sampled_image(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> set, uint32_t binding,
+                                         uint32_t array_element, typed_rhi_handle<rhi_handle_type::IMAGE> image,
+                                         image_layout layout) noexcept = 0;
+
+        virtual void write_sampled_images(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> set, uint32_t binding,
+                                          uint32_t first_array_element,
+                                          span<const typed_rhi_handle<rhi_handle_type::IMAGE>> images,
+                                          image_layout layout) noexcept = 0;
+
+        virtual void write_storage_image(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> set, uint32_t binding,
+                                         uint32_t array_element, typed_rhi_handle<rhi_handle_type::IMAGE> image,
+                                         image_layout layout) noexcept = 0;
+
+        virtual void write_uniform_buffer(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> set, uint32_t binding,
+                                          uint32_t array_element, typed_rhi_handle<rhi_handle_type::BUFFER> buffer,
+                                          uint64_t offset, uint64_t range) noexcept = 0;
+
+        virtual void write_storage_buffer(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> set, uint32_t binding,
+                                          uint32_t array_element, typed_rhi_handle<rhi_handle_type::BUFFER> buffer,
+                                          uint64_t offset, uint64_t range) noexcept = 0;
+
+        virtual void write_input_attachment(typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET> set, uint32_t binding,
+                                            uint32_t array_element, typed_rhi_handle<rhi_handle_type::IMAGE> image,
+                                            image_layout layout) noexcept = 0;
 
       protected:
         descriptor_context() = default;

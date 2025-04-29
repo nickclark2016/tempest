@@ -81,6 +81,7 @@ namespace tempest::rhi::vk
                    vk::work_queue* queue);
         void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline, uint64_t timeline_value,
                    vk::work_queue* queue);
+
         void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer, vk::work_queue* queue);
         void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image, vk::work_queue* queue);
         void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline, vk::work_queue* queue);

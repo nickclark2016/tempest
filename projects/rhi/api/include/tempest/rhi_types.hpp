@@ -15,6 +15,7 @@ namespace tempest::rhi
     class work_queue;
     class window_surface;
     class rhi_resource_tracker;
+    class descriptor_context;
 
     enum class rhi_handle_type
     {
@@ -29,6 +30,7 @@ namespace tempest::rhi
         RENDER_SURFACE,
         DESCRIPTOR_SET_LAYOUT,
         PIPELINE_LAYOUT,
+        DESCRIPTOR_SET,
     };
 
     template <rhi_handle_type T>
