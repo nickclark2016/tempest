@@ -4,6 +4,7 @@
 #include <tempest/logger.hpp>
 
 #include <cassert>
+#include <cstring>
 
 namespace tempest::graphics
 {
