@@ -88,13 +88,13 @@ namespace tempest::graphics
     {
       public:
         static vector<image_resource_handle> upload_textures(render_device& dev, span<texture_data_descriptor> textures,
-                                                             buffer_resource_handle staging_buffer,
+                                                             buffer_resource_handle staging,
                                                              bool use_entire_buffer = false,
                                                              bool generate_mip_maps = false);
 
         static vector<image_resource_handle> upload_textures(render_device& dev, span<const guid> texture_ids,
                                                              const core::texture_registry& texture_registry,
-                                                             buffer_resource_handle staging_buffer,
+                                                             buffer_resource_handle staging,
                                                              bool use_entire_buffer = false,
                                                              bool generate_mip_maps = false);
 
@@ -104,14 +104,14 @@ namespace tempest::graphics
         static flat_unordered_map<guid, mesh_layout> upload_meshes(render_device& device, span<const guid> mesh_ids,
                                                                    core::mesh_registry& mesh_registry,
                                                                    buffer_resource_handle target, uint32_t& offset,
-                                                                   buffer_resource_handle staging_buffer);
+                                                                   buffer_resource_handle staging);
     };
 
     class staging_buffer_writer
     {
       public:
         explicit staging_buffer_writer(render_device& dev);
-        staging_buffer_writer(render_device& dev, buffer_resource_handle staging_buffer,
+        staging_buffer_writer(render_device& dev, buffer_resource_handle staging,
                               uint32_t staging_buffer_offset);
 
         staging_buffer_writer& write(command_list& cmds, span<const byte> data, buffer_resource_handle target,

@@ -19,18 +19,18 @@ namespace tempest::rhi
 
     enum class rhi_handle_type
     {
-        BUFFER,
-        IMAGE,
-        SAMPLER,
-        GRAPHICS_PIPELINE,
-        COMPUTE_PIPELINE,
-        COMMAND_LIST,
-        FENCE,
-        SEMAPHORE,
-        RENDER_SURFACE,
-        DESCRIPTOR_SET_LAYOUT,
-        PIPELINE_LAYOUT,
-        DESCRIPTOR_SET,
+        buffer,
+        image,
+        sampler,
+        graphics_pipeline,
+        compute_pipeline,
+        command_list,
+        fence,
+        semaphore,
+        render_surface,
+        descriptor_set_layout,
+        pipeline_layout,
+        descriptor_set,
     };
 
     template <rhi_handle_type T>
@@ -88,126 +88,126 @@ namespace tempest::rhi
 
     enum class memory_location
     {
-        DEVICE,
-        HOST,
-        AUTO,
+        device,
+        host,
+        automatic,
     };
 
     enum class image_format
     {
         // Single channel, color format
-        R8_UNORM,
-        R8_SNORM,
-        R16_UNORM,
-        R16_SNORM,
-        R16_FLOAT,
-        R32_FLOAT,
+        r8_unorm,
+        r8_snorm,
+        r16_unorm,
+        r16_snorm,
+        r16_float,
+        r32_float,
         // Two channels, color format
-        RG8_UNORM,
-        RG8_SNORM,
-        RG16_UNORM,
-        RG16_SNORM,
-        RG16_FLOAT,
-        RG32_FLOAT,
+        rg8_unorm,
+        rg8_snorm,
+        rg16_unorm,
+        rg16_snorm,
+        rg16_float,
+        rg32_float,
         // Four channels, color format
-        RGBA8_UNORM,
-        RGBA8_SNORM,
-        RGBA8_SRGB,
-        BGRA8_SRGB,
-        RGBA16_UNORM,
-        RGBA16_SNORM,
-        RGBA16_FLOAT,
-        RGBA32_FLOAT,
+        rgba8_unorm,
+        rgba8_snorm,
+        rgba8_srgb,
+        bgra8_srgb,
+        rgba16_unorm,
+        rgba16_snorm,
+        rgba16_float,
+        rgba32_float,
         // Depth-Stencil formats
-        S8_UINT,
-        D16_UNORM,
-        D24_UNORM,
-        D32_FLOAT,
-        D16_UNORM_S8_UINT,
-        D24_UNORM_S8_UINT,
-        D32_FLOAT_S8_UINT,
+        s8_uint,
+        d16_unorm,
+        d24_unorm,
+        d32_float,
+        d16_unorm_s8_uint,
+        d24_unorm_s8_uint,
+        d32_float_s8_uint,
         // HDR Formats
-        A2BGR10_UNORM_PACK32,
+        a2bgr10_unorm_pack32,
     };
 
     enum class image_layout
     {
-        UNDEFINED,
-        GENERAL,
-        COLOR_ATTACHMENT,
-        DEPTH_STENCIL_READ_WRITE,
-        DEPTH_STENCIL_READ_ONLY,
-        SHADER_READ_ONLY,
-        TRANSFER_SRC,
-        TRANSFER_DST,
-        DEPTH,
-        DEPTH_READ_ONLY,
-        STENCIL,
-        STENCIL_READ_ONLY,
-        PRESENT,
+        undefined,
+        general,
+        color_attachment,
+        depth_stencil_read_write,
+        depth_stencil_read_only,
+        shader_read_only,
+        transfer_src,
+        transfer_dst,
+        depth,
+        depth_read_only,
+        stencil,
+        stencil_read_only,
+        present,
     };
 
     enum class buffer_usage
     {
-        INDEX = 0x00000001,
-        INDIRECT = 0x00000002,
-        CONSTANT = 0x00000004,
-        STORAGE = 0x00000008,
-        TRANSFER_SRC = 0x00000010,
-        TRANSFER_DST = 0x00000020,
+        index = 0x00000001,
+        indirect = 0x00000002,
+        constant = 0x00000004,
+        structured = 0x00000008,
+        transfer_src = 0x00000010,
+        transfer_dst = 0x00000020,
     };
 
     enum class image_usage
     {
-        COLOR_ATTACHMENT = 0x00000001,
-        DEPTH_ATTACHMENT = 0x00000002,
-        STENCIL_ATTACHMENT = 0x00000004,
-        STORAGE = 0x00000008,
-        SAMPLED = 0x00000010,
-        TRANSFER_SRC = 0x00000020,
-        TRANSFER_DST = 0x00000040,
+        color_attachment = 0x00000001,
+        depth_attachment = 0x00000002,
+        stencil_attachment = 0x00000004,
+        storage = 0x00000008,
+        sampled = 0x00000010,
+        transfer_src = 0x00000020,
+        transfer_dst = 0x00000040,
     };
 
     enum class image_type
     {
-        IMAGE_1D,
-        IMAGE_2D,
-        IMAGE_3D,
-        IMAGE_CUBE,
-        IMAGE_1D_ARRAY,
-        IMAGE_2D_ARRAY,
-        IMAGE_CUBE_ARRAY,
+        image_1d,
+        image_2d,
+        image_3d,
+        image_cube,
+        image_1d_array,
+        image_2d_array,
+        image_cube_array,
     };
 
     enum class image_tiling_type
     {
-        OPTIMAL,
-        LINEAR,
+        optimal,
+        linear,
     };
 
     enum class image_sample_count
     {
-        SAMPLE_COUNT_1 = 0x00000001,
-        SAMPLE_COUNT_2 = 0x00000002,
-        SAMPLE_COUNT_4 = 0x00000004,
-        SAMPLE_COUNT_8 = 0x00000008,
-        SAMPLE_COUNT_16 = 0x00000010,
-        SAMPLE_COUNT_32 = 0x00000020,
-        SAMPLE_COUNT_64 = 0x00000040,
+        sample_count_1 = 0x00000001,
+        sample_count_2 = 0x00000002,
+        sample_count_4 = 0x00000004,
+        sample_count_8 = 0x00000008,
+        sample_count_16 = 0x00000010,
+        sample_count_32 = 0x00000020,
+        sample_count_64 = 0x00000040,
     };
 
     enum class host_access_type
     {
-        NONE,
-        COHERENT,
-        INCOHERENT,
+        none,
+        coherent,
+        incoherent,
     };
 
     enum class host_access_pattern
     {
-        NONE,
-        RANDOM,
-        SEQUENTIAL,
+        none,
+        random,
+        sequential,
     };
 
     struct buffer_desc
@@ -243,8 +243,8 @@ namespace tempest::rhi
 
     enum class semaphore_type
     {
-        BINARY,
-        TIMELINE,
+        binary,
+        timeline,
     };
 
     struct semaphore_info
@@ -255,36 +255,36 @@ namespace tempest::rhi
 
     enum class operation_type
     {
-        COMPUTE,
-        GRAPHICS,
-        TRANSFER,
+        compute,
+        graphics,
+        transfer,
     };
 
     enum class color_space
     {
-        ADOBE_RGB_LINEAR,
-        ADOBE_RGB_NONLINEAR,
-        BT709_LINEAR,
-        BT709_NONLINEAR,
-        BT2020_LINEAR,
-        DCI_P3_NONLINEAR,
-        DISPLAY_NATIVE_AMD,
-        DISPLAY_P3_LINEAR,
-        DISPLAY_P3_NONLINEAR,
-        EXTENDED_SRGB_LINEAR,
-        EXTENDED_SRGB_NONLINEAR,
-        HDR10_HLG,
-        HDR10_ST2084,
-        PASS_THROUGH,
-        SRGB_NONLINEAR,
+        adobe_rgb_linear,
+        adobe_rgb_nonlinear,
+        bt709_linear,
+        bt709_nonlinear,
+        bt2020_linear,
+        dci_p3_nonlinear,
+        display_native_amd,
+        display_p3_linear,
+        display_p3_nonlinear,
+        extended_srgb_linear,
+        extended_srgb_nonlinear,
+        hdr10_hlg,
+        hdr10_st2084,
+        pass_through,
+        srgb_nonlinear,
     };
 
     enum class present_mode
     {
-        IMMEDIATE,
-        MAILBOX,
-        FIFO,
-        FIFO_RELAXED,
+        immediate,
+        mailbox,
+        fifo,
+        fifo_relaxed,
     };
 
     struct render_surface_format
@@ -328,101 +328,99 @@ namespace tempest::rhi
 
     enum class swapchain_error_code
     {
-        OUT_OF_DATE,
-        SUBOPTIMAL,
-        FAILURE,
-        INVALID_SWAPCHAIN_ARGUMENT,
+        out_of_date,
+        suboptimal,
+        failure,
+        invalid_swapchain_argument,
     };
 
     struct swapchain_image_acquire_info_result
     {
-        typed_rhi_handle<rhi_handle_type::FENCE> frame_complete_fence;
-        typed_rhi_handle<rhi_handle_type::SEMAPHORE> acquire_sem;
-        typed_rhi_handle<rhi_handle_type::SEMAPHORE> render_complete_sem;
-        typed_rhi_handle<rhi_handle_type::IMAGE> image;
+        typed_rhi_handle<rhi_handle_type::fence> frame_complete_fence;
+        typed_rhi_handle<rhi_handle_type::semaphore> acquire_sem;
+        typed_rhi_handle<rhi_handle_type::semaphore> render_complete_sem;
+        typed_rhi_handle<rhi_handle_type::image> image;
         uint32_t image_index;
     };
 
     enum class pipeline_stage
     {
-        NONE = 0x00000,
-        TOP = 0x00001,
-        BOTTOM = 0x00002,
-        INDIRECT_COMMAND = 0x00004,
+        none = 0x00000,
+        top = 0x00001,
+        bottom = 0x00002,
+        indirect_command = 0x00004,
         // Graphics commmands
-        VERTEX_ATTRIBUTE_INPUT = 0x00008,
-        INDEX_INPUT = 0x00010,
-        VERTEX_SHADER = 0x00020,
-        TESSELLATION_CONTROL_SHADER = 0x00040,
-        TESSELLATION_EVALUATION_SHADER = 0x00080,
-        GEOMETRY_SHADER = 0x00100,
-        FRAGMENT_SHADER = 0x00200,
-        EARLY_FRAGMENT_TESTS = 0x00400,
-        LATE_FRAGMENT_TESTS = 0x00800,
-        COLOR_ATTACHMENT_OUTPUT = 0x01000,
+        vertex_attribute_input = 0x00008,
+        index_input = 0x00010,
+        vertex_shader = 0x00020,
+        tessellation_control_shader = 0x00040,
+        tessellation_evaluation_shader = 0x00080,
+        geometry_shader = 0x00100,
+        fragment_shader = 0x00200,
+        early_fragment_tests = 0x00400,
+        late_fragment_tests = 0x00800,
+        color_attachment_output = 0x01000,
         // Compute commands
-        COMPUTE_SHADER = 0x02000,
+        compute_shader = 0x02000,
         // Transfer commands
-        COPY = 0x04000,
-        RESOLVE = 0x08000,
-        BLIT = 0x10000,
-        CLEAR = 0x20000,
-        ALL_TRANSFER = 0x40000,
+        copy = 0x04000,
+        resolve = 0x08000,
+        blit = 0x10000,
+        clear = 0x20000,
+        all_transfer = 0x40000,
     };
 
     enum class memory_access
     {
-        NONE = 0x00000,
-        INDIRECT_COMMAND_READ = 0x00001,
-        INDEX_READ = 0x00002,
-        VERTEX_ATTRIBUTE_READ = 0x00004,
-        CONSTANT_BUFFER_READ = 0x00008,
-        SHADER_READ = 0x00010,
-        SHADER_WRITE = 0x00020,
-        COLOR_ATTACHMENT_READ = 0x00040,
-        COLOR_ATTACHMENT_WRITE = 0x00080,
-        DEPTH_STENCIL_ATTACHMENT_READ = 0x00100,
-        DEPTH_STENCIL_ATTACHMENT_WRITE = 0x00200,
-        TRANSFER_READ = 0x00400,
-        TRANSFER_WRITE = 0x00800,
-        HOST_READ = 0x01000,
-        HOST_WRITE = 0x02000,
-        MEMORY_READ = 0x04000,
-        MEMORY_WRITE = 0x08000,
-        SHADER_SAMPLED_READ = 0x10000,
-        SHADER_STORAGE_READ = 0x20000,
-        SHADER_STORAGE_WRITE = 0x40000,
+        none = 0x00000,
+        indirect_command_read = 0x00001,
+        index_read = 0x00002,
+        vertex_attribute_read = 0x00004,
+        constant_buffer_read = 0x00008,
+        shader_read = 0x00010,
+        shader_write = 0x00020,
+        color_attachment_read = 0x00040,
+        color_attachment_write = 0x00080,
+        depth_stencil_attachment_read = 0x00100,
+        depth_stencil_attachment_write = 0x00200,
+        transfer_read = 0x00400,
+        transfer_write = 0x00800,
+        host_read = 0x01000,
+        host_write = 0x02000,
+        memory_read = 0x04000,
+        memory_write = 0x08000,
+        shader_sampled_read = 0x10000,
+        shader_storage_read = 0x20000,
+        shader_storage_write = 0x40000,
     };
 
     enum class shader_stage
     {
-        NONE = 0x00000,
-        VERTEX = 0x00001,
-        TESSELLATION_CONTROL = 0x00002,
-        TESSELLATION_EVALUATION = 0x00004,
-        GEOMETRY = 0x00008,
-        FRAGMENT = 0x00010,
-        COMPUTE = 0x00020,
+        none = 0x00000,
+        vertex = 0x00001,
+        tessellation_control = 0x00002,
+        tessellation_evaluation = 0x00004,
+        geometry = 0x00008,
+        fragment = 0x00010,
+        compute = 0x00020,
     };
 
     enum class descriptor_type
     {
-        SAMPLER,
-        COMBINED_IMAGE_SAMPLER,
-        SAMPLED_IMAGE,
-        STORAGE_IMAGE,
-        UNIFORM_BUFFER,
-        STORAGE_BUFFER,
-        UNIFORM_TEXEL_BUFFER,
-        STORAGE_TEXEL_BUFFER,
-        INPUT_ATTACHMENT,
+        sampler,
+        sampled_image,
+        storage_image,
+        constant_buffer,
+        structured_buffer,
+        dynamic_constant_buffer,
+        dynamic_structured_buffer,
     };
 
     enum class descriptor_binding_flags
     {
-        NONE = 0x00,
-        PARTIALLY_BOUND = 0x01,
-        VARIABLE_LENGTH = 0x02,
+        none = 0x00,
+        partially_bound = 0x01,
+        variable_length = 0x02,
     };
 
     struct descriptor_binding_layout
@@ -431,7 +429,7 @@ namespace tempest::rhi
         descriptor_type type;
         uint32_t count;
         enum_mask<shader_stage> stages;
-        enum_mask<descriptor_binding_flags> flags = make_enum_mask(descriptor_binding_flags::NONE);
+        enum_mask<descriptor_binding_flags> flags = make_enum_mask(descriptor_binding_flags::none);
 
         bool operator==(const descriptor_binding_layout& other) const noexcept;
         bool operator!=(const descriptor_binding_layout& other) const noexcept;
@@ -448,50 +446,6 @@ namespace tempest::rhi
         return !(*this == other);
     }
 
-    class descriptor_resource_binding
-    {
-      public:
-        struct image_binding
-        {
-            typed_rhi_handle<rhi_handle_type::IMAGE> image;
-            typed_rhi_handle<rhi_handle_type::SAMPLER> sampler;
-            image_layout layout;
-
-            bool operator==(const image_binding& other) const noexcept;
-            bool operator!=(const image_binding& other) const noexcept;
-        };
-
-        struct buffer_binding
-        {
-            typed_rhi_handle<rhi_handle_type::BUFFER> buffer;
-            size_t offset;
-            size_t size;
-
-            bool operator==(const buffer_binding& other) const noexcept;
-            bool operator!=(const buffer_binding& other) const noexcept;
-        };
-
-        void bind_image(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image,
-                        rhi::typed_rhi_handle<rhi::rhi_handle_type::SAMPLER> sampler,
-                        rhi::image_layout layout = rhi::image_layout::UNDEFINED) noexcept;
-
-        void bind_buffer(uint32_t set, uint32_t binding, rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer,
-                         size_t offset = 0, size_t size = numeric_limits<size_t>::max()) noexcept;
-
-        const flat_unordered_map<uint64_t, image_binding>& get_image_bindings() const noexcept;
-        const flat_unordered_map<uint64_t, buffer_binding>& get_buffer_bindings() const noexcept;
-
-        bool operator==(const descriptor_resource_binding& other) const noexcept;
-        bool operator!=(const descriptor_resource_binding& other) const noexcept;
-
-        static uint64_t make_key(uint32_t set, uint32_t binding) noexcept;
-        static void split_key(uint64_t key, uint32_t& set, uint32_t& binding) noexcept;
-
-      private:
-        flat_unordered_map<uint64_t, image_binding> _image_bindings;
-        flat_unordered_map<uint64_t, buffer_binding> _buffer_bindings;
-    };
-
     struct push_constant_range
     {
         uint32_t offset;
@@ -501,7 +455,7 @@ namespace tempest::rhi
 
     struct pipeline_layout_desc
     {
-        vector<typed_rhi_handle<rhi_handle_type::DESCRIPTOR_SET_LAYOUT>> descriptor_set_layouts;
+        vector<typed_rhi_handle<rhi_handle_type::descriptor_set_layout>> descriptor_set_layouts;
         vector<push_constant_range> push_constants;
     };
 
@@ -522,19 +476,19 @@ namespace tempest::rhi
 
     enum class primitive_topology
     {
-        POINT_LIST,
-        LINE_LIST,
-        LINE_STRIP,
-        TRIANGLE_LIST,
-        TRIANGLE_STRIP,
-        TRIANGLE_FAN
+        point_list,
+        line_list,
+        line_strip,
+        triangle_list,
+        triangle_strip,
+        triangle_fan
     };
 
     enum class index_format
     {
-        UINT8,
-        UINT16,
-        UINT32,
+        uint8,
+        uint16,
+        uint32,
     };
 
     struct input_assembly_desc
@@ -549,22 +503,22 @@ namespace tempest::rhi
 
     enum class polygon_mode
     {
-        FILL,
-        LINE,
-        POINT,
+        fill,
+        line,
+        point,
     };
 
     enum class cull_mode
     {
-        NONE = 0x00,
-        FRONT = 0x01,
-        BACK = 0x02,
+        none = 0x00,
+        front = 0x01,
+        back = 0x02,
     };
 
     enum class vertex_winding
     {
-        CLOCKWISE,
-        COUNTER_CLOCKWISE,
+        clockwise,
+        counter_clockwise,
     };
 
     struct depth_bias
@@ -601,26 +555,26 @@ namespace tempest::rhi
 
     enum class compare_op
     {
-        NEVER,
-        LESS,
-        EQUAL,
-        LESS_EQUAL,
-        GREATER,
-        NOT_EQUAL,
-        GREATER_EQUAL,
-        ALWAYS,
+        never,
+        less,
+        equal,
+        less_equal,
+        greater,
+        not_equal,
+        greater_equal,
+        always,
     };
 
     enum class stencil_op
     {
-        KEEP,
-        ZERO,
-        REPLACE,
-        INCREMENT_AND_CLAMP,
-        DECREMENT_AND_CLAMP,
-        INVERT,
-        INCREMENT_AND_WRAP,
-        DECREMENT_AND_WRAP,
+        keep,
+        zero,
+        replace,
+        increment_and_clamp,
+        decrement_and_clamp,
+        invert,
+        increment_and_wrap,
+        decrement_and_wrap,
     };
 
     struct stencil_op_state
@@ -657,29 +611,29 @@ namespace tempest::rhi
 
     enum class blend_factor
     {
-        ZERO,
-        ONE,
-        SRC_COLOR,
-        ONE_MINUS_SRC_COLOR,
-        DST_COLOR,
-        ONE_MINUS_DST_COLOR,
-        SRC_ALPHA,
-        ONE_MINUS_SRC_ALPHA,
-        DST_ALPHA,
-        ONE_MINUS_DST_ALPHA,
-        CONSTANT_COLOR,
-        ONE_MINUS_CONSTANT_COLOR,
-        CONSTANT_ALPHA,
-        ONE_MINUS_CONSTANT_ALPHA,
+        zero,
+        one,
+        src_color,
+        one_minus_src_color,
+        dst_color,
+        one_minus_dst_color,
+        src_alpha,
+        one_minus_src_alpha,
+        dst_alpha,
+        one_minus_dst_alpha,
+        constant_color,
+        one_minus_constant_color,
+        constant_alpha,
+        one_minus_constant_alpha,
     };
 
     enum class blend_op
     {
-        ADD,
-        SUBTRACT,
-        REVERSE_SUBTRACT,
-        MIN,
-        MAX,
+        add,
+        subtract,
+        reverse_subtract,
+        min,
+        max,
     };
 
     struct color_blend_attachment
@@ -718,7 +672,46 @@ namespace tempest::rhi
         depth_stencil_state depth_stencil;
         color_blend_state color_blend;
 
-        typed_rhi_handle<rhi_handle_type::PIPELINE_LAYOUT> layout;
+        typed_rhi_handle<rhi_handle_type::pipeline_layout> layout;
+
+        string name;
+    };
+
+    struct buffer_descriptor
+    {
+        uint32_t index;
+        descriptor_type type;
+        uint32_t offset;
+        uint32_t size;
+        typed_rhi_handle<rhi_handle_type::buffer> buffer;
+    };
+
+    struct image_info
+    {
+        typed_rhi_handle<rhi_handle_type::image> image;
+        image_layout layout;
+    };
+
+    struct image_descriptor
+    {
+        uint32_t index;
+        descriptor_type type;
+        uint32_t array_offset;
+        vector<image_info> images;
+    };
+
+    struct sampler_descriptor
+    {
+        uint32_t index;
+        vector<typed_rhi_handle<rhi_handle_type::sampler>> samplers;
+    };
+
+    struct descriptor_set_desc
+    {
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout;
+        vector<buffer_descriptor> buffers;
+        vector<image_descriptor> images;
+        vector<sampler_descriptor> samplers;
     };
 } // namespace tempest::rhi
 

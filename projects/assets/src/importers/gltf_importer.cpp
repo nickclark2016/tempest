@@ -1011,6 +1011,16 @@ namespace tempest::assets
                 }
             }
 
+            if (!m.has_normals)
+            {
+                m.compute_normals();
+            }
+
+            if (!m.has_tangents)
+            {
+                m.compute_tangents();
+            }
+
             result.mesh_id = mesh_reg->register_mesh(move(m));
 
             if (auto material = prim["material"].get_int64(); material.error() == simdjson::error_code::SUCCESS)

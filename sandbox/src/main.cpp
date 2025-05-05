@@ -30,25 +30,25 @@ struct clear_render_pipeline : tempest::graphics::render_pipeline
 
         rhi::work_queue::image_barrier to_tx_dst = {
             .image = rs.swapchain_image,
-            .old_layout = rhi::image_layout::UNDEFINED,
-            .new_layout = rhi::image_layout::TRANSFER_DST,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::ALL_TRANSFER),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
+            .old_layout = rhi::image_layout::undefined,
+            .new_layout = rhi::image_layout::transfer_dst,
+            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::clear),
+            .dst_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
         };
 
         work_queue.transition_image(cmds, tempest::span(&to_tx_dst, 1));
-        work_queue.clear_color_image(cmds, rs.swapchain_image, rhi::image_layout::TRANSFER_DST, r, g, b, a);
+        work_queue.clear_color_image(cmds, rs.swapchain_image, rhi::image_layout::transfer_dst, r, g, b, a);
 
         rhi::work_queue::image_barrier to_present = {
             .image = rs.swapchain_image,
-            .old_layout = rhi::image_layout::TRANSFER_DST,
-            .new_layout = rhi::image_layout::PRESENT,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::CLEAR),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::TRANSFER_WRITE),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::BOTTOM),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::NONE),
+            .old_layout = rhi::image_layout::transfer_dst,
+            .new_layout = rhi::image_layout::present,
+            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::clear),
+            .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::bottom),
+            .dst_access = tempest::make_enum_mask(rhi::memory_access::none),
         };
 
         work_queue.transition_image(cmds, tempest::span(&to_present, 1));
@@ -60,12 +60,12 @@ struct clear_render_pipeline : tempest::graphics::render_pipeline
         submit_info.wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.start_sem,
             .value = 0,
-            .stages = tempest::make_enum_mask(rhi::pipeline_stage::ALL_TRANSFER),
+            .stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
         });
         submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.end_sem,
             .value = 1,
-            .stages = tempest::make_enum_mask(rhi::pipeline_stage::BOTTOM),
+            .stages = tempest::make_enum_mask(rhi::pipeline_stage::bottom),
         });
 
         work_queue.submit(tempest::span(&submit_info, 1), rs.end_fence);
@@ -78,12 +78,12 @@ struct clear_render_pipeline : tempest::graphics::render_pipeline
         present_info.wait_semaphores.push_back(rs.end_sem);
 
         auto present_result = work_queue.present(present_info);
-        if (present_result == rhi::work_queue::present_result::OUT_OF_DATE ||
-            present_result == rhi::work_queue::present_result::SUBOPTIMAL)
+        if (present_result == rhi::work_queue::present_result::out_of_date ||
+            present_result == rhi::work_queue::present_result::suboptimal)
         {
             return render_result::REQUEST_RECREATE_SWAPCHAIN;
         }
-        else if (present_result == rhi::work_queue::present_result::ERROR)
+        else if (present_result == rhi::work_queue::present_result::error)
         {
             return render_result::FAILURE;
         }

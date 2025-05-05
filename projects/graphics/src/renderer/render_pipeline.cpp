@@ -20,10 +20,10 @@ namespace tempest::graphics
             .min_image_count = 2,
             .format =
                 {
-                    .space = rhi::color_space::SRGB_NONLINEAR,
-                    .format = rhi::image_format::BGRA8_SRGB,
+                    .space = rhi::color_space::srgb_nonlinear,
+                    .format = rhi::image_format::bgra8_srgb,
                 },
-            .present_mode = rhi::present_mode::IMMEDIATE,
+            .present_mode = rhi::present_mode::immediate,
             .width = window->width(),
             .height = window->height(),
             .layers = 1,
@@ -79,7 +79,7 @@ namespace tempest::graphics
             if (!acquire_result)
             {
                 auto error_code = acquire_result.error();
-                if (error_code == rhi::swapchain_error_code::OUT_OF_DATE)
+                if (error_code == rhi::swapchain_error_code::out_of_date)
                 {
                     _rhi_device->recreate_render_surface(it->render_surface,
                                                          {
@@ -87,17 +87,17 @@ namespace tempest::graphics
                                                              .min_image_count = 2,
                                                              .format =
                                                                  {
-                                                                     .space = rhi::color_space::SRGB_NONLINEAR,
-                                                                     .format = rhi::image_format::BGRA8_SRGB,
+                                                                     .space = rhi::color_space::srgb_nonlinear,
+                                                                     .format = rhi::image_format::bgra8_srgb,
                                                                  },
-                                                             .present_mode = rhi::present_mode::IMMEDIATE,
+                                                             .present_mode = rhi::present_mode::immediate,
                                                              .width = window.width(),
                                                              .height = window.height(),
                                                              .layers = 1,
                                                          });
                     continue;
                 }
-                else if (error_code == rhi::swapchain_error_code::FAILURE)
+                else if (error_code == rhi::swapchain_error_code::failure)
                 {
                     it->pipeline->destroy(*this, *_rhi_device);
                     it->win->close();
@@ -125,10 +125,10 @@ namespace tempest::graphics
                                                          .min_image_count = 2,
                                                          .format =
                                                              {
-                                                                 .space = rhi::color_space::SRGB_NONLINEAR,
-                                                                 .format = rhi::image_format::BGRA8_SRGB,
+                                                                 .space = rhi::color_space::srgb_nonlinear,
+                                                                 .format = rhi::image_format::bgra8_srgb,
                                                              },
-                                                         .present_mode = rhi::present_mode::IMMEDIATE,
+                                                         .present_mode = rhi::present_mode::immediate,
                                                          .width = window.width(),
                                                          .height = window.height(),
                                                          .layers = 1,

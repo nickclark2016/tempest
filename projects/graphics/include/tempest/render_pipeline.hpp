@@ -24,7 +24,7 @@ namespace tempest::graphics
         struct window_payload
         {
             rhi::window_surface* win;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::RENDER_SURFACE> render_surface;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface;
             unique_ptr<render_pipeline> pipeline;
         };
 
@@ -36,11 +36,11 @@ namespace tempest::graphics
       public:
         struct render_state
         {
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::SEMAPHORE> start_sem;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::SEMAPHORE> end_sem;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::FENCE> end_fence;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> swapchain_image;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::RENDER_SURFACE> surface;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> start_sem;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> end_sem;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::fence> end_fence;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> swapchain_image;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> surface;
             uint32_t image_index;
         };
 

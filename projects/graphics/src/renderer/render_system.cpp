@@ -1017,14 +1017,14 @@ namespace tempest::graphics
 
     void render_system::after_initialize()
     {
-        auto staging_buffer = _device->get_staging_buffer();
-        auto mapped_staging_buffer = _device->map_buffer(staging_buffer);
+        auto staging = _device->get_staging_buffer();
+        auto mapped_staging_buffer = _device->map_buffer(staging);
 
         // upload mesh layouts
         {
             auto& commands = _device->get_command_executor().get_commands();
             std::memcpy(mapped_staging_buffer.data(), _meshes.data(), _meshes.size() * sizeof(mesh_layout));
-            commands.copy(staging_buffer, _mesh_layout_buffer, 0, 0, _meshes.size() * sizeof(mesh_layout));
+            commands.copy(staging, _mesh_layout_buffer, 0, 0, _meshes.size() * sizeof(mesh_layout));
             _device->get_command_executor().submit_and_wait();
         }
 
@@ -1032,11 +1032,11 @@ namespace tempest::graphics
         {
             auto& commands = _device->get_command_executor().get_commands();
             std::memcpy(mapped_staging_buffer.data(), _materials.data(), _materials.size() * sizeof(gpu_material_data));
-            commands.copy(staging_buffer, _materials_buffer, 0, 0, _materials.size() * sizeof(gpu_material_data));
+            commands.copy(staging, _materials_buffer, 0, 0, _materials.size() * sizeof(gpu_material_data));
             _device->get_command_executor().submit_and_wait();
         }
 
-        _device->unmap_buffer(staging_buffer);
+        _device->unmap_buffer(staging);
 
         _graph->update_external_sampled_images(_pbr_pass, _images, passes::pbr_pass::texture_array_desc.set,
                                                passes::pbr_pass::texture_array_desc.binding, pipeline_stage::FRAGMENT);

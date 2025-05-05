@@ -15,7 +15,7 @@ namespace tempest::graphics
 
     vector<image_resource_handle> renderer_utilities::upload_textures(render_device& dev,
                                                                       span<texture_data_descriptor> textures,
-                                                                      buffer_resource_handle staging_buffer,
+                                                                      buffer_resource_handle staging,
                                                                       bool use_entire_buffer, bool generate_mip_maps)
     {
         vector<image_resource_handle> images;
@@ -51,13 +51,13 @@ namespace tempest::graphics
         }
 
         auto staging_buffer_bytes =
-            use_entire_buffer ? dev.map_buffer(staging_buffer) : dev.map_buffer_frame(staging_buffer);
+            use_entire_buffer ? dev.map_buffer(staging) : dev.map_buffer_frame(staging);
 
         std::size_t staging_buffer_size = staging_buffer_bytes.size_bytes();
         std::size_t staging_buffer_bytes_written = 0;
 
         std::size_t image_index = 0;
-        std::size_t global_staging_buffer_offset = dev.get_buffer_frame_offset(staging_buffer);
+        std::size_t global_staging_buffer_offset = dev.get_buffer_frame_offset(staging);
 
         for (texture_data_descriptor& tex_data : textures)
         {
@@ -89,7 +89,7 @@ namespace tempest::graphics
 
                     std::memcpy(staging_buffer_bytes.data() + staging_buffer_bytes_written,
                                 mip_data.bytes.data() + mip_bytes_written, bytes_to_write);
-                    cmds->copy(staging_buffer, images[image_index], buffer_offset, mip_data.width,
+                    cmds->copy(staging, images[image_index], buffer_offset, mip_data.width,
                                static_cast<std::uint32_t>(row_count), mip_index, 0, 0);
 
                     mip_bytes_written += bytes_to_write;
@@ -124,7 +124,7 @@ namespace tempest::graphics
 
         cmd_executor.submit_and_wait();
 
-        dev.unmap_buffer(staging_buffer);
+        dev.unmap_buffer(staging);
 
         return images;
     }
@@ -151,7 +151,7 @@ namespace tempest::graphics
 
     vector<image_resource_handle> renderer_utilities::upload_textures(render_device& dev, span<const guid> texture_ids,
                                                                       const core::texture_registry& tex_reg,
-                                                                      buffer_resource_handle staging_buffer,
+                                                                      buffer_resource_handle staging,
                                                                       bool use_entire_buffer, bool generate_mip_maps)
     {
         vector<image_resource_handle> images;
@@ -188,13 +188,13 @@ namespace tempest::graphics
         }
 
         auto staging_buffer_bytes =
-            use_entire_buffer ? dev.map_buffer(staging_buffer) : dev.map_buffer_frame(staging_buffer);
+            use_entire_buffer ? dev.map_buffer(staging) : dev.map_buffer_frame(staging);
 
         size_t staging_buffer_size = staging_buffer_bytes.size_bytes();
         size_t staging_buffer_bytes_written = 0;
 
         size_t image_index = 0;
-        size_t global_staging_buffer_offset = dev.get_buffer_frame_offset(staging_buffer);
+        size_t global_staging_buffer_offset = dev.get_buffer_frame_offset(staging);
 
         for (const auto tex_guid : texture_ids)
         {
@@ -230,7 +230,7 @@ namespace tempest::graphics
 
                     std::memcpy(staging_buffer_bytes.data() + staging_buffer_bytes_written,
                                 mip_data.data.data() + mip_bytes_written, bytes_to_write);
-                    cmds->copy(staging_buffer, images[image_index], buffer_offset, mip_data.width,
+                    cmds->copy(staging, images[image_index], buffer_offset, mip_data.width,
                                static_cast<uint32_t>(row_count), mip_index, 0, static_cast<int32_t>(row_index));
 
                     row_index += row_count;
@@ -267,7 +267,7 @@ namespace tempest::graphics
 
         cmd_executor.submit_and_wait();
 
-        dev.unmap_buffer(staging_buffer);
+        dev.unmap_buffer(staging);
 
         return images;
     }
@@ -281,8 +281,8 @@ namespace tempest::graphics
         vector<graphics::mesh_layout> result;
         result.reserve(meshes.size());
 
-        auto staging_buffer = device.get_staging_buffer();
-        auto staging_buffer_ptr = device.map_buffer(staging_buffer);
+        auto staging = device.get_staging_buffer();
+        auto staging_buffer_ptr = device.map_buffer(staging);
         auto dst = staging_buffer_ptr.data();
 
         auto& executor = device.get_command_executor();
@@ -331,7 +331,7 @@ namespace tempest::graphics
             if (staging_buffer_bytes_written + mesh.vertices.size() * 3 * sizeof(float) > staging_buffer_ptr.size())
             {
                 auto& cmds = executor.get_commands();
-                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
                 executor.submit_and_wait();
                 staging_buffer_bytes_written = 0;
                 last_write_index = bytes_written;
@@ -352,7 +352,7 @@ namespace tempest::graphics
             if (bytes_written + mesh.vertices.size() * layout.interleave_stride > staging_buffer_ptr.size())
             {
                 auto& cmds = executor.get_commands();
-                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
                 executor.submit_and_wait();
                 staging_buffer_bytes_written = 0;
                 last_write_index = bytes_written;
@@ -391,7 +391,7 @@ namespace tempest::graphics
             if (staging_buffer_bytes_written + layout.index_count * sizeof(std::uint32_t) > staging_buffer_ptr.size())
             {
                 auto& cmds = executor.get_commands();
-                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
                 executor.submit_and_wait();
                 staging_buffer_bytes_written = 0;
                 last_write_index = bytes_written;
@@ -407,12 +407,12 @@ namespace tempest::graphics
         if (staging_buffer_bytes_written > 0)
         {
             auto& cmds = executor.get_commands();
-            cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+            cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
             executor.submit_and_wait();
             staging_buffer_bytes_written = 0;
         }
 
-        device.unmap_buffer(staging_buffer);
+        device.unmap_buffer(staging);
 
         offset = static_cast<std::uint32_t>(bytes_written);
 
@@ -422,14 +422,14 @@ namespace tempest::graphics
     flat_unordered_map<guid, mesh_layout> renderer_utilities::upload_meshes(render_device& device, span<const guid> mesh_ids,
                                                           core::mesh_registry& mesh_reg,
                                                           buffer_resource_handle target, uint32_t& offset,
-                                                          buffer_resource_handle staging_buffer)
+                                                          buffer_resource_handle staging)
     {
         std::size_t bytes_written = offset;
         std::size_t staging_buffer_bytes_written = 0;
         std::size_t last_write_index = offset;
         flat_unordered_map<guid, graphics::mesh_layout> result;
 
-        auto staging_buffer_ptr = device.map_buffer(staging_buffer);
+        auto staging_buffer_ptr = device.map_buffer(staging);
         auto dst = staging_buffer_ptr.data();
 
         auto& executor = device.get_command_executor();
@@ -480,7 +480,7 @@ namespace tempest::graphics
             if (staging_buffer_bytes_written + mesh.vertices.size() * 3 * sizeof(float) > staging_buffer_ptr.size())
             {
                 auto& cmds = executor.get_commands();
-                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
                 executor.submit_and_wait();
                 staging_buffer_bytes_written = 0;
                 last_write_index = bytes_written;
@@ -501,7 +501,7 @@ namespace tempest::graphics
             if (bytes_written + mesh.vertices.size() * layout.interleave_stride > staging_buffer_ptr.size())
             {
                 auto& cmds = executor.get_commands();
-                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
                 executor.submit_and_wait();
                 staging_buffer_bytes_written = 0;
                 last_write_index = bytes_written;
@@ -540,7 +540,7 @@ namespace tempest::graphics
             if (staging_buffer_bytes_written + layout.index_count * sizeof(std::uint32_t) > staging_buffer_ptr.size())
             {
                 auto& cmds = executor.get_commands();
-                cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+                cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
                 executor.submit_and_wait();
                 staging_buffer_bytes_written = 0;
                 last_write_index = bytes_written;
@@ -556,12 +556,12 @@ namespace tempest::graphics
         if (staging_buffer_bytes_written > 0)
         {
             auto& cmds = executor.get_commands();
-            cmds.copy(staging_buffer, target, 0, last_write_index, staging_buffer_bytes_written);
+            cmds.copy(staging, target, 0, last_write_index, staging_buffer_bytes_written);
             executor.submit_and_wait();
             staging_buffer_bytes_written = 0;
         }
 
-        device.unmap_buffer(staging_buffer);
+        device.unmap_buffer(staging);
 
         offset = static_cast<std::uint32_t>(bytes_written);
 
@@ -574,9 +574,9 @@ namespace tempest::graphics
     {
     }
 
-    staging_buffer_writer::staging_buffer_writer(render_device& dev, buffer_resource_handle staging_buffer,
+    staging_buffer_writer::staging_buffer_writer(render_device& dev, buffer_resource_handle staging,
                                                  uint32_t staging_buffer_offset)
-        : _dev{&dev}, _staging_buffer_offset{staging_buffer_offset}, _staging_buffer{staging_buffer}
+        : _dev{&dev}, _staging_buffer_offset{staging_buffer_offset}, _staging_buffer{staging}
     {
     }
 

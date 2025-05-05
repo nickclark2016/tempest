@@ -75,24 +75,29 @@ namespace tempest::rhi::vk
         resource_tracker& operator=(const resource_tracker&) = delete;
         resource_tracker& operator=(resource_tracker&&) noexcept = delete;
 
-        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer, uint64_t timeline_value,
+        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer, uint64_t timeline_value,
                    vk::work_queue* queue);
-        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image, uint64_t timeline_value,
+        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image, uint64_t timeline_value,
                    vk::work_queue* queue);
-        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline, uint64_t timeline_value,
+        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline, uint64_t timeline_value,
+                   vk::work_queue* queue);
+        void track(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set, uint64_t timeline_value,
                    vk::work_queue* queue);
 
-        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer, vk::work_queue* queue);
-        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image, vk::work_queue* queue);
-        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline, vk::work_queue* queue);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer, vk::work_queue* queue);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image, vk::work_queue* queue);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline, vk::work_queue* queue);
+        void untrack(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set, vk::work_queue* queue);
 
-        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer) const noexcept;
-        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image) const noexcept;
-        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline) const noexcept;
+        bool is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set) const noexcept;
 
-        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::BUFFER> buffer);
-        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::IMAGE> image);
-        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::GRAPHICS_PIPELINE> pipeline);
+        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer);
+        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image);
+        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline);
+        void request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set);
 
         void try_release() noexcept;
         void destroy() noexcept;
