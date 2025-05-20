@@ -63,14 +63,31 @@ namespace tempest::math
         return lerp(new_min, new_max, t);
     }
 
-    template <typename T>
-    inline constexpr T div_ceil(T x, T y)
+    template <typename T, typename U = T>
+    inline constexpr T div_ceil(T x, U y)
     {
         if (x != 0)
         {
-            return 1 + ((x - 1) / y);
+            return 1 + ((x - 1) / static_cast<T>(y));
         }
         return 0;
+    }
+
+    template <typename T, typename U = T>
+    inline constexpr T round_to_next_multiple(T x, U y)
+    {
+        if (y == 0)
+        {
+            return x;
+        }
+
+        const auto remainder = x % y;
+        if (remainder == 0)
+        {
+            return x;
+        }
+
+        return x + y - remainder;
     }
 } // namespace tempest::math
 

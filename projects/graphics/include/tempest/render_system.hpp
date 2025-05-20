@@ -45,7 +45,6 @@ namespace tempest::graphics
         {
             math::mat4<float> model;
             math::mat4<float> inv_tranpose_model;
-            math::mat4<float> prev_model;
 
             uint32_t mesh_id;
             uint32_t material_id;
@@ -63,7 +62,7 @@ namespace tempest::graphics
 
         struct gpu_material_data
         {
-            static constexpr int16_t INVALID_TEXTURE_ID = -1;
+            static constexpr int16_t invalid_texture_id = -1;
 
             math::vec4<float> base_color_factor;
             math::vec4<float> emissive_factor;
@@ -78,13 +77,13 @@ namespace tempest::graphics
             float thickness_factor;
             float attenuation_distance;
 
-            int16_t base_color_texture_id = INVALID_TEXTURE_ID;
-            int16_t normal_texture_id = INVALID_TEXTURE_ID;
-            int16_t metallic_roughness_texture_id = INVALID_TEXTURE_ID;
-            int16_t emissive_texture_id = INVALID_TEXTURE_ID;
-            int16_t occlusion_texture_id = INVALID_TEXTURE_ID;
-            int16_t transmission_texture_id = INVALID_TEXTURE_ID;
-            int16_t thickness_texture_id = INVALID_TEXTURE_ID;
+            int16_t base_color_texture_id = invalid_texture_id;
+            int16_t normal_texture_id = invalid_texture_id;
+            int16_t metallic_roughness_texture_id = invalid_texture_id;
+            int16_t emissive_texture_id = invalid_texture_id;
+            int16_t occlusion_texture_id = invalid_texture_id;
+            int16_t transmission_texture_id = invalid_texture_id;
+            int16_t thickness_texture_id = invalid_texture_id;
 
             gpu_material_type material_type;
         };
@@ -93,10 +92,8 @@ namespace tempest::graphics
         {
             math::mat4<float> proj;
             math::mat4<float> inv_proj;
-            math::mat4<float> prev_proj;
             math::mat4<float> view;
             math::mat4<float> inv_view;
-            math::mat4<float> prev_view;
             math::vec3<float> position;
         };
 
@@ -400,8 +397,8 @@ namespace tempest::graphics
                                                           const ecs::transform_component& light_transform,
                                                           const camera_component& camera_data);
 
-        vector<mesh_layout> _load_meshes(span<core::mesh> meshes);
-        void _load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
+        vector<mesh_layout> load_meshes(span<core::mesh> meshes);
+        void load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps);
 
         float _ssao_radius{0.5f};
         float _ssao_bias{0.025f};

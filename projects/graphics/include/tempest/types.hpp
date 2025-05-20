@@ -42,17 +42,17 @@ namespace tempest::graphics
         R16_FLOAT,
         R32_FLOAT,
         R32_UINT,
-        RGBA8_SRGB,
+        rgba8_srgb,
         BGRA8_SRGB,
         RGBA8_UINT,
-        RGBA8_UNORM,
+        rgba8_unorm,
         RGBA16_FLOAT,
-        RGBA16_UNORM,
+        rgba16_unorm,
         RG16_FLOAT,
         RG32_FLOAT,
         RG32_UINT,
         RGB32_FLOAT,
-        RGBA32_FLOAT,
+        rgba32_float,
         D32_FLOAT,
         D24_FLOAT,
         D24_S8_FLOAT,
@@ -76,11 +76,11 @@ namespace tempest::graphics
             [[fallthrough]];
         case resource_format::D24_S8_FLOAT:
             [[fallthrough]];
-        case resource_format::RGBA8_SRGB:
+        case resource_format::rgba8_srgb:
             [[fallthrough]];
         case resource_format::RGBA8_UINT:
             [[fallthrough]];
-        case resource_format::RGBA8_UNORM:
+        case resource_format::rgba8_unorm:
             [[fallthrough]];
         case resource_format::BGRA8_SRGB:
             [[fallthrough]];
@@ -94,7 +94,7 @@ namespace tempest::graphics
             return 8;
         case resource_format::RGB32_FLOAT:
             return 12;
-        case resource_format::RGBA32_FLOAT:
+        case resource_format::rgba32_float:
             return 16;
         default:
             break;

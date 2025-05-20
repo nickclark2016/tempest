@@ -128,7 +128,7 @@ namespace tempest
                 material_guids.push_back(material_id);
 
                 // Get the material and add the textures to the texture list
-                auto mat = _material_reg.get_material(material_id);
+                auto mat = _material_reg.find(material_id);
                 if (mat)
                 {
                     if (auto base_color = mat->get_texture(core::material::base_color_texture_name);
@@ -194,7 +194,7 @@ namespace tempest
                           to_string(material_id).c_str(), ecs::entity_traits<ecs::entity>::as_entity(e),
                           ecs::entity_traits<ecs::entity>::as_version(e));
 
-                auto material = _material_reg.get_material(material_id);
+                auto material = _material_reg.find(material_id);
 
                 graphics::renderable_component renderable{
                     .mesh_id = static_cast<uint32_t>(_render_system.get_mesh_id(mesh_id).value()),

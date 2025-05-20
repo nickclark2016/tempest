@@ -24,7 +24,7 @@ namespace tempest::editor
 
                 imgui::create_header("Material Component", [&]() {
                     imgui::create_table("##material_component_container", 2, [&]() {
-                        auto mat = _mat_reg->get_material(mat_comp->material_id);
+                        auto mat = _mat_reg->find(mat_comp->material_id);
                         if (!mat)
                         {
                             imgui::next_row();

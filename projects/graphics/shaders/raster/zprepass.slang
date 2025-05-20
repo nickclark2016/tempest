@@ -8,8 +8,6 @@ import "../common/vertex_pull";
 struct SceneGlobals {
     Camera camera;
     float2 screen_size;
-    float4 ambient_light;
-    Light sun;
 };
 
 struct VertexOutput {
@@ -24,7 +22,6 @@ struct VertexOutput {
 
 struct FragmentOutput {
     float2 encoded_normal : SV_Target0;
-    float4 position       : SV_Target1;
 };
 
 [vk_binding(0, 0)] ConstantBuffer<SceneGlobals, Std430DataLayout> scene;
@@ -89,7 +86,6 @@ FragmentOutput FSMain(VertexOutput input) {
     half3 normal01 = pd.shading_normal + 0.5h * 0.5h;
 
     output.encoded_normal = encode_normal(normal01);
-    output.position = input.view_pos;
 
     return output;
 }

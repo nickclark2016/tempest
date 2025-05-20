@@ -41,7 +41,7 @@ namespace tempest::graphics::passes
         };
 
         resource_format color_buffer_fmt[] = {
-            resource_format::RGBA8_SRGB,
+            resource_format::rgba8_srgb,
         };
 
         color_blend_attachment_state blending[] = {
@@ -365,7 +365,7 @@ namespace tempest::graphics::passes
             },
         };
 
-        resource_format color_formats[] = {resource_format::RGBA8_SRGB};
+        resource_format color_formats[] = {resource_format::rgba8_srgb};
 
         auto pipeline = device.create_graphics_pipeline({
             .layout{

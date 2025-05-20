@@ -15,7 +15,6 @@ struct VertexOutput {
     float3 world_position   : Position;
     float3 view_position    : ViewPosition;
     float4 current_position : CurrentPosition;
-    float4 prev_position    : PreviousPosition;
     float2 uv               : UV0;
     float3 normal           : Normal;
     float3 tangent          : Tangent;
@@ -70,9 +69,6 @@ VertexOutput compute_vertex(uint vertex_id, uint instance_id) {
     float4 view_pos = mul(scene.camera.view, world_pos);
     float4 clip_pos = mul(scene.camera.projection, view_pos);
 
-    float4 prev_world_pos = mul(instance.prev_model_matrix, float4(v.position, 1.0));
-    float4 prev_clip_pos = mul(scene.camera.prev_projection, mul(scene.camera.prev_view, prev_world_pos));
-
     float3x3 model_3x3 = (float3x3) instance.model_matrix;
     float3x3 t_inv_model_3x3 = (float3x3) instance.transpose_inv_model_matrix;
 
@@ -84,7 +80,6 @@ VertexOutput compute_vertex(uint vertex_id, uint instance_id) {
 
     result.position = clip_pos;
     result.current_position = clip_pos;
-    result.prev_position = prev_clip_pos;
     result.world_position = world_pos.xyz;
     result.view_position = view_pos.xyz;
     result.uv = v.uv0;

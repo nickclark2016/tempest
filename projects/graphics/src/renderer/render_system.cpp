@@ -15,7 +15,7 @@ namespace tempest::graphics
 {
     namespace
     {
-        auto log = logger::logger_factory::create({"tempest::render_system"});
+        auto logger = logger::logger_factory::create({"tempest::render_system"});
     } // namespace
 
     render_system::render_system(ecs::archetype_registry& entities, const render_system_settings& settings)
@@ -32,11 +32,11 @@ namespace tempest::graphics
         auto devices = _context->enumerate_suitable_devices();
         if (devices.empty())
         {
-            log->critical("No suitable devices found for rendering");
+            logger->critical("No suitable devices found for rendering");
             std::terminate();
         }
 
-        log->info("Found {} suitable devices. Selecting device {}", devices.size(), devices[0].name.c_str());
+        logger->info("Found {} suitable devices. Selecting device {}", devices.size(), devices[0].name.c_str());
 
         _device = &_context->create_device(0);
     }
@@ -71,7 +71,7 @@ namespace tempest::graphics
         auto color_buffer = rgc->create_image({
             .width = 1920,
             .height = 1080,
-            .fmt = resource_format::RGBA8_SRGB,
+            .fmt = resource_format::rgba8_srgb,
             .type = image_type::IMAGE_2D,
             .persistent = true,
             .name = "Color Buffer",
@@ -401,9 +401,6 @@ namespace tempest::graphics
                                 camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio,
                                 camera_data.near_plane);
 
-                            _scene_data.camera.prev_proj = _scene_data.camera.proj;
-                            _scene_data.camera.prev_view = _scene_data.camera.view;
-
                             _scene_data.camera.view = camera_view;
                             _scene_data.camera.inv_view = math::inverse(camera_view);
                             _scene_data.camera.proj = camera_projection;
@@ -504,7 +501,7 @@ namespace tempest::graphics
                         // Upload SSAO constants
                         passes::ssao_pass::constants ssao_constants;
                         ssao_constants.radius = _ssao_radius; // radius in view space
-                        ssao_constants.bias = _ssao_bias; // bias in view space
+                        ssao_constants.bias = _ssao_bias;     // bias in view space
                         ssao_constants.projection = _scene_data.camera.proj;
                         ssao_constants.inv_projection = _scene_data.camera.inv_proj;
                         ssao_constants.view = _scene_data.camera.view;
@@ -847,9 +844,8 @@ namespace tempest::graphics
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                     .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
                     .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0, 7)
-                    .add_sampled_image(
-                        ssao_blur_image, passes::pbr_oit_gather_pass::ao_image_desc.set,
-                        passes::pbr_oit_gather_pass::ao_image_desc.binding, pipeline_stage::FRAGMENT)
+                    .add_sampled_image(ssao_blur_image, passes::pbr_oit_gather_pass::ao_image_desc.set,
+                                       passes::pbr_oit_gather_pass::ao_image_desc.binding, pipeline_stage::FRAGMENT)
                     .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -905,9 +901,8 @@ namespace tempest::graphics
                     .add_structured_buffer(_materials_buffer, resource_access_type::READ, 0, 5)
                     .add_storage_image(moments_oit_images, resource_access_type::READ_WRITE, 0, 6)
                     .add_storage_image(moments_oit_zero_image, resource_access_type::READ_WRITE, 0, 7)
-                    .add_sampled_image(
-                        ssao_blur_image, passes::pbr_oit_resolve_pass::ao_image_desc.set,
-                        passes::pbr_oit_resolve_pass::ao_image_desc.binding, pipeline_stage::FRAGMENT)
+                    .add_sampled_image(ssao_blur_image, passes::pbr_oit_resolve_pass::ao_image_desc.set,
+                                       passes::pbr_oit_resolve_pass::ao_image_desc.binding, pipeline_stage::FRAGMENT)
                     .add_sampler(_linear_sampler, 0, 15, pipeline_stage::FRAGMENT)
                     .add_external_sampled_images(512, 0, 16, pipeline_stage::FRAGMENT)
                     .add_structured_buffer(light_buffer, resource_access_type::READ, 1, 0)
@@ -1076,7 +1071,6 @@ namespace tempest::graphics
                 gpu_object_data object_payload = {
                     .model = math::mat4<float>(1.0f),
                     .inv_tranpose_model = math::mat4<float>(1.0f),
-                    .prev_model = math::mat4<float>(1.0f),
                     .mesh_id = static_cast<uint32_t>(renderable.mesh_id),
                     .material_id = static_cast<uint32_t>(renderable.material_id),
                     .parent_id = ~0u,
@@ -1107,18 +1101,15 @@ namespace tempest::graphics
                 auto object_data_it = draw_batch.objects.find(self.entity);
                 if (object_data_it == draw_batch.objects.end()) [[unlikely]]
                 {
-                    log->info("New object added to draw batch - ID: {}, Mesh ID: {}, Material ID: {} - Entity {}:{}",
-                              renderable.object_id, renderable.mesh_id, renderable.material_id,
-                              ecs::entity_traits<ecs::entity>::as_entity(self.entity),
-                              ecs::entity_traits<ecs::entity>::as_version(self.entity));
+                    logger->info("New object added to draw batch - ID: {}, Mesh ID: {}, Material ID: {} - Entity {}:{}",
+                                 renderable.object_id, renderable.mesh_id, renderable.material_id,
+                                 ecs::entity_traits<ecs::entity>::as_entity(self.entity),
+                                 ecs::entity_traits<ecs::entity>::as_version(self.entity));
 
-                    object_payload.prev_model = object_payload.model;
                     draw_batch.objects.insert(self.entity, object_payload);
                 }
                 else
                 {
-                    const auto& prev_data = draw_batch.objects[self.entity];
-                    object_payload.prev_model = prev_data.model;
                     draw_batch.objects[self.entity] = object_payload;
                 }
 
@@ -1256,7 +1247,7 @@ namespace tempest::graphics
 
         for (const auto& [guid, layout] : mesh_layout_mapping)
         {
-            log->info("Uploaded mesh with guid: {} at index {}", to_string(guid).c_str(), _meshes.size());
+            logger->info("Uploaded mesh with guid: {} at index {}", to_string(guid).c_str(), _meshes.size());
             _mesh_id_map[guid] = _meshes.size();
             _meshes.push_back(layout);
             mesh_layouts[guid] = layout;
@@ -1265,7 +1256,7 @@ namespace tempest::graphics
         return mesh_layouts;
     }
 
-    vector<mesh_layout> render_system::_load_meshes(span<core::mesh> meshes)
+    vector<mesh_layout> render_system::load_meshes(span<core::mesh> meshes)
     {
         auto mesh_layouts = renderer_utilities::upload_meshes(*_device, meshes, _vertex_pull_buffer, _mesh_bytes);
 
@@ -1277,7 +1268,7 @@ namespace tempest::graphics
         return mesh_layouts;
     }
 
-    void render_system::_load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
+    void render_system::load_textures(span<texture_data_descriptor> texture_sources, bool generate_mip_maps)
     {
         auto textures = renderer_utilities::upload_textures(*_device, texture_sources, _device->get_staging_buffer(),
                                                             true, generate_mip_maps);
@@ -1328,7 +1319,7 @@ namespace tempest::graphics
                 continue;
             }
 
-            auto material = mat_reg.get_material(guid);
+            auto material = mat_reg.find(guid);
             if (material)
             {
                 auto base_color_factor = material->get_vec4(core::material::base_color_factor_name)
@@ -1396,7 +1387,7 @@ namespace tempest::graphics
                 }
                 else
                 {
-                    gpu_material.base_color_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                    gpu_material.base_color_texture_id = gpu_material_data::invalid_texture_id;
                 }
 
                 if (const auto normal_map = material->get_texture(core::material::normal_texture_name))
@@ -1406,7 +1397,7 @@ namespace tempest::graphics
                 }
                 else
                 {
-                    gpu_material.normal_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                    gpu_material.normal_texture_id = gpu_material_data::invalid_texture_id;
                 }
 
                 if (const auto metallic_map = material->get_texture(core::material::metallic_roughness_texture_name))
@@ -1416,7 +1407,7 @@ namespace tempest::graphics
                 }
                 else
                 {
-                    gpu_material.metallic_roughness_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                    gpu_material.metallic_roughness_texture_id = gpu_material_data::invalid_texture_id;
                 }
 
                 if (const auto emissive_map = material->get_texture(core::material::emissive_texture_name))
@@ -1426,7 +1417,7 @@ namespace tempest::graphics
                 }
                 else
                 {
-                    gpu_material.emissive_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                    gpu_material.emissive_texture_id = gpu_material_data::invalid_texture_id;
                 }
 
                 if (const auto ao_map = material->get_texture(core::material::occlusion_texture_name))
@@ -1436,7 +1427,7 @@ namespace tempest::graphics
                 }
                 else
                 {
-                    gpu_material.occlusion_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                    gpu_material.occlusion_texture_id = gpu_material_data::invalid_texture_id;
                 }
 
                 if (const auto transmission_map = material->get_texture(core::material::transmissive_texture_name))
@@ -1446,7 +1437,7 @@ namespace tempest::graphics
                 }
                 else
                 {
-                    gpu_material.transmission_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                    gpu_material.transmission_texture_id = gpu_material_data::invalid_texture_id;
                 }
 
                 if (const auto thickness_map = material->get_texture(core::material::volume_thickness_factor_name))
@@ -1456,10 +1447,10 @@ namespace tempest::graphics
                 }
                 else
                 {
-                    gpu_material.thickness_texture_id = gpu_material_data::INVALID_TEXTURE_ID;
+                    gpu_material.thickness_texture_id = gpu_material_data::invalid_texture_id;
                 }
 
-                log->info("Uploaded material with guid: {} at index {}", to_string(guid).c_str(), _materials.size());
+                logger->info("Uploaded material with guid: {} at index {}", to_string(guid).c_str(), _materials.size());
 
                 _material_id_map[guid] = _materials.size();
                 _materials.push_back(gpu_material);
@@ -1666,7 +1657,7 @@ namespace tempest::graphics
             },
         };
 
-        resource_format color_buffer_fmt[] = {resource_format::RGBA8_SRGB};
+        resource_format color_buffer_fmt[] = {resource_format::rgba8_srgb};
 
         color_blend_attachment_state blending[] = {
             {
@@ -1727,7 +1718,7 @@ namespace tempest::graphics
             },
         };
 
-        resource_format color_buffer_fmt[] = {resource_format::RGBA8_SRGB};
+        resource_format color_buffer_fmt[] = {resource_format::rgba8_srgb};
 
         color_blend_attachment_state blending[] = {
             {

@@ -45,7 +45,7 @@ namespace tempest::assets
         core::texture tex = {
             .width = static_cast<uint32_t>(width),
             .height = static_cast<uint32_t>(height),
-            .format = core::texture_format::RGBA32_FLOAT,
+            .format = core::texture_format::rgba32_float,
             .compression = core::texture_compression::NONE,
         };
 

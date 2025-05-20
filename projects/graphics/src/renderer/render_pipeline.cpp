@@ -13,7 +13,7 @@ namespace tempest::graphics
         return rhi::vk::create_window_surface(desc);
     }
 
-    void renderer::register_window(rhi::window_surface* window, unique_ptr<render_pipeline> pipeline)
+    render_pipeline* renderer::register_window(rhi::window_surface* window, unique_ptr<render_pipeline> pipeline)
     {
         auto render_surface = _rhi_device->create_render_surface({
             .window = window,
@@ -39,6 +39,8 @@ namespace tempest::graphics
 
         // On window close, unregister the window
         window->register_close_callback([this, window]() { unregister_window(window); });
+
+        return _windows.back().pipeline.get();
     }
 
     void renderer::unregister_window(rhi::window_surface* window)

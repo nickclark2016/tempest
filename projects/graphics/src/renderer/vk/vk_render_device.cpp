@@ -140,9 +140,9 @@ namespace tempest::graphics::vk
                 return VK_FORMAT_R8_UNORM;
             case resource_format::RGBA8_UINT:
                 return VK_FORMAT_R8G8B8A8_UINT;
-            case resource_format::RGBA8_UNORM:
+            case resource_format::rgba8_unorm:
                 return VK_FORMAT_R8G8B8A8_UNORM;
-            case resource_format::RGBA8_SRGB:
+            case resource_format::rgba8_srgb:
                 return VK_FORMAT_R8G8B8A8_SRGB;
             case resource_format::BGRA8_SRGB:
                 return VK_FORMAT_B8G8R8A8_SRGB;
@@ -152,7 +152,7 @@ namespace tempest::graphics::vk
                 return VK_FORMAT_R16G16B16A16_SFLOAT;
             case resource_format::RG16_FLOAT:
                 return VK_FORMAT_R16G16_SFLOAT;
-            case resource_format::RGBA16_UNORM:
+            case resource_format::rgba16_unorm:
                 return VK_FORMAT_R16G16B16A16_UNORM;
             case resource_format::R32_FLOAT:
                 return VK_FORMAT_R32_SFLOAT;
@@ -164,7 +164,7 @@ namespace tempest::graphics::vk
                 return VK_FORMAT_R32G32_UINT;
             case resource_format::RGB32_FLOAT:
                 return VK_FORMAT_R32G32B32_SFLOAT;
-            case resource_format::RGBA32_FLOAT:
+            case resource_format::rgba32_float:
                 return VK_FORMAT_R32G32B32A32_SFLOAT;
             case resource_format::D24_FLOAT:
                 return VK_FORMAT_X8_D24_UNORM_PACK32;
@@ -323,19 +323,19 @@ namespace tempest::graphics::vk
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT;
             case resource_format::RGB32_FLOAT:
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
-            case resource_format::RGBA8_UNORM:
+            case resource_format::rgba8_unorm:
                 [[fallthrough]];
             case resource_format::RGBA8_UINT:
                 [[fallthrough]];
-            case resource_format::RGBA8_SRGB:
+            case resource_format::rgba8_srgb:
                 [[fallthrough]];
             case resource_format::BGRA8_SRGB:
                 [[fallthrough]];
             case resource_format::RGBA16_FLOAT:
                 [[fallthrough]];
-            case resource_format::RGBA16_UNORM:
+            case resource_format::rgba16_unorm:
                 [[fallthrough]];
-            case resource_format::RGBA32_FLOAT:
+            case resource_format::rgba32_float:
                 return VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                        VK_COLOR_COMPONENT_A_BIT;
             case resource_format::D32_FLOAT: {

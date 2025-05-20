@@ -99,8 +99,9 @@ namespace tempest::rhi::vk
                                typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r, float g,
                                float b, float a) noexcept override;
         void blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                  typed_rhi_handle<rhi_handle_type::image> src,
-                  typed_rhi_handle<rhi_handle_type::image> dst) noexcept override;
+                  typed_rhi_handle<rhi_handle_type::image> src, image_layout src_layout, uint32_t src_mip,
+                  typed_rhi_handle<rhi_handle_type::image> dst, image_layout dst_layout,
+                  uint32_t dst_mip) noexcept override;
         void generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                 typed_rhi_handle<rhi_handle_type::image> img, image_layout current_layout,
                                 uint32_t base_mip, uint32_t mip_count) noexcept override;
@@ -113,6 +114,9 @@ namespace tempest::rhi::vk
         void fill(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                   typed_rhi_handle<rhi_handle_type::buffer> handle, size_t offset, size_t size,
                   uint32_t data) noexcept override;
+        void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::image> dst,
+                  image_layout layout, size_t src_offset = 0, uint32_t dst_mip = 0) noexcept override;
 
         // Barrier commands
         void pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -126,12 +130,23 @@ namespace tempest::rhi::vk
         void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                   typed_rhi_handle<rhi_handle_type::graphics_pipeline> pipeline) noexcept override;
         void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                  typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t draw_count,
+                  typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t offset, uint32_t draw_count,
                   uint32_t stride) noexcept override;
+        void bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                               typed_rhi_handle<rhi_handle_type::buffer> buffer, uint32_t offset,
+                               rhi::index_format index_type) noexcept override;
+        void set_scissor_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, int32_t x, int32_t y,
+                                uint32_t width, uint32_t height, uint32_t region_index = 0) noexcept override;
+        void set_viewport(typed_rhi_handle<rhi_handle_type::command_list> command_list, float x, float y, float width,
+                          float height, float min_depth, float max_depth, uint32_t viewport_index = 0,
+                          bool flipped = false) noexcept override;
+        void set_cull_mode(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                           enum_mask<cull_mode> cull) noexcept override;
 
         // Descriptor commands
-        void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t first_set_index,
-                  span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
+        void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
+                  uint32_t first_set_index, span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
                   span<const uint32_t> dynamic_offsets) noexcept override;
 
       private:
@@ -177,6 +192,7 @@ namespace tempest::rhi::vk
         bool swapchain_image;
         VkImageAspectFlags image_aspect;
         VkImageCreateInfo create_info;
+        VkImageViewCreateInfo view_create_info;
     };
 
     struct buffer
@@ -184,6 +200,12 @@ namespace tempest::rhi::vk
         VmaAllocation allocation;
         VmaAllocationInfo allocation_info;
         VkBuffer buffer;
+    };
+
+    struct sampler
+    {
+        VkSampler sampler;
+        VkSamplerCreateInfo create_info;
     };
 
     struct fence
@@ -219,6 +241,15 @@ namespace tempest::rhi::vk
         VkPipelineLayout layout;
 
         graphics_pipeline_desc desc;
+    };
+
+    struct compute_pipeline
+    {
+        VkShaderModule shader_module;
+        VkPipeline pipeline;
+        VkPipelineLayout layout;
+
+        compute_pipeline_desc desc;
     };
 
     struct delete_queue
@@ -409,6 +440,9 @@ namespace tempest::rhi::vk
             const graphics_pipeline_desc& desc) noexcept override;
         typed_rhi_handle<rhi_handle_type::descriptor_set> create_descriptor_set(
             const descriptor_set_desc& desc) noexcept override;
+        typed_rhi_handle<rhi_handle_type::compute_pipeline> create_compute_pipeline(
+            const compute_pipeline_desc& desc) noexcept override;
+        typed_rhi_handle<rhi_handle_type::sampler> create_sampler(const sampler_desc& desc) noexcept override;
 
         void destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept override;
         void destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept override;
@@ -420,6 +454,8 @@ namespace tempest::rhi::vk
         void destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept override;
         void destroy_graphics_pipeline(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept override;
         void destroy_descriptor_set(typed_rhi_handle<rhi_handle_type::descriptor_set> handle) noexcept override;
+        void destroy_compute_pipeline(typed_rhi_handle<rhi_handle_type::compute_pipeline> handle) noexcept override;
+        void destroy_sampler(typed_rhi_handle<rhi_handle_type::sampler> handle) noexcept override;
 
         void recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
                                      const render_surface_desc& desc) noexcept override;
@@ -464,7 +500,7 @@ namespace tempest::rhi::vk
         VkSwapchainKHR get_swapchain(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept;
         VkDescriptorSetLayout get_descriptor_set_layout(
             typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) const noexcept;
-        VkSampler get_sampler(typed_rhi_handle<rhi_handle_type::sampler> handle) const noexcept;
+        VkPipelineLayout get_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) const noexcept;
 
         optional<const vk::buffer&> get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept;
         optional<const vk::image&> get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept;
@@ -472,13 +508,16 @@ namespace tempest::rhi::vk
             typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) const noexcept;
         optional<const vk::descriptor_set&> get_descriptor_set(
             typed_rhi_handle<rhi_handle_type::descriptor_set> handle) const noexcept;
+        optional<const vk::sampler&> get_sampler(typed_rhi_handle<rhi_handle_type::sampler> handle) const noexcept;
 
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept;
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::image> handle) noexcept;
+        void release_resource_immediate(typed_rhi_handle<rhi_handle_type::sampler> handle) noexcept;
         bool release_resource_immediate(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept;
         bool release_resource_immediate(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept;
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept;
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::descriptor_set> handle) noexcept;
+        void release_resource_immediate(typed_rhi_handle<rhi_handle_type::compute_pipeline> handle) noexcept;
 
         const vkb::DispatchTable& get_dispatch_table() const noexcept
         {
@@ -511,7 +550,9 @@ namespace tempest::rhi::vk
         slot_map<semaphore> _semaphores;
         slot_map<swapchain> _swapchains;
         slot_map<graphics_pipeline> _graphics_pipelines;
+        slot_map<compute_pipeline> _compute_pipelines;
         slot_map<descriptor_set> _descriptor_sets;
+        slot_map<sampler> _samplers;
 
         slot_map<VkCommandBuffer> _command_buffers;
 

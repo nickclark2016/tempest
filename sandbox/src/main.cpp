@@ -1,129 +1,54 @@
+#include <tempest/archetype.hpp>
+#include <tempest/asset_database.hpp>
 #include <tempest/input.hpp>
+#include <tempest/material.hpp>
 #include <tempest/pipelines/pbr_pipeline.hpp>
 #include <tempest/render_pipeline.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/texture.hpp>
+#include <tempest/transform_component.hpp>
 #include <tempest/tuple.hpp>
+#include <tempest/vertex.hpp>
 
 namespace rhi = tempest::rhi;
-
-struct clear_render_pipeline : tempest::graphics::render_pipeline
-{
-    float r;
-    float g;
-    float b;
-    float a;
-
-    clear_render_pipeline(float r, float g, float b, float a) : r(r), g(g), b(b), a(a)
-    {
-    }
-
-    void initialize([[maybe_unused]] tempest::graphics::renderer& parent, [[maybe_unused]] rhi::device& dev) override
-    {
-    }
-
-    render_result render([[maybe_unused]] tempest::graphics::renderer& parent, rhi::device& dev,
-                         const render_state& rs) const override
-    {
-        auto& work_queue = dev.get_primary_work_queue();
-        auto cmds = work_queue.get_next_command_list();
-        work_queue.begin_command_list(cmds, true);
-
-        rhi::work_queue::image_barrier to_tx_dst = {
-            .image = rs.swapchain_image,
-            .old_layout = rhi::image_layout::undefined,
-            .new_layout = rhi::image_layout::transfer_dst,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::clear),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
-        };
-
-        work_queue.transition_image(cmds, tempest::span(&to_tx_dst, 1));
-        work_queue.clear_color_image(cmds, rs.swapchain_image, rhi::image_layout::transfer_dst, r, g, b, a);
-
-        rhi::work_queue::image_barrier to_present = {
-            .image = rs.swapchain_image,
-            .old_layout = rhi::image_layout::transfer_dst,
-            .new_layout = rhi::image_layout::present,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::clear),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::bottom),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::none),
-        };
-
-        work_queue.transition_image(cmds, tempest::span(&to_present, 1));
-
-        work_queue.end_command_list(cmds);
-
-        rhi::work_queue::submit_info submit_info;
-        submit_info.command_lists.push_back(cmds);
-        submit_info.wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
-            .semaphore = rs.start_sem,
-            .value = 0,
-            .stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
-        });
-        submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
-            .semaphore = rs.end_sem,
-            .value = 1,
-            .stages = tempest::make_enum_mask(rhi::pipeline_stage::bottom),
-        });
-
-        work_queue.submit(tempest::span(&submit_info, 1), rs.end_fence);
-
-        rhi::work_queue::present_info present_info;
-        present_info.swapchain_images.push_back(rhi::work_queue::swapchain_image_present_info{
-            .render_surface = rs.surface,
-            .image_index = rs.image_index,
-        });
-        present_info.wait_semaphores.push_back(rs.end_sem);
-
-        auto present_result = work_queue.present(present_info);
-        if (present_result == rhi::work_queue::present_result::out_of_date ||
-            present_result == rhi::work_queue::present_result::suboptimal)
-        {
-            return render_result::REQUEST_RECREATE_SWAPCHAIN;
-        }
-        else if (present_result == rhi::work_queue::present_result::error)
-        {
-            return render_result::FAILURE;
-        }
-        return render_result::SUCCESS;
-    }
-
-    void destroy([[maybe_unused]] tempest::graphics::renderer&, [[maybe_unused]] rhi::device&) override
-    {
-    }
-};
 
 int main()
 {
     auto renderer = tempest::graphics::renderer();
 
-    auto win1 = renderer.create_window({
+    auto win = renderer.create_window({
         .width = 1920,
         .height = 1080,
         .name = "Window 1",
         .fullscreen = false,
     });
 
-    auto win2 = renderer.create_window({
-        .width = 1920,
-        .height = 1080,
-        .name = "Window 2",
-        .fullscreen = false,
-    });
+    auto entity_registry = tempest::ecs::archetype_registry();
+    auto mesh_registry = tempest::core::mesh_registry();
+    auto texture_registry = tempest::core::texture_registry();
+    auto material_registry = tempest::core::material_registry();
+    auto asset_database = tempest::assets::asset_database(&mesh_registry, &texture_registry, &material_registry);
 
-    auto win3 = renderer.create_window({
-        .width = 1920,
-        .height = 1080,
-        .name = "Window 3",
-        .fullscreen = false,
-    });
+    auto sponza_prefab =
+        asset_database.import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", entity_registry);
+    auto sponza_instance = entity_registry.duplicate(sponza_prefab);
 
-    renderer.register_window(win1.get(), tempest::make_unique<clear_render_pipeline>(1.0f, 0.0f, 0.0f, 1.0f));
-    renderer.register_window(win2.get(), tempest::make_unique<clear_render_pipeline>(0.0f, 1.0f, 0.0f, 1.0f));
-    renderer.register_window(win3.get(),
-                             tempest::make_unique<tempest::graphics::pbr_pipeline>(win3->width(), win3->height()));
+    auto pbr_pipeline =
+        renderer.register_window<tempest::graphics::pbr_pipeline>(win.get(), 1920, 1080, entity_registry);
+
+    pbr_pipeline->upload_objects_sync(renderer.get_device(), {&sponza_instance, 1}, mesh_registry, texture_registry,
+                                      material_registry);
+
+    auto camera = entity_registry.create();
+    tempest::graphics::camera_component camera_data = {
+        .aspect_ratio = 16.0f / 9.0f,
+        .vertical_fov = 90.0f,
+        .near_plane = 0.01f,
+        .far_shadow_plane = 64.0f,
+    };
+
+    entity_registry.assign(camera, camera_data);
+    entity_registry.assign(camera, tempest::ecs::transform_component::identity());
 
     while (true)
     {

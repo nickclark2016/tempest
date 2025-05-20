@@ -56,6 +56,9 @@ namespace tempest::rhi
             const graphics_pipeline_desc& desc) noexcept = 0;
         virtual typed_rhi_handle<rhi_handle_type::descriptor_set> create_descriptor_set(
             const descriptor_set_desc& desc) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::compute_pipeline> create_compute_pipeline(
+            const compute_pipeline_desc& desc) noexcept = 0;
+        virtual typed_rhi_handle<rhi_handle_type::sampler> create_sampler(const sampler_desc& desc) noexcept = 0;
 
         virtual void destroy_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
         virtual void destroy_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept = 0;
@@ -68,6 +71,8 @@ namespace tempest::rhi
         virtual void destroy_graphics_pipeline(
             typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept = 0;
         virtual void destroy_descriptor_set(typed_rhi_handle<rhi_handle_type::descriptor_set> handle) noexcept = 0;
+        virtual void destroy_compute_pipeline(typed_rhi_handle<rhi_handle_type::compute_pipeline> handle) noexcept = 0;
+        virtual void destroy_sampler(typed_rhi_handle<rhi_handle_type::sampler> handle) noexcept = 0;
 
         virtual work_queue& get_primary_work_queue() noexcept = 0;
         virtual work_queue& get_dedicated_transfer_queue() noexcept = 0;
@@ -244,14 +249,15 @@ namespace tempest::rhi
                                        typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r,
                                        float g, float b, float a) noexcept = 0;
         virtual void blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::image> src,
-                          typed_rhi_handle<rhi_handle_type::image> dst) noexcept = 0;
+                          typed_rhi_handle<rhi_handle_type::image> src, image_layout src_layout, uint32_t src_mip,
+                          typed_rhi_handle<rhi_handle_type::image> dst, image_layout dst_layout,
+                          uint32_t dst_mip) noexcept = 0;
         virtual void generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                         typed_rhi_handle<rhi_handle_type::image> img, image_layout current_layout,
                                         uint32_t base_mip = 0,
                                         uint32_t mip_count = numeric_limits<uint32_t>::max()) = 0;
 
-        // Buffer Commands
+        // Buffer and Image Commands
         virtual void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                           typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::buffer> dst,
                           size_t src_offset = 0, size_t dst_offset = 0,
@@ -259,6 +265,9 @@ namespace tempest::rhi
         virtual void fill(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                           typed_rhi_handle<rhi_handle_type::buffer> handle, size_t offset, size_t size,
                           uint32_t data) noexcept = 0;
+        virtual void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::image> dst,
+                          image_layout layout, size_t src_offset = 0, uint32_t dst_mip = 0) noexcept = 0;
 
         // Barrier commands
         virtual void pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -272,12 +281,24 @@ namespace tempest::rhi
         virtual void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                           typed_rhi_handle<rhi_handle_type::graphics_pipeline> pipeline) noexcept = 0;
         virtual void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                          typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t draw_count,
-                          uint32_t stride) noexcept = 0;
+                          typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
+                          uint32_t draw_count, uint32_t stride) noexcept = 0;
+        virtual void bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                       typed_rhi_handle<rhi_handle_type::buffer> buffer, uint32_t offset,
+                                       rhi::index_format index_type) noexcept = 0;
+        virtual void set_scissor_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, int32_t x,
+                                        int32_t y, uint32_t width, uint32_t height,
+                                        uint32_t region_index = 0) noexcept = 0;
+        virtual void set_viewport(typed_rhi_handle<rhi_handle_type::command_list> command_list, float x, float y,
+                                  float width, float height, float min_depth, float max_depth,
+                                  uint32_t viewport_index = 0, bool flipped = false) noexcept = 0;
+        virtual void set_cull_mode(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                   enum_mask<cull_mode> cull) noexcept = 0;
 
         // Descriptor commands
-        virtual void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t first_set_index,
-                          span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
+        virtual void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
+                          uint32_t first_set_index, span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
                           span<const uint32_t> dynamic_offsets = {}) noexcept = 0;
 
       protected:

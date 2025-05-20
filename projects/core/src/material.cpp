@@ -133,7 +133,7 @@ namespace tempest::core
         return true;
     }
 
-    optional<const material&> material_registry::get_material(guid id) const
+    optional<const material&> material_registry::find(guid id) const
     {
         if (auto it = _materials.find(id); it != _materials.end())
         {

@@ -54,7 +54,10 @@ namespace tempest
     // TODO: Investigate bump down allocation instead of bump up
     void* stack_allocator::allocate(size_t size, size_t alignment, [[maybe_unused]] source_location loc)
     {
-        assert(size > 0 && "Size must be non-zero.");
+        if (size == 0)
+        {
+            return nullptr;
+        }
         const auto start = align_memory(_allocated_bytes, alignment);
         assert(start < _capacity && "tempest::core::stack_allocator out of memory.");
         const auto new_allocated_byte_count = start + size;

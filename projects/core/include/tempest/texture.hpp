@@ -13,10 +13,10 @@ namespace tempest::core
 {
     enum class texture_format
     {
-        RGBA8_SRGB,
-        RGBA8_UNORM,
-        RGBA16_UNORM,
-        RGBA32_FLOAT,
+        rgba8_srgb,
+        rgba8_unorm,
+        rgba16_unorm,
+        rgba32_float,
     };
 
     enum class texture_compression

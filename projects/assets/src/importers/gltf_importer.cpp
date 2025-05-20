@@ -443,7 +443,7 @@ namespace tempest::assets
 
             if (is_hdr)
             {
-                tex.format = core::texture_format::RGBA32_FLOAT;
+                tex.format = core::texture_format::rgba32_float;
                 const auto data =
                     stbi_loadf_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
                                            static_cast<int>(image_data.size()), &width, &height, &components, 4);
@@ -456,7 +456,7 @@ namespace tempest::assets
             }
             else if (is_16_bit)
             {
-                tex.format = core::texture_format::RGBA16_UNORM;
+                tex.format = core::texture_format::rgba16_unorm;
                 const auto data =
                     stbi_load_16_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
                                              static_cast<int>(image_data.size()), &width, &height, &components, 4);
@@ -469,7 +469,7 @@ namespace tempest::assets
             }
             else
             {
-                tex.format = core::texture_format::RGBA8_UNORM;
+                tex.format = core::texture_format::rgba8_unorm;
                 const auto data =
                     stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(image_data.data()),
                                           static_cast<int32_t>(image_data.size()), &width, &height, &components, 4);

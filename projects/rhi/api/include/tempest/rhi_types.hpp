@@ -33,6 +33,12 @@ namespace tempest::rhi
         descriptor_set,
     };
 
+    enum class bind_point
+    {
+        graphics,
+        compute,
+    };
+
     template <rhi_handle_type T>
     struct typed_rhi_handle
     {
@@ -236,6 +242,55 @@ namespace tempest::rhi
         string name;
     };
 
+    enum class filter
+    {
+        nearest,
+        linear,
+    };
+
+    enum class mipmap_mode
+    {
+        nearest,
+        linear,
+    };
+
+    enum class address_mode
+    {
+        repeat,
+        mirrored_repeat,
+        clamp_to_edge,
+        clamp_to_border,
+        mirror_clamp_to_edge,
+    };
+
+    enum class compare_op
+    {
+        never,
+        less,
+        equal,
+        less_equal,
+        greater,
+        not_equal,
+        greater_equal,
+        always,
+    };
+
+    struct sampler_desc
+    {
+        filter mag;
+        filter min;
+        mipmap_mode mipmap;
+        address_mode address_u;
+        address_mode address_v;
+        address_mode address_w;
+        float mip_lod_bias;
+        float min_lod;
+        float max_lod;
+        optional<float> max_anisotropy;
+        optional<compare_op> compare;
+        string name;
+    };
+
     struct fence_info
     {
         bool signaled;
@@ -368,6 +423,10 @@ namespace tempest::rhi
         blit = 0x10000,
         clear = 0x20000,
         all_transfer = 0x40000,
+        // Host commands
+        host = 0x80000,
+        // All commands
+        all = 0x100000,
     };
 
     enum class memory_access
@@ -553,18 +612,6 @@ namespace tempest::rhi
         bool alpha_to_one;
     };
 
-    enum class compare_op
-    {
-        never,
-        less,
-        equal,
-        less_equal,
-        greater,
-        not_equal,
-        greater_equal,
-        always,
-    };
-
     enum class stencil_op
     {
         keep,
@@ -677,7 +724,14 @@ namespace tempest::rhi
         string name;
     };
 
-    struct buffer_descriptor
+    struct compute_pipeline_desc
+    {
+        vector<byte> compute_shader;
+        typed_rhi_handle<rhi_handle_type::pipeline_layout> layout;
+        string name;
+    };
+
+    struct buffer_binding_descriptor
     {
         uint32_t index;
         descriptor_type type;
@@ -686,21 +740,21 @@ namespace tempest::rhi
         typed_rhi_handle<rhi_handle_type::buffer> buffer;
     };
 
-    struct image_info
+    struct image_binding_info
     {
         typed_rhi_handle<rhi_handle_type::image> image;
         image_layout layout;
     };
 
-    struct image_descriptor
+    struct image_binding_descriptor
     {
         uint32_t index;
         descriptor_type type;
         uint32_t array_offset;
-        vector<image_info> images;
+        vector<image_binding_info> images;
     };
 
-    struct sampler_descriptor
+    struct sampler_binding_descriptor
     {
         uint32_t index;
         vector<typed_rhi_handle<rhi_handle_type::sampler>> samplers;
@@ -709,9 +763,9 @@ namespace tempest::rhi
     struct descriptor_set_desc
     {
         typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout;
-        vector<buffer_descriptor> buffers;
-        vector<image_descriptor> images;
-        vector<sampler_descriptor> samplers;
+        vector<buffer_binding_descriptor> buffers;
+        vector<image_binding_descriptor> images;
+        vector<sampler_binding_descriptor> samplers;
     };
 } // namespace tempest::rhi
 

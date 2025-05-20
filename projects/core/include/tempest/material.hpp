@@ -82,7 +82,7 @@ namespace tempest::core
         [[nodiscard]] guid register_material(material&& mat);
         [[nodiscard]] bool register_material_with_id(const guid& id, material&& mat);
 
-        optional<const material&> get_material(guid id) const;
+        optional<const material&> find(guid id) const;
 
         template <invocable<material&> Fn>
         void update_material(const guid& id, Fn&& fn);

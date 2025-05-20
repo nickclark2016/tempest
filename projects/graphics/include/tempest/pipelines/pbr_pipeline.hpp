@@ -11,6 +11,7 @@
 #include <tempest/material.hpp>
 #include <tempest/render_pipeline.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/shelf_pack.hpp>
 #include <tempest/sparse.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/vec4.hpp>
@@ -31,7 +32,7 @@ namespace tempest::graphics
 
         struct material_data
         {
-            static constexpr int16_t INVALID_TEXTURE_ID = -1;
+            static constexpr int16_t invalid_texture_id = -1;
 
             math::vec4<float> base_color_factor;
             math::vec4<float> emissive_factor;
@@ -46,13 +47,13 @@ namespace tempest::graphics
             float thickness_factor;
             float attenuation_distance;
 
-            int16_t base_color_texture_id = INVALID_TEXTURE_ID;
-            int16_t normal_texture_id = INVALID_TEXTURE_ID;
-            int16_t metallic_roughness_texture_id = INVALID_TEXTURE_ID;
-            int16_t emissive_texture_id = INVALID_TEXTURE_ID;
-            int16_t occlusion_texture_id = INVALID_TEXTURE_ID;
-            int16_t transmission_texture_id = INVALID_TEXTURE_ID;
-            int16_t thickness_texture_id = INVALID_TEXTURE_ID;
+            int16_t base_color_texture_id = invalid_texture_id;
+            int16_t normal_texture_id = invalid_texture_id;
+            int16_t metallic_roughness_texture_id = invalid_texture_id;
+            int16_t emissive_texture_id = invalid_texture_id;
+            int16_t occlusion_texture_id = invalid_texture_id;
+            int16_t transmission_texture_id = invalid_texture_id;
+            int16_t thickness_texture_id = invalid_texture_id;
 
             material_type type;
         };
@@ -61,10 +62,8 @@ namespace tempest::graphics
         {
             math::mat4<float> proj;
             math::mat4<float> inv_proj;
-            math::mat4<float> prev_proj;
             math::mat4<float> view;
             math::mat4<float> inv_view;
-            math::mat4<float> prev_view;
             math::vec3<float> position;
         };
 
@@ -132,7 +131,6 @@ namespace tempest::graphics
         {
             math::mat4<float> model;
             math::mat4<float> inv_tranpose_model;
-            math::mat4<float> prev_model;
 
             uint32_t mesh_id;
             uint32_t material_id;
@@ -144,7 +142,7 @@ namespace tempest::graphics
     class pbr_pipeline : public render_pipeline
     {
       public:
-        pbr_pipeline(uint32_t width, uint32_t height);
+        pbr_pipeline(uint32_t width, uint32_t height, ecs::archetype_registry& entity_registry);
         pbr_pipeline(const pbr_pipeline&) = delete;
         pbr_pipeline(pbr_pipeline&&) = delete;
         ~pbr_pipeline() override = default;
@@ -152,52 +150,139 @@ namespace tempest::graphics
         pbr_pipeline& operator=(pbr_pipeline&&) = delete;
 
         void initialize(renderer& parent, rhi::device& dev) override;
-        render_result render(renderer& parent, rhi::device& dev, const render_state& rs) const override;
+        render_result render(renderer& parent, rhi::device& dev, const render_state& rs) override;
         void destroy(renderer& parent, rhi::device& dev) override;
 
-        flat_unordered_map<guid, mesh_layout> load_meshes(rhi::device& dev, span<const guid> mesh_ids,
-                                                          const core::mesh_registry& mesh_registry);
-        void load_textures(rhi::device& dev, span<const guid> texture_ids,
-                           const core::texture_registry& texture_registry, bool generate_mip_maps);
-        void load_materials(rhi::device& dev, span<const guid> material_ids,
-                            const core::material_registry& material_registry);
+        void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
+                                 const core::mesh_registry& meshes, const core::texture_registry& textures,
+                                 const core::material_registry& materials);
 
       private:
         struct
         {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> scene_constants;
+            size_t scene_constant_bytes_per_frame = 0;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_0_layout;
+            uint64_t last_binding_update_frame = 0;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
         } _z_prepass = {};
 
-        [[maybe_unused]] struct
+        struct
         {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> build_cluster_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> build_cluster_desc_set_0_layout;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> build_cluster_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> build_clusters;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> fill_cluster_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> fill_cluster_desc_set_0_layout;
 
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> fill_cluster_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> fill_clusters;
         } _forward_light_clustering = {};
 
-        [[maybe_unused]] struct
+        struct
         {
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
-        } _skybox_pass = {};
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> scene_constants;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> ssao_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> ssao_desc_set_0_layout;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> ssao_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> ssao_pipeline;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> ssao_blur_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> ssao_blur_desc_set_0_layout;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> ssao_blur_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> ssao_blur_pipeline;
+        } _ssao = {};
+
+        struct
+        {
+            shelf_pack_allocator image_region_allocator{{1024 * 16, 1024 * 16},
+                                                        {
+                                                            .alignment = {32, 32},
+                                                            .column_count = 4,
+                                                        }};
+
+            vector<gpu::shadow_map_parameter> shadow_map_build_params;
+            vector<gpu::shadow_map_parameter> shadow_map_use_params;
+
+            uint64_t last_binding_update_frame = 0;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> directional_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> directional_desc_set_0_layout =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> directional_layout =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> directional_pipeline =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline>::null_handle;
+        } _shadows = {};
 
         [[maybe_unused]] struct
         {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_0_layout;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> hdri_texture =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+        } _skybox = {};
+
+        struct
+        {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_0_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_1 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_1_layout;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
         } _pbr_opaque = {};
 
-        [[maybe_unused]] struct
+        struct
         {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> oit_gather_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> oit_gather_desc_set_0_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> oit_gather_desc_set_1 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> oit_gather_desc_set_1_layout;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> oit_gather_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> oit_gather_pipeline;
 
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> oit_resolve_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> oit_resolve_desc_set_0_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> oit_resolve_desc_set_1 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> oit_resolve_desc_set_1_layout;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> oit_resolve_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> oit_resolve_pipeline;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> oit_blend_desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> oit_blend_desc_set_0_layout;
 
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> oit_blend_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> oit_blend_pipeline;
@@ -208,9 +293,11 @@ namespace tempest::graphics
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> depth;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> color;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> encoded_normals;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> transparency_accumulator;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> shadow_megatexture;
         } _render_targets = {};
 
-        [[maybe_unused]] struct
+        struct
         {
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> staging;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> vertices;
@@ -220,13 +307,18 @@ namespace tempest::graphics
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> instances;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> scene_constants;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> indirect_commands;
+
+            size_t object_bytes_per_frame = 0;
+            size_t instance_bytes_per_frame = 0;
+            size_t scene_constants_bytes_per_frame = 0;
         } _gpu_buffers = {};
 
         struct
         {
-            uint32_t staging_bytes_writen;
-            uint32_t staging_bytes_available;
-            uint32_t vertex_bytes_written;
+            uint32_t staging_bytes_writen = 0;
+            uint32_t staging_bytes_available = 0;
+            uint32_t vertex_bytes_written = 0;
+            uint32_t mesh_layout_bytes_written = 0;
         } _gpu_resource_usages = {};
 
         struct draw_batch_key
@@ -246,6 +338,7 @@ namespace tempest::graphics
 
         [[maybe_unused]] struct
         {
+            uint32_t indirect_command_bytes_per_frame = 0;
             flat_map<draw_batch_key, draw_batch_payload> draw_batches;
             vector<mesh_layout> meshes;
         } _cpu_buffers = {};
@@ -256,34 +349,78 @@ namespace tempest::graphics
             float bias = 0.025f;
         } _ssao_constants;
 
-        [[maybe_unused]] struct
+        struct
         {
+            uint64_t last_updated_frame_index;
+
+            flat_unordered_map<guid, size_t> image_to_index;
             vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>> images;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_sampler;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_sampler;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_sampler_no_aniso;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_sampler_no_aniso;
         } _bindless_textures = {};
 
+        struct
+        {
+            flat_unordered_map<guid, size_t> material_to_index;
+            vector<gpu::material_data> materials;
+        } _materials = {};
+
+        struct
+        {
+            flat_unordered_map<guid, size_t> mesh_to_index;
+            vector<mesh_layout> meshes;
+        } _meshes = {};
+
         static constexpr rhi::image_format depth_format = rhi::image_format::d32_float;
         static constexpr rhi::image_format color_format = rhi::image_format::rgba8_srgb;
         static constexpr rhi::image_format encoded_normals_format = rhi::image_format::rg16_float;
-        static constexpr rhi::image_format positions_format = rhi::image_format::rgba16_float;
+        static constexpr rhi::image_format transparency_accumulator_format = rhi::image_format::rgba16_float;
+        static constexpr rhi::image_format ssao_format = rhi::image_format::r16_float;
+        static constexpr rhi::image_format shadow_megatexture_format = rhi::image_format::d24_unorm;
 
         uint32_t _render_target_width;
         uint32_t _render_target_height;
 
+        uint32_t _object_count = 0;
+
         [[maybe_unused]] gpu::scene_data _scene{};
         [[maybe_unused]] ecs::archetype_entity _camera{};
 
+        size_t _frame_number = 0;
+        size_t _frame_in_flight = 0;
+        ecs::archetype_registry* _entity_registry = nullptr;
+
         void _initialize_z_prepass(renderer& parent, rhi::device& dev);
+        void _initialize_clustering(renderer& parent, rhi::device& dev);
+        void _initialize_pbr_opaque(renderer& parent, rhi::device& dev);
+        void _initialize_pbr_transparent(renderer& parent, rhi::device& dev);
+        void _initialize_shadows(renderer& parent, rhi::device& dev);
+        void _initialize_ssao(renderer& parent, rhi::device& dev);
+        void _initialize_skybox(renderer& parent, rhi::device& dev);
+        void _initialize_samplers(renderer& parent, rhi::device& dev);
+
         void _initialize_render_targets(renderer& parent, rhi::device& dev);
         void _initialize_gpu_buffers(renderer& parent, rhi::device& dev);
 
+        void _prepare_draw_batches(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                                   rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
         void _draw_z_prepass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
-                             rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands) const;
+                             rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
+        void _draw_shadow_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                               rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
         void _draw_clear_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
                               rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands) const;
+
+        void _load_meshes(rhi::device& dev, span<const guid> mesh_ids, const core::mesh_registry& mesh_registry);
+        void _load_textures(rhi::device& dev, span<const guid> texture_ids,
+                            const core::texture_registry& texture_registry, bool generate_mip_maps);
+        void _load_materials(rhi::device& dev, span<const guid> material_ids,
+                             const core::material_registry& material_registry);
+
+        uint32_t _acquire_next_object() noexcept;
     };
 } // namespace tempest::graphics
 

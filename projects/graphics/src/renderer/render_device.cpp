@@ -135,14 +135,14 @@ namespace tempest::graphics
         {
             switch (fmt)
             {
-                case core::texture_format::RGBA8_UNORM:
-                    return resource_format::RGBA8_UNORM;
-                case core::texture_format::RGBA8_SRGB:
-                    return resource_format::RGBA8_SRGB;
-                case core::texture_format::RGBA16_UNORM:
-                    return resource_format::RGBA16_UNORM;
-                case core::texture_format::RGBA32_FLOAT:
-                    return resource_format::RGBA32_FLOAT;
+                case core::texture_format::rgba8_unorm:
+                    return resource_format::rgba8_unorm;
+                case core::texture_format::rgba8_srgb:
+                    return resource_format::rgba8_srgb;
+                case core::texture_format::rgba16_unorm:
+                    return resource_format::rgba16_unorm;
+                case core::texture_format::rgba32_float:
+                    return resource_format::rgba32_float;
                 default:
                     return resource_format::UNKNOWN;
             }
