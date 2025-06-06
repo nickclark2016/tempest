@@ -79,3 +79,9 @@ newaction {
         end
     end
 }
+
+newoption {
+    trigger = 'enable-aftermath',
+    description = 'Enable NSight Aftermath support for Vulkan. Windows only.',
+    category = 'Tempest Engine',
+}

@@ -1,12 +1,15 @@
 #include <tempest/pipelines/pbr_pipeline.hpp>
 
 #include <tempest/files.hpp>
+#include <tempest/graphics_components.hpp>
+#include <tempest/inplace_vector.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/transform_component.hpp>
 
 #include <cassert>
 #include <cstring>
+#include <random>
 
 namespace tempest::graphics
 {
@@ -33,23 +36,6 @@ namespace tempest::graphics
             unreachable();
         }
 
-        rhi::work_queue::buffer_barrier pre_host_write_buffer_barrier(
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer, size_t offset, size_t range)
-        {
-            return {
-                .buffer = buffer,
-                .src_stages =
-                    tempest::make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader,
-                                            rhi::pipeline_stage::compute_shader),
-                .src_access =
-                    tempest::make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
-                .dst_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
-                .dst_access = make_enum_mask(rhi::memory_access::transfer_read),
-                .offset = offset,
-                .size = range,
-            };
-        }
-
         rhi::work_queue::buffer_barrier pre_staging_to_dst_buffer_barrier(
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer, size_t offset, size_t range)
         {
@@ -59,8 +45,8 @@ namespace tempest::graphics
                     make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader,
                                    rhi::pipeline_stage::compute_shader, rhi::pipeline_stage::indirect_command),
                 .src_access = make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
-                .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::copy),
-                .dst_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
                 .offset = offset,
                 .size = range,
             };
@@ -71,13 +57,12 @@ namespace tempest::graphics
         {
             return {
                 .buffer = buffer,
-                .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::copy),
-                .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
+                .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .src_access = make_enum_mask(rhi::memory_access::transfer_write),
                 .dst_stages =
-                    tempest::make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader,
-                                            rhi::pipeline_stage::compute_shader, rhi::pipeline_stage::indirect_command),
-                .dst_access =
-                    tempest::make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
+                    make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader,
+                                   rhi::pipeline_stage::compute_shader, rhi::pipeline_stage::indirect_command),
+                .dst_access = make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
                 .offset = offset,
                 .size = range,
             };
@@ -95,57 +80,57 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout vertex_pull_buffer_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout mesh_buffer_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout object_buffer_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout instance_buffer_layout = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout material_buffer_layout = {
                 .binding_index = 5,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout linear_sampler_layout = {
                 .binding_index = 15,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout bindless_textures_layout = {
                 .binding_index = 16,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 512,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
-                .flags = tempest::make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
+                .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
             };
         } // namespace zprepass
 
@@ -155,56 +140,56 @@ namespace tempest::graphics
                 .binding_index = 1,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout mesh_buffer_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout object_buffer_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout instance_buffer_layout = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
 
             rhi::descriptor_binding_layout material_buffer_layout = {
                 .binding_index = 5,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout linear_sampler_layout = {
                 .binding_index = 15,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout bindless_textures_layout = {
                 .binding_index = 16,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 512,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
-                .flags = tempest::make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
+                .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
             };
 
             rhi::push_constant_range light_matrix_pc_range = {
                 .offset = 0,
                 .range = 64, // float4x4
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex),
             };
         } // namespace shadows
 
@@ -226,62 +211,62 @@ namespace tempest::graphics
             rhi::push_constant_range build_cluster_grid_pc_range = {
                 .offset = 0,
                 .range = static_cast<uint32_t>(sizeof(cluster_grid_create_info)),
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::push_constant_range cull_lights_pc_range = {
                 .offset = 0,
                 .range = static_cast<uint32_t>(sizeof(cull_lights_pcs)),
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::descriptor_binding_layout build_cluster_layout = {
                 .binding_index = 0,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::descriptor_binding_layout scene_constants_layout = {
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::descriptor_binding_layout cull_cluster_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::descriptor_binding_layout lights_layout = {
                 .binding_index = 2,
-                .type = rhi::descriptor_type::structured_buffer,
+                .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::descriptor_binding_layout global_light_index_list_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::descriptor_binding_layout light_grid_layout = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
 
             rhi::descriptor_binding_layout global_index_count = {
                 .binding_index = 5,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::compute),
+                .stages = make_enum_mask(rhi::shader_stage::compute),
             };
         } // namespace clusters
 
@@ -292,64 +277,64 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout vertex_pull_buffer_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout mesh_buffer_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout object_buffer_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout instance_buffer_layout = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout material_buffer_layout = {
                 .binding_index = 5,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout ao_image_layout = {
                 .binding_index = 6,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout linear_sampler_layout = {
                 .binding_index = 15,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout bindless_textures_layout = {
                 .binding_index = 16,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 512,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
-                .flags = tempest::make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
+                .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
             };
 
             // Set 1
@@ -357,35 +342,35 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
-            rhi::descriptor_binding_layout light_params_layout = {
+            rhi::descriptor_binding_layout shadow_map_params_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
-            rhi::descriptor_binding_layout shadow_map_layout = {
+            rhi::descriptor_binding_layout shadow_map_megatexture_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout light_grid_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
-            rhi::descriptor_binding_layout global_index_count = {
+            rhi::descriptor_binding_layout global_index_list = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
         } // namespace pbr
 
@@ -396,78 +381,78 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout vertex_pull_buffer_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout mesh_buffer_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout object_buffer_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout instance_buffer_layout = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout material_buffer_layout = {
                 .binding_index = 5,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout oit_image_layout = {
                 .binding_index = 6,
                 .type = rhi::descriptor_type::storage_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout oit_zeroth_image_layout = {
                 .binding_index = 7,
                 .type = rhi::descriptor_type::storage_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout ao_image_layout = {
                 .binding_index = 8,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout linear_sampler_layout = {
                 .binding_index = 15,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout bindless_textures_layout = {
                 .binding_index = 16,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 512,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
-                .flags = tempest::make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
+                .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
             };
 
             // Set 1
@@ -475,63 +460,63 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
-            rhi::descriptor_binding_layout light_params_layout = {
+            rhi::descriptor_binding_layout shadow_map_params_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::dynamic_structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout shadow_map_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout light_grid_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
-            rhi::descriptor_binding_layout global_index_count = {
+            rhi::descriptor_binding_layout global_light_index_list_layout = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::structured_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout blend_moments_layout = {
                 .binding_index = 0,
                 .type = rhi::descriptor_type::storage_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout blend_moments_zeroth_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::storage_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout blend_transparency_accumulator_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout blend_linear_sampler_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
         } // namespace pbr_transparencies
 
@@ -539,11 +524,13 @@ namespace tempest::graphics
         {
             struct scene_constants
             {
+                static constexpr size_t kernel_size = 64;
+
                 math::mat4<float> projection;
                 math::mat4<float> inv_projection;
                 math::mat4<float> view;
                 math::mat4<float> inv_view;
-                array<math::vec4<float>, 64> kernel;
+                array<math::vec4<float>, kernel_size> kernel;
                 math::vec2<float> noise_scale;
                 float radius;
                 float bias;
@@ -554,42 +541,42 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout depth_buffer_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout normal_buffer_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout noise_buffer_layout = {
                 .binding_index = 3,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout linear_sampler_layout = {
                 .binding_index = 4,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout point_sampler_layout = {
                 .binding_index = 5,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             // Blur layouts
@@ -597,14 +584,14 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout blur_point_sampler_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
         } // namespace ssao
 
@@ -614,23 +601,120 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout skybox_texture_layout = {
                 .binding_index = 1,
                 .type = rhi::descriptor_type::sampled_image,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout linear_sampler_layout = {
                 .binding_index = 2,
                 .type = rhi::descriptor_type::sampler,
                 .count = 1,
-                .stages = tempest::make_enum_mask(rhi::shader_stage::fragment),
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
             };
         } // namespace skybox
+
+        gpu::shadow_map_cascade_info calculate_shadow_map_cascades(const shadow_map_component& shadows,
+                                                                   const ecs::transform_component& light_transform,
+                                                                   const camera_component& camera_data,
+                                                                   const math::mat4<float>& view_matrix)
+        {
+            const auto near_plane = camera_data.near_plane;
+            const auto far_plane = camera_data.far_shadow_plane;
+            const auto clip_range = far_plane - near_plane;
+
+            const auto clip_ratio = far_plane / clip_range;
+
+            gpu::shadow_map_cascade_info results;
+            results.cascade_distances.resize(shadows.cascade_count);
+            results.frustum_view_projections.resize(shadows.cascade_count);
+
+            // Compute splits
+            // https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus
+            for (size_t i = 0; i < shadows.cascade_count; ++i)
+            {
+                const auto p = static_cast<float>(i + 1) / static_cast<float>(shadows.cascade_count);
+                const auto logarithm = near_plane * std::pow(clip_ratio, p);
+                const auto uniform = near_plane + clip_range * p;
+                const auto d = 0.95f * (logarithm - uniform) + uniform;
+
+                results.cascade_distances[i] = (d - near_plane) / clip_range;
+            }
+
+            const auto projection_with_clip = math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov,
+                                                                camera_data.near_plane, camera_data.far_shadow_plane);
+            const auto inv_view_proj = math::inverse(projection_with_clip * view_matrix);
+
+            auto last_split = 0.0f;
+            for (uint32_t cascade = 0; cascade < shadows.cascade_count; ++cascade)
+            {
+                array frustum_corners = {
+                    math::vec3<float>{-1.0f, 1.0f, 0.0f}, math::vec3<float>{1.0f, 1.0f, 0.0f},
+                    math::vec3<float>{1.0f, -1.0f, 0.0f}, math::vec3<float>{-1.0f, -1.0f, 0.0f},
+                    math::vec3<float>{-1.0f, 1.0f, 1.0f}, math::vec3<float>{1.0f, 1.0f, 1.0f},
+                    math::vec3<float>{1.0f, -1.0f, 1.0f}, math::vec3<float>{-1.0f, -1.0f, 1.0f},
+                };
+
+                for (auto& corner : frustum_corners)
+                {
+                    auto inv_corner = inv_view_proj * math::vec4<float>(corner.x, corner.y, corner.z, 1.0f);
+                    auto normalized = inv_corner / inv_corner.w;
+                    corner = {normalized.x, normalized.y, normalized.z};
+                }
+
+                const auto split_distance = results.cascade_distances[cascade];
+
+                for (auto idx = 0; idx < 4; ++idx)
+                {
+                    const auto edge = frustum_corners[idx + 4] - frustum_corners[idx];
+                    const auto normalized_far = frustum_corners[idx] + edge * split_distance;
+                    const auto normalized_near = frustum_corners[idx] + edge * last_split;
+
+                    frustum_corners[idx + 4] = normalized_far;
+                    frustum_corners[idx] = normalized_near;
+                }
+
+                auto frustum_center = math::vec3<float>(0.0f);
+                for (const auto& corner : frustum_corners)
+                {
+                    frustum_center += corner;
+                }
+                frustum_center /= static_cast<float>(8);
+
+                float radius = 0.0f;
+                for (const auto& corner : frustum_corners)
+                {
+                    const auto distance = math::norm(corner - frustum_center);
+                    radius = tempest::max(radius, distance);
+                }
+                radius = std::ceil(radius * 16.0f) / 16.0f;
+
+                auto max_extents = math::vec3<float>(radius);
+                auto min_extents = -max_extents;
+
+                const auto light_rotation = math::rotate(light_transform.rotation());
+                const auto light_direction_xyzw = light_rotation * math::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+                const auto light_direction =
+                    math::vec3(light_direction_xyzw.x, light_direction_xyzw.y, light_direction_xyzw.z);
+
+                const auto light_view = math::look_at(frustum_center - light_direction * radius, frustum_center,
+                                                      math::vec3(0.0f, 1.0f, 0.0f));
+                const auto light_projection = math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y,
+                                                          min_extents.z - max_extents.z, 0.0f);
+
+                results.cascade_distances[cascade] = (near_plane + split_distance * clip_range) * -1.0f;
+                results.frustum_view_projections[cascade] = light_projection * light_view;
+
+                last_split = results.cascade_distances[cascade];
+            }
+
+            return results;
+        }
     } // namespace
 
     pbr_pipeline::pbr_pipeline(uint32_t width, uint32_t height, ecs::archetype_registry& entity_registry)
@@ -640,15 +724,16 @@ namespace tempest::graphics
 
     void pbr_pipeline::initialize(renderer& parent, rhi::device& dev)
     {
+        _initialize_gpu_buffers(parent, dev);
+
         _initialize_z_prepass(parent, dev);
         _initialize_clustering(parent, dev);
         _initialize_pbr_opaque(parent, dev);
-        _initialize_pbr_transparent(parent, dev);
+        _initialize_pbr_mboit(parent, dev);
         _initialize_shadows(parent, dev);
         _initialize_ssao(parent, dev);
         _initialize_skybox(parent, dev);
         _initialize_render_targets(parent, dev);
-        _initialize_gpu_buffers(parent, dev);
         _initialize_samplers(parent, dev);
     }
 
@@ -660,37 +745,219 @@ namespace tempest::graphics
         _entity_registry->each(
             [&]([[maybe_unused]] const camera_component& camera, ecs::self_component self) { _camera = self.entity; });
 
+        const auto& camera_data = _entity_registry->get<camera_component>(_camera);
+        const auto& camera_transform = _entity_registry->get<ecs::transform_component>(_camera);
+
+        const auto quat_rot = math::quat(camera_transform.rotation());
+        const auto f = math::extract_forward(quat_rot);
+        const auto u = math::extract_up(quat_rot);
+
+        const auto camera_view = math::look_at(camera_transform.position(), camera_transform.position() + f, u);
+        const auto camera_projection = math::perspective(
+            camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, camera_data.near_plane);
+        const auto camera_inv_proj = math::inverse(camera_projection);
+        const auto camera_inv_view = math::inverse(camera_view);
+
+        const auto rotate_only_view = math::look_at(math::vec3<float>(0.0f), f, u);
+        const auto rotate_only_inv_view = math::inverse(rotate_only_view);
+
+        const auto cam = gpu::camera{
+            .proj = camera_projection,
+            .inv_proj = camera_inv_proj,
+            .view = camera_view,
+            .inv_view = camera_inv_view,
+            .position = camera_transform.position(),
+        };
+
+        const auto rotate_only_cam = gpu::camera{
+            .proj = camera_projection,
+            .inv_proj = camera_inv_proj,
+            .view = rotate_only_view,
+            .inv_view = rotate_only_inv_view,
+            .position = math::vec3<float>(0.0f),
+        };
+
+        // Store all the directional lights
+        _entity_registry->each([&](ecs::self_component self, const ecs::transform_component& tx,
+                                   const directional_light_component& dir_light) {
+            gpu::light light = {};
+            light.type = gpu::light_type::directional;
+            light.color_intensity =
+                math::vec4<float>(dir_light.color.x, dir_light.color.y, dir_light.color.z, dir_light.intensity);
+
+            // Rotate 0, 0, 1 by the rotation of the transform
+            auto light_rot = math::rotate(tx.rotation());
+            auto light_dir = light_rot * math::vec4<float>(0.0f, 0.0f, 1.0f, 0.0f);
+
+            light.direction_angle = math::vec4<float>(light_dir.x, light_dir.y, light_dir.z, 0.0f);
+            light.enabled = true;
+            _cpu_buffers.dir_lights.insert_or_replace(self.entity, light);
+        });
+
+        // Store all the point lights
+        _entity_registry->each([&](ecs::self_component self, const ecs::transform_component& tx,
+                                   const point_light_component& point_light) {
+            gpu::light light = {};
+            light.type = gpu::light_type::point;
+            light.color_intensity =
+                math::vec4<float>(point_light.color.x, point_light.color.y, point_light.color.z, point_light.intensity);
+
+            auto sq_range = point_light.range * point_light.range;
+            auto inv_sq_range = sq_range > 0.0f ? 1.0f / sq_range : 0.0f;
+
+            light.position_falloff = math::vec4<float>(tx.position().x, tx.position().y, tx.position().z, inv_sq_range);
+            light.enabled = true;
+            _cpu_buffers.point_and_spot_lights.insert_or_replace(self.entity, light);
+        });
+
+        flat_unordered_map<ecs::archetype_entity, gpu::shadow_map_cascade_info> light_shadow_map_cascade_info;
+
+        uint32_t shadow_maps_written = 0;
+        _entity_registry->each([&](ecs::self_component self, shadow_map_component shadows,
+                                   ecs::transform_component light_transform) {
+            const auto cascade_info = calculate_shadow_map_cascades(shadows, light_transform, camera_data, camera_view);
+            light_shadow_map_cascade_info.insert({self.entity, cascade_info});
+
+            auto light = *_get_light_data(self.entity);
+            light.shadow_map_count = shadows.cascade_count;
+
+            for (uint32_t i = 0; i < light.shadow_map_count; ++i)
+            {
+                light.shadow_map_indices[i] = i + shadow_maps_written;
+            }
+
+            if (light.type == gpu::light_type::directional)
+            {
+                _cpu_buffers.dir_lights.insert_or_replace(self.entity, light);
+            }
+            else
+            {
+                _cpu_buffers.point_and_spot_lights.insert_or_replace(self.entity, light);
+            }
+            shadow_maps_written += shadows.cascade_count;
+        });
+
         auto& work_queue = dev.get_primary_work_queue();
         auto cmds = work_queue.get_next_command_list();
         work_queue.begin_command_list(cmds, true);
 
+        _upload_per_frame_data(parent, dev, rs, work_queue, cmds, cam);
         _prepare_draw_batches(parent, dev, rs, work_queue, cmds);
-        _draw_clear_pass(parent, dev, rs, work_queue, cmds);
+
+        rhi::work_queue::image_barrier undefined_to_color_attachment = {
+            .image = _render_targets.color,
+            .old_layout = rhi::image_layout::undefined,
+            .new_layout = rhi::image_layout::color_attachment,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::blit),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .dst_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+        };
+
+        work_queue.transition_image(cmds, tempest::span(&undefined_to_color_attachment, 1));
+
         _draw_z_prepass(parent, dev, rs, work_queue, cmds);
-        _draw_shadow_pass(parent, dev, rs, work_queue, cmds);
+        _draw_shadow_pass(parent, dev, rs, work_queue, cmds, light_shadow_map_cascade_info);
+        _draw_light_clusters(parent, dev, rs, work_queue, cmds, camera_inv_proj);
+        _draw_skybox_pass(parent, dev, rs, work_queue, cmds, rotate_only_cam);
+        _draw_ssao_pass(parent, dev, rs, work_queue, cmds, cam);
+
+        // Barrier on attachments and buffers to be ready for the final composition passes
+        // Images
+        // - Depth - shader read only -> depth
+        // - SSAO - color attachment -> shader read only
+        // Buffers
+        // - Light Grid - compute write -> fragment read
+        // - Light Index List - compute write -> fragment read
+        rhi::work_queue::image_barrier depth_buffer_to_depth_attachment = {
+            .image = _render_targets.depth,
+            .old_layout = rhi::image_layout::shader_read_only,
+            .new_layout = rhi::image_layout::depth,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .src_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::early_fragment_tests),
+            .dst_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write,
+                                         rhi::memory_access::depth_stencil_attachment_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        rhi::work_queue::image_barrier ssao_attachment_to_sampled = {
+            .image = _ssao.ssao_blur_target,
+            .old_layout = rhi::image_layout::color_attachment,
+            .new_layout = rhi::image_layout::shader_read_only,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        const auto image_barriers = array{
+            depth_buffer_to_depth_attachment,
+            ssao_attachment_to_sampled,
+        };
+
+        rhi::work_queue::buffer_barrier light_grid_to_fragment_read = {
+            .buffer = _forward_light_clustering.light_cluster_range_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .src_access =
+                make_enum_mask(rhi::memory_access::shader_storage_write, rhi::memory_access::shader_storage_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_storage_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.light_cluster_range_buffer_size,
+        };
+
+        rhi::work_queue::buffer_barrier light_index_list_to_fragment_read = {
+            .buffer = _forward_light_clustering.global_light_index_list_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .src_access =
+                make_enum_mask(rhi::memory_access::shader_storage_write, rhi::memory_access::shader_storage_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_storage_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.global_light_index_list_buffer_size,
+        };
+
+        const auto buffer_barriers = array{
+            light_grid_to_fragment_read,
+            light_index_list_to_fragment_read,
+        };
+
+        work_queue.pipeline_barriers(cmds, image_barriers, buffer_barriers);
+
+        // Compose the final scene
+        _draw_pbr_opaque_pass(parent, dev, rs, work_queue, cmds);
+        _draw_pbr_mboit_pass(parent, dev, rs, work_queue, cmds);
 
         rhi::work_queue::image_barrier color_to_transfer_dst = {
             .image = _render_targets.color,
             .old_layout = rhi::image_layout::color_attachment,
             .new_layout = rhi::image_layout::transfer_src,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::color_attachment_output),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::color_attachment_write),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::blit),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::transfer_read),
+            .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::blit),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_read),
         };
 
         rhi::work_queue::image_barrier sc_to_transfer_dst = {
             .image = rs.swapchain_image,
             .old_layout = rhi::image_layout::undefined,
             .new_layout = rhi::image_layout::transfer_dst,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::blit),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
+            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::blit),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
         };
 
         {
-            array barriers = {
+            const array barriers = {
                 color_to_transfer_dst,
                 sc_to_transfer_dst,
             };
@@ -705,10 +972,10 @@ namespace tempest::graphics
             .image = rs.swapchain_image,
             .old_layout = rhi::image_layout::transfer_dst,
             .new_layout = rhi::image_layout::present,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::blit),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::bottom),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::none),
+            .src_stages = make_enum_mask(rhi::pipeline_stage::blit),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::bottom),
+            .dst_access = make_enum_mask(rhi::memory_access::none),
         };
 
         work_queue.transition_image(cmds, tempest::span(&sc_to_present, 1));
@@ -720,12 +987,12 @@ namespace tempest::graphics
         submit_info.wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.start_sem,
             .value = 0,
-            .stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
         });
         submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.end_sem,
             .value = 1,
-            .stages = tempest::make_enum_mask(rhi::pipeline_stage::bottom),
+            .stages = make_enum_mask(rhi::pipeline_stage::bottom),
         });
 
         work_queue.submit(tempest::span(&submit_info, 1), rs.end_fence);
@@ -764,6 +1031,8 @@ namespace tempest::graphics
         dev.destroy_buffer(_gpu_buffers.instances);
         dev.destroy_buffer(_gpu_buffers.objects);
         dev.destroy_buffer(_gpu_buffers.indirect_commands);
+        dev.destroy_buffer(_gpu_buffers.point_and_spot_lights);
+        dev.destroy_buffer(_gpu_buffers.shadows);
 
         // Destroy PBR Opaque
         dev.destroy_graphics_pipeline(_pbr_opaque.pipeline);
@@ -772,10 +1041,16 @@ namespace tempest::graphics
         dev.destroy_graphics_pipeline(_pbr_transparencies.oit_gather_pipeline);
         dev.destroy_graphics_pipeline(_pbr_transparencies.oit_resolve_pipeline);
         dev.destroy_graphics_pipeline(_pbr_transparencies.oit_blend_pipeline);
+        dev.destroy_image(_pbr_transparencies.moments_target);
+        dev.destroy_image(_pbr_transparencies.zeroth_moment_target);
 
         // Destroy light culling
         dev.destroy_compute_pipeline(_forward_light_clustering.build_clusters);
         dev.destroy_compute_pipeline(_forward_light_clustering.fill_clusters);
+        dev.destroy_buffer(_forward_light_clustering.light_cluster_buffer);
+        dev.destroy_buffer(_forward_light_clustering.light_cluster_range_buffer);
+        dev.destroy_buffer(_forward_light_clustering.global_light_index_count_buffer);
+        dev.destroy_buffer(_forward_light_clustering.global_light_index_list_buffer);
 
         // Destroy z prepass
         dev.destroy_descriptor_set(_z_prepass.desc_set_0);
@@ -790,9 +1065,14 @@ namespace tempest::graphics
         dev.destroy_graphics_pipeline(_ssao.ssao_pipeline);
         dev.destroy_graphics_pipeline(_ssao.ssao_blur_pipeline);
         dev.destroy_buffer(_ssao.scene_constants);
+        dev.destroy_image(_ssao.noise_texture);
+        dev.destroy_sampler(_ssao.clamped_linear_no_aniso_sampler);
+        dev.destroy_sampler(_ssao.clamped_point_no_aniso_sampler);
 
         // Destroy Skybox
         dev.destroy_graphics_pipeline(_skybox.pipeline);
+        dev.destroy_image(_skybox.hdri_texture);
+        dev.destroy_buffer(_skybox.camera_payload);
 
         // Destroy render targets
         dev.destroy_image(_render_targets.depth);
@@ -937,6 +1217,106 @@ namespace tempest::graphics
                 }
             }
         }
+    }
+
+    void pbr_pipeline::set_skybox_texture(rhi::device& dev, const guid& texture_id,
+                                          const core::texture_registry& texture_registry)
+    {
+        // If there is an existing skybox texture, destroy it
+        if (_skybox.hdri_texture)
+        {
+            dev.destroy_image(_skybox.hdri_texture);
+            _skybox.hdri_texture = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+        }
+
+        const auto texture_opt = texture_registry.get_texture(texture_id);
+        if (!texture_opt.has_value())
+        {
+            return; // Invalid texture ID
+        }
+
+        const auto& texture = *texture_opt;
+
+        // Image is a 360 equirectangular texture
+        // Shader will sample it as a 2D texture with a linear sampler
+        const auto skybox_desc = rhi::image_desc{
+            .format = convert_format(texture.format),
+            .type = rhi::image_type::image_2d,
+            .width = texture.width,
+            .height = texture.height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::sampled, rhi::image_usage::transfer_dst),
+            .name = texture.name,
+        };
+
+        const auto skybox_texture_handle = dev.create_image(skybox_desc);
+
+        // Allocate a staging buffer
+        const auto staging_desc = rhi::buffer_desc{
+            .size = texture.mips[0].data.size(),
+            .location = rhi::memory_location::automatic,
+            .usage = make_enum_mask(rhi::buffer_usage::transfer_src),
+            .access_type = rhi::host_access_type::incoherent,
+            .access_pattern = make_enum_mask(rhi::host_access_pattern::sequential),
+            .name = "Skybox Texture Staging Buffer",
+        };
+
+        const auto staging_buffer_handle = dev.create_buffer(staging_desc);
+
+        auto staging_buffer_ptr = dev.map_buffer(staging_buffer_handle);
+        std::memcpy(staging_buffer_ptr, texture.mips[0].data.data(), staging_desc.size);
+
+        auto& wq = dev.get_primary_work_queue();
+        auto cmds = wq.get_next_command_list();
+
+        rhi::work_queue::image_barrier to_transfer_dst = {
+            .image = skybox_texture_handle,
+            .old_layout = rhi::image_layout::undefined,
+            .new_layout = rhi::image_layout::transfer_dst,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .src_access = make_enum_mask(rhi::memory_access::none),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        rhi::work_queue::image_barrier to_shader_ro = {
+            .image = skybox_texture_handle,
+            .old_layout = rhi::image_layout::transfer_dst,
+            .new_layout = rhi::image_layout::shader_read_only,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        wq.begin_command_list(cmds, true);
+        wq.transition_image(cmds, {&to_transfer_dst, 1});
+        wq.copy(cmds, staging_buffer_handle, skybox_texture_handle, rhi::image_layout::transfer_dst, 0, 0);
+        wq.transition_image(cmds, {&to_shader_ro, 1});
+        wq.end_command_list(cmds);
+
+        auto submit_info = rhi::work_queue::submit_info{};
+        submit_info.command_lists.push_back(cmds);
+
+        auto fence = dev.create_fence({.signaled = false});
+        wq.submit({&submit_info, 1}, fence);
+        dev.wait({&fence, 1});
+
+        dev.destroy_fence(fence);
+        dev.destroy_buffer(staging_buffer_handle);
+
+        _skybox.hdri_texture = skybox_texture_handle;
+
+        _skybox.last_binding_update_frame = _frame_number;
     }
 
     void pbr_pipeline::_load_meshes(rhi::device& dev, span<const guid> mesh_ids,
@@ -1110,7 +1490,7 @@ namespace tempest::graphics
         _gpu_resource_usages.mesh_layout_bytes_written += layout_bytes_required;
     }
 
-    void pbr_pipeline::_load_textures([[maybe_unused]] rhi::device& dev, span<const guid> texture_ids,
+    void pbr_pipeline::_load_textures(rhi::device& dev, span<const guid> texture_ids,
                                       const core::texture_registry& texture_registry, bool generate_mip_maps)
     {
         // Ensure we aren't uploading existing textures
@@ -1190,10 +1570,10 @@ namespace tempest::graphics
                 .image = image,
                 .old_layout = rhi::image_layout::undefined,
                 .new_layout = rhi::image_layout::general,
-                .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
-                .src_access = tempest::make_enum_mask(rhi::memory_access::none),
-                .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::copy),
-                .dst_access = tempest::make_enum_mask(rhi::memory_access::transfer_write),
+                .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+                .src_access = make_enum_mask(rhi::memory_access::none),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
             };
 
             work_queue.transition_image(cmd_buf, span(&image_barrier, 1));
@@ -1259,18 +1639,18 @@ namespace tempest::graphics
             dev.destroy_buffer(staging);
         }
 
+        auto commands = work_queue.get_next_command_list();
+        work_queue.begin_command_list(commands, true);
+
         // Build out the image mips
         if (generate_mip_maps)
         {
-            auto commands = work_queue.get_next_command_list();
-            work_queue.begin_command_list(commands, true);
-
-            auto image_index = 0;
+            auto image_index = 0u;
             for (const auto& tex_guid : next_texture_ids)
             {
                 auto texture_opt = texture_registry.get_texture(tex_guid);
                 const auto& texture = *texture_opt;
-                const auto& image = images[image_index];
+                const auto& image = images[image_index++];
 
                 // Generate mip maps from the number of mips specified in the image source to the number of mips
                 // requested for creation
@@ -1280,32 +1660,33 @@ namespace tempest::graphics
 
                 work_queue.generate_mip_chain(commands, image, rhi::image_layout::general, mip_to_build_from,
                                               num_mips_to_generate);
-
-                // Transition the image to a shader read layout
-                rhi::work_queue::image_barrier image_barrier = {
-                    .image = image,
-                    .old_layout = rhi::image_layout::general,
-                    .new_layout = rhi::image_layout::shader_read_only,
-                    .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::all_transfer),
-                    .src_access =
-                        tempest::make_enum_mask(rhi::memory_access::transfer_read, rhi::memory_access::transfer_write),
-                    .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::vertex_shader,
-                                                          rhi::pipeline_stage::fragment_shader,
-                                                          rhi::pipeline_stage::compute_shader),
-                    .dst_access = tempest::make_enum_mask(rhi::memory_access::shader_read),
-                };
-
-                work_queue.transition_image(commands, span(&image_barrier, 1));
             }
-
-            work_queue.end_command_list(commands);
-            rhi::work_queue::submit_info submit_info = {};
-            submit_info.command_lists.push_back(commands);
-            auto finished = dev.create_fence({.signaled = false});
-            work_queue.submit(span(&submit_info, 1), finished);
-            dev.wait(span(&finished, 1));
-            dev.destroy_fence(finished);
         }
+
+        // Transition the image to a shader read layout
+        for (const auto& image : images)
+        {
+            rhi::work_queue::image_barrier image_barrier = {
+                .image = image,
+                .old_layout = rhi::image_layout::general,
+                .new_layout = rhi::image_layout::shader_read_only,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+                .src_access = make_enum_mask(rhi::memory_access::transfer_read, rhi::memory_access::transfer_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader,
+                                             rhi::pipeline_stage::compute_shader),
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read),
+            };
+
+            work_queue.transition_image(commands, span(&image_barrier, 1));
+        }
+
+        work_queue.end_command_list(commands);
+        rhi::work_queue::submit_info submit_info = {};
+        submit_info.command_lists.push_back(commands);
+        auto finished = dev.create_fence({.signaled = false});
+        work_queue.submit(span(&submit_info, 1), finished);
+        dev.wait(span(&finished, 1));
+        dev.destroy_fence(finished);
 
         size_t image_index = 0;
         for (const auto& guid : next_texture_ids)
@@ -1317,9 +1698,8 @@ namespace tempest::graphics
         _bindless_textures.last_updated_frame_index = _frame_number;
     }
 
-    void pbr_pipeline::_load_materials([[maybe_unused]] rhi::device& dev,
-                                       [[maybe_unused]] span<const guid> material_ids,
-                                       [[maybe_unused]] const core::material_registry& material_registry)
+    void pbr_pipeline::_load_materials(rhi::device& dev, span<const guid> material_ids,
+                                       const core::material_registry& material_registry)
     {
         for (const auto& guid : material_ids)
         {
@@ -1465,11 +1845,53 @@ namespace tempest::graphics
             _materials.material_to_index.insert({guid, _materials.materials.size()});
             _materials.materials.push_back(gpu_material);
         }
+
+        // Upload the materials to GPU using the staging buffer
+        const auto staging_buffer = _gpu_buffers.staging;
+        const auto staging_buffer_write_offset =
+            _gpu_resource_usages.staging_bytes_writen * _gpu_resource_usages.staging_bytes_available * _frame_in_flight;
+        const auto write_length = _materials.materials.size() * sizeof(gpu::material_data);
+        auto staging_buffer_ptr = dev.map_buffer(staging_buffer);
+        std::memcpy(staging_buffer_ptr + staging_buffer_write_offset, _materials.materials.data(), write_length);
+        dev.unmap_buffer(staging_buffer);
+
+        dev.flush_buffers(span(&staging_buffer, 1));
+
+        _gpu_resource_usages.staging_bytes_writen += static_cast<uint32_t>(write_length);
+
+        auto& wq = dev.get_primary_work_queue();
+        auto cmds = wq.get_next_command_list();
+        wq.begin_command_list(cmds, true);
+        wq.copy(cmds, staging_buffer, _gpu_buffers.materials, staging_buffer_write_offset, 0, write_length);
+        wq.end_command_list(cmds);
+
+        auto submit_info = rhi::work_queue::submit_info{};
+        submit_info.command_lists.push_back(cmds);
+        auto fence = dev.create_fence({.signaled = false});
+        wq.submit({&submit_info, 1}, fence);
+        dev.wait({&fence, 1});
     }
 
     uint32_t pbr_pipeline::_acquire_next_object() noexcept
     {
         return _object_count++;
+    }
+
+    optional<gpu::light> pbr_pipeline::_get_light_data(ecs::archetype_entity entity) const
+    {
+        const auto point_spot_it = _cpu_buffers.point_and_spot_lights.find(entity);
+        if (point_spot_it != _cpu_buffers.point_and_spot_lights.end())
+        {
+            return point_spot_it->second;
+        }
+
+        const auto directional_it = _cpu_buffers.dir_lights.find(entity);
+        if (directional_it != _cpu_buffers.dir_lights.end())
+        {
+            return directional_it->second;
+        }
+
+        return none();
     }
 
     void pbr_pipeline::_initialize_z_prepass([[maybe_unused]] renderer& parent, rhi::device& dev)
@@ -1646,6 +2068,55 @@ namespace tempest::graphics
         });
 
         _forward_light_clustering.fill_clusters = cull_pipeline;
+
+        // Set up buffers
+        _forward_light_clustering.light_cluster_buffer_size = math::round_to_next_multiple(
+            sizeof(gpu::lighting_cluster_bounds) * num_clusters_x * num_clusters_y * num_clusters_z, 256);
+
+        _forward_light_clustering.light_cluster_range_buffer_size = math::round_to_next_multiple(
+            sizeof(gpu::light_grid_range) * num_clusters_x * num_clusters_y * num_clusters_z, 256);
+
+        _forward_light_clustering.global_light_index_count_buffer_size =
+            math::round_to_next_multiple(sizeof(uint32_t), 256);
+
+        _forward_light_clustering.global_light_index_list_buffer_size = math::round_to_next_multiple(
+            sizeof(uint32_t) * max_lights_per_cluster * num_clusters_x * num_clusters_y * num_clusters_z, 256);
+
+        _forward_light_clustering.light_cluster_buffer = dev.create_buffer({
+            .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_buffer_size),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Light Grid Buffer",
+        });
+
+        _forward_light_clustering.light_cluster_range_buffer = dev.create_buffer({
+            .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_range_buffer_size),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Light Cluster Range Buffer",
+        });
+
+        _forward_light_clustering.global_light_index_count_buffer = dev.create_buffer({
+            .size = static_cast<uint32_t>(_forward_light_clustering.global_light_index_count_buffer_size),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Global Light Index Count Buffer",
+        });
+
+        _forward_light_clustering.global_light_index_list_buffer = dev.create_buffer({
+            .size = static_cast<uint32_t>(_forward_light_clustering.global_light_index_list_buffer_size),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Global Light Index List Buffer",
+        });
     }
 
     void pbr_pipeline::_initialize_pbr_opaque([[maybe_unused]] renderer& parent, rhi::device& dev)
@@ -1665,10 +2136,10 @@ namespace tempest::graphics
 
         bindings.clear();
         bindings.push_back(pbr::lights_layout);
-        bindings.push_back(pbr::light_params_layout);
-        bindings.push_back(pbr::shadow_map_layout);
+        bindings.push_back(pbr::shadow_map_params_layout);
+        bindings.push_back(pbr::shadow_map_megatexture_layout);
         bindings.push_back(pbr::light_grid_layout);
-        bindings.push_back(pbr::global_index_count);
+        bindings.push_back(pbr::global_index_list);
         auto set1_layout = dev.create_descriptor_set_layout(bindings);
 
         tempest::vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>> layouts;
@@ -1734,7 +2205,7 @@ namespace tempest::graphics
                 {
                     .depth =
                         rhi::depth_test{
-                            .write_enable = true,
+                            .write_enable = false,
                             .compare_op = rhi::compare_op::greater_equal,
                             .depth_bounds_test_enable = false,
                             .min_depth_bounds = 0.0f,
@@ -1754,7 +2225,7 @@ namespace tempest::graphics
         _pbr_opaque.pipeline = dev.create_graphics_pipeline(tempest::move(pipeline_desc));
     }
 
-    void pbr_pipeline::_initialize_pbr_transparent([[maybe_unused]] renderer& parent, [[maybe_unused]] rhi::device& dev)
+    void pbr_pipeline::_initialize_pbr_mboit([[maybe_unused]] renderer& parent, [[maybe_unused]] rhi::device& dev)
     {
         // Set up the gather pass
         {
@@ -1775,10 +2246,10 @@ namespace tempest::graphics
 
             vector<rhi::descriptor_binding_layout> set_1_bindings;
             set_1_bindings.push_back(pbr_transparencies::lights_layout);
-            set_1_bindings.push_back(pbr_transparencies::light_params_layout);
+            set_1_bindings.push_back(pbr_transparencies::shadow_map_params_layout);
             set_1_bindings.push_back(pbr_transparencies::shadow_map_layout);
             set_1_bindings.push_back(pbr_transparencies::light_grid_layout);
-            set_1_bindings.push_back(pbr_transparencies::global_index_count);
+            set_1_bindings.push_back(pbr_transparencies::global_light_index_list_layout);
 
             auto set_1_layout = dev.create_descriptor_set_layout(set_1_bindings);
 
@@ -1886,10 +2357,10 @@ namespace tempest::graphics
 
             vector<rhi::descriptor_binding_layout> set_1_bindings;
             set_1_bindings.push_back(pbr_transparencies::lights_layout);
-            set_1_bindings.push_back(pbr_transparencies::light_params_layout);
+            set_1_bindings.push_back(pbr_transparencies::shadow_map_params_layout);
             set_1_bindings.push_back(pbr_transparencies::shadow_map_layout);
             set_1_bindings.push_back(pbr_transparencies::light_grid_layout);
-            set_1_bindings.push_back(pbr_transparencies::global_index_count);
+            set_1_bindings.push_back(pbr_transparencies::global_light_index_list_layout);
 
             auto set_1_layout = dev.create_descriptor_set_layout(set_1_bindings);
 
@@ -2003,7 +2474,7 @@ namespace tempest::graphics
             auto frag_source = core::read_bytes("assets/shaders/pbr_oit_blend.frag.spv");
 
             vector<rhi::image_format> color_formats;
-            color_formats.push_back(transparency_accumulator_format);
+            color_formats.push_back(color_format);
 
             vector<rhi::color_blend_attachment> blending;
             blending.push_back(rhi::color_blend_attachment{
@@ -2062,6 +2533,39 @@ namespace tempest::graphics
             };
 
             _pbr_transparencies.oit_blend_pipeline = dev.create_graphics_pipeline(tempest::move(desc));
+        }
+
+        // Set up moment images
+        {
+            _pbr_transparencies.moments_target = dev.create_image({
+                .format = rhi::image_format::rgba16_float,
+                .type = rhi::image_type::image_2d_array,
+                .width = _render_target_width,
+                .height = _render_target_height,
+                .depth = 1,
+                .array_layers = 2,
+                .mip_levels = 1,
+                .sample_count = rhi::image_sample_count::sample_count_1,
+                .tiling = rhi::image_tiling_type::optimal,
+                .location = rhi::memory_location::device,
+                .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::transfer_dst),
+                .name = "MBOIT Moments Target",
+            });
+
+            _pbr_transparencies.zeroth_moment_target = dev.create_image({
+                .format = rhi::image_format::r32_float,
+                .type = rhi::image_type::image_2d,
+                .width = _render_target_width,
+                .height = _render_target_height,
+                .depth = 1,
+                .array_layers = 1,
+                .mip_levels = 1,
+                .sample_count = rhi::image_sample_count::sample_count_1,
+                .tiling = rhi::image_tiling_type::optimal,
+                .location = rhi::memory_location::device,
+                .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::transfer_dst),
+                .name = "MBOIT Zeroth Moment Target",
+            });
         }
     }
 
@@ -2131,7 +2635,7 @@ namespace tempest::graphics
                     .depth =
                         rhi::depth_test{
                             .write_enable = true,
-                            .compare_op = rhi::compare_op::less,
+                            .compare_op = rhi::compare_op::greater,
                             .depth_bounds_test_enable = false,
                             .min_depth_bounds = 0.0f,
                             .max_depth_bounds = 1.0f,
@@ -2332,6 +2836,184 @@ namespace tempest::graphics
 
             _ssao.ssao_blur_pipeline = dev.create_graphics_pipeline(tempest::move(desc));
         }
+
+        // Set up scene constants buffer
+        _ssao.scene_constant_bytes_per_frame =
+            static_cast<uint32_t>(math::round_to_next_multiple(sizeof(ssao::scene_constants), 256));
+        _ssao.scene_constants = dev.create_buffer({
+            .size = _ssao.scene_constant_bytes_per_frame * dev.frames_in_flight(),
+            .location = rhi::memory_location::automatic,
+            .usage = make_enum_mask(rhi::buffer_usage::constant, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::incoherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
+            .name = "SSAO Scene Constants",
+        });
+
+        // Set up the SSAO targets
+        _ssao.ssao_target = dev.create_image({
+            .format = ssao_format,
+            .type = rhi::image_type::image_2d,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .depth = 1u,
+            .array_layers = 1u,
+            .mip_levels = 1u,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .name = "SSAO Target",
+        });
+
+        _ssao.ssao_blur_target = dev.create_image({
+            .format = ssao_format,
+            .type = rhi::image_type::image_2d,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .depth = 1u,
+            .array_layers = 1u,
+            .mip_levels = 1u,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .name = "SSAO Blur Target",
+        });
+
+        // Set up the noise texture and kernel
+        const auto noise_width = 16u;
+        const auto noise_height = 16u;
+        auto noise_data = vector<byte>(sizeof(float) * 2 * noise_width * noise_height);
+
+        auto rd = std::random_device{};
+        auto generator = std::mt19937{rd()};
+        auto distribution = std::uniform_real_distribution<float>(0.0f, 1.0f);
+
+        const auto num_noise_samples = noise_width * noise_height;
+        for (auto idx = 0u; idx < num_noise_samples; ++idx)
+        {
+            const auto r = distribution(generator) * 2.0f - 1.0f;
+            const auto g = distribution(generator) * 2.0f - 1.0f;
+            const auto samples = array{r, g};
+            const auto write_offset = idx * 2 * sizeof(float);
+
+            std::memcpy(noise_data.data() + write_offset, samples.data(), 2 * sizeof(float));
+        }
+
+        _ssao.noise_kernel.resize(ssao::scene_constants::kernel_size);
+        for (size_t i = 0; i < ssao::scene_constants::kernel_size; ++i)
+        {
+            const auto x = distribution(generator) * 2.0f - 1.0f;
+            const auto y = distribution(generator) * 2.0f - 1.0f;
+            const auto z = distribution(generator);
+
+            const auto sample = math ::normalize(math::vec3{x, y, z});
+            const auto scaled_sample = sample * distribution(generator);
+
+            const auto scale = static_cast<float>(i) / static_cast<float>(ssao::scene_constants::kernel_size);
+            const auto adjusted_scale = math::lerp(0.1f, 1.0f, scale * scale);
+
+            const auto lerp_adjusted_sample = adjusted_scale * scaled_sample;
+            _ssao.noise_kernel[i] =
+                math::vec4(lerp_adjusted_sample.x, lerp_adjusted_sample.y, lerp_adjusted_sample.z, 1.0f);
+        }
+
+        auto staging_buffer_ptr = dev.map_buffer(_gpu_buffers.staging);
+        auto staging_buffer_offset =
+            _gpu_resource_usages.staging_bytes_writen + _gpu_resource_usages.staging_bytes_available * _frame_in_flight;
+        std::memcpy(staging_buffer_ptr + staging_buffer_offset, noise_data.data(), noise_data.size());
+
+        const auto noise_texture = dev.create_image({
+            .format = rhi::image_format::rg16_float,
+            .type = rhi::image_type::image_2d,
+            .width = noise_width,
+            .height = noise_height,
+            .depth = 1u,
+            .array_layers = 1u,
+            .mip_levels = 1u,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::sampled, rhi::image_usage::transfer_dst),
+            .name = "SSAO Noise Texture",
+        });
+
+        const auto to_transfer_dst = rhi::work_queue::image_barrier{
+            .image = noise_texture,
+            .old_layout = rhi::image_layout::undefined,
+            .new_layout = rhi::image_layout::transfer_dst,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .src_access = make_enum_mask(rhi::memory_access::none),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        const auto to_sampled = rhi::work_queue::image_barrier{
+            .image = noise_texture,
+            .old_layout = rhi::image_layout::transfer_dst,
+            .new_layout = rhi::image_layout::shader_read_only,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        auto& wq = dev.get_primary_work_queue();
+        auto cmds = wq.get_next_command_list();
+
+        wq.begin_command_list(cmds, true);
+
+        wq.transition_image(cmds, {&to_transfer_dst, 1});
+        wq.copy(cmds, _gpu_buffers.staging, noise_texture, rhi::image_layout::transfer_dst, staging_buffer_offset, 0);
+        wq.transition_image(cmds, {&to_sampled, 1});
+
+        wq.end_command_list(cmds);
+
+        auto submit_info = rhi::work_queue::submit_info{};
+        submit_info.command_lists.push_back(cmds);
+
+        auto wait_fence = dev.create_fence(rhi::fence_info{.signaled = false});
+        wq.submit({&submit_info, 1}, wait_fence);
+
+        dev.wait({&wait_fence, 1});
+
+        dev.destroy_fence(wait_fence);
+
+        _ssao.noise_texture = noise_texture;
+
+        _ssao.clamped_linear_no_aniso_sampler = dev.create_sampler({
+            .mag = rhi::filter::linear,
+            .min = rhi::filter::linear,
+            .mipmap = rhi::mipmap_mode::linear,
+            .address_u = rhi::address_mode::clamp_to_edge,
+            .address_v = rhi::address_mode::clamp_to_edge,
+            .address_w = rhi::address_mode::clamp_to_edge,
+            .mip_lod_bias = 0.0f,
+            .min_lod = 0.0f,
+            .max_lod = 32.0f,
+            .max_anisotropy = 1.0f,
+            .compare = none(),
+            .name = "SSAO Clamped Linear Sampler",
+        });
+
+        _ssao.clamped_point_no_aniso_sampler = dev.create_sampler({
+            .mag = rhi::filter::nearest,
+            .min = rhi::filter::nearest,
+            .mipmap = rhi::mipmap_mode::nearest,
+            .address_u = rhi::address_mode::clamp_to_edge,
+            .address_v = rhi::address_mode::clamp_to_edge,
+            .address_w = rhi::address_mode::clamp_to_edge,
+            .mip_lod_bias = 0.0f,
+            .min_lod = 0.0f,
+            .max_lod = 32.0f,
+            .max_anisotropy = 1.0f,
+            .compare = none(),
+            .name = "SSAO Clamped Point Sampler",
+        });
     }
 
     void pbr_pipeline::_initialize_skybox([[maybe_unused]] renderer& parent, rhi::device& dev)
@@ -2424,6 +3106,19 @@ namespace tempest::graphics
         };
 
         _skybox.pipeline = dev.create_graphics_pipeline(tempest::move(desc));
+
+        const auto camera_bytes_per_frame = math::round_to_next_multiple(sizeof(gpu::camera), 256);
+        const auto camera_buffer_desc = rhi::buffer_desc{
+            .size = camera_bytes_per_frame * dev.frames_in_flight(),
+            .location = rhi::memory_location::automatic,
+            .usage = make_enum_mask(rhi::buffer_usage::constant, rhi::buffer_usage::transfer_dst),
+            .access_type = make_enum_mask(rhi::host_access_type::incoherent),
+            .access_pattern = make_enum_mask(rhi::host_access_pattern::sequential),
+            .name = "Skybox Camera Data",
+        };
+
+        _skybox.camera_bytes_per_frame = camera_bytes_per_frame;
+        _skybox.camera_payload = dev.create_buffer(camera_buffer_desc);
     }
 
     void pbr_pipeline::_initialize_samplers([[maybe_unused]] renderer& parent, rhi::device& dev)
@@ -2705,6 +3400,155 @@ namespace tempest::graphics
         });
 
         _gpu_buffers.indirect_commands = indirect_command_buffer;
+
+        const auto num_lights = 4 * 1024; // 4K lights
+        _gpu_buffers.lights_bytes_per_frame = sizeof(gpu::light) * num_lights;
+
+        auto lights_buffer = dev.create_buffer({
+            .size = _gpu_buffers.lights_bytes_per_frame * dev.frames_in_flight(),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Lights Buffer",
+        });
+
+        _gpu_buffers.point_and_spot_lights = lights_buffer;
+
+        _gpu_buffers.shadow_bytes_per_frame =
+            math::round_to_next_multiple(sizeof(gpu::shadow_map_parameter) * num_lights, 256);
+        auto shadows_buffer = dev.create_buffer({
+            .size = _gpu_buffers.shadow_bytes_per_frame * dev.frames_in_flight(),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Shadow Map Parameters Buffer",
+        });
+
+        _gpu_buffers.shadows = shadows_buffer;
+    }
+
+    void pbr_pipeline::_upload_per_frame_data([[maybe_unused]] renderer& parent, rhi::device& dev,
+                                              [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
+                                              rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                                              const gpu::camera& camera)
+    {
+        gpu::light sun{};
+        sun.enabled = false;
+
+        _entity_registry->each([&](ecs::self_component self, [[maybe_unused]] directional_light_component dir_light) {
+            auto light_it = _cpu_buffers.dir_lights.find(self.entity);
+            if (light_it != _cpu_buffers.dir_lights.end())
+            {
+                sun = light_it->second;
+            }
+        });
+
+        // Set up the scene data
+        _scene.cam = camera;
+        _scene.screen_size =
+            math::vec2(static_cast<float>(_render_target_width), static_cast<float>(_render_target_height));
+        _scene.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.1f;
+        _scene.light_grid_count_and_size =
+            math::vec4(num_clusters_x, num_clusters_y, num_clusters_z, _render_target_width / num_clusters_x);
+        _scene.light_grid_z_bounds = math::vec2(0.1f, 1000.0f);
+        _scene.point_light_count = static_cast<uint32_t>(_cpu_buffers.point_and_spot_lights.size());
+        _scene.ssao_strength = 2.0f;
+        _scene.sun = sun;
+
+        rhi::work_queue::buffer_barrier scene_buffer_barrier = {
+            .buffer = _gpu_buffers.scene_constants,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::bottom),
+            .src_access = make_enum_mask(rhi::memory_access::none),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight,
+            .size = _gpu_buffers.scene_constants_bytes_per_frame,
+        };
+
+        rhi::work_queue::buffer_barrier lights_buffer_barrier = {
+            .buffer = _gpu_buffers.point_and_spot_lights,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::bottom),
+            .src_access = make_enum_mask(rhi::memory_access::none),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _gpu_buffers.lights_bytes_per_frame * _frame_in_flight,
+            .size = _gpu_buffers.lights_bytes_per_frame,
+        };
+
+        const auto pre_staging_write_barriers = array{
+            scene_buffer_barrier,
+            lights_buffer_barrier,
+        };
+
+        queue.pipeline_barriers(commands, {}, pre_staging_write_barriers);
+
+        const auto staging_buffer = _gpu_buffers.staging;
+        const auto staging_offset =
+            _gpu_resource_usages.staging_bytes_writen + _gpu_resource_usages.staging_bytes_available * _frame_in_flight;
+        auto staging_buffer_bytes = dev.map_buffer(_gpu_buffers.staging);
+
+        // Write the scene data
+        const auto scene_data_offset = staging_offset + _gpu_resource_usages.staging_bytes_writen;
+        std::memcpy(staging_buffer_bytes + scene_data_offset, &_scene, sizeof(gpu::scene_data));
+        _gpu_resource_usages.staging_bytes_writen += static_cast<uint32_t>(sizeof(gpu::scene_data));
+
+        // Write the lights data
+        const auto light_data_offset = staging_offset + _gpu_resource_usages.staging_bytes_writen;
+        std::memcpy(staging_buffer_bytes + light_data_offset, _cpu_buffers.point_and_spot_lights.values(),
+                    _cpu_buffers.point_and_spot_lights.size() * sizeof(gpu::light));
+        _gpu_resource_usages.staging_bytes_writen +=
+            static_cast<uint32_t>(_cpu_buffers.point_and_spot_lights.size() * sizeof(gpu::light));
+
+        // Copy the scene data to the GPU
+        queue.copy(commands, staging_buffer, _gpu_buffers.scene_constants, scene_data_offset,
+                   _gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight, sizeof(gpu::scene_data));
+
+        // Copy the lights data to the GPU
+        queue.copy(commands, staging_buffer, _gpu_buffers.point_and_spot_lights, light_data_offset,
+                   _gpu_buffers.lights_bytes_per_frame * _frame_in_flight,
+                   _cpu_buffers.point_and_spot_lights.size() * sizeof(gpu::light));
+
+        // Set up a barrier to ensure the scene and lights data are visible to the shader
+        // Both need to be visible to compute, vertex, and fragment shader stages
+
+        rhi::work_queue::buffer_barrier scene_buffer_visibility_barrier = {
+            .buffer = _gpu_buffers.scene_constants,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::compute_shader, rhi::pipeline_stage::vertex_shader,
+                                         rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::constant_buffer_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight,
+            .size = _gpu_buffers.scene_constants_bytes_per_frame,
+        };
+
+        rhi::work_queue::buffer_barrier lights_buffer_visibility_barrier = {
+            .buffer = _gpu_buffers.point_and_spot_lights,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::compute_shader, rhi::pipeline_stage::vertex_shader,
+                                         rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _gpu_buffers.lights_bytes_per_frame * _frame_in_flight,
+            .size = _gpu_buffers.lights_bytes_per_frame,
+        };
+
+        const auto post_staging_upload_barriers = array{
+            scene_buffer_visibility_barrier,
+            lights_buffer_visibility_barrier,
+        };
+
+        queue.pipeline_barriers(commands, {}, post_staging_upload_barriers);
     }
 
     void pbr_pipeline::_prepare_draw_batches(
@@ -2786,14 +3630,6 @@ namespace tempest::graphics
         auto staging_buffer_bytes = dev.map_buffer(staging_buffer) + staging_offset;
         size_t local_bytes_written = 0u;
 
-        // Set up a barrier before writing to the staging buffer
-        const array pre_staging_writes = {
-            pre_host_write_buffer_barrier(_gpu_buffers.staging, staging_offset,
-                                          _gpu_resource_usages.staging_bytes_available),
-        };
-
-        queue.pipeline_barriers(commands, {}, pre_staging_writes);
-
         size_t object_data_bytes_written = 0;
         size_t instance_data_bytes_written = 0;
         size_t indirect_command_bytes_written = 0;
@@ -2818,6 +3654,9 @@ namespace tempest::graphics
                         batch.objects.size() * sizeof(uint32_t));
             local_bytes_written += batch.objects.size() * sizeof(uint32_t);
             instance_data_bytes_written += batch.objects.size() * sizeof(uint32_t);
+
+            batch.indirect_command_offset = instances_written;
+
             instances_written += static_cast<uint32_t>(batch.objects.size());
         }
 
@@ -2846,7 +3685,8 @@ namespace tempest::graphics
         queue.pipeline_barriers(commands, {}, pre_staging_uploads);
 
         // Copy the data from the staging buffer to the GPU buffers
-        const auto object_data_byte_offset = _gpu_resource_usages.staging_bytes_writen;
+        const auto object_data_byte_offset =
+            _gpu_resource_usages.staging_bytes_writen + _gpu_resource_usages.staging_bytes_available * _frame_in_flight;
         const auto instance_data_byte_offset = object_data_byte_offset + object_data_bytes_written;
         const auto indirect_command_data_byte_offset = instance_data_byte_offset + instance_data_bytes_written;
 
@@ -2982,8 +3822,8 @@ namespace tempest::graphics
             .buffer = _z_prepass.scene_constants,
             .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer, rhi::pipeline_stage::fragment_shader),
             .src_access = make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
-            .dst_stages = make_enum_mask(rhi::pipeline_stage::host),
-            .dst_access = make_enum_mask(rhi::memory_access::host_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
             .src_queue = nullptr,
             .dst_queue = nullptr,
             .offset = byte_offset,
@@ -3040,14 +3880,13 @@ namespace tempest::graphics
             .image = _render_targets.encoded_normals,
             .old_layout = rhi::image_layout::undefined,
             .new_layout = rhi::image_layout::color_attachment,
-            .src_stages =
-                tempest::make_enum_mask(rhi::pipeline_stage::fragment_shader, rhi::pipeline_stage::compute_shader,
-                                        rhi::pipeline_stage::color_attachment_output),
-            .src_access = tempest::make_enum_mask(
-                rhi::memory_access::shader_sampled_read, rhi::memory_access::shader_storage_read,
-                rhi::memory_access::color_attachment_read, rhi::memory_access::color_attachment_write),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::color_attachment_output),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::color_attachment_write),
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader, rhi::pipeline_stage::compute_shader,
+                                         rhi::pipeline_stage::color_attachment_output),
+            .src_access =
+                make_enum_mask(rhi::memory_access::shader_sampled_read, rhi::memory_access::shader_storage_read,
+                               rhi::memory_access::color_attachment_read, rhi::memory_access::color_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .dst_access = make_enum_mask(rhi::memory_access::color_attachment_write),
         };
 
         // Barrier to wait for the depth buffer to be done any previous operations
@@ -3058,12 +3897,12 @@ namespace tempest::graphics
             .src_stages = make_enum_mask(rhi::pipeline_stage::late_fragment_tests),
             .src_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_read,
                                          rhi::memory_access::depth_stencil_attachment_write),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::early_fragment_tests),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::depth_stencil_attachment_read,
-                                                  rhi::memory_access::depth_stencil_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::early_fragment_tests),
+            .dst_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_read,
+                                         rhi::memory_access::depth_stencil_attachment_write),
         };
 
-        array barriers = {
+        const auto barriers = array{
             undefined_to_encoded_normals_attachment,
             undefined_to_depth_attachment,
         };
@@ -3113,7 +3952,7 @@ namespace tempest::graphics
         const auto instance_offset = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame * _frame_in_flight);
         const auto object_offset = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame * _frame_in_flight);
 
-        array dynamic_offsets = {
+        const auto dynamic_offsets = array{
             scene_constants_offset,
             object_offset,
             instance_offset,
@@ -3126,9 +3965,11 @@ namespace tempest::graphics
 
         for (auto [key, batch] : _cpu_buffers.draw_batches)
         {
-            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+            if (key.alpha_type == alpha_behavior::OPAQUE)
             {
-                queue.draw(commands, _gpu_buffers.indirect_commands, static_cast<uint32_t>(indirect_command_offset),
+                queue.draw(commands, _gpu_buffers.indirect_commands,
+                           static_cast<uint32_t>(indirect_command_offset +
+                                                 batch.indirect_command_offset * sizeof(gpu::indexed_indirect_command)),
                            static_cast<uint32_t>(batch.objects.size()), sizeof(gpu::indexed_indirect_command));
             }
         }
@@ -3136,10 +3977,10 @@ namespace tempest::graphics
         queue.end_rendering(commands);
     }
 
-    void pbr_pipeline::_draw_shadow_pass([[maybe_unused]] renderer& parent, rhi::device& dev,
-                                         [[maybe_unused]] const render_state& rs,
-                                         rhi::work_queue& queue,
-                                         rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands)
+    void pbr_pipeline::_draw_shadow_pass(
+        [[maybe_unused]] renderer& parent, rhi::device& dev, [[maybe_unused]] const render_state& rs,
+        rhi::work_queue& queue, rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+        const flat_unordered_map<ecs::archetype_entity, gpu::shadow_map_cascade_info> light_map_cascades)
     {
         if (_shadows.last_binding_update_frame >= _frame_number ||
             _bindless_textures.last_updated_frame_index >= _frame_number)
@@ -3216,7 +4057,41 @@ namespace tempest::graphics
             _shadows.directional_desc_set_0 = dev.create_descriptor_set(ds_desc);
         }
 
+        // Set up the render pass
+        // Transition the shadow megatexture to depth attachment
+
+        rhi::work_queue::image_barrier shadows_undefined_to_depth_attachment = {
+            .image = _render_targets.shadow_megatexture,
+            .old_layout = rhi::image_layout::undefined,
+            .new_layout = rhi::image_layout::depth,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::bottom),
+            .src_access = make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::early_fragment_tests),
+            .dst_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write),
+        };
+
+        queue.transition_image(commands, {&shadows_undefined_to_depth_attachment, 1});
+
+        rhi::work_queue::render_pass_info shadow_pass_info = {};
+        shadow_pass_info.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = _render_targets.shadow_megatexture,
+            .layout = rhi::image_layout::depth,
+            .clear_depth = 0.0f,
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        };
+        shadow_pass_info.x = 0;
+        shadow_pass_info.y = 0;
+        shadow_pass_info.width = _shadows.image_region_allocator.extent().x;
+        shadow_pass_info.height = _shadows.image_region_allocator.extent().y;
+        shadow_pass_info.layers = 1;
+        shadow_pass_info.name = "Shadow Pass";
+
+        queue.begin_rendering(commands, shadow_pass_info);
+
         queue.bind(commands, _shadows.directional_pipeline);
+        queue.bind_index_buffer(commands, _gpu_buffers.vertices, 0, rhi::index_format::uint32);
+        queue.set_cull_mode(commands, enum_mask(rhi::cull_mode::back));
 
         const auto instance_offset = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame * _frame_in_flight);
         const auto object_offset = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame * _frame_in_flight);
@@ -3229,63 +4104,1760 @@ namespace tempest::graphics
         queue.bind(commands, _shadows.directional_layout, rhi::bind_point::graphics, 0,
                    {&_shadows.directional_desc_set_0, 1}, dynamic_offsets);
 
-        auto shadow_maps_written = 0u;
-        _entity_registry->each(
-            [&]([[maybe_unused]] const directional_light_component& light, shadow_map_component shadows) {
-                for (auto i = 0u; i < shadows.cascade_count; ++i)
+        // Reset the allocator
+        _shadows.image_region_allocator.clear();
+        _shadows.shadow_map_use_params.clear();
+
+        _entity_registry->each([&]([[maybe_unused]] directional_light_component light, shadow_map_component shadows,
+                                   ecs::self_component self) {
+            const auto cascade_it = light_map_cascades.find(self.entity);
+            if (cascade_it == light_map_cascades.end())
+            {
+                return;
+            }
+
+            const auto& cascade = cascade_it->second;
+
+            for (auto i = 0u; i < shadows.cascade_count; ++i)
+            {
+                const auto region = _shadows.image_region_allocator.allocate(shadows.size);
+                const auto x_pos = region->position.x;
+                const auto y_pos = region->position.y;
+                const auto width = region->extent.x;
+                const auto height = region->extent.y;
+
+                _shadows.shadow_map_use_params.push_back(gpu::shadow_map_parameter{
+                    .light_proj_matrix = cascade.frustum_view_projections[i],
+                    .shadow_map_region =
+                        {
+                            static_cast<float>(x_pos) / _shadows.image_region_allocator.extent().x,
+                            static_cast<float>(y_pos) / _shadows.image_region_allocator.extent().y,
+                            static_cast<float>(width) / _shadows.image_region_allocator.extent().x,
+                            static_cast<float>(height) / _shadows.image_region_allocator.extent().y,
+                        },
+                    .cascade_split_far = cascade.cascade_distances[i],
+                });
+
+                // Set up the viewport and scissors
+                queue.set_viewport(commands, static_cast<float>(x_pos), static_cast<float>(y_pos),
+                                   static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f, 0, false);
+                queue.set_scissor_region(commands, x_pos, y_pos, width, height, 0);
+
+                // Set up push constants
+                queue.typed_push_constants(commands, _shadows.directional_layout,
+                                           make_enum_mask(rhi::shader_stage::vertex), 0,
+                                           cascade.frustum_view_projections[i]);
+
+                // Draw
+                const auto indirect_command_offset = _cpu_buffers.indirect_command_bytes_per_frame * _frame_in_flight;
+
+                for (auto [key, batch] : _cpu_buffers.draw_batches)
                 {
-                    const auto& params = _shadows.shadow_map_build_params[shadow_maps_written];
-                    const auto& region = params.shadow_map_region;
-
-                    queue.set_scissor_region(commands, region.x, region.y, region.z, region.w);
-                    queue.set_viewport(commands, static_cast<float>(region.x), static_cast<float>(region.y),
-                                       static_cast<float>(region.z), static_cast<float>(region.w), 0.0f, 1.0f, false);
-                    queue.set_cull_mode(commands, enum_mask(rhi::cull_mode::back));
-
-                    // Set up push constants
-                    // Draw
+                    if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+                    {
+                        queue.draw(
+                            commands, _gpu_buffers.indirect_commands,
+                            static_cast<uint32_t>(indirect_command_offset + batch.indirect_command_offset *
+                                                                                sizeof(gpu::indexed_indirect_command)),
+                            static_cast<uint32_t>(batch.objects.size()), sizeof(gpu::indexed_indirect_command));
+                    }
                 }
-            });
-    }
+            }
+        });
 
-    void pbr_pipeline::_draw_clear_pass([[maybe_unused]] renderer& parent, [[maybe_unused]] rhi::device& dev,
-                                        [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
-                                        rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands) const
-    {
-        // Barrier to wait for the color buffer to be done any previous operations
-        rhi::work_queue::image_barrier undefined_to_color_attachment = {
-            .image = _render_targets.color,
-            .old_layout = rhi::image_layout::undefined,
-            .new_layout = rhi::image_layout::color_attachment,
-            .src_stages = tempest::make_enum_mask(rhi::pipeline_stage::blit),
-            .src_access = tempest::make_enum_mask(rhi::memory_access::transfer_read),
-            .dst_stages = tempest::make_enum_mask(rhi::pipeline_stage::color_attachment_output),
-            .dst_access = tempest::make_enum_mask(rhi::memory_access::color_attachment_write),
+        queue.end_rendering(commands);
+
+        // Transition the shadow megatexture back to shader read only
+        rhi::work_queue::image_barrier depth_to_shader_read_only_attachment = {
+            .image = _render_targets.shadow_megatexture,
+            .old_layout = rhi::image_layout::depth,
+            .new_layout = rhi::image_layout::shader_read_only,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::late_fragment_tests),
+            .src_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
         };
 
-        queue.transition_image(commands, tempest::span(&undefined_to_color_attachment, 1));
+        queue.transition_image(commands, {&depth_to_shader_read_only_attachment, 1});
 
-        rhi::work_queue::render_pass_info render_pass_info = {
+        // Upload the shadow parameter buffer
+        const auto staging_buffer = _gpu_buffers.staging;
+        const auto staging_offset =
+            _gpu_resource_usages.staging_bytes_writen + _gpu_resource_usages.staging_bytes_available * _frame_in_flight;
+        auto staging_buffer_bytes = dev.map_buffer(staging_buffer) + staging_offset;
+        std::memcpy(staging_buffer_bytes, _shadows.shadow_map_use_params.data(),
+                    _shadows.shadow_map_use_params.size() * sizeof(gpu::shadow_map_parameter));
+        dev.unmap_buffer(_gpu_buffers.staging);
+
+        _gpu_resource_usages.staging_bytes_writen +=
+            static_cast<uint32_t>(_shadows.shadow_map_use_params.size() * sizeof(gpu::shadow_map_parameter));
+
+        queue.copy(commands, staging_buffer, _gpu_buffers.shadows, staging_offset,
+                   _gpu_buffers.shadow_bytes_per_frame * _frame_in_flight,
+                   _shadows.shadow_map_use_params.size() * sizeof(gpu::shadow_map_parameter));
+
+        rhi::work_queue::buffer_barrier post_staging_uploads = {
+            .buffer = _gpu_buffers.shadows,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_storage_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _gpu_buffers.shadow_bytes_per_frame * _frame_in_flight,
+            .size = _gpu_buffers.instance_bytes_per_frame,
+        };
+
+        queue.pipeline_barriers(commands, {}, {&post_staging_uploads, 1});
+    }
+
+    void pbr_pipeline::_draw_light_clusters([[maybe_unused]] renderer& parent, rhi::device& dev,
+                                            [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
+                                            rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                                            const math::mat4<float>& inv_proj)
+    {
+        if (_forward_light_clustering.last_binding_update_frame >= _frame_number)
+        {
+            auto build_ds_desc = rhi::descriptor_set_desc{};
+            build_ds_desc.layout = _forward_light_clustering.build_cluster_desc_set_0_layout;
+
+            build_ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = 0,
+                .type = rhi::descriptor_type::structured_buffer,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_buffer_size),
+                .buffer = _forward_light_clustering.light_cluster_buffer,
+            });
+
+            dev.destroy_descriptor_set(_forward_light_clustering.build_cluster_desc_set_0);
+            _forward_light_clustering.build_cluster_desc_set_0 = dev.create_descriptor_set(build_ds_desc);
+
+            auto cull_ds_desc = rhi::descriptor_set_desc{};
+            cull_ds_desc.layout = _forward_light_clustering.fill_cluster_desc_set_0_layout;
+
+            cull_ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = clusters::scene_constants_layout.binding_index,
+                .type = clusters::scene_constants_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame),
+                .buffer = _gpu_buffers.scene_constants,
+            });
+
+            cull_ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = clusters::cull_cluster_layout.binding_index,
+                .type = clusters::cull_cluster_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_buffer_size),
+                .buffer = _forward_light_clustering.light_cluster_buffer,
+            });
+
+            cull_ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = clusters::lights_layout.binding_index,
+                .type = clusters::lights_layout.type,
+                .offset = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame * _frame_in_flight),
+                .size = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame),
+                .buffer = _gpu_buffers.point_and_spot_lights,
+            });
+
+            cull_ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = clusters::global_light_index_list_layout.binding_index,
+                .type = clusters::global_light_index_list_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_forward_light_clustering.global_light_index_list_buffer_size),
+                .buffer = _forward_light_clustering.global_light_index_list_buffer,
+            });
+
+            cull_ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = clusters::light_grid_layout.binding_index,
+                .type = clusters::light_grid_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_range_buffer_size),
+                .buffer = _forward_light_clustering.light_cluster_range_buffer,
+            });
+
+            cull_ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = clusters::global_index_count.binding_index,
+                .type = clusters::global_index_count.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_forward_light_clustering.global_light_index_count_buffer_size),
+                .buffer = _forward_light_clustering.global_light_index_count_buffer,
+            });
+
+            dev.destroy_descriptor_set(_forward_light_clustering.fill_cluster_desc_set_0);
+            _forward_light_clustering.fill_cluster_desc_set_0 = dev.create_descriptor_set(cull_ds_desc);
+        }
+
+        // Light cluster buffer needs to wait on the fill shader
+        rhi::work_queue::buffer_barrier pre_light_cluster_buffer_barrier = {
+            .buffer = _forward_light_clustering.light_cluster_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .src_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .dst_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.light_cluster_buffer_size,
+        };
+
+        queue.pipeline_barriers(commands, {}, {&pre_light_cluster_buffer_barrier, 1});
+
+        clusters::cluster_grid_create_info cluster_grid_info = {
+            .inv_proj = inv_proj,
+            .screen_bounds = math::vec4(static_cast<float>(_render_target_width),
+                                        static_cast<float>(_render_target_height), 0.0f, 1000.0f),
+            .workgroup_count_tile_size_px = math::vec4(
+                static_cast<uint32_t>(num_clusters_x), static_cast<uint32_t>(num_clusters_y),
+                static_cast<uint32_t>(num_clusters_z), static_cast<uint32_t>(_render_target_width / num_clusters_x)),
+        };
+
+        queue.bind(commands, _forward_light_clustering.build_clusters);
+        queue.bind(commands, _forward_light_clustering.build_cluster_layout, rhi::bind_point::compute, 0,
+                   {&_forward_light_clustering.build_cluster_desc_set_0, 1});
+        queue.typed_push_constants(commands, _forward_light_clustering.build_cluster_layout,
+                                   make_enum_mask(rhi::shader_stage::compute), 0, cluster_grid_info);
+
+        // Dispatch the compute shader to build the light clusters
+        queue.dispatch(commands, num_clusters_x, num_clusters_y, num_clusters_z);
+
+        // Clear out the global count buffer
+        // Requires a pre and post fill barrier
+
+        rhi::work_queue::buffer_barrier fill_barrier = {
+            .buffer = _forward_light_clustering.global_light_index_count_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .src_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.global_light_index_count_buffer_size,
+        };
+
+        queue.pipeline_barriers(commands, {}, {&fill_barrier, 1});
+        queue.fill(commands, _forward_light_clustering.global_light_index_count_buffer, 0,
+                   _forward_light_clustering.global_light_index_count_buffer_size, 0);
+
+        // Set up the barriers for the light clusters, light cluster ranges, global light index buffer, and global light
+        // index count buffer
+        rhi::work_queue::buffer_barrier post_fill_barrier = {
+            .buffer = _forward_light_clustering.global_light_index_count_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .dst_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.global_light_index_count_buffer_size,
+        };
+
+        // compute -> compute
+        rhi::work_queue::buffer_barrier light_cluster_barrier = {
+            .buffer = _forward_light_clustering.light_cluster_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .src_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .dst_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.light_cluster_buffer_size,
+        };
+
+        // fragmnet -> compute
+        rhi::work_queue::buffer_barrier light_cluster_ranges_barrier = {
+            .buffer = _forward_light_clustering.light_cluster_range_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .src_access = make_enum_mask(rhi::memory_access::shader_storage_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .dst_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.light_cluster_range_buffer_size,
+        };
+
+        // fragment -> compute
+        rhi::work_queue::buffer_barrier global_light_index_barrier = {
+            .buffer = _forward_light_clustering.global_light_index_list_buffer,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .src_access = make_enum_mask(rhi::memory_access::shader_storage_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::compute_shader),
+            .dst_access =
+                make_enum_mask(rhi::memory_access::shader_storage_read, rhi::memory_access::shader_storage_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = 0,
+            .size = _forward_light_clustering.global_light_index_list_buffer_size,
+        };
+
+        // Transition the buffers to the compute shader stage
+        array pre_light_fill_barriers = {
+            post_fill_barrier,
+            light_cluster_barrier,
+            light_cluster_ranges_barrier,
+            global_light_index_barrier,
+        };
+
+        queue.pipeline_barriers(commands, {}, pre_light_fill_barriers);
+
+        static constexpr auto z_slices = 6;
+        const auto pcs = clusters::cull_lights_pcs{
+            .grid_ci =
+                {
+                    .inv_proj = inv_proj,
+                    .screen_bounds = math::vec4(static_cast<float>(_render_target_width),
+                                                static_cast<float>(_render_target_height), 0.0f, 1000.0f),
+                    .workgroup_count_tile_size_px =
+                        math::vec4(static_cast<uint32_t>(num_clusters_x), static_cast<uint32_t>(num_clusters_y),
+                                   static_cast<uint32_t>(num_clusters_z / z_slices),
+                                   static_cast<uint32_t>(_render_target_width / num_clusters_x)),
+                },
+            .light_count = static_cast<uint32_t>(_cpu_buffers.point_and_spot_lights.size()),
+        };
+
+        const auto scene_constants_offset =
+            static_cast<uint32_t>(_z_prepass.scene_constant_bytes_per_frame * _frame_in_flight);
+        const auto lights_offset = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame * _frame_in_flight);
+
+        const auto dynamic_offsets = array{
+            scene_constants_offset,
+            lights_offset,
+        };
+
+        queue.bind(commands, _forward_light_clustering.fill_clusters);
+        queue.bind(commands, _forward_light_clustering.fill_cluster_layout, rhi::bind_point::compute, 0,
+                   {&_forward_light_clustering.fill_cluster_desc_set_0, 1}, dynamic_offsets);
+        queue.typed_push_constants(commands, _forward_light_clustering.fill_cluster_layout,
+                                   make_enum_mask(rhi::shader_stage::compute), 0, pcs);
+
+        queue.dispatch(commands, 1, 1, z_slices);
+    }
+
+    void pbr_pipeline::_draw_ssao_pass([[maybe_unused]] renderer& parent, [[maybe_unused]] rhi::device& dev,
+                                       [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
+                                       rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                                       const gpu::camera& cam)
+    {
+        if (_ssao.last_binding_update_frame >= _frame_number)
+        {
+            {
+                auto ds_desc = rhi::descriptor_set_desc{};
+                ds_desc.layout = _ssao.ssao_desc_set_0_layout;
+
+                ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                    .index = 0,
+                    .type = rhi::descriptor_type::dynamic_constant_buffer,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_ssao.scene_constant_bytes_per_frame),
+                    .buffer = _ssao.scene_constants,
+                });
+
+                const auto depth_buffer_binding = rhi::image_binding_info{
+                    .image = _render_targets.depth,
+                    .layout = rhi::image_layout::shader_read_only,
+                };
+
+                const auto normals_buffer_binding = rhi::image_binding_info{
+                    .image = _render_targets.encoded_normals,
+                    .layout = rhi::image_layout::shader_read_only,
+                };
+
+                const auto noise_texture_binding = rhi::image_binding_info{
+                    .image = _ssao.noise_texture,
+                    .layout = rhi::image_layout::shader_read_only,
+                };
+
+                rhi::image_binding_descriptor depth_binding_desc = {
+                    .index = 1,
+                    .type = rhi::descriptor_type::sampled_image,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                depth_binding_desc.images.push_back(depth_buffer_binding);
+                ds_desc.images.push_back(depth_binding_desc);
+
+                rhi::image_binding_descriptor normals_binding_desc = {
+                    .index = 2,
+                    .type = rhi::descriptor_type::sampled_image,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                normals_binding_desc.images.push_back(normals_buffer_binding);
+                ds_desc.images.push_back(normals_binding_desc);
+
+                rhi::image_binding_descriptor noise_binding_desc = {
+                    .index = 3,
+                    .type = rhi::descriptor_type::sampled_image,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                noise_binding_desc.images.push_back(noise_texture_binding);
+                ds_desc.images.push_back(noise_binding_desc);
+
+                rhi::sampler_binding_descriptor linear_sampler_desc = {
+                    .index = 4,
+                    .samplers = {},
+                };
+                linear_sampler_desc.samplers.push_back(_ssao.clamped_linear_no_aniso_sampler);
+                ds_desc.samplers.push_back(linear_sampler_desc);
+
+                rhi::sampler_binding_descriptor point_sampler_desc = {
+                    .index = 5,
+                    .samplers = {},
+                };
+                point_sampler_desc.samplers.push_back(_ssao.clamped_point_no_aniso_sampler);
+                ds_desc.samplers.push_back(point_sampler_desc);
+
+                dev.destroy_descriptor_set(_ssao.ssao_desc_set_0);
+                _ssao.ssao_desc_set_0 = dev.create_descriptor_set(ds_desc);
+            }
+
+            {
+                auto ds_desc = rhi::descriptor_set_desc{};
+                ds_desc.layout = _ssao.ssao_blur_desc_set_0_layout;
+
+                rhi::image_binding_descriptor ssao_target_binding_desc = {
+                    .index = 0,
+                    .type = rhi::descriptor_type::sampled_image,
+                    .array_offset = 0,
+                    .images = {},
+                };
+
+                ssao_target_binding_desc.images.push_back({
+                    .image = _ssao.ssao_target,
+                    .layout = rhi::image_layout::shader_read_only,
+                });
+
+                ds_desc.images.push_back(ssao_target_binding_desc);
+
+                rhi::sampler_binding_descriptor point_sampler_desc = {
+                    .index = 1,
+                    .samplers = {},
+                };
+                point_sampler_desc.samplers.push_back(_ssao.clamped_point_no_aniso_sampler);
+
+                ds_desc.samplers.push_back(point_sampler_desc);
+
+                dev.destroy_descriptor_set(_ssao.ssao_blur_desc_set_0);
+                _ssao.ssao_blur_desc_set_0 = dev.create_descriptor_set(ds_desc);
+            }
+
+            _ssao.last_binding_update_frame = _frame_number;
+        }
+
+        ssao::scene_constants constants;
+        constants.bias = _ssao_constants.bias;
+        constants.radius = _ssao_constants.radius;
+        constants.inv_projection = cam.inv_proj;
+        constants.inv_view = cam.inv_view;
+        constants.projection = cam.proj;
+        constants.view = cam.view;
+
+        for (auto i = 0u; i < _ssao.noise_kernel.size(); ++i)
+        {
+            constants.kernel[i] = _ssao.noise_kernel[i];
+        }
+
+        // Copy the scene constants to the GPU
+        const auto staging_buffer_bytes = dev.map_buffer(_gpu_buffers.staging);
+        const auto staging_buffer_offset =
+            _ssao.scene_constant_bytes_per_frame * _frame_in_flight + _gpu_resource_usages.staging_bytes_writen;
+        auto staging_bytes = staging_buffer_bytes + staging_buffer_offset;
+        std::memcpy(staging_bytes, &constants, sizeof(ssao::scene_constants));
+
+        queue.copy(commands, _gpu_buffers.staging, _ssao.scene_constants, staging_buffer_offset,
+                   _ssao.scene_constant_bytes_per_frame * _frame_in_flight, sizeof(ssao::scene_constants));
+
+        // Transition the SSAO target to color attachment
+        // Transition the encoded normals to shader read only
+        // Transition the depth buffer to shader read
+        // Barrier for the scene constants to be ready ready for read in the shader
+        rhi::work_queue::image_barrier ssao_target_barrier = {
+            .image = _ssao.ssao_target,
+            .old_layout = rhi::image_layout::undefined,
+            .new_layout = rhi::image_layout::color_attachment,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .src_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .dst_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        rhi::work_queue::image_barrier encoded_normals_barrier = {
+            .image = _render_targets.encoded_normals,
+            .old_layout = rhi::image_layout::color_attachment,
+            .new_layout = rhi::image_layout::shader_read_only,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        rhi::work_queue::image_barrier depth_buffer_barrier = {
+            .image = _render_targets.depth,
+            .old_layout = rhi::image_layout::depth,
+            .new_layout = rhi::image_layout::shader_read_only,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::late_fragment_tests),
+            .src_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        const auto ssao_target_barriers = array{
+            ssao_target_barrier,
+            encoded_normals_barrier,
+            depth_buffer_barrier,
+        };
+
+        rhi::work_queue::buffer_barrier scene_constants_upload_barrier{
+            .buffer = _ssao.scene_constants,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader, rhi::pipeline_stage::compute_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::constant_buffer_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _ssao.scene_constant_bytes_per_frame * _frame_in_flight,
+            .size = _ssao.scene_constant_bytes_per_frame,
+        };
+
+        const auto ssao_buffer_barriers = array{
+            scene_constants_upload_barrier,
+        };
+
+        queue.pipeline_barriers(commands, ssao_target_barriers, ssao_buffer_barriers);
+
+        const auto dynamic_offsets = array{
+            static_cast<uint32_t>(_ssao.scene_constant_bytes_per_frame * _frame_in_flight),
+        };
+
+        // Set up the render pass
+        rhi::work_queue::render_pass_info ssao_pass_info = {};
+        ssao_pass_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = _ssao.ssao_target,
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        ssao_pass_info.x = 0;
+        ssao_pass_info.y = 0;
+        ssao_pass_info.width = _render_target_width;
+        ssao_pass_info.height = _render_target_height;
+        ssao_pass_info.layers = 1;
+        ssao_pass_info.name = "SSAO Pass";
+
+        queue.begin_rendering(commands, ssao_pass_info);
+        queue.bind(commands, _ssao.ssao_pipeline);
+        queue.bind(commands, _ssao.ssao_layout, rhi::bind_point::graphics, 0, {&_ssao.ssao_desc_set_0, 1},
+                   dynamic_offsets);
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::back));
+        queue.set_scissor_region(commands, 0, 0, _render_target_width, _render_target_height, 0);
+        queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
+                           static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, false);
+        queue.draw(commands, 3, 1, 0, 0);
+        queue.end_rendering(commands);
+
+        // ----------------------- BLUR ------------------------ //
+        // Transition the SSAO target to shader read only
+        // Transition the SSAO blur target to color attachment
+
+        rhi::work_queue::image_barrier ssao_target_to_shader_read_only = {
+            .image = _ssao.ssao_target,
+            .old_layout = rhi::image_layout::color_attachment,
+            .new_layout = rhi::image_layout::shader_read_only,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        rhi::work_queue::image_barrier ssao_blur_target_barrier = {
+            .image = _ssao.ssao_blur_target,
+            .old_layout = rhi::image_layout::undefined,
+            .new_layout = rhi::image_layout::color_attachment,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .src_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            .dst_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+        };
+
+        const auto ssao_blur_target_barriers = array{
+            ssao_target_to_shader_read_only,
+            ssao_blur_target_barrier,
+        };
+
+        queue.transition_image(commands, ssao_blur_target_barriers);
+
+        // Set up the blur render pass
+        rhi::work_queue::render_pass_info ssao_blur_pass_info = {};
+        ssao_blur_pass_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = _ssao.ssao_blur_target,
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        ssao_blur_pass_info.x = 0;
+        ssao_blur_pass_info.y = 0;
+        ssao_blur_pass_info.width = _render_target_width;
+        ssao_blur_pass_info.height = _render_target_height;
+        ssao_blur_pass_info.layers = 1;
+        ssao_blur_pass_info.name = "SSAO Blur Pass";
+
+        queue.begin_rendering(commands, ssao_blur_pass_info);
+        queue.bind(commands, _ssao.ssao_blur_pipeline);
+        queue.bind(commands, _ssao.ssao_blur_layout, rhi::bind_point::graphics, 0,
+                   {&_ssao.ssao_blur_desc_set_0, 1}); // No dynamic offsets
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::back));
+        queue.set_scissor_region(commands, 0, 0, _render_target_width, _render_target_height, 0);
+        queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
+                           static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, false);
+        queue.draw(commands, 3, 1, 0, 0);
+        queue.end_rendering(commands);
+    }
+
+    void pbr_pipeline::_draw_skybox_pass([[maybe_unused]] renderer& parent, rhi::device& dev,
+                                         [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
+                                         rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                                         const gpu::camera& camera)
+    {
+        if (_skybox.last_binding_update_frame >= _frame_number)
+        {
+            if (_skybox.hdri_texture)
+            {
+                auto ds_desc = rhi::descriptor_set_desc{};
+                ds_desc.layout = _skybox.desc_set_0_layout;
+
+                ds_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+                    .index = 0,
+                    .type = skybox::scene_constants_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_skybox.camera_bytes_per_frame),
+                    .buffer = _skybox.camera_payload,
+                });
+
+                auto images = vector<rhi::image_binding_info>();
+                images.push_back({
+                    .image = _skybox.hdri_texture,
+                    .layout = rhi::image_layout::shader_read_only,
+                });
+
+                ds_desc.images.push_back(rhi::image_binding_descriptor{
+                    .index = 1,
+                    .type = rhi::descriptor_type::sampled_image,
+                    .array_offset = 0,
+                    .images = tempest::move(images),
+                });
+
+                auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>();
+                samplers.push_back(_bindless_textures.linear_sampler_no_aniso);
+
+                ds_desc.samplers.push_back(rhi::sampler_binding_descriptor{
+                    .index = 2,
+                    .samplers = tempest::move(samplers),
+                });
+
+                dev.destroy_descriptor_set(_skybox.desc_set_0);
+                _skybox.desc_set_0 = dev.create_descriptor_set(ds_desc);
+            }
+            else
+            {
+                dev.destroy_descriptor_set(_skybox.desc_set_0);
+            }
+        }
+
+        if (!_skybox.hdri_texture)
+        {
+            return; // No skybox to draw
+        }
+
+        // Copy camera to staging buffer
+        auto staging_buffer_ptr = dev.map_buffer(_gpu_buffers.staging);
+        auto staging_buffer_offset =
+            _gpu_resource_usages.staging_bytes_available * _frame_in_flight + _gpu_resource_usages.staging_bytes_writen;
+        std::memcpy(staging_buffer_ptr + staging_buffer_offset, &camera, sizeof(gpu::camera));
+        dev.unmap_buffer(_gpu_buffers.staging);
+        _gpu_resource_usages.staging_bytes_writen += sizeof(gpu::camera);
+
+        queue.copy(commands, _gpu_buffers.staging, _skybox.camera_payload, staging_buffer_offset,
+                   _skybox.camera_bytes_per_frame * _frame_in_flight, sizeof(gpu::camera));
+
+        rhi::work_queue::buffer_barrier camera_payload_barrier = {
+            .buffer = _skybox.camera_payload,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::vertex_shader),
+            .dst_access = make_enum_mask(rhi::memory_access::constant_buffer_read, rhi::memory_access::shader_read),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _skybox.camera_bytes_per_frame * _frame_in_flight,
+            .size = _skybox.camera_bytes_per_frame,
+        };
+
+        queue.pipeline_barriers(commands, {}, {&camera_payload_barrier, 1});
+
+        const auto camera_payload_offset = static_cast<uint32_t>(_skybox.camera_bytes_per_frame * _frame_in_flight);
+
+        const auto dynamic_offsets = array{
+            camera_payload_offset,
+        };
+
+        rhi::work_queue::render_pass_info rpi = {};
+        rpi.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = _render_targets.color,
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {1, 1, 1, 1},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+        rpi.width = _render_target_width;
+        rpi.height = _render_target_height;
+        rpi.x = 0;
+        rpi.y = 0;
+        rpi.layers = 1;
+        rpi.name = "Skybox Pass";
+
+        queue.begin_rendering(commands, rpi);
+        queue.bind(commands, _skybox.pipeline);
+        queue.bind(commands, _skybox.layout, rhi::bind_point::graphics, 0, {&_skybox.desc_set_0, 1}, dynamic_offsets);
+        queue.set_scissor_region(commands, 0, 0, _render_target_width, _render_target_height, 0);
+        queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
+                           static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, false);
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::back));
+        queue.draw(commands, 3, 1, 0, 0);
+        queue.end_rendering(commands);
+    }
+
+    void pbr_pipeline::_draw_pbr_opaque_pass([[maybe_unused]] renderer& parent, rhi::device& dev,
+                                             [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
+                                             rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands)
+    {
+        if (_pbr_opaque.last_binding_update_frame >= _frame_number ||
+            _bindless_textures.last_updated_frame_index >= _frame_number)
+        {
+
+            auto ds_desc_0 = rhi::descriptor_set_desc{};
+            ds_desc_0.layout = _pbr_opaque.desc_set_0_layout;
+
+            ds_desc_0.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::scene_constants_layout.binding_index,
+                .type = pbr::scene_constants_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame),
+                .buffer = _gpu_buffers.scene_constants,
+            });
+
+            ds_desc_0.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::vertex_pull_buffer_layout.binding_index,
+                .type = pbr::vertex_pull_buffer_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_resource_usages.vertex_bytes_written),
+                .buffer = _gpu_buffers.vertices,
+            });
+
+            ds_desc_0.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::mesh_buffer_layout.binding_index,
+                .type = pbr::mesh_buffer_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_resource_usages.mesh_layout_bytes_written),
+                .buffer = _gpu_buffers.mesh_layouts,
+            });
+
+            ds_desc_0.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::object_buffer_layout.binding_index,
+                .type = pbr::object_buffer_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame),
+                .buffer = _gpu_buffers.objects,
+            });
+
+            ds_desc_0.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::instance_buffer_layout.binding_index,
+                .type = pbr::instance_buffer_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame),
+                .buffer = _gpu_buffers.instances,
+            });
+
+            ds_desc_0.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::material_buffer_layout.binding_index,
+                .type = pbr::material_buffer_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(sizeof(gpu::material_data) * _materials.materials.size()),
+                .buffer = _gpu_buffers.materials,
+            });
+
+            rhi::sampler_binding_descriptor linear_sampler_desc = {
+                .index = pbr::linear_sampler_layout.binding_index,
+                .samplers = {},
+            };
+            linear_sampler_desc.samplers.push_back(_bindless_textures.linear_sampler);
+
+            ds_desc_0.samplers.push_back(linear_sampler_desc);
+
+            rhi::image_binding_descriptor bindless_textures_desc = {
+                .index = pbr::bindless_textures_layout.binding_index,
+                .type = rhi::descriptor_type::sampled_image,
+                .array_offset = 0,
+                .images = {},
+            };
+
+            for (auto& texture : _bindless_textures.images)
+            {
+                bindless_textures_desc.images.push_back({
+                    .image = texture,
+                    .layout = rhi::image_layout::shader_read_only,
+                });
+            }
+
+            ds_desc_0.images.push_back(tempest::move(bindless_textures_desc));
+
+            rhi::image_binding_descriptor ao_texture_desc = {
+                .index = pbr::ao_image_layout.binding_index,
+                .type = pbr::ao_image_layout.type,
+                .array_offset = 0,
+                .images = {},
+            };
+            ao_texture_desc.images.push_back({
+                .image = _ssao.ssao_blur_target,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+
+            ds_desc_0.images.push_back(tempest::move(ao_texture_desc));
+
+            dev.destroy_descriptor_set(_pbr_opaque.desc_set_0);
+            _pbr_opaque.desc_set_0 = dev.create_descriptor_set(ds_desc_0);
+
+            auto ds_desc_1 = rhi::descriptor_set_desc{};
+            ds_desc_1.layout = _pbr_opaque.desc_set_1_layout;
+
+            ds_desc_1.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::lights_layout.binding_index,
+                .type = pbr::lights_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame),
+                .buffer = _gpu_buffers.point_and_spot_lights,
+            });
+
+            ds_desc_1.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::shadow_map_params_layout.binding_index,
+                .type = pbr::shadow_map_params_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_gpu_buffers.shadow_bytes_per_frame),
+                .buffer = _gpu_buffers.shadows,
+            });
+
+            ds_desc_1.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::light_grid_layout.binding_index,
+                .type = pbr::light_grid_layout.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_range_buffer_size),
+                .buffer = _forward_light_clustering.light_cluster_range_buffer,
+            });
+
+            ds_desc_1.buffers.push_back(rhi::buffer_binding_descriptor{
+                .index = pbr::global_index_list.binding_index,
+                .type = pbr::global_index_list.type,
+                .offset = 0,
+                .size = static_cast<uint32_t>(_forward_light_clustering.global_light_index_list_buffer_size),
+                .buffer = _forward_light_clustering.global_light_index_list_buffer,
+            });
+
+            vector<rhi::image_binding_info> shadow_map_bindings;
+            rhi::image_binding_info shadow_map_megatexture_binding = {
+                .image = _render_targets.shadow_megatexture,
+                .layout = rhi::image_layout::shader_read_only,
+            };
+            shadow_map_bindings.push_back(shadow_map_megatexture_binding);
+
+            rhi::image_binding_descriptor shadow_map_megatexture_desc = {
+                .index = pbr::shadow_map_megatexture_layout.binding_index,
+                .type = rhi::descriptor_type::sampled_image,
+                .array_offset = 0,
+                .images = tempest::move(shadow_map_bindings),
+            };
+
+            ds_desc_1.images.push_back(tempest::move(shadow_map_megatexture_desc));
+
+            dev.destroy_descriptor_set(_pbr_opaque.desc_set_1);
+            _pbr_opaque.desc_set_1 = dev.create_descriptor_set(ds_desc_1);
+
+            _pbr_opaque.last_binding_update_frame = _frame_number;
+        }
+
+        // Set up dynamic offsets for the descriptor sets
+        const auto scene_constants_offset =
+            static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight);
+        const auto objects_offset = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame * _frame_in_flight);
+        const auto instances_offset = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame * _frame_in_flight);
+        const auto lights_offset = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame * _frame_in_flight);
+        const auto shadows_offset = static_cast<uint32_t>(_gpu_buffers.shadow_bytes_per_frame * _frame_in_flight);
+
+        const auto dynamic_offsets = array{
+            scene_constants_offset, objects_offset, instances_offset, lights_offset, shadows_offset,
+        };
+
+        const auto descriptor_sets = array{
+            _pbr_opaque.desc_set_0,
+            _pbr_opaque.desc_set_1,
+        };
+
+        rhi::work_queue::render_pass_info rpi = {
             .color_attachments = {},
-            .depth_attachment = none(),
-            .stencil_attachment = none(),
+            .depth_attachment = tempest::nullopt,
+            .stencil_attachment = tempest::nullopt,
             .x = 0,
             .y = 0,
             .width = _render_target_width,
             .height = _render_target_height,
             .layers = 1,
-            .name = "Clear Color",
+            .name = "PBR Opaque Pass",
         };
 
-        render_pass_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+        rpi.color_attachments.push_back(rhi::work_queue::color_attachment_info{
             .image = _render_targets.color,
             .layout = rhi::image_layout::color_attachment,
-            .clear_color = {0.0f, 0.0f, 1.0f, 1.0f},
+            .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        rpi.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = _render_targets.depth,
+            .layout = rhi::image_layout::depth,
+            .clear_depth = 1.0f,
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::store,
+        };
+
+        queue.begin_rendering(commands, rpi);
+
+        queue.bind(commands, _pbr_opaque.pipeline);
+        queue.bind(commands, _pbr_opaque.layout, rhi::bind_point::graphics, 0, descriptor_sets, dynamic_offsets);
+        queue.bind_index_buffer(commands, _gpu_buffers.vertices, 0, rhi::index_format::uint32);
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::back));
+        queue.set_scissor_region(commands, 0, 0, _render_target_width, _render_target_height, 0);
+        queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
+                           static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, true);
+
+        const auto indirect_command_offset = _cpu_buffers.indirect_command_bytes_per_frame * _frame_in_flight;
+
+        for (auto [key, batch] : _cpu_buffers.draw_batches)
+        {
+            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+            {
+                queue.draw(commands, _gpu_buffers.indirect_commands,
+                           static_cast<uint32_t>(indirect_command_offset +
+                                                 batch.indirect_command_offset * sizeof(gpu::indexed_indirect_command)),
+                           static_cast<uint32_t>(batch.objects.size()), sizeof(gpu::indexed_indirect_command));
+            }
+        }
+
+        queue.end_rendering(commands);
+    }
+
+    void pbr_pipeline::_draw_pbr_mboit_pass([[maybe_unused]] renderer& parent, rhi::device& dev,
+                                            [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
+                                            rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands)
+    {
+        if (_pbr_transparencies.last_binding_update_frame >= _frame_number ||
+            _bindless_textures.last_updated_frame_index >= _frame_number)
+        {
+            // Gather descriptor sets
+            {
+                auto ds_desc_0 = rhi::descriptor_set_desc{};
+                ds_desc_0.layout = _pbr_transparencies.oit_gather_desc_set_0_layout;
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::scene_constants_layout.binding_index,
+                    .type = pbr_transparencies::scene_constants_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame),
+                    .buffer = _gpu_buffers.scene_constants,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::vertex_pull_buffer_layout.binding_index,
+                    .type = pbr_transparencies::vertex_pull_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_resource_usages.vertex_bytes_written),
+                    .buffer = _gpu_buffers.vertices,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::mesh_buffer_layout.binding_index,
+                    .type = pbr_transparencies::mesh_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_resource_usages.mesh_layout_bytes_written),
+                    .buffer = _gpu_buffers.mesh_layouts,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::object_buffer_layout.binding_index,
+                    .type = pbr_transparencies::object_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame),
+                    .buffer = _gpu_buffers.objects,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::instance_buffer_layout.binding_index,
+                    .type = pbr_transparencies::instance_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame),
+                    .buffer = _gpu_buffers.instances,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::material_buffer_layout.binding_index,
+                    .type = pbr_transparencies::material_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_materials.materials.size() * sizeof(gpu::material_data)),
+                    .buffer = _gpu_buffers.materials,
+                });
+
+                auto ao_texture_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::ao_image_layout.binding_index,
+                    .type = pbr_transparencies::ao_image_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                ao_texture_desc.images.push_back({
+                    .image = _ssao.ssao_blur_target,
+                    .layout = rhi::image_layout::shader_read_only,
+                });
+
+                ds_desc_0.images.push_back(tempest::move(ao_texture_desc));
+
+                auto oit_moments_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::oit_image_layout.binding_index,
+                    .type = pbr_transparencies::oit_image_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                oit_moments_desc.images.push_back({
+                    .image = _pbr_transparencies.moments_target,
+                    .layout = rhi::image_layout::general,
+                });
+
+                ds_desc_0.images.push_back(tempest::move(oit_moments_desc));
+
+                auto oit_zeroth_moment_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::oit_zeroth_image_layout.binding_index,
+                    .type = pbr_transparencies::oit_zeroth_image_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                oit_zeroth_moment_desc.images.push_back({
+                    .image = _pbr_transparencies.zeroth_moment_target,
+                    .layout = rhi::image_layout::general,
+                });
+
+                ds_desc_0.images.push_back(tempest::move(oit_zeroth_moment_desc));
+
+                auto oit_linear_sampler = rhi::sampler_binding_descriptor{
+                    .index = pbr_transparencies::linear_sampler_layout.binding_index,
+                    .samplers = {},
+                };
+                oit_linear_sampler.samplers.push_back(_bindless_textures.linear_sampler);
+
+                ds_desc_0.samplers.push_back(tempest::move(oit_linear_sampler));
+
+                auto bindless_textures = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::bindless_textures_layout.binding_index,
+                    .type = pbr_transparencies::bindless_textures_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+
+                bindless_textures.images.reserve(_bindless_textures.images.size());
+
+                for (auto&& img : _bindless_textures.images)
+                {
+                    bindless_textures.images.push_back({
+                        .image = img,
+                        .layout = rhi::image_layout::shader_read_only,
+                    });
+                }
+
+                ds_desc_0.images.push_back(tempest::move(bindless_textures));
+
+                dev.destroy_descriptor_set(_pbr_transparencies.oit_gather_desc_set_0);
+                _pbr_transparencies.oit_gather_desc_set_0 = dev.create_descriptor_set(ds_desc_0);
+
+                auto ds_desc_1 = rhi::descriptor_set_desc{};
+                ds_desc_1.layout = _pbr_transparencies.oit_gather_desc_set_1_layout;
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::lights_layout.binding_index,
+                    .type = pbr_transparencies::lights_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame),
+                    .buffer = _gpu_buffers.point_and_spot_lights,
+                });
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::shadow_map_params_layout.binding_index,
+                    .type = pbr_transparencies::shadow_map_params_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.shadow_bytes_per_frame),
+                    .buffer = _gpu_buffers.shadows,
+                });
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::light_grid_layout.binding_index,
+                    .type = pbr_transparencies::light_grid_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_range_buffer_size),
+                    .buffer = _forward_light_clustering.light_cluster_range_buffer,
+                });
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::global_light_index_list_layout.binding_index,
+                    .type = pbr_transparencies::global_light_index_list_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_forward_light_clustering.global_light_index_list_buffer_size),
+                    .buffer = _forward_light_clustering.global_light_index_list_buffer,
+                });
+
+                auto shadow_map_info = rhi::image_binding_info{
+                    .image = _render_targets.shadow_megatexture,
+                    .layout = rhi::image_layout::shader_read_only,
+                };
+
+                auto shadow_map_megatexture_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::shadow_map_layout.binding_index,
+                    .type = pbr_transparencies::shadow_map_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                shadow_map_megatexture_desc.images.push_back(tempest::move(shadow_map_info));
+
+                ds_desc_1.images.push_back(tempest::move(shadow_map_megatexture_desc));
+
+                dev.destroy_descriptor_set(_pbr_transparencies.oit_gather_desc_set_1);
+                _pbr_transparencies.oit_gather_desc_set_1 = dev.create_descriptor_set(ds_desc_1);
+            }
+
+            // Resolve descriptor sets
+            {
+                auto ds_desc_0 = rhi::descriptor_set_desc{};
+                ds_desc_0.layout = _pbr_transparencies.oit_resolve_desc_set_0_layout;
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::scene_constants_layout.binding_index,
+                    .type = pbr_transparencies::scene_constants_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame),
+                    .buffer = _gpu_buffers.scene_constants,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::vertex_pull_buffer_layout.binding_index,
+                    .type = pbr_transparencies::vertex_pull_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_resource_usages.vertex_bytes_written),
+                    .buffer = _gpu_buffers.vertices,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::mesh_buffer_layout.binding_index,
+                    .type = pbr_transparencies::mesh_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_resource_usages.mesh_layout_bytes_written),
+                    .buffer = _gpu_buffers.mesh_layouts,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::object_buffer_layout.binding_index,
+                    .type = pbr_transparencies::object_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame),
+                    .buffer = _gpu_buffers.objects,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::instance_buffer_layout.binding_index,
+                    .type = pbr_transparencies::instance_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame),
+                    .buffer = _gpu_buffers.instances,
+                });
+
+                ds_desc_0.buffers.push_back({
+                    .index = pbr_transparencies::material_buffer_layout.binding_index,
+                    .type = pbr_transparencies::material_buffer_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_materials.materials.size() * sizeof(gpu::material_data)),
+                    .buffer = _gpu_buffers.materials,
+                });
+
+                auto ao_texture_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::ao_image_layout.binding_index,
+                    .type = pbr_transparencies::ao_image_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                ao_texture_desc.images.push_back({
+                    .image = _ssao.ssao_blur_target,
+                    .layout = rhi::image_layout::shader_read_only,
+                });
+
+                ds_desc_0.images.push_back(tempest::move(ao_texture_desc));
+
+                auto oit_moments_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::oit_image_layout.binding_index,
+                    .type = pbr_transparencies::oit_image_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                oit_moments_desc.images.push_back({
+                    .image = _pbr_transparencies.moments_target,
+                    .layout = rhi::image_layout::general,
+                });
+                ds_desc_0.images.push_back(tempest::move(oit_moments_desc));
+
+                auto oit_zeroth_moment_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::oit_zeroth_image_layout.binding_index,
+                    .type = pbr_transparencies::oit_zeroth_image_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                oit_zeroth_moment_desc.images.push_back({
+                    .image = _pbr_transparencies.zeroth_moment_target,
+                    .layout = rhi::image_layout::general,
+                });
+                ds_desc_0.images.push_back(tempest::move(oit_zeroth_moment_desc));
+
+                auto oit_linear_sampler = rhi::sampler_binding_descriptor{
+                    .index = pbr_transparencies::linear_sampler_layout.binding_index,
+                    .samplers = {},
+                };
+                oit_linear_sampler.samplers.push_back(_bindless_textures.linear_sampler);
+                ds_desc_0.samplers.push_back(tempest::move(oit_linear_sampler));
+
+                auto bindless_textures = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::bindless_textures_layout.binding_index,
+                    .type = pbr_transparencies::bindless_textures_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                bindless_textures.images.reserve(_bindless_textures.images.size());
+
+                for (auto&& img : _bindless_textures.images)
+                {
+                    bindless_textures.images.push_back({
+                        .image = img,
+                        .layout = rhi::image_layout::shader_read_only,
+                    });
+                }
+
+                ds_desc_0.images.push_back(tempest::move(bindless_textures));
+
+                dev.destroy_descriptor_set(_pbr_transparencies.oit_resolve_desc_set_0);
+                _pbr_transparencies.oit_resolve_desc_set_0 = dev.create_descriptor_set(ds_desc_0);
+
+                auto ds_desc_1 = rhi::descriptor_set_desc{};
+                ds_desc_1.layout = _pbr_transparencies.oit_resolve_desc_set_1_layout;
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::lights_layout.binding_index,
+                    .type = pbr_transparencies::lights_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame),
+                    .buffer = _gpu_buffers.point_and_spot_lights,
+                });
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::shadow_map_params_layout.binding_index,
+                    .type = pbr_transparencies::shadow_map_params_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_gpu_buffers.shadow_bytes_per_frame),
+                    .buffer = _gpu_buffers.shadows,
+                });
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::light_grid_layout.binding_index,
+                    .type = pbr_transparencies::light_grid_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_forward_light_clustering.light_cluster_range_buffer_size),
+                    .buffer = _forward_light_clustering.light_cluster_range_buffer,
+                });
+
+                ds_desc_1.buffers.push_back({
+                    .index = pbr_transparencies::global_light_index_list_layout.binding_index,
+                    .type = pbr_transparencies::global_light_index_list_layout.type,
+                    .offset = 0,
+                    .size = static_cast<uint32_t>(_forward_light_clustering.global_light_index_list_buffer_size),
+                    .buffer = _forward_light_clustering.global_light_index_list_buffer,
+                });
+
+                auto shadow_map_info = rhi::image_binding_info{
+                    .image = _render_targets.shadow_megatexture,
+                    .layout = rhi::image_layout::shader_read_only,
+                };
+                auto shadow_map_megatexture_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::shadow_map_layout.binding_index,
+                    .type = pbr_transparencies::shadow_map_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                shadow_map_megatexture_desc.images.push_back(tempest::move(shadow_map_info));
+
+                ds_desc_1.images.push_back(tempest::move(shadow_map_megatexture_desc));
+
+                dev.destroy_descriptor_set(_pbr_transparencies.oit_resolve_desc_set_1);
+                _pbr_transparencies.oit_resolve_desc_set_1 = dev.create_descriptor_set(ds_desc_1);
+            }
+
+            // Blend descriptor sets
+            {
+                auto ds_desc_0 = rhi::descriptor_set_desc{};
+                ds_desc_0.layout = _pbr_transparencies.oit_blend_desc_set_0_layout;
+
+                auto moments_target_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::blend_moments_layout.binding_index,
+                    .type = pbr_transparencies::blend_moments_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                moments_target_desc.images.push_back({
+                    .image = _pbr_transparencies.moments_target,
+                    .layout = rhi::image_layout::general,
+                });
+
+                ds_desc_0.images.push_back(tempest::move(moments_target_desc));
+
+                auto zeroth_moment_target_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::blend_moments_zeroth_layout.binding_index,
+                    .type = pbr_transparencies::blend_moments_zeroth_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                zeroth_moment_target_desc.images.push_back({
+                    .image = _pbr_transparencies.zeroth_moment_target,
+                    .layout = rhi::image_layout::general,
+                });
+
+                ds_desc_0.images.push_back(tempest::move(zeroth_moment_target_desc));
+
+                auto linear_sampler_desc = rhi::sampler_binding_descriptor{
+                    .index = pbr_transparencies::blend_linear_sampler_layout.binding_index,
+                    .samplers = {},
+                };
+                linear_sampler_desc.samplers.push_back(_bindless_textures.linear_sampler);
+
+                ds_desc_0.samplers.push_back(tempest::move(linear_sampler_desc));
+
+                auto transparency_accumulator_desc = rhi::image_binding_descriptor{
+                    .index = pbr_transparencies::blend_transparency_accumulator_layout.binding_index,
+                    .type = pbr_transparencies::blend_transparency_accumulator_layout.type,
+                    .array_offset = 0,
+                    .images = {},
+                };
+                transparency_accumulator_desc.images.push_back({
+                    .image = _render_targets.transparency_accumulator,
+                    .layout = rhi::image_layout::shader_read_only,
+                });
+
+                ds_desc_0.images.push_back(tempest::move(transparency_accumulator_desc));
+
+                dev.destroy_descriptor_set(_pbr_transparencies.oit_blend_desc_set_0);
+                _pbr_transparencies.oit_blend_desc_set_0 = dev.create_descriptor_set(ds_desc_0);
+            }
+
+            _pbr_transparencies.last_binding_update_frame = _frame_number;
+        }
+
+        // Barriers
+        // - Transparency Accumulator: Undefined -> Color Attachment
+        // - Moments Target: Undefined -> Transfer Dst
+        // - Zeroth Moment Target: Undefined -> Transfer Dst
+
+        const auto pre_clear_barriers = array{
+            rhi::work_queue::image_barrier{
+                .image = _render_targets.transparency_accumulator,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::color_attachment,
+                .src_stages = make_enum_mask(
+                    rhi::pipeline_stage::fragment_shader,
+                    rhi::pipeline_stage::color_attachment_output), // read in the fragment shader .src_access =
+                .src_access = make_enum_mask(
+                    rhi::memory_access::shader_read,
+                    rhi::memory_access::color_attachment_write), // read in the fragment shader.dst_stages =
+                .dst_stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output), // write in the color attachment
+                .dst_access =
+                    make_enum_mask(rhi::memory_access::color_attachment_write), // write in the color attachment
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.moments_target,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::transfer_dst,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .src_access = make_enum_mask(rhi::memory_access::shader_read),      // read in the fragment shader
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::clear),           // write in the transfer stage
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),   // write in the transfer stage
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.zeroth_moment_target,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::transfer_dst,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .src_access = make_enum_mask(rhi::memory_access::shader_read),      // read in the fragment shader
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::clear),           // write in the transfer stage
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),   // write in the transfer stage
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+        };
+
+        queue.pipeline_barriers(commands, pre_clear_barriers, {});
+
+        queue.clear_color_image(commands, _pbr_transparencies.moments_target, rhi::image_layout::transfer_dst, 0.0f,
+                                0.0f, 0.0f, 0.0f);
+        queue.clear_color_image(commands, _pbr_transparencies.zeroth_moment_target, rhi::image_layout::transfer_dst,
+                                0.0f, 0.0f, 0.0f, 0.0f);
+
+        // Transition the moments and zeroth moment targets to general layout for the gather pass
+        const auto gather_barriers = array{
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.moments_target,
+                .old_layout = rhi::image_layout::transfer_dst,
+                .new_layout = rhi::image_layout::general,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::clear),           // read in the clear stage
+                .src_access = make_enum_mask(rhi::memory_access::transfer_write),   // write in the transfer stage
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // write in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read), // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.zeroth_moment_target,
+                .old_layout = rhi::image_layout::transfer_dst,
+                .new_layout = rhi::image_layout::general,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::clear),           // read in the clear stage
+                .src_access = make_enum_mask(rhi::memory_access::transfer_write),   // write in the transfer stage
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // write in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read), // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+        };
+
+        queue.pipeline_barriers(commands, gather_barriers, {});
+
+        // Set up dynamic offsets for the descriptor sets
+        const auto scene_constants_offset =
+            static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight);
+        const auto objects_offset = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame * _frame_in_flight);
+        const auto instances_offset = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame * _frame_in_flight);
+        const auto lights_offset = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame * _frame_in_flight);
+        const auto shadows_offset = static_cast<uint32_t>(_gpu_buffers.shadow_bytes_per_frame * _frame_in_flight);
+        const auto dynamic_offsets = array{
+            scene_constants_offset, objects_offset, instances_offset, lights_offset, shadows_offset,
+        };
+
+        // Begin the gather pass
+        rhi::work_queue::render_pass_info rpi = {
+            .color_attachments = {},
+            .depth_attachment = tempest::nullopt,
+            .stencil_attachment = tempest::nullopt,
+            .x = 0,
+            .y = 0,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .layers = 1,
+            .name = "PBR OIT Gather Pass",
+        };
+
+        rpi.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = _render_targets.transparency_accumulator,
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 0.0f},
             .load_op = rhi::work_queue::load_op::clear,
             .store_op = rhi::work_queue::store_op::store,
         });
 
-        queue.begin_rendering(commands, render_pass_info);
+        rpi.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = _render_targets.depth,
+            .layout = rhi::image_layout::depth,
+            .clear_depth = 1.0f,
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::store,
+        };
+
+        const auto gather_descriptors = array{
+            _pbr_transparencies.oit_gather_desc_set_0,
+            _pbr_transparencies.oit_gather_desc_set_1,
+        };
+
+        queue.begin_rendering(commands, rpi);
+        queue.bind(commands, _pbr_transparencies.oit_gather_pipeline);
+        queue.bind(commands, _pbr_transparencies.oit_gather_layout, rhi::bind_point::graphics, 0, gather_descriptors,
+                   dynamic_offsets);
+        queue.bind_index_buffer(commands, _gpu_buffers.vertices, 0, rhi::index_format::uint32);
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::back));
+        queue.set_scissor_region(commands, 0, 0, _render_target_width, _render_target_height, 0);
+        queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
+                           static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, true);
+
+        {
+            // Draw just like normal, but only for the transparent objects
+            const auto indirect_command_offset = _cpu_buffers.indirect_command_bytes_per_frame * _frame_in_flight;
+
+            for (auto [key, batch] : _cpu_buffers.draw_batches)
+            {
+                if (key.alpha_type == alpha_behavior::TRANSMISSIVE || key.alpha_type == alpha_behavior::TRANSPARENT)
+                {
+                    queue.draw(
+                        commands, _gpu_buffers.indirect_commands,
+                        static_cast<uint32_t>(indirect_command_offset +
+                                              batch.indirect_command_offset * sizeof(gpu::indexed_indirect_command)),
+                        static_cast<uint32_t>(batch.objects.size()), sizeof(gpu::indexed_indirect_command));
+                }
+            }
+        }
+
+        queue.end_rendering(commands);
+
+        // Execution barrier on the transparency accumulator and moments targets
+
+        const auto resolve_barriers = array{
+            rhi::work_queue::image_barrier{
+                .image = _render_targets.transparency_accumulator,
+                .old_layout = rhi::image_layout::color_attachment,
+                .new_layout = rhi::image_layout::color_attachment,
+                .src_stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output), // write in the color attachment
+                .src_access =
+                    make_enum_mask(rhi::memory_access::color_attachment_write), // write in the color attachment
+                .dst_stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output), // read in the color attachment
+                .dst_access =
+                    make_enum_mask(rhi::memory_access::color_attachment_read,
+                                   rhi::memory_access::color_attachment_write), // read in the color attachment
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.moments_target,
+                .old_layout = rhi::image_layout::general,
+                .new_layout = rhi::image_layout::general,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .src_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read),      // read in the fragment shader
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // write in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read), // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.zeroth_moment_target,
+                .old_layout = rhi::image_layout::general,
+                .new_layout = rhi::image_layout::general,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .src_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read),      // read in the fragment shader
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // write in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read), // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+        };
+
+        queue.pipeline_barriers(commands, resolve_barriers, {});
+
+        // Begin the resolve pass
+        rhi::work_queue::render_pass_info rpi_resolve = {
+            .color_attachments = {},
+            .depth_attachment = tempest::nullopt,
+            .stencil_attachment = tempest::nullopt,
+            .x = 0,
+            .y = 0,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .layers = 1,
+            .name = "PBR OIT Resolve Pass",
+        };
+
+        rpi_resolve.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = _render_targets.transparency_accumulator,
+            .layout = rhi::image_layout::general,
+            .clear_color = {0.0f, 0.0f, 0.0f, 0.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        rpi_resolve.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = _render_targets.depth,
+            .layout = rhi::image_layout::depth,
+            .clear_depth = 1.0f,
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::store,
+        };
+
+        const auto resolve_descriptors = array{
+            _pbr_transparencies.oit_resolve_desc_set_0,
+            _pbr_transparencies.oit_resolve_desc_set_1,
+        };
+
+        queue.begin_rendering(commands, rpi_resolve);
+        queue.bind(commands, _pbr_transparencies.oit_resolve_pipeline);
+        queue.bind(commands, _pbr_transparencies.oit_resolve_layout, rhi::bind_point::graphics, 0, resolve_descriptors,
+                   dynamic_offsets);
+        queue.bind_index_buffer(commands, _gpu_buffers.vertices, 0, rhi::index_format::uint32);
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::back));
+        queue.set_scissor_region(commands, 0, 0, _render_target_width, _render_target_height, 0);
+        queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
+                           static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, true);
+
+        {
+            const auto indirect_command_offset = _cpu_buffers.indirect_command_bytes_per_frame * _frame_in_flight;
+
+            // Draw just like normal, but only for the transparent objects
+            for (auto [key, batch] : _cpu_buffers.draw_batches)
+            {
+                if (key.alpha_type == alpha_behavior::TRANSPARENT || key.alpha_type == alpha_behavior::TRANSMISSIVE)
+                {
+                    queue.draw(
+                        commands, _gpu_buffers.indirect_commands,
+                        static_cast<uint32_t>(indirect_command_offset +
+                                              batch.indirect_command_offset * sizeof(gpu::indexed_indirect_command)),
+                        static_cast<uint32_t>(batch.objects.size()), sizeof(gpu::indexed_indirect_command));
+                }
+            }
+        }
+
+        queue.end_rendering(commands);
+
+        // Barriers
+        // - Transparency Accumulator: Color Attachment -> Shader Read Only
+        // - Moments Target: General -> General (Execution Barrier)
+        // - Zeroth Moment Target: General -> General (Execution Barrier)
+        // - Color Attachment: Color Attachment -> Color Attachment (Execution Barrier)
+
+        const auto post_resolve_barriers = array{
+            rhi::work_queue::image_barrier{
+                .image = _render_targets.transparency_accumulator,
+                .old_layout = rhi::image_layout::color_attachment,
+                .new_layout = rhi::image_layout::shader_read_only,
+                .src_stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output), // write in the color attachment
+                .src_access =
+                    make_enum_mask(rhi::memory_access::color_attachment_write),     // write in the color attachment
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read),      // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.moments_target,
+                .old_layout = rhi::image_layout::general,
+                .new_layout = rhi::image_layout::general,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // write in the fragment shader
+                .src_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read),      // write in the fragment shader
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read),      // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _pbr_transparencies.zeroth_moment_target,
+                .old_layout = rhi::image_layout::general,
+                .new_layout = rhi::image_layout::general,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // write in the fragment shader
+                .src_access = make_enum_mask(rhi::memory_access::shader_write,
+                                             rhi::memory_access::shader_read),      // write in the fragment shader
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read),      // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _render_targets.color,
+                .old_layout = rhi::image_layout::color_attachment,
+                .new_layout = rhi::image_layout::color_attachment,
+                .src_stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output), // write in the color attachment
+                .src_access =
+                    make_enum_mask(rhi::memory_access::color_attachment_write), // write in the color attachment
+                .dst_stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output), // read in the color attachment
+                .dst_access =
+                    make_enum_mask(rhi::memory_access::color_attachment_read,
+                                   rhi::memory_access::color_attachment_write), // read in the color attachment
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+        };
+
+        queue.pipeline_barriers(commands, post_resolve_barriers, {});
+
+        // Begin the blend pass
+        rhi::work_queue::render_pass_info rpi_blend = {
+            .color_attachments = {},
+            .depth_attachment = tempest::nullopt,
+            .stencil_attachment = tempest::nullopt,
+            .x = 0,
+            .y = 0,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .layers = 1,
+            .name = "PBR OIT Blend Pass",
+        };
+
+        rpi_blend.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = _render_targets.color,
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 0.0f},
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        const auto blend_descriptors = array{
+            _pbr_transparencies.oit_blend_desc_set_0,
+        };
+
+        queue.begin_rendering(commands, rpi_blend);
+        queue.bind(commands, _pbr_transparencies.oit_blend_pipeline);
+        queue.bind(commands, _pbr_transparencies.oit_blend_layout, rhi::bind_point::graphics, 0, blend_descriptors);
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::back));
+        queue.set_scissor_region(commands, 0, 0, _render_target_width, _render_target_height, 0);
+        queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
+                           static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, false);
+        queue.draw(commands, 3, 1, 0, 0); // Full-screen triangle for blending
         queue.end_rendering(commands);
     }
 } // namespace tempest::graphics

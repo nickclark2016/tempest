@@ -9,9 +9,9 @@ scoped.group('Engine', function()
             objdir '%{intermediates}'
     
             files {
-                'include/**.hpp',
-                'src/**.cpp',
-                'src/**.hpp',
+                'include/tempest/vk/*.hpp',
+                'src/*.cpp',
+                'src/*.hpp',
             }
     
             includedirs {
@@ -25,6 +25,24 @@ scoped.group('Engine', function()
                 'vk-bootstrap',
                 'vma',
             }
+
+            if _OPTIONS['debugshaders'] then
+                defines {
+                    'TEMPEST_DEBUG_SHADERS',
+                }
+            end
+
+            if _OPTIONS['enable-aftermath'] then
+                uses 'aftermath'
+                defines {
+                    'TEMPEST_ENABLE_AFTERMATH',
+                }
+
+                files {
+                    'include/tempest/vk/aftermath/*.hpp',
+                    'src/aftermath/*.cpp',
+                }
+            end
 
             warnings 'Extra'
 

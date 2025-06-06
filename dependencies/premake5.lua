@@ -11,4 +11,8 @@ scoped.group('vendor', function()
     include 'vk-bootstrap'
     include 'vma'
     include 'vulkan'
+
+    if _OPTIONS['enable-aftermath'] then
+        include 'aftermath-premake5.lua'
+    end
 end)

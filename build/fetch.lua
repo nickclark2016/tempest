@@ -69,6 +69,37 @@ local function fetch_slang(cache_dir)
     end
 end
 
+local aftermath_dep_path = path.join(_MAIN_SCRIPT_DIR, 'dependencies/aftermath')
+
+local function fetch_aftermath(cache_dir)
+    if not _OPTIONS['enable-aftermath'] then
+        return
+    end
+
+    if os.target() == 'windows' then
+        local aftermath_zip_path = path.join(cache_dir, 'NVIDIA_Nsight_Aftermath_SDK_2025.1.0.25009.zip')
+        local downloaded = fetch_if_not_exists('https://developer.nvidia.com/downloads/assets/tools/secure/nsight-aftermath-sdk/2025_1_0/windows/NVIDIA_Nsight_Aftermath_SDK_2025.1.0.25009.zip', aftermath_zip_path)
+
+        if downloaded then
+            zip.extract(aftermath_zip_path, aftermath_dep_path)
+
+            local files = os.matchfiles(path.join(aftermath_dep_path, '**'))
+            for _, file in ipairs(files) do
+                -- Ensure the files have read and write permissions. If the file is an executable, set it to be executable as well.
+                if os.isfile(file) then
+                    if os.isfile(file) and (file:endswith('.exe') or file:endswith('.dll')) then
+                        os.chmod(file, '755') -- Set executable permissions for .exe and .dll files
+                    else
+                        os.chmod(file, '644') -- Set read/write permissions for other files
+                    end
+                end
+            end
+        end
+    else
+        p.error('Unsupported target for aftermath: ' .. os.target())
+    end
+end
+
 fetch.slang = {
     directory = path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang'),
     compiler = (function()
@@ -81,6 +112,10 @@ fetch.slang = {
         end
         return nil -- Return nil if the target is not supported
     end)()
+}
+
+fetch.aftermath = {
+    directory = path.join(_MAIN_SCRIPT_DIR, 'dependencies/aftermath'),
 }
 
 local function fetch_poly_haven(cache_dir)
@@ -133,6 +168,7 @@ newaction {
     execute = function()
         local cache_dir = get_cache_dir()
         fetch_slang(cache_dir)
+        fetch_aftermath(cache_dir)
         fetch_poly_haven(cache_dir)
     end
 }

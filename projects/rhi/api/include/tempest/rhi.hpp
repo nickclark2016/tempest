@@ -283,6 +283,8 @@ namespace tempest::rhi
         virtual void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                           typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
                           uint32_t draw_count, uint32_t stride) noexcept = 0;
+        virtual void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t vertex_count,
+                          uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) noexcept = 0;
         virtual void bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                        typed_rhi_handle<rhi_handle_type::buffer> buffer, uint32_t offset,
                                        rhi::index_format index_type) noexcept = 0;
@@ -295,11 +297,33 @@ namespace tempest::rhi
         virtual void set_cull_mode(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                    enum_mask<cull_mode> cull) noexcept = 0;
 
+        // Compute commands
+        virtual void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::compute_pipeline> pipeline) noexcept = 0;
+        virtual void dispatch(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t x, uint32_t y,
+                              uint32_t z) noexcept = 0;
+
         // Descriptor commands
         virtual void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                           typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
                           uint32_t first_set_index, span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
                           span<const uint32_t> dynamic_offsets = {}) noexcept = 0;
+
+        virtual void push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                    typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                    enum_mask<rhi::shader_stage> stages, uint32_t offset,
+                                    span<const byte> values) noexcept = 0;
+
+        template <typename T>
+            requires is_trivially_copyable_v<T> && is_standard_layout_v<T>
+        void typed_push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                  typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                  enum_mask<rhi::shader_stage> stages, uint32_t offset, const T& value) noexcept
+        {
+            static_assert(sizeof(T) % 4 == 0, "Push constant size must be a multiple of 4 bytes");
+            push_constants(command_list, pipeline_layout, stages, offset,
+                                 span<const byte>{reinterpret_cast<const byte*>(&value), sizeof(T)});
+        }
 
       protected:
         work_queue() = default;

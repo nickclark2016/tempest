@@ -54,6 +54,20 @@ scoped.group('Engine', function()
                 'vma'
             }
 
+            if _OPTIONS['enable-aftermath'] then
+                libdirs('%{root}/dependencies/aftermath/lib/x64')
+                links('GFSDK_Aftermath_Lib.x64')
+            end
+
+            scoped.filter({
+                'system:windows'
+            }, function()
+                links {
+                    'kernel32',
+                    'user32',
+                }
+            end)
+
             scoped.filter({
                 'system:linux'
             }, function()

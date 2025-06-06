@@ -23,3 +23,8 @@ Makefile
 
 # Caches
 TempestCache/
+
+# Generated NVidia Files
+*.nvdbg
+*.nv-gpudmp
+*.nv-gpudmp.json

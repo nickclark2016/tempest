@@ -1117,7 +1117,15 @@ namespace tempest::rhi::vk
     device::device(vkb::Device dev, vkb::Instance* instance)
         : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()},
           _resource_tracker{this, _dispatch_table}, _descriptor_set_layout_cache{this}, _pipeline_layout_cache{this}
+#if TEMPEST_ENABLE_AFTERMATH
+          ,
+          _crash_tracker{_marker_map}
+#endif
     {
+#if TEMPEST_ENABLE_AFTERMATH
+        _crash_tracker.initialize();
+#endif
+
         VmaVulkanFunctions fns = {
             .vkGetInstanceProcAddr = _vkb_instance->fp_vkGetInstanceProcAddr,
             .vkGetDeviceProcAddr = _vkb_device.fp_vkGetDeviceProcAddr,
@@ -2537,6 +2545,7 @@ namespace tempest::rhi::vk
             [[fallthrough]];
         case VK_SUCCESS: {
             auto image = swapchain_it->images[image_index];
+            auto render_complete = swapchain_it->render_complete[image_index];
             auto& fif = swapchain_it->frames[_current_frame % frames_in_flight()];
 
             // We are using this frame, so we need to reset the fence
@@ -2549,7 +2558,7 @@ namespace tempest::rhi::vk
             return swapchain_image_acquire_info_result{
                 .frame_complete_fence = fif.frame_ready,
                 .acquire_sem = fif.image_acquired,
-                .render_complete_sem = fif.render_complete,
+                .render_complete_sem = render_complete,
                 .image = image,
                 .image_index = image_index,
             };
@@ -2811,6 +2820,7 @@ namespace tempest::rhi::vk
             .swapchain = vkb_sc,
             .surface = surface,
             .images = {},
+            .render_complete = {},
             .frames = {},
         };
 
@@ -2862,48 +2872,58 @@ namespace tempest::rhi::vk
                         .pQueueFamilyIndices = nullptr,
                         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                     },
-                    .view_create_info = {},
+                .view_create_info = {},
             }));
+        }
+
+        for (size_t i = 0; i < num_frames_in_flight; ++i)
+        {
+            // Allocate a fence for each frame in flight
+            // Allocate two semaphores for each frame in flight
+
+            auto fence = create_fence({
+                .signaled = true,
+            });
+
+            auto image_acquired = create_semaphore({
+                .type = rhi::semaphore_type::binary,
+                .initial_value = 0,
+            });
+
+            fif_data fif = {
+                .frame_ready = fence,
+                .image_acquired = image_acquired,
+            };
+
+            sc.frames.push_back(fif);
+        }
+
+        for (size_t i = 0; i < images.size(); ++i)
+        {
+            auto render_complete = create_semaphore({
+                .type = rhi::semaphore_type::binary,
+                .initial_value = 0,
+            });
+
+            sc.render_complete.push_back(render_complete);
         }
 
         if (old_swapchain_it != _swapchains.end())
         {
-            // Copy the old swapchain's sync objects to the new swapchain
-            sc.frames = old_swapchain_it->frames;
+            for (auto fif : old_swapchain_it->frames)
+            {
+                destroy_semaphore(fif.image_acquired);
+                destroy_fence(fif.frame_ready);
+            }
+
+            for (auto sem : old_swapchain_it->render_complete)
+            {
+                destroy_semaphore(sem);
+            }
 
             // Replace the old swapchain in the map
             *old_swapchain_it = tempest::move(sc);
             return old_swapchain;
-        }
-        else
-        {
-            for (size_t i = 0; i < num_frames_in_flight; ++i)
-            {
-                // Allocate a fence for each frame in flight
-                // Allocate two semaphores for each frame in flight
-
-                auto fence = create_fence({
-                    .signaled = true,
-                });
-
-                auto image_acquired = create_semaphore({
-                    .type = rhi::semaphore_type::binary,
-                    .initial_value = 0,
-                });
-
-                auto render_complete = create_semaphore({
-                    .type = rhi::semaphore_type::binary,
-                    .initial_value = 0,
-                });
-
-                fif_data fif = {
-                    .frame_ready = fence,
-                    .image_acquired = image_acquired,
-                    .render_complete = render_complete,
-                };
-
-                sc.frames.push_back(fif);
-            }
         }
 
         const auto new_key = _swapchains.insert(sc);
@@ -3010,6 +3030,18 @@ namespace tempest::rhi::vk
         const auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         const auto it = _samplers.find(key);
         if (it != _samplers.end())
+        {
+            return *it;
+        }
+        return none();
+    }
+
+    optional<const vk::compute_pipeline&> device::get_compute_pipeline(
+        typed_rhi_handle<rhi_handle_type::compute_pipeline> handle) const noexcept
+    {
+        const auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        const auto it = _compute_pipelines.find(key);
+        if (it != _compute_pipelines.end())
         {
             return *it;
         }
@@ -3565,7 +3597,7 @@ namespace tempest::rhi::vk
         VkImageMemoryBarrier2 pre_barrier = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
             .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -3649,8 +3681,8 @@ namespace tempest::rhi::vk
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
             .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
             .newLayout = to_vulkan(current_layout),
             .srcQueueFamilyIndex = _queue_family_index,
@@ -3702,6 +3734,11 @@ namespace tempest::rhi::vk
                           typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::buffer> dst,
                           size_t src_offset, size_t dst_offset, size_t byte_count) noexcept
     {
+        if (byte_count == 0)
+        {
+            return;
+        }
+
         VkBufferCopy copy_region = {
             .srcOffset = src_offset,
             .dstOffset = dst_offset,
@@ -4013,12 +4050,24 @@ namespace tempest::rhi::vk
                           typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
                           uint32_t draw_count, uint32_t stride) noexcept
     {
+        if (draw_count == 0)
+        {
+            return; // No draws to perform
+        }
+
         auto cmds = _parent->get_command_buffer(command_list);
         auto buf = _parent->get_buffer(indirect_buffer);
         _dispatch->cmdDrawIndexedIndirect(cmds, buf->buffer, offset, draw_count, stride);
 
         // Track the buffer for the resource tracker
         used_buffers[command_list].push_back(indirect_buffer);
+    }
+
+    void work_queue::draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t vertex_count,
+                          uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        _dispatch->cmdDraw(cmds, vertex_count, instance_count, first_vertex, first_instance);
     }
 
     void work_queue::bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -4076,6 +4125,23 @@ namespace tempest::rhi::vk
     }
 
     void work_queue::bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::compute_pipeline> pipeline) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        auto pipe = _parent->get_compute_pipeline(pipeline);
+        _dispatch->cmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, pipe->pipeline);
+        // Track the pipeline for the resource tracker
+        used_compute_pipelines[command_list].push_back(pipeline);
+    }
+
+    void work_queue::dispatch(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t x, uint32_t y,
+                              uint32_t z) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        _dispatch->cmdDispatch(cmds, x, y, z);
+    }
+
+    void work_queue::bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                           typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
                           uint32_t first_set_index, span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
                           span<const uint32_t> dynamic_offsets) noexcept
@@ -4108,6 +4174,17 @@ namespace tempest::rhi::vk
                                          first_set_index, static_cast<uint32_t>(sets.size()), vk_sets,
                                          static_cast<uint32_t>(dynamic_offsets.size()), dynamic_offsets.data());
         _allocator.reset();
+    }
+
+    void work_queue::push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                    typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                    enum_mask<rhi::shader_stage> stages, uint32_t offset,
+                                    span<const byte> values) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        auto layout = _parent->get_pipeline_layout(pipeline_layout);
+        _dispatch->cmdPushConstants(cmds, layout, to_vulkan(stages), offset, static_cast<uint32_t>(values.size()),
+                                    values.data());
     }
 
     void work_group::reset() noexcept
@@ -4597,7 +4674,7 @@ namespace tempest::rhi::vk
         }
 
         // Build the pipeline layout
-        auto set_layouts = desc.descriptor_set_layouts.empty()
+        auto set_layouts = desc.descriptor_set_layouts.size() == 0 // not using empty because intellisense is dumb
                                ? nullptr
                                : _allocator.allocate_typed<VkDescriptorSetLayout>(desc.descriptor_set_layouts.size());
         for (size_t i = 0; i < desc.descriptor_set_layouts.size(); ++i)

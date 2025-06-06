@@ -6,6 +6,7 @@
 #include <tempest/flat_map.hpp>
 #include <tempest/graphics_components.hpp>
 #include <tempest/guid.hpp>
+#include <tempest/inplace_vector.hpp>
 #include <tempest/int.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/material.hpp>
@@ -94,10 +95,10 @@ namespace tempest::graphics
         struct alignas(16) scene_data
         {
             camera cam;
-            math::vec4<float> screen_size;
-            math::vec4<float> ambient_light_color_intensity;
+            math::vec2<float> screen_size;
+            math::vec3<float> ambient_light_color;
             light sun;
-            math::vec4<float> light_grid_count_and_size; // x = light grid count, y = light grid size (in tiles), z =
+            math::vec4<uint32_t> light_grid_count_and_size; // x = light grid count, y = light grid size (in tiles), z =
                                                          // padding, w = pixel width
             math::vec2<float> light_grid_z_bounds;       // x = min light grid bounds, y = max light grid bounds (z)
             float ssao_strength = 2.0f;
@@ -108,6 +109,18 @@ namespace tempest::graphics
         {
             math::vec2<uint32_t> size;
             uint32_t mip_count;
+        };
+
+        struct lighting_cluster_bounds
+        {
+            math::vec4<float> min_bounds;
+            math::vec4<float> max_bounds;
+        };
+
+        struct alignas(16) light_grid_range
+        {
+            uint32_t offset;
+            uint32_t range;
         };
 
         struct indirect_command
@@ -137,6 +150,14 @@ namespace tempest::graphics
             uint32_t parent_id;
             uint32_t self_id;
         };
+
+        struct shadow_map_cascade_info
+        {
+            static constexpr size_t max_cascades = 6;
+
+            inplace_vector<math::mat4<float>, max_cascades> frustum_view_projections;
+            inplace_vector<float, max_cascades> cascade_distances;
+        };
     } // namespace gpu
 
     class pbr_pipeline : public render_pipeline
@@ -156,6 +177,9 @@ namespace tempest::graphics
         void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
                                  const core::mesh_registry& meshes, const core::texture_registry& textures,
                                  const core::material_registry& materials);
+
+        void set_skybox_texture(rhi::device& dev, const guid& texture_id,
+                                const core::texture_registry& texture_registry);
 
       private:
         struct
@@ -187,11 +211,43 @@ namespace tempest::graphics
 
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> fill_cluster_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> fill_clusters;
+
+            uint64_t last_binding_update_frame = 0;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> light_cluster_buffer =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> light_cluster_range_buffer =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> global_light_index_count_buffer =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> global_light_index_list_buffer =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
+
+            size_t light_cluster_buffer_size = 0;
+            size_t light_cluster_range_buffer_size = 0;
+            size_t global_light_index_count_buffer_size = 0;
+            size_t global_light_index_list_buffer_size = 0;
         } _forward_light_clustering = {};
+
+        inline static constexpr auto num_clusters_x = 16u;
+        inline static constexpr auto num_clusters_y = 9u;
+        inline static constexpr auto num_clusters_z = 24u;
+        inline static constexpr auto max_lights_per_cluster = 128u;
 
         struct
         {
+            uint64_t last_binding_update_frame = 0;
+
+            vector<math::vec4<float>> noise_kernel;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> scene_constants;
+            size_t scene_constant_bytes_per_frame = 0;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> noise_texture =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> ssao_target;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> ssao_blur_target;
 
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> ssao_desc_set_0 =
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
@@ -206,6 +262,11 @@ namespace tempest::graphics
 
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> ssao_blur_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> ssao_blur_pipeline;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> clamped_linear_no_aniso_sampler =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> clamped_point_no_aniso_sampler =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle;
         } _ssao = {};
 
         struct
@@ -216,7 +277,6 @@ namespace tempest::graphics
                                                             .column_count = 4,
                                                         }};
 
-            vector<gpu::shadow_map_parameter> shadow_map_build_params;
             vector<gpu::shadow_map_parameter> shadow_map_use_params;
 
             uint64_t last_binding_update_frame = 0;
@@ -234,6 +294,10 @@ namespace tempest::graphics
 
         [[maybe_unused]] struct
         {
+            uint64_t last_binding_update_frame = 0;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> camera_payload;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_0 =
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_0_layout;
@@ -243,10 +307,14 @@ namespace tempest::graphics
 
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> hdri_texture =
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+
+            size_t camera_bytes_per_frame = 0;
         } _skybox = {};
 
         struct
         {
+            uint64_t last_binding_update_frame = 0;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_0 =
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_0_layout;
@@ -260,6 +328,8 @@ namespace tempest::graphics
 
         struct
         {
+            uint64_t last_binding_update_frame = 0;
+
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> oit_gather_desc_set_0 =
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> oit_gather_desc_set_0_layout;
@@ -286,6 +356,9 @@ namespace tempest::graphics
 
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> oit_blend_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> oit_blend_pipeline;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> moments_target;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> zeroth_moment_target;
         } _pbr_transparencies = {};
 
         struct
@@ -307,10 +380,14 @@ namespace tempest::graphics
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> instances;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> scene_constants;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> indirect_commands;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> point_and_spot_lights;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> shadows;
 
             size_t object_bytes_per_frame = 0;
             size_t instance_bytes_per_frame = 0;
             size_t scene_constants_bytes_per_frame = 0;
+            size_t lights_bytes_per_frame = 0;
+            size_t shadow_bytes_per_frame = 0;
         } _gpu_buffers = {};
 
         struct
@@ -332,7 +409,7 @@ namespace tempest::graphics
         struct draw_batch_payload
         {
             vector<gpu::indexed_indirect_command> commands;
-            size_t index_buffer_offset;
+            size_t indirect_command_offset;
             ecs::basic_sparse_map<ecs::basic_archetype_registry::entity_type, gpu::object_data> objects;
         };
 
@@ -341,6 +418,8 @@ namespace tempest::graphics
             uint32_t indirect_command_bytes_per_frame = 0;
             flat_map<draw_batch_key, draw_batch_payload> draw_batches;
             vector<mesh_layout> meshes;
+            ecs::basic_sparse_map<ecs::basic_archetype_registry::entity_type, gpu::light> point_and_spot_lights;
+            ecs::basic_sparse_map<ecs::basic_archetype_registry::entity_type, gpu::light> dir_lights;
         } _cpu_buffers = {};
 
         [[maybe_unused]] struct
@@ -386,7 +465,7 @@ namespace tempest::graphics
 
         uint32_t _object_count = 0;
 
-        [[maybe_unused]] gpu::scene_data _scene{};
+        gpu::scene_data _scene{};
         [[maybe_unused]] ecs::archetype_entity _camera{};
 
         size_t _frame_number = 0;
@@ -396,7 +475,7 @@ namespace tempest::graphics
         void _initialize_z_prepass(renderer& parent, rhi::device& dev);
         void _initialize_clustering(renderer& parent, rhi::device& dev);
         void _initialize_pbr_opaque(renderer& parent, rhi::device& dev);
-        void _initialize_pbr_transparent(renderer& parent, rhi::device& dev);
+        void _initialize_pbr_mboit(renderer& parent, rhi::device& dev);
         void _initialize_shadows(renderer& parent, rhi::device& dev);
         void _initialize_ssao(renderer& parent, rhi::device& dev);
         void _initialize_skybox(renderer& parent, rhi::device& dev);
@@ -405,14 +484,30 @@ namespace tempest::graphics
         void _initialize_render_targets(renderer& parent, rhi::device& dev);
         void _initialize_gpu_buffers(renderer& parent, rhi::device& dev);
 
+        void _upload_per_frame_data(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                                    rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                                    const gpu::camera& camera);
         void _prepare_draw_batches(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
                                    rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
         void _draw_z_prepass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
                              rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
-        void _draw_shadow_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
-                               rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
-        void _draw_clear_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
-                              rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands) const;
+        void _draw_shadow_pass(
+            renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+            const flat_unordered_map<ecs::archetype_entity, gpu::shadow_map_cascade_info> light_map_cascades);
+        void _draw_light_clusters(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                                  rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                                  const math::mat4<float>& inv_proj);
+        void _draw_ssao_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                             rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                             const gpu::camera& cam);
+        void _draw_skybox_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                               rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
+                               const gpu::camera& camera);
+        void _draw_pbr_opaque_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                                   rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
+        void _draw_pbr_mboit_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                                  rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
 
         void _load_meshes(rhi::device& dev, span<const guid> mesh_ids, const core::mesh_registry& mesh_registry);
         void _load_textures(rhi::device& dev, span<const guid> texture_ids,
@@ -421,6 +516,8 @@ namespace tempest::graphics
                              const core::material_registry& material_registry);
 
         uint32_t _acquire_next_object() noexcept;
+
+        optional<gpu::light> _get_light_data(ecs::archetype_entity entity) const;
     };
 } // namespace tempest::graphics
 

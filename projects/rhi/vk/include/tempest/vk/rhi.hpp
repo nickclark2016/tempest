@@ -13,6 +13,10 @@
 
 #include <queue>
 
+#if TEMPEST_ENABLE_AFTERMATH
+#include <tempest/vk/aftermath/gpu_crash_tracker.hpp>
+#endif
+
 namespace tempest::rhi::vk
 {
     class device;
@@ -132,6 +136,8 @@ namespace tempest::rhi::vk
         void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                   typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t offset, uint32_t draw_count,
                   uint32_t stride) noexcept override;
+        void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t vertex_count,
+                  uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) noexcept override;
         void bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                typed_rhi_handle<rhi_handle_type::buffer> buffer, uint32_t offset,
                                rhi::index_format index_type) noexcept override;
@@ -143,11 +149,22 @@ namespace tempest::rhi::vk
         void set_cull_mode(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                            enum_mask<cull_mode> cull) noexcept override;
 
+        // Compute commands
+        void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::compute_pipeline> pipeline) noexcept override;
+        void dispatch(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t x, uint32_t y,
+                      uint32_t z) noexcept override;
+
         // Descriptor commands
         void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                   typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
                   uint32_t first_set_index, span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
                   span<const uint32_t> dynamic_offsets) noexcept override;
+
+        void push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                            typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                            enum_mask<rhi::shader_stage> stages, uint32_t offset,
+                            span<const byte> values) noexcept override;
 
       private:
         vkb::DispatchTable* _dispatch;
@@ -178,6 +195,9 @@ namespace tempest::rhi::vk
         flat_unordered_map<typed_rhi_handle<rhi_handle_type::command_list>,
                            vector<typed_rhi_handle<rhi_handle_type::graphics_pipeline>>>
             used_gfx_pipelines;
+        flat_unordered_map<typed_rhi_handle<rhi_handle_type::command_list>,
+                           vector<typed_rhi_handle<rhi_handle_type::compute_pipeline>>>
+            used_compute_pipelines;
         flat_unordered_map<typed_rhi_handle<rhi_handle_type::command_list>,
                            vector<typed_rhi_handle<rhi_handle_type::sampler>>>
             used_samplers;
@@ -223,7 +243,6 @@ namespace tempest::rhi::vk
     {
         typed_rhi_handle<rhi_handle_type::fence> frame_ready;
         typed_rhi_handle<rhi_handle_type::semaphore> image_acquired;
-        typed_rhi_handle<rhi_handle_type::semaphore> render_complete;
     };
 
     struct swapchain
@@ -231,6 +250,7 @@ namespace tempest::rhi::vk
         vkb::Swapchain swapchain;
         VkSurfaceKHR surface;
         inplace_vector<typed_rhi_handle<rhi_handle_type::image>, 8> images;
+        inplace_vector<typed_rhi_handle<rhi::rhi_handle_type::semaphore>, 8> render_complete;
         inplace_vector<fif_data, 4> frames;
     };
 
@@ -509,6 +529,8 @@ namespace tempest::rhi::vk
         optional<const vk::descriptor_set&> get_descriptor_set(
             typed_rhi_handle<rhi_handle_type::descriptor_set> handle) const noexcept;
         optional<const vk::sampler&> get_sampler(typed_rhi_handle<rhi_handle_type::sampler> handle) const noexcept;
+        optional<const vk::compute_pipeline&> get_compute_pipeline(
+            typed_rhi_handle<rhi_handle_type::compute_pipeline> handle) const noexcept;
 
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept;
         void release_resource_immediate(typed_rhi_handle<rhi_handle_type::image> handle) noexcept;
@@ -571,6 +593,11 @@ namespace tempest::rhi::vk
         stack_allocator _desc_pool_allocator{128 * 1024};
 
         void name_object(VkObjectType type, void* handle, const char* name) noexcept;
+
+#if TEMPEST_ENABLE_AFTERMATH
+        aftermath::gpu_crash_tracker::marker_map _marker_map;
+        aftermath::gpu_crash_tracker _crash_tracker;
+#endif
     };
 
     unique_ptr<rhi::instance> create_instance() noexcept;

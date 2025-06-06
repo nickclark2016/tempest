@@ -38,4 +38,8 @@ scoped.project('sandbox', function()
         '{LINKDIR} %{root}/sandbox/assets/polyhaven ../../vendor/polyhaven',
         '{LINKDIR} %{root}/sandbox/assets/shaders ../../bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}/shaders',
     }
+
+    if _OPTIONS['enable-aftermath'] then
+        uses 'aftermath-runtime'
+    end
 end)

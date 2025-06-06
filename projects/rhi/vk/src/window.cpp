@@ -195,6 +195,7 @@ namespace tempest::rhi::vk
         glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
             auto* win = static_cast<window_surface*>(glfwGetWindowUserPointer(window));
             win->execute_resize_callbacks(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+            win->set_size(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
         });
 
         // Focus
@@ -207,7 +208,7 @@ namespace tempest::rhi::vk
         glfwSetWindowIconifyCallback(window, [](GLFWwindow* window, int minimized) {
             auto* win = static_cast<window_surface*>(glfwGetWindowUserPointer(window));
             win->execute_minimize_callbacks(minimized == GLFW_TRUE);
-            win->set_minimized(GLFW_TRUE);
+            win->set_minimized(minimized == GLFW_TRUE);
         });
 
         return win;
