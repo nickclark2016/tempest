@@ -30,6 +30,10 @@ scoped.group('Engine', function()
                 'math',
                 'rhi-api',
             }
+
+            links {
+                'rhi-vk',
+            }
         end)
 
         scoped.usage("INTERFACE", function()

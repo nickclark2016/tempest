@@ -19,8 +19,6 @@ scoped.project('sandbox', function()
 
     uses {
         'tempest',
-        'rhi-api',
-        'rhi-vk',
     }
 
     warnings 'Extra'
