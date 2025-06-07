@@ -40,6 +40,16 @@ namespace tempest::rhi::vk
             return glfwWindowShouldClose(_window);
         }
 
+        void disable_cursor(bool disabled = true) noexcept
+        {
+            glfwSetInputMode(_window, GLFW_CURSOR, disabled ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        }
+
+        bool is_cursor_disabled() const noexcept override
+        {
+            return glfwGetInputMode(_window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+        }
+
         expected<VkSurfaceKHR, VkResult> get_surface(VkInstance instance) noexcept
         {
             if (_surface == VK_NULL_HANDLE)

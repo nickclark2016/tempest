@@ -1,7 +1,11 @@
 #ifndef tempest_graphics_render_pipeline_hpp
 #define tempest_graphics_render_pipeline_hpp
 
+#include <tempest/archetype.hpp>
+#include <tempest/material.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/texture.hpp>
+#include <tempest/vertex.hpp>
 
 namespace tempest::graphics
 {
@@ -35,6 +39,10 @@ namespace tempest::graphics
         {
             return *_rhi_device;
         }
+
+        void upload_objects_sync(span<const ecs::archetype_entity> entities,
+                               const core::mesh_registry& meshes, const core::texture_registry& textures,
+                               const core::material_registry& materials);
 
       private:
         unique_ptr<rhi::instance> _rhi_instance;
@@ -81,6 +89,10 @@ namespace tempest::graphics
         virtual void initialize(renderer& parent, rhi::device& dev) = 0;
         virtual render_result render(renderer& parent, rhi::device& dev, const render_state& rs) = 0;
         virtual void destroy(renderer& parent, rhi::device& dev) = 0;
+
+        virtual void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
+                                         const core::mesh_registry& meshes, const core::texture_registry& textures,
+                                         const core::material_registry& materials) = 0;
     };
 } // namespace tempest::graphics
 

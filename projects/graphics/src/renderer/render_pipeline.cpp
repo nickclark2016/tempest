@@ -151,4 +151,13 @@ namespace tempest::graphics
 
         return !_windows.empty();
     }
+
+    void renderer::upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+                                       const core::texture_registry& textures, const core::material_registry& materials)
+    {
+        for (auto&& ctx : _windows)
+        {
+            ctx.pipeline->upload_objects_sync(*_rhi_device, entities, meshes, textures, materials);
+        }
+    }
 } // namespace tempest::graphics

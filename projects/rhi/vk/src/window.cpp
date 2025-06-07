@@ -187,8 +187,6 @@ namespace tempest::rhi::vk
         glfwSetWindowCloseCallback(window, [](GLFWwindow* window) {
             auto* win = static_cast<window_surface*>(glfwGetWindowUserPointer(window));
             win->execute_close_callbacks();
-            glfwDestroyWindow(window);
-            win->release_handle();
         });
 
         // Resize

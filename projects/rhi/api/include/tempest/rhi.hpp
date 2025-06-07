@@ -344,6 +344,7 @@ namespace tempest::rhi
         virtual string name() const noexcept = 0;
         virtual bool should_close() const noexcept = 0;
         virtual bool minimized() const noexcept = 0;
+        virtual bool is_cursor_disabled() const noexcept = 0;
 
         virtual void close() = 0;
 

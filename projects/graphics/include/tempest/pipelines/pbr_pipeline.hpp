@@ -176,7 +176,7 @@ namespace tempest::graphics
 
         void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
                                  const core::mesh_registry& meshes, const core::texture_registry& textures,
-                                 const core::material_registry& materials);
+                                 const core::material_registry& materials) override;
 
         void set_skybox_texture(rhi::device& dev, const guid& texture_id,
                                 const core::texture_registry& texture_registry);

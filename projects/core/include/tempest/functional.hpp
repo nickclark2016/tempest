@@ -605,8 +605,8 @@ namespace tempest
         {
             _data = fn._data;
 
-            _invoker = exchange(fn._invoker, nullptr);
-            _manager_fn = exchange(fn._manager_fn, nullptr);
+            _invoker = tempest::exchange(fn._invoker, nullptr);
+            _manager_fn = tempest::exchange(fn._manager_fn, nullptr);
         }
     }
 

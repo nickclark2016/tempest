@@ -28,6 +28,7 @@ scoped.group('Engine', function()
                 'graphics',
                 'logger',
                 'math',
+                'rhi-api',
             }
         end)
 
