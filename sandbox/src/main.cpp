@@ -11,7 +11,8 @@ int main()
         .fullscreen = false,
     };
 
-    auto [surface, inputs] = engine.register_window(surface_desc);
+    auto window_and_inputs = engine.register_window(surface_desc);
+    auto& [surface, inputs] = window_and_inputs;
     auto pipeline =
         engine.register_pipeline<tempest::graphics::pbr_pipeline>(surface, 1920, 1080, engine.get_registry());
 
@@ -30,7 +31,7 @@ int main()
         auto camera = ctx.get_registry().create();
         tempest::graphics::camera_component camera_data = {
             .aspect_ratio = 16.0f / 9.0f,
-            .vertical_fov = 90.0f,
+            .vertical_fov = 100.0f,
             .near_plane = 0.01f,
             .far_shadow_plane = 64.0f,
         };
@@ -51,6 +52,12 @@ int main()
             .size = {2048, 2048},
             .cascade_count = 3,
         };
+
+        surface->register_resize_callback([&ctx, camera](uint32_t width, uint32_t height) {
+            auto camera_data = ctx.get_registry().get<tempest::graphics::camera_component>(camera);
+            camera_data.aspect_ratio = static_cast<float>(width) / height;
+            ctx.get_registry().assign_or_replace(camera, camera_data);
+        });
 
         ctx.get_registry().assign_or_replace(sun, sun_shadows);
         ctx.get_registry().assign_or_replace(sun, sun_data);

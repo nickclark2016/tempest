@@ -292,7 +292,7 @@ namespace tempest::graphics
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline>::null_handle;
         } _shadows = {};
 
-        [[maybe_unused]] struct
+        struct
         {
             uint64_t last_binding_update_frame = 0;
 
