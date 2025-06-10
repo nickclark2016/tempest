@@ -2792,7 +2792,8 @@ namespace tempest::rhi::vk
         vkb::SwapchainBuilder swap_bldr =
             vkb::SwapchainBuilder(_vkb_device.physical_device, _vkb_device, surface)
                 .add_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                .set_required_min_image_count(desc.min_image_count)
+                .set_required_min_image_count(3)
+                .set_desired_min_image_count(desc.min_image_count)
                 .set_desired_extent(desc.width, desc.height)
                 .set_desired_present_mode(to_vulkan(desc.present_mode))
                 .set_desired_format({

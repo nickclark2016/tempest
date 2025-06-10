@@ -75,7 +75,7 @@ namespace tempest::rhi::vk
 
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it =
-                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                find_if(resource.usage_records.begin(), resource.usage_records.end(),
                              [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
@@ -114,7 +114,7 @@ namespace tempest::rhi::vk
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it =
-                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                find_if(resource.usage_records.begin(), resource.usage_records.end(),
                              [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
@@ -153,7 +153,7 @@ namespace tempest::rhi::vk
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it =
-                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                find_if(resource.usage_records.begin(), resource.usage_records.end(),
                              [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
@@ -192,7 +192,7 @@ namespace tempest::rhi::vk
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it =
-                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                find_if(resource.usage_records.begin(), resource.usage_records.end(),
                              [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
@@ -231,7 +231,7 @@ namespace tempest::rhi::vk
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it =
-                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                find_if(resource.usage_records.begin(), resource.usage_records.end(),
                              [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
@@ -270,7 +270,7 @@ namespace tempest::rhi::vk
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it =
-                std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                find_if(resource.usage_records.begin(), resource.usage_records.end(),
                              [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
@@ -293,7 +293,7 @@ namespace tempest::rhi::vk
             return;
         }
         auto& resource = it->second;
-        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+        auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                      [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
@@ -311,7 +311,7 @@ namespace tempest::rhi::vk
             return;
         }
         auto& resource = it->second;
-        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+        auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                      [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
@@ -329,7 +329,7 @@ namespace tempest::rhi::vk
             return;
         }
         auto& resource = it->second;
-        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+        auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                      [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
@@ -348,7 +348,7 @@ namespace tempest::rhi::vk
             return;
         }
         auto& resource = it->second;
-        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+        auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                      [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
@@ -367,7 +367,7 @@ namespace tempest::rhi::vk
             return;
         }
         auto& resource = it->second;
-        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+        auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                      [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
@@ -386,7 +386,7 @@ namespace tempest::rhi::vk
             return;
         }
         auto& resource = it->second;
-        auto usage_it = std::find_if(resource.usage_records.begin(), resource.usage_records.end(),
+        auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                      [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
