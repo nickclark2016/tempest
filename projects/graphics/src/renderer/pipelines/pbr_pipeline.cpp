@@ -80,7 +80,7 @@ namespace tempest::graphics
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .count = 1,
-                .stages = make_enum_mask(rhi::shader_stage::vertex),
+                .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
             };
 
             rhi::descriptor_binding_layout vertex_pull_buffer_layout = {
@@ -802,10 +802,7 @@ namespace tempest::graphics
             light.color_intensity =
                 math::vec4<float>(point_light.color.x, point_light.color.y, point_light.color.z, point_light.intensity);
 
-            auto sq_range = point_light.range * point_light.range;
-            auto inv_sq_range = sq_range > 0.0f ? 1.0f / sq_range : 0.0f;
-
-            light.position_falloff = math::vec4<float>(tx.position().x, tx.position().y, tx.position().z, inv_sq_range);
+            light.position_falloff = math::vec4<float>(tx.position().x, tx.position().y, tx.position().z, point_light.range);
             light.enabled = true;
             _cpu_buffers.point_and_spot_lights.insert_or_replace(self.entity, light);
         });
@@ -874,7 +871,7 @@ namespace tempest::graphics
             .old_layout = rhi::image_layout::shader_read_only,
             .new_layout = rhi::image_layout::depth,
             .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-            .src_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .src_access = make_enum_mask(rhi::memory_access::shader_read),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::early_fragment_tests),
             .dst_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write,
                                          rhi::memory_access::depth_stencil_attachment_read),
@@ -889,7 +886,7 @@ namespace tempest::graphics
             .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
             .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
             .src_queue = nullptr,
             .dst_queue = nullptr,
         };
@@ -2894,10 +2891,14 @@ namespace tempest::graphics
         {
             const auto r = distribution(generator) * 2.0f - 1.0f;
             const auto g = distribution(generator) * 2.0f - 1.0f;
-            const auto samples = array{r, g};
-            const auto write_offset = idx * 2 * sizeof(float);
 
-            std::memcpy(noise_data.data() + write_offset, samples.data(), 2 * sizeof(float));
+            const auto r_signed_short = std::roundf(r * 32767.0f);
+            const auto g_signed_short = std::roundf(g * 32767.0f);
+
+            const auto samples = array{r_signed_short, g_signed_short};
+            const auto write_offset = idx * 2 * sizeof(int16_t);
+
+            std::memcpy(noise_data.data() + write_offset, samples.data(), 2 * sizeof(int16_t));
         }
 
         _ssao.noise_kernel.resize(ssao::scene_constants::kernel_size);
@@ -2924,7 +2925,7 @@ namespace tempest::graphics
         std::memcpy(staging_buffer_ptr + staging_buffer_offset, noise_data.data(), noise_data.size());
 
         const auto noise_texture = dev.create_image({
-            .format = rhi::image_format::rg16_float,
+            .format = rhi::image_format::rg16_snorm,
             .type = rhi::image_type::image_2d,
             .width = noise_width,
             .height = noise_height,
@@ -2957,7 +2958,7 @@ namespace tempest::graphics
             .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
             .src_access = make_enum_mask(rhi::memory_access::transfer_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
             .src_queue = nullptr,
             .dst_queue = nullptr,
         };
@@ -2994,7 +2995,7 @@ namespace tempest::graphics
             .address_w = rhi::address_mode::clamp_to_edge,
             .mip_lod_bias = 0.0f,
             .min_lod = 0.0f,
-            .max_lod = 32.0f,
+            .max_lod = 0.0f,
             .max_anisotropy = 1.0f,
             .compare = none(),
             .name = "SSAO Clamped Linear Sampler",
@@ -3009,7 +3010,7 @@ namespace tempest::graphics
             .address_w = rhi::address_mode::clamp_to_edge,
             .mip_lod_bias = 0.0f,
             .min_lod = 0.0f,
-            .max_lod = 32.0f,
+            .max_lod = 0.0f,
             .max_anisotropy = 1.0f,
             .compare = none(),
             .name = "SSAO Clamped Point Sampler",
@@ -4175,7 +4176,7 @@ namespace tempest::graphics
             .src_stages = make_enum_mask(rhi::pipeline_stage::late_fragment_tests),
             .src_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
         };
 
         queue.transition_image(commands, {&depth_to_shader_read_only_attachment, 1});
@@ -4562,6 +4563,10 @@ namespace tempest::graphics
         constants.inv_view = cam.inv_view;
         constants.projection = cam.proj;
         constants.view = cam.view;
+        constants.noise_scale = {
+            static_cast<float>(_render_target_width) / 16u,
+            static_cast<float>(_render_target_height) / 16u,
+        };
 
         for (auto i = 0u; i < _ssao.noise_kernel.size(); ++i)
         {
@@ -4601,7 +4606,7 @@ namespace tempest::graphics
             .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
             .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
             .src_queue = nullptr,
             .dst_queue = nullptr,
         };
@@ -4613,7 +4618,7 @@ namespace tempest::graphics
             .src_stages = make_enum_mask(rhi::pipeline_stage::late_fragment_tests),
             .src_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
             .src_queue = nullptr,
             .dst_queue = nullptr,
         };
@@ -4685,7 +4690,7 @@ namespace tempest::graphics
             .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
             .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-            .dst_access = make_enum_mask(rhi::memory_access::shader_sampled_read),
+            .dst_access = make_enum_mask(rhi::memory_access::shader_read),
             .src_queue = nullptr,
             .dst_queue = nullptr,
         };

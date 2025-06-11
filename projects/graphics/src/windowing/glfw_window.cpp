@@ -15,10 +15,10 @@ namespace tempest::graphics::glfw
             return init;
         }
 
-        static consteval std::array<core::key, GLFW_KEY_LAST + 1> build_key_map()
+        static consteval array<core::key, GLFW_KEY_LAST + 1> build_key_map()
         {
-            std::array<core::key, GLFW_KEY_LAST + 1> keys;
-            std::fill(std::begin(keys), std::end(keys), core::key::UNKNOWN);
+            array<core::key, GLFW_KEY_LAST + 1> keys;
+            keys.fill(core::key::UNKNOWN);
 
             keys[GLFW_KEY_SPACE] = core::key::SPACE;
             keys[GLFW_KEY_APOSTROPHE] = core::key::APOSTROPHE;
@@ -142,10 +142,10 @@ namespace tempest::graphics::glfw
             return keys;
         }
 
-        static consteval std::array<core::key_action, GLFW_REPEAT + 1> build_key_action_map()
+        static consteval array<core::key_action, GLFW_REPEAT + 1> build_key_action_map()
         {
-            std::array<core::key_action, GLFW_REPEAT + 1> actions;
-            std::fill(std::begin(actions), std::end(actions), core::key_action::RELEASE);
+            array<core::key_action, GLFW_REPEAT + 1> actions;
+            actions.fill(core::key_action::RELEASE);
             actions[GLFW_RELEASE] = core::key_action::RELEASE;
             actions[GLFW_PRESS] = core::key_action::PRESS;
             actions[GLFW_REPEAT] = core::key_action::REPEAT;
@@ -153,9 +153,9 @@ namespace tempest::graphics::glfw
             return actions;
         }
 
-        static consteval std::array<core::mouse_button, GLFW_MOUSE_BUTTON_LAST + 1> build_mouse_button_map()
+        static consteval array<core::mouse_button, GLFW_MOUSE_BUTTON_LAST + 1> build_mouse_button_map()
         {
-            std::array<core::mouse_button, GLFW_MOUSE_BUTTON_LAST + 1> buttons;
+            array<core::mouse_button, GLFW_MOUSE_BUTTON_LAST + 1> buttons;
             buttons[GLFW_MOUSE_BUTTON_1] = core::mouse_button::MB_1;
             buttons[GLFW_MOUSE_BUTTON_2] = core::mouse_button::MB_2;
             buttons[GLFW_MOUSE_BUTTON_3] = core::mouse_button::MB_3;

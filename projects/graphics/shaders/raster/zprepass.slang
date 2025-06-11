@@ -11,12 +11,13 @@ struct SceneGlobals {
 };
 
 struct VertexOutput {
-    float4 position  : SV_Position;
-    float4 view_pos  : ViewPosition;
-    float2 uv        : UV0;
-    float3 normal    : Normal;
-    float3 tangent   : Tangent;
-    float3 bitangent : Bitangent;
+    float4 position    : SV_Position;
+    float4 view_pos    : ViewPosition;
+    float2 uv          : UV0;
+    float3 normal      : Normal;
+    float3 view_normal : ViewNormal;
+    float3 tangent     : Tangent;
+    float3 bitangent   : Bitangent;
     uint material_id;
 };
 
@@ -31,7 +32,7 @@ struct FragmentOutput {
 [vk_binding(4, 0)] StructuredBuffer<uint> instance_buffer;
 [vk_binding(5, 0)] StructuredBuffer<Material> materials;
 [vk_binding(15, 0)] SamplerState linear_sampler;
-[vk_binding(16, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
+[vk_binding(16, 0)] Texture2D bindless_textures[];
 
 [shader("vertex")]
 VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID, uint base_instance : SV_StartInstanceLocation) {
@@ -46,16 +47,21 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
     float3x3 model_3x3 = (float3x3) instance.model_matrix;
     float3x3 t_inv_model_3x3 = (float3x3) instance.transpose_inv_model_matrix;
+    float3x3 t_inv_view_3x3 = (float3x3) transpose(scene.camera.inv_view);
 
     float3 geom_normal = normalize(mul(t_inv_model_3x3, v.normal));
     float3 geom_tangent = normalize(mul(model_3x3, v.tangent.xyz));
     float3 geom_bitan = normalize(cross(geom_normal, geom_tangent)) * v.tangent.w;
+    
+    float3x3 normal_matrix = mul(t_inv_view_3x3, t_inv_model_3x3);
+    float3 view_normal = normalize(mul(normal_matrix, v.normal));
 
     VertexOutput output;
     output.position = clip_pos;
     output.view_pos = view_pos;
     output.uv = v.uv0;
     output.normal = geom_normal;
+    output.view_normal = view_normal;
     output.tangent = geom_tangent;
     output.bitangent = geom_bitan;
     output.material_id = instance.material_id;
@@ -77,15 +83,15 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
 
-    fetch_pixel_data(material, pd, bindless_textures);
+    fetch_diffuse(material, pd, bindless_textures);
 
     if (pd.diffuse.w < material.mat.alpha_cutoff) {
         discard;
     }
 
-    half3 normal01 = pd.shading_normal + 0.5h * 0.5h;
-
-    output.encoded_normal = encode_normal(normal01);
+    float3x3 upper_view = (float3x3) scene.camera.view;
+    float3 view_normal = normalize(input.view_normal);
+    output.encoded_normal = encode_normal(view_normal);
 
     return output;
 }

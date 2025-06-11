@@ -46,8 +46,8 @@ namespace tempest
         [[nodiscard]] constexpr size_type size() const noexcept;
         [[nodiscard]] constexpr size_type max_size() const noexcept;
 
-        void fill(const T& value);
-        void swap(array& other) noexcept;
+        constexpr void fill(const T& value);
+        constexpr void swap(array& other) noexcept;
 
         // Undefined to access directly.
         T _data[N];
@@ -82,8 +82,8 @@ namespace tempest
         [[nodiscard]] constexpr size_type size() const noexcept;
         [[nodiscard]] constexpr size_type max_size() const noexcept;
 
-        void fill(const T& value);
-        void swap(array& other) noexcept;
+        constexpr void fill(const T& value);
+        constexpr void swap(array& other) noexcept;
     };
 
     template <typename T, size_t N>
@@ -221,7 +221,7 @@ namespace tempest
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline void array<T, N>::fill(const T& value)
+    inline constexpr void array<T, N>::fill(const T& value)
     {
         for (size_type i = 0; i < N; ++i)
         {
@@ -231,7 +231,7 @@ namespace tempest
 
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    inline void array<T, N>::swap(array& other) noexcept
+    inline constexpr void array<T, N>::swap(array& other) noexcept
     {
         for (size_type i = 0; i < N; ++i)
         {
@@ -318,13 +318,13 @@ namespace tempest
 
     template <typename T>
         requires is_default_constructible_v<T>
-    inline void array<T, 0>::fill([[maybe_unused]] const T& value)
+    inline constexpr void array<T, 0>::fill([[maybe_unused]] const T& value)
     {
     }
 
     template <typename T>
         requires is_default_constructible_v<T>
-    inline void array<T, 0>::swap([[maybe_unused]] array& other) noexcept
+    inline constexpr void array<T, 0>::swap([[maybe_unused]] array& other) noexcept
     {
     }
 

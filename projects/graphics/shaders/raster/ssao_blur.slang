@@ -17,6 +17,7 @@ struct FragmentOutput {
 [shader("vertex")]
 VSOutput VSMain(uint id : SV_VertexID) {
     let vtx = generate_quad_vertex(id);
+
     return VSOutput(
         vtx.position,
         vtx.uv

@@ -1,14 +1,15 @@
 #ifndef tempest_input_keyboard_hpp
 #define tempest_input_keyboard_hpp
 
-#include <array>
-#include <concepts>
-#include <cstdint>
-#include <type_traits>
+#include <tempest/array.hpp>
+#include <tempest/concepts.hpp>
+#include <tempest/int.hpp>
+#include <tempest/type_traits.hpp>
+#include <tempest/utility.hpp>
 
 namespace tempest::core
 {
-    enum class key : std::uint32_t
+    enum class key : uint32_t
     {
         UNKNOWN,
         SPACE,
@@ -158,11 +159,11 @@ namespace tempest::core
         key_modifier modifiers = key_modifier::NONE;
     };
 
-    inline constexpr bool test_modifier(key_state s, std::same_as<key_modifier> auto... modifiers) noexcept
+    inline constexpr bool test_modifier(key_state s, same_as<key_modifier> auto... modifiers) noexcept
     {
-        auto set_mod = static_cast<std::underlying_type_t<key_modifier>>(s.modifiers);
-        return (... && ((static_cast<std::underlying_type_t<key_modifier>>(modifiers) & set_mod) ==
-                        static_cast<std::underlying_type_t<key_modifier>>(modifiers)));
+        auto set_mod = static_cast<underlying_type_t<key_modifier>>(s.modifiers);
+        return (... && ((static_cast<underlying_type_t<key_modifier>>(modifiers) & set_mod) ==
+                        static_cast<underlying_type_t<key_modifier>>(modifiers)));
     }
 
     class keyboard
@@ -170,12 +171,12 @@ namespace tempest::core
       public:
         void set(key_state state)
         {
-            _key_states[static_cast<std::underlying_type_t<key>>(state.k)] = state;
+            _key_states[static_cast<underlying_type_t<key>>(state.k)] = state;
         }
 
         key_state get(key k) const
         {
-            return _key_states[static_cast<std::underlying_type_t<key>>(k)];
+            return _key_states[to_underlying(k)];
         }
 
         bool is_key_down(key k) const noexcept
@@ -185,7 +186,7 @@ namespace tempest::core
         }
 
       private:
-        std::array<key_state, static_cast<std::underlying_type_t<key>>(key::LAST_KEY)> _key_states;
+        array<key_state, static_cast<underlying_type_t<key>>(key::LAST_KEY)> _key_states;
     };
 } // namespace tempest::core
 

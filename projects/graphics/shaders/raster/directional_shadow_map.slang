@@ -20,7 +20,7 @@ struct FragmentOutput {
 [vk_binding(4, 0)] StructuredBuffer<uint> instance_buffer;
 [vk_binding(5, 0)] StructuredBuffer<Material> materials;
 [vk_binding(15, 0)] SamplerState linear_sampler;
-[vk_binding(16, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
+[vk_binding(16, 0)] Texture2D bindless_textures[];
 
 // Push constants for the shadow map
 struct ShadowMapPushConstants {

@@ -419,7 +419,7 @@ namespace tempest::graphics
                                 .color_intensity = math::vec4<float>(point_light.color.x, point_light.color.y,
                                                                      point_light.color.z, point_light.intensity),
                                 .position_falloff = math::vec4<float>(transform.position().x, transform.position().y,
-                                                                      transform.position().z, inv_sq_range),
+                                                                      transform.position().z, point_light.range),
                                 .light_type = gpu_light_type::POINT,
                                 .shadow_map_count = 0,
                                 .enabled = 1,

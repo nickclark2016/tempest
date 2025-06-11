@@ -31,8 +31,8 @@ float square_distance_point_aabb(float3 point, uint tile) {
 }
 
 bool test_light_in_tile(uint light_index, uint tile_index) {
-    float inv_square_range = shared_lights[light_index].position_falloff.w;
-    float sq_range = 1.0f / inv_square_range;
+    float range = shared_lights[light_index].position_falloff.w;
+    float sq_range = range * range;
     float3 center = shared_lights[light_index].position_falloff.xyz;
     float3 view_pos = mul(scene.camera.view, float4(center, 1.0)).xyz;
 

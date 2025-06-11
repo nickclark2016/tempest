@@ -87,11 +87,12 @@ half2 octohedral_wrap(half2 v) {
     return (1.0h - abs(v.yx)) * select(v.xy >= 0.0h, 1.0h, -1.0h);
 }
 
-half2 encode_normal(half3 normal) {
+half2 encode_normal(float3 normal) {
+    half3 n = (half3) normal;
     normal /= (abs(normal.x) + abs(normal.y) + abs(normal.z));
-    normal.xy = normal.z >= 0.0h ? normal.xy : octohedral_wrap(normal.xy);
-    normal.xy = normal.xy * 0.5h + 0.5h;
-    return normal.xy;
+    n.xy = n.z >= 0.0h ? n.xy : octohedral_wrap(n.xy);
+    n.xy = n.xy * 0.5h + 0.5h;
+    return n.xy;
 }
 
 float3 decode_normal(float2 encoded_normal) {
@@ -328,9 +329,9 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
     color.rgb += color_comp; 
 }
 
-float compute_square_falloff_attenuation(float3 pos_to_light, float inv_light_radius) {
+float compute_square_falloff_attenuation(float3 pos_to_light, float radius) {
     float distance_squared = dot(pos_to_light, pos_to_light);
-    float factor = distance_squared * inv_light_radius * inv_light_radius;
+    float factor = distance_squared / (radius * radius);
     float smooth = max(1.0 - factor * factor, 0.0);
     return (smooth * smooth) / max(distance_squared, 1e-4);
 }

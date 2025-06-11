@@ -38,8 +38,8 @@ int main()
 
         ctx.get_registry().assign(camera, camera_data);
         auto camera_tx = tempest::ecs::transform_component::identity();
-        camera_tx.position({0.0f, 5.2f, -1.0f});
-        camera_tx.rotation({0.0f, 0.0f, 0.0f});
+        camera_tx.position({0.0f, 15.0f, -1.0f});
+        camera_tx.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
         ctx.get_registry().assign(camera, camera_tx);
 
         auto sun = ctx.get_registry().create();

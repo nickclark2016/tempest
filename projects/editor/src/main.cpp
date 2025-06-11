@@ -43,8 +43,8 @@ int main()
         };
 
         tempest::ecs::transform_component camera_transform = tempest::ecs::transform_component::identity();
-        // camera_transform.position({-0.5f, 0.1f, 0.0f});
-        // camera_transform.rotation({tempest::math::as_radians(5.0f), tempest::math::as_radians(90.0f), 0.0f});
+        camera_transform.position({0.0f, 15.0f, 0.0f});
+        camera_transform.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
 
         // camera_transform.position({-0.07f, 0.0f, 2.0f});
         // camera_transform.rotation({0.0f, tempest::math::as_radians(180.0f), 0.0f});

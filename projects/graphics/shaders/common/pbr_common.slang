@@ -39,7 +39,7 @@ struct PBROutput {
 [vk_binding(4, 0)] StructuredBuffer<uint> instance_buffer;
 [vk_binding(5, 0)] StructuredBuffer<Material> materials;
 [vk_binding(15, 0)] SamplerState linear_sampler;
-[vk_binding(16, 0)] Texture2D bindless_textures[BINDLESS_TEXTURE_COUNT];
+[vk_binding(16, 0)] Texture2D bindless_textures[];
 
 [vk_binding(0, 1)] StructuredBuffer<Light> lights;
 [vk_binding(1, 1)] StructuredBuffer<ShadowMapParameter> shadow_map_params;
