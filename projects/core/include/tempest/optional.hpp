@@ -1033,7 +1033,7 @@ namespace tempest
     template <typename T>
     inline constexpr bool optional<T&>::has_value() const noexcept
     {
-        return _ref == nullptr;
+        return _ref != nullptr;
     }
 
     template <typename T>
