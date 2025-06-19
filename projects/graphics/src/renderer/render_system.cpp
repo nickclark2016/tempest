@@ -412,9 +412,6 @@ namespace tempest::graphics
                         vector<gpu_light> light_data;
 
                         _registry->each([&](point_light_component point_light, ecs::transform_component transform) {
-                            auto sq_range = point_light.range * point_light.range;
-                            auto inv_sq_range = sq_range > 0.0f ? 1.0f / sq_range : 0.0f;
-
                             gpu_light light = {
                                 .color_intensity = math::vec4<float>(point_light.color.x, point_light.color.y,
                                                                      point_light.color.z, point_light.intensity),

@@ -144,13 +144,13 @@ namespace tempest
         constexpr auto transform(Fn&& fn) const& -> optional<invoke_result_t<Fn, const T&>>;
 
         template <typename Fn>
-            requires(is_invocable<Fn, T&&>::value && !is_void_v<invoke_result_t<Fn, T&&>> &&
-                     !is_reference_v<invoke_result_t<Fn, T&&>>)
+            requires(is_invocable<Fn, T &&>::value && !is_void_v<invoke_result_t<Fn, T &&>> &&
+                     !is_reference_v<invoke_result_t<Fn, T &&>>)
         constexpr auto transform(Fn&& fn) && -> optional<invoke_result_t<Fn, T&&>>;
 
         template <typename Fn>
-            requires(is_invocable<Fn, const T&&>::value && !is_void_v<invoke_result_t<Fn, const T&&>> &&
-                     !is_reference_v<invoke_result_t<Fn, const T&&>>)
+            requires(is_invocable<Fn, const T &&>::value && !is_void_v<invoke_result_t<Fn, const T &&>> &&
+                     !is_reference_v<invoke_result_t<Fn, const T &&>>)
         constexpr auto transform(Fn&& fn) const&& -> optional<invoke_result_t<Fn, const T&&>>;
 
         template <typename Fn>
@@ -252,15 +252,7 @@ namespace tempest
         constexpr void swap(optional& other) noexcept;
 
       private:
-        union impl {
-            byte c;
-            T* ref;
-
-            impl() noexcept;
-            ~impl();
-        } _data;
-
-        bool _has_value = false;
+        T* _ref;
     };
 
     inline constexpr nullopt_t none()
@@ -763,8 +755,8 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires(is_invocable<Fn, T&&>::value && !is_void_v<invoke_result_t<Fn, T&&>> &&
-                 !is_reference_v<invoke_result_t<Fn, T&&>>)
+        requires(is_invocable<Fn, T &&>::value && !is_void_v<invoke_result_t<Fn, T &&>> &&
+                 !is_reference_v<invoke_result_t<Fn, T &&>>)
     inline constexpr auto optional<T>::transform(Fn&& fn) && -> optional<invoke_result_t<Fn, T&&>>
     {
         if (*this)
@@ -779,8 +771,8 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires(is_invocable<Fn, const T&&>::value && !is_void_v<invoke_result_t<Fn, const T&&>> &&
-                 !is_reference_v<invoke_result_t<Fn, const T&&>>)
+        requires(is_invocable<Fn, const T &&>::value && !is_void_v<invoke_result_t<Fn, const T &&>> &&
+                 !is_reference_v<invoke_result_t<Fn, const T &&>>)
     inline constexpr auto optional<T>::transform(Fn&& fn) const&& -> optional<invoke_result_t<Fn, const T&&>>
     {
         if (*this)
@@ -824,51 +816,25 @@ namespace tempest
     }
 
     template <typename T>
-    inline optional<T&>::impl::impl() noexcept
+    inline constexpr optional<T&>::optional(nullopt_t) noexcept : _ref{nullptr}
     {
     }
 
     template <typename T>
-    inline optional<T&>::impl::~impl()
+    inline constexpr optional<T&>::optional(const optional& other) : _ref{other._ref}
     {
     }
 
     template <typename T>
-    inline constexpr optional<T&>::optional(nullopt_t) noexcept
+    inline constexpr optional<T&>::optional(optional&& other) noexcept : _ref{tempest::exchange(other._ref, nullptr)}
     {
-    }
-
-    template <typename T>
-    inline constexpr optional<T&>::optional(const optional& other)
-    {
-        if (other.has_value())
-        {
-            _data.ref = other._data.ref;
-            _has_value = true;
-        }
-    }
-
-    template <typename T>
-    inline constexpr optional<T&>::optional(optional&& other) noexcept
-    {
-        if (other.has_value())
-        {
-            _data.ref = other._data.ref;
-            other.reset();
-            _has_value = true;
-        }
     }
 
     template <typename T>
     template <typename U>
         requires(is_convertible_v<U, T>)
-    inline constexpr optional<T&>::optional(const optional<U>& other)
+    inline constexpr optional<T&>::optional(const optional<U>& other) : _ref{&*other}
     {
-        if (other.has_value())
-        {
-            _data.ref = other._data.ref;
-            _has_value = true;
-        }
     }
 
     template <typename T>
@@ -876,12 +842,8 @@ namespace tempest
         requires(is_convertible_v<U, T>)
     inline constexpr optional<T&>::optional(optional<U>&& other)
     {
-        if (other.has_value())
-        {
-            _data.ref = other._data.ref;
-            other.reset();
-            _has_value = true;
-        }
+        _ref = &*other;
+        other.reset();
     }
 
     template <typename T>
@@ -889,18 +851,13 @@ namespace tempest
         requires(is_constructible_v<T, U>)
     inline constexpr optional<T&>::optional(U&& value)
     {
-        _data.ref = &value;
-        _has_value = true;
+        _ref = &value;
     }
 
     template <typename T>
     inline constexpr optional<T&>& optional<T&>::operator=(nullopt_t) noexcept
     {
-        if (has_value())
-        {
-            _data.ref = nullptr;
-            _has_value = false;
-        }
+        _ref = nullptr;
 
         return *this;
     }
@@ -908,24 +865,7 @@ namespace tempest
     template <typename T>
     inline constexpr optional<T&>& optional<T&>::operator=(const optional& other)
     {
-        if (this != &other)
-        {
-            if (has_value())
-            {
-                _data.ref = nullptr;
-            }
-
-            if (other.has_value())
-            {
-                _data.ref = other._data.ref;
-                _has_value = true;
-            }
-            else
-            {
-                _has_value = false;
-            }
-        }
-
+        _ref = other._ref;
         return *this;
     }
 
@@ -934,21 +874,7 @@ namespace tempest
     {
         if (this != &other)
         {
-            if (has_value())
-            {
-                _data.ref = nullptr;
-            }
-
-            if (other.has_value())
-            {
-                _data.ref = other._data.ref;
-                other.reset();
-                _has_value = true;
-            }
-            else
-            {
-                _has_value = false;
-            }
+            _ref = tempest::exchange(other._ref, nullptr);
         }
 
         return *this;
@@ -959,20 +885,7 @@ namespace tempest
         requires(is_convertible_v<U, T>)
     inline constexpr optional<T&>& optional<T&>::operator=(const optional<U>& other)
     {
-        if (has_value())
-        {
-            _data.ref = nullptr;
-        }
-
-        if (other.has_value())
-        {
-            _data.ref = other._data.ref;
-            _has_value = true;
-        }
-        else
-        {
-            _has_value = false;
-        }
+        _ref = &*other._ref;
 
         return *this;
     }
@@ -982,20 +895,10 @@ namespace tempest
         requires(is_convertible_v<U, T>)
     inline constexpr optional<T&>& optional<T&>::operator=(optional<U>&& other)
     {
-        if (has_value())
+        if (this != &other)
         {
-            _data.ref = nullptr;
-        }
-
-        if (other.has_value())
-        {
-            _data.ref = other._data.ref;
+            _ref = &*other._ref;
             other.reset();
-            _has_value = true;
-        }
-        else
-        {
-            _has_value = false;
         }
 
         return *this;
@@ -1006,13 +909,7 @@ namespace tempest
         requires(is_constructible_v<T, U>)
     inline constexpr optional<T&>& optional<T&>::operator=(U&& value)
     {
-        if (has_value())
-        {
-            _data.ref = nullptr;
-        }
-
-        _data.ref = &value;
-        _has_value = true;
+        _ref = &value;
 
         return *this;
     }
@@ -1020,19 +917,19 @@ namespace tempest
     template <typename T>
     inline constexpr typename optional<T&>::iterator optional<T&>::begin() noexcept
     {
-        return has_value() ? _data.ref : nullptr;
+        return _ref;
     }
 
     template <typename T>
     inline constexpr typename optional<T&>::const_iterator optional<T&>::begin() const noexcept
     {
-        return has_value() ? _data.ref : nullptr;
+        return _ref;
     }
 
     template <typename T>
     inline constexpr typename optional<T&>::const_iterator optional<T&>::cbegin() const noexcept
     {
-        return begin();
+        return _ref;
     }
 
     template <typename T>
@@ -1056,75 +953,75 @@ namespace tempest
     template <typename T>
     inline constexpr T& optional<T&>::value() &
     {
-        return *_data.ref;
+        return *_ref;
     }
 
     template <typename T>
     inline constexpr const T& optional<T&>::value() const&
     {
-        return *_data.ref;
+        return *_ref;
     }
 
     template <typename T>
     inline constexpr T&& optional<T&>::value() &&
     {
-        return tempest::move(*_data.ref);
+        return tempest::move(*_ref);
     }
 
     template <typename T>
     inline constexpr const T&& optional<T&>::value() const&&
     {
-        return tempest::move(*_data.ref);
+        return tempest::move(*_ref);
     }
 
     template <typename T>
     template <typename U>
     inline constexpr T optional<T&>::value_or(U&& default_value) const&
     {
-        return has_value() ? *_data.ref : static_cast<T>(forward<U>(default_value));
+        return has_value() ? *_ref : static_cast<T>(forward<U>(default_value));
     }
 
     template <typename T>
     template <typename U>
     inline constexpr T optional<T&>::value_or(U&& default_value) &&
     {
-        return has_value() ? tempest::move(*_data.ref) : static_cast<T>(forward<U>(default_value));
+        return has_value() ? tempest::move(*_ref) : static_cast<T>(forward<U>(default_value));
     }
 
     template <typename T>
     inline constexpr T* optional<T&>::operator->() noexcept
     {
-        return _data.ref;
+        return _ref;
     }
 
     template <typename T>
     inline constexpr const T* optional<T&>::operator->() const noexcept
     {
-        return _data.ref;
+        return _ref;
     }
 
     template <typename T>
     inline constexpr T& optional<T&>::operator*() & noexcept
     {
-        return *_data.ref;
+        return *_ref;
     }
 
     template <typename T>
     inline constexpr const T& optional<T&>::operator*() const& noexcept
     {
-        return *_data.ref;
+        return *_ref;
     }
 
     template <typename T>
     inline constexpr T&& optional<T&>::operator*() && noexcept
     {
-        return tempest::move(*_data.ref);
+        return tempest::move(*_ref);
     }
 
     template <typename T>
     inline constexpr const T&& optional<T&>::operator*() const&& noexcept
     {
-        return tempest::move(*_data.ref);
+        return tempest::move(*_ref);
     }
 
     template <typename T>
@@ -1136,40 +1033,19 @@ namespace tempest
     template <typename T>
     inline constexpr bool optional<T&>::has_value() const noexcept
     {
-        return _has_value;
+        return _ref == nullptr;
     }
 
     template <typename T>
     inline constexpr void optional<T&>::reset() noexcept
     {
-        if (has_value())
-        {
-            _data.ref = nullptr;
-            _has_value = false;
-        }
+        _ref = nullptr;
     }
 
     template <typename T>
     inline constexpr void optional<T&>::swap(optional& other) noexcept
     {
-        if (has_value() && other.has_value())
-        {
-            tempest::swap(_data.ref, other._data.ref);
-        }
-        else if (has_value())
-        {
-            other._data.ref = _data.ref;
-            _data.ref = nullptr;
-            _has_value = false;
-            other._has_value = true;
-        }
-        else if (other.has_value())
-        {
-            _data.ref = other._data.ref;
-            other._data.ref = nullptr;
-            _has_value = true;
-            other._has_value = false;
-        }
+        tempest::swap(_ref, other._ref);
     }
 
     template <typename T>
