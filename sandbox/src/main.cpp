@@ -1,5 +1,6 @@
 #include <tempest/pipelines/pbr_pipeline.hpp>
 #include <tempest/tempest.hpp>
+#include <tempest/transform_component.hpp>
 
 int main()
 {

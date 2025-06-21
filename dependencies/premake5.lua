@@ -1,4 +1,4 @@
-scoped.group('vendor', function()
+scoped.group('Vendor', function()
     include 'glfw'
     include 'googletest'
     include 'imgui'
