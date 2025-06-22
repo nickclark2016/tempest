@@ -77,6 +77,7 @@ namespace tempest::core
         HOME,
         END,
         CAPS_LOCK,
+        SCROLL_LOCK,
         NUM_LOCK,
         PRINT_SCREEN,
         PAUSE,

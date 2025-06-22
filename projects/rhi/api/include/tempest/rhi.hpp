@@ -332,6 +332,44 @@ namespace tempest::rhi
     class window_surface
     {
       public:
+        enum class cursor_shape
+        {
+            arrow,
+            ibeam,
+            crosshair,
+            hand,
+            resize_horizontal,
+            resize_vertical,
+        };
+
+        struct video_mode
+        {
+            uint32_t width;
+            uint32_t height;
+            uint32_t refresh_rate;
+            uint8_t red_bits;
+            uint8_t green_bits;
+            uint8_t blue_bits;
+        };
+
+        struct monitor
+        {
+            int32_t work_x;
+            int32_t work_y;
+            uint32_t work_width;
+            uint32_t work_height;
+
+            int32_t x;
+            int32_t y;
+
+            float content_scale_x;
+            float content_scale_y;
+
+            string_view name;
+
+            video_mode current_video_mode;
+        };
+
         window_surface(const window_surface&) = delete;
         window_surface(window_surface&&) noexcept = delete;
         virtual ~window_surface() = default;
@@ -341,10 +379,16 @@ namespace tempest::rhi
 
         virtual uint32_t width() const noexcept = 0;
         virtual uint32_t height() const noexcept = 0;
+        virtual uint32_t framebuffer_width() const noexcept = 0;
+        virtual uint32_t framebuffer_height() const noexcept = 0;
         virtual string name() const noexcept = 0;
         virtual bool should_close() const noexcept = 0;
         virtual bool minimized() const noexcept = 0;
         virtual bool is_cursor_disabled() const noexcept = 0;
+        virtual void hide_cursor() noexcept = 0;
+        virtual void disable_cursor() noexcept = 0;
+        virtual void show_cursor() noexcept = 0;
+        virtual bool is_focused() const noexcept = 0;
 
         virtual void close() = 0;
 
@@ -353,12 +397,24 @@ namespace tempest::rhi
         virtual void register_mouse_callback(function<void(const core::mouse_button_state&)>&& cb) noexcept = 0;
         virtual void register_cursor_callback(function<void(float, float)>&& cb) noexcept = 0;
         virtual void register_scroll_callback(function<void(float, float)>&& cb) noexcept = 0;
+        virtual void register_character_input_callback(function<void(uint32_t)>&& cb) noexcept = 0;
 
         // Set up other miscellaneous callbacks
         virtual void register_close_callback(function<void()>&& cb) noexcept = 0;
         virtual void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept = 0;
         virtual void register_focus_callback(function<void(bool)>&& cb) noexcept = 0;
         virtual void register_minimize_callback(function<void(bool)>&& cb) noexcept = 0;
+        virtual void register_cursor_enter_callback(function<void(bool)>&& cb) noexcept = 0;
+
+        // Set up clipboard operations
+        virtual void set_clipboard_text(const char* text) noexcept = 0;
+        virtual const char* get_clipboard_text() noexcept = 0;
+
+        // Cursor management
+        virtual void set_cursor_shape(cursor_shape shape) noexcept = 0;
+
+        // Monitor management
+        virtual vector<monitor> get_monitors() const noexcept = 0;
 
       protected:
         window_surface() = default;

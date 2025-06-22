@@ -29,4 +29,14 @@ scoped.project('editor-ui', function()
             'editor-ui',
         }
     end)
+
+    scoped.usage('PUBLIC', function()
+        uses {
+            'rhi-api',
+        }
+    end)
+
+    uses {
+        'imgui',
+    }
 end)

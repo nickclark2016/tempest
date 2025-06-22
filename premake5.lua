@@ -100,7 +100,7 @@ scoped.workspace('Tempest', function()
         'system:windows',
         'action:gmake*',
         'configurations:debug',
-        'kind:ConsoleApp or SharedLib'
+        'kind:ConsoleApp or SharedLib or WindowedApp'
     }, function()
         linkoptions {
             '-dll_dbg',
@@ -117,7 +117,7 @@ scoped.workspace('Tempest', function()
         'system:windows',
         'action:gmake*',
         'configurations:relwithdebuginfo',
-        'kind:ConsoleApp or SharedLib'
+        'kind:ConsoleApp or SharedLib or WindowedApp'
     }, function()
         linkoptions {
             '-dll',
@@ -134,7 +134,7 @@ scoped.workspace('Tempest', function()
         'system:windows',
         'action:gmake*',
         'configurations:release',
-        'kind:ConsoleApp or SharedLib'
+        'kind:ConsoleApp or SharedLib or WindowedApp'
     }, function()
         linkoptions {
             '-dll',
@@ -146,7 +146,7 @@ scoped.workspace('Tempest', function()
         }
     end)
 
-    startproject 'editor'
+    startproject 'editor-entrypoint'
 
     include 'dependencies'
     include 'projects'

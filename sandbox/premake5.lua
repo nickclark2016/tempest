@@ -5,7 +5,7 @@ scoped.project('sandbox', function()
 
     targetdir '%{binaries}'
     objdir '%{intermediates}'
-    debugdir '%{root}/projects/sandbox'
+    debugdir '%{root}/sandbox'
 
     files {
         'include/**.hpp',
