@@ -136,6 +136,58 @@ namespace tempest::rhi
         a2bgr10_unorm_pack32,
     };
 
+    enum class buffer_format
+    {
+        r8_unorm,
+        r8_snorm,
+        r8_uint,
+        r8_sint,
+        r16_unorm,
+        r16_snorm,
+        r16_uint,
+        r16_sint,
+        r16_float,
+        r32_float,
+        r32_uint,
+        r32_sint,
+        rg8_unorm,
+        rg8_snorm,
+        rg8_uint,
+        rg8_sint,
+        rg16_unorm,
+        rg16_snorm,
+        rg16_float,
+        rg16_uint,
+        rg16_sint,
+        rg32_float,
+        rg32_uint,
+        rg32_sint,
+        rgb8_unorm,
+        rgb8_snorm,
+        rgb8_uint,
+        rgb8_sint,
+        rgb16_unorm,
+        rgb16_snorm,
+        rgb16_float,
+        rgb16_uint,
+        rgb16_sint,
+        rgb32_float,
+        rgb32_uint,
+        rgb32_sint,
+        rgba8_unorm,
+        rgba8_snorm,
+        rgba8_uint,
+        rgba8_sint,
+        rgba16_unorm,
+        rgba16_snorm,
+        rgba16_float,
+        rgba16_uint,
+        rgba16_sint,
+        rgba32_float,
+        rgba32_uint,
+        rgba32_sint,
+    };
+
     enum class image_layout
     {
         undefined,
@@ -473,6 +525,7 @@ namespace tempest::rhi
         structured_buffer,
         dynamic_constant_buffer,
         dynamic_structured_buffer,
+        combined_image_sampler,
     };
 
     enum class descriptor_binding_flags
@@ -700,6 +753,33 @@ namespace tempest::rhi
         array<float, 4> blend_constants;
     };
 
+    enum class vertex_input_rate
+    {
+        vertex,
+        instance,
+    };
+
+    struct vertex_binding_desc
+    {
+        uint32_t binding_index;
+        uint32_t stride;
+        vertex_input_rate input_rate;
+    };
+
+    struct vertex_attribute_desc
+    {
+        uint32_t binding_index;
+        uint32_t location_index;
+        buffer_format format;
+        uint32_t offset;
+    };
+
+    struct vertex_input_desc
+    {
+        vector<vertex_binding_desc> bindings;
+        vector<vertex_attribute_desc> attributes;
+    };
+
     struct graphics_pipeline_desc
     {
         vector<image_format> color_attachment_formats;
@@ -713,6 +793,7 @@ namespace tempest::rhi
         vector<byte> fragment_shader;
 
         input_assembly_desc input_assembly;
+        optional<vertex_input_desc> vertex_input;
         optional<tessellation_desc> tessellation;
         multisample_state multisample;
         rasterization_state rasterization;

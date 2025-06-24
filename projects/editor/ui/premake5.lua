@@ -33,6 +33,7 @@ scoped.project('editor-ui', function()
     scoped.usage('PUBLIC', function()
         uses {
             'rhi-api',
+            'graphics',
         }
     end)
 

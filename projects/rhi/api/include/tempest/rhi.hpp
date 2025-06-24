@@ -98,6 +98,12 @@ namespace tempest::rhi
         virtual void unmap_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
         virtual void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept = 0;
 
+        // Swapchain info
+        virtual uint32_t get_render_surface_width(
+            typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;
+        virtual uint32_t get_render_surface_height(
+            typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;
+
         virtual void start_frame() = 0;
         virtual void end_frame() = 0;
 

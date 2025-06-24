@@ -499,6 +499,9 @@ namespace tempest::rhi::vk
         void unmap_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept override;
         void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept override;
 
+        uint32_t get_render_surface_width(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
+        uint32_t get_render_surface_height(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
+
         void start_frame() override;
         void end_frame() override;
 

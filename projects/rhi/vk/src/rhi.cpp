@@ -128,6 +128,126 @@ namespace tempest::rhi::vk
             }
         }
 
+        constexpr VkFormat to_vulkan(rhi::buffer_format fmt)
+        {
+            switch (fmt)
+            {
+            case rhi::buffer_format::r8_snorm:
+                return VK_FORMAT_R8_SNORM;
+            case rhi::buffer_format::r8_unorm:
+                return VK_FORMAT_R8_UNORM;
+            case rhi::buffer_format::r8_uint:
+                return VK_FORMAT_R8_UINT;
+            case rhi::buffer_format::r8_sint:
+                return VK_FORMAT_R8_SINT;
+            case rhi::buffer_format::r16_unorm:
+                return VK_FORMAT_R16_UNORM;
+            case rhi::buffer_format::r16_snorm:
+                return VK_FORMAT_R16_SNORM;
+            case rhi::buffer_format::r16_uint:
+                return VK_FORMAT_R16_UINT;
+            case rhi::buffer_format::r16_sint:
+                return VK_FORMAT_R16_SINT;
+            case rhi::buffer_format::r16_float:
+                return VK_FORMAT_R16_SFLOAT;
+            case rhi::buffer_format::r32_float:
+                return VK_FORMAT_R32_SFLOAT;
+            case rhi::buffer_format::r32_uint:
+                return VK_FORMAT_R32_UINT;
+            case rhi::buffer_format::r32_sint:
+                return VK_FORMAT_R32_SINT;
+            case rhi::buffer_format::rg8_snorm:
+                return VK_FORMAT_R8G8_SNORM;
+            case rhi::buffer_format::rg8_unorm:
+                return VK_FORMAT_R8G8_UNORM;
+            case rhi::buffer_format::rg8_uint:
+                return VK_FORMAT_R8G8_UINT;
+            case rhi::buffer_format::rg8_sint:
+                return VK_FORMAT_R8G8_SINT;
+            case rhi::buffer_format::rg16_unorm:
+                return VK_FORMAT_R16G16_UNORM;
+            case rhi::buffer_format::rg16_snorm:
+                return VK_FORMAT_R16G16_SNORM;
+            case rhi::buffer_format::rg16_float:
+                return VK_FORMAT_R16G16_SFLOAT;
+            case rhi::buffer_format::rg16_uint:
+                return VK_FORMAT_R16G16_UINT;
+            case rhi::buffer_format::rg16_sint:
+                return VK_FORMAT_R16G16_SINT;
+            case rhi::buffer_format::rg32_float:
+                return VK_FORMAT_R32G32_SFLOAT;
+            case rhi::buffer_format::rg32_uint:
+                return VK_FORMAT_R32G32_UINT;
+            case rhi::buffer_format::rg32_sint:
+                return VK_FORMAT_R32G32_SINT;
+            case rhi::buffer_format::rgb8_snorm:
+                return VK_FORMAT_R8G8B8_SNORM;
+            case rhi::buffer_format::rgb8_unorm:
+                return VK_FORMAT_R8G8B8_UNORM;
+            case rhi::buffer_format::rgb8_uint:
+                return VK_FORMAT_R8G8B8_UINT;
+            case rhi::buffer_format::rgb8_sint:
+                return VK_FORMAT_R8G8B8_SINT;
+            case rhi::buffer_format::rgb16_unorm:
+                return VK_FORMAT_R16G16B16_UNORM;
+            case rhi::buffer_format::rgb16_snorm:
+                return VK_FORMAT_R16G16B16_SNORM;
+            case rhi::buffer_format::rgb16_float:
+                return VK_FORMAT_R16G16B16_SFLOAT;
+            case rhi::buffer_format::rgb16_uint:
+                return VK_FORMAT_R16G16B16_UINT;
+            case rhi::buffer_format::rgb16_sint:
+                return VK_FORMAT_R16G16B16_SINT;
+            case rhi::buffer_format::rgb32_float:
+                return VK_FORMAT_R32G32B32_SFLOAT;
+            case rhi::buffer_format::rgb32_uint:
+                return VK_FORMAT_R32G32B32_UINT;
+            case rhi::buffer_format::rgb32_sint:
+                return VK_FORMAT_R32G32B32_SINT;
+            case rhi::buffer_format::rgba8_snorm:
+                return VK_FORMAT_R8G8B8A8_SNORM;
+            case rhi::buffer_format::rgba8_unorm:
+                return VK_FORMAT_R8G8B8A8_UNORM;
+            case rhi::buffer_format::rgba8_uint:
+                return VK_FORMAT_R8G8B8A8_UINT;
+            case rhi::buffer_format::rgba8_sint:
+                return VK_FORMAT_R8G8B8A8_SINT;
+            case rhi::buffer_format::rgba16_unorm:
+                return VK_FORMAT_R16G16B16A16_UNORM;
+            case rhi::buffer_format::rgba16_snorm:
+                return VK_FORMAT_R16G16B16A16_SNORM;
+            case rhi::buffer_format::rgba16_float:
+                return VK_FORMAT_R16G16B16A16_SFLOAT;
+            case rhi::buffer_format::rgba16_uint:
+                return VK_FORMAT_R16G16B16A16_UINT;
+            case rhi::buffer_format::rgba16_sint:
+                return VK_FORMAT_R16G16B16A16_SINT;
+            case rhi::buffer_format::rgba32_float:
+                return VK_FORMAT_R32G32B32A32_SFLOAT;
+            case rhi::buffer_format::rgba32_uint:
+                return VK_FORMAT_R32G32B32A32_UINT;
+            case rhi::buffer_format::rgba32_sint:
+                return VK_FORMAT_R32G32B32A32_SINT;
+            default:
+                logger->critical("Invalid buffer format: {}", static_cast<uint32_t>(fmt));
+                std::terminate();
+            }
+        }
+
+        constexpr VkVertexInputRate to_vulkan(rhi::vertex_input_rate rate)
+        {
+            switch (rate)
+            {
+            case rhi::vertex_input_rate::vertex:
+                return VK_VERTEX_INPUT_RATE_VERTEX;
+            case rhi::vertex_input_rate::instance:
+                return VK_VERTEX_INPUT_RATE_INSTANCE;
+            default:
+                logger->critical("Invalid vertex input rate: {}", static_cast<uint32_t>(rate));
+                std::terminate();
+            }
+        }
+
         constexpr VkColorSpaceKHR to_vulkan(rhi::color_space color_space)
         {
             switch (color_space)
@@ -606,6 +726,8 @@ namespace tempest::rhi::vk
                 return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
             case rhi::descriptor_type::dynamic_structured_buffer:
                 return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+            case rhi::descriptor_type::combined_image_sampler:
+                return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             }
             unreachable();
         }
@@ -1739,14 +1861,43 @@ namespace tempest::rhi::vk
             shader_stages.push_back(stage_ci);
         }
 
+        auto vertex_bindings = vector<VkVertexInputBindingDescription>();
+        auto vertex_attributes = vector<VkVertexInputAttributeDescription>();
+
+        if (desc.vertex_input)
+        {
+            for (const auto& binding : desc.vertex_input->bindings)
+            {
+                VkVertexInputBindingDescription vk_binding = {
+                    .binding = binding.binding_index,
+                    .stride = binding.stride,
+                    .inputRate = to_vulkan(binding.input_rate),
+                };
+
+                vertex_bindings.push_back(tempest::move(vk_binding));
+            }
+
+            for (const auto& attr : desc.vertex_input->attributes)
+            {
+                VkVertexInputAttributeDescription vk_attr = {
+                    .location = attr.location_index,
+                    .binding = attr.binding_index,
+                    .format = to_vulkan(attr.format),
+                    .offset = attr.offset,
+                };
+
+                vertex_attributes.push_back(tempest::move(vk_attr));
+            }
+        }
+
         VkPipelineVertexInputStateCreateInfo vertex_input_ci = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .vertexBindingDescriptionCount = 0,
-            .pVertexBindingDescriptions = nullptr,
-            .vertexAttributeDescriptionCount = 0,
-            .pVertexAttributeDescriptions = nullptr,
+            .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_bindings.size()),
+            .pVertexBindingDescriptions = vertex_bindings.empty() ? nullptr : vertex_bindings.data(),
+            .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attributes.size()),
+            .pVertexAttributeDescriptions = vertex_attributes.empty() ? nullptr : vertex_attributes.data(),
         };
 
         VkPipelineInputAssemblyStateCreateInfo input_assembly_ci = {
@@ -2434,6 +2585,8 @@ namespace tempest::rhi::vk
     void device::recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
                                          const render_surface_desc& desc) noexcept
     {
+        _dispatch_table.deviceWaitIdle();
+
         auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
         auto swapchain_it = _swapchains.find(swapchain_key);
         if (swapchain_it == _swapchains.end())
@@ -2678,6 +2831,28 @@ namespace tempest::rhi::vk
             vmaFlushAllocations(_vma_allocator, static_cast<uint32_t>(allocations.size()), allocations.data(), nullptr,
                                 nullptr);
         }
+    }
+
+    uint32_t device::get_render_surface_width(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept
+    {
+        auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto swapchain_it = _swapchains.find(swapchain_key);
+        if (swapchain_it != _swapchains.end())
+        {
+            return swapchain_it->swapchain.extent.width;
+        }
+        return 0;
+    }
+
+    uint32_t device::get_render_surface_height(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept
+    {
+        auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto swapchain_it = _swapchains.find(swapchain_key);
+        if (swapchain_it != _swapchains.end())
+        {
+            return swapchain_it->swapchain.extent.height;
+        }
+        return 0;
     }
 
     void device::start_frame()

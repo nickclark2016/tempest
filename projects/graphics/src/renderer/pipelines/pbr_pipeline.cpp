@@ -802,7 +802,8 @@ namespace tempest::graphics
             light.color_intensity =
                 math::vec4<float>(point_light.color.x, point_light.color.y, point_light.color.z, point_light.intensity);
 
-            light.position_falloff = math::vec4<float>(tx.position().x, tx.position().y, tx.position().z, point_light.range);
+            light.position_falloff =
+                math::vec4<float>(tx.position().x, tx.position().y, tx.position().z, point_light.range);
             light.enabled = true;
             _cpu_buffers.point_and_spot_lights.insert_or_replace(self.entity, light);
         });
@@ -1945,6 +1946,7 @@ namespace tempest::graphics
                 {
                     .topology = rhi::primitive_topology::triangle_list,
                 },
+            .vertex_input = none(),
             .tessellation = none(),
             .multisample =
                 {
@@ -2180,6 +2182,7 @@ namespace tempest::graphics
                 {
                     .topology = rhi::primitive_topology::triangle_list,
                 },
+            .vertex_input = none(),
             .tessellation = none(),
             .multisample =
                 {
@@ -2293,6 +2296,7 @@ namespace tempest::graphics
                     {
                         .topology = rhi::primitive_topology::triangle_list,
                     },
+                .vertex_input = none(),
                 .tessellation = none(),
                 .multisample =
                     {
@@ -2404,6 +2408,7 @@ namespace tempest::graphics
                     {
                         .topology = rhi::primitive_topology::triangle_list,
                     },
+                .vertex_input = none(),
                 .tessellation = none(),
                 .multisample =
                     {
@@ -2497,6 +2502,7 @@ namespace tempest::graphics
                     {
                         .topology = rhi::primitive_topology::triangle_list,
                     },
+                .vertex_input = none(),
                 .tessellation = none(),
                 .multisample =
                     {
@@ -2609,6 +2615,7 @@ namespace tempest::graphics
                 {
                     .topology = rhi::primitive_topology::triangle_list,
                 },
+            .vertex_input = none(),
             .tessellation = none(),
             .multisample =
                 {
@@ -2706,6 +2713,7 @@ namespace tempest::graphics
                     {
                         .topology = rhi::primitive_topology::triangle_list,
                     },
+                .vertex_input = none(),
                 .tessellation = none(),
                 .multisample =
                     {
@@ -2799,6 +2807,7 @@ namespace tempest::graphics
                     {
                         .topology = rhi::primitive_topology::triangle_list,
                     },
+                .vertex_input = none(),
                 .tessellation = none(),
                 .multisample =
                     {
@@ -3067,6 +3076,7 @@ namespace tempest::graphics
                 {
                     .topology = rhi::primitive_topology::triangle_list,
                 },
+            .vertex_input = none(),
             .tessellation = none(),
             .multisample =
                 {

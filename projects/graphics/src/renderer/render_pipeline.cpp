@@ -24,10 +24,22 @@ namespace tempest::graphics
                     .format = rhi::image_format::bgra8_srgb,
                 },
             .present_mode = rhi::present_mode::immediate,
-            .width = window->width(),
-            .height = window->height(),
+            .width = window->framebuffer_width(),
+            .height = window->framebuffer_height(),
             .layers = 1,
         });
+
+        window->register_resize_callback(
+            [render_surface, this]([[maybe_unused]] uint32_t width, [[maybe_unused]] uint32_t height) {
+                auto window_payload_it =
+                    tempest::find_if(_windows.begin(), _windows.end(), [render_surface](const auto& payload) {
+                        return payload.render_surface == render_surface;
+                    });
+                if (window_payload_it != _windows.end())
+                {
+                    window_payload_it->framebuffer_resized = true;
+                }
+            });
 
         _windows.push_back({
             .win = window,
@@ -93,8 +105,8 @@ namespace tempest::graphics
                                                                      .format = rhi::image_format::bgra8_srgb,
                                                                  },
                                                              .present_mode = rhi::present_mode::immediate,
-                                                             .width = window.width(),
-                                                             .height = window.height(),
+                                                             .width = window.framebuffer_width(),
+                                                             .height = window.framebuffer_height(),
                                                              .layers = 1,
                                                          });
                     continue;
@@ -115,11 +127,13 @@ namespace tempest::graphics
                 .swapchain_image = acquire_result->image,
                 .surface = it->render_surface,
                 .image_index = acquire_result->image_index,
+                .image_width = _rhi_device->get_render_surface_width(it->render_surface),
+                .image_height = _rhi_device->get_render_surface_height(it->render_surface),
             };
 
             auto result = pipeline.render(*this, *_rhi_device, rs);
 
-            if (result == render_pipeline::render_result::REQUEST_RECREATE_SWAPCHAIN)
+            if (result == render_pipeline::render_result::REQUEST_RECREATE_SWAPCHAIN || it->framebuffer_resized)
             {
                 _rhi_device->recreate_render_surface(it->render_surface,
                                                      {
@@ -131,10 +145,11 @@ namespace tempest::graphics
                                                                  .format = rhi::image_format::bgra8_srgb,
                                                              },
                                                          .present_mode = rhi::present_mode::immediate,
-                                                         .width = window.width(),
-                                                         .height = window.height(),
+                                                         .width = window.framebuffer_width(),
+                                                         .height = window.framebuffer_height(),
                                                          .layers = 1,
                                                      });
+                it->framebuffer_resized = false;
                 continue;
             }
             else if (result == render_pipeline::render_result::FAILURE)
@@ -159,5 +174,15 @@ namespace tempest::graphics
         {
             ctx.pipeline->upload_objects_sync(*_rhi_device, entities, meshes, textures, materials);
         }
+    }
+
+    void render_pipeline::upload_objects_sync([[maybe_unused]] rhi::device& dev,
+                                              [[maybe_unused]] span<const ecs::archetype_entity> entities,
+                                              [[maybe_unused]] const core::mesh_registry& meshes,
+                                              [[maybe_unused]] const core::texture_registry& textures,
+                                              [[maybe_unused]] const core::material_registry& materials)
+    {
+        // Default implementation does nothing.
+        // Derived classes can override this method to implement specific upload logic.
     }
 } // namespace tempest::graphics

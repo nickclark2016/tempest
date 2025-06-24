@@ -53,6 +53,7 @@ namespace tempest::graphics
             rhi::window_surface* win;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface;
             unique_ptr<render_pipeline> pipeline;
+            bool framebuffer_resized;
         };
 
         vector<window_payload> _windows;
@@ -69,6 +70,8 @@ namespace tempest::graphics
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> swapchain_image;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> surface;
             uint32_t image_index;
+            uint32_t image_width;
+            uint32_t image_height;
         };
 
         enum render_result
@@ -92,7 +95,7 @@ namespace tempest::graphics
 
         virtual void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
                                          const core::mesh_registry& meshes, const core::texture_registry& textures,
-                                         const core::material_registry& materials) = 0;
+                                         const core::material_registry& materials);
     };
 } // namespace tempest::graphics
 
