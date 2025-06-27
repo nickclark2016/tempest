@@ -1228,15 +1228,10 @@ namespace tempest::editor::ui
 
         wq.end_command_list(cmds);
 
-        // Submit and wait for the upload to complete
-        auto fence = _impl->device->create_fence(rhi::fence_info{});
         rhi::work_queue::submit_info submit_info;
         submit_info.command_lists.push_back(cmds);
 
-        wq.submit(tempest::span(&submit_info, 1), fence);
-
-        _impl->device->wait({&fence, 1});
-        _impl->device->destroy_fence(fence);
+        wq.submit(tempest::span(&submit_info, 1));
         _impl->device->destroy_buffer(upload_buffer);
 
         auto packed_handle = math::pack_uint32x2(font_tex.generation, font_tex.id);
