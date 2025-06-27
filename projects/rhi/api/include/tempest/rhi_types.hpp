@@ -213,6 +213,7 @@ namespace tempest::rhi
         structured = 0x00000008,
         transfer_src = 0x00000010,
         transfer_dst = 0x00000020,
+        vertex = 0x00000040,
     };
 
     enum class image_usage
@@ -558,6 +559,12 @@ namespace tempest::rhi
         return !(*this == other);
     }
 
+    enum class descriptor_set_layout_flags
+    {
+        none = 0x0,
+        push = 0x1,
+    };
+
     struct push_constant_range
     {
         uint32_t offset;
@@ -824,6 +831,7 @@ namespace tempest::rhi
     struct image_binding_info
     {
         typed_rhi_handle<rhi_handle_type::image> image;
+        typed_rhi_handle<rhi_handle_type::sampler> sampler;
         image_layout layout;
     };
 

@@ -364,6 +364,11 @@ namespace tempest::rhi::vk
                 flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
             }
 
+            if ((usage & rhi::buffer_usage::vertex) == rhi::buffer_usage::vertex)
+            {
+                flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            }
+
             return flags;
         }
 
@@ -1011,6 +1016,18 @@ namespace tempest::rhi::vk
                 return VK_PIPELINE_BIND_POINT_COMPUTE;
             }
             unreachable();
+        }
+
+        constexpr VkDescriptorSetLayoutCreateFlags to_vulkan(enum_mask<descriptor_set_layout_flags> flags)
+        {
+            VkDescriptorSetLayoutCreateFlags vk_flags = 0;
+
+            if ((flags & descriptor_set_layout_flags::push) == descriptor_set_layout_flags::push)
+            {
+                vk_flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+            }
+
+            return vk_flags;
         }
 
         constexpr VkImageViewType get_compatible_view_type(rhi::image_type type)
@@ -1748,9 +1765,9 @@ namespace tempest::rhi::vk
     }
 
     typed_rhi_handle<rhi_handle_type::descriptor_set_layout> device::create_descriptor_set_layout(
-        const vector<descriptor_binding_layout>& desc) noexcept
+        const vector<descriptor_binding_layout>& desc, enum_mask<descriptor_set_layout_flags> flags) noexcept
     {
-        return _descriptor_set_layout_cache.get_or_create_layout(desc);
+        return _descriptor_set_layout_cache.get_or_create_layout(desc, flags);
     }
 
     typed_rhi_handle<rhi_handle_type::pipeline_layout> device::create_pipeline_layout(
@@ -1768,6 +1785,8 @@ namespace tempest::rhi::vk
             logger->error("Failed to create graphics pipeline: invalid pipeline layout");
             return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
         }
+
+        assert(desc.color_attachment_formats.size() == desc.color_blend.attachments.size());
 
         // Lambda to create shader modules and stages
         // Returns a pair of shader modules and shader stages
@@ -2208,7 +2227,8 @@ namespace tempest::rhi::vk
             for (size_t i = 0; i < image_desc.images.size(); ++i)
             {
                 img_infos[i] = {
-                    .sampler = VK_NULL_HANDLE,
+                    .sampler = image_desc.images[i].sampler ? get_sampler(image_desc.images[i].sampler)->sampler
+                                                            : VK_NULL_HANDLE,
                     .imageView = get_image(image_desc.images[i].image)->image_view,
                     .imageLayout = to_vulkan(image_desc.images[i].layout),
                 };
@@ -4246,6 +4266,14 @@ namespace tempest::rhi::vk
         _dispatch->cmdDraw(cmds, vertex_count, instance_count, first_vertex, first_instance);
     }
 
+    void work_queue::draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t index_count,
+                          uint32_t instance_count, uint32_t first_index, int32_t vertex_offset,
+                          uint32_t first_instance) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        _dispatch->cmdDrawIndexed(cmds, index_count, instance_count, first_index, vertex_offset, first_instance);
+    }
+
     void work_queue::bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                        typed_rhi_handle<rhi_handle_type::buffer> buffer, uint32_t offset,
                                        rhi::index_format index_type) noexcept
@@ -4255,6 +4283,30 @@ namespace tempest::rhi::vk
         _dispatch->cmdBindIndexBuffer(cmds, buf->buffer, offset, to_vulkan(index_type));
         // Track the buffer for the resource tracker
         used_buffers[command_list].push_back(buffer);
+    }
+
+    void work_queue::bind_vertex_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                         uint32_t first_binding,
+                                         span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers,
+                                         span<const size_t> offsets) noexcept
+    {
+        auto vk_buffers = _allocator.allocate_typed<VkBuffer>(buffers.size());
+        auto vk_offsets = _allocator.allocate_typed<VkDeviceSize>(offsets.size());
+
+        for (size_t i = 0; i < buffers.size(); ++i)
+        {
+            auto buf = _parent->get_buffer(buffers[i]);
+            vk_buffers[i] = buf->buffer;
+            vk_offsets[i] = static_cast<VkDeviceSize>(offsets[i]);
+        }
+
+        _dispatch->cmdBindVertexBuffers(_parent->get_command_buffer(command_list), first_binding,
+                                        static_cast<uint32_t>(buffers.size()), vk_buffers, vk_offsets);
+
+        for (auto&& buffer : buffers)
+        {
+            used_buffers[command_list].push_back(buffer);
+        }
     }
 
     void work_queue::set_scissor_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, int32_t x,
@@ -4350,6 +4402,113 @@ namespace tempest::rhi::vk
                                          first_set_index, static_cast<uint32_t>(sets.size()), vk_sets,
                                          static_cast<uint32_t>(dynamic_offsets.size()), dynamic_offsets.data());
         _allocator.reset();
+    }
+
+    void work_queue::push_descriptors(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                      typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                      bind_point point, uint32_t set_index,
+                                      span<const buffer_binding_descriptor> buffers,
+                                      span<const image_binding_descriptor> images,
+                                      span<const sampler_binding_descriptor> samplers) noexcept
+    {
+        auto cmds = _parent->get_command_buffer(command_list);
+        auto layout = _parent->get_pipeline_layout(pipeline_layout);
+
+        const auto write_count = static_cast<uint32_t>(buffers.size() + images.size() + samplers.size());
+        if (write_count == 0)
+        {
+            return; // No descriptors to push
+        }
+
+        auto writes = _allocator.allocate_typed<VkWriteDescriptorSet>(write_count);
+        auto write_index = 0u;
+
+        for (const auto& buffer : buffers)
+        {
+            auto buffer_write_info = _allocator.allocate_typed<VkDescriptorBufferInfo>(1);
+            buffer_write_info[0] = {
+                .buffer = _parent->get_buffer(buffer.buffer)->buffer,
+                .offset = buffer.offset,
+                .range = buffer.size,
+            };
+
+            writes[write_index++] = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE, // Will be set later
+                .dstBinding = buffer.index,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pImageInfo = nullptr,
+                .pBufferInfo = buffer_write_info,
+                .pTexelBufferView = nullptr,
+            };
+            // Track the buffer for the resource tracker
+            used_buffers[command_list].push_back(buffer.buffer);
+        }
+
+        for (const auto& image : images)
+        {
+            auto image_write_info = _allocator.allocate_typed<VkDescriptorImageInfo>(image.images.size());
+            for (size_t i = 0; i < image.images.size(); ++i)
+            {
+                const auto& img_info = image.images[i];
+                auto img = _parent->get_image(img_info.image);
+                auto smp = img_info.sampler ? _parent->get_sampler(img_info.sampler)->sampler : VK_NULL_HANDLE;
+                auto img_layout = to_vulkan(img_info.layout);
+
+                image_write_info[i] = {
+                    .sampler = smp,
+                    .imageView = img->image_view,
+                    .imageLayout = img_layout,
+                };
+            }
+
+            writes[write_index++] = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE, // Will be set later
+                .dstBinding = image.index,
+                .dstArrayElement = 0,
+                .descriptorCount = static_cast<uint32_t>(image.images.size()),
+                .descriptorType = to_vulkan(image.type),
+                .pImageInfo = image_write_info,
+                .pBufferInfo = nullptr,
+                .pTexelBufferView = nullptr,
+            };
+        }
+
+        for (const auto& sampler : samplers)
+        {
+            auto sampler_write_info = _allocator.allocate_typed<VkDescriptorImageInfo>(sampler.samplers.size());
+            for (size_t i = 0; i < sampler.samplers.size(); ++i)
+            {
+                auto smp = _parent->get_sampler(sampler.samplers[i])->sampler;
+                sampler_write_info[i] = {
+                    .sampler = smp,
+                    .imageView = VK_NULL_HANDLE,
+                    .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                };
+            }
+            writes[write_index++] = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE, // Will be set later
+                .dstBinding = sampler.index,
+                .dstArrayElement = 0,
+                .descriptorCount = static_cast<uint32_t>(sampler.samplers.size()),
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .pImageInfo = sampler_write_info,
+                .pBufferInfo = nullptr,
+                .pTexelBufferView = nullptr,
+            };
+            // Track the samplers for the resource tracker
+            used_samplers[command_list].insert(used_samplers[command_list].end(), sampler.samplers.begin(),
+                                               sampler.samplers.end());
+        }
+
+        _dispatch->cmdPushDescriptorSetKHR(cmds, to_vulkan(point), layout, set_index, write_count, writes);
     }
 
     void work_queue::push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -4503,6 +4662,7 @@ namespace tempest::rhi::vk
                 .require_present()
                 .add_required_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)
                 .add_required_extension(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME)
+                .add_required_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)
                 .set_minimum_version(1, 3)
                 .set_required_features({
 #ifdef _DEBUG
@@ -4670,13 +4830,14 @@ namespace tempest::rhi::vk
     }
 
     typed_rhi_handle<rhi_handle_type::descriptor_set_layout> descriptor_set_layout_cache::get_or_create_layout(
-        const vector<descriptor_binding_layout>& desc) noexcept
+        const vector<descriptor_binding_layout>& desc, enum_mask<descriptor_set_layout_flags> flags) noexcept
     {
         // Check if the layout already exists in the cache
-        size_t hash = _compute_cache_hash(desc);
+        size_t hash = _compute_cache_hash(desc, flags);
 
         cache_key key = {
             .desc = desc,
+            .flags = flags,
             .hash = hash,
         };
 
@@ -4716,7 +4877,7 @@ namespace tempest::rhi::vk
         VkDescriptorSetLayoutCreateInfo layout_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .pNext = &binding_flags_info,
-            .flags = 0,
+            .flags = to_vulkan(flags),
             .bindingCount = static_cast<uint32_t>(desc.size()),
             .pBindings = bindings,
         };
@@ -4815,8 +4976,8 @@ namespace tempest::rhi::vk
         return true;
     }
 
-    size_t descriptor_set_layout_cache::_compute_cache_hash(
-        const vector<descriptor_binding_layout>& desc) const noexcept
+    size_t descriptor_set_layout_cache::_compute_cache_hash(const vector<descriptor_binding_layout>& desc,
+                                                            enum_mask<descriptor_set_layout_flags> flags) const noexcept
     {
         size_t hash = 0;
         for (const auto& binding : desc)
@@ -4824,6 +4985,7 @@ namespace tempest::rhi::vk
             hash = hash_combine(hash, binding.binding_index, to_underlying(binding.type), binding.count,
                                 to_underlying(binding.stages.value()), to_underlying(binding.flags.value()));
         }
+        hash = hash_combine(hash, to_underlying(flags.value()));
         return hash;
     }
 

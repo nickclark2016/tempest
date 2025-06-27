@@ -49,7 +49,9 @@ namespace tempest::rhi
         virtual typed_rhi_handle<rhi_handle_type::render_surface> create_render_surface(
             const render_surface_desc& desc) noexcept = 0;
         virtual typed_rhi_handle<rhi_handle_type::descriptor_set_layout> create_descriptor_set_layout(
-            const vector<descriptor_binding_layout>& desc) noexcept = 0;
+            const vector<descriptor_binding_layout>& desc,
+            enum_mask<descriptor_set_layout_flags> flags =
+                make_enum_mask(descriptor_set_layout_flags::none)) noexcept = 0;
         virtual typed_rhi_handle<rhi_handle_type::pipeline_layout> create_pipeline_layout(
             const pipeline_layout_desc& desc) noexcept = 0;
         virtual typed_rhi_handle<rhi_handle_type::graphics_pipeline> create_graphics_pipeline(
@@ -65,8 +67,7 @@ namespace tempest::rhi
         virtual void destroy_fence(typed_rhi_handle<rhi_handle_type::fence> handle) noexcept = 0;
         virtual void destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept = 0;
         virtual void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept = 0;
-        virtual void destroy_descriptor_set_layout(
-            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept = 0;
+        virtual void destroy_descriptor_set_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept = 0;
         virtual void destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept = 0;
         virtual void destroy_graphics_pipeline(
             typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept = 0;
@@ -291,9 +292,16 @@ namespace tempest::rhi
                           uint32_t draw_count, uint32_t stride) noexcept = 0;
         virtual void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t vertex_count,
                           uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) noexcept = 0;
+        virtual void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t index_count,
+                          uint32_t instance_count, uint32_t first_index, int32_t vertex_offset,
+                          uint32_t first_instance) noexcept = 0;
         virtual void bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                        typed_rhi_handle<rhi_handle_type::buffer> buffer, uint32_t offset,
                                        rhi::index_format index_type) noexcept = 0;
+        virtual void bind_vertex_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                         uint32_t first_binding,
+                                         span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers,
+                                         span<const size_t> offsets) noexcept = 0;
         virtual void set_scissor_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, int32_t x,
                                         int32_t y, uint32_t width, uint32_t height,
                                         uint32_t region_index = 0) noexcept = 0;
@@ -320,6 +328,13 @@ namespace tempest::rhi
                                     enum_mask<rhi::shader_stage> stages, uint32_t offset,
                                     span<const byte> values) noexcept = 0;
 
+        virtual void push_descriptors(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                      typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                      bind_point point, uint32_t set_index,
+                                      span<const buffer_binding_descriptor> buffers,
+                                      span<const image_binding_descriptor> images,
+                                      span<const sampler_binding_descriptor> samplers) noexcept = 0;
+
         template <typename T>
             requires is_trivially_copyable_v<T> && is_standard_layout_v<T>
         void typed_push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -328,7 +343,7 @@ namespace tempest::rhi
         {
             static_assert(sizeof(T) % 4 == 0, "Push constant size must be a multiple of 4 bytes");
             push_constants(command_list, pipeline_layout, stages, offset,
-                                 span<const byte>{reinterpret_cast<const byte*>(&value), sizeof(T)});
+                           span<const byte>{reinterpret_cast<const byte*>(&value), sizeof(T)});
         }
 
       protected:

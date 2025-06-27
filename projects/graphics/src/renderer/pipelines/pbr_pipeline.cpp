@@ -3814,6 +3814,7 @@ namespace tempest::graphics
                 // TODO: Figure out what happens if there are "gaps" in the array
                 bindless_textures_desc.images.push_back(rhi::image_binding_info{
                     .image = img,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
             }
@@ -4044,6 +4045,7 @@ namespace tempest::graphics
             {
                 images.push_back(rhi::image_binding_info{
                     .image = img,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
             }
@@ -4475,16 +4477,19 @@ namespace tempest::graphics
 
                 const auto depth_buffer_binding = rhi::image_binding_info{
                     .image = _render_targets.depth,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 };
 
                 const auto normals_buffer_binding = rhi::image_binding_info{
                     .image = _render_targets.encoded_normals,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 };
 
                 const auto noise_texture_binding = rhi::image_binding_info{
                     .image = _ssao.noise_texture,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 };
 
@@ -4546,6 +4551,7 @@ namespace tempest::graphics
 
                 ssao_target_binding_desc.images.push_back({
                     .image = _ssao.ssao_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
 
@@ -4776,6 +4782,7 @@ namespace tempest::graphics
                 auto images = vector<rhi::image_binding_info>();
                 images.push_back({
                     .image = _skybox.hdri_texture,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
 
@@ -4943,6 +4950,7 @@ namespace tempest::graphics
             {
                 bindless_textures_desc.images.push_back({
                     .image = texture,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
             }
@@ -4957,6 +4965,7 @@ namespace tempest::graphics
             };
             ao_texture_desc.images.push_back({
                 .image = _ssao.ssao_blur_target,
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                 .layout = rhi::image_layout::shader_read_only,
             });
 
@@ -5003,6 +5012,7 @@ namespace tempest::graphics
             vector<rhi::image_binding_info> shadow_map_bindings;
             rhi::image_binding_info shadow_map_megatexture_binding = {
                 .image = _render_targets.shadow_megatexture,
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                 .layout = rhi::image_layout::shader_read_only,
             };
             shadow_map_bindings.push_back(shadow_map_megatexture_binding);
@@ -5161,6 +5171,7 @@ namespace tempest::graphics
                 };
                 ao_texture_desc.images.push_back({
                     .image = _ssao.ssao_blur_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
 
@@ -5174,6 +5185,7 @@ namespace tempest::graphics
                 };
                 oit_moments_desc.images.push_back({
                     .image = _pbr_transparencies.moments_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::general,
                 });
 
@@ -5187,6 +5199,7 @@ namespace tempest::graphics
                 };
                 oit_zeroth_moment_desc.images.push_back({
                     .image = _pbr_transparencies.zeroth_moment_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::general,
                 });
 
@@ -5213,6 +5226,7 @@ namespace tempest::graphics
                 {
                     bindless_textures.images.push_back({
                         .image = img,
+                        .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                         .layout = rhi::image_layout::shader_read_only,
                     });
                 }
@@ -5259,6 +5273,7 @@ namespace tempest::graphics
 
                 auto shadow_map_info = rhi::image_binding_info{
                     .image = _render_targets.shadow_megatexture,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 };
 
@@ -5337,6 +5352,7 @@ namespace tempest::graphics
                 };
                 ao_texture_desc.images.push_back({
                     .image = _ssao.ssao_blur_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
 
@@ -5350,6 +5366,7 @@ namespace tempest::graphics
                 };
                 oit_moments_desc.images.push_back({
                     .image = _pbr_transparencies.moments_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::general,
                 });
                 ds_desc_0.images.push_back(tempest::move(oit_moments_desc));
@@ -5362,6 +5379,7 @@ namespace tempest::graphics
                 };
                 oit_zeroth_moment_desc.images.push_back({
                     .image = _pbr_transparencies.zeroth_moment_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::general,
                 });
                 ds_desc_0.images.push_back(tempest::move(oit_zeroth_moment_desc));
@@ -5385,6 +5403,7 @@ namespace tempest::graphics
                 {
                     bindless_textures.images.push_back({
                         .image = img,
+                        .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                         .layout = rhi::image_layout::shader_read_only,
                     });
                 }
@@ -5431,6 +5450,7 @@ namespace tempest::graphics
 
                 auto shadow_map_info = rhi::image_binding_info{
                     .image = _render_targets.shadow_megatexture,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 };
                 auto shadow_map_megatexture_desc = rhi::image_binding_descriptor{
@@ -5460,6 +5480,7 @@ namespace tempest::graphics
                 };
                 moments_target_desc.images.push_back({
                     .image = _pbr_transparencies.moments_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::general,
                 });
 
@@ -5473,6 +5494,7 @@ namespace tempest::graphics
                 };
                 zeroth_moment_target_desc.images.push_back({
                     .image = _pbr_transparencies.zeroth_moment_target,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::general,
                 });
 
@@ -5494,6 +5516,7 @@ namespace tempest::graphics
                 };
                 transparency_accumulator_desc.images.push_back({
                     .image = _render_targets.transparency_accumulator,
+                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                     .layout = rhi::image_layout::shader_read_only,
                 });
 

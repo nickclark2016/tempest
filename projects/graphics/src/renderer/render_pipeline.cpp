@@ -45,6 +45,7 @@ namespace tempest::graphics
             .win = window,
             .render_surface = render_surface,
             .pipeline = move(pipeline),
+            .framebuffer_resized = false,
         });
 
         _windows.back().pipeline->initialize(*this, *_rhi_device);

@@ -89,6 +89,17 @@ namespace tempest::math
 
         return x + y - remainder;
     }
+
+    inline uint64_t pack_uint32x2(uint32_t x, uint32_t y)
+    {
+        return (static_cast<uint64_t>(x) << 32) | static_cast<uint64_t>(y);
+    }
+
+    inline void unpack_uint32x2(uint64_t packed, uint32_t& x, uint32_t& y)
+    {
+        x = static_cast<uint32_t>(packed >> 32);
+        y = static_cast<uint32_t>(packed & 0xFFFFFFFF);
+    }
 } // namespace tempest::math
 
 #endif // tempest_math_math_utils_hpp__

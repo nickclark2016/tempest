@@ -138,9 +138,15 @@ namespace tempest::rhi::vk
                   uint32_t stride) noexcept override;
         void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t vertex_count,
                   uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) noexcept override;
+        void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t index_count,
+                  uint32_t instance_count, uint32_t first_index, int32_t vertex_offset,
+                  uint32_t first_instance) noexcept override;
         void bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                typed_rhi_handle<rhi_handle_type::buffer> buffer, uint32_t offset,
                                rhi::index_format index_type) noexcept override;
+        void bind_vertex_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t first_binding,
+                                 span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers,
+                                 span<const size_t> offsets) noexcept override;
         void set_scissor_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, int32_t x, int32_t y,
                                 uint32_t width, uint32_t height, uint32_t region_index = 0) noexcept override;
         void set_viewport(typed_rhi_handle<rhi_handle_type::command_list> command_list, float x, float y, float width,
@@ -160,6 +166,12 @@ namespace tempest::rhi::vk
                   typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
                   uint32_t first_set_index, span<const typed_rhi_handle<rhi_handle_type::descriptor_set>> sets,
                   span<const uint32_t> dynamic_offsets) noexcept override;
+
+        void push_descriptors(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                              typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
+                              uint32_t set_index, span<const buffer_binding_descriptor> buffers,
+                              span<const image_binding_descriptor> images,
+                              span<const sampler_binding_descriptor> samplers) noexcept override;
 
         void push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                             typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
@@ -314,6 +326,7 @@ namespace tempest::rhi::vk
         struct cache_key
         {
             vector<descriptor_binding_layout> desc;
+            enum_mask<descriptor_set_layout_flags> flags;
             size_t hash;
 
             bool operator==(const cache_key& other) const noexcept
@@ -352,7 +365,7 @@ namespace tempest::rhi::vk
         descriptor_set_layout_cache& operator=(descriptor_set_layout_cache&&) noexcept = delete;
 
         typed_rhi_handle<rhi_handle_type::descriptor_set_layout> get_or_create_layout(
-            const vector<descriptor_binding_layout>& desc) noexcept;
+            const vector<descriptor_binding_layout>& desc, enum_mask<descriptor_set_layout_flags> flags) noexcept;
 
         bool release_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept;
 
@@ -368,7 +381,8 @@ namespace tempest::rhi::vk
         slot_map<slot_entry> _cache_slots;
         device* _dev;
 
-        size_t _compute_cache_hash(const vector<descriptor_binding_layout>& desc) const noexcept;
+        size_t _compute_cache_hash(const vector<descriptor_binding_layout>& desc,
+                                   enum_mask<descriptor_set_layout_flags> flags) const noexcept;
 
         stack_allocator _allocator{16 * 1024};
     };
@@ -453,7 +467,8 @@ namespace tempest::rhi::vk
         typed_rhi_handle<rhi_handle_type::render_surface> create_render_surface(
             const render_surface_desc& desc) noexcept override;
         typed_rhi_handle<rhi_handle_type::descriptor_set_layout> create_descriptor_set_layout(
-            const vector<descriptor_binding_layout>& desc) noexcept override;
+            const vector<descriptor_binding_layout>& desc,
+            enum_mask<descriptor_set_layout_flags> flags) noexcept override;
         typed_rhi_handle<rhi_handle_type::pipeline_layout> create_pipeline_layout(
             const pipeline_layout_desc& desc) noexcept override;
         typed_rhi_handle<rhi_handle_type::graphics_pipeline> create_graphics_pipeline(
@@ -499,8 +514,10 @@ namespace tempest::rhi::vk
         void unmap_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept override;
         void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept override;
 
-        uint32_t get_render_surface_width(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
-        uint32_t get_render_surface_height(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
+        uint32_t get_render_surface_width(
+            typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
+        uint32_t get_render_surface_height(
+            typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
 
         void start_frame() override;
         void end_frame() override;

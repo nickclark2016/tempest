@@ -659,7 +659,7 @@ namespace tempest
             *it = tempest::move(*(it - count));
         }
 
-        for (size_type i = 0; i < count; ++i)
+        for (size_type i = 0; i < static_cast<size_type>(count); ++i)
         {
             allocator_traits<Allocator>::construct(_alloc, _data + index + i, *first++);
         }

@@ -28,3 +28,6 @@ TempestCache/
 *.nvdbg
 *.nv-gpudmp
 *.nv-gpudmp.json
+
+# UI configuration files
+*.ini

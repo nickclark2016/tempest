@@ -1,5 +1,7 @@
 #include <tempest/ui.hpp>
 
+#include <tempest/tuple.hpp>
+
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -325,6 +327,14 @@ namespace tempest::editor::ui
             bool window_owned = false;
         };
 
+        struct render_state
+        {
+            rhi::work_queue* queue;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
+        };
+
         struct render_data
         {
             rhi::device* device = nullptr;
@@ -342,7 +352,65 @@ namespace tempest::editor::ui
             window_render_buffer_data main_window_render_buffers;
 
             rhi::image_format color_target_fmt;
+            uint32_t frames_in_flight;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> font_texture =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
         };
+
+        ImGuiWindowFlags to_imgui(enum_mask<ui_context::window_flags> flags)
+        {
+            ImGuiWindowFlags im_flags = 0;
+
+            if ((flags & ui_context::window_flags::no_title) == ui_context::window_flags::no_title)
+            {
+                im_flags |= ImGuiWindowFlags_NoTitleBar;
+            }
+
+            if ((flags & ui_context::window_flags::no_resize) == ui_context::window_flags::no_resize)
+            {
+                im_flags |= ImGuiWindowFlags_NoResize;
+            }
+
+            if ((flags & ui_context::window_flags::no_move) == ui_context::window_flags::no_move)
+            {
+                im_flags |= ImGuiWindowFlags_NoMove;
+            }
+
+            if ((flags & ui_context::window_flags::no_scrollbar) == ui_context::window_flags::no_scrollbar)
+            {
+                im_flags |= ImGuiWindowFlags_NoScrollbar;
+            }
+
+            if ((flags & ui_context::window_flags::no_bring_to_front_on_focus) ==
+                ui_context::window_flags::no_bring_to_front_on_focus)
+            {
+                im_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+            }
+
+            if ((flags & ui_context::window_flags::no_collapse) == ui_context::window_flags::no_collapse)
+            {
+                im_flags |= ImGuiWindowFlags_NoCollapse;
+            }
+
+            if ((flags & ui_context::window_flags::no_navigation_focus) ==
+                ui_context::window_flags::no_navigation_focus)
+            {
+                im_flags |= ImGuiWindowFlags_AlwaysAutoResize;
+            }
+
+            if ((flags & ui_context::window_flags::no_decoration) == ui_context::window_flags::no_decoration)
+            {
+                im_flags |= ImGuiWindowFlags_NoDecoration;
+            }
+
+            if ((flags & ui_context::window_flags::no_background) == ui_context::window_flags::no_background)
+            {
+                im_flags |= ImGuiWindowFlags_NoBackground;
+            }
+
+            return im_flags;
+        }
     } // namespace
 
     struct ui_context::impl
@@ -364,17 +432,21 @@ namespace tempest::editor::ui
         bool mouse_ignore_button_up;
     };
 
-    ui_context::ui_context(rhi::window_surface* surface, rhi::device* device, rhi::image_format target_fmt) noexcept
+    ui_context::ui_context(rhi::window_surface* surface, rhi::device* device, rhi::image_format target_fmt,
+                           uint32_t frames_in_flight) noexcept
     {
         _impl = make_unique<ui_context::impl>();
         _impl->render_backend_data.color_target_fmt = target_fmt;
+        _impl->render_backend_data.frames_in_flight = frames_in_flight;
 
         IMGUI_CHECKVERSION();
 
         auto ctx = ImGui::CreateContext();
+        ctx->IO = ImGui::GetIO();
         ctx->IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         ctx->IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
         ctx->IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        ctx->IO.Fonts->AddFontDefault();
 
         _impl->imgui_context = ctx;
         _impl->surface = surface;
@@ -386,6 +458,11 @@ namespace tempest::editor::ui
 
     ui_context::~ui_context()
     {
+        auto viewport_render_data =
+            static_cast<render_viewport_data*>(_impl->imgui_context->Viewports[0]->RendererUserData);
+        delete viewport_render_data;
+
+        _impl->device->destroy_sampler(_impl->render_backend_data.texture_sampler);
         _impl->device->destroy_graphics_pipeline(_impl->render_backend_data.pipeline);
         _impl->device->destroy_pipeline_layout(_impl->render_backend_data.pipeline_layout);
         ImGui::DestroyContext(static_cast<ImGuiContext*>(_impl->imgui_context));
@@ -398,12 +475,18 @@ namespace tempest::editor::ui
         auto& io = context->IO;
 
         // Renderer-specific new frame setup
+        {
+            if (!_impl->render_backend_data.font_texture)
+            {
+                _setup_font_textures();
+            }
+        }
 
         // Windowing specific new frame setup
         {
             // Handle window size and framebuffer scale
-            uint32_t width = _impl->surface->height();
-            uint32_t height = _impl->surface->width();
+            uint32_t width = _impl->surface->width();
+            uint32_t height = _impl->surface->height();
             uint32_t fb_width = _impl->surface->framebuffer_width();
             uint32_t fb_height = _impl->surface->framebuffer_height();
 
@@ -412,6 +495,9 @@ namespace tempest::editor::ui
                                            ? ImVec2(static_cast<float>(fb_width) / static_cast<float>(width),
                                                     static_cast<float>(fb_height) / static_cast<float>(height))
                                            : ImVec2(1.0f, 1.0f);
+
+            io.DisplaySize = _impl->window_size;
+            io.DisplayFramebufferScale = _impl->framebuffer_scale;
 
             // Handle monitors
             auto& platform_io = context->PlatformIO;
@@ -503,6 +589,290 @@ namespace tempest::editor::ui
     void ui_context::render_ui_commands(rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> command_list,
                                         rhi::work_queue& wq) noexcept
     {
+        auto& draw_data = _impl->imgui_context->Viewports[0]->DrawDataP;
+        if (!draw_data.Valid)
+        {
+            return;
+        }
+
+        auto fb_width = static_cast<int>(draw_data.DisplaySize.x * draw_data.FramebufferScale.x);
+        auto fb_height = static_cast<int>(draw_data.DisplaySize.y * draw_data.FramebufferScale.y);
+
+        // Early return if the framebuffer is 0 sized
+        if (fb_width <= 0 || fb_height <= 0)
+        {
+            return;
+        }
+
+        auto owner_vp = draw_data.OwnerViewport;
+        auto viewport_render_data = static_cast<render_viewport_data*>(owner_vp->RendererUserData);
+        assert(viewport_render_data != nullptr);
+
+        auto wrb = &viewport_render_data->render_buffers;
+        if (wrb->frame_render_buffers.empty())
+        {
+            wrb->index = 0;
+            wrb->count = _impl->render_backend_data.frames_in_flight;
+            wrb->frame_render_buffers.resize(wrb->count);
+        }
+
+        assert(wrb->frame_render_buffers.size() == wrb->count);
+        assert(wrb->count == _impl->render_backend_data.frames_in_flight);
+
+        auto& rb = wrb->frame_render_buffers[wrb->index];
+
+        if (draw_data.TotalVtxCount > 0)
+        {
+            // Set up the vertex and index buffers
+            // Map the buffers
+            // Copy the vertex data
+            // Unmap and flush the buffers
+
+            auto resize_buffers = [device = _impl->device,
+                                   alignment = _impl->render_backend_data.buffer_memory_alignment](
+                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buf, size_t requested_size,
+                                      enum_mask<rhi::buffer_usage> usage, string name) {
+                if (buf)
+                {
+                    device->destroy_buffer(buf);
+                }
+
+                const auto aligned_size = math::round_to_next_multiple(requested_size, alignment);
+
+                auto buffer_desc = rhi::buffer_desc{
+                    .size = aligned_size,
+                    .location = rhi::memory_location::automatic,
+                    .usage = usage,
+                    .access_type = rhi::host_access_type::incoherent,
+                    .access_pattern = rhi::host_access_pattern::sequential,
+                    .name = tempest::move(name),
+                };
+
+                return make_tuple(device->create_buffer(buffer_desc), aligned_size);
+            };
+
+            const auto vertex_size = math::round_to_next_multiple(draw_data.TotalVtxCount * sizeof(ImDrawVert),
+                                                                  _impl->render_backend_data.buffer_memory_alignment);
+            const auto index_size = math::round_to_next_multiple(draw_data.TotalIdxCount * sizeof(ImDrawIdx),
+                                                                 _impl->render_backend_data.buffer_memory_alignment);
+
+            if (!rb.vertex_buffer || rb.vertex_buffer_size < vertex_size)
+            {
+                auto [buf, size] = resize_buffers(rb.vertex_buffer, vertex_size,
+                                                  make_enum_mask(rhi::buffer_usage::vertex), "ImGUI Vertex Buffer");
+                rb.vertex_buffer = buf;
+                rb.vertex_buffer_size = size;
+            }
+
+            if (!rb.index_buffer || rb.index_buffer_size < index_size)
+            {
+                auto [buf, size] = resize_buffers(rb.index_buffer, index_size, make_enum_mask(rhi::buffer_usage::index),
+                                                  "ImGUI Index Buffer");
+                rb.index_buffer = buf;
+                rb.index_buffer_size = size;
+            }
+
+            auto vertex_buffer_data = _impl->device->map_buffer(rb.vertex_buffer);
+            auto index_buffer_data = _impl->device->map_buffer(rb.index_buffer);
+
+            auto vtx_dst = reinterpret_cast<ImDrawVert*>(vertex_buffer_data);
+            auto idx_dst = reinterpret_cast<ImDrawIdx*>(index_buffer_data);
+
+            for (int n = 0; n < draw_data.CmdListsCount; ++n)
+            {
+                const auto draw_list = draw_data.CmdLists[n];
+                std::memcpy(vtx_dst, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
+                std::memcpy(idx_dst, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+                vtx_dst += draw_list->VtxBuffer.Size;
+                idx_dst += draw_list->IdxBuffer.Size;
+            }
+
+            const array buffers = {
+                rb.vertex_buffer,
+                rb.index_buffer,
+            };
+
+            _impl->device->flush_buffers(buffers);
+
+            _impl->device->unmap_buffer(rb.vertex_buffer);
+            _impl->device->unmap_buffer(rb.index_buffer);
+        }
+
+        // Setup the render state for tempest::rhi
+        auto setup_render_state = [&bd = _impl->render_backend_data](
+                                      ImDrawData& draw_data,
+                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline,
+                                      per_frame_buffer_data* rb, int fb_width, int fb_height, rhi::work_queue& queue,
+                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands) {
+            queue.bind(commands, pipeline);
+            queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::none));
+
+            if (draw_data.TotalVtxCount > 0)
+            {
+                const array vertex_buffers = {
+                    rb->vertex_buffer,
+                };
+
+                const array vertex_buffer_offsets = {
+                    size_t(0),
+                };
+
+                queue.bind_vertex_buffers(commands, 0, vertex_buffers, vertex_buffer_offsets);
+                queue.bind_index_buffer(commands, rb->index_buffer, 0,
+                                        sizeof(ImDrawIdx) == 2 ? rhi::index_format::uint16 : rhi::index_format::uint32);
+            }
+
+            queue.set_viewport(commands, 0, 0, static_cast<float>(fb_width), static_cast<float>(fb_height), 0, 1, 0,
+                               false);
+
+            const array scale = {
+                2.0f / draw_data.DisplaySize.x,
+                2.0f / draw_data.DisplaySize.y,
+            };
+
+            const array translate = {
+                -1.0f - draw_data.DisplayPos.x * scale[0],
+                -1.0f - draw_data.DisplayPos.y * scale[1],
+            };
+
+            queue.typed_push_constants(commands, bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 0,
+                                       scale);
+            queue.typed_push_constants(commands, bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 8,
+                                       translate);
+        };
+
+        setup_render_state(draw_data, _impl->render_backend_data.pipeline, &rb, fb_width, fb_height, wq, command_list);
+
+        // Set up the render state for imgui
+        ImGuiPlatformIO& platform_io = _impl->imgui_context->PlatformIO;
+        render_state state = {
+            .queue = &wq,
+            .commands = command_list,
+            .pipeline = _impl->render_backend_data.pipeline,
+            .pipeline_layout = _impl->render_backend_data.pipeline_layout,
+        };
+        platform_io.Renderer_RenderState = &state;
+
+        auto clip_offset = draw_data.DisplayPos;
+        auto clip_scale = draw_data.FramebufferScale;
+
+        auto global_vtx_offset = 0u;
+        auto global_idx_offset = 0u;
+
+        for (int n = 0; n < draw_data.CmdListsCount; ++n)
+        {
+            const auto draw_list = draw_data.CmdLists[n];
+            for (int cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size; ++cmd_i)
+            {
+                const auto& cmd = draw_list->CmdBuffer[cmd_i];
+                if (cmd.UserCallback)
+                {
+                    if (cmd.UserCallback != ImDrawCallback_ResetRenderState)
+                    {
+                        setup_render_state(draw_data, _impl->render_backend_data.viewport_pipeline, &rb, fb_width,
+                                           fb_height, wq, command_list);
+                    }
+                    else
+                    {
+                        cmd.UserCallback(draw_list, &cmd);
+                    }
+                }
+                else
+                {
+                    auto clip_min = ImVec2((cmd.ClipRect.x - clip_offset.x) * clip_scale.x,
+                                           (cmd.ClipRect.y - clip_offset.y) * clip_scale.y);
+                    auto clip_max = ImVec2((cmd.ClipRect.z - clip_offset.x) * clip_scale.x,
+                                           (cmd.ClipRect.w - clip_offset.y) * clip_scale.y);
+
+                    if (clip_min.x < 0.0f)
+                    {
+                        clip_min.x = 0.0f;
+                    }
+
+                    if (clip_min.y < 0.0f)
+                    {
+                        clip_min.y = 0.0f;
+                    }
+
+                    if (clip_max.x > static_cast<float>(fb_width))
+                    {
+                        clip_max.x = static_cast<float>(fb_width);
+                    }
+
+                    if (clip_max.y > static_cast<float>(fb_height))
+                    {
+                        clip_max.y = static_cast<float>(fb_height);
+                    }
+
+                    if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
+                    {
+                        continue; // Clipped out
+                    }
+
+                    // Apply the scissor test
+                    wq.set_scissor_region(
+                        command_list, static_cast<int32_t>(clip_min.x), static_cast<int32_t>(clip_min.y),
+                        static_cast<uint32_t>(clip_max.x - clip_min.x), static_cast<uint32_t>(clip_max.y - clip_min.y));
+
+                    // Push the descriptor set for the texture
+                    auto packed_texture_id = cmd.GetTexID();
+                    uint32_t generation = 0, id = 0;
+                    math::unpack_uint32x2(packed_texture_id, generation, id);
+                    auto texture_handle = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>{
+                        .id = id,
+                        .generation = generation,
+                    };
+
+                    rhi::image_binding_descriptor image_desc = {
+                        .index = 0,
+                        .type = rhi::descriptor_type::combined_image_sampler,
+                        .array_offset = 0,
+                        .images = {},
+                    };
+                    image_desc.images.push_back({
+                        .image = texture_handle,
+                        .sampler = _impl->render_backend_data.texture_sampler,
+                        .layout = rhi::image_layout::shader_read_only,
+                    });
+
+                    wq.push_descriptors(command_list, _impl->render_backend_data.pipeline_layout,
+                                        rhi::bind_point::graphics, 0, {}, {&image_desc, 1}, {});
+
+                    wq.draw(command_list, cmd.ElemCount, 1u, cmd.IdxOffset + global_idx_offset,
+                            static_cast<int32_t>(cmd.VtxOffset + global_vtx_offset), 0);
+                }
+            }
+
+            global_idx_offset += static_cast<uint32_t>(draw_list->IdxBuffer.Size);
+            global_vtx_offset += static_cast<uint32_t>(draw_list->VtxBuffer.Size);
+        }
+
+        platform_io.Renderer_RenderState = nullptr;
+        wq.set_scissor_region(command_list, 0, 0, static_cast<uint32_t>(fb_width), static_cast<uint32_t>(fb_height));
+    }
+
+    bool ui_context::begin_window(window_info info)
+    {
+        auto vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowViewport(vp->ID);
+
+        if (info.position)
+        {
+            ImGui::SetNextWindowPos({info.position->x, info.position->y}, ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        }
+
+        if (info.size)
+        {
+            ImGui::SetNextWindowSize({info.size->x, info.size->y}, ImGuiCond_Always);
+        }
+
+        const auto window_flags = to_imgui(info.flags);
+        return ImGui::Begin(info.name.data(), nullptr, window_flags);
+    }
+
+    void ui_context::end_window()
+    {
+        ImGui::End();
     }
 
     void ui_context::_init_window_backend()
@@ -560,7 +930,7 @@ namespace tempest::editor::ui
         });
 
         surface->register_mouse_callback([ctx](const core::mouse_button_state& mouse_state) {
-            if (mouse_state.action != core::mouse_action::RELEASE)
+            if (mouse_state.action != core::mouse_action::PRESS && mouse_state.action != core::mouse_action::RELEASE)
             {
                 return;
             }
@@ -583,7 +953,7 @@ namespace tempest::editor::ui
                 return; // Unsupported mouse button
             }
 
-            if (button > 0 && button < ImGuiMouseButton_COUNT)
+            if (button >= 0 && button < ImGuiMouseButton_COUNT)
             {
                 io.AddMouseButtonEvent(button, mouse_state.action == core::mouse_action::PRESS);
             }
@@ -633,7 +1003,8 @@ namespace tempest::editor::ui
         auto set_0_bindings = vector<rhi::descriptor_binding_layout>();
         set_0_bindings.push_back(desc_set_0_binding_0);
 
-        auto set_0_layout = _impl->device->create_descriptor_set_layout(set_0_bindings);
+        auto set_0_layout = _impl->device->create_descriptor_set_layout(
+            set_0_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::push));
 
         auto pipeline_layout_desc = rhi::pipeline_layout_desc{};
         pipeline_layout_desc.descriptor_set_layouts.push_back(set_0_layout);
@@ -697,7 +1068,7 @@ namespace tempest::editor::ui
             .dst_color_blend_factor = rhi::blend_factor::one_minus_src_alpha,
             .color_blend_op = rhi::blend_op::add,
             .src_alpha_blend_factor = rhi::blend_factor::one,
-            .dst_alpha_blend_factor = rhi::blend_factor::one_minus_constant_alpha,
+            .dst_alpha_blend_factor = rhi::blend_factor::one_minus_src_alpha,
         };
 
         auto color_blend_state = rhi::color_blend_state{};
@@ -721,7 +1092,7 @@ namespace tempest::editor::ui
             .multisample =
                 {
                     .sample_count = rhi::image_sample_count::sample_count_1,
-                    .sample_shading = false,
+                    .sample_shading = none(),
                     .alpha_to_coverage = false,
                     .alpha_to_one = false,
                 },
@@ -730,7 +1101,7 @@ namespace tempest::editor::ui
                     .depth_clamp_enable = false,
                     .rasterizer_discard_enable = false,
                     .polygon_mode = rhi::polygon_mode::fill,
-                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .cull_mode = make_enum_mask(rhi::cull_mode::none),
                     .vertex_winding = rhi::vertex_winding::counter_clockwise,
                     .depth_bias = none(),
                     .line_width = 1.0f,
@@ -744,8 +1115,131 @@ namespace tempest::editor::ui
             .layout = pipeline_layout,
             .name = "ImGUI Pipeline",
         };
+        pipeline_desc.color_attachment_formats.push_back(_impl->render_backend_data.color_target_fmt);
 
         render_data.pipeline = _impl->device->create_graphics_pipeline(pipeline_desc);
+
+        // Texture sampler state
+        auto texture_sampler = rhi::sampler_desc{
+            .mag = rhi::filter::linear,
+            .min = rhi::filter::linear,
+            .mipmap = rhi::mipmap_mode::linear,
+            .address_u = rhi::address_mode::clamp_to_edge,
+            .address_v = rhi::address_mode::clamp_to_edge,
+            .address_w = rhi::address_mode::clamp_to_edge,
+            .mip_lod_bias = 0.0f,
+            .min_lod = -1000.0f,
+            .max_lod = 1000.0f,
+            .max_anisotropy = 1.0f,
+            .compare = none(),
+            .name = "ImGUI Texture Sampler",
+        };
+
+        render_data.texture_sampler = _impl->device->create_sampler(texture_sampler);
+
+        // set up viewport data
+        auto main_vp = _impl->imgui_context->Viewports[0];
+        main_vp->RendererUserData = new render_viewport_data();
+    }
+
+    void ui_context::_setup_font_textures()
+    {
+        if (_impl->render_backend_data.font_texture)
+        {
+            _impl->device->destroy_image(_impl->render_backend_data.font_texture);
+            _impl->render_backend_data.font_texture = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+        }
+
+        auto& io = _impl->imgui_context->IO;
+
+        auto& wq = _impl->device->get_primary_work_queue();
+        auto cmds = wq.get_next_command_list();
+
+        unsigned char* pixels;
+        int width, height;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        const auto upload_size = width * height * 4 * sizeof(char);
+
+        auto font_tex_create_info = rhi::image_desc{
+            .format = rhi::image_format::rgba8_unorm,
+            .type = rhi::image_type::image_2d,
+            .width = static_cast<uint32_t>(width),
+            .height = static_cast<uint32_t>(height),
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::sampled, rhi::image_usage::transfer_dst),
+            .name = "ImGUI Font Texture",
+        };
+
+        auto font_tex = _impl->device->create_image(font_tex_create_info);
+        _impl->render_backend_data.font_texture = font_tex;
+
+        // Set up the upload buffer
+        auto upload_buffer_desc = rhi::buffer_desc{
+            .size = upload_size,
+            .location = rhi::memory_location::host,
+            .usage = make_enum_mask(rhi::buffer_usage::transfer_src),
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
+            .name = "ImGUI Font Upload Buffer",
+        };
+
+        auto upload_buffer = _impl->device->create_buffer(upload_buffer_desc);
+        auto upload_buffer_data = _impl->device->map_buffer(upload_buffer);
+        std::memcpy(upload_buffer_data, pixels, upload_size);
+        _impl->device->unmap_buffer(upload_buffer);
+
+        wq.begin_command_list(cmds, true);
+
+        // Transition the font texture to transfer destination layout
+        const array pre_barriers = {
+            rhi::work_queue::image_barrier{
+                .image = _impl->render_backend_data.font_texture,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::transfer_dst,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::bottom),
+                .src_access = make_enum_mask(rhi::memory_access::none),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            },
+        };
+
+        wq.transition_image(cmds, pre_barriers);
+        wq.copy(cmds, upload_buffer, _impl->render_backend_data.font_texture, rhi::image_layout::transfer_dst, 0, 0);
+
+        const array post_barriers = {
+            rhi::work_queue::image_barrier{
+                .image = _impl->render_backend_data.font_texture,
+                .old_layout = rhi::image_layout::transfer_dst,
+                .new_layout = rhi::image_layout::shader_read_only,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::shader_sampled_read),
+            },
+        };
+
+        wq.transition_image(cmds, post_barriers);
+
+        wq.end_command_list(cmds);
+
+        // Submit and wait for the upload to complete
+        auto fence = _impl->device->create_fence(rhi::fence_info{});
+        rhi::work_queue::submit_info submit_info;
+        submit_info.command_lists.push_back(cmds);
+
+        wq.submit(tempest::span(&submit_info, 1), fence);
+
+        _impl->device->wait({&fence, 1});
+        _impl->device->destroy_fence(fence);
+        _impl->device->destroy_buffer(upload_buffer);
+
+        auto packed_handle = math::pack_uint32x2(font_tex.generation, font_tex.id);
+        io.Fonts->SetTexID(static_cast<ImTextureID>(packed_handle));
     }
 
     ui_pipeline::ui_pipeline(ui_context* ui_ctx) : _ui_ctx{ui_ctx}
@@ -770,8 +1264,8 @@ namespace tempest::editor::ui
                 .image = rs.swapchain_image,
                 .old_layout = rhi::image_layout::undefined,
                 .new_layout = rhi::image_layout::color_attachment,
-                .src_stages = make_enum_mask(rhi::pipeline_stage::blit),
-                .src_access = make_enum_mask(rhi::memory_access::transfer_read),
+                .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                .src_access = make_enum_mask(rhi::memory_access::none),
                 .dst_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                 .dst_access = make_enum_mask(rhi::memory_access::color_attachment_write),
             },
@@ -821,11 +1315,11 @@ namespace tempest::editor::ui
         submit_info.wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.start_sem,
             .value = 0,
-            .stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
         });
         submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.end_sem,
-            .value = 1,
+            .value = 0,
             .stages = make_enum_mask(rhi::pipeline_stage::bottom),
         });
 
