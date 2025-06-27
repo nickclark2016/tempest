@@ -6,6 +6,7 @@
 #include <imgui_internal.h>
 
 #include <chrono>
+#include <cstring>
 
 namespace tempest::editor::ui
 {
