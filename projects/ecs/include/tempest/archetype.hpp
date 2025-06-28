@@ -3,14 +3,16 @@
 
 #include <tempest/array.hpp>
 #include <tempest/bit.hpp>
+#include <tempest/concepts.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/int.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/optional.hpp>
-#include <tempest/registry.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/slot_map.hpp>
 #include <tempest/span.hpp>
+#include <tempest/sparse.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/traits.hpp>
@@ -202,6 +204,527 @@ namespace tempest::ecs
         }
     } // namespace detail
 
+    namespace detail
+    {
+        /**
+         * @brief A bidirectional iterator for basic entity stores.
+         *
+         * @tparam T The type of the value the iterator points to.
+         * @tparam EPC The number of entities per chunk.
+         * @tparam EPB The number of entities per block.
+         * @tparam BPC The number of blocks per chunk.
+         *
+         * This struct defines a basic iterator for entity stores in an ECS (Entity Component System). It provides
+         * the functionality to iterate over entities in a chunked storage system, where entities are stored in blocks,
+         * and blocks are grouped into chunks.
+         *
+         * The iterator supports bidirectional iteration, meaning it can increment and decrement.
+         *
+         * @see tempest::ecs::basic_entity_store
+         */
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        struct basic_entity_store_iterator
+        {
+            // Iterator traits
+            using value_type = T::value_type;
+            using pointer = value_type*;
+            using const_pointer = const value_type*;
+            using reference = value_type&;
+            using const_reference = const value_type&;
+            using difference_type = ptrdiff_t;
+
+            // Named constants
+            static constexpr size_t entities_per_chunk = EPC;
+            static constexpr size_t entities_per_block = EPB;
+            static constexpr size_t blocks_per_chunk = BPC;
+
+            /**
+             * @brief Default constructor.
+             */
+            constexpr basic_entity_store_iterator() noexcept = default;
+
+            /**
+             * @brief Construct a new basic entity store iterator object.
+             *
+             * @param chunks A pointer to the chunks in the entity store.
+             * @param index The index of the entity the iterator points to.
+             * @param end The end index of the entity store.  This is equivalent to the total number of entities in the
+             * store.
+             */
+            constexpr basic_entity_store_iterator(T* chunks, size_t index, size_t end) noexcept;
+
+            /**
+             * @brief Dereference operator.
+             */
+            [[nodiscard]] constexpr value_type operator*() const noexcept;
+
+            /**
+             * @brief Pre-increment operator.
+             */
+            constexpr basic_entity_store_iterator& operator++() noexcept;
+
+            /**
+             * @brief Post-increment operator.
+             */
+            constexpr basic_entity_store_iterator operator++(int) noexcept;
+
+            /**
+             * @brief Pre-decrement operator.
+             */
+            constexpr basic_entity_store_iterator& operator--() noexcept;
+
+            /**
+             * @brief Post-decrement operator.
+             */
+            constexpr basic_entity_store_iterator operator--(int) noexcept;
+
+            /**
+             * Pointer to an array of chunks.
+             */
+            T* chunks{nullptr};
+
+            /**
+             * The index of the entity the iterator points to.
+             */
+            size_t index{0};
+
+            /**
+             * The end index of the entity store.
+             */
+            size_t end{0};
+        };
+
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::basic_entity_store_iterator(
+            T* chunks, size_t index, size_t end) noexcept
+            : chunks{chunks}, index{index}, end{end}
+        {
+        }
+
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::value_type basic_entity_store_iterator<
+            T, EPC, EPB, BPC>::operator*() const noexcept
+        {
+            auto chunk_index = index / entities_per_chunk;
+            auto chunk_offset = index % entities_per_chunk;
+
+            auto block_index = chunk_offset / entities_per_block;
+            auto block_offset = chunk_offset % entities_per_block;
+
+            return chunks[chunk_index].blocks[block_index].entities[block_offset];
+        }
+
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>& basic_entity_store_iterator<
+            T, EPC, EPB, BPC>::operator++() noexcept
+        {
+            ++index;
+
+            while (index < end)
+            {
+                // TODO: Figure out faster iteration
+                auto chunk_index = index / entities_per_chunk;
+                auto chunk_offset = index % entities_per_chunk;
+
+                auto block_index = chunk_offset / entities_per_block;
+                auto block_offset = chunk_offset % entities_per_block;
+
+                if (tempest::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
+                {
+                    break;
+                }
+
+                ++index;
+            }
+
+            return *this;
+        }
+
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC> basic_entity_store_iterator<
+            T, EPC, EPB, BPC>::operator++(int) noexcept
+        {
+            auto self = *this;
+            ++(*this);
+            return self;
+        }
+
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>& basic_entity_store_iterator<
+            T, EPC, EPB, BPC>::operator--() noexcept
+        {
+            while (index > 0)
+            {
+                --index;
+
+                auto chunk_index = index / entities_per_chunk;
+                auto chunk_offset = index % entities_per_chunk;
+
+                auto block_index = chunk_offset / entities_per_block;
+                auto block_offset = chunk_offset % entities_per_block;
+
+                if (tempest::is_bit_set(chunks[chunk_index].blocks[block_index].occupancy, block_offset))
+                {
+                    break;
+                }
+            }
+
+            return *this;
+        }
+
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC> basic_entity_store_iterator<
+            T, EPC, EPB, BPC>::operator--(int) noexcept
+        {
+            auto self = *this;
+            --(*this);
+            return self;
+        }
+
+        /**
+         * @brief Equality operator.
+         *
+         * @tparam T The type of the value the iterator points to.
+         * @tparam EPC The number of entities per chunk.
+         * @tparam EPB The number of entities per block.
+         * @tparam BPC The number of blocks per chunk.
+         *
+         * Checks for equality of two iterators by the index they point to. If the iterators were generated from
+         * different basic_entity_stores, this function is undefined.
+         *
+         * @param lhs The left hand side iterator.
+         * @param rhs The right hand side iterator.
+         * @return true if the iterators point to the same index, false otherwise.
+         */
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        [[nodiscard]] inline constexpr bool operator==(
+            const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
+            const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept
+        {
+            return lhs.index == rhs.index;
+        }
+
+        /**
+         * @brief Three-way comparison operator.
+         *
+         * @tparam T The type of the value the iterator points to.
+         * @tparam EPC The number of entities per chunk.
+         * @tparam EPB The number of entities per block.
+         * @tparam BPC The number of blocks per chunk.
+         *
+         * Compares two iterators by the index they point to. If the iterators were generated from different
+         * basic_entity_stores, this function is undefined.
+         *
+         * @param lhs The left hand side iterator.
+         * @param rhs The right hand side iterator.
+         * @return strong_ordering representing the comparison result of the indices.
+         */
+        template <typename T, size_t EPC, size_t EPB, size_t BPC>
+        [[nodiscard]] inline constexpr auto operator<=>(
+            const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
+            const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept
+        {
+            return lhs.index <=> rhs.index;
+        }
+    } // namespace detail
+
+    template <typename T, size_t N, integral O>
+    class basic_entity_store
+    {
+      public:
+        static constexpr size_t entities_per_chunk = N;
+        static constexpr size_t entities_per_block = sizeof(O) * CHAR_BIT;
+        static constexpr size_t blocks_per_chunk = entities_per_chunk / entities_per_block;
+
+        struct block
+        {
+            O occupancy{0};
+            array<T, entities_per_block> entities{};
+        };
+
+        struct chunk
+        {
+            using value_type = T;
+
+            array<block, blocks_per_chunk> blocks;
+        };
+
+        using traits_type = entity_traits<T>;
+        using entity_type = typename traits_type::value_type;
+        using version_type = typename traits_type::version_type;
+
+        using size_type = size_t;
+
+        using iterator =
+            detail::basic_entity_store_iterator<chunk, entities_per_chunk, entities_per_block, blocks_per_chunk>;
+        using const_iterator =
+            detail::basic_entity_store_iterator<const chunk, entities_per_chunk, entities_per_block, blocks_per_chunk>;
+
+        constexpr basic_entity_store() = default;
+        constexpr explicit basic_entity_store(size_t initial_capacity);
+
+        [[nodiscard]] constexpr size_type size() const noexcept;
+        [[nodiscard]] constexpr size_type capacity() const noexcept;
+        [[nodiscard]] constexpr bool empty() const noexcept;
+
+        [[nodiscard]] constexpr iterator begin() noexcept;
+        [[nodiscard]] constexpr const_iterator begin() const noexcept;
+        [[nodiscard]] constexpr const_iterator cbegin() const noexcept;
+
+        [[nodiscard]] constexpr iterator end() noexcept;
+        [[nodiscard]] constexpr const_iterator end() const noexcept;
+        [[nodiscard]] constexpr const_iterator cend() const noexcept;
+
+        [[nodiscard]] constexpr T acquire();
+        constexpr void release(T e) noexcept;
+        [[nodiscard]] constexpr bool is_valid(T e) const noexcept;
+        constexpr void clear() noexcept;
+        void reserve(size_t new_capacity);
+
+      private:
+        vector<chunk> _chunks;
+        T _head = null;
+
+        size_t _count{0};
+    };
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::basic_entity_store(size_t initial_capacity)
+    {
+        reserve(initial_capacity);
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::size_type basic_entity_store<T, N, O>::size() const noexcept
+    {
+        return _count;
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::size_type basic_entity_store<T, N, O>::capacity() const noexcept
+    {
+        return _chunks.size() * entities_per_chunk;
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr bool basic_entity_store<T, N, O>::empty() const noexcept
+    {
+        return size() == 0;
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::iterator basic_entity_store<T, N, O>::begin() noexcept
+    {
+        for (size_t chunk_idx = 0; chunk_idx < _chunks.size(); ++chunk_idx)
+        {
+            for (size_t block_idx = 0; block_idx < blocks_per_chunk; ++block_idx)
+            {
+                for (size_t block_offset = 0; block_offset < entities_per_block; ++block_offset)
+                {
+                    if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
+                    {
+                        return iterator(_chunks.data(),
+                                        chunk_idx * entities_per_chunk + block_idx * entities_per_block + block_offset,
+                                        capacity());
+                    }
+                }
+            }
+        }
+        return end();
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::const_iterator basic_entity_store<T, N, O>::begin() const noexcept
+    {
+        for (size_t chunk_idx = 0; chunk_idx < _chunks.size(); ++chunk_idx)
+        {
+            for (size_t block_idx = 0; block_idx < blocks_per_chunk; ++block_idx)
+            {
+                for (size_t block_offset = 0; block_offset < entities_per_block; ++block_offset)
+                {
+                    if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
+                    {
+                        return const_iterator(
+                            _chunks.data(),
+                            chunk_idx * entities_per_chunk + block_idx * entities_per_block + block_offset, capacity());
+                    }
+                }
+            }
+        }
+        return end();
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::const_iterator basic_entity_store<T, N, O>::cbegin() const noexcept
+    {
+        return begin();
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::iterator basic_entity_store<T, N, O>::end() noexcept
+    {
+        return iterator(_chunks.data(), capacity(), capacity());
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::const_iterator basic_entity_store<T, N, O>::end() const noexcept
+    {
+        return const_iterator(_chunks.data(), capacity(), capacity());
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr basic_entity_store<T, N, O>::const_iterator basic_entity_store<T, N, O>::cend() const noexcept
+    {
+        return const_iterator(_chunks.data(), capacity(), capacity());
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr T basic_entity_store<T, N, O>::acquire()
+    {
+        if (size() == capacity())
+        {
+            reserve(size() + 1);
+        }
+
+        assert(_head != null);
+        T ent = _head;
+
+        auto index = traits_type::as_entity(ent);
+
+        auto chunk_index = index / entities_per_chunk;
+        auto chunk_offset = index % entities_per_chunk;
+
+        auto block_index = chunk_offset / entities_per_block;
+        auto block_offset = chunk_offset % entities_per_block;
+
+        block& blk = _chunks[chunk_index].blocks[block_index];
+        T next = blk.entities[block_offset];
+        assert(next != null);
+        _head = next;
+
+        blk.occupancy = tempest::set_bit<size_t>(blk.occupancy, block_offset);
+
+        auto result = traits_type::construct(traits_type::as_entity(ent), traits_type::as_version(next));
+        blk.entities[block_offset] = result;
+
+        ++_count;
+
+        return result;
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr void basic_entity_store<T, N, O>::release(T e) noexcept
+    {
+        auto index = traits_type::as_entity(e);
+
+        auto chunk_index = index / entities_per_chunk;
+        auto chunk_offset = index % entities_per_chunk;
+
+        auto block_index = chunk_offset / entities_per_block;
+        auto block_offset = chunk_offset % entities_per_block;
+
+        block& blk = _chunks[chunk_index].blocks[block_index];
+
+        blk.occupancy = tempest::clear_bit<size_t>(blk.occupancy, block_offset);
+
+        auto head_index = traits_type::as_entity(_head);
+        T& to_erase = blk.entities[block_offset];
+        to_erase = traits_type::construct(head_index,
+                                          traits_type::as_version(to_erase) + 1); // point entity to next, bump version
+
+        _head = e;
+        --_count;
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr bool basic_entity_store<T, N, O>::is_valid(T e) const noexcept
+    {
+        auto index = traits_type::as_entity(e);
+
+        auto chunk_index = index / entities_per_chunk;
+        auto chunk_offset = index % entities_per_chunk;
+
+        auto block_index = chunk_offset / entities_per_block;
+        auto block_offset = chunk_offset % entities_per_block;
+
+        if (chunk_index < _chunks.size())
+        {
+            const block& blk = _chunks[chunk_index].blocks[block_index];
+            return tempest::is_bit_set<size_t>(blk.occupancy, block_offset) &&
+                   traits_type::as_version(blk.entities[block_offset]) == traits_type::as_version(e);
+        }
+
+        return false;
+    }
+
+    template <typename T, size_t N, integral O>
+    inline constexpr void basic_entity_store<T, N, O>::clear() noexcept
+    {
+        size_t index = 0;
+        for (auto& chunk : _chunks)
+        {
+            for (auto& block : chunk.blocks)
+            {
+                block.occupancy = 0;
+                for (auto& entity : block.entities)
+                {
+                    entity = traits_type::construct(index + 1, traits_type::as_version(entity) +
+                                                                   1); // point entity to next, bump version
+                    ++index;
+                }
+            }
+        }
+
+        _count = 0;
+
+        if (!_chunks.empty())
+        {
+            _head = traits_type::construct(0, traits_type::as_version(_chunks[0].blocks[0].entities[0]));
+        }
+        else
+        {
+            _head = null;
+        }
+    }
+
+    template <typename T, size_t N, integral O>
+    inline void basic_entity_store<T, N, O>::reserve(size_t new_capacity)
+    {
+        if (new_capacity <= capacity())
+        {
+            return;
+        }
+
+        size_t new_chunks = (new_capacity + entities_per_chunk - 1) / entities_per_chunk;
+
+        size_t current_cap = capacity();
+        size_t current_chunk_count = _chunks.size();
+
+        _chunks.resize(new_chunks);
+
+        // build next chain
+        auto idx = current_cap;
+        for (size_t chunk_idx = current_chunk_count; chunk_idx < new_chunks; ++chunk_idx)
+        {
+            for (size_t block_idx = 0; block_idx < blocks_per_chunk; ++block_idx)
+            {
+                for (size_t block_offset = 0; block_offset < entities_per_block; ++block_offset)
+                {
+                    _chunks[chunk_idx].blocks[block_idx].entities[block_offset] =
+                        traits_type::construct(idx + 1, 0); // new blocks have all entities as version 0
+                    ++idx;
+                }
+            }
+        }
+
+        // attach to current chain
+        auto last_chunk = _chunks.size() - 1;
+        auto last_block = blocks_per_chunk - 1;
+        auto last_offset = entities_per_block - 1;
+        _chunks[last_chunk].blocks[last_block].entities[last_offset] = traits_type::construct(current_cap, 0);
+        _head = traits_type::construct(current_cap, 0);
+    }
+
     class basic_archetype_registry
     {
       public:
@@ -258,7 +781,7 @@ namespace tempest::ecs
         vector<basic_archetype> _archetypes;
         vector<basic_archetype_types_hash<256u>> _hashes;
 
-        basic_entity_store<entity_type, 4096, std::uint64_t> _entities;
+        basic_entity_store<entity_type, 4096, uint64_t> _entities;
         sparse_map<basic_archetype_entity> _entity_archetype_mapping;
 
         flat_unordered_map<entity, tempest::string> _names;
