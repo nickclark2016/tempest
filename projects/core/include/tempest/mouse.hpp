@@ -9,25 +9,24 @@ namespace tempest::core
 {
     enum class mouse_button : uint32_t
     {
-        MB_0,
-        MB_1,
-        MB_2,
-        MB_3,
-        MB_4,
-        MB_5,
-        MB_6,
-        MB_7,
-        MB_8,
-        LAST,
-        LEFT = MB_1,
-        RIGHT = MB_2,
-        MIDDLE = MB_3,
+        mb_1,
+        mb_2,
+        mb_3,
+        mb_4,
+        mb_5,
+        mb_6,
+        mb_7,
+        mb_8,
+        last,
+        left = mb_1,
+        right = mb_2,
+        middle = mb_3,
     };
 
     enum class mouse_action : uint32_t
     {
-        PRESS,
-        RELEASE,
+        press,
+        release,
     };
 
     struct mouse_button_state
@@ -112,7 +111,7 @@ namespace tempest::core
 
         bool is_pressed(mouse_button button) const
         {
-            return _button_states[to_underlying(button)].action == mouse_action::PRESS;
+            return _button_states[to_underlying(button)].action == mouse_action::press;
         }
 
         bool is_disabled() const noexcept
@@ -134,7 +133,7 @@ namespace tempest::core
         }
 
       private:
-        array<mouse_button_state, to_underlying(mouse_button::LAST)> _button_states{};
+        array<mouse_button_state, to_underlying(mouse_button::last)> _button_states{};
 
         float _x = -1.0f;
         float _y = -1.0f;

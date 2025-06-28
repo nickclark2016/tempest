@@ -134,7 +134,7 @@ namespace tempest::graphics
 
             auto result = pipeline.render(*this, *_rhi_device, rs);
 
-            if (result == render_pipeline::render_result::REQUEST_RECREATE_SWAPCHAIN || it->framebuffer_resized)
+            if (result == render_pipeline::render_result::request_recreate_swapchain || it->framebuffer_resized)
             {
                 _rhi_device->recreate_render_surface(it->render_surface,
                                                      {
@@ -153,7 +153,7 @@ namespace tempest::graphics
                 it->framebuffer_resized = false;
                 continue;
             }
-            else if (result == render_pipeline::render_result::FAILURE)
+            else if (result == render_pipeline::render_result::failure)
             {
                 it->pipeline->destroy(*this, *_rhi_device);
                 it = _windows.erase(it);

@@ -28,12 +28,12 @@ namespace tempest
 
         bool is_some(detail::shelf::item_index index)
         {
-            return index != detail::item::NONE;
+            return index != detail::item::none;
         }
 
         bool is_none(detail::shelf::item_index index)
         {
-            return index == detail::item::NONE;
+            return index == detail::item::none;
         }
 
         // TODO: Allow configuration?
@@ -108,8 +108,8 @@ namespace tempest
 
         // Find a shelf that can accommodate the allocation.
         auto selected_shelf_height = static_cast<uint16_t>(~0);
-        auto selected_shelf = detail::shelf::NONE;
-        auto selected_item = detail::item::NONE;
+        auto selected_shelf = detail::shelf::none;
+        auto selected_item = detail::item::none;
 
         auto shelf_index = _first_shelf;
 
@@ -176,8 +176,8 @@ namespace tempest
                 .height = static_cast<uint16_t>(shelf.height - height),
                 .previous = selected_shelf,
                 .next = shelf.next,
-                .first_item = detail::item::NONE,
-                .first_unallocated_index = detail::item::NONE,
+                .first_item = detail::item::none,
+                .first_unallocated_index = detail::item::none,
                 .is_empty = true,
             };
 
@@ -186,10 +186,10 @@ namespace tempest
             detail::item item_to_insert = {
                 .x = shelf.position.x,
                 .width = static_cast<uint16_t>(_shelf_width),
-                .previous = detail::item::NONE,
-                .next = detail::item::NONE,
-                .previous_unallocated = detail::item::NONE,
-                .next_unallocated = detail::item::NONE,
+                .previous = detail::item::none,
+                .next = detail::item::none,
+                .previous_unallocated = detail::item::none,
+                .next_unallocated = detail::item::none,
                 .shelf_id = new_shelf_index,
                 .allocated = false,
                 .generation = 1,
@@ -224,8 +224,8 @@ namespace tempest
                 .width = static_cast<uint16_t>(element.width - width),
                 .previous = selected_item,
                 .next = element.next,
-                .previous_unallocated = detail::item::NONE,
-                .next_unallocated = detail::item::NONE,
+                .previous_unallocated = detail::item::none,
+                .next_unallocated = detail::item::none,
                 .shelf_id = selected_shelf,
                 .allocated = false,
                 .generation = 1,
@@ -373,7 +373,7 @@ namespace tempest
             }
 
             _items[item_index].next_unallocated = first;
-            _items[item_index].previous_unallocated = detail::item::NONE;
+            _items[item_index].previous_unallocated = detail::item::none;
             _shelves[item.shelf_id].first_unallocated_index = item_index;
         }
 
@@ -512,14 +512,14 @@ namespace tempest
 
         auto column_count = _extent.x / _shelf_width;
 
-        auto prev = detail::shelf::NONE;
+        auto prev = detail::shelf::none;
         for (uint32_t i = 0; i < column_count; ++i)
         {
             auto first_item = static_cast<detail::shelf::item_index>(_items.size());
             auto x_position = i * _shelf_width;
 
             auto current = static_cast<detail::shelf::shelf_index>(i);
-            auto next = (i + 1 < column_count) ? static_cast<detail::shelf::shelf_index>(i + 1) : detail::shelf::NONE;
+            auto next = (i + 1 < column_count) ? static_cast<detail::shelf::shelf_index>(i + 1) : detail::shelf::none;
 
             // Build shelf
             detail::shelf shelf{
@@ -538,10 +538,10 @@ namespace tempest
             detail::item item{
                 .x = static_cast<uint16_t>(x_position),
                 .width = static_cast<uint16_t>(_shelf_width),
-                .previous = detail::item::NONE,
-                .next = detail::item::NONE,
-                .previous_unallocated = detail::item::NONE,
-                .next_unallocated = detail::item::NONE,
+                .previous = detail::item::none,
+                .next = detail::item::none,
+                .previous_unallocated = detail::item::none,
+                .next_unallocated = detail::item::none,
                 .shelf_id = current,
                 .allocated = false,
                 .generation = 1,
@@ -555,8 +555,8 @@ namespace tempest
 
         _allocated_memory = 0;
         _first_shelf = 0;
-        _first_unallocated_item = detail::item::NONE;
-        _first_unallocated_shelf = detail::shelf::NONE;
+        _first_unallocated_item = detail::item::none;
+        _first_unallocated_shelf = detail::shelf::none;
     }
 
     shelf_pack_allocator::allocation_id::allocation_id(uint16_t index, uint16_t generation)

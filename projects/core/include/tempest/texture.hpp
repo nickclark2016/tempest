@@ -21,30 +21,30 @@ namespace tempest::core
 
     enum class texture_compression
     {
-        NONE,
+        none,
     };
 
     enum class magnify_texture_filter
     {
-        NEAREST,
-        LINEAR,
+        nearest,
+        linear,
     };
 
     enum class minify_texture_filter
     {
-        NEAREST,
-        LINEAR,
-        NEAREST_MIPMAP_NEAREST,
-        LINEAR_MIPMAP_NEAREST,
-        NEAREST_MIPMAP_LINEAR,
-        LINEAR_MIPMAP_LINEAR,
+        nearest,
+        linear,
+        nearest_mipmap_nearest,
+        linear_mipmap_nearest,
+        nearest_mipmap_linear,
+        linear_mipmap_linear,
     };
 
     enum class texture_wrap_mode
     {
-        CLAMP_TO_EDGE,
-        MIRRORED_REPEAT,
-        REPEAT,
+        clamp_to_edge,
+        mirrored_repeat,
+        repeat,
     };
 
     struct texture_mip_data
@@ -56,10 +56,10 @@ namespace tempest::core
 
     struct sampler_state
     {
-        magnify_texture_filter mag_filter = magnify_texture_filter::LINEAR;
-        minify_texture_filter min_filter = minify_texture_filter::LINEAR;
-        texture_wrap_mode wrap_s = texture_wrap_mode::REPEAT;
-        texture_wrap_mode wrap_t = texture_wrap_mode::REPEAT;
+        magnify_texture_filter mag_filter = magnify_texture_filter::linear;
+        minify_texture_filter min_filter = minify_texture_filter::linear;
+        texture_wrap_mode wrap_s = texture_wrap_mode::repeat;
+        texture_wrap_mode wrap_t = texture_wrap_mode::repeat;
     };
 
     struct texture

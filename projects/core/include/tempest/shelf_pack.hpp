@@ -16,7 +16,7 @@ namespace tempest
             using shelf_index = uint16_t;
             using item_index = uint16_t;
 
-            static constexpr shelf_index NONE = static_cast<shelf_index>(~0);
+            static constexpr shelf_index none = static_cast<shelf_index>(~0);
 
             math::vec2<uint16_t> position;
             uint16_t height;
@@ -32,7 +32,7 @@ namespace tempest
 
         struct item
         {
-            static constexpr uint16_t NONE = static_cast<uint16_t>(~0);
+            static constexpr uint16_t none = static_cast<uint16_t>(~0);
 
             uint16_t x;
             uint16_t width;
@@ -105,8 +105,8 @@ namespace tempest
         math::vec2<uint32_t> _alignment;
 
         detail::shelf::shelf_index _first_shelf{0};
-        detail::shelf::item_index _first_unallocated_item{detail::item::NONE};
-        detail::shelf::shelf_index _first_unallocated_shelf{detail::shelf::NONE};
+        detail::shelf::item_index _first_unallocated_item{detail::item::none};
+        detail::shelf::shelf_index _first_unallocated_shelf{detail::shelf::none};
 
         uint32_t _shelf_width;
         uint32_t _allocated_memory{0};

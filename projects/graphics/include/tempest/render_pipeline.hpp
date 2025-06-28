@@ -74,11 +74,11 @@ namespace tempest::graphics
             uint32_t image_height;
         };
 
-        enum render_result
+        enum class render_result
         {
-            SUCCESS,
-            REQUEST_RECREATE_SWAPCHAIN,
-            FAILURE,
+            success,
+            request_recreate_swapchain,
+            failure,
         };
 
         render_pipeline() = default;

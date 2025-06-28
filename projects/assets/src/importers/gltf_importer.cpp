@@ -323,52 +323,52 @@ namespace tempest::assets
 
                 if ((*sampler)["magFilter"].get(mag_filter))
                 {
-                    state.mag_filter = core::magnify_texture_filter::LINEAR;
+                    state.mag_filter = core::magnify_texture_filter::linear;
                 }
                 else
                 {
                     switch (mag_filter)
                     {
                     case 9728:
-                        state.mag_filter = core::magnify_texture_filter::NEAREST;
+                        state.mag_filter = core::magnify_texture_filter::nearest;
                         break;
                     case 9729:
-                        state.mag_filter = core::magnify_texture_filter::LINEAR;
+                        state.mag_filter = core::magnify_texture_filter::linear;
                         break;
                     default:
-                        state.mag_filter = core::magnify_texture_filter::LINEAR;
+                        state.mag_filter = core::magnify_texture_filter::linear;
                         break;
                     }
                 }
 
                 if ((*sampler)["minFilter"].get(min_filter))
                 {
-                    state.min_filter = core::minify_texture_filter::LINEAR;
+                    state.min_filter = core::minify_texture_filter::linear;
                 }
                 else
                 {
                     switch (min_filter)
                     {
                     case 9728:
-                        state.min_filter = core::minify_texture_filter::NEAREST;
+                        state.min_filter = core::minify_texture_filter::nearest;
                         break;
                     case 9729:
-                        state.min_filter = core::minify_texture_filter::LINEAR;
+                        state.min_filter = core::minify_texture_filter::linear;
                         break;
                     case 9984:
-                        state.min_filter = core::minify_texture_filter::NEAREST_MIPMAP_NEAREST;
+                        state.min_filter = core::minify_texture_filter::nearest_mipmap_nearest;
                         break;
                     case 9985:
-                        state.min_filter = core::minify_texture_filter::LINEAR_MIPMAP_NEAREST;
+                        state.min_filter = core::minify_texture_filter::linear_mipmap_nearest;
                         break;
                     case 9986:
-                        state.min_filter = core::minify_texture_filter::NEAREST_MIPMAP_LINEAR;
+                        state.min_filter = core::minify_texture_filter::nearest_mipmap_linear;
                         break;
                     case 9987:
-                        state.min_filter = core::minify_texture_filter::LINEAR_MIPMAP_LINEAR;
+                        state.min_filter = core::minify_texture_filter::linear_mipmap_linear;
                         break;
                     default:
-                        state.min_filter = core::minify_texture_filter::LINEAR;
+                        state.min_filter = core::minify_texture_filter::linear;
                         break;
                     }
                 }
@@ -376,46 +376,46 @@ namespace tempest::assets
                 uint64_t wrap_s, wrap_t;
                 if ((*sampler)["wrapS"].get(wrap_s))
                 {
-                    state.wrap_s = core::texture_wrap_mode::REPEAT;
+                    state.wrap_s = core::texture_wrap_mode::repeat;
                 }
                 else
                 {
                     switch (wrap_s)
                     {
                     case 33071:
-                        state.wrap_s = core::texture_wrap_mode::CLAMP_TO_EDGE;
+                        state.wrap_s = core::texture_wrap_mode::clamp_to_edge;
                         break;
                     case 33648:
-                        state.wrap_s = core::texture_wrap_mode::MIRRORED_REPEAT;
+                        state.wrap_s = core::texture_wrap_mode::mirrored_repeat;
                         break;
                     case 10497:
-                        state.wrap_s = core::texture_wrap_mode::REPEAT;
+                        state.wrap_s = core::texture_wrap_mode::repeat;
                         break;
                     default:
-                        state.wrap_s = core::texture_wrap_mode::REPEAT;
+                        state.wrap_s = core::texture_wrap_mode::repeat;
                         break;
                     }
                 }
 
                 if ((*sampler)["wrapT"].get(wrap_t))
                 {
-                    state.wrap_t = core::texture_wrap_mode::REPEAT;
+                    state.wrap_t = core::texture_wrap_mode::repeat;
                 }
                 else
                 {
                     switch (wrap_t)
                     {
                     case 33071:
-                        state.wrap_t = core::texture_wrap_mode::CLAMP_TO_EDGE;
+                        state.wrap_t = core::texture_wrap_mode::clamp_to_edge;
                         break;
                     case 33648:
-                        state.wrap_t = core::texture_wrap_mode::MIRRORED_REPEAT;
+                        state.wrap_t = core::texture_wrap_mode::mirrored_repeat;
                         break;
                     case 10497:
-                        state.wrap_t = core::texture_wrap_mode::REPEAT;
+                        state.wrap_t = core::texture_wrap_mode::repeat;
                         break;
                     default:
-                        state.wrap_t = core::texture_wrap_mode::REPEAT;
+                        state.wrap_t = core::texture_wrap_mode::repeat;
                         break;
                     }
                 }

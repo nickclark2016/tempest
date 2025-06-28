@@ -1009,13 +1009,13 @@ namespace tempest::graphics
         if (present_result == rhi::work_queue::present_result::out_of_date ||
             present_result == rhi::work_queue::present_result::suboptimal)
         {
-            return render_result::REQUEST_RECREATE_SWAPCHAIN;
+            return render_result::request_recreate_swapchain;
         }
         else if (present_result == rhi::work_queue::present_result::error)
         {
-            return render_result::FAILURE;
+            return render_result::failure;
         }
-        return render_result::SUCCESS;
+        return render_result::success;
     }
 
     void pbr_pipeline::destroy([[maybe_unused]] renderer& parent, rhi::device& dev)
