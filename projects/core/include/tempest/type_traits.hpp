@@ -3182,6 +3182,17 @@ namespace tempest
     /// @tparam U Type to copy the constness, volatility and reference to.
     template <typename T, typename U>
     using copy_cvref_t = typename copy_cvref<T, U>::type;
+
+    template <typename T, template <typename...> typename U>
+    inline constexpr bool is_specialization_v = false;
+
+    template <template <typename...> typename T, typename... Ts>
+    inline constexpr bool is_specialization_v<T<Ts...>, T> = true;
+
+    template <typename T, template <typename...> typename U>
+    struct is_specialization : bool_constant<is_specialization_v<T, U>>
+    {
+    };
 } // namespace tempest
 
 #endif // tempest_core_type_traits_hpp

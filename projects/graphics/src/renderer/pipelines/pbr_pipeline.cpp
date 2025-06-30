@@ -3977,7 +3977,7 @@ namespace tempest::graphics
 
         for (auto [key, batch] : _cpu_buffers.draw_batches)
         {
-            if (key.alpha_type == alpha_behavior::OPAQUE)
+            if (key.alpha_type == alpha_behavior::opaque)
             {
                 queue.draw(commands, _gpu_buffers.indirect_commands,
                            static_cast<uint32_t>(indirect_command_offset +
@@ -4166,7 +4166,7 @@ namespace tempest::graphics
 
                 for (auto [key, batch] : _cpu_buffers.draw_batches)
                 {
-                    if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+                    if (key.alpha_type == alpha_behavior::opaque || key.alpha_type == alpha_behavior::mask)
                     {
                         queue.draw(
                             commands, _gpu_buffers.indirect_commands,
@@ -5091,7 +5091,7 @@ namespace tempest::graphics
 
         for (auto [key, batch] : _cpu_buffers.draw_batches)
         {
-            if (key.alpha_type == alpha_behavior::OPAQUE || key.alpha_type == alpha_behavior::MASK)
+            if (key.alpha_type == alpha_behavior::opaque || key.alpha_type == alpha_behavior::mask)
             {
                 queue.draw(commands, _gpu_buffers.indirect_commands,
                            static_cast<uint32_t>(indirect_command_offset +
@@ -5674,7 +5674,7 @@ namespace tempest::graphics
 
             for (auto [key, batch] : _cpu_buffers.draw_batches)
             {
-                if (key.alpha_type == alpha_behavior::TRANSMISSIVE || key.alpha_type == alpha_behavior::TRANSPARENT)
+                if (key.alpha_type == alpha_behavior::transmissive || key.alpha_type == alpha_behavior::transparent)
                 {
                     queue.draw(
                         commands, _gpu_buffers.indirect_commands,
@@ -5786,7 +5786,7 @@ namespace tempest::graphics
             // Draw just like normal, but only for the transparent objects
             for (auto [key, batch] : _cpu_buffers.draw_batches)
             {
-                if (key.alpha_type == alpha_behavior::TRANSPARENT || key.alpha_type == alpha_behavior::TRANSMISSIVE)
+                if (key.alpha_type == alpha_behavior::transparent || key.alpha_type == alpha_behavior::transmissive)
                 {
                     queue.draw(
                         commands, _gpu_buffers.indirect_commands,

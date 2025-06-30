@@ -27,6 +27,22 @@ namespace tempest
     {
     };
 
+    namespace detail
+    {
+        // clang-format off
+        template <typename T, typename U>
+        using allow_direct_conversion = bool_constant<
+            conjunction_v<
+                negation<is_same<remove_cvref_t<U>, optional<T>>>,
+                negation<is_same<remove_cvref_t<U>, in_place_t>>,
+                negation<
+                    conjunction<is_same<remove_cv_t<U>, bool>,
+                    is_specialization<remove_cvref_t<U>, optional>>>,
+                is_constructible<T, U>
+            >>;
+        // clang-format on
+    } // namespace detail
+
     template <typename T>
     class optional
     {
@@ -49,8 +65,8 @@ namespace tempest
             requires(is_convertible_v<U, T>)
         constexpr optional(optional<U>&& other);
 
-        template <typename U = T>
-            requires(is_constructible_v<T, U>)
+        template <typename U = remove_cvref_t<T>>
+            requires(detail::allow_direct_conversion<T, U>::value)
         constexpr optional(U&& value);
 
         ~optional()
@@ -348,7 +364,7 @@ namespace tempest
 
     template <typename T>
     template <typename U>
-        requires(is_constructible_v<T, U>)
+        requires(detail::allow_direct_conversion<T, U>::value)
     inline constexpr optional<T>::optional(U&& value)
     {
         (void)tempest::construct_at(&_data.value, tempest::forward<U>(value));

@@ -410,6 +410,16 @@ namespace tempest::editor::ui
                 im_flags |= ImGuiWindowFlags_NoBackground;
             }
 
+            if ((flags & ui_context::window_flags::no_docking) == ui_context::window_flags::no_docking)
+            {
+                im_flags |= ImGuiWindowFlags_NoDocking;
+            }
+
+            if ((flags & ui_context::window_flags::menubar) == ui_context::window_flags::menubar)
+            {
+                im_flags |= ImGuiWindowFlags_MenuBar;
+            }
+
             return im_flags;
         }
     } // namespace
@@ -859,16 +869,120 @@ namespace tempest::editor::ui
 
         if (info.position)
         {
-            ImGui::SetNextWindowPos({info.position->x, info.position->y}, ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+            ImGui::SetNextWindowPos({info.position->x, info.position->y}, ImGuiCond_Appearing, ImVec2(0.0f, 0.0f));
+
         }
 
         if (info.size)
         {
             ImGui::SetNextWindowSize({info.size->x, info.size->y}, ImGuiCond_Always);
         }
+        else
+        {
+            ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize, ImGuiCond_Always);
+        }
 
         const auto window_flags = to_imgui(info.flags);
-        return ImGui::Begin(info.name.data(), nullptr, window_flags);
+
+        if (!info.size)
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        }
+
+        const auto result = ImGui::Begin(info.name.data(), nullptr, window_flags);
+
+        if (!info.size)
+        {
+            ImGui::PopStyleVar();
+        }
+
+        return result;
+    }
+
+    ui_context::dockspace_identifiers ui_context::configure_dockspace(dockspace_configure_info info)
+    {
+        const auto dock_id = ImGui::GetID(info.name.data());
+
+        dockspace_identifiers identifiers;
+        identifiers.center_id = dock_id;
+        identifiers.root_id = dock_id;
+
+        ImGui::DockBuilderRemoveNode(dock_id);
+        ImGui::DockBuilderAddNode(dock_id, ImGuiDockNodeFlags_DockSpace);
+
+        // Set up all 5 nodes
+        auto center =
+            ImGui::DockBuilderSplitNode(identifiers.center_id, ImGuiDir_Left, 1.0f, nullptr, &identifiers.center_id);
+
+        const auto left =
+            ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, info.left_width.value_or(0.1f), nullptr, &center);
+        const auto right =
+            ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, info.right_width.value_or(0.1f), nullptr, &center);
+        const auto top =
+            ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, info.top_height.value_or(0.1f), nullptr, &center);
+        const auto bottom =
+            ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, info.bottom_height.value_or(0.3f), nullptr, &center);
+
+        identifiers.center_id = center;
+        identifiers.left_id = left;
+        identifiers.right_id = right;
+        identifiers.top_id = top;
+        identifiers.bottom_id = bottom;
+
+        if (info.left_width)
+        {
+            if (info.left_window_name)
+            {
+                ImGui::DockBuilderDockWindow(info.left_window_name->data(), left);
+            }
+        }
+        else
+        {
+            ImGui::DockBuilderGetNode(left)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
+        }
+
+        if (info.right_width)
+        {
+            if (info.right_window_name)
+            {
+                ImGui::DockBuilderDockWindow(info.right_window_name->data(), right);
+            }
+        }
+        else
+        {
+            ImGui::DockBuilderGetNode(right)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
+        }
+
+        if (info.top_height)
+        {
+            if (info.top_window_name)
+            {
+                ImGui::DockBuilderDockWindow(info.top_window_name->data(), top);
+            }
+        }
+        else
+        {
+            ImGui::DockBuilderGetNode(top)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
+        }
+
+        if (info.bottom_height)
+        {
+            if (info.bottom_window_name)
+            {
+                ImGui::DockBuilderDockWindow(info.bottom_window_name->data(), bottom);
+            }
+        }
+        else
+        {
+            ImGui::DockBuilderGetNode(bottom)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
+        }
+
+        return identifiers;
+    }
+
+    void ui_context::dockspace(dockspace_info info)
+    {
+        ImGui::DockSpace(info.root, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
     }
 
     void ui_context::end_window()

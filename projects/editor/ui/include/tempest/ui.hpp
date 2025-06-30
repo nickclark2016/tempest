@@ -25,6 +25,8 @@ namespace tempest::editor::ui
             no_decoration = 0x040,
             no_background = 0x080,
             no_scrollbar = 0x100,
+            no_docking = 0x200,
+            menubar = 0x400,
         };
 
         struct window_info
@@ -33,6 +35,40 @@ namespace tempest::editor::ui
             optional<math::vec2<float>> position;
             optional<math::vec2<float>> size;
             enum_mask<window_flags> flags;
+        };
+
+        using dockspace_identifier = uint32_t;
+
+        struct dockspace_configure_info
+        {
+            string_view name;
+
+            optional<float> left_width;
+            optional<float> right_width;
+            optional<float> top_height;
+            optional<float> bottom_height;
+            optional<dockspace_identifier> parent;
+
+            optional<string_view> left_window_name;
+            optional<string_view> right_window_name;
+            optional<string_view> top_window_name;
+            optional<string_view> bottom_window_name;
+            optional<string_view> center_window_name;
+        };
+
+        struct dockspace_identifiers
+        {
+            optional<dockspace_identifier> left_id;
+            optional<dockspace_identifier> right_id;
+            optional<dockspace_identifier> top_id;
+            optional<dockspace_identifier> bottom_id;
+            dockspace_identifier center_id;
+            dockspace_identifier root_id;
+        };
+
+        struct dockspace_info
+        {
+            dockspace_identifier root;
         };
 
         ui_context(rhi::window_surface* surface, rhi::device* device, rhi::image_format target_fmt,
@@ -51,6 +87,8 @@ namespace tempest::editor::ui
                                 rhi::work_queue& wq) noexcept;
 
         static bool begin_window(window_info info);
+        static dockspace_identifiers configure_dockspace(dockspace_configure_info info);
+        static void dockspace(dockspace_info info);
         static void end_window();
 
       private:

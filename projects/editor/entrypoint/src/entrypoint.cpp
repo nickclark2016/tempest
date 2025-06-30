@@ -30,22 +30,48 @@ namespace tempest::editor
         auto ui_pipeline = engine.register_pipeline<ui::ui_pipeline>(win_surface, ui_context.get());
         ui_pipeline->set_size(win_surface->framebuffer_width(), win_surface->framebuffer_height());
 
-        engine.register_on_fixed_update_callback([&win_surface, &ui_context](engine_context& ctx, auto dt) {
+        engine.register_on_fixed_update_callback([&win_surface, &ui_context, dockspace_needs_configure = true,
+                                                  dockspace_layout = ui::ui_context::dockspace_configure_info{},
+                                                  dockspace_info = ui::ui_context::dockspace_info{},
+                                                  dockspace_ids = ui::ui_context::dockspace_identifiers{}](
+                                                     engine_context& ctx, auto dt) mutable {
             ui_context->begin_ui_commands();
 
             if (ui::ui_context::begin_window({
                     .name = "Tempest Editor",
-                    .position = math::vec2{0.0f, 0.0f},
-                    .size = math::vec2{static_cast<float>(win_surface->framebuffer_width()),
-                                       static_cast<float>(win_surface->framebuffer_height())},
+                    .position = none(),
+                    .size = none(),
                     .flags = make_enum_mask(
                         ui::ui_context::window_flags::no_title, ui::ui_context::window_flags::no_resize,
                         ui::ui_context::window_flags::no_move, ui::ui_context::window_flags::no_collapse,
                         ui::ui_context::window_flags::no_bring_to_front_on_focus,
-                        ui::ui_context::window_flags::no_navigation_focus, ui::ui_context::window_flags::no_decoration),
+                        ui::ui_context::window_flags::no_navigation_focus, ui::ui_context::window_flags::no_decoration,
+                        ui::ui_context::window_flags::no_docking),
                 }))
             {
+                if (dockspace_needs_configure)
+                {
+                    dockspace_layout.name = "MainDockspace";
+                    dockspace_layout.left_window_name = "Entities";
+                    dockspace_layout.left_width = 0.2f;
+                    dockspace_layout.right_width = 0.2f;
+
+                    dockspace_needs_configure = false;
+
+                    dockspace_ids = ui::ui_context::configure_dockspace(dockspace_layout);
+                    dockspace_info.root = dockspace_ids.root_id;
+                }
+
+                ui::ui_context::dockspace(dockspace_info);
             }
+            ui::ui_context::end_window();
+
+            ui::ui_context::begin_window({
+                .name = "Entities",
+                .position = none(),
+                .size = math::vec2(240.0f, 100.0f),
+                .flags = make_enum_mask(ui::ui_context::window_flags::none),
+            });
             ui::ui_context::end_window();
 
             ui_context->finish_ui_commands();

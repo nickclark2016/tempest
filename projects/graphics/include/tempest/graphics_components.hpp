@@ -30,15 +30,15 @@ namespace tempest::graphics
 
     enum class alpha_behavior : uint32_t
     {
-        OPAQUE = 0,
-        MASK = 1,
-        TRANSPARENT = 2,
-        TRANSMISSIVE = 3,
+        opaque = 0,
+        mask = 1,
+        transparent = 2,
+        transmissive = 3,
     };
 
     struct material_payload
     {
-        alpha_behavior type{alpha_behavior::OPAQUE};
+        alpha_behavior type{alpha_behavior::opaque};
 
         uint32_t albedo_map_id{std::numeric_limits<uint32_t>::max()};
         uint32_t normal_map_id{std::numeric_limits<uint32_t>::max()};

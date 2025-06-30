@@ -1,4 +1,5 @@
 #include <tempest/optional.hpp>
+#include <tempest/string_view.hpp>
 
 #include <gtest/gtest.h>
 
@@ -213,4 +214,11 @@ TEST(optional, value_or_empty)
 {
     tempest::optional<int> opt;
     EXPECT_EQ(opt.value_or(43), 43);
+}
+
+TEST(optional, construct_non_trivial)
+{
+    tempest::string_view sv = "Hello, World!";
+    tempest::optional<tempest::string_view> sv_opt = sv;
+    tempest::optional<tempest::string_view> sv_opt2 = sv_opt;
 }
