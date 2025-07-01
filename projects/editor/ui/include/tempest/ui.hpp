@@ -87,9 +87,11 @@ namespace tempest::editor::ui
                                 rhi::work_queue& wq) noexcept;
 
         static bool begin_window(window_info info);
+        static void end_window();
+        static math::vec2<uint32_t> get_current_window_size() noexcept;
+
         static dockspace_identifiers configure_dockspace(dockspace_configure_info info);
         static void dockspace(dockspace_info info);
-        static void end_window();
 
       private:
         struct impl;

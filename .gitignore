@@ -20,6 +20,8 @@ Makefile
 *.ninja
 *.ninja_log
 *.ninja_deps
+*compile_commands.json
+*.clangd
 
 # Caches
 TempestCache/

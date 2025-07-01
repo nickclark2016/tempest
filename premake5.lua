@@ -96,6 +96,15 @@ scoped.workspace('Tempest', function()
     end)
 
     scoped.filter({
+        'action:export-compile-commands',
+        'toolset:clang',
+    }, function()
+        buildoptions {
+            '-march=native'
+        }
+    end)
+
+    scoped.filter({
         'toolset:clang',
         'system:windows',
         'action:gmake*',

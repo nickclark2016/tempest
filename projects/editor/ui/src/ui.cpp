@@ -870,7 +870,6 @@ namespace tempest::editor::ui
         if (info.position)
         {
             ImGui::SetNextWindowPos({info.position->x, info.position->y}, ImGuiCond_Appearing, ImVec2(0.0f, 0.0f));
-
         }
 
         if (info.size)
@@ -988,6 +987,12 @@ namespace tempest::editor::ui
     void ui_context::end_window()
     {
         ImGui::End();
+    }
+
+    math::vec2<uint32_t> ui_context::get_current_window_size() noexcept
+    {
+        const auto win_size = ImGui::GetWindowSize();
+        return math::vec2(static_cast<uint32_t>(win_size.x), static_cast<uint32_t>(win_size.y));
     }
 
     void ui_context::_init_window_backend()
