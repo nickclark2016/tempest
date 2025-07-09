@@ -987,7 +987,7 @@ namespace tempest::editor::ui
     {
         auto dock_id = ImGui::GetID(info.name.data());
         ImGui::DockBuilderRemoveNode(dock_id);
-        ImGui::DockBuilderAddNode(dock_id, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockBuilderAddNode(dock_id, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodePos(dock_id, {0, 0});
         ImGui::DockBuilderSetNodeSize(dock_id, ImGui::GetMainViewport()->Size);
 
