@@ -349,7 +349,7 @@ namespace tempest
                 dst.access<Fn*>() = get_pointer(src);
                 break;
             case function_manager_operation::CLONE_FUNCTOR:
-                init_functor(dst, *const_cast<const Fn*>(get_pointer(src)));
+                init_functor(dst, forward_like<Fn>(*get_pointer(src)));
                 break;
             case function_manager_operation::DESTROY_FUNCTOR:
                 _destroy<is_stored_locally>(dst);

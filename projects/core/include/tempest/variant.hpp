@@ -457,13 +457,15 @@ namespace tempest
         struct construction_dispatcher<false, T>
         {
             template <size_t Idx, typename... Args>
-            static constexpr void switch_case([[maybe_unused]] size_t index, [[maybe_unused]] void* addr, [[maybe_unused]] Args&&... args)
+            static constexpr void switch_case([[maybe_unused]] size_t index, [[maybe_unused]] void* addr,
+                                              [[maybe_unused]] Args&&... args)
             {
                 tempest::unreachable();
             }
 
             template <size_t Base, size_t TargetIdx, typename... Args>
-            static constexpr void switch_dispatch([[maybe_unused]] size_t index, [[maybe_unused]] void* addr, [[maybe_unused]] Args&&... args)
+            static constexpr void switch_dispatch([[maybe_unused]] size_t index, [[maybe_unused]] void* addr,
+                                                  [[maybe_unused]] Args&&... args)
             {
                 tempest::unreachable();
             }
@@ -601,10 +603,11 @@ namespace tempest
     template <typename T>
         requires(!is_same_v<remove_cvref_t<T>, variant<Ts...>>)
     inline constexpr variant<Ts...>::variant(T&& value) noexcept
-        : _index{detail::variant_index_selector<T, Ts...>::index}
+        : _index{detail::variant_index_selector<remove_cvref_t<T>, Ts...>::index}
     {
         detail::construction_dispatcher<true, variant<Ts...>>::template switch_dispatch<
-            0, detail::variant_index_selector<T, Ts...>::index>(&_storage.data, tempest::forward<T>(value));
+            0, detail::variant_index_selector<remove_cvref_t<T>, Ts...>::index>(&_storage.data,
+                                                                                tempest::forward<T>(value));
     }
 
     template <typename... Ts>
@@ -824,7 +827,8 @@ namespace tempest
             }
 
             template <size_t Base, typename Fn, typename V>
-            static constexpr R switch_dispatch([[maybe_unused]] size_t index, [[maybe_unused]] Fn&& fn, [[maybe_unused]] V&& v)
+            static constexpr R switch_dispatch([[maybe_unused]] size_t index, [[maybe_unused]] Fn&& fn,
+                                               [[maybe_unused]] V&& v)
             {
                 tempest::unreachable();
             }

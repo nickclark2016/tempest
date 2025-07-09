@@ -93,6 +93,8 @@ namespace tempest::graphics
         virtual render_result render(renderer& parent, rhi::device& dev, const render_state& rs) = 0;
         virtual void destroy(renderer& parent, rhi::device& dev) = 0;
 
+        virtual void set_viewport(uint32_t width, uint32_t height) = 0;
+
         virtual void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
                                          const core::mesh_registry& meshes, const core::texture_registry& textures,
                                          const core::material_registry& materials);

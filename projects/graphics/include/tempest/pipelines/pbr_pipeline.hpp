@@ -174,6 +174,8 @@ namespace tempest::graphics
         render_result render(renderer& parent, rhi::device& dev, const render_state& rs) override;
         void destroy(renderer& parent, rhi::device& dev) override;
 
+        void set_viewport(uint32_t width, uint32_t height) override;
+
         void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
                                  const core::mesh_registry& meshes, const core::texture_registry& textures,
                                  const core::material_registry& materials) override;
@@ -462,6 +464,7 @@ namespace tempest::graphics
 
         uint32_t _render_target_width;
         uint32_t _render_target_height;
+        bool _render_target_requires_reconstruction = true;
 
         uint32_t _object_count = 0;
 
@@ -481,8 +484,8 @@ namespace tempest::graphics
         void _initialize_skybox(renderer& parent, rhi::device& dev);
         void _initialize_samplers(renderer& parent, rhi::device& dev);
 
-        void _initialize_render_targets(renderer& parent, rhi::device& dev);
-        void _initialize_gpu_buffers(renderer& parent, rhi::device& dev);
+        void _initialize_render_targets(rhi::device& dev);
+        void _initialize_gpu_buffers(rhi::device& dev);
 
         void _upload_per_frame_data(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
                                     rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
@@ -518,6 +521,10 @@ namespace tempest::graphics
         uint32_t _acquire_next_object() noexcept;
 
         optional<gpu::light> _get_light_data(ecs::archetype_entity entity) const;
+
+        void _reconstruct_render_targets(rhi::device& dev);
+        void _construct_pbr_mboit_images(rhi::device& dev);
+        void _construct_ssao_images(rhi::device& dev);
     };
 } // namespace tempest::graphics
 

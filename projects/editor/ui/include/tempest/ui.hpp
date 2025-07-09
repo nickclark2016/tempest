@@ -6,6 +6,7 @@
 #include <tempest/render_pipeline.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/variant.hpp>
 #include <tempest/vec2.hpp>
 
 namespace tempest::editor::ui
@@ -13,6 +14,30 @@ namespace tempest::editor::ui
     class ui_context
     {
       public:
+        struct default_position_tag_t
+        {
+        };
+
+        static constexpr default_position_tag_t default_position_tag{};
+
+        struct viewport_origin_tag_t
+        {
+        };
+
+        static constexpr viewport_origin_tag_t viewport_origin_tag{};
+
+        struct default_size_tag_t
+        {
+        };
+
+        static constexpr default_size_tag_t default_size_tag{};
+
+        struct fullscreen_tag_t
+        {
+        };
+
+        static constexpr fullscreen_tag_t fullscreen_tag{};
+
         enum class window_flags
         {
             none = 0x000,
@@ -32,38 +57,38 @@ namespace tempest::editor::ui
         struct window_info
         {
             string_view name;
-            optional<math::vec2<float>> position;
-            optional<math::vec2<float>> size;
+            variant<default_position_tag_t, viewport_origin_tag_t, math::vec2<float>> position;
+            variant<default_size_tag_t, fullscreen_tag_t, math::vec2<float>> size;
             enum_mask<window_flags> flags;
         };
 
         using dockspace_identifier = uint32_t;
 
-        struct dockspace_configure_info
+        struct dockspace_configure_node
         {
-            string_view name;
+            unique_ptr<dockspace_configure_node> top;
+            unique_ptr<dockspace_configure_node> bottom;
+            unique_ptr<dockspace_configure_node> left;
+            unique_ptr<dockspace_configure_node> right;
 
-            optional<float> left_width;
-            optional<float> right_width;
-            optional<float> top_height;
-            optional<float> bottom_height;
-            optional<dockspace_identifier> parent;
-
-            optional<string_view> left_window_name;
-            optional<string_view> right_window_name;
-            optional<string_view> top_window_name;
-            optional<string_view> bottom_window_name;
-            optional<string_view> center_window_name;
+            float size;
+            vector<string_view> docked_windows;
         };
 
-        struct dockspace_identifiers
+        struct dockspace_configure_info
         {
-            optional<dockspace_identifier> left_id;
-            optional<dockspace_identifier> right_id;
-            optional<dockspace_identifier> top_id;
-            optional<dockspace_identifier> bottom_id;
-            dockspace_identifier center_id;
-            dockspace_identifier root_id;
+            dockspace_configure_node root;
+            string_view name;
+        };
+
+        struct dockspace_layout
+        {
+            unique_ptr<dockspace_layout> top_node;
+            unique_ptr<dockspace_layout> bottom_node;
+            unique_ptr<dockspace_layout> left_node;
+            unique_ptr<dockspace_layout> right_node;
+
+            dockspace_identifier central_node = 0;
         };
 
         struct dockspace_info
@@ -89,9 +114,10 @@ namespace tempest::editor::ui
         static bool begin_window(window_info info);
         static void end_window();
         static math::vec2<uint32_t> get_current_window_size() noexcept;
+        static dockspace_identifier get_dockspace_id(string_view name) noexcept;
 
-        static dockspace_identifiers configure_dockspace(dockspace_configure_info info);
-        static void dockspace(dockspace_info info);
+        static dockspace_layout configure_dockspace(dockspace_configure_info&& info);
+        static void dockspace(dockspace_identifier id);
 
       private:
         struct impl;
@@ -111,7 +137,7 @@ namespace tempest::editor::ui
         render_result render(graphics::renderer& parent, rhi::device& dev, const render_state& rs) override;
         void destroy(graphics::renderer& parent, rhi::device& dev) override;
 
-        void set_size(uint32_t width, uint32_t height) noexcept
+        void set_viewport(uint32_t width, uint32_t height) override
         {
             _width = width;
             _height = height;

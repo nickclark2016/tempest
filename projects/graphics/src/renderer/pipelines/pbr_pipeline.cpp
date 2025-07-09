@@ -724,7 +724,7 @@ namespace tempest::graphics
 
     void pbr_pipeline::initialize(renderer& parent, rhi::device& dev)
     {
-        _initialize_gpu_buffers(parent, dev);
+        _initialize_gpu_buffers(dev);
 
         _initialize_z_prepass(parent, dev);
         _initialize_clustering(parent, dev);
@@ -733,13 +733,21 @@ namespace tempest::graphics
         _initialize_shadows(parent, dev);
         _initialize_ssao(parent, dev);
         _initialize_skybox(parent, dev);
-        _initialize_render_targets(parent, dev);
+        _initialize_render_targets(dev);
         _initialize_samplers(parent, dev);
+
+        _render_target_requires_reconstruction = false;
     }
 
     render_pipeline::render_result pbr_pipeline::render([[maybe_unused]] renderer& parent, rhi::device& dev,
                                                         const render_state& rs)
     {
+        if (_render_target_requires_reconstruction)
+        {
+            _reconstruct_render_targets(dev);
+            _render_target_requires_reconstruction = false;
+        }
+
         _gpu_resource_usages.staging_bytes_writen = 0;
 
         _entity_registry->each(
@@ -1084,6 +1092,17 @@ namespace tempest::graphics
         dev.destroy_sampler(_bindless_textures.point_sampler);
         dev.destroy_sampler(_bindless_textures.linear_sampler_no_aniso);
         dev.destroy_sampler(_bindless_textures.point_sampler_no_aniso);
+    }
+
+    void pbr_pipeline::set_viewport(uint32_t width, uint32_t height)
+    {
+        const auto is_resized = _render_target_width != width || _render_target_height != height;
+        if (is_resized)
+        {
+            _render_target_width = width;
+            _render_target_height = height;
+            _render_target_requires_reconstruction = true;
+        }
     }
 
     void pbr_pipeline::upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
@@ -1892,6 +1911,95 @@ namespace tempest::graphics
         return none();
     }
 
+    void pbr_pipeline::_reconstruct_render_targets(rhi::device& dev)
+    {
+        // "Global" render targets
+        dev.destroy_image(_render_targets.color);
+        dev.destroy_image(_render_targets.depth);
+        dev.destroy_image(_render_targets.encoded_normals);
+        dev.destroy_image(_render_targets.shadow_megatexture);
+        dev.destroy_image(_render_targets.transparency_accumulator);
+        
+        // MBOIT
+        dev.destroy_image(_pbr_transparencies.moments_target);
+        dev.destroy_image(_pbr_transparencies.zeroth_moment_target);
+
+        // SSAO
+        dev.destroy_image(_ssao.ssao_target);
+        dev.destroy_image(_ssao.ssao_blur_target);
+
+        // Reconstruct targets
+        _initialize_render_targets(dev);
+        _construct_pbr_mboit_images(dev);
+        _construct_ssao_images(dev);
+    }
+
+    void pbr_pipeline::_construct_pbr_mboit_images(rhi::device& dev)
+    {
+        _pbr_transparencies.moments_target = dev.create_image({
+            .format = rhi::image_format::rgba16_float,
+            .type = rhi::image_type::image_2d_array,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .depth = 1,
+            .array_layers = 2,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::transfer_dst),
+            .name = "MBOIT Moments Target",
+        });
+
+        _pbr_transparencies.zeroth_moment_target = dev.create_image({
+            .format = rhi::image_format::r32_float,
+            .type = rhi::image_type::image_2d,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::transfer_dst),
+            .name = "MBOIT Zeroth Moment Target",
+        });
+    }
+
+    void pbr_pipeline::_construct_ssao_images(rhi::device& dev)
+    {
+        _ssao.ssao_target = dev.create_image({
+            .format = ssao_format,
+            .type = rhi::image_type::image_2d,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .depth = 1u,
+            .array_layers = 1u,
+            .mip_levels = 1u,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .name = "SSAO Target",
+        });
+
+        _ssao.ssao_blur_target = dev.create_image({
+            .format = ssao_format,
+            .type = rhi::image_type::image_2d,
+            .width = _render_target_width,
+            .height = _render_target_height,
+            .depth = 1u,
+            .array_layers = 1u,
+            .mip_levels = 1u,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .name = "SSAO Blur Target",
+        });
+    }
+
     void pbr_pipeline::_initialize_z_prepass([[maybe_unused]] renderer& parent, rhi::device& dev)
     {
         tempest::vector<rhi::descriptor_binding_layout> bindings;
@@ -2539,37 +2647,7 @@ namespace tempest::graphics
         }
 
         // Set up moment images
-        {
-            _pbr_transparencies.moments_target = dev.create_image({
-                .format = rhi::image_format::rgba16_float,
-                .type = rhi::image_type::image_2d_array,
-                .width = _render_target_width,
-                .height = _render_target_height,
-                .depth = 1,
-                .array_layers = 2,
-                .mip_levels = 1,
-                .sample_count = rhi::image_sample_count::sample_count_1,
-                .tiling = rhi::image_tiling_type::optimal,
-                .location = rhi::memory_location::device,
-                .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::transfer_dst),
-                .name = "MBOIT Moments Target",
-            });
-
-            _pbr_transparencies.zeroth_moment_target = dev.create_image({
-                .format = rhi::image_format::r32_float,
-                .type = rhi::image_type::image_2d,
-                .width = _render_target_width,
-                .height = _render_target_height,
-                .depth = 1,
-                .array_layers = 1,
-                .mip_levels = 1,
-                .sample_count = rhi::image_sample_count::sample_count_1,
-                .tiling = rhi::image_tiling_type::optimal,
-                .location = rhi::memory_location::device,
-                .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::transfer_dst),
-                .name = "MBOIT Zeroth Moment Target",
-            });
-        }
+        _construct_pbr_mboit_images(dev);
     }
 
     void pbr_pipeline::_initialize_shadows([[maybe_unused]] renderer& parent, rhi::device& dev)
@@ -2856,35 +2934,7 @@ namespace tempest::graphics
         });
 
         // Set up the SSAO targets
-        _ssao.ssao_target = dev.create_image({
-            .format = ssao_format,
-            .type = rhi::image_type::image_2d,
-            .width = _render_target_width,
-            .height = _render_target_height,
-            .depth = 1u,
-            .array_layers = 1u,
-            .mip_levels = 1u,
-            .sample_count = rhi::image_sample_count::sample_count_1,
-            .tiling = rhi::image_tiling_type::optimal,
-            .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
-            .name = "SSAO Target",
-        });
-
-        _ssao.ssao_blur_target = dev.create_image({
-            .format = ssao_format,
-            .type = rhi::image_type::image_2d,
-            .width = _render_target_width,
-            .height = _render_target_height,
-            .depth = 1u,
-            .array_layers = 1u,
-            .mip_levels = 1u,
-            .sample_count = rhi::image_sample_count::sample_count_1,
-            .tiling = rhi::image_tiling_type::optimal,
-            .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
-            .name = "SSAO Blur Target",
-        });
+        _construct_ssao_images(dev);
 
         // Set up the noise texture and kernel
         const auto noise_width = 16u;
@@ -3203,7 +3253,7 @@ namespace tempest::graphics
         _bindless_textures.point_sampler_no_aniso = dev.create_sampler(point);
     }
 
-    void pbr_pipeline::_initialize_render_targets([[maybe_unused]] renderer& parent, rhi::device& dev)
+    void pbr_pipeline::_initialize_render_targets(rhi::device& dev)
     {
         rhi::image_desc depth_image_desc = {
             .format = depth_format,
@@ -3289,7 +3339,7 @@ namespace tempest::graphics
         _render_targets.shadow_megatexture = dev.create_image(shadow_megatexture_image_desc);
     }
 
-    void pbr_pipeline::_initialize_gpu_buffers([[maybe_unused]] renderer& parent, rhi::device& dev)
+    void pbr_pipeline::_initialize_gpu_buffers(rhi::device& dev)
     {
         constexpr auto staging_size = math::round_to_next_multiple(64 * 1024 * 1024, 256);
 

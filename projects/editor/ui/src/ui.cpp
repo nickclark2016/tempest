@@ -128,10 +128,6 @@ namespace tempest::editor::ui
                 return ImGuiKey_LeftBracket;
             case core::key::backslash:
                 return ImGuiKey_Backslash;
-            case core::key::world_1:
-                return ImGuiKey_Oem102;
-            case core::key::world_2:
-                return ImGuiKey_Oem102;
             case core::key::right_bracket:
                 return ImGuiKey_RightBracket;
             case core::key::grave_accent:
@@ -397,7 +393,7 @@ namespace tempest::editor::ui
             if ((flags & ui_context::window_flags::no_navigation_focus) ==
                 ui_context::window_flags::no_navigation_focus)
             {
-                im_flags |= ImGuiWindowFlags_AlwaysAutoResize;
+                im_flags |= ImGuiWindowFlags_NoNavFocus;
             }
 
             if ((flags & ui_context::window_flags::no_decoration) == ui_context::window_flags::no_decoration)
@@ -867,30 +863,55 @@ namespace tempest::editor::ui
         auto vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowViewport(vp->ID);
 
-        if (info.position)
+        struct position_visitor
         {
-            ImGui::SetNextWindowPos({info.position->x, info.position->y}, ImGuiCond_Appearing, ImVec2(0.0f, 0.0f));
-        }
+            void operator()(const math::vec2<float>& pos) const
+            {
+                ImGui::SetNextWindowPos({pos.x, pos.y}, ImGuiCond_Appearing, ImVec2(0.0f, 0.0f));
+            }
 
-        if (info.size)
+            void operator()(default_position_tag_t) const
+            {
+            }
+
+            void operator()(viewport_origin_tag_t) const
+            {
+                auto vp = ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos({vp->Pos.x, vp->Pos.y}, ImGuiCond_Appearing, ImVec2(0.0f, 0.0f));
+            }
+        };
+
+        struct size_visitor
         {
-            ImGui::SetNextWindowSize({info.size->x, info.size->y}, ImGuiCond_Always);
-        }
-        else
-        {
-            ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize, ImGuiCond_Always);
-        }
+            void operator()(const math::vec2<float>& size) const
+            {
+                ImGui::SetNextWindowSize({size.x, size.y}, ImGuiCond_Always);
+            }
+
+            void operator()(default_size_tag_t) const
+            {
+            }
+
+            void operator()(fullscreen_tag_t) const
+            {
+                auto vp = ImGui::GetMainViewport();
+                ImGui::SetNextWindowSize({vp->Size.x, vp->Size.y}, ImGuiCond_Always);
+            }
+        };
+
+        visit(position_visitor{}, info.position);
+        visit(size_visitor{}, info.size);
 
         const auto window_flags = to_imgui(info.flags);
 
-        if (!info.size)
+        if (holds_alternative<fullscreen_tag_t>(info.size))
         {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         }
 
         const auto result = ImGui::Begin(info.name.data(), nullptr, window_flags);
 
-        if (!info.size)
+        if (holds_alternative<fullscreen_tag_t>(info.size))
         {
             ImGui::PopStyleVar();
         }
@@ -898,90 +919,95 @@ namespace tempest::editor::ui
         return result;
     }
 
-    ui_context::dockspace_identifiers ui_context::configure_dockspace(dockspace_configure_info info)
+    namespace
     {
-        const auto dock_id = ImGui::GetID(info.name.data());
+        unique_ptr<ui_context::dockspace_layout> build_layouts(const ui_context::dockspace_configure_node& node,
+                                                               ImGuiID& central_node)
+        {
+            auto layout = make_unique<ui_context::dockspace_layout>();
 
-        dockspace_identifiers identifiers;
-        identifiers.center_id = dock_id;
-        identifiers.root_id = dock_id;
+            // Handle the left and right splits
+            if (node.left)
+            {
+                // Split the node left
+                auto left_id =
+                    ImGui::DockBuilderSplitNode(central_node, ImGuiDir_Left, node.left->size, nullptr, &central_node);
+                layout->left_node = build_layouts(*node.left, left_id);
+            }
 
+            if (node.right)
+            {
+                // If there is a left node, compute the size of the right node. The size in the config is relative to
+                // the full size, not the remaining space.
+                auto right_size = node.right->size;
+                if (layout->left_node)
+                {
+                    right_size = node.right->size / (1.0f - node.left->size);
+                }
+
+                // Split the node right
+                auto right_id =
+                    ImGui::DockBuilderSplitNode(central_node, ImGuiDir_Right, right_size, nullptr, &central_node);
+                layout->right_node = build_layouts(*node.right, right_id);
+            }
+
+            if (node.top)
+            {
+                auto top_id =
+                    ImGui::DockBuilderSplitNode(central_node, ImGuiDir_Up, node.top->size, nullptr, &central_node);
+                layout->top_node = build_layouts(*node.top, top_id);
+            }
+
+            if (node.bottom)
+            {
+                // If there is a top node, compute the size of the bottom node. The size in the config is relative to
+                // the full size, not the remaining space.
+                auto bottom_size = node.bottom->size;
+                if (layout->top_node)
+                {
+                    bottom_size = node.bottom->size / (1.0f - node.top->size);
+                }
+                auto bottom_id =
+                    ImGui::DockBuilderSplitNode(central_node, ImGuiDir_Down, bottom_size, nullptr, &central_node);
+                layout->bottom_node = build_layouts(*node.bottom, bottom_id);
+            }
+
+            for (auto&& window_name : node.docked_windows)
+            {
+                ImGui::DockBuilderDockWindow(window_name.data(), central_node);
+            }
+
+            layout->central_node = central_node;
+
+            return layout;
+        }
+    } // namespace
+
+    ui_context::dockspace_layout ui_context::configure_dockspace(dockspace_configure_info&& info)
+    {
+        auto dock_id = ImGui::GetID(info.name.data());
         ImGui::DockBuilderRemoveNode(dock_id);
-        ImGui::DockBuilderAddNode(dock_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderAddNode(dock_id, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockBuilderSetNodePos(dock_id, {0, 0});
+        ImGui::DockBuilderSetNodeSize(dock_id, ImGui::GetMainViewport()->Size);
 
-        // Set up all 5 nodes
-        auto center =
-            ImGui::DockBuilderSplitNode(identifiers.center_id, ImGuiDir_Left, 1.0f, nullptr, &identifiers.center_id);
+        dockspace_layout identifiers;
 
-        const auto left =
-            ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, info.left_width.value_or(0.1f), nullptr, &center);
-        const auto right =
-            ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, info.right_width.value_or(0.1f), nullptr, &center);
-        const auto top =
-            ImGui::DockBuilderSplitNode(center, ImGuiDir_Up, info.top_height.value_or(0.1f), nullptr, &center);
-        const auto bottom =
-            ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, info.bottom_height.value_or(0.3f), nullptr, &center);
+        auto root_layout = build_layouts(info.root, dock_id);
+        identifiers.central_node = root_layout->central_node;
+        identifiers.left_node = tempest::move(root_layout->left_node);
+        identifiers.right_node = tempest::move(root_layout->right_node);
+        identifiers.top_node = tempest::move(root_layout->top_node);
+        identifiers.bottom_node = tempest::move(root_layout->bottom_node);
 
-        identifiers.center_id = center;
-        identifiers.left_id = left;
-        identifiers.right_id = right;
-        identifiers.top_id = top;
-        identifiers.bottom_id = bottom;
-
-        if (info.left_width)
-        {
-            if (info.left_window_name)
-            {
-                ImGui::DockBuilderDockWindow(info.left_window_name->data(), left);
-            }
-        }
-        else
-        {
-            ImGui::DockBuilderGetNode(left)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
-        }
-
-        if (info.right_width)
-        {
-            if (info.right_window_name)
-            {
-                ImGui::DockBuilderDockWindow(info.right_window_name->data(), right);
-            }
-        }
-        else
-        {
-            ImGui::DockBuilderGetNode(right)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
-        }
-
-        if (info.top_height)
-        {
-            if (info.top_window_name)
-            {
-                ImGui::DockBuilderDockWindow(info.top_window_name->data(), top);
-            }
-        }
-        else
-        {
-            ImGui::DockBuilderGetNode(top)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
-        }
-
-        if (info.bottom_height)
-        {
-            if (info.bottom_window_name)
-            {
-                ImGui::DockBuilderDockWindow(info.bottom_window_name->data(), bottom);
-            }
-        }
-        else
-        {
-            ImGui::DockBuilderGetNode(bottom)->LocalFlags |= ImGuiDockNodeFlags_NoDocking;
-        }
+        ImGui::DockBuilderFinish(dock_id);
 
         return identifiers;
     }
 
-    void ui_context::dockspace(dockspace_info info)
+    void ui_context::dockspace(ui_context::dockspace_identifier id)
     {
-        ImGui::DockSpace(info.root, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockSpace(id, {0, 0}, ImGuiDockNodeFlags_PassthruCentralNode);
     }
 
     void ui_context::end_window()
@@ -993,6 +1019,11 @@ namespace tempest::editor::ui
     {
         const auto win_size = ImGui::GetWindowSize();
         return math::vec2(static_cast<uint32_t>(win_size.x), static_cast<uint32_t>(win_size.y));
+    }
+
+    ui_context::dockspace_identifier ui_context::get_dockspace_id(string_view name) noexcept
+    {
+        return ImGui::GetID(name.data());
     }
 
     void ui_context::_init_window_backend()
