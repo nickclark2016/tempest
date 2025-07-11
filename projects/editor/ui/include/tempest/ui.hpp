@@ -5,6 +5,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/render_pipeline.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/slot_map.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/variant.hpp>
 #include <tempest/vec2.hpp>
@@ -131,17 +132,20 @@ namespace tempest::editor::ui
     class ui_pipeline : public graphics::render_pipeline
     {
       public:
+        using viewport_pipeline_handle = slot_map<unique_ptr<graphics::render_pipeline>>::key_type;
+
         explicit ui_pipeline(ui_context* ui_ctx);
 
         void initialize(graphics::renderer& parent, rhi::device& dev) override;
         render_result render(graphics::renderer& parent, rhi::device& dev, const render_state& rs) override;
         void destroy(graphics::renderer& parent, rhi::device& dev) override;
 
-        void set_viewport(uint32_t width, uint32_t height) override
-        {
-            _width = width;
-            _height = height;
-        }
+        void set_viewport(uint32_t width, uint32_t height) override;
+        void set_viewport(viewport_pipeline_handle handle, uint32_t width, uint32_t height) noexcept;
+
+        viewport_pipeline_handle register_viewport_pipeline(unique_ptr<graphics::render_pipeline> pipeline) noexcept;
+        bool unregister_viewport_pipeline(viewport_pipeline_handle handle) noexcept;
+        graphics::render_pipeline* get_viewport_pipeline(viewport_pipeline_handle handle) const noexcept;
 
       private:
         ui_context* _ui_ctx;
@@ -150,6 +154,21 @@ namespace tempest::editor::ui
 
         uint32_t _width = 0;
         uint32_t _height = 0;
+
+        rhi::device* _device = nullptr;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> _timeline_sem =
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore>::null_handle;
+        uint64_t _timeline_value = 0;
+
+        struct viewport_pipeline_payload
+        {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> timeline_sem;
+            uint64_t timeline_value;
+
+            unique_ptr<graphics::render_pipeline> pipeline;
+        };
+
+        slot_map<viewport_pipeline_payload> _child_pipelines;
     };
 
 } // namespace tempest::editor::ui

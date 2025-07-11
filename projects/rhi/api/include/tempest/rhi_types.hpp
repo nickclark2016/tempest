@@ -358,7 +358,7 @@ namespace tempest::rhi
     struct semaphore_info
     {
         semaphore_type type;
-        uint32_t initial_value;
+        uint64_t initial_value;
     };
 
     enum class operation_type

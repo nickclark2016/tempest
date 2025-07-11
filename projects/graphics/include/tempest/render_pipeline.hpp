@@ -40,9 +40,8 @@ namespace tempest::graphics
             return *_rhi_device;
         }
 
-        void upload_objects_sync(span<const ecs::archetype_entity> entities,
-                               const core::mesh_registry& meshes, const core::texture_registry& textures,
-                               const core::material_registry& materials);
+        void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+                                 const core::texture_registry& textures, const core::material_registry& materials);
 
       private:
         unique_ptr<rhi::instance> _rhi_instance;
@@ -62,16 +61,25 @@ namespace tempest::graphics
     class render_pipeline
     {
       public:
+        enum class render_type
+        {
+            offscreen,
+            swapchain,
+        };
+
         struct render_state
         {
             rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> start_sem;
+            uint64_t start_value;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> end_sem;
+            uint64_t end_value;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::fence> end_fence;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> swapchain_image;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> surface;
             uint32_t image_index;
             uint32_t image_width;
             uint32_t image_height;
+            render_type render_mode;
         };
 
         enum class render_result

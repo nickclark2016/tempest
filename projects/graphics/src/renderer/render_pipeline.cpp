@@ -123,13 +123,16 @@ namespace tempest::graphics
 
             render_pipeline::render_state rs = {
                 .start_sem = acquire_result->acquire_sem,
+                .start_value = 0,
                 .end_sem = acquire_result->render_complete_sem,
+                .end_value = 1,
                 .end_fence = acquire_result->frame_complete_fence,
                 .swapchain_image = acquire_result->image,
                 .surface = it->render_surface,
                 .image_index = acquire_result->image_index,
                 .image_width = _rhi_device->get_render_surface_width(it->render_surface),
                 .image_height = _rhi_device->get_render_surface_height(it->render_surface),
+                .render_mode = render_pipeline::render_type::swapchain,
             };
 
             auto result = pipeline.render(*this, *_rhi_device, rs);

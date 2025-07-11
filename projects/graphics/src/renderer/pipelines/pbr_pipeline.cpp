@@ -942,62 +942,103 @@ namespace tempest::graphics
         _draw_pbr_opaque_pass(parent, dev, rs, work_queue, cmds);
         _draw_pbr_mboit_pass(parent, dev, rs, work_queue, cmds);
 
-        rhi::work_queue::image_barrier color_to_transfer_dst = {
-            .image = _render_targets.color,
-            .old_layout = rhi::image_layout::color_attachment,
-            .new_layout = rhi::image_layout::transfer_src,
-            .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
-            .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
-            .dst_stages = make_enum_mask(rhi::pipeline_stage::blit),
-            .dst_access = make_enum_mask(rhi::memory_access::transfer_read),
-        };
-
-        rhi::work_queue::image_barrier sc_to_transfer_dst = {
-            .image = rs.swapchain_image,
-            .old_layout = rhi::image_layout::undefined,
-            .new_layout = rhi::image_layout::transfer_dst,
-            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
-            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
-            .dst_stages = make_enum_mask(rhi::pipeline_stage::blit),
-            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
-        };
-
+        switch (rs.render_mode)
         {
-            const array barriers = {
-                color_to_transfer_dst,
-                sc_to_transfer_dst,
+        case render_type::offscreen: {
+            rhi::work_queue::image_barrier color_to_sampled = {
+                .image = _render_targets.color,
+                .old_layout = rhi::image_layout::color_attachment,
+                .new_layout = rhi::image_layout::shader_read_only,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::shader_sampled_read),
             };
 
-            work_queue.transition_image(cmds, barriers);
+            work_queue.transition_image(cmds, tempest::span(&color_to_sampled, 1));
+
+            break;
+        }
+        case render_type::swapchain: {
+            rhi::work_queue::image_barrier color_to_transfer_dst = {
+                .image = _render_targets.color,
+                .old_layout = rhi::image_layout::color_attachment,
+                .new_layout = rhi::image_layout::transfer_src,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                .src_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::blit),
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_read),
+            };
+
+            rhi::work_queue::image_barrier sc_to_transfer_dst = {
+                .image = rs.swapchain_image,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::transfer_dst,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+                .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::blit),
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            };
+
+            {
+                const array barriers = {
+                    color_to_transfer_dst,
+                    sc_to_transfer_dst,
+                };
+
+                work_queue.transition_image(cmds, barriers);
+            }
+
+            work_queue.blit(cmds, _render_targets.color, rhi::image_layout::transfer_src, 0, rs.swapchain_image,
+                            rhi::image_layout::transfer_dst, 0);
+
+            rhi::work_queue::image_barrier sc_to_present = {
+                .image = rs.swapchain_image,
+                .old_layout = rhi::image_layout::transfer_dst,
+                .new_layout = rhi::image_layout::present,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::blit),
+                .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::bottom),
+                .dst_access = make_enum_mask(rhi::memory_access::none),
+            };
+
+            work_queue.transition_image(cmds, tempest::span(&sc_to_present, 1));
+            break;
+        }
         }
 
-        work_queue.blit(cmds, _render_targets.color, rhi::image_layout::transfer_src, 0, rs.swapchain_image,
-                        rhi::image_layout::transfer_dst, 0);
-
-        rhi::work_queue::image_barrier sc_to_present = {
-            .image = rs.swapchain_image,
-            .old_layout = rhi::image_layout::transfer_dst,
-            .new_layout = rhi::image_layout::present,
-            .src_stages = make_enum_mask(rhi::pipeline_stage::blit),
-            .src_access = make_enum_mask(rhi::memory_access::transfer_write),
-            .dst_stages = make_enum_mask(rhi::pipeline_stage::bottom),
-            .dst_access = make_enum_mask(rhi::memory_access::none),
-        };
-
-        work_queue.transition_image(cmds, tempest::span(&sc_to_present, 1));
-
         work_queue.end_command_list(cmds);
+
+        if (rs.render_mode == render_type::offscreen)
+        {
+            rhi::work_queue::submit_info submit_info;
+            submit_info.command_lists.push_back(cmds);
+            submit_info.wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
+                .semaphore = rs.start_sem,
+                .value = rs.start_value,
+                .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            });
+            submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
+                .semaphore = rs.end_sem,
+                .value = rs.end_value,
+                .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            });
+
+            work_queue.submit(tempest::span(&submit_info, 1), rs.end_fence);
+
+            return render_result::success;
+        }
 
         rhi::work_queue::submit_info submit_info;
         submit_info.command_lists.push_back(cmds);
         submit_info.wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.start_sem,
-            .value = 0,
+            .value = rs.start_value,
             .stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
         });
         submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.end_sem,
-            .value = 1,
+            .value = rs.end_value,
             .stages = make_enum_mask(rhi::pipeline_stage::bottom),
         });
 
@@ -1008,6 +1049,7 @@ namespace tempest::graphics
             .render_surface = rs.surface,
             .image_index = rs.image_index,
         });
+
         present_info.wait_semaphores.push_back(rs.end_sem);
         auto present_result = work_queue.present(present_info);
 
@@ -1919,7 +1961,7 @@ namespace tempest::graphics
         dev.destroy_image(_render_targets.encoded_normals);
         dev.destroy_image(_render_targets.shadow_megatexture);
         dev.destroy_image(_render_targets.transparency_accumulator);
-        
+
         // MBOIT
         dev.destroy_image(_pbr_transparencies.moments_target);
         dev.destroy_image(_pbr_transparencies.zeroth_moment_target);

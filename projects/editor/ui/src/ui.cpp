@@ -1394,14 +1394,83 @@ namespace tempest::editor::ui
 
     void ui_pipeline::initialize(graphics::renderer& parent, rhi::device& dev)
     {
+        _device = &dev;
+        _timeline_value = 0;
+        _timeline_sem = dev.create_semaphore({
+            .type = rhi::semaphore_type::timeline,
+            .initial_value = _timeline_value,
+        });
     }
 
     graphics::render_pipeline::render_result ui_pipeline::render(graphics::renderer& parent, rhi::device& dev,
                                                                  const graphics::render_pipeline::render_state& rs)
     {
         auto& queue = dev.get_primary_work_queue();
-        auto command_list = queue.get_next_command_list();
 
+        // Use a submit to "split" a binary semaphore into signaling a timeline semaphore
+        auto timeline_split_submit_info = rhi::work_queue::submit_info{};
+        timeline_split_submit_info.wait_semaphores.push_back({
+            .semaphore = rs.start_sem,
+            .value = 0,
+            .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+        });
+
+        for (auto&& pipe : _child_pipelines)
+        {
+            timeline_split_submit_info.signal_semaphores.push_back({
+                .semaphore = pipe.timeline_sem,
+                .value = pipe.timeline_value + 1,
+                .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            });
+
+            pipe.timeline_value += 1;
+        }
+
+        timeline_split_submit_info.signal_semaphores.push_back({
+            .semaphore = _timeline_sem,
+            .value = _timeline_value + 1,
+            .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+        });
+
+        _timeline_value += 1;
+
+        queue.submit(tempest::span(&timeline_split_submit_info, 1));
+
+        // Submit all the child pipelines
+        // Gather the "wait" semaphores from the child pipelines
+        auto child_wait_semaphores = vector<rhi::work_queue::semaphore_submit_info>{};
+
+        for (auto&& pipe : _child_pipelines)
+        {
+            auto& child_pipeline = *pipe.pipeline;
+
+            auto child_pipeline_render_state = render_pipeline::render_state{
+                .start_sem = pipe.timeline_sem,
+                .start_value = pipe.timeline_value,
+                .end_sem = pipe.timeline_sem,
+                .end_value = pipe.timeline_value + 1,
+                .end_fence = rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>::null_handle,
+                .swapchain_image = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle,
+                .surface = rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>::null_handle,
+                .image_index = 0,
+                .image_width = {},
+                .image_height = {},
+                .render_mode = graphics::render_pipeline::render_type::offscreen,
+            };
+
+            pipe.timeline_value += 1;
+
+            child_pipeline.render(parent, dev, child_pipeline_render_state);
+
+            // Add the child pipeline's end semaphore to the wait semaphores
+            child_wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
+                .semaphore = pipe.timeline_sem,
+                .value = pipe.timeline_value,
+                .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            });
+        }
+
+        auto command_list = queue.get_next_command_list();
         queue.begin_command_list(command_list, true);
 
         // Transition the swapchain image to a render target
@@ -1458,16 +1527,26 @@ namespace tempest::editor::ui
 
         rhi::work_queue::submit_info submit_info;
         submit_info.command_lists.push_back(command_list);
-        submit_info.wait_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
-            .semaphore = rs.start_sem,
-            .value = 0,
+        submit_info.wait_semaphores = child_wait_semaphores;
+        submit_info.wait_semaphores.push_back({
+            .semaphore = _timeline_sem,
+            .value = _timeline_value,
             .stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
         });
+
         submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
             .semaphore = rs.end_sem,
             .value = 0,
             .stages = make_enum_mask(rhi::pipeline_stage::bottom),
         });
+
+        // Increment the timeline semaphore value
+        submit_info.signal_semaphores.push_back(rhi::work_queue::semaphore_submit_info{
+            .semaphore = _timeline_sem,
+            .value = _timeline_value + 1,
+            .stages = make_enum_mask(rhi::pipeline_stage::bottom),
+        });
+        _timeline_value += 1;
 
         queue.submit(tempest::span(&submit_info, 1), rs.end_fence);
 
@@ -1496,5 +1575,54 @@ namespace tempest::editor::ui
 
     void ui_pipeline::destroy([[maybe_unused]] graphics::renderer& parent, [[maybe_unused]] rhi::device& dev)
     {
+    }
+
+    void ui_pipeline::set_viewport(uint32_t width, uint32_t height)
+    {
+        _width = width;
+        _height = height;
+    }
+
+    void ui_pipeline::set_viewport(viewport_pipeline_handle handle, uint32_t width, uint32_t height) noexcept
+    {
+        auto pipeline_it = _child_pipelines.find(handle);
+        if (pipeline_it != _child_pipelines.end())
+        {
+            pipeline_it->pipeline->set_viewport(width, height);
+        }
+    }
+
+    ui_pipeline::viewport_pipeline_handle ui_pipeline::register_viewport_pipeline(
+        unique_ptr<graphics::render_pipeline> pipeline) noexcept
+    {
+        auto handle = _child_pipelines.insert({
+            .timeline_sem = _device->create_semaphore({
+                .type = rhi::semaphore_type::timeline,
+                .initial_value = 0,
+            }),
+
+            .timeline_value = 0,
+            .pipeline = tempest::move(pipeline),
+        });
+
+        return handle;
+    }
+
+    bool ui_pipeline::unregister_viewport_pipeline(viewport_pipeline_handle handle) noexcept
+    {
+        return _child_pipelines.erase(handle);
+    }
+
+    graphics::render_pipeline* ui_pipeline::get_viewport_pipeline(viewport_pipeline_handle handle) const noexcept
+    {
+        auto pipeline_it = _child_pipelines.find(handle);
+        if (pipeline_it == _child_pipelines.end())
+        {
+            return nullptr;
+        }
+        else
+        {
+            return pipeline_it->pipeline.get();
+        }
     }
 } // namespace tempest::editor::ui
