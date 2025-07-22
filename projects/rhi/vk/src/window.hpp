@@ -72,7 +72,7 @@ namespace tempest::rhi::vk
 
         bool is_focused() const noexcept override
         {
-            return glfwGetInputMode(_window, GLFW_FOCUSED) != GLFW_FALSE;
+            return glfwGetWindowAttrib(_window, GLFW_FOCUSED) != GLFW_FALSE;
         }
 
         expected<VkSurfaceKHR, VkResult> get_surface(VkInstance instance) noexcept
