@@ -6,28 +6,25 @@ namespace tempest
 {
 #if defined(TEMPEST_WIN_THREADS)
 
-    mutex::~mutex()
-    {
-        if (_handle != nullptr && !CloseHandle(_handle))
-        {
-            std::terminate();
-        }
-    }
+    mutex::~mutex() = default;
 
     void mutex::lock()
     {
-        (void)WaitForSingleObject(_handle, INFINITE);
+        AcquireSRWLockExclusive(&_handle);
     }
 
     bool mutex::try_lock()
     {
-        auto result = WaitForSingleObject(_handle, 0);
+        auto result = TryAcquireSRWLockExclusive(&_handle);
         return result == WAIT_OBJECT_0;
     }
 
     void mutex::unlock()
     {
-        (void)ReleaseMutex(_handle);
+#pragma warning(push)
+#pragma warning(disable : 26110)
+        ReleaseSRWLockExclusive(&_handle);
+#pragma warning(pop)
     }
 
     shared_mutex::~shared_mutex()

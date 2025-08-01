@@ -1010,6 +1010,39 @@ namespace tempest::editor::ui
         ImGui::DockSpace(id, {0, 0}, ImGuiDockNodeFlags_PassthruCentralNode);
     }
 
+    bool ui_context::begin_menu_bar()
+    {
+        return ImGui::BeginMenuBar();
+    }
+
+    void ui_context::end_menu_bar()
+    {
+        ImGui::EndMenuBar();
+    }
+
+    bool ui_context::begin_menu(string_view name, bool enabled)
+    {
+        return ImGui::BeginMenu(name.data(), enabled);
+    }
+
+    void ui_context::end_menu()
+    {
+        ImGui::EndMenu();
+    }
+
+    bool ui_context::menu_item(string_view name, bool enabled)
+    {
+        return ImGui::MenuItem(name.data(), nullptr, nullptr, enabled);
+    }
+
+    void ui_context::text(string_view content, ...)
+    {
+        va_list args;
+        va_start(args, content);
+        ImGui::TextV(content.data(), args);
+        va_end(args);
+    }
+
     void ui_context::end_window()
     {
         ImGui::End();

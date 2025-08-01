@@ -120,6 +120,51 @@ namespace tempest::editor::ui
         static dockspace_layout configure_dockspace(dockspace_configure_info&& info);
         static void dockspace(dockspace_identifier id);
 
+        /// <summary>
+        /// Begins a menu bar context and returns if the context is active. Only one menu bar context can be active at a
+        /// time. A context is ended by calling <see cref="end_menu_bar"/>.
+        /// </summary>
+        /// <returns>True if context is active, else false</returns>
+        static bool begin_menu_bar();
+
+        /// <summary>
+        /// Ends the active menu bar context. If no context is active, this function must not be called.
+        /// </summary>
+        static void end_menu_bar();
+
+        /// <summary>
+        /// Begins a new menu context with the given name. If the menu is not enabled, it will be added to the menu bar,
+        /// but it will be disabled. A context must be surrounded by a menu bar context (see <see
+        /// cref="begin_menu_bar"/>). A menu context is ended by calling <see cref="end_window"/>. A menu context can
+        /// exist inside another menu context, allowing for nested menus.
+        /// </summary>
+        /// <param name="name">Name of the menu</param>
+        /// <param name="enabled">True if the menu should be enabled</param>
+        /// <returns>True if the menu context is active, else false</returns>
+        static bool begin_menu(string_view name, bool enabled = true);
+
+        /// <summary>
+        /// Ends the active menu context. If no context is active, this function must not be called.
+        /// </summary>
+        static void end_menu();
+
+        /// <summary>
+        /// Displays a menu item with the given name. If the item is enabled, it will be clickable. A menu item must be
+        /// inside a menu context (see <see cref="begin_menu"/>).
+        /// </summary>
+        /// <param name="name">Display name of the menu item</param>
+        /// <param name="enabled">True if the menu item should be enabled</param>
+        /// <returns>True if the menu item was selected</returns>
+        static bool menu_item(string_view name, bool enabled = true);
+
+        /// <summary>
+        /// Displays the provided text. The string must be null terminatedand can contain formatting arguments similar
+        /// to printf.
+        /// </summary>
+        /// <param name="content">Text to display</param>
+        /// <param name="...">Optional arguments for formatting the text</param>
+        static void text(string_view content, ...);
+
       private:
         struct impl;
         unique_ptr<impl> _impl = nullptr;

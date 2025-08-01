@@ -19,7 +19,7 @@ namespace tempest
     {
       public:
 #if defined(TEMPEST_WIN_THREADS)
-        using native_handle_type = HANDLE;
+        using native_handle_type = SRWLOCK;
 #elif defined(TEMPEST_POSIX_THREADS)
         using native_handle_type = pthread_mutex_t;
 #else
@@ -48,11 +48,11 @@ namespace tempest
     {
         if (is_constant_evaluated())
         {
-            _handle = nullptr;
+            _handle = SRWLOCK{};
         }
         else
         {
-            _handle = CreateMutexW(nullptr, FALSE, nullptr);
+            InitializeSRWLock(&_handle);
         }
     }
 
