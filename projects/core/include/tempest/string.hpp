@@ -2026,6 +2026,7 @@ namespace tempest
     }
 
     using string = basic_string<char>;
+    using wstring = basic_string<wchar_t>;
 
     template <typename CharT, typename Traits, typename Allocator>
     constexpr typename basic_string<CharT, Traits, Allocator>::size_type copy(

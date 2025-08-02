@@ -41,6 +41,9 @@ namespace tempest
     /// @brief 64 bit unsigned integer type.
     using uint64_t = unsigned long long;
 
+    /// @brief Wide character type used for wide characters, capable of storing any wchar_t value or wide EOF.
+    using wint_t = unsigned short;
+
 #else
 
     /// @brief 8 bit signed integer type.
@@ -66,6 +69,9 @@ namespace tempest
 
     /// @brief 64 bit unsigned integer type.
     using uint64_t = unsigned long;
+
+    /// @brief Wide character type used for wide characters, capable of storing any wchar_t value or wide EOF.
+    using wint_t = unsigned int;
 
 #endif
 

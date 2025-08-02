@@ -3,8 +3,8 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/array.hpp>
-#include <tempest/iterator.hpp>
 #include <tempest/int.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/span.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/vector.hpp>
@@ -51,6 +51,39 @@ namespace tempest
       public:
         using char_type = char;
         using int_type = int;
+        using off_type = long long;
+        using pos_type = long long;
+
+        static constexpr void assign(char_type& c1, const char_type& c2) noexcept;
+        static constexpr char_type* assign(char_type* s, size_t n, char_type a);
+
+        static constexpr bool eq(char_type a, char_type b) noexcept;
+        static constexpr bool lt(char_type a, char_type b) noexcept;
+
+        static constexpr char_type* move(char_type* dest, const char_type* src, size_t count);
+        static constexpr char_type* copy(char_type* dest, const char_type* src, size_t count);
+
+        static constexpr int compare(const char_type* s1, const char_type* s2, size_t count);
+        static constexpr size_t length(const char_type* s);
+
+        static constexpr const char_type* find(const char_type* ptr, size_t count, const char_type& ch);
+
+        static constexpr char_type to_char_type(int_type c) noexcept;
+        static constexpr int_type to_int_type(char_type c) noexcept;
+
+        static constexpr bool eq_int_type(int_type c1, int_type c2) noexcept;
+
+        static constexpr int_type eof() noexcept;
+
+        static constexpr int_type not_eof(int_type c) noexcept;
+    };
+
+    template <>
+    class char_traits<wchar_t>
+    {
+      public:
+        using char_type = wchar_t;
+        using int_type = wint_t;
         using off_type = long long;
         using pos_type = long long;
 
@@ -217,11 +250,144 @@ namespace tempest
         return c != eof() ? c : !eof();
     }
 
+    inline constexpr void char_traits<wchar_t>::assign(char_type& c1, const char_type& c2) noexcept
+    {
+        c1 = c2;
+    }
+
+    inline constexpr char_traits<wchar_t>::char_type* char_traits<wchar_t>::assign(char_type* s, size_t n, char_type c)
+    {
+        for (size_t i = 0; i < n; ++i)
+        {
+            s[i] = c;
+        }
+
+        return s;
+    }
+
+    inline constexpr bool char_traits<wchar_t>::eq(char_type a, char_type b) noexcept
+    {
+        return a == b;
+    }
+
+    inline constexpr bool char_traits<wchar_t>::lt(char_type a, char_type b) noexcept
+    {
+        return a < b;
+    }
+
+    inline constexpr char_traits<wchar_t>::char_type* char_traits<wchar_t>::move(char_type* dest, const char_type* src,
+                                                                                 size_t count)
+    {
+        // For constant expressions, we need to fall back to a less efficient implementation to correctly handle
+        // overlapping regions of memory.
+        if (is_constant_evaluated())
+        {
+            bool should_loop_forward = true;
+
+            for (const auto* s = src; s != dest; ++s)
+            {
+                if (s == dest)
+                {
+                    should_loop_forward = false;
+                    break;
+                }
+            }
+
+            if (should_loop_forward)
+            {
+                for (size_t i = 0; i < count; ++i)
+                {
+                    dest[i] = src[i];
+                }
+                return dest;
+            }
+            else
+            {
+                for (size_t i = count; i != 0; --i)
+                {
+                    dest[i - 1] = src[i - 1];
+                }
+                return dest;
+            }
+        }
+
+        (void)memmove(dest, src, count);
+        return dest;
+    }
+
+    inline constexpr char_traits<wchar_t>::char_type* char_traits<wchar_t>::copy(char_type* dest, const char_type* src,
+                                                                                 size_t count)
+    {
+        // Assume: No overlapping regions
+        for (size_t i = 0; i < count; ++i)
+        {
+            dest[i] = src[i];
+        }
+        return dest;
+    }
+
+    inline constexpr int char_traits<wchar_t>::compare(const char_type* s1, const char_type* s2, size_t count)
+    {
+        for (size_t i = 0; i < count; ++i)
+        {
+            auto diff = s1[i] - s2[i];
+            if (diff != 0)
+            {
+                return diff;
+            }
+        }
+        return 0;
+    }
+
+    inline constexpr size_t char_traits<wchar_t>::length(const char_type* s)
+    {
+        size_t len = 0;
+        while (s[len] != char_type())
+        {
+            ++len;
+        }
+        return len;
+    }
+
+    inline constexpr const char_traits<wchar_t>::char_type* char_traits<wchar_t>::find(const char_type* ptr,
+                                                                                       size_t count,
+                                                                                       const char_type& ch)
+    {
+        for (size_t i = 0; i < count; ++i)
+        {
+            if (ptr[i] == ch)
+            {
+                return ptr + i;
+            }
+        }
+        return nullptr;
+    }
+
+    inline constexpr char_traits<wchar_t>::char_type char_traits<wchar_t>::to_char_type(int_type c) noexcept
+    {
+        return static_cast<char_type>(c);
+    }
+
+    inline constexpr char_traits<wchar_t>::int_type char_traits<wchar_t>::to_int_type(char_type c) noexcept
+    {
+        return static_cast<int_type>(c);
+    }
+
+    inline constexpr bool char_traits<wchar_t>::eq_int_type(int_type c1, int_type c2) noexcept
+    {
+        return c1 == c2;
+    }
+
+    inline constexpr char_traits<wchar_t>::int_type char_traits<wchar_t>::eof() noexcept
+    {
+        return -1; // EOF is -1
+    }
+
     namespace detail
     {
         template <typename CharT, typename Traits>
         constexpr typename Traits::int_type bad_character_heuristic(const CharT* str, size_t size,
-                                                          span<typename Traits::int_type> table)
+                                                                    span<typename Traits::int_type> table)
         {
             for (auto& entry : table)
             {
@@ -246,7 +412,7 @@ namespace tempest
 
         template <typename CharT, typename Traits>
         constexpr typename Traits::int_type reverse_bad_character_heuristic(const CharT* str, size_t size,
-                                                                  span<typename Traits::int_type> table)
+                                                                            span<typename Traits::int_type> table)
         {
             for (auto& entry : table)
             {
@@ -270,8 +436,8 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr const CharT* boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len,
-                                        span<typename Traits::int_type> bad_char_table)
+        constexpr const CharT* boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern,
+                                                  size_t pattern_len, span<typename Traits::int_type> bad_char_table)
         {
             auto min_value = bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
 
@@ -296,8 +462,8 @@ namespace tempest
                     continue;
                 }
 
-                s += max<typename Traits::int_type>(
-                    1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
+                s += max<typename Traits::int_type>(1, static_cast<Traits::int_type>(p) -
+                                                           bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
 
             return str + str_len;
@@ -305,7 +471,8 @@ namespace tempest
 
         template <typename CharT, typename Traits>
         constexpr const CharT* reverse_boyer_more_helper(const CharT* str, size_t str_len, const CharT* pattern,
-                                               size_t pattern_len, span<typename Traits::int_type> bad_char_table)
+                                                         size_t pattern_len,
+                                                         span<typename Traits::int_type> bad_char_table)
         {
             auto s_pattern_len = static_cast<ptrdiff_t>(pattern_len);
             auto min_value = reverse_bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
@@ -331,8 +498,8 @@ namespace tempest
                     continue;
                 }
 
-                s -= max<typename Traits::int_type>(
-                    1, static_cast<Traits::int_type>(p) - bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
+                s -= max<typename Traits::int_type>(1, static_cast<Traits::int_type>(p) -
+                                                           bad_char_table[Traits::to_int_type(str[s + p]) - min_value]);
             }
 
             return str + str_len;
@@ -358,7 +525,8 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr const CharT* reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+        constexpr const CharT* reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern,
+                                                   size_t pattern_len)
         {
             if constexpr (sizeof(CharT) == 1)
             {
