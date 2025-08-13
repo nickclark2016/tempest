@@ -60,7 +60,6 @@ TEST(path, default_constructor)
 
     tempest::string native_str = p;
     EXPECT_EQ(native_str, "");
-}
 #endif
 }
 
