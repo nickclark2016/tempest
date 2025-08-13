@@ -1419,7 +1419,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::append(
         size_type count, value_type ch)
     {
-        if (auto ss_size = _small_string_size(); _is_small() && ss_size + count < small_string_capacity - 1)
+        if (auto ss_size = _small_string_size(); _is_small() && ss_size + count <= small_string_capacity - 1)
         {
             Traits::assign(_storage.small.data + ss_size, count, ch);
             _storage.small.data[ss_size + count] = value_type();
@@ -1490,9 +1490,19 @@ namespace tempest
             reserve(new_cap);
         }
 
-        Traits::copy(_storage.large.data + current_size, s, count);
-        _storage.large.data[new_size] = value_type();
-        _storage.large.size = new_size;
+        if (_is_small())
+        {
+            Traits::copy(_storage.small.data + current_size, s, count);
+            _storage.small.data[new_size] = value_type();
+            _emplace_remaining_small_capacity(new_size);
+            return *this;
+        }
+        else
+        {
+            Traits::copy(_storage.large.data + current_size, s, count);
+            _storage.large.data[new_size] = value_type();
+            _storage.large.size = new_size;
+        }
 
         return *this;
     }
@@ -1527,15 +1537,30 @@ namespace tempest
             reserve(new_cap);
         }
 
-        auto it = first;
-        for (size_type i = 0; i < count; ++i)
+        if (_is_small())
         {
-            _storage.large.data[current_size + i] = *it;
-            ++it;
+            auto it = first;
+            for (size_type i = 0; i < count; ++i)
+            {
+                _storage.small.data[current_size + i] = *it;
+                ++it;
+            }
+            _storage.small.data[new_size] = value_type();
+            _emplace_remaining_small_capacity(new_size);
+            return *this;
         }
+        else
+        {
+            auto it = first;
+            for (size_type i = 0; i < count; ++i)
+            {
+                _storage.large.data[current_size + i] = *it;
+                ++it;
+            }
 
-        _storage.large.data[new_size] = value_type();
-        _storage.large.size = new_size;
+            _storage.large.data[new_size] = value_type();
+            _storage.large.size = new_size;
+        }
 
         return *this;
     }
@@ -1853,9 +1878,9 @@ namespace tempest
     template <typename CharT, typename Traits, typename Allocator>
     inline constexpr bool basic_string<CharT, Traits, Allocator>::_is_small() const noexcept
     {
-        auto last_small_value = _storage.small.data[small_string_capacity - 1];
-        // Get the mask of the first 3 bits
-        auto flags = static_cast<tempest::make_unsigned_t<CharT>>(last_small_value) & 0xE0;
+        // Interpret the last byte of the small string buffer as a flag
+        auto last_byte = reinterpret_cast<const unsigned char*>(&_storage.small.data) + sizeof(_storage.small) - 1;
+        auto flags = *last_byte & 0xE0; // Mask the top 3 bits
         return flags == 0;
     }
 

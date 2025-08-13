@@ -6,7 +6,13 @@
 #include <tempest/transform_component.hpp>
 
 #include <chrono>
+#include <clocale>
 #include <cstdlib>
+#include <locale>
+
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 namespace tempest
 {
@@ -17,6 +23,28 @@ namespace tempest
 
     engine_context::engine_context() : _asset_database(&_mesh_reg, &_texture_reg, &_material_reg)
     {
+        if (!std::setlocale(LC_ALL, "en_US.UTF-8"))
+        {
+            log->error("Failed to set C locale to en_US.UTF-8");
+        }
+
+        try
+        {
+            std::locale utf8_locale("en_US.UTF-8");
+            std::locale::global(utf8_locale);
+            std::cin.imbue(utf8_locale);
+            std::cout.imbue(utf8_locale);
+            std::cerr.imbue(utf8_locale);
+        }
+        catch (const std::runtime_error&)
+        {
+            log->error("std::locale(\"en_US.UTF-8\") not supported on this platform.");
+        }
+
+#ifdef _WIN32
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
+#endif
     }
 
     tuple<rhi::window_surface*, core::input_group> engine_context::register_window(rhi::window_surface_desc desc)

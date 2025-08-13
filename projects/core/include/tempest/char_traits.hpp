@@ -311,7 +311,7 @@ namespace tempest
             }
         }
 
-        (void)memmove(dest, src, count);
+        (void)memmove(dest, src, count * sizeof(wchar_t));
         return dest;
     }
 
@@ -380,7 +380,7 @@ namespace tempest
 
     inline constexpr char_traits<wchar_t>::int_type char_traits<wchar_t>::eof() noexcept
     {
-        return -1; // EOF is -1
+        return static_cast<char_traits<wchar_t>::int_type>(-1); // EOF is -1
     }
 
     namespace detail

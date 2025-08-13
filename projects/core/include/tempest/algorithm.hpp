@@ -556,6 +556,30 @@ namespace tempest
 
         return first;
     }
+
+    template <forward_iterator It, typename T>
+    constexpr void replace(It first, It last, const T& old, const T& new_value)
+    {
+        for (; first != last; ++first)
+        {
+            if (*first == old)
+            {
+                *first = new_value;
+            }
+        }
+    }
+
+    template <forward_iterator It, typename Compare, typename T>
+    constexpr void replace_if(It first, It last, Compare comp, const T& new_value)
+    {
+        for (; first != last; ++first)
+        {
+            if (comp(*first))
+            {
+                *first = new_value;
+            }
+        }
+    }
 } // namespace tempest
 
 #endif // tempest_core_algorithm_hpp
