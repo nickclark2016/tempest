@@ -161,7 +161,7 @@ TEST(path, root_name)
     EXPECT_EQ(relative_win_path.root_name().native(), "");
     EXPECT_EQ(relative_unix_path.root_name().native(), "");
     EXPECT_EQ(win_unc_path.root_name().native(), "\\\\server\\share");
-    EXPECT_EQ(unix_unc_path.root_name().native(), "//server\\share");
+    EXPECT_EQ(unix_unc_path.root_name().native(), "//server/share");
 #endif
 }
 
@@ -352,10 +352,10 @@ TEST(path, relative_path)
     ASSERT_EQ(unix_unc_root_path.relative_path().native(), L"");
     ASSERT_EQ(unc_root_with_trailing_slash.relative_path().native(), L"");
 #else
-    ASSERT_EQ(win_style_path.relative_path().native(), "Users/User/Documents/file.txt");
+    ASSERT_EQ(win_style_path.relative_path().native(), "Users\\User\\Documents\\file.txt");
     ASSERT_EQ(unix_style_path.relative_path().native(), "home/user/documents/file.txt");
     ASSERT_EQ(empty_path.relative_path().native(), "");
-    ASSERT_EQ(relative_win_path.relative_path().native(), "Documents/file.txt");
+    ASSERT_EQ(relative_win_path.relative_path().native(), "Documents\\file.txt");
     ASSERT_EQ(relative_unix_path.relative_path().native(), "documents/file.txt");
     ASSERT_EQ(win_root_path.relative_path().native(), "");
     ASSERT_EQ(unix_root_path.relative_path().native(), "");
@@ -543,8 +543,9 @@ TEST(path, append)
     EXPECT_EQ(win_style_both_roots.native(), "C:\\world");
     EXPECT_EQ(win_style_unc_left.native(), "\\\\server\\share\\file.txt");
     EXPECT_EQ(win_style_unc_right.native(), "\\\\server\\share");
-    EXPECT_EQ(unix_style_left_root.native(), "/world");
+    EXPECT_EQ(unix_style_left_root.native(), "/hello/world");
     EXPECT_EQ(unix_style_right_root.native(), "/world");
+    EXPECT_EQ(unix_style_both_roots.native(), "/world");
 #endif
 }
 
