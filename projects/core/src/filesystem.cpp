@@ -11,6 +11,7 @@
 #else
 #include <iconv.h>
 #include <limits.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
