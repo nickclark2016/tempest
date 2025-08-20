@@ -47,6 +47,10 @@ scoped.project('core', function()
             defines {
                 'TEMPEST_WIN_THREADS',
             }
+
+            links {
+                'Advapi32.lib'
+            }
         end)
 
         scoped.filter({
@@ -70,6 +74,14 @@ scoped.project('core', function()
         links {
             'core',
         }
+
+        scoped.filter({
+            'system:windows'
+        }, function()
+            links {
+                'Advapi32.lib'
+            }
+        end)
     end)
 end)
 

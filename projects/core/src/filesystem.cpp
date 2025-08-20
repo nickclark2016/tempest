@@ -3,11 +3,15 @@
 #include <tempest/algorithm.hpp>
 
 #ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
+
+#include <AclAPI.h>
+#include <winioctl.h>
 #else
 #include <iconv.h>
+#include <limits.h>
+#include <unistd.h>
 #endif
 
 namespace tempest::filesystem
@@ -37,7 +41,7 @@ namespace tempest::filesystem
 
         template <typename T>
         constexpr auto is_slash = [](T ch) { return ch == forward_slash<T> || ch == back_slash<T>; };
-    }
+    } // namespace
 
     namespace detail
     {
@@ -1156,5 +1160,415 @@ namespace tempest::filesystem
     bool operator>=(const path& lhs, const path& rhs) noexcept
     {
         return detail::compare_slash_insensitive<path::value_type>(lhs.native(), rhs.native()) >= 0;
+    }
+
+    file_status::file_status() noexcept : file_status(file_type::none)
+    {
+    }
+
+    file_status::file_status(file_type type, permissions perms) noexcept : _type{type}, _permissions{perms}
+    {
+    }
+
+    bool is_block_file(const file_status& status)
+    {
+        return status.type() == file_type::block;
+    }
+
+    bool is_block_file(const path& p)
+    {
+        return is_block_file(status(p));
+    }
+
+    bool is_character_file(const file_status& status)
+    {
+        return status.type() == file_type::character;
+    }
+
+    bool is_character_file(const path& p)
+    {
+        return is_character_file(status(p));
+    }
+
+    bool is_directory(const file_status& status)
+    {
+        return status.type() == file_type::directory;
+    }
+
+    bool is_directory(const path& p)
+    {
+        return is_directory(status(p));
+    }
+
+    bool is_empty(const path& p)
+    {
+        return p.empty() || (p.has_root_path() && p.relative_path().empty());
+    }
+
+    bool is_fifo(const file_status& status)
+    {
+        return status.type() == file_type::fifo;
+    }
+
+    bool is_fifo(const path& p)
+    {
+        return is_fifo(status(p));
+    }
+
+    bool is_other(const file_status& status)
+    {
+        return exists(status) && !is_regular_file(status) && !is_directory(status) && !is_symlink(status);
+    }
+
+    bool is_other(const path& p)
+    {
+        return is_other(status(p));
+    }
+
+    bool is_regular_file(const file_status& status)
+    {
+        return status.type() == file_type::regular;
+    }
+
+    bool is_regular_file(const path& p)
+    {
+        return is_regular_file(status(p));
+    }
+
+    bool is_socket(const file_status& status)
+    {
+        return status.type() == file_type::socket;
+    }
+
+    bool is_socket(const path& p)
+    {
+        return is_socket(status(p));
+    }
+
+    bool is_symlink(const file_status& status)
+    {
+        return status.type() == file_type::symlink;
+    }
+
+    bool is_symlink(const path& p)
+    {
+        return is_symlink(status(p));
+    }
+
+    bool status_known(const file_status& status)
+    {
+        return status.type() != file_type::none;
+    }
+
+    namespace
+    {
+#ifdef _WIN32
+        // https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_reparse_data_buffer
+        typedef struct _REPARSE_DATA_BUFFER
+        {
+            ULONG ReparseTag;
+            USHORT ReparseDataLength;
+            USHORT Reserved;
+            union {
+                struct
+                {
+                    USHORT SubstituteNameOffset;
+                    USHORT SubstituteNameLength;
+                    USHORT PrintNameOffset;
+                    USHORT PrintNameLength;
+                    ULONG Flags;
+                    WCHAR PathBuffer[1];
+                } SymbolicLinkReparseBuffer;
+                struct
+                {
+                    USHORT SubstituteNameOffset;
+                    USHORT SubstituteNameLength;
+                    USHORT PrintNameOffset;
+                    USHORT PrintNameLength;
+                    WCHAR PathBuffer[1];
+                } MountPointReparseBuffer;
+                struct
+                {
+                    UCHAR DataBuffer[1];
+                } GenericReparseBuffer;
+            } DUMMYUNIONNAME;
+        } REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+
+        path::string_type follow_symlink(const path::string_type& p)
+        {
+            HANDLE h = CreateFileW(p.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                   OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+
+            if (h == INVALID_HANDLE_VALUE)
+            {
+                return path::string_type{};
+            }
+
+            auto buf = vector<byte>(MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
+            DWORD bytes_returned = 0;
+            BOOL ok = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, buf.data(),
+                                      static_cast<DWORD>(buf.size()), &bytes_returned, nullptr);
+            CloseHandle(h);
+
+            if (!ok)
+            {
+                return path::string_type{};
+            }
+
+            auto rdb = reinterpret_cast<REPARSE_DATA_BUFFER*>(buf.data());
+
+            if (rdb->ReparseTag == IO_REPARSE_TAG_SYMLINK)
+            {
+                auto& symlink = rdb->SymbolicLinkReparseBuffer;
+                return path::string_type(symlink.PathBuffer + symlink.PrintNameOffset / sizeof(WCHAR),
+                                         symlink.PrintNameLength / sizeof(WCHAR));
+            }
+
+            if (rdb->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT)
+            {
+                auto& mount_point = rdb->MountPointReparseBuffer;
+                return path::string_type(mount_point.PathBuffer + mount_point.PrintNameOffset / sizeof(WCHAR),
+                                         mount_point.PrintNameLength / sizeof(WCHAR));
+            }
+
+            return p;
+        }
+
+        file_type get_file_type(const path::string_type& p)
+        {
+            WIN32_FILE_ATTRIBUTE_DATA file_info;
+            if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &file_info))
+            {
+                DWORD err = GetLastError();
+                if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+                {
+                    return file_type::not_found; // File or path does not exist
+                }
+                return file_type::unknown; // Unknown error, treat as unknown type
+            }
+
+            if (file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+            {
+                return file_type::symlink; // Reparse point indicates a symlink
+            }
+            if (file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            {
+                return file_type::directory; // Directory
+            }
+            if (file_info.dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
+            {
+                return file_type::character; // Device file
+            }
+
+            return file_type::regular;
+        }
+
+        enum_mask<permissions> get_permissions(const path::string_type& p)
+        {
+            PSECURITY_DESCRIPTOR sec_desc = nullptr;
+            PSID owner = nullptr;
+            PSID group = nullptr;
+            PACL dacl = nullptr;
+
+            const auto res = GetNamedSecurityInfoW(p.c_str(), SE_FILE_OBJECT,
+                                                   OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
+                                                       DACL_SECURITY_INFORMATION,
+                                                   &owner, &group, &dacl, nullptr, &sec_desc);
+
+            if (res != ERROR_SUCCESS)
+            {
+                return enum_mask(permissions::unknown);
+            }
+
+            if (dacl == nullptr)
+            {
+                return enum_mask(permissions::unknown); // No DACL present
+            }
+
+            auto perms = enum_mask(permissions::none);
+
+            for (DWORD i = 0; i < dacl->AceCount; ++i)
+            {
+                void* ace;
+
+                if (!GetAce(dacl, i, &ace))
+                {
+                    continue; // Skip if we can't get the ACE
+                }
+
+                ACE_HEADER* ace_header = static_cast<ACE_HEADER*>(ace);
+                if (ace_header->AceType != ACCESS_ALLOWED_ACE_TYPE)
+                {
+                    continue; // Only interested in ACCESS_ALLOWED_ACE_TYPE
+                }
+
+                ACCESS_ALLOWED_ACE* allowed_ace = static_cast<ACCESS_ALLOWED_ACE*>(ace);
+                PSID sid = &allowed_ace->SidStart;
+                DWORD mask = allowed_ace->Mask;
+
+                if (EqualSid(sid, owner))
+                {
+                    if (mask & (FILE_GENERIC_READ | GENERIC_READ | FILE_READ_DATA))
+                    {
+                        perms |= permissions::owner_read;
+                    }
+                    if (mask & (FILE_GENERIC_WRITE | GENERIC_WRITE | FILE_WRITE_DATA))
+                    {
+                        perms |= permissions::owner_write;
+                    }
+                    if (mask & (FILE_GENERIC_EXECUTE | GENERIC_EXECUTE | FILE_EXECUTE))
+                    {
+                        perms |= permissions::owner_execute;
+                    }
+                }
+                else if (EqualSid(sid, group))
+                {
+                    if (mask & (FILE_GENERIC_READ | GENERIC_READ | FILE_READ_DATA))
+                    {
+                        perms |= permissions::group_read;
+                    }
+                    if (mask & (FILE_GENERIC_WRITE | GENERIC_WRITE | FILE_WRITE_DATA))
+                    {
+                        perms |= permissions::group_write;
+                    }
+                    if (mask & (FILE_GENERIC_EXECUTE | GENERIC_EXECUTE | FILE_EXECUTE))
+                    {
+                        perms |= permissions::group_execute;
+                    }
+                }
+                else
+                {
+                    SID_IDENTIFIER_AUTHORITY others_auth = SECURITY_WORLD_SID_AUTHORITY;
+                    PSID others_sid = nullptr;
+                    if (AllocateAndInitializeSid(&others_auth, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &others_sid))
+                    {
+                        bool is_others = others_sid && EqualSid(sid, others_sid);
+                        FreeSid(others_sid);
+
+                        if (is_others)
+                        {
+                            if (mask & (FILE_GENERIC_READ | GENERIC_READ | FILE_READ_DATA))
+                            {
+                                perms |= permissions::others_read;
+                            }
+
+                            if (mask & (FILE_GENERIC_WRITE | GENERIC_WRITE | FILE_WRITE_DATA))
+                            {
+                                perms |= permissions::others_write;
+                            }
+
+                            if (mask & (FILE_GENERIC_EXECUTE | GENERIC_EXECUTE | FILE_EXECUTE))
+                            {
+                                perms |= permissions::others_execute;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return perms;
+        }
+#else
+        file_type model_to_file_type(mode_t mode)
+        {
+            if (S_ISREG(mode))
+            {
+                return file_type::regular;
+            }
+
+            if (S_ISDIR(mode))
+            {
+                return file_type::directory;
+            }
+
+            if (S_ISLNK(mode))
+            {
+                return file_type::symlink;
+            }
+
+            if (S_ISBLK(mode))
+            {
+                return file_type::block;
+            }
+
+            if (S_ISCHR(mode))
+            {
+                return file_type::character;
+            }
+
+            if (S_ISFIFO(mode))
+            {
+                return file_type::fifo;
+            }
+
+            if (S_ISSOCK(mode))
+            {
+                return file_type::socket;
+            }
+
+            return file_type::unknown;
+        }
+
+        file_status get_unix_file_status(const path::string_type& p, bool follow_link)
+        {
+            if (follow_link)
+            {
+                struct stat file_stat;
+                if (::stat(p.c_str(), &file_stat) != 0)
+                {
+                    if (errno == ENOENT)
+                    {
+                        return file_status(file_type::not_found);
+                    }
+
+                    return file_status(file_type::unknown);
+                }
+
+                return file_status(model_to_file_type(file_stat.st_mode),
+                                   static_cast<permissions>(file_stat.st_mode & 07777));
+            }
+
+            struct stat file_stat;
+            if (::lstat(p.c_str(), &file_stat) != 0)
+            {
+                if (errno == ENOENT)
+                {
+                    return file_status(file_type::not_found);
+                }
+                return file_status(file_type::unknown);
+            }
+            return file_status(model_to_file_type(file_stat.st_mode),
+                               static_cast<permissions>(file_stat.st_mode & 07777));
+        }
+#endif
+    } // namespace
+
+    file_status status(const path& p)
+    {
+#ifdef _WIN32
+        const auto native_path = follow_symlink(p.native());
+        auto type = get_file_type(native_path);
+        auto perms = get_permissions(native_path);
+        return file_status(type, perms);
+#else
+        return get_unix_file_status(p.native(), true);
+#endif
+    }
+
+    file_status symlink_status(const path& p)
+    {
+#ifdef _WIN32
+        const auto native_path = p.native();
+        auto type = get_file_type(native_path);
+        auto perms = get_permissions(native_path);
+        return file_status(type, perms);
+#else
+        return get_unix_file_status(p.native(), false);
+#endif
+    }
+
+    bool exists(const file_status& status)
+    {
+        return status.type() != file_type::not_found && status_known(status);
     }
 } // namespace tempest::filesystem

@@ -2,6 +2,7 @@
 #define tempest_filesystem_hpp
 
 #include <tempest/concepts.hpp>
+#include <tempest/enum.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
@@ -29,7 +30,7 @@ namespace tempest::filesystem
         /// <typeparam name="T">The type to check.</typeparam>
         template <typename T>
         concept path_source_type = (is_specialization_v<T, basic_string> || is_specialization_v<T, basic_string_view> ||
-                                    character_type<remove_const_t<typename iterator_traits<decay_t<T>>::value_type>>);
+                                    (iterable<T> && character_type<remove_const_t<decay_t<remove_all_extents_t<T>>>>));
 
         string convert_wide_to_narrow(tempest::wstring_view wide_str);
         wstring convert_narrow_to_wide(tempest::string_view narrow_str);
@@ -239,6 +240,151 @@ namespace tempest::filesystem
         result._append(rhs);
         return result;
     }
+
+    enum class directory_options
+    {
+        none = 0,
+        follow_directory_symlink = 0x1,
+        skip_permissions_denied = 0x2
+    };
+
+    enum class file_type
+    {
+        none,
+        not_found,
+        regular,
+        directory,
+        symlink,
+        block,
+        character,
+        fifo,
+        socket,
+        unknown,
+    };
+
+    enum class permissions
+    {
+        none = 0,
+        owner_read = 0400,
+        owner_write = 0200,
+        owner_execute = 0100,
+        owner_all = owner_read | owner_write | owner_execute,
+        group_read = 0040,
+        group_write = 0020,
+        group_execute = 0010,
+        group_all = group_read | group_write | group_execute,
+        others_read = 0004,
+        others_write = 0002,
+        others_execute = 0001,
+        others_all = others_read | others_write | others_execute,
+        all = owner_all | group_all | others_all,
+        set_uid = 04000,
+        set_gid = 02000,
+        sticky_bit = 01000,
+        mask = 07777,
+        unknown = 0xFFFF
+    };
+
+    class file_status
+    {
+      public:
+        file_status() noexcept;
+        explicit file_status(file_type type, permissions perms = permissions::unknown) noexcept;
+
+        file_status(const file_status& other) noexcept = default;
+        file_status(file_status&& other) noexcept = default;
+
+        ~file_status() noexcept = default;
+
+        file_status& operator=(const file_status& other) noexcept = default;
+        file_status& operator=(file_status&& other) noexcept = default;
+
+        file_type type() const noexcept
+        {
+            return _type;
+        }
+
+        void type(file_type t) noexcept
+        {
+            _type = t;
+        }
+
+        permissions perms() const noexcept
+        {
+            return _permissions;
+        }
+
+
+        void perms(permissions p) noexcept
+        {
+            _permissions = p;
+        }
+
+      private:
+        file_type _type = file_type::unknown;
+        permissions _permissions = permissions::unknown;
+    };
+
+    [[nodiscard]] bool is_block_file(const file_status& status);
+    [[nodiscard]] bool is_block_file(const path& p);
+    [[nodiscard]] bool is_character_file(const file_status& status);
+    [[nodiscard]] bool is_character_file(const path& p);
+    [[nodiscard]] bool is_directory(const file_status& status);
+    [[nodiscard]] bool is_directory(const path& p);
+    [[nodiscard]] bool is_empty(const path& p);
+    [[nodiscard]] bool is_fifo(const file_status& status);
+    [[nodiscard]] bool is_fifo(const path& p);
+    [[nodiscard]] bool is_other(const file_status& status);
+    [[nodiscard]] bool is_other(const path& p);
+    [[nodiscard]] bool is_regular_file(const file_status& status);
+    [[nodiscard]] bool is_regular_file(const path& p);
+    [[nodiscard]] bool is_socket(const file_status& status);
+    [[nodiscard]] bool is_socket(const path& p);
+    [[nodiscard]] bool is_symlink(const file_status& status);
+    [[nodiscard]] bool is_symlink(const path& p);
+    [[nodiscard]] bool status_known(const file_status& status);
+
+    [[nodiscard]] file_status status(const path& p);
+    [[nodiscard]] file_status symlink_status(const path& p);
+
+    [[nodiscard]] bool exists(const file_status& status);
+    [[nodiscard]] bool exists(const path& p);
+
+    class directory_entry
+    {
+      public:
+      private:
+    };
+
+    class directory_iterator
+    {
+      public:
+        using value_type = directory_entry;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const directory_entry*;
+        using reference = const directory_entry&;
+
+        directory_iterator() noexcept;
+        explicit directory_iterator(const path& p);
+        directory_iterator(const path& p, enum_mask<directory_options> opts) noexcept;
+
+        directory_iterator(const directory_iterator& other) noexcept = default;
+        directory_iterator(directory_iterator&& other) noexcept = default;
+
+        ~directory_iterator() noexcept = default;
+
+        directory_iterator& operator=(const directory_iterator& other) noexcept = default;
+        directory_iterator& operator=(directory_iterator&& other) noexcept = default;
+
+        directory_iterator operator++();
+
+        pointer operator->() const noexcept;
+        reference operator*() const noexcept;
+
+      private:
+        directory_entry _cur;
+        enum_mask<directory_options> _opts;
+    };
 } // namespace tempest::filesystem
 
 #endif // tempest_filesystem_hpp

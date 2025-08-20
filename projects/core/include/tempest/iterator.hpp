@@ -603,6 +603,12 @@ namespace tempest
     {
         return reverse_iterator<It>(it);
     }
+
+    template <typename T>
+    concept iterable = requires(T& t) {
+        { begin(t) } -> input_or_output_iterator;
+        { end(t) } -> sentinel_for<decltype(begin(t))>;
+    };
 } // namespace tempest
 
 #endif // tempest_core_iterator_hpp
