@@ -314,7 +314,6 @@ namespace tempest::filesystem
             return _permissions;
         }
 
-
         void perms(permissions p) noexcept
         {
             _permissions = p;
