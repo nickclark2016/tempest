@@ -348,42 +348,6 @@ namespace tempest::filesystem
 
     [[nodiscard]] bool exists(const file_status& status);
     [[nodiscard]] bool exists(const path& p);
-
-    class directory_entry
-    {
-      public:
-      private:
-    };
-
-    class directory_iterator
-    {
-      public:
-        using value_type = directory_entry;
-        using difference_type = std::ptrdiff_t;
-        using pointer = const directory_entry*;
-        using reference = const directory_entry&;
-
-        directory_iterator() noexcept;
-        explicit directory_iterator(const path& p);
-        directory_iterator(const path& p, enum_mask<directory_options> opts) noexcept;
-
-        directory_iterator(const directory_iterator& other) noexcept = default;
-        directory_iterator(directory_iterator&& other) noexcept = default;
-
-        ~directory_iterator() noexcept = default;
-
-        directory_iterator& operator=(const directory_iterator& other) noexcept = default;
-        directory_iterator& operator=(directory_iterator&& other) noexcept = default;
-
-        directory_iterator operator++();
-
-        pointer operator->() const noexcept;
-        reference operator*() const noexcept;
-
-      private:
-        directory_entry _cur;
-        enum_mask<directory_options> _opts;
-    };
 } // namespace tempest::filesystem
 
 #endif // tempest_filesystem_hpp
