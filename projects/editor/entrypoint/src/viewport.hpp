@@ -21,8 +21,6 @@ namespace tempest::editor
         bool should_render() const noexcept override;
         bool should_close() const noexcept override;
         string_view name() const noexcept override;
-
-      private:
     };
 } // namespace tempest::editor
 

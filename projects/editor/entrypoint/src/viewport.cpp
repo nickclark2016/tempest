@@ -14,6 +14,7 @@ namespace tempest::editor
             }))
         {
             // Render the viewport content here
+            auto win_size = ui::ui_context::get_current_window_size();
         }
         ui::ui_context::end_window();
     }

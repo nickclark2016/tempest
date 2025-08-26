@@ -1450,6 +1450,12 @@ namespace tempest::editor::ui
 
         for (auto&& pipe : _child_pipelines)
         {
+            if (pipe.timeline_value == 0)
+            {
+                // First time use, initialize the pipeline
+                pipe.pipeline->initialize(parent, dev);
+            }
+
             timeline_split_submit_info.signal_semaphores.push_back({
                 .semaphore = pipe.timeline_sem,
                 .value = pipe.timeline_value + 1,
@@ -1608,6 +1614,13 @@ namespace tempest::editor::ui
 
     void ui_pipeline::destroy([[maybe_unused]] graphics::renderer& parent, [[maybe_unused]] rhi::device& dev)
     {
+        for (auto&& pipe : _child_pipelines)
+        {
+            pipe.pipeline->destroy(parent, dev);
+            dev.destroy_semaphore(pipe.timeline_sem);
+        }
+
+        _child_pipelines.clear();
     }
 
     void ui_pipeline::set_viewport(uint32_t width, uint32_t height)

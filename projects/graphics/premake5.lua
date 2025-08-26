@@ -54,8 +54,8 @@ scoped.project('graphics', function()
             'options:debugshaders'
         }, function()
             buildcommands {
-                '"%{fetch.slang.compiler}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O0 -g3 -line-directive-mode source-map',
-                '"%{fetch.slang.compiler}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O0 -g3 -line-directive-mode source-map',
+                '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -o %{!cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O0 -g3 -line-directive-mode source-map',
+                '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -o %{!cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O0 -g3 -line-directive-mode source-map',
             }
         end)
 
@@ -63,19 +63,19 @@ scoped.project('graphics', function()
             'options:not debugshaders'
         }, function()
             buildcommands {
-                '"%{fetch.slang.compiler}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
-                '"%{fetch.slang.compiler}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
+                '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -o %{!cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
+                '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -o %{!cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
             }
         end)
 
         
         buildoutputs {
-            '%{cfg.targetdir}/shaders/%{file.basename}.vert.spv',
-            '%{cfg.targetdir}/shaders/%{file.basename}.frag.spv'
+            '%{!cfg.targetdir}/shaders/%{file.basename}.vert.spv',
+            '%{!cfg.targetdir}/shaders/%{file.basename}.frag.spv'
         }
 
         buildinputs {
-            'shaders/common/**.slang',
+            '%{!prj.location}/shaders/common/**.slang',
         }
     end)
 
@@ -86,7 +86,7 @@ scoped.project('graphics', function()
             'options:debugshaders'
         }, function()
             buildcommands {
-                '"%{fetch.slang.compiler}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O0 -g3 -line-directive-mode source-map',
+                '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -o %{!cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O0 -g3 -line-directive-mode source-map',
             }
         end)
 
@@ -94,16 +94,16 @@ scoped.project('graphics', function()
             'options:not debugshaders'
         }, function()
             buildcommands {
-                '"%{fetch.slang.compiler}" "%{!file.relpath}" -target spirv -o %{cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
+                '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -o %{!cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
             }
         end)
         
         buildoutputs {
-            '%{cfg.targetdir}/shaders/%{file.basename}.comp.spv',
+            '%{!cfg.targetdir}/shaders/%{file.basename}.comp.spv',
         }
 
         buildinputs {
-            'shaders/common/**.slang',
+            '%{!prj.location}/shaders/common/**.slang',
         }
     end)
 

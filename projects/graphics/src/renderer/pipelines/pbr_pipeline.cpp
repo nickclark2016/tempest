@@ -619,6 +619,23 @@ namespace tempest::graphics
             };
         } // namespace skybox
 
+        namespace tonemapping
+        {
+            rhi::descriptor_binding_layout hdr_image_layout = {
+                .binding_index = 0,
+                .type = rhi::descriptor_type::sampled_image,
+                .count = 1,
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
+            };
+
+            rhi::descriptor_binding_layout linear_sampler_layout = {
+                .binding_index = 1,
+                .type = rhi::descriptor_type::sampler,
+                .count = 1,
+                .stages = make_enum_mask(rhi::shader_stage::fragment),
+            };
+        } // namespace tonemapping
+
         gpu::shadow_map_cascade_info calculate_shadow_map_cascades(const shadow_map_component& shadows,
                                                                    const ecs::transform_component& light_transform,
                                                                    const camera_component& camera_data,
@@ -735,6 +752,7 @@ namespace tempest::graphics
         _initialize_skybox(parent, dev);
         _initialize_render_targets(dev);
         _initialize_samplers(parent, dev);
+        _initialize_tonemap(parent, dev);
 
         _render_target_requires_reconstruction = false;
     }
@@ -851,7 +869,7 @@ namespace tempest::graphics
         _prepare_draw_batches(parent, dev, rs, work_queue, cmds);
 
         rhi::work_queue::image_barrier undefined_to_color_attachment = {
-            .image = _render_targets.color,
+            .image = _render_targets.hdr_color,
             .old_layout = rhi::image_layout::undefined,
             .new_layout = rhi::image_layout::color_attachment,
             .src_stages = make_enum_mask(rhi::pipeline_stage::blit),
@@ -942,11 +960,14 @@ namespace tempest::graphics
         _draw_pbr_opaque_pass(parent, dev, rs, work_queue, cmds);
         _draw_pbr_mboit_pass(parent, dev, rs, work_queue, cmds);
 
+        // Tonemap the output
+        _draw_tonemap_pass(parent, dev, rs, work_queue, cmds);
+
         switch (rs.render_mode)
         {
         case render_type::offscreen: {
             rhi::work_queue::image_barrier color_to_sampled = {
-                .image = _render_targets.color,
+                .image = _render_targets.final_color,
                 .old_layout = rhi::image_layout::color_attachment,
                 .new_layout = rhi::image_layout::shader_read_only,
                 .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
@@ -961,7 +982,7 @@ namespace tempest::graphics
         }
         case render_type::swapchain: {
             rhi::work_queue::image_barrier color_to_transfer_dst = {
-                .image = _render_targets.color,
+                .image = _render_targets.final_color,
                 .old_layout = rhi::image_layout::color_attachment,
                 .new_layout = rhi::image_layout::transfer_src,
                 .src_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
@@ -989,7 +1010,7 @@ namespace tempest::graphics
                 work_queue.transition_image(cmds, barriers);
             }
 
-            work_queue.blit(cmds, _render_targets.color, rhi::image_layout::transfer_src, 0, rs.swapchain_image,
+            work_queue.blit(cmds, _render_targets.final_color, rhi::image_layout::transfer_src, 0, rs.swapchain_image,
                             rhi::image_layout::transfer_dst, 0);
 
             rhi::work_queue::image_barrier sc_to_present = {
@@ -1122,9 +1143,13 @@ namespace tempest::graphics
         dev.destroy_image(_skybox.hdri_texture);
         dev.destroy_buffer(_skybox.camera_payload);
 
+        // Destroy Tonemapping
+        dev.destroy_graphics_pipeline(_tonemapping.pipeline);
+
         // Destroy render targets
         dev.destroy_image(_render_targets.depth);
-        dev.destroy_image(_render_targets.color);
+        dev.destroy_image(_render_targets.hdr_color);
+        dev.destroy_image(_render_targets.final_color);
         dev.destroy_image(_render_targets.encoded_normals);
         dev.destroy_image(_render_targets.transparency_accumulator);
         dev.destroy_image(_render_targets.shadow_megatexture);
@@ -1956,7 +1981,8 @@ namespace tempest::graphics
     void pbr_pipeline::_reconstruct_render_targets(rhi::device& dev)
     {
         // "Global" render targets
-        dev.destroy_image(_render_targets.color);
+        dev.destroy_image(_render_targets.hdr_color);
+        dev.destroy_image(_render_targets.final_color);
         dev.destroy_image(_render_targets.depth);
         dev.destroy_image(_render_targets.encoded_normals);
         dev.destroy_image(_render_targets.shadow_megatexture);
@@ -2306,7 +2332,7 @@ namespace tempest::graphics
         auto frag_source = core::read_bytes("assets/shaders/pbr.frag.spv");
 
         vector<rhi::image_format> color_formats;
-        color_formats.push_back(color_format);
+        color_formats.push_back(hdr_color_format);
 
         vector<rhi::color_blend_attachment> blending;
         blending.push_back(rhi::color_blend_attachment{
@@ -2626,7 +2652,7 @@ namespace tempest::graphics
             auto frag_source = core::read_bytes("assets/shaders/pbr_oit_blend.frag.spv");
 
             vector<rhi::image_format> color_formats;
-            color_formats.push_back(color_format);
+            color_formats.push_back(hdr_color_format);
 
             vector<rhi::color_blend_attachment> blending;
             blending.push_back(rhi::color_blend_attachment{
@@ -3142,7 +3168,7 @@ namespace tempest::graphics
         auto frag_source = core::read_bytes("assets/shaders/skybox.frag.spv");
 
         vector<rhi::image_format> color_formats;
-        color_formats.push_back(color_format);
+        color_formats.push_back(hdr_color_format);
 
         vector<rhi::color_blend_attachment> blending;
         blending.push_back(rhi::color_blend_attachment{
@@ -3222,6 +3248,92 @@ namespace tempest::graphics
 
         _skybox.camera_bytes_per_frame = camera_bytes_per_frame;
         _skybox.camera_payload = dev.create_buffer(camera_buffer_desc);
+    }
+
+    void pbr_pipeline::_initialize_tonemap(renderer& parent, rhi::device& dev)
+    {
+        vector<rhi::descriptor_binding_layout> bindings;
+        bindings.push_back(tonemapping::hdr_image_layout);
+        bindings.push_back(tonemapping::linear_sampler_layout);
+
+        auto set_0_layout =
+            dev.create_descriptor_set_layout(bindings, make_enum_mask(rhi::descriptor_set_layout_flags::push));
+        _tonemapping.desc_set_0_layout = set_0_layout;
+
+        vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>> layouts;
+        layouts.push_back(set_0_layout);
+
+        auto pipeline_layout = dev.create_pipeline_layout({
+            .descriptor_set_layouts = tempest::move(layouts),
+            .push_constants = {},
+        });
+
+        _tonemapping.layout = pipeline_layout;
+
+        auto vert_source = core::read_bytes("assets/shaders/tonemap.vert.spv");
+        auto frag_source = core::read_bytes("assets/shaders/tonemap.frag.spv");
+
+        vector<rhi::image_format> color_formats;
+        color_formats.push_back(final_color_format);
+
+        vector<rhi::color_blend_attachment> blending;
+        blending.push_back(rhi::color_blend_attachment{
+            .blend_enable = false,
+            .src_color_blend_factor = rhi::blend_factor::zero,
+            .dst_color_blend_factor = rhi::blend_factor::zero,
+            .color_blend_op = rhi::blend_op::add,
+            .src_alpha_blend_factor = rhi::blend_factor::zero,
+            .dst_alpha_blend_factor = rhi::blend_factor::zero,
+            .alpha_blend_op = rhi::blend_op::add,
+        });
+
+        rhi::graphics_pipeline_desc desc = {
+            .color_attachment_formats = tempest::move(color_formats),
+            .depth_attachment_format = none(),
+            .stencil_attachment_format = none(),
+            .vertex_shader = tempest::move(vert_source),
+            .tessellation_control_shader = {},
+            .tessellation_evaluation_shader = {},
+            .geometry_shader = {},
+            .fragment_shader = tempest::move(frag_source),
+            .input_assembly =
+                {
+                    .topology = rhi::primitive_topology::triangle_list,
+                },
+            .vertex_input = none(),
+            .tessellation = none(),
+            .multisample =
+                {
+                    .sample_count = rhi::image_sample_count::sample_count_1,
+                    .sample_shading = none(),
+                    .alpha_to_coverage = false,
+                    .alpha_to_one = false,
+                },
+            .rasterization =
+                {
+                    .depth_clamp_enable = false,
+                    .rasterizer_discard_enable = false,
+                    .polygon_mode = rhi::polygon_mode::fill,
+                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
+                    .depth_bias = none(),
+                    .line_width = 1.0f,
+                },
+            .depth_stencil =
+                {
+                    .depth = none(),
+                    .stencil = none(),
+                },
+            .color_blend =
+                {
+                    .attachments = tempest::move(blending),
+                    .blend_constants = {},
+                },
+            .layout = pipeline_layout,
+            .name = "Tonemapping Pipeline",
+        };
+
+        _tonemapping.pipeline = dev.create_graphics_pipeline(tempest::move(desc));
     }
 
     void pbr_pipeline::_initialize_samplers([[maybe_unused]] renderer& parent, rhi::device& dev)
@@ -3314,7 +3426,7 @@ namespace tempest::graphics
         };
 
         rhi::image_desc color_image_desc = {
-            .format = color_format,
+            .format = hdr_color_format,
             .type = rhi::image_type::image_2d,
             .width = _render_target_width,
             .height = _render_target_height,
@@ -3326,8 +3438,11 @@ namespace tempest::graphics
             .location = rhi::memory_location::device,
             .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled,
                                     rhi::image_usage::transfer_src),
-            .name = "Color Texture",
+            .name = "HDR Color Texture",
         };
+
+        rhi::image_desc final_color_image_desc = color_image_desc;
+        final_color_image_desc.format = final_color_format;
 
         rhi::image_desc encoded_normals_image_desc = {
             .format = encoded_normals_format,
@@ -3375,7 +3490,8 @@ namespace tempest::graphics
         };
 
         _render_targets.depth = dev.create_image(depth_image_desc);
-        _render_targets.color = dev.create_image(color_image_desc);
+        _render_targets.hdr_color = dev.create_image(color_image_desc);
+        _render_targets.final_color = dev.create_image(final_color_image_desc);
         _render_targets.encoded_normals = dev.create_image(encoded_normals_image_desc);
         _render_targets.transparency_accumulator = dev.create_image(transparency_accumulation_image_desc);
         _render_targets.shadow_megatexture = dev.create_image(shadow_megatexture_image_desc);
@@ -4940,7 +5056,7 @@ namespace tempest::graphics
 
         rhi::work_queue::render_pass_info rpi = {};
         rpi.color_attachments.push_back(rhi::work_queue::color_attachment_info{
-            .image = _render_targets.color,
+            .image = _render_targets.hdr_color,
             .layout = rhi::image_layout::color_attachment,
             .clear_color = {1, 1, 1, 1},
             .load_op = rhi::work_queue::load_op::clear,
@@ -5154,7 +5270,7 @@ namespace tempest::graphics
         };
 
         rpi.color_attachments.push_back(rhi::work_queue::color_attachment_info{
-            .image = _render_targets.color,
+            .image = _render_targets.hdr_color,
             .layout = rhi::image_layout::color_attachment,
             .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
             .load_op = rhi::work_queue::load_op::load,
@@ -5936,7 +6052,7 @@ namespace tempest::graphics
                 .dst_queue = nullptr,
             },
             rhi::work_queue::image_barrier{
-                .image = _render_targets.color,
+                .image = _render_targets.hdr_color,
                 .old_layout = rhi::image_layout::color_attachment,
                 .new_layout = rhi::image_layout::color_attachment,
                 .src_stages =
@@ -5969,7 +6085,7 @@ namespace tempest::graphics
         };
 
         rpi_blend.color_attachments.push_back(rhi::work_queue::color_attachment_info{
-            .image = _render_targets.color,
+            .image = _render_targets.hdr_color,
             .layout = rhi::image_layout::color_attachment,
             .clear_color = {0.0f, 0.0f, 0.0f, 0.0f},
             .load_op = rhi::work_queue::load_op::load,
@@ -5988,6 +6104,90 @@ namespace tempest::graphics
         queue.set_viewport(commands, 0.0f, 0.0f, static_cast<float>(_render_target_width),
                            static_cast<float>(_render_target_height), 0.0f, 1.0f, 0, false);
         queue.draw(commands, 3, 1, 0, 0); // Full-screen triangle for blending
+        queue.end_rendering(commands);
+    }
+
+    void pbr_pipeline::_draw_tonemap_pass(renderer& parent, rhi::device& dev, const render_state& rs,
+                                          rhi::work_queue& queue,
+                                          rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands)
+    {
+        // Transition the HDR color target to shader read only
+        const auto pre_tonemap_barriers = array{
+            rhi::work_queue::image_barrier{
+                .image = _render_targets.hdr_color,
+                .old_layout = rhi::image_layout::color_attachment,
+                .new_layout = rhi::image_layout::shader_read_only,
+                .src_stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output), // write in the color attachment
+                .src_access =
+                    make_enum_mask(rhi::memory_access::color_attachment_write),     // write in the color attachment
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader), // read in the fragment shader
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read),      // read in the fragment shader
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+            rhi::work_queue::image_barrier{
+                .image = _render_targets.final_color,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::color_attachment,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::bottom),
+                .src_access = make_enum_mask(rhi::memory_access::none),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                .dst_access = make_enum_mask(rhi::memory_access::color_attachment_write),
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+        };
+
+        queue.pipeline_barriers(commands, pre_tonemap_barriers, {});
+
+        auto tonemap_image_descriptors = array{
+            rhi::image_binding_descriptor{
+                .index = 0,
+                .type = rhi::descriptor_type::sampled_image,
+                .array_offset = 0,
+                .images = {},
+            },
+        };
+        tonemap_image_descriptors[0].images.push_back({
+            .image = _render_targets.hdr_color,
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        auto tonemap_sampler_descriptors = array{
+            rhi::sampler_binding_descriptor{
+                .index = 1,
+                .samplers = {},
+            },
+        };
+        tonemap_sampler_descriptors[0].samplers.push_back(_bindless_textures.linear_sampler);
+
+        rhi::work_queue::render_pass_info rpi = {
+            .color_attachments = {},
+            .depth_attachment = tempest::nullopt,
+            .stencil_attachment = tempest::nullopt,
+            .x = 0,
+            .y = 0,
+            .width = rs.image_width,
+            .height = rs.image_height,
+            .layers = 1,
+            .name = "Tonemap Pass",
+        };
+        rpi.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = _render_targets.final_color,
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        queue.begin_rendering(commands, rpi);
+        queue.bind(commands, _tonemapping.pipeline);
+        queue.push_descriptors(commands, _tonemapping.layout, rhi::bind_point::graphics, 0, {},
+                               tonemap_image_descriptors, tonemap_sampler_descriptors);
+        queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::none));
+        queue.draw(commands, 3, 1, 0, 0); // Full-screen triangle
         queue.end_rendering(commands);
     }
 } // namespace tempest::graphics

@@ -365,8 +365,19 @@ namespace tempest::graphics
 
         struct
         {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_0 =
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_0_layout;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+        } _tonemapping = {};
+
+        struct
+        {
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> depth;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> color;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> hdr_color;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> final_color;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> encoded_normals;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> transparency_accumulator;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> shadow_megatexture;
@@ -456,7 +467,8 @@ namespace tempest::graphics
         } _meshes = {};
 
         static constexpr rhi::image_format depth_format = rhi::image_format::d32_float;
-        static constexpr rhi::image_format color_format = rhi::image_format::rgba8_srgb;
+        static constexpr rhi::image_format hdr_color_format = rhi::image_format::rgba16_float;
+        static constexpr rhi::image_format final_color_format = rhi::image_format::rgba8_srgb;
         static constexpr rhi::image_format encoded_normals_format = rhi::image_format::rg16_float;
         static constexpr rhi::image_format transparency_accumulator_format = rhi::image_format::rgba16_float;
         static constexpr rhi::image_format ssao_format = rhi::image_format::r16_float;
@@ -482,6 +494,7 @@ namespace tempest::graphics
         void _initialize_shadows(renderer& parent, rhi::device& dev);
         void _initialize_ssao(renderer& parent, rhi::device& dev);
         void _initialize_skybox(renderer& parent, rhi::device& dev);
+        void _initialize_tonemap(renderer& parent, rhi::device& dev);
         void _initialize_samplers(renderer& parent, rhi::device& dev);
 
         void _initialize_render_targets(rhi::device& dev);
@@ -511,6 +524,8 @@ namespace tempest::graphics
                                    rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
         void _draw_pbr_mboit_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
                                   rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
+        void _draw_tonemap_pass(renderer& parent, rhi::device& dev, const render_state& rs, rhi::work_queue& queue,
+                                rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands);
 
         void _load_meshes(rhi::device& dev, span<const guid> mesh_ids, const core::mesh_registry& mesh_registry);
         void _load_textures(rhi::device& dev, span<const guid> texture_ids,

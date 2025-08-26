@@ -126,9 +126,6 @@ PBROutput compute_fragment(VertexOutput input, Texture2D ao_texture) {
 
     float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position, input.view_position, input.current_position, bindless_textures);
 
-    color.rgb = uncharted_2(color.rgb * 4.5);
-    color.rgb = color.rgb * (1.0f / uncharted_2((11.2f).xxx));
-
     PBROutput output;
 
     output.color = color;
