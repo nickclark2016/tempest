@@ -6169,8 +6169,8 @@ namespace tempest::graphics
             .stencil_attachment = tempest::nullopt,
             .x = 0,
             .y = 0,
-            .width = rs.image_width,
-            .height = rs.image_height,
+            .width = _render_target_width,
+            .height = _render_target_height,
             .layers = 1,
             .name = "Tonemap Pass",
         };
