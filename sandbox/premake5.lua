@@ -30,11 +30,11 @@ scoped.project('sandbox', function()
     end)
 
     postbuildcommands {
-        '{RMDIR} %{root}/sandbox/assets', -- Ensure a clean assets directory before building it
-        '{MKDIR} %{root}/sandbox/assets',
-        '{LINKDIR} %{root}/sandbox/assets/glTF-Sample-Assets ../../vendor/glTF-Sample-Assets',
-        '{LINKDIR} %{root}/sandbox/assets/polyhaven ../../vendor/polyhaven',
-        '{LINKDIR} %{root}/sandbox/assets/shaders ../../bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}/shaders',
+        '{RMDIR} %{!root}/sandbox/assets', -- Ensure a clean assets directory before building it
+        '{MKDIR} %{!root}/sandbox/assets',
+        '{LINKDIR} %{!root}/sandbox/assets/glTF-Sample-Assets ../../vendor/glTF-Sample-Assets',
+        '{LINKDIR} %{!root}/sandbox/assets/polyhaven ../../vendor/polyhaven',
+        '{LINKDIR} %{!root}/sandbox/assets/shaders ../../bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}/shaders',
     }
 
     if _OPTIONS['enable-aftermath'] then
