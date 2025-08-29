@@ -696,7 +696,7 @@ namespace tempest
         ptrdiff_t end_index = size();
         ptrdiff_t start_index = index;
 
-        for (auto i = 0; i < count_to_move; ++i)
+        for (auto i = 0u; i < count_to_move; ++i)
         {
             allocator_traits<Allocator>::construct(_alloc, _end + i, tempest::move(_data[index + i - 1]));
         }

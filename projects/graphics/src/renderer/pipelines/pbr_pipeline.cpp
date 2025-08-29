@@ -3254,7 +3254,7 @@ namespace tempest::graphics
         _skybox.camera_payload = dev.create_buffer(camera_buffer_desc);
     }
 
-    void pbr_pipeline::_initialize_tonemap(renderer& parent, rhi::device& dev)
+    void pbr_pipeline::_initialize_tonemap([[maybe_unused]] renderer& parent, rhi::device& dev)
     {
         vector<rhi::descriptor_binding_layout> bindings;
         bindings.push_back(tonemapping::hdr_image_layout);
@@ -6155,8 +6155,8 @@ namespace tempest::graphics
         queue.end_rendering(commands);
     }
 
-    void pbr_pipeline::_draw_tonemap_pass(renderer& parent, rhi::device& dev, const render_state& rs,
-                                          rhi::work_queue& queue,
+    void pbr_pipeline::_draw_tonemap_pass([[maybe_unused]] renderer& parent, [[maybe_unused]] rhi::device& dev,
+                                          [[maybe_unused]] const render_state& rs, rhi::work_queue& queue,
                                           rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands)
     {
         // Transition the HDR color target to shader read only
