@@ -114,7 +114,7 @@ namespace tempest::editor::ui
 
         static bool begin_window(window_info info);
         static void end_window();
-        static math::vec2<uint32_t> get_current_window_size() noexcept;
+        static math::vec2<uint32_t> get_available_content_region() noexcept;
         static dockspace_identifier get_dockspace_id(string_view name) noexcept;
 
         static dockspace_layout configure_dockspace(dockspace_configure_info&& info);
@@ -165,6 +165,11 @@ namespace tempest::editor::ui
         /// <param name="...">Optional arguments for formatting the text</param>
         static void text(string_view content, ...);
 
+        static void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height);
+
+        static void push_window_padding(float px, float py);
+        static void pop_window_padding();
+
       private:
         struct impl;
         unique_ptr<impl> _impl = nullptr;
@@ -192,6 +197,9 @@ namespace tempest::editor::ui
         bool unregister_viewport_pipeline(viewport_pipeline_handle handle) noexcept;
         graphics::render_pipeline* get_viewport_pipeline(viewport_pipeline_handle handle) const noexcept;
 
+        void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
+                                 const core::mesh_registry& meshes, const core::texture_registry& textures,
+                                 const core::material_registry& materials) override;
       private:
         ui_context* _ui_ctx;
         uint64_t _frame_number = 0;
@@ -200,7 +208,9 @@ namespace tempest::editor::ui
         uint32_t _width = 0;
         uint32_t _height = 0;
 
+        graphics::renderer* _renderer = nullptr;
         rhi::device* _device = nullptr;
+
         rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> _timeline_sem =
             rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore>::null_handle;
         uint64_t _timeline_value = 0;

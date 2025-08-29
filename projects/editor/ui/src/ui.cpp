@@ -824,7 +824,7 @@ namespace tempest::editor::ui
                     // Push the descriptor set for the texture
                     auto packed_texture_id = cmd.GetTexID();
                     uint32_t generation = 0, id = 0;
-                    math::unpack_uint32x2(packed_texture_id, generation, id);
+                    math::unpack_uint32x2(packed_texture_id, id, generation);
                     auto texture_handle = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>{
                         .id = id,
                         .generation = generation,
@@ -1043,14 +1043,30 @@ namespace tempest::editor::ui
         va_end(args);
     }
 
+    void ui_context::image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height)
+    {
+        auto id = math::pack_uint32x2(img.id, img.generation);
+        ImGui::Image(bit_cast<ImTextureID>(id), ImVec2{static_cast<float>(width), static_cast<float>(height)});
+    }
+
+    void ui_context::push_window_padding(float px, float py)
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px, py});
+    }
+
+    void ui_context::pop_window_padding()
+    {
+        ImGui::PopStyleVar();
+    }
+
     void ui_context::end_window()
     {
         ImGui::End();
     }
 
-    math::vec2<uint32_t> ui_context::get_current_window_size() noexcept
+    math::vec2<uint32_t> ui_context::get_available_content_region() noexcept
     {
-        const auto win_size = ImGui::GetWindowSize();
+        const auto win_size = ImGui::GetContentRegionAvail();
         return math::vec2(static_cast<uint32_t>(win_size.x), static_cast<uint32_t>(win_size.y));
     }
 
@@ -1417,7 +1433,7 @@ namespace tempest::editor::ui
         wq.submit(tempest::span(&submit_info, 1));
         _impl->device->destroy_buffer(upload_buffer);
 
-        auto packed_handle = math::pack_uint32x2(font_tex.generation, font_tex.id);
+        auto packed_handle = math::pack_uint32x2(font_tex.id, font_tex.generation);
         io.Fonts->SetTexID(static_cast<ImTextureID>(packed_handle));
     }
 
@@ -1427,6 +1443,7 @@ namespace tempest::editor::ui
 
     void ui_pipeline::initialize(graphics::renderer& parent, rhi::device& dev)
     {
+        _renderer = &parent;
         _device = &dev;
         _timeline_value = 0;
         _timeline_sem = dev.create_semaphore({
@@ -1450,12 +1467,6 @@ namespace tempest::editor::ui
 
         for (auto&& pipe : _child_pipelines)
         {
-            if (pipe.timeline_value == 0)
-            {
-                // First time use, initialize the pipeline
-                pipe.pipeline->initialize(parent, dev);
-            }
-
             timeline_split_submit_info.signal_semaphores.push_back({
                 .semaphore = pipe.timeline_sem,
                 .value = pipe.timeline_value + 1,
@@ -1641,6 +1652,8 @@ namespace tempest::editor::ui
     ui_pipeline::viewport_pipeline_handle ui_pipeline::register_viewport_pipeline(
         unique_ptr<graphics::render_pipeline> pipeline) noexcept
     {
+        pipeline->initialize(*_renderer, *_device);
+
         auto handle = _child_pipelines.insert({
             .timeline_sem = _device->create_semaphore({
                 .type = rhi::semaphore_type::timeline,
@@ -1669,6 +1682,16 @@ namespace tempest::editor::ui
         else
         {
             return pipeline_it->pipeline.get();
+        }
+    }
+
+    void ui_pipeline::upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
+                                          const core::mesh_registry& meshes, const core::texture_registry& textures,
+                                          const core::material_registry& materials)
+    {
+        for (auto& pipeline : _child_pipelines)
+        {
+            pipeline.pipeline->upload_objects_sync(dev, entities, meshes, textures, materials);
         }
     }
 } // namespace tempest::editor::ui

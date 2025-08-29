@@ -27,6 +27,6 @@ FragmentOutput FSMain(VSOutput input) {
     FragmentOutput output;
     var hdr_color = hdr_buffer.Sample(linear_sampler, input.uv);
     hdr_color.rgb = hdr_color.rgb * exp2(1.0);
-    output.color = float4(ACES(hdr_color.rgb), hdr_color.a);
+    output.color = float4(ACES(hdr_color.rgb), 1.0);
     return output;
 }

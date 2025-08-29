@@ -450,8 +450,12 @@ namespace tempest::assets
                 auto& mip = tex.mips.emplace_back();
                 mip.width = width;
                 mip.height = height;
-                mip.data.resize(static_cast<size_t>(width) * height * 4 * sizeof(float));
-                copy_n(reinterpret_cast<const byte*>(data), mip.data.size(), mip.data.begin());
+
+                mip.data = vector{
+                    reinterpret_cast<const byte*>(data),
+                    reinterpret_cast<const byte*>(data) + width * height * 4 * sizeof(float),
+                };
+
                 stbi_image_free(data);
             }
             else if (is_16_bit)
@@ -463,8 +467,12 @@ namespace tempest::assets
                 auto& mip = tex.mips.emplace_back();
                 mip.width = width;
                 mip.height = height;
-                mip.data.resize(width * height * 4 * sizeof(uint16_t));
-                copy_n(reinterpret_cast<const byte*>(data), mip.data.size(), mip.data.begin());
+
+                mip.data = vector{
+                    reinterpret_cast<const byte*>(data),
+                    reinterpret_cast<const byte*>(data) + width * height * 4 * sizeof(uint16_t),
+                };
+
                 stbi_image_free(data);
             }
             else
@@ -476,8 +484,12 @@ namespace tempest::assets
                 auto& mip = tex.mips.emplace_back();
                 mip.width = width;
                 mip.height = height;
-                mip.data.resize(static_cast<size_t>(width) * height * 4);
-                copy_n(reinterpret_cast<const byte*>(data), mip.data.size(), mip.data.begin());
+
+                mip.data = vector{
+                    reinterpret_cast<byte*>(data),
+                    reinterpret_cast<byte*>(data) + width * height * sizeof(byte) * 4,
+                };
+
                 stbi_image_free(data);
             }
 

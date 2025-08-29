@@ -89,6 +89,12 @@ namespace tempest::graphics
             failure,
         };
 
+        struct render_target_info
+        {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image;
+            rhi::image_layout layout;
+        };
+
         render_pipeline() = default;
         render_pipeline(const render_pipeline&) = delete;
         render_pipeline(render_pipeline&&) = delete;
@@ -106,6 +112,8 @@ namespace tempest::graphics
         virtual void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
                                          const core::mesh_registry& meshes, const core::texture_registry& textures,
                                          const core::material_registry& materials);
+
+        virtual render_target_info get_render_target() const;
     };
 } // namespace tempest::graphics
 

@@ -10,6 +10,15 @@
 
 namespace tempest
 {
+    template <typename T, typename Allocator>
+    class vector;
+
+    namespace unsafe
+    {
+        template <typename T, typename Allocator>
+        void resize_no_init(vector<T, Allocator>& vec, size_t count);
+    }
+
     template <typename T, typename Allocator = allocator<T>>
     class vector
     {
@@ -142,6 +151,8 @@ namespace tempest
 
         template <typename... Args>
         constexpr void _emplace_one_at_back(Args&&... args);
+
+        friend void unsafe::resize_no_init(vector<T, Allocator>& vec, size_t count);
     };
 
     template <typename T, typename Allocator>
@@ -187,9 +198,20 @@ namespace tempest
     {
         reserve(distance(first, last));
 
-        for (auto it = first; it != last; ++it)
+        if constexpr (contiguous_iterator<It> && is_trivial_v<typename iterator_traits<It>::value_type> &&
+                      is_same_v<typename iterator_traits<It>::value_type, T>)
         {
-            push_back(*it);
+            const auto count = tempest::distance(first, last);
+            auto first_ptr = to_address(first);
+            copy_n(first_ptr, count, _data);
+            _end = _data + count;
+        }
+        else
+        {
+            for (auto it = first; it != last; ++it)
+            {
+                push_back(*it);
+            }
         }
     }
 
@@ -200,9 +222,19 @@ namespace tempest
     {
         reserve(other.size());
 
-        for (const auto& value : other)
+        if constexpr (is_trivial_v<T>)
         {
-            push_back(value);
+            const auto count = other.size();
+            const auto first_ptr = other.data();
+            copy_n(first_ptr, count, _data);
+            _end = _data + count;
+        }
+        else
+        {
+            for (const auto& value : other)
+            {
+                push_back(value);
+            }
         }
     }
 
@@ -550,9 +582,12 @@ namespace tempest
     template <typename T, typename Allocator>
     constexpr void vector<T, Allocator>::clear() noexcept
     {
-        for (auto it = begin(); it != end(); ++it)
+        if constexpr (!is_trivially_destructible_v<T>)
         {
-            allocator_traits<Allocator>::destroy(_alloc, it);
+            for (auto it = begin(); it != end(); ++it)
+            {
+                allocator_traits<Allocator>::destroy(_alloc, it);
+            }
         }
 
         _end = _data;
@@ -651,15 +686,27 @@ namespace tempest
                                                                                    InputIt last)
     {
         auto index = pos - begin();
-        auto count = tempest::distance(first, last);
         reserve(_compute_next_capacity(size() + 1));
 
-        for (auto it = end(); it != begin() + index; --it)
+        // Move construct the first count elements, then move the rest
+        size_t count = distance(first, last);
+        size_t count_remaining = size() - index;
+        auto count_to_move = tempest::min(count, count_remaining);
+
+        ptrdiff_t end_index = size();
+        ptrdiff_t start_index = index;
+
+        for (auto i = 0; i < count_to_move; ++i)
         {
-            *it = tempest::move(*(it - count));
+            allocator_traits<Allocator>::construct(_alloc, _end + i, tempest::move(_data[index + i - 1]));
         }
 
-        for (size_type i = 0; i < static_cast<size_type>(count); ++i)
+        for (auto index = end_index - 1; index > start_index; --index)
+        {
+            _data[index] = tempest::move(_data[index - count]);
+        }
+
+        for (size_type i = 0; i < count; ++i)
         {
             allocator_traits<Allocator>::construct(_alloc, _data + index + i, *first++);
         }
@@ -936,6 +983,16 @@ namespace tempest
     inline constexpr bool empty(const vector<T, Alloc>& c) noexcept
     {
         return c.empty();
+    }
+
+    namespace unsafe
+    {
+        template <typename T, typename Allocator>
+        void resize_no_init(vector<T, Allocator>& vec, size_t count)
+        {
+            vec.reserve(count);
+            vec._end = vec._data + count;
+        }
     }
 } // namespace tempest
 

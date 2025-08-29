@@ -189,4 +189,12 @@ namespace tempest::graphics
         // Default implementation does nothing.
         // Derived classes can override this method to implement specific upload logic.
     }
+
+    render_pipeline::render_target_info render_pipeline::get_render_target() const
+    {
+        return {
+            .image = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle,
+            .layout = rhi::image_layout::undefined,
+        };
+    }
 } // namespace tempest::graphics

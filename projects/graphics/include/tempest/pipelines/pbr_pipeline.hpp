@@ -183,6 +183,14 @@ namespace tempest::graphics
         void set_skybox_texture(rhi::device& dev, const guid& texture_id,
                                 const core::texture_registry& texture_registry);
 
+        render_target_info get_render_target() const override
+        {
+            return {
+                .image = _render_targets.final_color,
+                .layout = _final_color_layout,
+            };
+        }
+
       private:
         struct
         {
@@ -477,6 +485,7 @@ namespace tempest::graphics
         uint32_t _render_target_width;
         uint32_t _render_target_height;
         bool _render_target_requires_reconstruction = true;
+        rhi::image_layout _final_color_layout;
 
         uint32_t _object_count = 0;
 

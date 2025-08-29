@@ -1047,8 +1047,12 @@ namespace tempest::graphics
 
             work_queue.submit(tempest::span(&submit_info, 1), rs.end_fence);
 
+            _final_color_layout = rhi::image_layout::shader_read_only;
+
             return render_result::success;
         }
+
+        _final_color_layout = rhi::image_layout::transfer_dst;
 
         rhi::work_queue::submit_info submit_info;
         submit_info.command_lists.push_back(cmds);
@@ -4413,6 +4417,20 @@ namespace tempest::graphics
         _gpu_resource_usages.staging_bytes_writen +=
             static_cast<uint32_t>(_shadows.shadow_map_use_params.size() * sizeof(gpu::shadow_map_parameter));
 
+        rhi::work_queue::buffer_barrier pre_staging_uploads = {
+            .buffer = _gpu_buffers.shadows,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            .src_access = make_enum_mask(rhi::memory_access::shader_storage_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _gpu_buffers.shadow_bytes_per_frame * _frame_in_flight,
+            .size = _gpu_buffers.instance_bytes_per_frame,
+        };
+
+        queue.pipeline_barriers(commands, {}, {&pre_staging_uploads, 1});
+
         queue.copy(commands, staging_buffer, _gpu_buffers.shadows, staging_offset,
                    _gpu_buffers.shadow_bytes_per_frame * _frame_in_flight,
                    _shadows.shadow_map_use_params.size() * sizeof(gpu::shadow_map_parameter));
@@ -4804,6 +4822,21 @@ namespace tempest::graphics
         auto staging_bytes = staging_buffer_bytes + staging_buffer_offset;
         std::memcpy(staging_bytes, &constants, sizeof(ssao::scene_constants));
 
+        rhi::work_queue::buffer_barrier scene_constants_preupload_barrier{
+            .buffer = _ssao.scene_constants,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy, rhi::pipeline_stage::fragment_shader,
+                                         rhi::pipeline_stage::compute_shader),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write, rhi::memory_access::constant_buffer_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _ssao.scene_constant_bytes_per_frame * _frame_in_flight,
+            .size = _ssao.scene_constant_bytes_per_frame,
+        };
+
+        queue.pipeline_barriers(commands, {}, {&scene_constants_preupload_barrier, 1});
+
         queue.copy(commands, _gpu_buffers.staging, _ssao.scene_constants, staging_buffer_offset,
                    _ssao.scene_constant_bytes_per_frame * _frame_in_flight, sizeof(ssao::scene_constants));
 
@@ -5031,12 +5064,27 @@ namespace tempest::graphics
         dev.unmap_buffer(_gpu_buffers.staging);
         _gpu_resource_usages.staging_bytes_writen += sizeof(gpu::camera);
 
+        rhi::work_queue::buffer_barrier skybox_prebarrier = {
+            .buffer = _skybox.camera_payload,
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy, rhi::pipeline_stage::vertex_shader),
+            .src_access = make_enum_mask(rhi::memory_access::transfer_write, rhi::memory_access::constant_buffer_read,
+                                         rhi::memory_access::shader_read),
+            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            .src_queue = nullptr,
+            .dst_queue = nullptr,
+            .offset = _skybox.camera_bytes_per_frame * _frame_in_flight,
+            .size = _skybox.camera_bytes_per_frame,
+        };
+
+        queue.pipeline_barriers(commands, {}, {&skybox_prebarrier, 1});
+
         queue.copy(commands, _gpu_buffers.staging, _skybox.camera_payload, staging_buffer_offset,
                    _skybox.camera_bytes_per_frame * _frame_in_flight, sizeof(gpu::camera));
 
         rhi::work_queue::buffer_barrier camera_payload_barrier = {
             .buffer = _skybox.camera_payload,
-            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+            .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
             .src_access = make_enum_mask(rhi::memory_access::transfer_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::vertex_shader),
             .dst_access = make_enum_mask(rhi::memory_access::constant_buffer_read, rhi::memory_access::shader_read),
