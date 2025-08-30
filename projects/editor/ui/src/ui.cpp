@@ -1054,7 +1054,7 @@ namespace tempest::editor::ui
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px, py});
     }
 
-    void ui_context::pop_window_padding()
+    void ui_context::pop_style()
     {
         ImGui::PopStyleVar();
     }

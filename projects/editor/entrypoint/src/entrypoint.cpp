@@ -77,8 +77,8 @@ namespace tempest::editor
             };
 
             tempest::graphics::shadow_map_component sun_shadows = {
-                .size = {2048, 2048},
-                .cascade_count = 3,
+                .size = {4096, 4096},
+                .cascade_count = 4,
             };
 
             ctx.get_registry().assign_or_replace(sun, sun_shadows);

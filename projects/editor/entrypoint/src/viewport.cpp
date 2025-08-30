@@ -35,7 +35,7 @@ namespace tempest::editor
 
         ui::ui_context::end_window();
 
-        ui::ui_context::pop_window_padding();
+        ui::ui_context::pop_style();
     }
 
     bool viewport::should_render() const noexcept

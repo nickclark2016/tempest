@@ -165,10 +165,27 @@ namespace tempest::editor::ui
         /// <param name="...">Optional arguments for formatting the text</param>
         static void text(string_view content, ...);
 
+        /// <summary>
+        /// Displays an image with the given width and height. The image must be created with the sampled usage flag.
+        /// </summary>
+        /// <param name="img">Image to display. At the time of UI pipeline execution, this image must be in a
+        /// rhi::image_layout::shader_read_only layout.</param>
+        /// <param name="width">Display width</param>
+        /// <param name="height">Display height</param>
         static void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height);
 
+        /// <summary>
+        /// Pushes a new window padding value. This value is applied to all four sides of the window. Style values are
+        /// pushed like a stack, so pushes must be matched with a pop (see <see cref="pop_style"/>).
+        /// </summary>
+        /// <param name="px">Padding along the x axis</param>
+        /// <param name="py">Padding along the y axis</param>
         static void push_window_padding(float px, float py);
-        static void pop_window_padding();
+
+        /// <summary>
+        /// Pops a previously pushed style variable.
+        /// </summary>
+        static void pop_style();
 
       private:
         struct impl;
@@ -200,6 +217,7 @@ namespace tempest::editor::ui
         void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
                                  const core::mesh_registry& meshes, const core::texture_registry& textures,
                                  const core::material_registry& materials) override;
+
       private:
         ui_context* _ui_ctx;
         uint64_t _frame_number = 0;

@@ -780,7 +780,7 @@ namespace tempest::graphics
 
         const auto camera_view = math::look_at(camera_transform.position(), camera_transform.position() + f, u);
         const auto camera_projection = math::perspective(
-            camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, camera_data.near_plane);
+            camera_data.aspect_ratio, camera_data.vertical_fov, camera_data.near_plane);
         const auto camera_inv_proj = math::inverse(camera_projection);
         const auto camera_inv_view = math::inverse(camera_view);
 
@@ -4065,7 +4065,7 @@ namespace tempest::graphics
 
         const auto camera_view = math::look_at(camera_transform.position(), camera_transform.position() + f, u);
         const auto camera_projection = math::perspective(
-            camera_data.aspect_ratio, camera_data.vertical_fov / camera_data.aspect_ratio, camera_data.near_plane);
+            camera_data.aspect_ratio, camera_data.vertical_fov, camera_data.near_plane);
 
         const auto scene_constants = zprepass::scene_constants{
             .camera =
