@@ -579,6 +579,7 @@ namespace tempest::rhi::vk
         vkb::DispatchTable _dispatch_table;
         VmaAllocator _vma_allocator{};
         bool _is_debug_device;
+        bool _can_name;
 
         optional<work_queue> _primary_work_queue;
         optional<work_queue> _dedicated_transfer_queue;

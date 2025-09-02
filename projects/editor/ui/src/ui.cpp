@@ -418,6 +418,18 @@ namespace tempest::editor::ui
 
             return im_flags;
         }
+
+        ImGuiTreeNodeFlags to_imgui(enum_mask<ui_context::tree_node_flags> flags)
+        {
+            ImGuiTreeNodeFlags im_flags = ImGuiTreeNodeFlags_None;
+
+            if ((flags & ui_context::tree_node_flags::selected) == ui_context::tree_node_flags::selected)
+            {
+                im_flags |= ImGuiTreeNodeFlags_Selected;
+            }
+
+            return im_flags;
+        }
     } // namespace
 
     struct ui_context::impl
@@ -1049,6 +1061,29 @@ namespace tempest::editor::ui
         ImGui::Image(bit_cast<ImTextureID>(id), ImVec2{static_cast<float>(width), static_cast<float>(height)});
     }
 
+    bool ui_context::tree_node(const void* id, enum_mask<tree_node_flags> flags, string_view label, ...)
+    {
+        va_list args;
+        va_start(args, label);
+        const auto res = ImGui::TreeNodeExV(id, to_imgui(flags), label.data(), args);
+        va_end(args);
+        return res;
+    }
+
+    bool ui_context::tree_leaf(const void* id, enum_mask<tree_node_flags> flags, string_view label, ...)
+    {
+        va_list args;
+        va_start(args, label);
+        const auto res = ImGui::TreeNodeExV(id, to_imgui(flags) | ImGuiTreeNodeFlags_Leaf, label.data(), args);
+        va_end(args);
+        return res;
+    }
+
+    void ui_context::tree_pop()
+    {
+        ImGui::TreePop();
+    }
+
     void ui_context::push_window_padding(float px, float py)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {px, py});
@@ -1057,6 +1092,11 @@ namespace tempest::editor::ui
     void ui_context::pop_style()
     {
         ImGui::PopStyleVar();
+    }
+
+    bool ui_context::is_clicked()
+    {
+        return ImGui::IsItemClicked();
     }
 
     void ui_context::end_window()

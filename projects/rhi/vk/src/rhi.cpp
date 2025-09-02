@@ -1428,6 +1428,16 @@ namespace tempest::rhi::vk
         {
             logger->info("Device in debug mode. Using {}", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
+
+#if defined(TEMPEST_DEBUG_SHADERS)
+        _can_name = true;
+#else
+        _can_name = _is_debug_device;
+#endif
+        if (_can_name)
+        {
+            logger->info("Debug names enabled.");
+        }
     }
 
     device::~device()
@@ -3363,7 +3373,7 @@ namespace tempest::rhi::vk
 
     void device::name_object(VkObjectType type, void* handle, const char* name) noexcept
     {
-        if (_is_debug_device)
+        if (_can_name)
         {
             VkDebugUtilsObjectNameInfoEXT name_info = {
                 .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -4595,6 +4605,11 @@ namespace tempest::rhi::vk
         bldr.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
 #endif
 #endif
+
+#if defined(TEMPEST_DEBUG_SHADERS)
+        bldr.enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+
         auto result = bldr.build();
         if (!result)
         {

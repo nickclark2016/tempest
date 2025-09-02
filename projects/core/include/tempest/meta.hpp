@@ -37,34 +37,29 @@ namespace tempest::core
         // remove suffix
         here = substr(here, 0, here.size() - suffix.size());
 
-        auto inner = tempest::reverse_search(here, "()::"); // defined in function scope
-        if (inner != here.end())
+        if (tempest::starts_with(here, "()::")) // defined in function scope
         {
-            here = string_view(inner + 4, here.end());
+            here = string_view(here.data() + 4, here.size() - 4);
         }
 
-        inner = tempest::reverse_search(here, "<lambda()>::"); // defined in lambda scope
-        if (inner != here.end())
+        if (tempest::starts_with(here, "<lambda()>::")) // defined in lambda scope
         {
-            here = string_view(inner + 12, here.end());
+            here = string_view(here.data() + 12, here.size() - 12);
         }
 
-        inner = tempest::reverse_search(here, "enum "); // defined in enum scope
-        if (inner != here.end())
+        if (tempest::starts_with(here, "enum ")) // defined in enum scope
         {
-            here = string_view(inner + 5, here.end());
+            here = string_view(here.data() + 5, here.size() - 5);
         }
 
-        inner = tempest::reverse_search(here, "struct "); // defined in struct scope
-        if (inner != here.end())
+        if (tempest::starts_with(here, "struct ")) // defined in struct scope
         {
-            here = string_view(inner + 7, here.end());
+            here = string_view(here.data() + 7, here.size() - 7);
         }
 
-        inner = tempest::reverse_search(here, "class "); // defined in class scope
-        if (inner != here.end())
+        if (tempest::starts_with(here, "class ")) // defined in class scope
         {
-            here = string_view(inner + 6, here.end());
+            here = string_view(here.data() + 6, here.size() - 6);
         }
 
         return here;

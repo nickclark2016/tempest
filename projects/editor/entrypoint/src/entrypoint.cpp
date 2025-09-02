@@ -42,6 +42,7 @@ namespace tempest::editor
         editor_ctx.register_pane(tempest::make_unique<asset_explorer>(), editor_context::dock_location::bottom);
 
         auto camera = engine.get_registry().create();
+        engine.get_registry().name(camera, "Main Camera");
 
         // Create a camera
         engine.register_on_initialize_callback([pbr_pipeline, camera](engine_context& ctx) {
@@ -49,6 +50,7 @@ namespace tempest::editor
                 "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", ctx.get_registry());
             auto sponza_instance = ctx.load_entity(sponza_prefab);
             ctx.get_registry().get<tempest::ecs::transform_component>(sponza_instance).scale({0.125f});
+            ctx.get_registry().name(sponza_instance, "Sponza");
 
             auto skybox_texture_prefab =
                 ctx.get_asset_database().import("assets/polyhaven/hdri/autumn_field_puresky.exr", ctx.get_registry());
@@ -91,14 +93,16 @@ namespace tempest::editor
             ctx.get_registry().assign_or_replace(sun, sun_tx);
         });
 
-        engine.register_on_variable_update_callback(
-            [&ui_context, &editor_ctx, &viewport_pane, camera](engine_context& ctx, auto dt) mutable {
-                auto vp_size = viewport_pane->window_size();
-                auto& cam_data = ctx.get_registry().get<graphics::camera_component>(camera);
-                cam_data.aspect_ratio = static_cast<float>(vp_size.x) / vp_size.y;
+        engine.register_on_variable_update_callback([&ui_context, &editor_ctx, &viewport_pane, camera, &entity_pane,
+                                                     &hierarchy_pane](engine_context& ctx, auto dt) mutable {
+            auto vp_size = viewport_pane->window_size();
+            auto& cam_data = ctx.get_registry().get<graphics::camera_component>(camera);
+            cam_data.aspect_ratio = static_cast<float>(vp_size.x) / vp_size.y;
 
-                editor_ctx.draw(ctx, *ui_context);
-            });
+            entity_pane->set_selected_entity(hierarchy_pane->get_selected_entity());
+
+            editor_ctx.draw(ctx, *ui_context);
+        });
 
         engine.run();
     }

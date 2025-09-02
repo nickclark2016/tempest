@@ -55,6 +55,12 @@ namespace tempest::editor::ui
             menubar = 0x400,
         };
 
+        enum class tree_node_flags
+        {
+            none = 0x000,
+            selected = 0x001,
+        };
+
         struct window_info
         {
             string_view name;
@@ -174,6 +180,10 @@ namespace tempest::editor::ui
         /// <param name="height">Display height</param>
         static void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height);
 
+        static bool tree_node(const void* id, enum_mask<tree_node_flags> flags, string_view label, ...);
+        static bool tree_leaf(const void* id, enum_mask<tree_node_flags> flags, string_view label, ...);
+        static void tree_pop();
+
         /// <summary>
         /// Pushes a new window padding value. This value is applied to all four sides of the window. Style values are
         /// pushed like a stack, so pushes must be matched with a pop (see <see cref="pop_style"/>).
@@ -186,6 +196,8 @@ namespace tempest::editor::ui
         /// Pops a previously pushed style variable.
         /// </summary>
         static void pop_style();
+
+        static bool is_clicked();
 
       private:
         struct impl;
