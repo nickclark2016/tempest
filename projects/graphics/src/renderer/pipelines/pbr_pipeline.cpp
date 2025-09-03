@@ -4289,8 +4289,8 @@ namespace tempest::graphics
             .image = _render_targets.shadow_megatexture,
             .old_layout = rhi::image_layout::undefined,
             .new_layout = rhi::image_layout::depth,
-            .src_stages = make_enum_mask(rhi::pipeline_stage::bottom),
-            .src_access = make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
+            .src_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader, rhi::pipeline_stage::compute_shader),
+            .src_access = make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::shader_write),
             .dst_stages = make_enum_mask(rhi::pipeline_stage::early_fragment_tests),
             .dst_access = make_enum_mask(rhi::memory_access::depth_stencil_attachment_write),
         };

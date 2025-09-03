@@ -83,10 +83,12 @@ FragmentOutput FSMain(VertexOutput input) {
     pd.geom_bitangent = half3(input.bitangent);
     pd.geom_normal = half3(input.normal);
 
-    fetch_diffuse(material, pd, bindless_textures);
+    if (material.mat.type != MaterialType::OPAQUE) {
+        fetch_diffuse(material, pd, bindless_textures);
 
-    if (pd.diffuse.w < material.mat.alpha_cutoff) {
-        discard;
+        if (pd.diffuse.w < material.mat.alpha_cutoff) {
+            discard;
+        }
     }
 
     float3x3 upper_view = (float3x3) scene.camera.view;
