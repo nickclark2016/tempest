@@ -243,6 +243,11 @@ namespace tempest::rhi::vk
         _resize_callbacks.push_back(tempest::move(cb));
     }
 
+    void window_surface::register_content_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept
+    {
+        _content_resize_callbacks.push_back(tempest::move(cb));
+    }
+
     void window_surface::register_focus_callback(function<void(bool)>&& cb) noexcept
     {
         _focus_callbacks.push_back(tempest::move(cb));
@@ -401,6 +406,14 @@ namespace tempest::rhi::vk
         }
     }
 
+    void window_surface::execute_content_resize_callbacks(uint32_t width, uint32_t height) const noexcept
+    {
+        for (const auto& cb : _content_resize_callbacks)
+        {
+            cb(width, height);
+        }
+    }
+
     void window_surface::execute_focus_callbacks(bool focused) const noexcept
     {
         for (const auto& cb : _focus_callbacks)
@@ -500,6 +513,7 @@ namespace tempest::rhi::vk
         // Framebuffer resize
         glfwSetFramebufferSizeCallback(window, [](GLFWwindow* window, int width, int height) {
             auto* win = static_cast<window_surface*>(glfwGetWindowUserPointer(window));
+            win->execute_content_resize_callbacks(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
             win->set_framebuffer_size(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
         });
 

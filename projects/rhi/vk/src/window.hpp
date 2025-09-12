@@ -112,6 +112,7 @@ namespace tempest::rhi::vk
         void register_character_input_callback(function<void(uint32_t)>&& cb) noexcept override;
         void register_close_callback(function<void()>&& cb) noexcept override;
         void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept override;
+        void register_content_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept override;
         void register_focus_callback(function<void(bool)>&& cb) noexcept override;
         void register_minimize_callback(function<void(bool)>&& cb) noexcept override;
         void register_cursor_enter_callback(function<void(bool)>&& cb) noexcept override;
@@ -137,6 +138,7 @@ namespace tempest::rhi::vk
         void execute_character_input_callbacks(uint32_t codepoint) const noexcept;
         void execute_close_callbacks() const noexcept;
         void execute_resize_callbacks(uint32_t width, uint32_t height) const noexcept;
+        void execute_content_resize_callbacks(uint32_t width, uint32_t height) const noexcept;
         void execute_focus_callbacks(bool focused) const noexcept;
         void execute_minimize_callbacks(bool minimized) const noexcept;
         void execute_cursor_enter_callbacks(bool entered) const noexcept;
@@ -175,6 +177,7 @@ namespace tempest::rhi::vk
         vector<function<void(uint32_t)>> _character_input_callbacks;
         vector<function<void()>> _close_callbacks;
         vector<function<void(uint32_t, uint32_t)>> _resize_callbacks;
+        vector<function<void(uint32_t, uint32_t)>> _content_resize_callbacks;
         vector<function<void(bool)>> _focus_callbacks;
         vector<function<void(bool)>> _minimize_callbacks;
         vector<function<void(bool)>> _cursor_enter_callbacks;

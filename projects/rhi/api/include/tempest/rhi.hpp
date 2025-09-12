@@ -423,6 +423,7 @@ namespace tempest::rhi
         // Set up other miscellaneous callbacks
         virtual void register_close_callback(function<void()>&& cb) noexcept = 0;
         virtual void register_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept = 0;
+        virtual void register_content_resize_callback(function<void(uint32_t, uint32_t)>&& cb) noexcept = 0;
         virtual void register_focus_callback(function<void(bool)>&& cb) noexcept = 0;
         virtual void register_minimize_callback(function<void(bool)>&& cb) noexcept = 0;
         virtual void register_cursor_enter_callback(function<void(bool)>&& cb) noexcept = 0;

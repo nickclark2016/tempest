@@ -4618,42 +4618,6 @@ namespace tempest::rhi::vk
 
         auto instance = tempest::move(result).value();
 
-        VkPhysicalDeviceExtendedDynamicState3FeaturesEXT extended_dynamic_state3 = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT,
-            .pNext = nullptr,
-            .extendedDynamicState3TessellationDomainOrigin = VK_FALSE,
-            .extendedDynamicState3DepthClampEnable = VK_FALSE,
-            .extendedDynamicState3PolygonMode = VK_FALSE,
-            .extendedDynamicState3RasterizationSamples = VK_TRUE,
-            .extendedDynamicState3SampleMask = VK_FALSE,
-            .extendedDynamicState3AlphaToCoverageEnable = VK_FALSE,
-            .extendedDynamicState3AlphaToOneEnable = VK_FALSE,
-            .extendedDynamicState3LogicOpEnable = VK_FALSE,
-            .extendedDynamicState3ColorBlendEnable = VK_FALSE,
-            .extendedDynamicState3ColorBlendEquation = VK_FALSE,
-            .extendedDynamicState3ColorWriteMask = VK_FALSE,
-            .extendedDynamicState3RasterizationStream = VK_FALSE,
-            .extendedDynamicState3ConservativeRasterizationMode = VK_FALSE,
-            .extendedDynamicState3ExtraPrimitiveOverestimationSize = VK_FALSE,
-            .extendedDynamicState3DepthClipEnable = VK_FALSE,
-            .extendedDynamicState3SampleLocationsEnable = VK_FALSE,
-            .extendedDynamicState3ColorBlendAdvanced = VK_FALSE,
-            .extendedDynamicState3ProvokingVertexMode = VK_FALSE,
-            .extendedDynamicState3LineRasterizationMode = VK_FALSE,
-            .extendedDynamicState3LineStippleEnable = VK_FALSE,
-            .extendedDynamicState3DepthClipNegativeOneToOne = VK_FALSE,
-            .extendedDynamicState3ViewportWScalingEnable = VK_FALSE,
-            .extendedDynamicState3ViewportSwizzle = VK_FALSE,
-            .extendedDynamicState3CoverageToColorEnable = VK_FALSE,
-            .extendedDynamicState3CoverageToColorLocation = VK_FALSE,
-            .extendedDynamicState3CoverageModulationMode = VK_FALSE,
-            .extendedDynamicState3CoverageModulationTableEnable = VK_FALSE,
-            .extendedDynamicState3CoverageModulationTable = VK_FALSE,
-            .extendedDynamicState3CoverageReductionMode = VK_FALSE,
-            .extendedDynamicState3RepresentativeFragmentTestEnable = VK_FALSE,
-            .extendedDynamicState3ShadingRateImageEnable = VK_FALSE,
-        };
-
         VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragment_shader_interlock = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT,
             .pNext = nullptr,
@@ -4675,7 +4639,6 @@ namespace tempest::rhi::vk
                 .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
                 .defer_surface_initialization()
                 .require_present()
-                .add_required_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)
                 .add_required_extension(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME)
                 .add_required_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)
                 .set_minimum_version(1, 3)
@@ -4744,7 +4707,7 @@ namespace tempest::rhi::vk
                     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
                     .pNext = nullptr,
                     .storageBuffer16BitAccess = VK_TRUE,
-                    .uniformAndStorageBuffer16BitAccess = VK_TRUE,
+                    .uniformAndStorageBuffer16BitAccess = VK_FALSE,
                     .storagePushConstant16 = VK_FALSE,
                     .storageInputOutput16 = VK_FALSE,
                     .multiview = VK_FALSE,
@@ -4762,7 +4725,7 @@ namespace tempest::rhi::vk
                     .samplerMirrorClampToEdge = VK_FALSE,
                     .drawIndirectCount = VK_FALSE,
                     .storageBuffer8BitAccess = VK_TRUE,
-                    .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+                    .uniformAndStorageBuffer8BitAccess = VK_FALSE,
                     .storagePushConstant8 = VK_FALSE,
                     .shaderBufferInt64Atomics = VK_FALSE,
                     .shaderSharedInt64Atomics = VK_FALSE,
@@ -4826,7 +4789,6 @@ namespace tempest::rhi::vk
                     .shaderIntegerDotProduct = VK_FALSE,
                     .maintenance4 = VK_FALSE,
                 })
-                .add_required_extension_features(extended_dynamic_state3)
                 .add_required_extension_features(fragment_shader_interlock);
 
         auto devices = selector.select_devices();

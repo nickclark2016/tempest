@@ -22,6 +22,12 @@ scoped.workspace('Tempest', function()
     end)
 
     scoped.filter({
+        'action:vs2026'
+    }, function()
+        toolset 'v145'
+    end)
+
+    scoped.filter({
         'configurations:Debug'
     }, function()
         defines { '_DEBUG' }

@@ -29,7 +29,7 @@ namespace tempest::graphics
             .layers = 1,
         });
 
-        window->register_resize_callback(
+        window->register_content_resize_callback(
             [render_surface, this]([[maybe_unused]] uint32_t width, [[maybe_unused]] uint32_t height) {
                 auto window_payload_it =
                     tempest::find_if(_windows.begin(), _windows.end(), [render_surface](const auto& payload) {
