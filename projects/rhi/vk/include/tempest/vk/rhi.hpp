@@ -225,6 +225,7 @@ namespace tempest::rhi::vk
         VkImageAspectFlags image_aspect;
         VkImageCreateInfo create_info;
         VkImageViewCreateInfo view_create_info;
+        string name;
     };
 
     struct buffer
@@ -566,7 +567,7 @@ namespace tempest::rhi::vk
             return _dispatch_table;
         }
 
-        flat_unordered_map<const vk::work_queue*, uint64_t> compute_current_work_queue_timeline_values() const noexcept;
+        vector<pair<const vk::work_queue*, uint64_t>> compute_current_work_queue_timeline_values() const noexcept;
 
         bool is_debug_device() const noexcept
         {

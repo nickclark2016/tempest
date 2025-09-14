@@ -1676,6 +1676,7 @@ namespace tempest::rhi::vk
             .image_aspect = view_ci.subresourceRange.aspectMask,
             .create_info = ci,
             .view_create_info = view_ci,
+            .name = desc.name,
         };
 
         if (!desc.name.empty())
@@ -3349,23 +3350,25 @@ namespace tempest::rhi::vk
         }
     }
 
-    flat_unordered_map<const work_queue*, uint64_t> device::compute_current_work_queue_timeline_values() const noexcept
+    vector<pair<const work_queue*, uint64_t>> device::compute_current_work_queue_timeline_values() const noexcept
     {
-        flat_unordered_map<const work_queue*, uint64_t> timeline_values;
+        vector<pair<const work_queue*, uint64_t>> timeline_values;
 
         if (_primary_work_queue)
         {
-            timeline_values[&*_primary_work_queue] = _primary_work_queue->query_completed_timeline_value();
+            timeline_values.emplace_back(&*_primary_work_queue, _primary_work_queue->query_completed_timeline_value());
         }
 
         if (_dedicated_compute_queue)
         {
-            timeline_values[&*_dedicated_compute_queue] = _dedicated_compute_queue->query_completed_timeline_value();
+            timeline_values.emplace_back(&*_dedicated_compute_queue,
+                                         _dedicated_compute_queue->query_completed_timeline_value());
         }
 
         if (_dedicated_transfer_queue)
         {
-            timeline_values[&*_dedicated_transfer_queue] = _dedicated_transfer_queue->query_completed_timeline_value();
+            timeline_values.emplace_back(&*_dedicated_transfer_queue,
+                                         _dedicated_transfer_queue->query_completed_timeline_value());
         }
 
         return timeline_values;
@@ -3511,6 +3514,8 @@ namespace tempest::rhi::vk
                     .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                     .deviceIndex = 1,
                 };
+
+                _last_submitted_value = timestamp;
             }
 
             for (size_t j = 0; j < infos[i].command_lists.size(); ++j)
@@ -3934,6 +3939,8 @@ namespace tempest::rhi::vk
                                 image->image, VK_IMAGE_LAYOUT_GENERAL, mip_count - 1, blits, VK_FILTER_LINEAR);
         _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info_post);
         _allocator.reset();
+
+        used_images[command_list].push_back(img);
     }
 
     void work_queue::copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -4487,6 +4494,16 @@ namespace tempest::rhi::vk
                 .pBufferInfo = nullptr,
                 .pTexelBufferView = nullptr,
             };
+
+            // Track the images and samplers for the resource tracker
+            for (const auto& img_info : image.images)
+            {
+                used_images[command_list].push_back(img_info.image);
+                if (img_info.sampler)
+                {
+                    used_samplers[command_list].push_back(img_info.sampler);
+                }
+            }
         }
 
         for (const auto& sampler : samplers)

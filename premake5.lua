@@ -161,6 +161,12 @@ scoped.workspace('Tempest', function()
         }
     end)
 
+    scoped.filter({
+        'configurations:Release'
+    }, function()
+        omitframepointer 'On'
+    end)
+
     startproject 'editor-entrypoint'
 
     include 'dependencies'

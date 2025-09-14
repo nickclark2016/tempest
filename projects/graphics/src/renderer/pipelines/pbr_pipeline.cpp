@@ -1167,6 +1167,11 @@ namespace tempest::graphics
 
     void pbr_pipeline::set_viewport(uint32_t width, uint32_t height)
     {
+        if (width == 0 || height == 0)
+        {
+            return;
+        }
+
         const auto is_resized = _render_target_width != width || _render_target_height != height;
         if (is_resized)
         {

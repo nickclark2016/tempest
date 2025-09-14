@@ -93,13 +93,13 @@ namespace tempest::editor
             ctx.get_registry().assign_or_replace(sun, sun_tx);
         });
 
-        engine.register_on_variable_update_callback([&ui_context, &editor_ctx, &viewport_pane, camera, &entity_pane,
-                                                     &hierarchy_pane](engine_context& ctx, auto dt) mutable {
+        engine.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {
             auto vp_size = viewport_pane->window_size();
             auto& cam_data = ctx.get_registry().get<graphics::camera_component>(camera);
             cam_data.aspect_ratio = static_cast<float>(vp_size.x) / vp_size.y;
 
             entity_pane->set_selected_entity(hierarchy_pane->get_selected_entity());
+            pbr_pipeline->set_viewport(vp_size.x, vp_size.y);            
 
             editor_ctx.draw(ctx, *ui_context);
         });

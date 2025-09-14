@@ -65,18 +65,15 @@ namespace tempest::rhi::vk
         }
         else
         {
-            auto resource = it->second;
-
+            auto& resource = it->second;
             if (resource.delete_requested)
             {
                 logger->error("Resource {} is already marked for deletion", key);
-                return;
             }
 
             // Check if the resource is already tracking usage on the queue and queue index
-            auto usage_it =
-                find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                    [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
                 resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
@@ -106,16 +103,14 @@ namespace tempest::rhi::vk
         }
         else
         {
-            auto resource = it->second;
+            auto& resource = it->second;
             if (resource.delete_requested)
             {
-                logger->error("Resource {} is already marked for deletion", key);
-                return;
+                logger->warn("Resource {} is already marked for deletion", key);
             }
             // Check if the resource is already tracking usage on the queue and queue index
-            auto usage_it =
-                find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                    [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
                 resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
@@ -145,16 +140,14 @@ namespace tempest::rhi::vk
         }
         else
         {
-            auto resource = it->second;
+            auto& resource = it->second;
             if (resource.delete_requested)
             {
                 logger->error("Resource {} is already marked for deletion", key);
-                return;
             }
             // Check if the resource is already tracking usage on the queue and queue index
-            auto usage_it =
-                find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                    [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
                 resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
@@ -184,16 +177,14 @@ namespace tempest::rhi::vk
         }
         else
         {
-            auto resource = it->second;
+            auto& resource = it->second;
             if (resource.delete_requested)
             {
                 logger->error("Resource {} is already marked for deletion", key);
-                return;
             }
             // Check if the resource is already tracking usage on the queue and queue index
-            auto usage_it =
-                find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                    [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
                 resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
@@ -223,16 +214,14 @@ namespace tempest::rhi::vk
         }
         else
         {
-            auto resource = it->second;
+            auto& resource = it->second;
             if (resource.delete_requested)
             {
                 logger->error("Resource {} is already marked for deletion", key);
-                return;
             }
             // Check if the resource is already tracking usage on the queue and queue index
-            auto usage_it =
-                find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                    [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
                 resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
@@ -262,16 +251,14 @@ namespace tempest::rhi::vk
         }
         else
         {
-            auto resource = it->second;
+            auto& resource = it->second;
             if (resource.delete_requested)
             {
                 logger->error("Resource {} is already marked for deletion", key);
-                return;
             }
             // Check if the resource is already tracking usage on the queue and queue index
-            auto usage_it =
-                find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                             [queue](const resource_usage_record& record) { return record.queue == queue; });
+            auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
+                                    [queue](const resource_usage_record& record) { return record.queue == queue; });
             if (usage_it == resource.usage_records.end())
             {
                 resource.usage_records.push_back({.queue = queue, .timeline_value = timeline_value});
@@ -294,7 +281,7 @@ namespace tempest::rhi::vk
         }
         auto& resource = it->second;
         auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+                                [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
             resource.usage_records.erase(usage_it);
@@ -312,7 +299,7 @@ namespace tempest::rhi::vk
         }
         auto& resource = it->second;
         auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+                                [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
             resource.usage_records.erase(usage_it);
@@ -330,7 +317,7 @@ namespace tempest::rhi::vk
         }
         auto& resource = it->second;
         auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+                                [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
             resource.usage_records.erase(usage_it);
@@ -349,7 +336,7 @@ namespace tempest::rhi::vk
         }
         auto& resource = it->second;
         auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+                                [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
             resource.usage_records.erase(usage_it);
@@ -368,7 +355,7 @@ namespace tempest::rhi::vk
         }
         auto& resource = it->second;
         auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+                                [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
             resource.usage_records.erase(usage_it);
@@ -387,7 +374,7 @@ namespace tempest::rhi::vk
         }
         auto& resource = it->second;
         auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
-                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
+                                [queue](const resource_usage_record& record) { return record.queue == queue; });
         if (usage_it != resource.usage_records.end())
         {
             resource.usage_records.erase(usage_it);
@@ -550,13 +537,17 @@ namespace tempest::rhi::vk
         for (auto it = _tracked_resources.begin(); it != _tracked_resources.end();)
         {
             auto& resource = it->second;
+
             if (resource.delete_requested)
             {
                 bool can_release = true;
 
                 for (const auto& record : resource.usage_records)
                 {
-                    if (timeline_values[record.queue] < record.timeline_value)
+                    auto record_it =
+                        find_if(timeline_values.begin(), timeline_values.end(),
+                                [&](const auto& wq_value_pair) { return wq_value_pair.first == record.queue; });
+                    if (record_it != timeline_values.end() && record_it->second <= record.timeline_value)
                     {
                         can_release = false;
                         break;
