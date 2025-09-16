@@ -3080,6 +3080,7 @@ namespace tempest::rhi::vk
                         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                     },
                 .view_create_info = {},
+                .name = "Swapchain Image",
             }));
         }
 
