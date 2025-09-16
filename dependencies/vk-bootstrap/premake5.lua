@@ -8,6 +8,7 @@ project 'vk-bootstrap'
 
     files {
         'include/**.h',
+        'include/**.inl',
         'src/**.cpp',
     }
 
