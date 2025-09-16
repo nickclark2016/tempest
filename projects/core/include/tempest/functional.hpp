@@ -424,7 +424,7 @@ namespace tempest
         template <typename R, typename Fn, typename... Args>
         inline R function_handler<R(Args...), Fn>::invoke(const any_func_data& data, Args&&... args)
         {
-            return invoke_r<R>(*base::get_pointer(data), tempest::forward<Args>(args)...);
+            return tempest::invoke_r<R>(*base::get_pointer(data), tempest::forward<Args>(args)...);
         }
 
         inline bool function_handler<void, void>::exec([[maybe_unused]] any_func_data& tgt,
