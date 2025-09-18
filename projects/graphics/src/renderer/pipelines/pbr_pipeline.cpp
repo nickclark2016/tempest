@@ -1049,6 +1049,8 @@ namespace tempest::graphics
 
             _final_color_layout = rhi::image_layout::shader_read_only;
 
+            ++_frame_number;
+
             return render_result::success;
         }
 
