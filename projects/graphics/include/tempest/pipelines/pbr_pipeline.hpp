@@ -389,6 +389,8 @@ namespace tempest::graphics
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> encoded_normals;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> transparency_accumulator;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> shadow_megatexture;
+
+            size_t frame_built;
         } _render_targets = {};
 
         struct

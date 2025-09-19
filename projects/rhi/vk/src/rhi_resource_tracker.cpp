@@ -68,7 +68,7 @@ namespace tempest::rhi::vk
             auto& resource = it->second;
             if (resource.delete_requested)
             {
-                logger->error("Resource {} is already marked for deletion", key);
+                logger->error("Buffer Resource {}:{} is already marked for deletion", buffer.generation, buffer.id);
             }
 
             // Check if the resource is already tracking usage on the queue and queue index
@@ -106,7 +106,10 @@ namespace tempest::rhi::vk
             auto& resource = it->second;
             if (resource.delete_requested)
             {
-                logger->warn("Resource {} is already marked for deletion", key);
+                // Get the resource name
+                const auto& name = _device->get_image(image)->name;
+                logger->warn("Image Resource {}:{} ({}) is already marked for deletion", image.generation, image.id,
+                             name.empty() ? "Unknown" : name.c_str());
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
@@ -143,7 +146,7 @@ namespace tempest::rhi::vk
             auto& resource = it->second;
             if (resource.delete_requested)
             {
-                logger->error("Resource {} is already marked for deletion", key);
+                logger->error("Sampler Resource {}:{} is already marked for deletion", sampler.generation, sampler.id);
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
@@ -180,7 +183,8 @@ namespace tempest::rhi::vk
             auto& resource = it->second;
             if (resource.delete_requested)
             {
-                logger->error("Resource {} is already marked for deletion", key);
+                logger->error("Graphics Pipeline Resource {}:{} is already marked for deletion", pipeline.generation,
+                              pipeline.id);
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
@@ -217,7 +221,8 @@ namespace tempest::rhi::vk
             auto& resource = it->second;
             if (resource.delete_requested)
             {
-                logger->error("Resource {} is already marked for deletion", key);
+                logger->error("Descriptor Set Resource {}:{} is already marked for deletion", desc_set.generation,
+                              desc_set.id);
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
@@ -254,7 +259,8 @@ namespace tempest::rhi::vk
             auto& resource = it->second;
             if (resource.delete_requested)
             {
-                logger->error("Resource {} is already marked for deletion", key);
+                logger->error("Compute Pipeline Resource {}:{} is already marked for deletion", pipeline.generation,
+                              pipeline.id);
             }
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
@@ -547,7 +553,7 @@ namespace tempest::rhi::vk
                     auto record_it =
                         find_if(timeline_values.begin(), timeline_values.end(),
                                 [&](const auto& wq_value_pair) { return wq_value_pair.first == record.queue; });
-                    if (record_it != timeline_values.end() && record_it->second <= record.timeline_value)
+                    if (record_it != timeline_values.end() && record_it->second - 1 <= record.timeline_value)
                     {
                         can_release = false;
                         break;

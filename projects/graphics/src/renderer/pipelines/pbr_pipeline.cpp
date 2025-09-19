@@ -779,8 +779,8 @@ namespace tempest::graphics
         const auto u = math::extract_up(quat_rot);
 
         const auto camera_view = math::look_at(camera_transform.position(), camera_transform.position() + f, u);
-        const auto camera_projection = math::perspective(
-            camera_data.aspect_ratio, camera_data.vertical_fov, camera_data.near_plane);
+        const auto camera_projection =
+            math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov, camera_data.near_plane);
         const auto camera_inv_proj = math::inverse(camera_projection);
         const auto camera_inv_view = math::inverse(camera_view);
 
@@ -2011,6 +2011,8 @@ namespace tempest::graphics
         _initialize_render_targets(dev);
         _construct_pbr_mboit_images(dev);
         _construct_ssao_images(dev);
+
+        _render_targets.frame_built = _frame_number;
     }
 
     void pbr_pipeline::_construct_pbr_mboit_images(rhi::device& dev)
@@ -4071,8 +4073,8 @@ namespace tempest::graphics
         const auto u = math::extract_up(quat_rot);
 
         const auto camera_view = math::look_at(camera_transform.position(), camera_transform.position() + f, u);
-        const auto camera_projection = math::perspective(
-            camera_data.aspect_ratio, camera_data.vertical_fov, camera_data.near_plane);
+        const auto camera_projection =
+            math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov, camera_data.near_plane);
 
         const auto scene_constants = zprepass::scene_constants{
             .camera =
@@ -4694,7 +4696,7 @@ namespace tempest::graphics
                                        rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands,
                                        const gpu::camera& cam)
     {
-        if (_ssao.last_binding_update_frame >= _frame_number)
+        if (_ssao.last_binding_update_frame >= _frame_number || _render_targets.frame_built >= _frame_number)
         {
             {
                 auto ds_desc = rhi::descriptor_set_desc{};
@@ -4771,38 +4773,39 @@ namespace tempest::graphics
                 _ssao.ssao_desc_set_0 = dev.create_descriptor_set(ds_desc);
             }
 
-            {
-                auto ds_desc = rhi::descriptor_set_desc{};
-                ds_desc.layout = _ssao.ssao_blur_desc_set_0_layout;
-
-                rhi::image_binding_descriptor ssao_target_binding_desc = {
-                    .index = 0,
-                    .type = rhi::descriptor_type::sampled_image,
-                    .array_offset = 0,
-                    .images = {},
-                };
-
-                ssao_target_binding_desc.images.push_back({
-                    .image = _ssao.ssao_target,
-                    .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
-                    .layout = rhi::image_layout::shader_read_only,
-                });
-
-                ds_desc.images.push_back(ssao_target_binding_desc);
-
-                rhi::sampler_binding_descriptor point_sampler_desc = {
-                    .index = 1,
-                    .samplers = {},
-                };
-                point_sampler_desc.samplers.push_back(_ssao.clamped_point_no_aniso_sampler);
-
-                ds_desc.samplers.push_back(point_sampler_desc);
-
-                dev.destroy_descriptor_set(_ssao.ssao_blur_desc_set_0);
-                _ssao.ssao_blur_desc_set_0 = dev.create_descriptor_set(ds_desc);
-            }
-
             _ssao.last_binding_update_frame = _frame_number;
+        }
+
+        if (_render_targets.frame_built >= _frame_number)
+        {
+            auto ds_desc = rhi::descriptor_set_desc{};
+            ds_desc.layout = _ssao.ssao_blur_desc_set_0_layout;
+
+            rhi::image_binding_descriptor ssao_target_binding_desc = {
+                .index = 0,
+                .type = rhi::descriptor_type::sampled_image,
+                .array_offset = 0,
+                .images = {},
+            };
+
+            ssao_target_binding_desc.images.push_back({
+                .image = _ssao.ssao_target,
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+
+            ds_desc.images.push_back(ssao_target_binding_desc);
+
+            rhi::sampler_binding_descriptor point_sampler_desc = {
+                .index = 1,
+                .samplers = {},
+            };
+            point_sampler_desc.samplers.push_back(_ssao.clamped_point_no_aniso_sampler);
+
+            ds_desc.samplers.push_back(point_sampler_desc);
+
+            dev.destroy_descriptor_set(_ssao.ssao_blur_desc_set_0);
+            _ssao.ssao_blur_desc_set_0 = dev.create_descriptor_set(ds_desc);
         }
 
         ssao::scene_constants constants;
@@ -5140,7 +5143,8 @@ namespace tempest::graphics
                                              rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands)
     {
         if (_pbr_opaque.last_binding_update_frame >= _frame_number ||
-            _bindless_textures.last_updated_frame_index >= _frame_number)
+            _bindless_textures.last_updated_frame_index >= _frame_number ||
+            _render_targets.frame_built >= _frame_number)
         {
 
             auto ds_desc_0 = rhi::descriptor_set_desc{};
@@ -5371,7 +5375,8 @@ namespace tempest::graphics
                                             rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands)
     {
         if (_pbr_transparencies.last_binding_update_frame >= _frame_number ||
-            _bindless_textures.last_updated_frame_index >= _frame_number)
+            _bindless_textures.last_updated_frame_index >= _frame_number ||
+            _render_targets.frame_built >= _frame_number)
         {
             // Gather descriptor sets
             {
