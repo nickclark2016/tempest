@@ -30,8 +30,9 @@ namespace tempest::filesystem
         /// <typeparam name="T">The type to check.</typeparam>
         template <typename T>
         concept path_source_type = (is_specialization_v<T, basic_string> || is_specialization_v<T, basic_string_view> ||
-                                    (iterable<T> && character_type<remove_const_t<decay_t<remove_all_extents_t<T>>>>));
-
+                                    (is_convertible_v<T, basic_string_view<char>> ||
+                                     is_convertible_v<T, basic_string_view<wchar_t>>));
+                                     
         string convert_wide_to_narrow(tempest::wstring_view wide_str);
         wstring convert_narrow_to_wide(tempest::string_view narrow_str);
 
@@ -64,6 +65,7 @@ namespace tempest::filesystem
     } // namespace detail
 
     class path;
+    class file_status;
 
     class path_iterator
     {
