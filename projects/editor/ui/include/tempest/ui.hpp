@@ -164,12 +164,20 @@ namespace tempest::editor::ui
         static bool menu_item(string_view name, bool enabled = true);
 
         /// <summary>
-        /// Displays the provided text. The string must be null terminatedand can contain formatting arguments similar
+        /// Displays the provided text. The string must be null terminated and can contain formatting arguments similar
         /// to printf.
         /// </summary>
         /// <param name="content">Text to display</param>
         /// <param name="...">Optional arguments for formatting the text</param>
         static void text(string_view content, ...);
+
+        /// <summary>
+        /// Displays the provided text. The string must be null terminated.
+        /// </summary>
+        /// <param name="selected">Set to true if the text is selected, else false</param>
+        /// <param name="content">Text to display</param>
+        /// <returns>True if text is selected, else false</returns>
+        static bool selectable_text(bool selected, string_view content);
 
         /// <summary>
         /// Displays an image with the given width and height. The image must be created with the sampled usage flag.
@@ -197,7 +205,15 @@ namespace tempest::editor::ui
         /// </summary>
         static void pop_style();
 
+        static bool button(string_view label);
+
         static bool is_clicked();
+        static bool is_hovered();
+        static bool is_double_clicked(core::mouse_button button);
+
+        static void no_line_break();
+
+        static void horizontal_separator();
 
       private:
         struct impl;

@@ -1,14 +1,17 @@
 #include <tempest/filesystem.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/utility.hpp>
 
 #ifdef _WIN32
 #define NOMINMAX
 #include <Windows.h>
 
 #include <AclAPI.h>
+#include <sddl.h>
 #include <winioctl.h>
 #else
+#include <dirent.h>
 #include <iconv.h>
 #include <limits.h>
 #include <sys/stat.h>
@@ -882,6 +885,83 @@ namespace tempest::filesystem
         }
     } // namespace
 
+    path_iterator::path_iterator() noexcept
+        : _full{}, _offset{numeric_limits<size_t>::max()}, _length{numeric_limits<size_t>::max()}
+    {
+    }
+
+    path_iterator::path_iterator(value_type path) : _full{path}
+    {
+        // Push the start to the first non-slash character
+        while (_offset < _full.size() && is_slash<detail::native_path_char_type>(_full[_offset]))
+        {
+            ++_offset;
+        }
+
+        // If we reached the end, set to end iterator
+        if (_offset >= _full.size())
+        {
+            _offset = numeric_limits<size_t>::max();
+            _length = numeric_limits<size_t>::max();
+            return;
+        }
+
+        // Find the next slash or the end of the string
+        size_t next_slash = _offset + 1;
+        while (next_slash < _full.size() && !is_slash<detail::native_path_char_type>(_full[next_slash]))
+        {
+            ++next_slash;
+        }
+
+        _length = next_slash - _offset;
+    }
+
+    path_iterator& path_iterator::operator++()
+    {
+        if (_offset == numeric_limits<size_t>::max())
+        {
+            return *this; // Already at end
+        }
+
+        _offset += _length;
+        // Push the start to the first non-slash character
+        while (_offset < _full.size() && is_slash<detail::native_path_char_type>(_full[_offset]))
+        {
+            ++_offset;
+        }
+
+        // If we reached the end, set to end iterator
+        if (_offset >= _full.size())
+        {
+            _offset = numeric_limits<size_t>::max();
+            _length = numeric_limits<size_t>::max();
+            return *this;
+        }
+
+        // Find the next slash or the end of the string
+        size_t next_slash = _offset + 1;
+        while (next_slash < _full.size() && !is_slash<detail::native_path_char_type>(_full[next_slash]))
+        {
+            ++next_slash;
+        }
+
+        _length = next_slash - _offset;
+
+        return *this;
+    }
+
+    path_iterator path_iterator::operator++(int)
+    {
+        auto copy = *this;
+        ++(*this);
+        return copy;
+    }
+
+    typename path_iterator::value_type path_iterator::operator*() const noexcept
+    {
+        return substr(_full, _offset, _length);
+    }
+
     path& path::assign(const path& p)
     {
         _path = p._path;
@@ -928,6 +1008,126 @@ namespace tempest::filesystem
     {
         _path.push_back(ch);
         return *this;
+    }
+
+    void path::clear()
+    {
+        _path = string_type{};
+    }
+
+    path& path::make_preferred()
+    {
+        for (auto& c : _path)
+        {
+            if (is_slash<value_type>(c))
+            {
+                c = preferred_separator;
+            }
+        }
+
+        return *this;
+    }
+
+    path& path::remove_filename()
+    {
+        // From the end of the path, find the last non-slash character
+        // If the end of the path is a slash character, this is a no op
+
+        if (_path.empty() || is_slash<value_type>(_path.back()))
+        {
+            return *this; // No-op if empty or ends with a slash
+        }
+
+        for (auto it = _path.end() - 1; it != _path.begin() - 1; --it)
+        {
+            if (is_slash<value_type>(*it))
+            {
+                // Erase from this position to the end
+                _path.erase(it + 1, _path.end());
+                return *this;
+            }
+        }
+
+        return *this;
+    }
+
+    path& path::replace_filename(const path& replacement)
+    {
+        remove_filename();
+        append(basic_string_view<value_type>(replacement.native()));
+        return *this;
+    }
+
+    path& path::replace_extension(const path& replacement)
+    {
+        // Replacement logic
+        // If this ends with an extension
+        //   If the replacement is empty, remove the extension
+        //   If the replacement starts with a dot, replace the extension with the replacement
+        //   If the replacement does not start with a dot, replace the extension with a dot + replacement
+        // If this does not end with an extension, but is not a slash
+        //   If the replacement is empty, do nothing
+        //   If the replacement starts with a dot, append the replacement
+        //   If the replacement does not start with a dot, append a dot + replacement
+        //   If the replacement is purely a dot, append a dot
+        // If this ends in a dot, append the entire replacement
+        // If this ends in a slash
+        //   If the extension starts with a dot, append the replacement
+        //   If the extension does not start with a dot, append a dot + replacement
+
+        // Search back to front for a dot or a slash
+        for (auto it = _path.end(); it != _path.begin();)
+        {
+            --it;
+            if (is_slash<value_type>(*it))
+            {
+                // Ends with a slash
+                if (!replacement.empty())
+                {
+                    if (dot<value_type> == replacement._path[0])
+                    {
+                        _path.append(replacement._path);
+                    }
+                    else
+                    {
+                        _path.push_back(dot<value_type>);
+                        _path.append(replacement._path);
+                    }
+                }
+                return *this;
+            }
+            else if (dot<value_type> == *it)
+            {
+                // Found an extension
+                if (replacement.empty())
+                {
+                    // Remove the extension
+                    _path.erase(it, _path.end());
+                }
+                else
+                {
+                    // Replace the extension
+                    _path.erase(it, _path.end());
+                    if (dot<value_type> == replacement._path[0])
+                    {
+                        _path.append(replacement._path);
+                    }
+                    else
+                    {
+                        _path.push_back(dot<value_type>);
+                        _path.append(replacement._path);
+                    }
+                }
+                return *this;
+            }
+        }
+
+        return *this;
+    }
+
+    void path::swap(path& other) noexcept
+    {
+        tempest::swap(_path, other._path);
     }
 
     const path::value_type* path::c_str() const noexcept
@@ -1078,6 +1278,26 @@ namespace tempest::filesystem
     bool path::is_relative() const
     {
         return !is_absolute();
+    }
+
+    typename path::iterator path::begin() const
+    {
+        return iterator(_path);
+    }
+
+    typename path::const_iterator path::cbegin() const
+    {
+        return const_iterator(_path);
+    }
+
+    typename path::iterator path::end() const
+    {
+        return iterator();
+    }
+
+    typename path::const_iterator path::cend() const
+    {
+        return const_iterator();
     }
 
     path& path::_append(const path& p)
@@ -1253,7 +1473,7 @@ namespace tempest::filesystem
 
     bool is_symlink(const path& p)
     {
-        return is_symlink(status(p));
+        return is_symlink(symlink_status(p));
     }
 
     bool status_known(const file_status& status)
@@ -1381,91 +1601,100 @@ namespace tempest::filesystem
                 return enum_mask(permissions::unknown);
             }
 
+            auto perms = enum_mask(permissions::none);
+
+            // Special case: NULL DACL = full access to everyone
             if (dacl == nullptr)
             {
-                return enum_mask(permissions::unknown); // No DACL present
+                perms = make_enum_mask(permissions::owner_all, permissions::group_all, permissions::others_all);
+                LocalFree(sec_desc);
+                return perms;
             }
 
-            auto perms = enum_mask(permissions::none);
+            // Build some well-known SIDs
+            PSID everyone_sid = nullptr;
+            {
+                SID_IDENTIFIER_AUTHORITY worldAuth = SECURITY_WORLD_SID_AUTHORITY;
+                AllocateAndInitializeSid(&worldAuth, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &everyone_sid);
+            }
+
+            PSID auth_users_sid = nullptr;
+            {
+                SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
+                AllocateAndInitializeSid(&ntAuth, 1, SECURITY_AUTHENTICATED_USER_RID, 0, 0, 0, 0, 0, 0, 0,
+                                         &auth_users_sid);
+            }
+
+            PSID builtin_users_sid = nullptr;
+            {
+                SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
+                AllocateAndInitializeSid(&ntAuth, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_USERS, 0, 0, 0, 0, 0,
+                                         0, &builtin_users_sid);
+            }
 
             for (DWORD i = 0; i < dacl->AceCount; ++i)
             {
-                void* ace;
-
+                void* ace = nullptr;
                 if (!GetAce(dacl, i, &ace))
                 {
-                    continue; // Skip if we can't get the ACE
+                    continue;
                 }
 
                 ACE_HEADER* ace_header = static_cast<ACE_HEADER*>(ace);
                 if (ace_header->AceType != ACCESS_ALLOWED_ACE_TYPE)
                 {
-                    continue; // Only interested in ACCESS_ALLOWED_ACE_TYPE
+                    continue; // ignore denies for now
                 }
 
-                ACCESS_ALLOWED_ACE* allowed_ace = static_cast<ACCESS_ALLOWED_ACE*>(ace);
-                PSID sid = &allowed_ace->SidStart;
+                auto* allowed_ace = reinterpret_cast<ACCESS_ALLOWED_ACE*>(ace);
+                PSID sid = reinterpret_cast<PSID>(&allowed_ace->SidStart);
                 DWORD mask = allowed_ace->Mask;
 
-                if (EqualSid(sid, owner))
+                if (!IsValidSid(sid))
+                    continue;
+
+                // Owner
+                if (IsValidSid(owner) && EqualSid(sid, owner))
                 {
-                    if (mask & (FILE_GENERIC_READ | GENERIC_READ | FILE_READ_DATA))
-                    {
+                    if (mask & (FILE_GENERIC_READ | FILE_READ_DATA))
                         perms |= permissions::owner_read;
-                    }
-                    if (mask & (FILE_GENERIC_WRITE | GENERIC_WRITE | FILE_WRITE_DATA))
-                    {
+                    if (mask & (FILE_GENERIC_WRITE | FILE_WRITE_DATA))
                         perms |= permissions::owner_write;
-                    }
-                    if (mask & (FILE_GENERIC_EXECUTE | GENERIC_EXECUTE | FILE_EXECUTE))
-                    {
+                    if (mask & (FILE_GENERIC_EXECUTE | FILE_EXECUTE))
                         perms |= permissions::owner_execute;
-                    }
                 }
-                else if (EqualSid(sid, group))
+                // Group
+                else if ((IsValidSid(group) && EqualSid(sid, group)) ||
+                         (builtin_users_sid && EqualSid(sid, builtin_users_sid)) ||
+                         (auth_users_sid && EqualSid(sid, auth_users_sid)))
                 {
-                    if (mask & (FILE_GENERIC_READ | GENERIC_READ | FILE_READ_DATA))
-                    {
+                    if (mask & (FILE_GENERIC_READ | FILE_READ_DATA))
                         perms |= permissions::group_read;
-                    }
-                    if (mask & (FILE_GENERIC_WRITE | GENERIC_WRITE | FILE_WRITE_DATA))
-                    {
+                    if (mask & (FILE_GENERIC_WRITE | FILE_WRITE_DATA))
                         perms |= permissions::group_write;
-                    }
-                    if (mask & (FILE_GENERIC_EXECUTE | GENERIC_EXECUTE | FILE_EXECUTE))
-                    {
+                    if (mask & (FILE_GENERIC_EXECUTE | FILE_EXECUTE))
                         perms |= permissions::group_execute;
-                    }
                 }
-                else
+                // Others
+                else if (everyone_sid && EqualSid(sid, everyone_sid))
                 {
-                    SID_IDENTIFIER_AUTHORITY others_auth = SECURITY_WORLD_SID_AUTHORITY;
-                    PSID others_sid = nullptr;
-                    if (AllocateAndInitializeSid(&others_auth, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &others_sid))
-                    {
-                        bool is_others = others_sid && EqualSid(sid, others_sid);
-                        FreeSid(others_sid);
-
-                        if (is_others)
-                        {
-                            if (mask & (FILE_GENERIC_READ | GENERIC_READ | FILE_READ_DATA))
-                            {
-                                perms |= permissions::others_read;
-                            }
-
-                            if (mask & (FILE_GENERIC_WRITE | GENERIC_WRITE | FILE_WRITE_DATA))
-                            {
-                                perms |= permissions::others_write;
-                            }
-
-                            if (mask & (FILE_GENERIC_EXECUTE | GENERIC_EXECUTE | FILE_EXECUTE))
-                            {
-                                perms |= permissions::others_execute;
-                            }
-                        }
-                    }
+                    if (mask & (FILE_GENERIC_READ | FILE_READ_DATA))
+                        perms |= permissions::others_read;
+                    if (mask & (FILE_GENERIC_WRITE | FILE_WRITE_DATA))
+                        perms |= permissions::others_write;
+                    if (mask & (FILE_GENERIC_EXECUTE | FILE_EXECUTE))
+                        perms |= permissions::others_execute;
                 }
             }
+
+            // cleanup
+            if (everyone_sid)
+                FreeSid(everyone_sid);
+            if (auth_users_sid)
+                FreeSid(auth_users_sid);
+            if (builtin_users_sid)
+                FreeSid(builtin_users_sid);
+            LocalFree(sec_desc);
 
             return perms;
         }
@@ -1547,9 +1776,19 @@ namespace tempest::filesystem
     file_status status(const path& p)
     {
 #ifdef _WIN32
-        const auto native_path = follow_symlink(p.native());
-        auto type = get_file_type(native_path);
-        auto perms = get_permissions(native_path);
+        auto type = get_file_type(p.native());
+        if (type == file_type::symlink)
+        {
+            auto native_path = path(follow_symlink(p.native()));
+            if (native_path.is_relative())
+            {
+                native_path = p / native_path;
+            }
+            type = get_file_type(native_path);
+            auto perms = get_permissions(native_path);
+            return file_status(type, perms);
+        }
+        auto perms = get_permissions(p.native());
         return file_status(type, perms);
 #else
         return get_unix_file_status(p.native(), true);
@@ -1571,5 +1810,274 @@ namespace tempest::filesystem
     bool exists(const file_status& status)
     {
         return status.type() != file_type::not_found && status_known(status);
+    }
+
+    bool exists(const path& p)
+    {
+        return exists(status(p));
+    }
+
+    path current_path()
+    {
+#ifdef _WIN32
+        DWORD size = GetCurrentDirectoryW(0, nullptr);
+        if (size == 0)
+        {
+            return path();
+        }
+
+        vector<wchar_t> buffer(size);
+        if (GetCurrentDirectoryW(size, buffer.data()) == 0)
+        {
+            return path();
+        }
+        return path(path::string_type(buffer.data()));
+#else
+        vector<char> buffer(PATH_MAX);
+        if (getcwd(buffer.data(), buffer.size()) == nullptr)
+        {
+            return path();
+        }
+        return path(path::string_type(buffer.data()));
+#endif
+    }
+
+    void current_path(const path& p)
+    {
+#ifdef _WIN32
+        SetCurrentDirectoryW(p.native().c_str());
+#else
+        chdir(p.native().c_str());
+#endif
+    }
+
+    directory_entry::directory_entry(const filesystem::path& p) : _path{p}
+    {
+    }
+
+    const filesystem::path& directory_entry::path() const noexcept
+    {
+        return _path;
+    }
+
+    directory_entry::operator const tempest::filesystem::path&() const noexcept
+    {
+        return _path;
+    }
+
+    bool directory_entry::exists() const
+    {
+        return filesystem::exists(_path);
+    }
+
+    bool directory_entry::is_block_file() const
+    {
+        return filesystem::is_block_file(_path);
+    }
+
+    bool directory_entry::is_character_file() const
+    {
+        return filesystem::is_character_file(_path);
+    }
+
+    bool directory_entry::is_directory() const
+    {
+        return filesystem::is_directory(_path);
+    }
+
+    bool directory_entry::is_fifo() const
+    {
+        return filesystem::is_fifo(_path);
+    }
+
+    bool directory_entry::is_other() const
+    {
+        return filesystem::is_other(_path);
+    }
+
+    bool directory_entry::is_regular_file() const
+    {
+        return filesystem::is_regular_file(_path);
+    }
+
+    bool directory_entry::is_socket() const
+    {
+        return filesystem::is_socket(_path);
+    }
+
+    bool directory_entry::is_symlink() const
+    {
+        return filesystem::is_symlink(_path);
+    }
+
+    file_status directory_entry::status() const
+    {
+        return filesystem::status(_path);
+    }
+
+    file_status directory_entry::symlink_status() const
+    {
+        return filesystem::symlink_status(_path);
+    }
+
+    size_t directory_entry::file_size() const
+    {
+        return filesystem::file_size(_path);
+    }
+
+    directory_iterator::directory_iterator(const path& p) : _dir{p}
+    {
+        if (!is_directory(p))
+        {
+            _index = 0;
+            return; // Not a directory, leave as end iterator
+        }
+
+#ifdef _WIN32
+        const auto path = p.native() / L"*";
+        auto find_data = WIN32_FIND_DATAW{};
+        const auto h_find = FindFirstFileW(path.c_str(), &find_data);
+        if (h_find == INVALID_HANDLE_VALUE)
+        {
+            _index = 0;
+            return; // Unable to open directory, leave as end iterator
+        }
+
+        do
+        {
+            const auto name = path::string_type(find_data.cFileName);
+            if (name != L"." && name != L"..")
+            {
+                _entries.emplace_back(p / name);
+            }
+        } while (FindNextFileW(h_find, &find_data));
+
+        FindClose(h_find);
+#else
+        auto dir = opendir(p.native().c_str());
+        if (!dir)
+        {
+            _index = 0;
+            return;
+        }
+
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != nullptr)
+        {
+            const auto name = path::string_type(entry->d_name);
+            if (name != "." && name != "..")
+            {
+                _entries.emplace_back(p / name);
+            }
+        }
+
+        closedir(dir);
+#endif
+    }
+
+    const directory_entry& directory_iterator::operator*() const
+    {
+        return _entries[_index];
+    }
+
+    const directory_entry* directory_iterator::operator->() const
+    {
+        return &_entries[_index];
+    }
+
+    directory_iterator& directory_iterator::operator++()
+    {
+        ++_index;
+        return *this;
+    }
+
+    size_t file_size(const path& p)
+    {
+#ifdef _WIN32
+        auto file_info = WIN32_FILE_ATTRIBUTE_DATA{};
+        if (!GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info))
+        {
+            return static_cast<size_t>(-1); // Unable to get attributes
+        }
+        if (file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            return static_cast<size_t>(-1); // It's a directory, not a file
+        }
+
+        auto size = LARGE_INTEGER{};
+        size.HighPart = file_info.nFileSizeHigh;
+        size.LowPart = file_info.nFileSizeLow;
+        return static_cast<size_t>(size.QuadPart);
+#else
+        struct stat file_stat;
+        if (stat(p.native().c_str(), &file_stat) != 0)
+        {
+            return static_cast<size_t>(-1); // Unable to get attributes
+        }
+        if (S_ISDIR(file_stat.st_mode))
+        {
+            return static_cast<size_t>(-1); // It's a directory, not a file
+        }
+        return static_cast<size_t>(file_stat.st_size);
+#endif
+    }
+
+    path relative(const path& p)
+    {
+        return relative(p, current_path());
+    }
+
+    path relative(const path& p, const path& base)
+    {
+        if (p.is_absolute() != base.is_absolute() || p.root_name() != base.root_name())
+        {
+            return p; // Can't compute relative path
+        }
+
+        auto p_iter = p.native().begin();
+        auto b_iter = base.native().begin();
+        auto p_end = p.native().end();
+        auto b_end = base.native().end();
+        // Skip common root directory
+        while (p_iter != p_end && b_iter != b_end && *p_iter == *b_iter)
+        {
+            ++p_iter;
+            ++b_iter;
+        }
+        // Skip any remaining slashes in base
+        while (b_iter != b_end && is_slash<path::value_type>(*b_iter))
+        {
+            ++b_iter;
+        }
+        // For each remaining component in base, add a ".."
+        path result;
+        while (b_iter != b_end)
+        {
+            result /= "..";
+            // Skip to next slash
+            while (b_iter != b_end && !is_slash<path::value_type>(*b_iter))
+            {
+                ++b_iter;
+            }
+            // Skip slashes
+            while (b_iter != b_end && is_slash<path::value_type>(*b_iter))
+            {
+                ++b_iter;
+            }
+        }
+        // Append the remaining part of p
+        if (p_iter != p_end)
+        {
+            if (!result.empty())
+            {
+                result /= ""; // Ensure separator if result is not empty
+            }
+            result += path(path::string_type(p_iter, p_end));
+        }
+        else if (result.empty())
+        {
+            result = "."; // Same path
+        }
+        return result;
     }
 } // namespace tempest::filesystem

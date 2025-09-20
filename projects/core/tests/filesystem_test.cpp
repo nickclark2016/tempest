@@ -588,3 +588,83 @@ TEST(path, divide_operator)
     EXPECT_EQ(unix_style_right_root.native(), "/world");
 #endif
 }
+
+TEST(path, clear)
+{
+    fs::path p = "Hello/World";
+    EXPECT_FALSE(p.empty());
+
+    p.clear();
+    EXPECT_TRUE(p.empty());
+}
+
+TEST(path, make_preferred)
+{
+    fs::path no_dirs = fs::path("HelloWorld");
+    fs::path mixed_dirs = fs::path("Hello/World\\Test");
+    fs::path unix_only_dirs = fs::path("Hello/World/Test");
+    fs::path win_only_dirs = fs::path("Hello\\World\\Test");
+
+    no_dirs.make_preferred();
+    mixed_dirs.make_preferred();
+    unix_only_dirs.make_preferred();
+    win_only_dirs.make_preferred();
+
+#ifdef _WIN32
+    EXPECT_EQ(no_dirs.native(), L"HelloWorld");
+    EXPECT_EQ(mixed_dirs.native(), L"Hello\\World\\Test");
+    EXPECT_EQ(unix_only_dirs.native(), L"Hello\\World\\Test");
+    EXPECT_EQ(win_only_dirs.native(), L"Hello\\World\\Test");
+#else
+    EXPECT_EQ(no_dirs.native(), "HelloWorld");
+    EXPECT_EQ(mixed_dirs.native(), "Hello/World/Test");
+    EXPECT_EQ(unix_only_dirs.native(), "Hello/World/Test");
+    EXPECT_EQ(win_only_dirs.native(), "Hello/World/Test");
+#endif
+}
+
+TEST(path, remove_filename)
+{
+    fs::path only_filename = fs::path("HelloWorld");
+    fs::path win_root = fs::path("C:\\");
+    fs::path unix_root = fs::path("/");
+    fs::path win_style_path = fs::path("C:\\Users\\User\\Documents\\file.txt");
+    fs::path unix_style_path = fs::path("/home/user/documents/file.txt");
+
+    only_filename.remove_filename();
+    win_style_path.remove_filename();
+    unix_style_path.remove_filename();
+
+#ifdef _WIN32
+    EXPECT_EQ(only_filename.native(), L"");
+    EXPECT_EQ(win_root.native(), L"C:\\");
+    EXPECT_EQ(unix_root.native(), L"/");
+    EXPECT_EQ(win_style_path.native(), L"C:\\Users\\User\\Documents");
+    EXPECT_EQ(unix_style_path.native(), L"/home/user/documents");
+#else
+    EXPECT_EQ(only_filename.native(), "");
+    EXPECT_EQ(win_root.native(), "C:\\");
+    EXPECT_EQ(unix_root.native(), "/");
+    EXPECT_EQ(win_style_path.native(), "C:\\Users\\User\\Documents");
+    EXPECT_EQ(unix_style_path.native(), "/home/user/documents");
+#endif
+}
+
+TEST(path, replace_filename)
+{
+    fs::path only_filename = fs::path("HelloWorld");
+    fs::path with_rel_path = fs::path("Documents/file.txt");
+
+    fs::path replacement = "Foo.png";
+
+    only_filename.replace_filename(replacement);
+    with_rel_path.replace_filename(replacement);
+
+#ifdef _WIN32
+    EXPECT_EQ(only_filename.native(), L"Foo.png");
+    EXPECT_EQ(with_rel_path.native(), L"Documents/Foo.png");
+#else
+    EXPECT_EQ(only_filename.native(), "Foo.png");
+    EXPECT_EQ(with_rel_path.native(), "Documents/Foo.png");
+#endif
+}

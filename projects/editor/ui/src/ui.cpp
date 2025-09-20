@@ -1055,6 +1055,11 @@ namespace tempest::editor::ui
         va_end(args);
     }
 
+    bool ui_context::selectable_text(bool selected, string_view content)
+    {
+        return ImGui::Selectable(content.data(), selected);
+    }
+
     void ui_context::image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height)
     {
         auto id = math::pack_uint32x2(img.id, img.generation);
@@ -1094,9 +1099,49 @@ namespace tempest::editor::ui
         ImGui::PopStyleVar();
     }
 
+    bool ui_context::button(string_view label)
+    {
+        return ImGui::Button(label.data());
+    }
+
     bool ui_context::is_clicked()
     {
         return ImGui::IsItemClicked();
+    }
+
+    bool ui_context::is_hovered()
+    {
+        return ImGui::IsItemHovered();
+    }
+
+    bool ui_context::is_double_clicked(core::mouse_button button)
+    {
+        ImGuiMouseButton im_button = -1;
+        switch (button)
+        {
+        case core::mouse_button::left:
+            im_button = ImGuiMouseButton_Left;
+            break;
+        case core::mouse_button::right:
+            im_button = ImGuiMouseButton_Right;
+            break;
+        case core::mouse_button::middle:
+            im_button = ImGuiMouseButton_Middle;
+            break;
+        default:
+            return false; // Unsupported mouse button
+        }
+        return ImGui::IsMouseDoubleClicked(im_button);
+    }
+
+    void ui_context::no_line_break()
+    {
+        ImGui::SameLine();
+    }
+
+    void ui_context::horizontal_separator()
+    {
+        ImGui::Separator();
     }
 
     void ui_context::end_window()

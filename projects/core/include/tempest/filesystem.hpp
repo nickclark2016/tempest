@@ -63,11 +63,48 @@ namespace tempest::filesystem
         }
     } // namespace detail
 
+    class path;
+
+    class path_iterator
+    {
+      public:
+        using value_type = basic_string_view<detail::native_path_char_type>;
+
+        path_iterator() noexcept;
+        explicit path_iterator(value_type path);
+
+        path_iterator& operator++();
+        path_iterator operator++(int);
+
+        value_type operator*() const noexcept;
+
+      private:
+        value_type _full = {};
+        size_t _offset = 0;
+        size_t _length = 0;
+
+        friend bool operator==(const path_iterator& lhs, const path_iterator& rhs) noexcept;
+        friend bool operator!=(const path_iterator& lhs, const path_iterator& rhs) noexcept;
+    };
+
+    inline bool operator==(const path_iterator& lhs, const path_iterator& rhs) noexcept
+    {
+        return lhs._offset == rhs._offset && lhs._length == rhs._length;
+    }
+
+    inline bool operator!=(const path_iterator& lhs, const path_iterator& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     class path
     {
       public:
         using value_type = detail::native_path_char_type;
         using string_type = tempest::basic_string<value_type>;
+        using const_iterator = path_iterator;
+        using iterator = const_iterator;
+
         static constexpr value_type preferred_separator = detail::native_path_separator;
 
         path() noexcept = default;
@@ -219,6 +256,11 @@ namespace tempest::filesystem
         bool is_absolute() const;
         bool is_relative() const;
 
+        iterator begin() const;
+        const_iterator cbegin() const;
+        iterator end() const;
+        const_iterator cend() const;
+
       private:
         string_type _path;
 
@@ -348,6 +390,97 @@ namespace tempest::filesystem
 
     [[nodiscard]] bool exists(const file_status& status);
     [[nodiscard]] bool exists(const path& p);
+
+    [[nodiscard]] path current_path();
+    void current_path(const path& p);
+
+    [[nodiscard]] size_t file_size(const path& p);
+
+    class directory_entry
+    {
+      public:
+        directory_entry() = default;
+        explicit directory_entry(const path& p);
+
+        const path& path() const noexcept;
+        operator const filesystem::path&() const noexcept;
+
+        bool exists() const;
+        bool is_block_file() const;
+        bool is_character_file() const;
+        bool is_directory() const;
+        bool is_fifo() const;
+        bool is_other() const;
+        bool is_regular_file() const;
+        bool is_socket() const;
+        bool is_symlink() const;
+
+        file_status status() const;
+        file_status symlink_status() const;
+
+        size_t file_size() const;
+
+      private:
+        filesystem::path _path;
+    };
+
+    // Filesystem Iterators
+    class directory_iterator
+    {
+      public:
+        using value_type = directory_entry;
+        using reference = const directory_entry&;
+        using pointer = const directory_entry*;
+        using difference_type = ptrdiff_t;
+
+        directory_iterator() noexcept = default;
+        explicit directory_iterator(const path& p);
+
+        const directory_entry& operator*() const;
+        const directory_entry* operator->() const;
+
+        directory_iterator& operator++();
+
+      private:
+        path _dir;
+        uint32_t _index = 0;
+
+        vector<directory_entry> _entries;
+
+        friend bool operator==(const directory_iterator& lhs, const directory_iterator& rhs) noexcept;
+    };
+
+    inline bool operator==(const directory_iterator& lhs, const directory_iterator& rhs) noexcept
+    {
+        // If the index is out of range, the iterator is at the end.
+        // Check if both are at the end.
+        if (lhs._index >= lhs._entries.size() && rhs._index >= rhs._entries.size())
+        {
+            return true;
+        }
+
+        // If only one is at the end, they are not equal.
+        if (lhs._index >= lhs._entries.size() || rhs._index >= rhs._entries.size())
+        {
+            return false;
+        }
+
+        // Both are not at the end, compare the path and index
+        return lhs._dir == rhs._dir && lhs._index == rhs._index;
+    }
+
+    inline directory_iterator begin(directory_iterator it) noexcept
+    {
+        return it;
+    }
+
+    inline directory_iterator end([[maybe_unused]] directory_iterator it) noexcept
+    {
+        return directory_iterator();
+    }
+
+    path relative(const path& p);
+    path relative(const path& p, const path& base);
 } // namespace tempest::filesystem
 
 #endif // tempest_filesystem_hpp
