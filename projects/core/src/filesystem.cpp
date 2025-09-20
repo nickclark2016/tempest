@@ -2080,4 +2080,6 @@ namespace tempest::filesystem
         }
         return result;
     }
+
+    static_assert(iterable<path>);
 } // namespace tempest::filesystem

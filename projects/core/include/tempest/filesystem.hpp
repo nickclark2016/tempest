@@ -69,6 +69,7 @@ namespace tempest::filesystem
     {
       public:
         using value_type = basic_string_view<detail::native_path_char_type>;
+        using difference_type = ptrdiff_t;
 
         path_iterator() noexcept;
         explicit path_iterator(value_type path);
@@ -481,6 +482,31 @@ namespace tempest::filesystem
 
     path relative(const path& p);
     path relative(const path& p, const path& base);
+
+    inline void swap(path& lhs, path& rhs) noexcept
+    {
+        lhs.swap(rhs);
+    }
+
+    inline typename path::iterator begin(const path& p) noexcept
+    {
+        return p.begin();
+    }
+
+    inline typename path::iterator cbegin(const path& p) noexcept
+    {
+        return p.cbegin();
+    }
+
+    inline typename path::iterator end(const path& p) noexcept
+    {
+        return p.end();
+    }
+
+    inline typename path::iterator cend(const path& p) noexcept
+    {
+        return p.cend();
+    }
 } // namespace tempest::filesystem
 
 #endif // tempest_filesystem_hpp
