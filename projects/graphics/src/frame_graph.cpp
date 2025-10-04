@@ -300,7 +300,7 @@ namespace tempest::graphics
         const auto dependency_graph = _build_dependency_graph(live_set);
         const auto sorted_passes = _topo_sort_kahns(dependency_graph);
         const auto queue_assignments = _assign_queue_type(live_set);
-        const auto submit_batches = _create_submit_batches(dependency_graph, sorted_passes, queue_assignments);
+        const auto submit_batches = _create_submit_batches(sorted_passes, queue_assignments);
         return _build_execution_plan(submit_batches, live_set.resource_indices);
     }
 
@@ -588,8 +588,7 @@ namespace tempest::graphics
     }
 
     vector<graph_compiler::submit_batch> graph_compiler::_create_submit_batches(
-        const dependency_graph& dag, span<const size_t> topo_order,
-        const flat_unordered_map<size_t, work_type>& queue_assignments) const
+        span<const size_t> topo_order, const flat_unordered_map<size_t, work_type>& queue_assignments) const
     {
         auto batches = vector<submit_batch>{};
         auto current_batch = submit_batch{};
@@ -681,7 +680,7 @@ namespace tempest::graphics
 
             auto sched_res = scheduled_resource{
                 .handle = copy(resource.handle),
-                .creation_info = [&]() -> variant<monostate_t, rhi::buffer_desc, rhi::image_desc> {
+                .creation_info = [&]() -> variant<external_resource, rhi::buffer_desc, rhi::image_desc> {
                     if (holds_alternative<internal_resource>(resource.resource))
                     {
                         const auto& res = get<internal_resource>(resource.resource);
@@ -695,7 +694,7 @@ namespace tempest::graphics
                         }
                     }
 
-                    return monostate;
+                    return get<external_resource>(resource.resource);
                 }(),
                 .per_frame = resource.per_frame,
                 .temporal = resource.temporal,
@@ -821,7 +820,6 @@ namespace tempest::graphics
                             last_usage.stages,
                         });
 
-                        batch_timeline = batch_timeline; // optionally increment for future transfers
                         ownership_transferred_in_batch.push_back(access.handle.handle);
                     }
                     else

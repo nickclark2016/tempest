@@ -305,8 +305,7 @@ namespace tempest::graphics
                              const flat_unordered_map<size_t, work_type>& queue_assignment,
                              const flat_unordered_map<uint64_t, work_type>& acquired_resource_handles) const;
         vector<submit_batch> _create_submit_batches(
-            const dependency_graph& dag, span<const size_t> topo_order,
-            const flat_unordered_map<size_t, work_type>& queue_assignments) const;
+            span<const size_t> topo_order, const flat_unordered_map<size_t, work_type>& queue_assignments) const;
         graph_execution_plan _build_execution_plan(span<const submit_batch> batches,
                                                    span<const size_t> resource_indices);
     };
@@ -352,6 +351,12 @@ namespace tempest::graphics
             },
             builder, false);
     }
+
+    class graph_executor
+    {
+      public:
+      private:
+    };
 } // namespace tempest::graphics
 
 #endif // tempest_graphics_frame_graph_hpp
