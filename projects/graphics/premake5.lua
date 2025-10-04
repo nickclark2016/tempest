@@ -139,6 +139,8 @@ scoped.group('Tests', function()
             'googletest',
             'tlsf',
         }
+
+        linkgroups 'On'
     
         externalwarnings 'Off'
         warnings 'Extra'
