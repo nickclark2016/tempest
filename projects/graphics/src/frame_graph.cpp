@@ -1,0 +1,858 @@
+#include <tempest/frame_graph.hpp>
+
+// TODO: Implement deque + queue
+// TODO: Implement unordered_set + set
+#include <tempest/flat_unordered_map.hpp>
+#include <tempest/vector.hpp>
+
+namespace tempest::graphics
+{
+    namespace
+    {
+        graph_resource_handle copy(const graph_resource_handle& handle)
+        {
+            return graph_resource_handle(handle.handle, handle.version, get_resource_type(handle));
+        }
+
+        inline constexpr enum_mask<rhi::memory_access> read_access_mask = make_enum_mask(
+            rhi::memory_access::color_attachment_read, rhi::memory_access::depth_stencil_attachment_read,
+            rhi::memory_access::shader_read, rhi::memory_access::shader_sampled_read,
+            rhi::memory_access::shader_storage_read, rhi::memory_access::index_read,
+            rhi::memory_access::vertex_attribute_read, rhi::memory_access::constant_buffer_read,
+            rhi::memory_access::transfer_read, rhi::memory_access::host_read, rhi::memory_access::memory_read);
+
+        inline constexpr enum_mask<rhi::memory_access> write_access_mask = make_enum_mask(
+            rhi::memory_access::color_attachment_write, rhi::memory_access::depth_stencil_attachment_write,
+            rhi::memory_access::shader_write, rhi::memory_access::shader_storage_write,
+            rhi::memory_access::transfer_write, rhi::memory_access::host_write, rhi::memory_access::memory_write);
+
+        constexpr bool is_read_access(enum_mask<rhi::memory_access> access)
+        {
+            return (access & read_access_mask) != enum_mask<rhi::memory_access>(rhi::memory_access::none);
+        }
+
+        constexpr bool is_write_access(enum_mask<rhi::memory_access> access)
+        {
+            return (access & write_access_mask) != enum_mask<rhi::memory_access>(rhi::memory_access::none);
+        }
+
+    } // namespace
+
+    void task_builder::read(graph_resource_handle& handle)
+    {
+        read(handle, make_enum_mask(rhi::pipeline_stage::all), read_access_mask);
+    }
+
+    void task_builder::read(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> read_hints,
+                            enum_mask<rhi::memory_access> access_hints)
+    {
+        accesses.push_back(scheduled_resource_access{
+            .handle = copy(handle),
+            .stages = read_hints,
+            .accesses = access_hints,
+        });
+    }
+
+    void task_builder::write(graph_resource_handle& handle)
+    {
+        write(handle, make_enum_mask(rhi::pipeline_stage::all), write_access_mask);
+    }
+
+    void task_builder::write(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> write_hints,
+                             enum_mask<rhi::memory_access> access_hints)
+    {
+        handle.version += 1;
+        auto current = copy(handle);
+
+        accesses.push_back(scheduled_resource_access{
+            .handle = tempest::move(current),
+            .stages = write_hints,
+            .accesses = access_hints,
+        });
+    }
+
+    void task_builder::read_write(graph_resource_handle& handle)
+    {
+        read_write(handle, make_enum_mask(rhi::pipeline_stage::all), read_access_mask,
+                   make_enum_mask(rhi::pipeline_stage::all), write_access_mask);
+    }
+
+    void task_builder::read_write(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> read_hints,
+                                  enum_mask<rhi::memory_access> read_access_hints,
+                                  enum_mask<rhi::pipeline_stage> write_hints,
+                                  enum_mask<rhi::memory_access> write_access_hints)
+    {
+        auto current = copy(handle);
+
+        accesses.push_back(scheduled_resource_access{
+            .handle = copy(current),
+            .stages = read_hints,
+            .accesses = read_access_hints,
+        });
+
+        handle.version += 1;
+        current = copy(handle);
+
+        accesses.push_back(scheduled_resource_access{
+            .handle = tempest::move(current),
+            .stages = write_hints,
+            .accesses = write_access_hints,
+        });
+    }
+
+    void compute_task_builder::prefer_async()
+    {
+        _prefer_async = true;
+    }
+
+    void transfer_task_builder::prefer_async()
+    {
+        _prefer_async = true;
+    }
+
+    graph_resource_handle graph_builder::import_buffer(string name,
+                                                       rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
+        auto entry = resource_entry{
+            .name = name,
+            .handle = copy(handle),
+            .resource = external_resource{buffer},
+            .per_frame = false,
+            .temporal = false,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle graph_builder::import_image(string name,
+                                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto entry = resource_entry{
+            .name = name,
+            .handle = copy(handle),
+            .resource = external_resource{image},
+            .per_frame = false,
+            .temporal = false,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle graph_builder::import_render_surface(
+        string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> surface)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::render_surface);
+        auto entry = resource_entry{
+            .name = name,
+            .handle = copy(handle),
+            .resource = external_resource{surface},
+            .per_frame = false,
+            .temporal = false,
+            .render_target = true,
+            .presentable = true,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle graph_builder::create_per_frame_buffer(rhi::buffer_desc desc)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
+        auto entry = resource_entry{
+            .name = desc.name,
+            .handle = copy(handle),
+            .resource = internal_resource{desc},
+            .per_frame = true,
+            .temporal = false,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle graph_builder::create_per_frame_image(rhi::image_desc desc)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto entry = resource_entry{
+            .name = desc.name,
+            .handle = copy(handle),
+            .resource = internal_resource{desc},
+            .per_frame = true,
+            .temporal = false,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle graph_builder::create_temporal_buffer(rhi::buffer_desc desc)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
+        auto entry = resource_entry{
+            .name = desc.name,
+            .handle = copy(handle),
+            .resource = internal_resource{desc},
+            .per_frame = false,
+            .temporal = true,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle graph_builder::create_temporal_image(rhi::image_desc desc)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto entry = resource_entry{
+            .name = desc.name,
+            .handle = copy(handle),
+            .resource = internal_resource{desc},
+            .per_frame = false,
+            .temporal = true,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle graph_builder::create_render_target(rhi::image_desc desc)
+    {
+        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto entry = resource_entry{
+            .name = desc.name,
+            .handle = copy(handle),
+            .resource = internal_resource{desc},
+            .per_frame = false,
+            .temporal = false,
+            .render_target = true,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_execution_plan graph_builder::compile(queue_configuration cfg) &&
+    {
+        return graph_compiler(tempest::move(_resources), tempest::move(_passes), cfg).compile();
+    }
+
+    void graph_builder::_create_pass_entry(string name, work_type type,
+                                           function<void(task_execution_context&)> execution_context,
+                                           task_builder& builder, bool async)
+    {
+        auto pass = pass_entry{};
+        pass.name = tempest::move(name);
+        pass.type = type;
+        pass.execution_context = std::move(execution_context);
+        pass.async = async;
+
+        for (auto&& res : builder.accesses)
+        {
+            pass.resource_accesses.push_back({
+                .handle = copy(res.handle),
+                .stages = res.stages,
+                .accesses = res.accesses,
+            });
+
+            if (is_write_access(res.accesses))
+            {
+                pass.outputs.push_back(copy(res.handle));
+            }
+        }
+
+        _passes.push_back(tempest::move(pass));
+    }
+
+    graph_compiler::graph_compiler(vector<resource_entry> resources, vector<pass_entry> passes, queue_configuration cfg)
+        : _resources{tempest::move(resources)}, _passes{tempest::move(passes)}, _cfg{cfg}
+    {
+    }
+
+    graph_execution_plan graph_compiler::compile()
+    {
+        const auto live_set = _gather_live_set();
+        const auto dependency_graph = _build_dependency_graph(live_set);
+        const auto sorted_passes = _topo_sort_kahns(dependency_graph);
+        const auto queue_assignments = _assign_queue_type(live_set);
+        const auto submit_batches = _create_submit_batches(dependency_graph, sorted_passes, queue_assignments);
+        return _build_execution_plan(submit_batches, live_set.resource_indices);
+    }
+
+    graph_compiler::live_set graph_compiler::_gather_live_set() const
+    {
+        auto live = live_set{};
+
+        auto work_list = vector<size_t>{};
+
+        for (size_t resource_idx = 0; resource_idx < _resources.size(); ++resource_idx)
+        {
+            const auto& resource = _resources[resource_idx];
+            if (resource.render_target || resource.temporal || holds_alternative<external_resource>(resource.resource))
+            {
+                // Render targets and temporal resources are always live
+                live.resource_indices.push_back(resource_idx);
+
+                // Find any writers for this resource
+                for (size_t pass_idx = 0; pass_idx < _passes.size(); ++pass_idx)
+                {
+                    const auto& pass = _passes[pass_idx];
+                    if (tempest::find_if(pass.outputs.cbegin(), pass.outputs.cend(), [&](const auto& output) {
+                            return resource.handle.handle == output.handle && resource.handle.type == output.type;
+                        }) != pass.outputs.cend())
+                    {
+
+                        if (tempest::find(live.pass_indices.cbegin(), live.pass_indices.cend(), pass_idx) ==
+                            live.pass_indices.cend())
+                        {
+                            live.pass_indices.push_back(pass_idx);
+                        }
+
+                        if (tempest::find(work_list.cbegin(), work_list.cend(), pass_idx) == work_list.cend())
+                        {
+                            work_list.push_back(pass_idx);
+                        }
+                    }
+                }
+            }
+        }
+
+        while (!work_list.empty())
+        {
+            const auto pass_index = work_list.back();
+            work_list.pop_back();
+
+            const auto& pass = _passes[pass_index];
+
+            for (auto& access : pass.resource_accesses)
+            {
+                const auto resource_it =
+                    tempest::find_if(_resources.cbegin(), _resources.cend(), [&](const auto& resource) {
+                        return resource.handle.handle == access.handle.handle &&
+                               resource.handle.type == access.handle.type;
+                    });
+
+                if (resource_it != _resources.cend())
+                {
+                    const auto resource_index = tempest::distance(_resources.begin(), resource_it);
+                    const auto live_resource_it =
+                        tempest::find(live.resource_indices.cbegin(), live.resource_indices.cend(), resource_index);
+                    if (live_resource_it == live.resource_indices.cend())
+                    {
+                        live.resource_indices.push_back(resource_index);
+
+                        for (size_t producer_index = 0; producer_index < _passes.size(); ++producer_index)
+                        {
+                            const auto pass_output_it = tempest::find_if(
+                                _passes[producer_index].outputs.cbegin(), _passes[producer_index].outputs.cend(),
+                                [&](const auto& output) {
+                                    return output.handle == access.handle.handle && output.type == access.handle.type;
+                                });
+
+                            if (pass_output_it != _passes[producer_index].outputs.cend() &&
+                                tempest::find(live.pass_indices.cbegin(), live.pass_indices.cend(), producer_index) !=
+                                    live.pass_indices.cend())
+                            {
+                                work_list.push_back(producer_index);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return live;
+    }
+
+    graph_compiler::dependency_graph graph_compiler::_build_dependency_graph(const live_set& live) const
+    {
+        auto dep_graph = dependency_graph{};
+
+        dep_graph.passes.insert(dep_graph.passes.end(), live.pass_indices.cbegin(), live.pass_indices.cend());
+        dep_graph.resources.insert(dep_graph.resources.end(), live.resource_indices.cbegin(),
+                                   live.resource_indices.cend());
+
+        for (auto consumer_index : live.pass_indices)
+        {
+            const auto& consumer = _passes[consumer_index];
+
+            // Build a set of resource handles the consumer writes (for read/write coalescing)
+            auto consumer_write_handles = vector<uint64_t>();
+            for (const auto& a : consumer.resource_accesses)
+            {
+                if (is_write_access(a.accesses))
+                {
+                    consumer_write_handles.push_back(a.handle.handle);
+                }
+            }
+
+            for (const auto& access : consumer.resource_accesses)
+            {
+                // If the consumer both reads and writes this resource, *skip* the read access
+                if (is_read_access(access.accesses) &&
+                    tempest::find(consumer_write_handles.cbegin(), consumer_write_handles.cend(),
+                                  access.handle.handle) != consumer_write_handles.cend())
+                {
+                    continue;
+                }
+
+                const auto resource_it = tempest::find_if(_resources.cbegin(), _resources.cend(), [&](const auto& res) {
+                    return res.handle.handle == access.handle.handle && res.handle.type == access.handle.type;
+                });
+
+                if (resource_it == _resources.cend())
+                    continue;
+
+                // For all earlier producers in the live pass list
+                for (size_t producer_index : dep_graph.passes)
+                {
+                    if (producer_index >= consumer_index)
+                    {
+                        continue;
+                    }
+
+                    const auto& producer = _passes[producer_index];
+
+                    // Producer must *write* this resource to be considered a producer:
+                    auto producer_access_it = tempest::find_if(
+                        producer.resource_accesses.cbegin(), producer.resource_accesses.cend(), [&](const auto& res) {
+                            return res.handle.handle == access.handle.handle && res.handle.type == access.handle.type &&
+                                   is_write_access(res.accesses);
+                        });
+
+                    if (producer_access_it == producer.resource_accesses.cend())
+                    {
+                        continue; // producer does not write this resource
+                    }
+
+                    if (producer_index == consumer_index)
+                    {
+                        continue; // skip self-dependencies
+                    }
+
+                    dependency_edge dependency{};
+                    dependency.producer_pass_index = producer_index;
+                    dependency.consumer_pass_index = consumer_index;
+                    dependency.resource = copy(access.handle);
+
+                    dependency.producer_stages = producer_access_it->stages;
+                    dependency.producer_access = producer_access_it->accesses;
+
+                    dependency.consumer_stages = access.stages;
+                    dependency.consumer_access = access.accesses;
+
+                    dep_graph.edges.push_back(tempest::move(dependency));
+                }
+            }
+        }
+
+        return dep_graph;
+    }
+
+    vector<size_t> graph_compiler::_topo_sort_kahns(const dependency_graph& graph) const
+    {
+        auto result = vector<size_t>{};
+        auto in_degree = flat_unordered_map<size_t, size_t>{};
+
+        for (size_t pass_idx : graph.passes)
+        {
+            in_degree[pass_idx] = 0;
+        }
+
+        for (const auto& edge : graph.edges)
+        {
+            in_degree[edge.consumer_pass_index]++;
+        }
+
+        auto ready = vector<size_t>{};
+        for (const auto& [pass_idx, degree] : in_degree)
+        {
+            if (degree == 0)
+            {
+                ready.push_back(pass_idx);
+            }
+        }
+
+        while (!ready.empty())
+        {
+            auto pass_idx = ready.back();
+            ready.pop_back();
+            result.push_back(pass_idx);
+            for (const auto& edge : graph.edges)
+            {
+                if (edge.producer_pass_index == pass_idx)
+                {
+                    in_degree[edge.consumer_pass_index]--;
+                    if (in_degree[edge.consumer_pass_index] == 0)
+                    {
+                        ready.push_back(edge.consumer_pass_index);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    flat_unordered_map<size_t, work_type> graph_compiler::_assign_queue_type(const live_set& live) const
+    {
+        auto assignments = flat_unordered_map<size_t, work_type>();
+
+        for (const auto& pass_index : live.pass_indices)
+        {
+            const auto& pass = _passes[pass_index];
+            if (pass.async)
+            {
+                // Ensure the pass type is supported by the configuration
+                // If the pass type is transfer and there is a transfer queue, assign it to transfer
+                // If the pass type is compute and there is a compute queue, assign it to compute
+                // If the pass type is transfer and there is no transfer queue but there is a compute queue, assign it
+                // to compute
+                // If the pass type is compute and there is no compute queue but there is a transfer queue, assign it to
+                // graphics
+                // If the pass type is transfer and there is no transfer or compute queue, assign it to graphics
+
+                if (pass.type == work_type::transfer && _cfg.transfer_queues > 0)
+                {
+                    assignments[pass_index] = work_type::transfer;
+                }
+                else if (pass.type == work_type::compute && _cfg.compute_queues > 0)
+                {
+                    assignments[pass_index] = work_type::compute;
+                }
+                else if (pass.type == work_type::transfer && _cfg.compute_queues > 0)
+                {
+                    assignments[pass_index] = work_type::compute;
+                }
+                else
+                {
+                    assignments[pass_index] = work_type::graphics;
+                }
+            }
+            else
+            {
+                // Default to graphics for non-async passes
+                assignments[pass_index] = work_type::graphics;
+            }
+        }
+
+        return assignments;
+    }
+
+    bool graph_compiler::_requires_split(size_t pass_idx, work_type queue,
+                                         const flat_unordered_map<size_t, work_type>& queue_assignment,
+                                         const flat_unordered_map<uint64_t, work_type>& acquired_resource_handles) const
+    {
+        if (queue_assignment.find(pass_idx)->second != queue)
+        {
+            return true;
+        }
+
+        const auto& pass = _passes[pass_idx];
+
+        for (const auto& access : pass.resource_accesses)
+        {
+            const auto handle = access.handle.handle;
+            const auto it = acquired_resource_handles.find(handle);
+            if (it != acquired_resource_handles.cend() && it->second != queue)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    vector<graph_compiler::submit_batch> graph_compiler::_create_submit_batches(
+        const dependency_graph& dag, span<const size_t> topo_order,
+        const flat_unordered_map<size_t, work_type>& queue_assignments) const
+    {
+        auto batches = vector<submit_batch>{};
+        auto current_batch = submit_batch{};
+
+        auto batch_passes = vector<size_t>{};
+
+        auto resource_queue_assignments =
+            flat_unordered_map<uint64_t, work_type>(); // storing the resource handle's handle value
+
+        for (auto pass : topo_order)
+        {
+            if (current_batch.pass_indices.empty())
+            {
+                current_batch.type = queue_assignments.find(pass)->second;
+                current_batch.pass_indices.push_back(pass);
+                batch_passes.push_back(pass);
+
+                // Gather the resources acquired by this pass
+                const auto& pass_entry = _passes[pass];
+                for (const auto& access : pass_entry.resource_accesses)
+                {
+                    resource_queue_assignments[access.handle.handle] = queue_assignments.find(pass)->second;
+                }
+
+                continue;
+            }
+
+            if (_requires_split(pass, current_batch.type, queue_assignments, resource_queue_assignments))
+            {
+                batches.push_back(tempest::move(current_batch));
+                current_batch = submit_batch{};
+                batch_passes.clear();
+
+                // Start a new batch
+                current_batch.type = queue_assignments.find(pass)->second;
+                current_batch.pass_indices.push_back(pass);
+                batch_passes.push_back(pass);
+
+                // Gather the resources acquired by this pass
+                const auto& pass_entry = _passes[pass];
+                for (const auto& access : pass_entry.resource_accesses)
+                {
+                    resource_queue_assignments[access.handle.handle] = queue_assignments.find(pass)->second;
+                }
+            }
+            else
+            {
+                current_batch.pass_indices.push_back(pass);
+                batch_passes.push_back(pass);
+
+                // Gather the resources acquired by this pass
+                const auto& pass_entry = _passes[pass];
+                for (const auto& access : pass_entry.resource_accesses)
+                {
+                    if (resource_queue_assignments.find(access.handle.handle) == resource_queue_assignments.cend())
+                    {
+                        resource_queue_assignments[access.handle.handle] = queue_assignments.find(pass)->second;
+                    }
+                }
+            }
+        }
+
+        if (!current_batch.pass_indices.empty())
+        {
+            batches.push_back(tempest::move(current_batch));
+        }
+
+        return batches;
+    }
+
+    graph_execution_plan graph_compiler::_build_execution_plan(span<const submit_batch> batches,
+                                                               span<const size_t> resource_indices)
+    {
+        struct last_usage_info
+        {
+            work_type queue;
+            uint64_t queue_index;
+            enum_mask<rhi::pipeline_stage> stages;
+            enum_mask<rhi::memory_access> access;
+            uint64_t timeline_value;
+            uint64_t last_submit_index;
+        };
+
+        auto plan = graph_execution_plan{};
+
+        for (auto resource_index : resource_indices)
+        {
+            const auto& resource = _resources[resource_index];
+
+            auto sched_res = scheduled_resource{
+                .handle = copy(resource.handle),
+                .creation_info = [&]() -> variant<monostate_t, rhi::buffer_desc, rhi::image_desc> {
+                    if (holds_alternative<internal_resource>(resource.resource))
+                    {
+                        const auto& res = get<internal_resource>(resource.resource);
+                        if (holds_alternative<rhi::buffer_desc>(res))
+                        {
+                            return get<rhi::buffer_desc>(res);
+                        }
+                        else if (holds_alternative<rhi::image_desc>(res))
+                        {
+                            return get<rhi::image_desc>(res);
+                        }
+                    }
+
+                    return monostate;
+                }(),
+                .per_frame = resource.per_frame,
+                .temporal = resource.temporal,
+                .render_target = resource.render_target,
+                .presentable = resource.presentable,
+            };
+
+            plan.resources.push_back(tempest::move(sched_res));
+        }
+
+        auto last_usage_map = flat_unordered_map<uint64_t, last_usage_info>{}; // handle -> last usage
+        auto queue_timelines =
+            flat_unordered_map<work_type,
+                               flat_unordered_map<uint64_t, uint64_t>>{}; // queue -> (queue index -> timeline value)
+
+        for (auto i = 0u; i < _cfg.graphics_queues; ++i)
+        {
+            queue_timelines[work_type::graphics][i] = 1;
+        }
+
+        for (auto i = 0u; i < _cfg.compute_queues; ++i)
+        {
+            queue_timelines[work_type::compute][i] = 1;
+        }
+
+        for (auto i = 0u; i < _cfg.transfer_queues; ++i)
+        {
+            queue_timelines[work_type::transfer][i] = 1;
+        }
+
+        struct future_usage
+        {
+            enum_mask<rhi::pipeline_stage> stages;
+            enum_mask<rhi::memory_access> access_mask;
+        };
+
+        auto future_usage_map = flat_unordered_map<uint64_t, flat_unordered_map<work_type, future_usage>>{};
+
+        for (auto batch_idx = static_cast<ptrdiff_t>(batches.size() - 1); batch_idx >= 0; --batch_idx)
+        {
+            const auto& batch = batches[batch_idx];
+            for (size_t pass_idx : batch.pass_indices)
+            {
+                const auto& pass = _passes[pass_idx];
+                for (auto& access : pass.resource_accesses)
+                {
+                    auto& usage = future_usage_map[access.handle.handle][batch.type];
+                    usage.stages |= access.stages;
+                    usage.access_mask |= access.accesses;
+                }
+            }
+        }
+
+        for (size_t batch_idx = 0; batch_idx < batches.size(); ++batch_idx)
+        {
+            const auto& batch = batches[batch_idx];
+
+            auto instructions = submit_instructions{};
+            instructions.type = batch.type;
+            instructions.queue_index = 0; // TODO: assign proper queue index
+
+            auto& batch_timeline = queue_timelines[batch.type][instructions.queue_index];
+            auto ownership_transferred_in_batch = vector<uint64_t>{};
+
+            for (size_t pass_idx : batch.pass_indices)
+            {
+                const auto& pass = _passes[pass_idx];
+                scheduled_pass sched_pass;
+                sched_pass.name = pass.name;
+                sched_pass.type = pass.type;
+
+                for (auto& access : pass.resource_accesses)
+                {
+                    auto& last_usage = last_usage_map[access.handle.handle];
+                    bool first_use = (last_usage.timeline_value == 0);
+
+                    if (!first_use && last_usage.queue != batch.type &&
+                        tempest::find(ownership_transferred_in_batch.cbegin(), ownership_transferred_in_batch.cend(),
+                                      access.handle.handle) == ownership_transferred_in_batch.cend())
+                    {
+
+                        // Cross-queue ownership transfer
+                        uint64_t signal_value = last_usage.timeline_value + 1;
+
+                        // SOURCE queue: release and signal on its own timeline
+                        submit_instructions& src_instructions = plan.submissions[last_usage.last_submit_index];
+                        const auto& future_usage = future_usage_map[access.handle.handle][last_usage.queue];
+                        src_instructions.released_resources.push_back({
+                            .handle = copy(access.handle),
+                            .src_queue = last_usage.queue,
+                            .dst_queue = batch.type,
+                            .src_stages = last_usage.stages,
+                            .dst_stages = future_usage.stages,
+                            .src_accesses = last_usage.access,
+                            .dst_accesses = future_usage.access_mask,
+                            .wait_value = 0,
+                            .signal_value = signal_value,
+                        });
+
+                        src_instructions.signals.push_back({
+                            .type = last_usage.queue,
+                            .queue_index = last_usage.queue_index,
+                            .value = signal_value,
+                            .stages = last_usage.stages,
+                        });
+
+                        // DESTINATION queue: acquire and wait on source queue timeline
+                        instructions.acquired_resources.push_back({
+                            .handle = copy(access.handle),
+                            .src_queue = last_usage.queue,
+                            .dst_queue = batch.type,
+                            .src_stages = last_usage.stages,
+                            .dst_stages = future_usage.stages,
+                            .src_accesses = last_usage.access,
+                            .dst_accesses = future_usage.access_mask,
+                            .wait_value = signal_value,
+                            .signal_value = 0 // destination timeline increment optional
+                        });
+                        instructions.waits.push_back({
+                            last_usage.queue,
+                            last_usage.queue_index,
+                            signal_value,
+                            last_usage.stages,
+                        });
+
+                        batch_timeline = batch_timeline; // optionally increment for future transfers
+                        ownership_transferred_in_batch.push_back(access.handle.handle);
+                    }
+                    else
+                    {
+                        // Same queue: merge stages/access masks
+                        last_usage.stages |= access.stages;
+                        last_usage.access |= access.accesses;
+                    }
+
+                    // Update last usage info
+                    last_usage.queue = batch.type;
+                    last_usage.queue_index = instructions.queue_index;
+                    last_usage.stages |= access.stages;
+                    last_usage.access |= access.accesses;
+                    last_usage.timeline_value = batch_timeline;
+                    last_usage.last_submit_index = batch_idx;
+
+                    sched_pass.accesses.push_back({
+                        .handle = copy(access.handle),
+                        .stages = access.stages,
+                        .accesses = access.accesses,
+                    });
+                }
+
+                sched_pass.execution_context = pass.execution_context;
+                instructions.passes.push_back(move(sched_pass));
+            }
+
+            plan.submissions.push_back(move(instructions));
+        }
+
+        return plan;
+    }
+} // namespace tempest::graphics

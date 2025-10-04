@@ -22,7 +22,7 @@ scoped.project('graphics', function()
         '{MKDIR} "%{cfg.targetdir}/shaders"',
     }
 
-    uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan', 'rhi-api', 'rhi-vk' }
+    uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan', 'rhi-vk' }
 
     scoped.usage("PUBLIC", function()
         uses {
@@ -30,6 +30,7 @@ scoped.project('graphics', function()
             'ecs',
             'logger',
             'math',
+            'rhi-api',
         }
     end)
 
@@ -117,6 +118,31 @@ scoped.project('graphics', function()
 
     externalwarnings 'Off'
     warnings 'Extra'
+end)
+
+scoped.group('Tests', function()
+    scoped.project('graphics-tests', function()
+        kind 'ConsoleApp'
+        language 'C++'
+        cppdialect 'C++20'
+    
+        targetdir '%{binaries}'
+        objdir '%{intermediates}'
+    
+        files {
+            'tests/**.cpp',
+        }
+
+        uses {
+            'graphics',
+            'glfw',
+            'googletest',
+            'tlsf',
+        }
+    
+        externalwarnings 'Off'
+        warnings 'Extra'
+    end)
 end)
 
 newoption {

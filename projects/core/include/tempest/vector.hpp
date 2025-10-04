@@ -651,7 +651,7 @@ namespace tempest
         requires is_copy_constructible_v<T>
     {
         auto index = pos - begin();
-        reserve(_compute_next_capacity(size() + 1));
+        reserve(_compute_next_capacity(size() + count));
 
         // Move construct the first count elements, then move the rest
         auto count_remaining = size() - index;
@@ -685,13 +685,13 @@ namespace tempest
     constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, InputIt first,
                                                                                    InputIt last)
     {
-        auto index = pos - begin();
-        reserve(_compute_next_capacity(size() + 1));
+        const auto index = pos - begin();
+        const auto count = static_cast<size_t>(distance(first, last));
+        reserve(_compute_next_capacity(size() + count));
 
         // Move construct the first count elements, then move the rest
-        size_t count = distance(first, last);
         size_t count_remaining = size() - index;
-        auto count_to_move = tempest::min(count, count_remaining);
+        const auto count_to_move = tempest::min(count, count_remaining);
 
         ptrdiff_t end_index = size();
         ptrdiff_t start_index = index;
@@ -993,7 +993,7 @@ namespace tempest
             vec.reserve(count);
             vec._end = vec._data + count;
         }
-    }
+    } // namespace unsafe
 } // namespace tempest
 
 #endif // tempest_core_vector_hpp

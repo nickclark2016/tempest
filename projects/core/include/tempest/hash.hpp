@@ -35,18 +35,18 @@ namespace tempest
         inline int64_t i8_hash(int8_t v) noexcept
         {
             auto full_hash = i64_hash(v);
-            auto masked_hash = full_hash & 0x1FFFFFFFFFFFFFF;      // mask off the upper 7 bits
+            auto masked_hash = full_hash & 0x1FFFFFFFFFFFFFF; // mask off the upper 7 bits
             auto input_mask = static_cast<int64_t>(v) & 0x7F; // mask off the upper 1 bit
-            auto shifted_input = input_mask << 57;                 // shift the input to the upper 7 bits
+            auto shifted_input = input_mask << 57;            // shift the input to the upper 7 bits
             return masked_hash | shifted_input;
         }
 
         inline uint64_t u8_hash(uint8_t v) noexcept
         {
             auto full_hash = u64_hash(v);
-            auto masked_hash = full_hash & 0x1FFFFFFFFFFFFFF;       // mask off the upper 7 bits
+            auto masked_hash = full_hash & 0x1FFFFFFFFFFFFFF;  // mask off the upper 7 bits
             auto input_mask = static_cast<uint64_t>(v) & 0x7F; // mask off the upper 1 bit
-            auto shifted_input = input_mask << 57;                  // shift the input to the upper 7 bits
+            auto shifted_input = input_mask << 57;             // shift the input to the upper 7 bits
             return masked_hash | shifted_input;
         }
 
@@ -242,6 +242,17 @@ namespace tempest
             {
                 return static_cast<size_t>(detail::u64_hash(bit_cast<uint64_t>(key)));
             }
+        }
+    };
+
+    template <typename T>
+        requires is_enum_v<T>
+    struct hash<T>
+    {
+        size_t operator()(T key) const noexcept
+        {
+            using underlying = underlying_type_t<T>;
+            return hash<underlying>()(static_cast<underlying>(key));
         }
     };
 
