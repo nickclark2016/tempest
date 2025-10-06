@@ -417,7 +417,7 @@ namespace tempest::rhi
 
     struct render_surface_desc
     {
-        window_surface* window;
+        const window_surface* window;
         uint32_t min_image_count;
         render_surface_format format;
         present_mode present_mode;

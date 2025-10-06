@@ -67,7 +67,8 @@ namespace tempest::rhi
         virtual void destroy_fence(typed_rhi_handle<rhi_handle_type::fence> handle) noexcept = 0;
         virtual void destroy_semaphore(typed_rhi_handle<rhi_handle_type::semaphore> handle) noexcept = 0;
         virtual void destroy_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle) noexcept = 0;
-        virtual void destroy_descriptor_set_layout(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept = 0;
+        virtual void destroy_descriptor_set_layout(
+            typed_rhi_handle<rhi_handle_type::descriptor_set_layout> handle) noexcept = 0;
         virtual void destroy_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) noexcept = 0;
         virtual void destroy_graphics_pipeline(
             typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) noexcept = 0;
@@ -103,6 +104,8 @@ namespace tempest::rhi
         virtual uint32_t get_render_surface_width(
             typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;
         virtual uint32_t get_render_surface_height(
+            typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;
+        virtual const window_surface* get_window_surface(
             typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;
 
         virtual void start_frame() = 0;
@@ -163,7 +166,7 @@ namespace tempest::rhi
         virtual bool submit(span<const submit_info> infos,
                             typed_rhi_handle<rhi_handle_type::fence> fence =
                                 typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept = 0;
-        virtual present_result present(const present_info& info) noexcept = 0;
+        virtual vector<present_result> present(const present_info& info) noexcept = 0;
 
         // Commands
         struct image_barrier

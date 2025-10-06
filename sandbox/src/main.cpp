@@ -1,27 +1,36 @@
+#include <tempest/frame_graph.hpp>
+#include <tempest/input.hpp>
 #include <tempest/pipelines/pbr_pipeline.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
 
+//namespace tempest::rhi::vk
+//{
+//    unique_ptr<rhi::instance> create_instance() noexcept;
+//    unique_ptr<rhi::window_surface> create_window_surface(const rhi::window_surface_desc& desc) noexcept;
+//} // namespace tempest::rhi::vk
+
 int main()
 {
-    auto engine = tempest::engine_context();
-    auto surface_desc = tempest::rhi::window_surface_desc{
-        .width = 1920,
-        .height = 1080,
-        .name = "Tempest Engine Sandbox",
-        .fullscreen = false,
-    };
+     auto engine = tempest::engine_context();
+     auto surface_desc = tempest::rhi::window_surface_desc{
+         .width = 1920,
+         .height = 1080,
+         .name = "Tempest Engine Sandbox",
+         .fullscreen = false,
+     };
 
-    auto window_and_inputs = engine.register_window(surface_desc);
-    auto& [surface, inputs] = window_and_inputs;
-    auto pipeline =
-        engine.register_pipeline<tempest::graphics::pbr_pipeline>(surface, 1920, 1080, engine.get_registry());
+     auto window_and_inputs = engine.register_window(surface_desc);
+     auto& [surface, inputs] = window_and_inputs;
+     auto pipeline =
+         engine.register_pipeline<tempest::graphics::pbr_pipeline>(surface, 1920, 1080, engine.get_registry());
 
-    engine.register_on_initialize_callback([&](tempest::engine_context& ctx) {
-        auto sponza_prefab = ctx.get_asset_database().import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf",
-                                                             ctx.get_registry());
-        auto sponza_instance = ctx.load_entity(sponza_prefab);
-        ctx.get_registry().get<tempest::ecs::transform_component>(sponza_instance).scale({0.125f});
+     engine.register_on_initialize_callback([&](tempest::engine_context& ctx) {
+         auto sponza_prefab =
+         ctx.get_asset_database().import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf",
+                                                              ctx.get_registry());
+         auto sponza_instance = ctx.load_entity(sponza_prefab);
+         ctx.get_registry().get<tempest::ecs::transform_component>(sponza_instance).scale({0.125f});
 
         auto skybox_texture_prefab =
             ctx.get_asset_database().import("assets/polyhaven/hdri/autumn_field_puresky.exr", ctx.get_registry());
@@ -71,4 +80,87 @@ int main()
     });
 
     engine.run();
+
+    //auto instance = tempest::rhi::vk::create_instance();
+    //auto& device = instance->acquire_device(0);
+
+    //auto window = tempest::rhi::vk::create_window_surface({
+    //    .width = 1280,
+    //    .height = 720,
+    //    .name = "Tempest Render Graph Test",
+    //});
+
+    //auto swapchain = device.create_render_surface({
+    //    .window = window.get(),
+    //    .min_image_count = 2,
+    //    .format =
+    //        {
+    //            .space = tempest::rhi::color_space::srgb_nonlinear,
+    //            .format = tempest::rhi::image_format::bgra8_srgb,
+    //        },
+    //    .present_mode = tempest::rhi::present_mode::immediate,
+    //    .width = 1280,
+    //    .height = 720,
+    //    .layers = 1,
+    //});
+
+    //auto render_graph_builder = tempest::graphics::graph_builder{};
+
+    //auto color_buffer = render_graph_builder.create_render_target({
+    //    .format = tempest::rhi::image_format::rgba8_srgb,
+    //    .type = tempest::rhi::image_type::image_2d,
+    //    .width = 1920,
+    //    .height = 1080,
+    //    .depth = 1,
+    //    .array_layers = 1,
+    //    .mip_levels = 1,
+    //    .sample_count = tempest::rhi::image_sample_count::sample_count_1,
+    //    .tiling = tempest::rhi::image_tiling_type::optimal,
+    //    .location = tempest::rhi::memory_location::device,
+    //    .usage =
+    //        tempest::make_enum_mask(tempest::rhi::image_usage::color_attachment, tempest::rhi::image_usage::sampled),
+    //    .name = "Color Target",
+    //});
+
+    //auto swapchain_handle = render_graph_builder.import_render_surface("Swapchain", swapchain);
+
+    //render_graph_builder.create_graphics_pass(
+    //    "Simple Pass", [&](tempest::graphics::graphics_task_builder& builder) { builder.write(color_buffer); },
+    //    [&](auto execute_ctx) {
+
+    //    });
+
+    //render_graph_builder.create_transfer_pass(
+    //    "Write to Swapchain",
+    //    [&](tempest::graphics::transfer_task_builder& builder) {
+    //        builder.write(swapchain_handle);
+    //        builder.read(color_buffer);
+    //    },
+    //    [&](tempest::graphics::transfer_task_execution_context) {
+
+    //    });
+
+    //auto plan = tempest::move(render_graph_builder)
+    //                .compile({
+    //                    .graphics_queues = 1,
+    //                    .compute_queues = 0,
+    //                    .transfer_queues = 1,
+    //                });
+
+    //auto executor = tempest::graphics::graph_executor(device);
+    //executor.set_execution_plan(tempest::move(plan));
+
+    //while (true)
+    //{
+    //    tempest::core::input::poll();
+
+    //    if (window->should_close())
+    //    {
+    //        break;
+    //    }
+
+    //    executor.execute();
+    //}
+
+    //return 0;
 }

@@ -69,7 +69,7 @@ namespace tempest::rhi::vk
         bool submit(span<const submit_info> infos,
                     typed_rhi_handle<rhi_handle_type::fence> fence =
                         typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept override;
-        rhi::work_queue::present_result present(const present_info& info) noexcept override;
+        vector<rhi::work_queue::present_result> present(const present_info& info) noexcept override;
 
         void start_frame(uint32_t frame_in_flight);
 
@@ -265,6 +265,7 @@ namespace tempest::rhi::vk
         inplace_vector<typed_rhi_handle<rhi_handle_type::image>, 8> images;
         inplace_vector<typed_rhi_handle<rhi::rhi_handle_type::semaphore>, 8> render_complete;
         inplace_vector<fif_data, 4> frames;
+        const rhi::window_surface* window;
     };
 
     struct graphics_pipeline
@@ -518,6 +519,8 @@ namespace tempest::rhi::vk
         uint32_t get_render_surface_width(
             typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
         uint32_t get_render_surface_height(
+            typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
+        const rhi::window_surface* get_window_surface(
             typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
 
         void start_frame() override;

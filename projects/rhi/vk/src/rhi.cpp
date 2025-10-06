@@ -2886,6 +2886,18 @@ namespace tempest::rhi::vk
         return 0;
     }
 
+    const rhi::window_surface* device::get_window_surface(
+        typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept
+    {
+        auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto swapchain_it = _swapchains.find(swapchain_key);
+        if (swapchain_it != _swapchains.end())
+        {
+            return swapchain_it->window;
+        }
+        return nullptr;
+    }
+
     void device::start_frame()
     {
         // Get all of the swapchains frame ready fences
@@ -2985,7 +2997,7 @@ namespace tempest::rhi::vk
     typed_rhi_handle<rhi_handle_type::render_surface> device::create_render_surface(
         const rhi::render_surface_desc& desc, typed_rhi_handle<rhi_handle_type::render_surface> old_swapchain) noexcept
     {
-        auto window = static_cast<vk::window_surface*>(desc.window);
+        auto window = static_cast<const vk::window_surface*>(desc.window);
         auto surf_res = window->get_surface(_vkb_instance->instance);
         if (!surf_res)
         {
@@ -3029,6 +3041,7 @@ namespace tempest::rhi::vk
             .images = {},
             .render_complete = {},
             .frames = {},
+            .window = desc.window,
         };
 
         auto images_result = sc.swapchain.get_images();
@@ -3586,12 +3599,12 @@ namespace tempest::rhi::vk
         return result == VK_SUCCESS;
     }
 
-    rhi::work_queue::present_result work_queue::present(const present_info& info) noexcept
+    vector<rhi::work_queue::present_result> work_queue::present(const present_info& info) noexcept
     {
         auto swapchains = _allocator.allocate_typed<VkSwapchainKHR>(info.swapchain_images.size());
         auto image_indices = _allocator.allocate_typed<uint32_t>(info.swapchain_images.size());
         auto wait_sems = _allocator.allocate_typed<VkSemaphore>(info.wait_semaphores.size());
-        auto results = _allocator.allocate_typed<VkResult>(info.swapchain_images.size());
+        auto vk_results = _allocator.allocate_typed<VkResult>(info.swapchain_images.size());
 
         for (size_t i = 0; i < info.swapchain_images.size(); ++i)
         {
@@ -3612,25 +3625,35 @@ namespace tempest::rhi::vk
             .swapchainCount = static_cast<uint32_t>(info.swapchain_images.size()),
             .pSwapchains = swapchains,
             .pImageIndices = image_indices,
-            .pResults = results,
+            .pResults = vk_results,
         };
 
-        auto result = _dispatch->queuePresentKHR(_queue, &present_info);
+        _dispatch->queuePresentKHR(_queue, &present_info);
+
+        auto results = vector<rhi::work_queue::present_result>(info.swapchain_images.size());
+
+        for (size_t i = 0; i < info.swapchain_images.size(); ++i)
+        {
+            switch (vk_results[i])
+            {
+            case VK_SUCCESS:
+                results[i] = rhi::work_queue::present_result::success;
+                break;
+            case VK_ERROR_OUT_OF_DATE_KHR:
+                results[i] = rhi::work_queue::present_result::out_of_date;
+                break;
+            case VK_SUBOPTIMAL_KHR:
+                results[i] = rhi::work_queue::present_result::suboptimal;
+                break;
+            default:
+                results[i] = rhi::work_queue::present_result::error;
+                break;
+            }
+        }
 
         _allocator.reset();
 
-        switch (result)
-        {
-        case VK_SUCCESS:
-            return rhi::work_queue::present_result::success;
-        case VK_SUBOPTIMAL_KHR:
-            return rhi::work_queue::present_result::suboptimal;
-        case VK_ERROR_OUT_OF_DATE_KHR:
-            return rhi::work_queue::present_result::out_of_date;
-        default:
-            logger->error("Failed to present swapchain: {}", to_underlying(result));
-            return rhi::work_queue::present_result::error;
-        }
+        return results;
     }
 
     void work_queue::start_frame(uint32_t frame_in_flight)

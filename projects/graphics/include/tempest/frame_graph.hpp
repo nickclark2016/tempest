@@ -2,10 +2,12 @@
 #define tempest_graphics_frame_graph_hpp
 
 #include <tempest/concepts.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
+#include <tempest/utility.hpp>
 #include <tempest/variant.hpp>
 #include <tempest/vector.hpp>
 
@@ -176,17 +178,18 @@ namespace tempest::graphics
         bool presentable;
     };
 
-    struct graph_execution_plan
-    {
-        vector<scheduled_resource> resources;
-        vector<submit_instructions> submissions;
-    };
-
     struct queue_configuration
     {
         uint32_t graphics_queues = 0;
         uint32_t compute_queues = 0;
         uint32_t transfer_queues = 0;
+    };
+
+    struct graph_execution_plan
+    {
+        vector<scheduled_resource> resources;
+        vector<submit_instructions> submissions;
+        queue_configuration queue_cfg;
     };
 
     struct pass_entry
@@ -355,7 +358,87 @@ namespace tempest::graphics
     class graph_executor
     {
       public:
+        explicit graph_executor(rhi::device& device);
+
+        void execute();
+        void set_execution_plan(graph_execution_plan plan);
+
       private:
+        rhi::device* _device;
+        optional<graph_execution_plan> _plan;
+
+        struct buffer_usage
+        {
+            uint64_t offset;
+            uint64_t range;
+        };
+
+        struct image_usage
+        {
+            uint32_t base_mip;
+            uint32_t mip_levels;
+            uint32_t base_array_layer;
+            uint32_t array_layers;
+            rhi::image_layout layout;
+        };
+
+        struct resource_usage
+        {
+            work_type queue;
+            uint32_t queue_index;
+            enum_mask<rhi::pipeline_stage> stages;
+            enum_mask<rhi::memory_access> accesses;
+            variant<buffer_usage, image_usage> usage;
+            uint64_t timeline_value;
+        };
+
+        struct per_frame_in_flight_usage
+        {
+            flat_unordered_map<uint64_t, resource_usage> resource_states; // handle -> state
+        };
+
+        flat_unordered_map<uint64_t, resource_usage> _current_resource_states; // handle -> state
+        vector<per_frame_in_flight_usage> _in_flight_usages;
+
+        // Owned resources
+        flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>> _owned_buffers;
+        flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::image>> _owned_images;
+
+        // Unowned resources
+        vector<pair<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>> _external_surfaces;
+        flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>>
+            _all_buffers; // External + Owned
+        flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::image>>
+            _all_images; // External + Owned
+
+        struct per_frame_fences
+        {
+            flat_unordered_map<work_type, rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>> frame_complete_fence;
+        };
+
+        vector<per_frame_fences> _per_frame_fences;
+
+        // Queue Timelines
+        struct timeline_sem
+        {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> sem;
+            uint64_t value = 0;
+        };
+
+        flat_unordered_map<work_type, vector<timeline_sem>> _queue_timelines;
+
+        size_t _current_frame = 0;
+
+        void _construct_owned_resources();
+        void _destroy_owned_resources();
+
+        using acquired_swapchains = vector<pair<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>,
+                                                rhi::swapchain_image_acquire_info_result>>;
+        
+        acquired_swapchains _acquire_swapchain_images();
+        void _wait_for_swapchain_acquire(const acquired_swapchains& acquired);
+        void _execute_plan(const acquired_swapchains& acquired);
+        void _present_swapchain_images(const acquired_swapchains& acquired);
     };
 } // namespace tempest::graphics
 

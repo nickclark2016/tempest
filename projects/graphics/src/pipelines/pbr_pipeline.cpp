@@ -1078,20 +1078,24 @@ namespace tempest::graphics
         });
 
         present_info.wait_semaphores.push_back(rs.end_sem);
-        auto present_result = work_queue.present(present_info);
+        auto present_results = work_queue.present(present_info);
 
         ++_frame_number;
         _frame_in_flight = _frame_number % dev.frames_in_flight();
 
-        if (present_result == rhi::work_queue::present_result::out_of_date ||
-            present_result == rhi::work_queue::present_result::suboptimal)
+        for (auto present_result : present_results)
         {
-            return render_result::request_recreate_swapchain;
+            if (present_result == rhi::work_queue::present_result::out_of_date ||
+                present_result == rhi::work_queue::present_result::suboptimal)
+            {
+                return render_result::request_recreate_swapchain;
+            }
+            else if (present_result == rhi::work_queue::present_result::error)
+            {
+                return render_result::failure;
+            }
         }
-        else if (present_result == rhi::work_queue::present_result::error)
-        {
-            return render_result::failure;
-        }
+
         return render_result::success;
     }
 

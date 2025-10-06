@@ -851,6 +851,530 @@ namespace tempest::graphics
             plan.submissions.push_back(move(instructions));
         }
 
+        plan.queue_cfg = _cfg;
+
         return plan;
+    }
+
+    graph_executor::graph_executor(rhi::device& device) : _device{&device}
+    {
+    }
+
+    void graph_executor::execute()
+    {
+        _device->start_frame();
+        const auto acquired_swapchains = _acquire_swapchain_images();
+        if (!acquired_swapchains.empty())
+        {
+            _wait_for_swapchain_acquire(acquired_swapchains);
+            _execute_plan(acquired_swapchains);
+            _present_swapchain_images(acquired_swapchains);
+        }
+        _device->end_frame();
+    }
+
+    void graph_executor::set_execution_plan(graph_execution_plan plan)
+    {
+        _destroy_owned_resources();
+        _plan = tempest::move(plan);
+        _construct_owned_resources();
+    }
+
+    void graph_executor::_construct_owned_resources()
+    {
+        for (const auto& resource : _plan->resources)
+        {
+            if (holds_alternative<external_resource>(resource.creation_info))
+            {
+                const auto& ext_res = get<external_resource>(resource.creation_info);
+                if (holds_alternative<rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>>(ext_res))
+                {
+                    const auto& buffer = get<rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>>(ext_res);
+                    _all_buffers[resource.handle.handle] = buffer;
+                }
+                else if (holds_alternative<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>>(ext_res))
+                {
+                    const auto& image = get<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>>(ext_res);
+                    _all_images[resource.handle.handle] = image;
+                }
+                else if (holds_alternative<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>(ext_res))
+                {
+                    const auto& surface = get<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>(ext_res);
+                    _external_surfaces.push_back(make_pair(resource.handle.handle, surface));
+                }
+            }
+            else if (holds_alternative<rhi::buffer_desc>(resource.creation_info))
+            {
+                // Intentional copy to modify size if per-frame
+                rhi::buffer_desc desc = get<rhi::buffer_desc>(resource.creation_info);
+
+                if (resource.per_frame)
+                {
+                    desc.size *= _device->frames_in_flight();
+                }
+
+                auto buffer = _device->create_buffer(desc);
+                _owned_buffers[resource.handle.handle] = buffer;
+                _all_buffers[resource.handle.handle] = buffer;
+            }
+            else if (holds_alternative<rhi::image_desc>(resource.creation_info))
+            {
+                const auto& desc = get<rhi::image_desc>(resource.creation_info);
+                auto image = _device->create_image(desc);
+                _owned_images[resource.handle.handle] = image;
+                _all_images[resource.handle.handle] = image;
+            }
+        }
+
+        // Construct the queue timelines
+        for (size_t idx = 0; idx < _plan->queue_cfg.graphics_queues; ++idx)
+        {
+            _queue_timelines[work_type::graphics].push_back({
+                .sem = _device->create_semaphore({
+                    .type = rhi::semaphore_type::timeline,
+                    .initial_value = 0,
+                }),
+                .value = 0,
+            });
+        }
+
+        for (size_t idx = 0; idx < _plan->queue_cfg.compute_queues; ++idx)
+        {
+            _queue_timelines[work_type::compute].push_back({
+                .sem = _device->create_semaphore({
+                    .type = rhi::semaphore_type::timeline,
+                    .initial_value = 0,
+                }),
+                .value = 0,
+            });
+        }
+
+        for (size_t idx = 0; idx < _plan->queue_cfg.transfer_queues; ++idx)
+        {
+            _queue_timelines[work_type::transfer].push_back({
+                .sem = _device->create_semaphore({
+                    .type = rhi::semaphore_type::timeline,
+                    .initial_value = 0,
+                }),
+                .value = 0,
+            });
+        }
+
+        // Build fence for each frame
+        _per_frame_fences.resize(_device->frames_in_flight());
+        for (size_t idx = 0; idx < _device->frames_in_flight(); ++idx)
+        {
+            if (_plan->queue_cfg.graphics_queues > 0)
+            {
+                _per_frame_fences[idx].frame_complete_fence[work_type::graphics] =
+                    _device->create_fence({.signaled = true});
+            }
+
+            if (_plan->queue_cfg.compute_queues > 0)
+            {
+                _per_frame_fences[idx].frame_complete_fence[work_type::compute] =
+                    _device->create_fence({.signaled = true});
+            }
+
+            if (_plan->queue_cfg.transfer_queues > 0)
+            {
+                _per_frame_fences[idx].frame_complete_fence[work_type::transfer] =
+                    _device->create_fence({.signaled = true});
+            }
+        }
+    }
+
+    void graph_executor::_destroy_owned_resources()
+    {
+        for (const auto& [handle, buffer] : _owned_buffers)
+        {
+            _device->destroy_buffer(buffer);
+        }
+
+        for (const auto& [handle, image] : _owned_images)
+        {
+            _device->destroy_image(image);
+        }
+
+        for (const auto& [type, timelines] : _queue_timelines)
+        {
+            for (const auto& timeline : timelines)
+            {
+                _device->destroy_semaphore(timeline.sem);
+            }
+        }
+
+        for (auto& frame_fences : _per_frame_fences)
+        {
+            for (const auto& [type, fence] : frame_fences.frame_complete_fence)
+            {
+                _device->destroy_fence(fence);
+            }
+        }
+
+        _queue_timelines.clear();
+        _owned_buffers.clear();
+        _owned_images.clear();
+        _all_buffers.clear();
+        _all_images.clear();
+        _external_surfaces.clear();
+    }
+
+    graph_executor::acquired_swapchains graph_executor::_acquire_swapchain_images()
+    {
+        auto results = vector<pair<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>,
+                                   rhi::swapchain_image_acquire_info_result>>{};
+
+        for (auto it = _external_surfaces.cbegin(); it != _external_surfaces.cend();)
+        {
+            const auto& [handle, surface] = *it;
+            const auto window = _device->get_window_surface(surface);
+
+            if (window->should_close())
+            {
+                it = _external_surfaces.erase(it);
+                continue;
+            }
+
+            if (window->framebuffer_width() == 0 || window->framebuffer_height() == 0 || window->minimized())
+            {
+                ++it;
+                continue;
+            }
+
+            auto res = _device->acquire_next_image(surface);
+            if (!res)
+            {
+                const auto err = res.error();
+                if (err == rhi::swapchain_error_code::out_of_date)
+                {
+                    const auto recreate_info = rhi::render_surface_desc{
+                        .window = window,
+                        .min_image_count = 2,
+                        .format =
+                            {
+                                .space = rhi::color_space::srgb_nonlinear,
+                                .format = rhi::image_format::bgra8_srgb,
+                            },
+                        .present_mode = rhi::present_mode::immediate,
+                        .width = window->framebuffer_width(),
+                        .height = window->framebuffer_height(),
+                        .layers = 1,
+                    };
+
+                    _device->recreate_render_surface(surface, recreate_info);
+                    continue;
+                }
+                else if (err == rhi::swapchain_error_code::failure)
+                {
+                    it = _external_surfaces.erase(it);
+                    continue;
+                }
+            }
+
+            results.push_back(make_pair(surface, res.value()));
+            ++it;
+        }
+
+        return results;
+    }
+
+    void graph_executor::_wait_for_swapchain_acquire(const acquired_swapchains& acquired)
+    {
+        auto wait_submit = rhi::work_queue::submit_info{};
+
+        for (const auto& [surface, acquire_info] : acquired)
+        {
+            // Wait on the acquire semaphore
+            wait_submit.wait_semaphores.push_back({
+                .semaphore = acquire_info.acquire_sem,
+                .value = 0, // binary semaphore, value doesn't matter
+                .stages =
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output, rhi::pipeline_stage::all_transfer),
+            });
+        }
+
+        // Signal the timelines for each queue
+        for (auto& [type, timelines] : _queue_timelines)
+        {
+            for (auto& timeline : timelines)
+            {
+                wait_submit.signal_semaphores.push_back({
+                    .semaphore = timeline.sem,
+                    .value = timeline.value + 1,
+                    .stages = make_enum_mask(rhi::pipeline_stage::all),
+                });
+
+                timeline.value += 1; // Increment the timeline value
+            }
+        }
+
+        auto& queue = _device->get_primary_work_queue();
+        const array submits = {wait_submit};
+
+        queue.submit(submits);
+    }
+
+    void graph_executor::_execute_plan([[maybe_unused]] const acquired_swapchains& acquired)
+    {
+        size_t submission_index = 0;
+        for (const auto& submission : _plan->submissions)
+        {
+            auto& queue = [&]() -> rhi::work_queue& {
+                switch (submission.type)
+                {
+                case work_type::graphics:
+                    return _device->get_primary_work_queue();
+                case work_type::compute:
+                    return _device->get_dedicated_compute_queue();
+                case work_type::transfer:
+                    return _device->get_dedicated_transfer_queue();
+                default:
+                    return _device->get_primary_work_queue();
+                }
+            }();
+
+            auto submit_info = rhi::work_queue::submit_info{};
+            auto timeline_value = _queue_timelines[submission.type][submission.queue_index].value;
+
+            struct sem_value
+            {
+                rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> sem;
+                uint64_t offset; // Offset from the timeline value at frame start
+                uint64_t queue_value;
+            };
+
+            // Handle waits on cross-queue ownership transfers with timeline semaphores
+            auto wait_map = flat_unordered_map<uint64_t, sem_value>{}; // semaphore handle -> max wait value
+
+            for (const auto& [_, sems] : _queue_timelines)
+            {
+                for (const auto& sem : sems)
+                {
+                    wait_map[sem.sem.id] = {
+                        .sem = sem.sem,
+                        .offset = 0,
+                        .queue_value = sem.value,
+                    };
+                }
+            }
+
+            for (const auto& wait : submission.waits)
+            {
+                const auto& timeline = _queue_timelines[wait.type][wait.queue_index];
+                const auto& current_value = wait_map[timeline.sem.id];
+                if (current_value.offset > wait.value)
+                {
+                    wait_map[timeline.sem.id].offset = current_value.offset;
+                }
+
+                // Add a pipeline barrier for the resource state transition and queue ownership transfer
+            }
+
+            // Handle signals on cross-queue ownership transfers with timeline semaphores
+            auto signal_map = flat_unordered_map<uint64_t, sem_value>{}; // semaphore handle -> max signal valu
+
+            for (const auto& pass : submission.passes)
+            {
+                for (const auto& resource : pass.accesses)
+                {
+                    auto prior_usage_it = _current_resource_states.find(resource.handle.handle);
+                    if (prior_usage_it != _current_resource_states.cend())
+                    {
+                        auto& prior_usage = prior_usage_it->second;
+                        const bool cross_queue = prior_usage.queue != submission.type;
+
+                        if (cross_queue)
+                        {
+                            auto sem_to_wait = _queue_timelines[prior_usage.queue][prior_usage.queue_index].sem;
+                            auto wait_value = prior_usage.timeline_value;
+
+                            // A semaphore wait is sufficient, the resource contents do not need to be preserved
+                            const auto& current_value = wait_map[sem_to_wait.id];
+                            if (current_value.offset > wait_value)
+                            {
+                                wait_map[sem_to_wait.id].offset = current_value.offset;
+                            }
+                        }
+                        else
+                        {
+                            // Add pipeline barrier for execution and memory dependencies
+                        }
+                    }
+                }
+
+                // Execute the pass
+                switch (pass.type)
+                {
+                case work_type::graphics:
+                    break;
+                case work_type::compute:
+                    break;
+                case work_type::transfer:
+                    break;
+                default:
+                    // Should never reach here
+                    break;
+                }
+
+                // Update the last used state for each resource
+                for (const auto& resource : pass.accesses)
+                {
+                    auto res_type = get_resource_type(resource.handle);
+                    if (res_type == rhi::rhi_handle_type::buffer)
+                    {
+                        _current_resource_states[resource.handle.handle] = resource_usage{
+                            .queue = submission.type,
+                            .queue_index = submission.queue_index,
+                            .stages = resource.stages,
+                            .accesses = resource.accesses,
+                            .usage = buffer_usage{},
+                            .timeline_value = timeline_value,
+                        };
+                    }
+                    else if (res_type == rhi::rhi_handle_type::image)
+                    {
+                        _current_resource_states[resource.handle.handle] = resource_usage{
+                            .queue = submission.type,
+                            .queue_index = submission.queue_index,
+                            .stages = resource.stages,
+                            .accesses = resource.accesses,
+                            .usage = image_usage{},
+                            .timeline_value = timeline_value,
+                        };
+                    }
+                }
+            }
+
+            for (const auto& signal : submission.signals)
+            {
+                const auto& timeline = _queue_timelines[signal.type][signal.queue_index];
+                const auto& current_value = signal_map[timeline.sem.id];
+                if (current_value.offset > signal.value)
+                {
+                    signal_map[timeline.sem.id].offset = current_value.offset;
+                }
+
+                // Add a pipeline barrier for the resource state transition and queue ownership transfer
+            }
+
+            // Fill out the wait and signal semaphores for the submit info
+            for (const auto& [sem_id, value] : wait_map)
+            {
+                submit_info.wait_semaphores.push_back({
+                    .semaphore = value.sem,
+                    .value = value.offset + value.queue_value,
+                    .stages = make_enum_mask(rhi::pipeline_stage::all),
+                });
+            }
+
+            for (const auto& [sem_id, value] : signal_map)
+            {
+                submit_info.signal_semaphores.push_back({
+                    .semaphore = value.sem,
+                    .value = value.offset + value.queue_value,
+                    .stages = make_enum_mask(rhi::pipeline_stage::all),
+                });
+            }
+
+            // If this is the last submission in the frame for this queue family, signal the frame complete fence
+            const auto frame_idx = _current_frame % _device->frames_in_flight();
+            auto fence_handle = _per_frame_fences[frame_idx].frame_complete_fence[submission.type];
+
+            for (auto idx = submission_index + 1; idx < _plan->submissions.size(); ++idx)
+            {
+                if (_plan->submissions[idx].type == submission.type)
+                {
+                    fence_handle = rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>::null_handle;
+                    break;
+                }
+            }
+
+            const array submits = {submit_info};
+            queue.submit(submits);
+
+            ++submission_index;
+        }
+    }
+
+    void graph_executor::_present_swapchain_images(const acquired_swapchains& acquired)
+    {
+        auto& present_queue = _device->get_primary_work_queue();
+
+        auto submit_info = rhi::work_queue::submit_info{};
+
+        // Wait on all the queue timelines
+        for (const auto& [type, timelines] : _queue_timelines)
+        {
+            for (const auto& timeline : timelines)
+            {
+                submit_info.wait_semaphores.push_back({
+                    .semaphore = timeline.sem,
+                    .value = timeline.value,
+                    .stages =
+                        make_enum_mask(rhi::pipeline_stage::all_transfer, rhi::pipeline_stage::color_attachment_output),
+                });
+            }
+        }
+
+        // Signal the render complete semaphores for each acquired swapchain image
+        for (const auto& [surface, acquire_info] : acquired)
+        {
+            submit_info.signal_semaphores.push_back({
+                .semaphore = acquire_info.render_complete_sem,
+                .value = 0, // binary semaphore, value doesn't matter
+                .stages = make_enum_mask(rhi::pipeline_stage::all),
+            });
+        }
+
+        // Submit the gather timeline -> binary submit
+        const auto submits = array{submit_info};
+        present_queue.submit(submits);
+
+        // Present the images
+        auto present_info = rhi::work_queue::present_info{};
+        for (const auto& [surface, acquire_info] : acquired)
+        {
+            present_info.swapchain_images.push_back({
+                .render_surface = surface,
+                .image_index = acquire_info.image_index,
+            });
+
+            present_info.wait_semaphores.push_back(acquire_info.render_complete_sem);
+        }
+
+        auto present_results = present_queue.present(present_info);
+
+        auto idx = size_t(0);
+
+        // Handle any out-of-date or suboptimal swapchains
+        for (auto present_result : present_results)
+        {
+            if (present_result == rhi::work_queue::present_result::out_of_date ||
+                present_result == rhi::work_queue::present_result::suboptimal)
+            {
+                auto surface_handle = acquired[idx].first;
+                auto window = _device->get_window_surface(surface_handle);
+                const auto recreate_info = rhi::render_surface_desc{
+                    .window = window,
+                    .min_image_count = 2,
+                    .format =
+                        {
+                            .space = rhi::color_space::srgb_nonlinear,
+                            .format = rhi::image_format::bgra8_srgb,
+                        },
+                    .present_mode = rhi::present_mode::immediate,
+                    .width = window->framebuffer_width(),
+                    .height = window->framebuffer_height(),
+                    .layers = 1,
+                };
+
+                _device->recreate_render_surface(surface_handle, recreate_info);
+            }
+            else if (present_result == rhi::work_queue::present_result::error)
+            {
+                erase_if(_external_surfaces, [&](const auto& pair) { return pair.second == acquired[idx].first; });
+            }
+        }
     }
 } // namespace tempest::graphics

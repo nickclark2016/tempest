@@ -75,7 +75,7 @@ namespace tempest::rhi::vk
             return glfwGetWindowAttrib(_window, GLFW_FOCUSED) != GLFW_FALSE;
         }
 
-        expected<VkSurfaceKHR, VkResult> get_surface(VkInstance instance) noexcept
+        expected<VkSurfaceKHR, VkResult> get_surface(VkInstance instance) const noexcept
         {
             if (_surface == VK_NULL_HANDLE)
             {
@@ -163,7 +163,7 @@ namespace tempest::rhi::vk
       private:
         GLFWwindow* _window;
         string _name;
-        VkSurfaceKHR _surface = VK_NULL_HANDLE;
+        mutable VkSurfaceKHR _surface = VK_NULL_HANDLE;
         bool _is_minimized = false;
         uint32_t _width;
         uint32_t _height;
