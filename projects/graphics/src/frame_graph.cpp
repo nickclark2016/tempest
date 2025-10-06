@@ -862,7 +862,7 @@ namespace tempest::graphics
 
     void graph_executor::execute()
     {
-        _device->start_frame();
+        
         const auto acquired_swapchains = _acquire_swapchain_images();
         if (!acquired_swapchains.empty())
         {
@@ -870,7 +870,8 @@ namespace tempest::graphics
             _execute_plan(acquired_swapchains);
             _present_swapchain_images(acquired_swapchains);
         }
-        _device->end_frame();
+        
+        _device->finish_frame();
     }
 
     void graph_executor::set_execution_plan(graph_execution_plan plan)

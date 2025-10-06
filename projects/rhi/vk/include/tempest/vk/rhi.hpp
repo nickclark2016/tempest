@@ -178,6 +178,8 @@ namespace tempest::rhi::vk
                             enum_mask<rhi::shader_stage> stages, uint32_t offset,
                             span<const byte> values) noexcept override;
 
+        void reset(uint64_t frame_in_flight) override;
+
       private:
         vkb::DispatchTable* _dispatch;
         VkQueue _queue;
@@ -254,7 +256,6 @@ namespace tempest::rhi::vk
 
     struct fif_data
     {
-        typed_rhi_handle<rhi_handle_type::fence> frame_ready;
         typed_rhi_handle<rhi_handle_type::semaphore> image_acquired;
     };
 
@@ -523,8 +524,8 @@ namespace tempest::rhi::vk
         const rhi::window_surface* get_window_surface(
             typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
 
-        void start_frame() override;
-        void end_frame() override;
+        void release_resources() override;
+        void finish_frame() override;
 
         uint32_t frame_in_flight() const noexcept;
         uint32_t frames_in_flight() const noexcept override;

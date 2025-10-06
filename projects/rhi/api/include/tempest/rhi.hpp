@@ -108,8 +108,8 @@ namespace tempest::rhi
         virtual const window_surface* get_window_surface(
             typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;
 
-        virtual void start_frame() = 0;
-        virtual void end_frame() = 0;
+        virtual void release_resources() = 0;
+        virtual void finish_frame() = 0;
 
         virtual uint32_t frames_in_flight() const noexcept = 0;
 
@@ -348,6 +348,8 @@ namespace tempest::rhi
             push_constants(command_list, pipeline_layout, stages, offset,
                            span<const byte>{reinterpret_cast<const byte*>(&value), sizeof(T)});
         }
+
+        virtual void reset(uint64_t frame_in_flight) = 0;
 
       protected:
         work_queue() = default;

@@ -2732,15 +2732,7 @@ namespace tempest::rhi::vk
             auto render_complete = swapchain_it->render_complete[image_index];
             auto& fif = swapchain_it->frames[_current_frame % frames_in_flight()];
 
-            // We are using this frame, so we need to reset the fence
-            auto vk_fence = get_fence(fif.frame_ready);
-            if (vk_fence != VK_NULL_HANDLE)
-            {
-                _dispatch_table.resetFences(1, &vk_fence);
-            }
-
             return swapchain_image_acquire_info_result{
-                .frame_complete_fence = fif.frame_ready,
                 .acquire_sem = fif.image_acquired,
                 .render_complete_sem = render_complete,
                 .image = image,
@@ -2898,44 +2890,13 @@ namespace tempest::rhi::vk
         return nullptr;
     }
 
-    void device::start_frame()
+    void device::release_resources()
     {
-        // Get all of the swapchains frame ready fences
-        vector<VkFence> fences_to_wait;
-        for (auto& sc : _swapchains)
-        {
-            auto& fif = sc.frames[_current_frame % num_frames_in_flight];
-            auto fence = get_fence(fif.frame_ready);
-
-            if (fence != VK_NULL_HANDLE)
-            {
-                _dispatch_table.waitForFences(1, &fence, VK_TRUE, numeric_limits<uint64_t>::max());
-            }
-        }
-
         _delete_queue.release_resources(_current_frame);
-
         _resource_tracker.try_release();
-
-        uint32_t frame_in_flight = _current_frame % num_frames_in_flight;
-
-        if (_primary_work_queue)
-        {
-            _primary_work_queue->start_frame(frame_in_flight);
-        }
-
-        if (_dedicated_compute_queue)
-        {
-            _dedicated_compute_queue->start_frame(frame_in_flight);
-        }
-
-        if (_dedicated_transfer_queue)
-        {
-            _dedicated_transfer_queue->start_frame(frame_in_flight);
-        }
     }
 
-    void device::end_frame()
+    void device::finish_frame()
     {
         _current_frame++;
     }
@@ -3112,7 +3073,6 @@ namespace tempest::rhi::vk
             });
 
             fif_data fif = {
-                .frame_ready = fence,
                 .image_acquired = image_acquired,
             };
 
@@ -3134,7 +3094,6 @@ namespace tempest::rhi::vk
             for (auto fif : old_swapchain_it->frames)
             {
                 destroy_semaphore(fif.image_acquired);
-                destroy_fence(fif.frame_ready);
             }
 
             for (auto sem : old_swapchain_it->render_complete)
@@ -4571,6 +4530,11 @@ namespace tempest::rhi::vk
         auto layout = _parent->get_pipeline_layout(pipeline_layout);
         _dispatch->cmdPushConstants(cmds, layout, to_vulkan(stages), offset, static_cast<uint32_t>(values.size()),
                                     values.data());
+    }
+
+    void work_queue::reset(uint64_t frame_in_flight)
+    {
+        start_frame(static_cast<uint32_t>(frame_in_flight));
     }
 
     void work_group::reset() noexcept

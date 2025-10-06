@@ -75,8 +75,6 @@ namespace tempest
         std::chrono::steady_clock::time_point _last_frame_time{};
         std::chrono::duration<float> _delta_frame_time{};
 
-        graphics::renderer _render;
-
         bool _should_close{false};
 
         void _update_fixed(std::chrono::duration<float> dt);
@@ -84,6 +82,8 @@ namespace tempest
         void _render_frame();
 
         vector<ecs::archetype_entity> _entities_to_load;
+
+        graphics::renderer _render;
     };
 
     template <typename T, typename... Ts>

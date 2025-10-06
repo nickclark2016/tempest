@@ -444,7 +444,6 @@ namespace tempest::rhi
 
     struct swapchain_image_acquire_info_result
     {
-        typed_rhi_handle<rhi_handle_type::fence> frame_complete_fence;
         typed_rhi_handle<rhi_handle_type::semaphore> acquire_sem;
         typed_rhi_handle<rhi_handle_type::semaphore> render_complete_sem;
         typed_rhi_handle<rhi_handle_type::image> image;

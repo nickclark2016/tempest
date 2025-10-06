@@ -6,6 +6,13 @@ namespace tempest::graphics
     {
         _rhi_instance = rhi::vk::create_instance();
         _rhi_device = &_rhi_instance->acquire_device(0);
+
+        // Create in-flight fences
+        _in_flight_fences.resize(_rhi_device->frames_in_flight());
+        for (auto& fence : _in_flight_fences)
+        {
+            fence = _rhi_device->create_fence({.signaled = true});
+        }
     }
 
     unique_ptr<rhi::window_surface> renderer::create_window(const rhi::window_surface_desc& desc)
@@ -69,7 +76,20 @@ namespace tempest::graphics
 
     bool renderer::render()
     {
-        _rhi_device->start_frame();
+        auto frame_index = _current_frame % _rhi_device->frames_in_flight();
+        auto& fence = _in_flight_fences[frame_index];
+        if (fence.is_valid())
+        {
+            _rhi_device->wait(span(&fence, 1));
+        }
+
+        _rhi_device->release_resources();
+
+        _rhi_device->get_primary_work_queue().reset(frame_index);
+        _rhi_device->get_dedicated_compute_queue().reset(frame_index);
+        _rhi_device->get_dedicated_transfer_queue().reset(frame_index);
+
+        auto fences_reset = false;
 
         for (auto it = _windows.begin(); it != _windows.end();)
         {
@@ -121,12 +141,18 @@ namespace tempest::graphics
                 }
             }
 
+            if (!fences_reset)
+            {
+                _rhi_device->reset(span(&fence, 1));
+                fences_reset = true;
+            }
+
             render_pipeline::render_state rs = {
                 .start_sem = acquire_result->acquire_sem,
                 .start_value = 0,
                 .end_sem = acquire_result->render_complete_sem,
                 .end_value = 1,
-                .end_fence = acquire_result->frame_complete_fence,
+                .end_fence = _in_flight_fences[frame_index],
                 .swapchain_image = acquire_result->image,
                 .surface = it->render_surface,
                 .image_index = acquire_result->image_index,
@@ -167,7 +193,9 @@ namespace tempest::graphics
             ++it;
         }
 
-        _rhi_device->end_frame();
+        _rhi_device->finish_frame();
+
+        ++_current_frame;
 
         return !_windows.empty();
     }

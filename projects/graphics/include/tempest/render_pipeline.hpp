@@ -56,6 +56,8 @@ namespace tempest::graphics
         };
 
         vector<window_payload> _windows;
+        vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>> _in_flight_fences;
+        uint64_t _current_frame = 0;
     };
 
     class render_pipeline
