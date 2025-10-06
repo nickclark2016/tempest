@@ -153,8 +153,8 @@ namespace tempest::graphics
                                                          .height = window.framebuffer_height(),
                                                          .layers = 1,
                                                      });
-                ++it;
                 it->framebuffer_resized = false;
+                ++it;
                 continue;
             }
             else if (result == render_pipeline::render_result::failure)
