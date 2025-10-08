@@ -53,6 +53,11 @@ namespace tempest::graphics
                                       rhi::memory_access::depth_stencil_attachment_write);
             case rhi::image_layout::depth_read_only:
                 return make_enum_mask(rhi::memory_access::depth_stencil_attachment_read);
+            case rhi::image_layout::stencil:
+                return make_enum_mask(rhi::memory_access::depth_stencil_attachment_read,
+                                      rhi::memory_access::depth_stencil_attachment_write);
+            case rhi::image_layout::stencil_read_only:
+                return make_enum_mask(rhi::memory_access::depth_stencil_attachment_read);
             case rhi::image_layout::general:
                 return make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write);
             case rhi::image_layout::present:
@@ -199,6 +204,7 @@ namespace tempest::graphics
             .handle = copy(current),
             .stages = read_hints,
             .accesses = read_access_hints,
+            .layout = rhi::image_layout::undefined,
         });
 
         handle.version += 1;
@@ -208,6 +214,7 @@ namespace tempest::graphics
             .handle = tempest::move(current),
             .stages = write_hints,
             .accesses = write_access_hints,
+            .layout = rhi::image_layout::undefined,
         });
     }
 
@@ -1723,6 +1730,7 @@ namespace tempest::graphics
                         .offset = 0,
                         .size = numeric_limits<size_t>::max(),
                     };
+                    release_buffer_ownership.push_back(barrier);
                     break;
                 }
                 case rhi::rhi_handle_type::image:

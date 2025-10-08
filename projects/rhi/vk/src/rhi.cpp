@@ -3063,10 +3063,6 @@ namespace tempest::rhi::vk
             // Allocate a fence for each frame in flight
             // Allocate two semaphores for each frame in flight
 
-            auto fence = create_fence({
-                .signaled = true,
-            });
-
             auto image_acquired = create_semaphore({
                 .type = rhi::semaphore_type::binary,
                 .initial_value = 0,

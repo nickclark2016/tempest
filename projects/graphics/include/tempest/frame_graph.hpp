@@ -306,19 +306,22 @@ namespace tempest::graphics
 
         // Create passes
         template <typename... ExecTs>
-        void create_graphics_pass(string name, invocable<graphics_task_builder&> auto&& setup,
+        void create_graphics_pass(
+            string name, invocable<graphics_task_builder&> auto&& setup,
             invocable_no_capture<graphics_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
-                                  ExecTs&&... exec_args);
+            ExecTs&&... exec_args);
 
         template <typename... ExecTs>
-        void create_compute_pass(string name, invocable<compute_task_builder&> auto&& setup,
+        void create_compute_pass(
+            string name, invocable<compute_task_builder&> auto&& setup,
             invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
-                                 ExecTs&&... exec_args);
+            ExecTs&&... exec_args);
 
         template <typename... ExecTs>
-        void create_transfer_pass(string name, invocable<transfer_task_builder&> auto&& setup,
+        void create_transfer_pass(
+            string name, invocable<transfer_task_builder&> auto&& setup,
             invocable_no_capture<transfer_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
-                                  ExecTs&&... exec_args);
+            ExecTs&&... exec_args);
 
         graph_execution_plan compile(queue_configuration cfg) &&;
 
@@ -390,22 +393,38 @@ namespace tempest::graphics
     template <typename... ExecTs>
     inline void graph_builder::create_compute_pass(
         string name, invocable<compute_task_builder&> auto&& setup,
-        invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
+        invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+        ExecTs&&... exec_args)
     {
         compute_task_builder builder;
         setup(builder);
 
-        auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+        if constexpr (sizeof...(ExecTs) == 0)
+        {
+            _create_pass_entry(
+                name, work_type::compute,
+                [record = tempest::move(record)](task_execution_context& ctx) {
+                    auto compute_ctx = static_cast<compute_task_execution_context&>(ctx);
+                    record(compute_ctx);
+                },
+                builder, builder._prefer_async);
+        }
+        else
+        {
+            auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
 
-        _create_pass_entry(
-            name, work_type::compute,
-            [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
-                auto compute_ctx = static_cast<compute_task_execution_context&>(ctx);
-                tempest::apply(
-                    [&](auto&&... unpacked) { record(compute_ctx, tempest::forward<decltype(unpacked)>(unpacked)...); },
-                    args);
-            },
-            builder, builder._prefer_async);
+            _create_pass_entry(
+                name, work_type::compute,
+                [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                    auto compute_ctx = static_cast<compute_task_execution_context&>(ctx);
+                    tempest::apply(
+                        [&](auto&&... unpacked) {
+                            record(compute_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
+                        },
+                        args);
+                },
+                builder, builder._prefer_async);
+        }
     }
 
     template <typename... ExecTs>
@@ -417,19 +436,32 @@ namespace tempest::graphics
         transfer_task_builder builder;
         setup(builder);
 
-        auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+        if constexpr (sizeof...(ExecTs) == 0)
+        {
+            _create_pass_entry(
+                name, work_type::transfer,
+                [record = tempest::move(record)](task_execution_context& ctx) {
+                    auto& transfer_ctx = static_cast<transfer_task_execution_context&>(ctx);
+                    record(transfer_ctx);
+                },
+                builder, builder._prefer_async);
+        }
+        else
+        {
+            auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
 
-        _create_pass_entry(
-            name, work_type::transfer,
-            [record = tempest::move(record), args = std::move(tup)](task_execution_context& ctx) {
-                auto& transfer_ctx = static_cast<transfer_task_execution_context&>(ctx);
-                tempest::apply(
-                    [&](auto&&... unpacked) {
-                        record(transfer_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
-                    },
-                    args);
-            },
-            builder, builder._prefer_async);
+            _create_pass_entry(
+                name, work_type::transfer,
+                [record = tempest::move(record), args = std::move(tup)](task_execution_context& ctx) {
+                    auto& transfer_ctx = static_cast<transfer_task_execution_context&>(ctx);
+                    tempest::apply(
+                        [&](auto&&... unpacked) {
+                            record(transfer_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
+                        },
+                        args);
+                },
+                builder, builder._prefer_async);
+        }
     }
 
     template <typename... ExecTs>
@@ -441,16 +473,39 @@ namespace tempest::graphics
         graphics_task_builder builder;
         setup(builder);
 
-        auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
-
-        _create_pass_entry(
-            name, work_type::graphics,
-            [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
-                auto& graphics_ctx = static_cast<graphics_task_execution_context&>(ctx);
-
-            },
-            builder, false);
+        if constexpr (sizeof...(ExecTs) == 0)
+        {
+            _create_pass_entry(
+                name, work_type::graphics,
+                [record = tempest::move(record)](task_execution_context& ctx) {
+                    auto graphics_ctx = static_cast<graphics_task_execution_context&>(ctx);
+                    record(graphics_ctx);
+                },
+                builder, false);
+        }
+        else
+        {
+            auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+            _create_pass_entry(
+                name, work_type::graphics,
+                [record = tempest::move(record), args = std::move(tup)](task_execution_context& ctx) {
+                    auto graphics_ctx = static_cast<graphics_task_execution_context&>(ctx);
+                    tempest::apply(
+                        [&](auto&&... unpacked) {
+                            record(graphics_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
+                        },
+                        args);
+                },
+                builder, false);
+        }
     }
+
+    struct execution_fence
+    {
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::fence> fence =
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>::null_handle;
+        bool queue_used = false;
+    };
 
     class graph_executor
     {
@@ -513,12 +568,6 @@ namespace tempest::graphics
             _all_buffers; // External + Owned
         flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::image>>
             _all_images; // External + Owned
-
-        struct execution_fence
-        {
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::fence> fence;
-            bool queue_used = false;
-        };
 
         struct per_frame_fences
         {

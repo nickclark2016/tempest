@@ -88,6 +88,7 @@ int main()
         .width = 1280,
         .height = 720,
         .name = "Tempest Render Graph Test",
+        .fullscreen = false,
     });
 
     auto swapchain = device.create_render_surface({

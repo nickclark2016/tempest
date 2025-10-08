@@ -41,10 +41,11 @@ TEST(frame_graph, simple_frame_graph)
     builder.create_graphics_pass(
         "Opaque Pass",
         [&](graphics::graphics_task_builder& task) {
-            task.write(color_target, make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            task.write(color_target, rhi::image_layout::color_attachment,
+                       make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                        make_enum_mask(rhi::memory_access::color_attachment_write));
             task.write(
-                depth_target,
+                depth_target, rhi::image_layout::depth,
                 make_enum_mask(rhi::pipeline_stage::early_fragment_tests, rhi::pipeline_stage::late_fragment_tests),
                 make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
         },
@@ -55,11 +56,13 @@ TEST(frame_graph, simple_frame_graph)
     builder.create_graphics_pass(
         "OIT Pass",
         [&](graphics::graphics_task_builder& task) {
-            task.read_write(color_target, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            task.read_write(color_target, rhi::image_layout::color_attachment,
+                            make_enum_mask(rhi::pipeline_stage::fragment_shader),
                             make_enum_mask(rhi::memory_access::shader_read),
                             make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                             make_enum_mask(rhi::memory_access::color_attachment_write));
-            task.read(depth_target, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            task.read(depth_target, rhi::image_layout::depth_read_only,
+                      make_enum_mask(rhi::pipeline_stage::fragment_shader),
                       make_enum_mask(rhi::memory_access::depth_stencil_attachment_read));
         },
         []([[maybe_unused]] graphics::graphics_task_execution_context& ctx) {
@@ -210,7 +213,7 @@ TEST(frame_graph, frame_graph_with_async)
         "Z Pre-Pass",
         [&](graphics::graphics_task_builder& task) {
             task.write(
-                depth_target,
+                depth_target, rhi::image_layout::depth,
                 make_enum_mask(rhi::pipeline_stage::early_fragment_tests, rhi::pipeline_stage::late_fragment_tests),
                 make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
         },
@@ -222,7 +225,7 @@ TEST(frame_graph, frame_graph_with_async)
         "Shadow Pass",
         [&](graphics::graphics_task_builder& task) {
             task.write(
-                shadow_target,
+                shadow_target, rhi::image_layout::depth,
                 make_enum_mask(rhi::pipeline_stage::early_fragment_tests, rhi::pipeline_stage::late_fragment_tests),
                 make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
         },
@@ -234,9 +237,10 @@ TEST(frame_graph, frame_graph_with_async)
         "SSAO Pass",
         [&](graphics::compute_task_builder& task) {
             task.prefer_async();
-            task.write(ssao_target, make_enum_mask(rhi::pipeline_stage::compute_shader),
+            task.write(ssao_target, rhi::image_layout::general, make_enum_mask(rhi::pipeline_stage::compute_shader),
                        make_enum_mask(rhi::memory_access::shader_write));
-            task.read(depth_target, make_enum_mask(rhi::pipeline_stage::compute_shader),
+            task.read(depth_target, rhi::image_layout::shader_read_only,
+                      make_enum_mask(rhi::pipeline_stage::compute_shader),
                       make_enum_mask(rhi::memory_access::shader_read));
         },
         []([[maybe_unused]] graphics::compute_task_execution_context& ctx) {
@@ -247,9 +251,10 @@ TEST(frame_graph, frame_graph_with_async)
         "SSAO Blur Pass",
         [&](graphics::compute_task_builder& task) {
             task.prefer_async();
-            task.write(ssao_blur_target, make_enum_mask(rhi::pipeline_stage::compute_shader),
+            task.write(ssao_blur_target, rhi::image_layout::general,
+                       make_enum_mask(rhi::pipeline_stage::compute_shader),
                        make_enum_mask(rhi::memory_access::shader_write));
-            task.read(ssao_target, make_enum_mask(rhi::pipeline_stage::compute_shader),
+            task.read(ssao_target, rhi::image_layout::general, make_enum_mask(rhi::pipeline_stage::compute_shader),
                       make_enum_mask(rhi::memory_access::shader_read));
         },
         []([[maybe_unused]] graphics::compute_task_execution_context& ctx) {
@@ -259,15 +264,18 @@ TEST(frame_graph, frame_graph_with_async)
     builder.create_graphics_pass(
         "Opaque Pass",
         [&](graphics::graphics_task_builder& task) {
-            task.write(color_target, make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            task.write(color_target, rhi::image_layout::color_attachment,
+                       make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                        make_enum_mask(rhi::memory_access::color_attachment_write));
             task.read(
-                depth_target,
+                depth_target, rhi::image_layout::depth_read_only,
                 make_enum_mask(rhi::pipeline_stage::early_fragment_tests, rhi::pipeline_stage::late_fragment_tests),
                 make_enum_mask(rhi::memory_access::depth_stencil_attachment_read));
-            task.read(shadow_target, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            task.read(shadow_target, rhi::image_layout::shader_read_only,
+                      make_enum_mask(rhi::pipeline_stage::fragment_shader),
                       make_enum_mask(rhi::memory_access::shader_read));
-            task.read(ssao_blur_target, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            task.read(ssao_blur_target, rhi::image_layout::shader_read_only,
+                      make_enum_mask(rhi::pipeline_stage::fragment_shader),
                       make_enum_mask(rhi::memory_access::shader_read));
         },
         []([[maybe_unused]] graphics::graphics_task_execution_context& ctx) {
@@ -277,11 +285,13 @@ TEST(frame_graph, frame_graph_with_async)
     builder.create_graphics_pass(
         "OIT Pass",
         [&](graphics::graphics_task_builder& task) {
-            task.read_write(color_target, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            task.read_write(color_target, rhi::image_layout::color_attachment,
+                            make_enum_mask(rhi::pipeline_stage::fragment_shader),
                             make_enum_mask(rhi::memory_access::color_attachment_read),
                             make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                             make_enum_mask(rhi::memory_access::color_attachment_write));
-            task.read(depth_target, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            task.read(depth_target, rhi::image_layout::depth_read_only,
+                      make_enum_mask(rhi::pipeline_stage::fragment_shader),
                       make_enum_mask(rhi::memory_access::depth_stencil_attachment_read));
         },
         []([[maybe_unused]] graphics::graphics_task_execution_context& ctx) {
@@ -291,9 +301,11 @@ TEST(frame_graph, frame_graph_with_async)
     builder.create_graphics_pass(
         "Tonemap Pass",
         [&](graphics::graphics_task_builder& task) {
-            task.write(tonemap_target, make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            task.write(tonemap_target, rhi::image_layout::color_attachment,
+                       make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                        make_enum_mask(rhi::memory_access::color_attachment_write));
-            task.read(color_target, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+            task.read(color_target, rhi::image_layout::shader_read_only,
+                      make_enum_mask(rhi::pipeline_stage::fragment_shader),
                       make_enum_mask(rhi::memory_access::shader_read));
         },
         []([[maybe_unused]] graphics::graphics_task_execution_context& ctx) {
@@ -428,7 +440,8 @@ TEST(frame_graph, imported_swapchain)
     builder.create_graphics_pass(
         "Present Pass",
         [&](graphics::graphics_task_builder& task) {
-            task.write(imported_surface, make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+            task.write(imported_surface, rhi::image_layout::color_attachment,
+                       make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                        make_enum_mask(rhi::memory_access::color_attachment_write));
         },
         []([[maybe_unused]] graphics::graphics_task_execution_context& ctx) {
@@ -444,7 +457,7 @@ TEST(frame_graph, imported_swapchain)
     auto plan = tempest::move(builder).compile(queue_cfg);
 
     ASSERT_EQ(graphics::get_resource_type(imported_surface), rhi::rhi_handle_type::render_surface);
-    
+
     ASSERT_EQ(plan.resources.size(), 1);
     ASSERT_EQ(plan.resources[0].creation_info.index(), 0); // monostate, as it's imported
     ASSERT_EQ(plan.resources[0].per_frame, false);
