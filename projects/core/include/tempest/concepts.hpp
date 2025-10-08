@@ -111,7 +111,7 @@ namespace tempest
     {
         template <typename T>
         concept boolean_testable = requires(T&& t) {
-            { !static_cast<T&&>(t) } -> convertible_to<bool>;
+            { !static_cast<T &&>(t) } -> convertible_to<bool>;
         } && convertible_to<T, bool>;
 
         template <typename T, typename U>
@@ -164,10 +164,14 @@ namespace tempest
     concept derived_from = is_base_of_v<U, T>;
 
     template <typename F, typename... Args>
-    concept invocable = requires(F&& f, Args&&... args) { tempest::invoke(forward<F>(f), tempest::forward<Args>(args)...); };
+    concept invocable =
+        requires(F&& f, Args&&... args) { tempest::invoke(forward<F>(f), tempest::forward<Args>(args)...); };
 
     template <typename F, typename... Args>
     concept regular_invocable = invocable<F, Args...>;
+
+    template <typename F, typename... Args>
+    concept invocable_no_capture = invocable<F, Args...> && is_copy_assignable_v<F>;
 
     namespace detail
     {

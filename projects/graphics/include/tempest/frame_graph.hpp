@@ -7,6 +7,7 @@
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
+#include <tempest/tuple.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/variant.hpp>
 #include <tempest/vector.hpp>
@@ -14,6 +15,7 @@
 namespace tempest::graphics
 {
     class graph_builder;
+    class graph_executor;
 
     enum class work_type
     {
@@ -22,51 +24,91 @@ namespace tempest::graphics
         transfer,
     };
 
-    struct graph_resource_handle
+    struct base_graph_resource_handle
     {
         uint64_t handle : 48 = {};
         uint64_t version : 11 = {};
         uint64_t type : 5 = {};
 
-        constexpr graph_resource_handle() = default;
-        graph_resource_handle(const graph_resource_handle&) = delete;
-        graph_resource_handle(graph_resource_handle&&) noexcept = default;
-        ~graph_resource_handle() = default;
+        constexpr base_graph_resource_handle() = default;
 
-        constexpr graph_resource_handle(uint64_t handle, uint8_t version, rhi::rhi_handle_type type)
+        constexpr base_graph_resource_handle(uint64_t handle, uint8_t version, rhi::rhi_handle_type type)
             : handle(handle), version(version), type(static_cast<uint8_t>(type))
         {
         }
 
-        graph_resource_handle& operator=(const graph_resource_handle&) = delete;
-        graph_resource_handle& operator=(graph_resource_handle&&) noexcept = default;
+        constexpr base_graph_resource_handle(uint64_t handle, uint8_t version, uint8_t type)
+            : handle(handle), version(version), type(type)
+        {
+        }
     };
 
-    inline constexpr rhi::rhi_handle_type get_resource_type(const graph_resource_handle& handle)
+    template <rhi::rhi_handle_type T>
+    struct graph_resource_handle : base_graph_resource_handle
+    {
+        using base_graph_resource_handle::base_graph_resource_handle;
+    };
+
+    template <rhi::rhi_handle_type T>
+    inline constexpr rhi::rhi_handle_type get_resource_type(const graph_resource_handle<T>& handle)
+    {
+        return static_cast<rhi::rhi_handle_type>(handle.type);
+    }
+
+    inline constexpr rhi::rhi_handle_type get_resource_type(const base_graph_resource_handle& handle)
     {
         return static_cast<rhi::rhi_handle_type>(handle.type);
     }
 
     struct scheduled_resource_access
     {
-        graph_resource_handle handle;
+        base_graph_resource_handle handle;
         enum_mask<rhi::pipeline_stage> stages;
         enum_mask<rhi::memory_access> accesses;
+        rhi::image_layout layout;
     };
 
     class task_builder
     {
       public:
-        void read(graph_resource_handle& handle);
-        void read(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> read_hints,
-                  enum_mask<rhi::memory_access> access_hints);
-        void write(graph_resource_handle& handle);
-        void write(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> write_hints,
-                   enum_mask<rhi::memory_access> access_hints);
-        void read_write(graph_resource_handle& handle);
-        void read_write(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> read_hints,
-                        enum_mask<rhi::memory_access> read_access_hints, enum_mask<rhi::pipeline_stage> write_hints,
-                        enum_mask<rhi::memory_access> write_access_hints);
+        void read(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle);
+        void read(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle,
+                  enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> access_hints);
+
+        void read(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout);
+        void read(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout,
+                  enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> access_hints);
+
+        void read(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle, rhi::image_layout layout);
+        void read(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle, rhi::image_layout layout,
+                  enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> access_hints);
+
+        void write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle);
+        void write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle,
+                   enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> access_hints);
+
+        void write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout);
+        void write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout,
+                   enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> access_hints);
+
+        void write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle, rhi::image_layout layout);
+        void write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle, rhi::image_layout layout,
+                   enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> access_hints);
+
+        void read_write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle);
+        void read_write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle,
+                        enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> read_access_hints,
+                        enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> write_access_hints);
+
+        void read_write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout);
+        void read_write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout,
+                        enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> read_access_hints,
+                        enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> write_access_hints);
+
+        void read_write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle, rhi::image_layout layout);
+        void read_write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle, rhi::image_layout layout,
+                        enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> read_access_hints,
+                        enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> write_access_hints);
 
       private:
         friend class graph_builder;
@@ -102,6 +144,17 @@ namespace tempest::graphics
 
     class task_execution_context
     {
+      protected:
+        task_execution_context(graph_executor* executor,
+                               rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> cmd_list,
+                               rhi::work_queue* queue)
+            : _executor(executor), _cmd_list(cmd_list), _queue(queue)
+        {
+        }
+
+        graph_executor* _executor = nullptr;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> _cmd_list;
+        rhi::work_queue* _queue = nullptr;
     };
 
     class graphics_task_execution_context : public task_execution_context
@@ -114,6 +167,16 @@ namespace tempest::graphics
 
     class transfer_task_execution_context : public task_execution_context
     {
+      public:
+        void clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image, float r, float g, float b,
+                         float a);
+        void clear_color(const graph_resource_handle<rhi::rhi_handle_type::render_surface>& image, float r, float g,
+                         float b, float a);
+
+      private:
+        friend class graph_executor;
+
+        using task_execution_context::task_execution_context;
     };
 
     struct scheduled_pass
@@ -121,14 +184,14 @@ namespace tempest::graphics
         string name;
         work_type type;
         vector<scheduled_resource_access> accesses;
-        vector<graph_resource_handle> outputs;
+        vector<base_graph_resource_handle> outputs;
 
         function<void(task_execution_context&)> execution_context;
     };
 
     struct ownership_transfer
     {
-        graph_resource_handle handle;
+        base_graph_resource_handle handle;
 
         work_type src_queue;
         work_type dst_queue;
@@ -140,6 +203,9 @@ namespace tempest::graphics
 
         uint64_t wait_value;
         uint64_t signal_value;
+
+        rhi::image_layout src_layout;
+        rhi::image_layout dst_layout;
     };
 
     struct timeline_reference
@@ -170,7 +236,7 @@ namespace tempest::graphics
 
     struct scheduled_resource
     {
-        graph_resource_handle handle;
+        base_graph_resource_handle handle;
         variant<external_resource, rhi::buffer_desc, rhi::image_desc> creation_info;
         bool per_frame;
         bool temporal;
@@ -200,13 +266,13 @@ namespace tempest::graphics
         bool async = false;
 
         vector<scheduled_resource_access> resource_accesses;
-        vector<graph_resource_handle> outputs; // Resources written in this pass, subset of resource_accesses
+        vector<base_graph_resource_handle> outputs; // Resources written in this pass, subset of resource_accesses
     };
 
     struct resource_entry
     {
         string name;
-        graph_resource_handle handle;
+        base_graph_resource_handle handle;
 
         variant<external_resource, internal_resource> resource;
 
@@ -220,31 +286,39 @@ namespace tempest::graphics
     {
       public:
         // Import assets external to the graph
-        graph_resource_handle import_buffer(string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer);
-        graph_resource_handle import_image(string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image);
-        graph_resource_handle import_render_surface(
+        graph_resource_handle<rhi::rhi_handle_type::buffer> import_buffer(
+            string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer);
+        graph_resource_handle<rhi::rhi_handle_type::image> import_image(
+            string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image);
+        graph_resource_handle<rhi::rhi_handle_type::render_surface> import_render_surface(
             string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> surface);
 
         // Handle transient resources
-        graph_resource_handle create_per_frame_buffer(rhi::buffer_desc desc);
-        graph_resource_handle create_per_frame_image(rhi::image_desc desc);
+        graph_resource_handle<rhi::rhi_handle_type::buffer> create_per_frame_buffer(rhi::buffer_desc desc);
+        graph_resource_handle<rhi::rhi_handle_type::image> create_per_frame_image(rhi::image_desc desc);
 
         // Handle temporal resources
-        graph_resource_handle create_temporal_buffer(rhi::buffer_desc desc);
-        graph_resource_handle create_temporal_image(rhi::image_desc desc);
+        graph_resource_handle<rhi::rhi_handle_type::buffer> create_temporal_buffer(rhi::buffer_desc desc);
+        graph_resource_handle<rhi::rhi_handle_type::image> create_temporal_image(rhi::image_desc desc);
 
         // Handle render targets
-        graph_resource_handle create_render_target(rhi::image_desc desc);
+        graph_resource_handle<rhi::rhi_handle_type::image> create_render_target(rhi::image_desc desc);
 
         // Create passes
+        template <typename... ExecTs>
         void create_graphics_pass(string name, invocable<graphics_task_builder&> auto&& setup,
-                                  invocable<graphics_task_execution_context&> auto&& record);
+            invocable_no_capture<graphics_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+                                  ExecTs&&... exec_args);
 
+        template <typename... ExecTs>
         void create_compute_pass(string name, invocable<compute_task_builder&> auto&& setup,
-                                 invocable<compute_task_execution_context&> auto&& record);
+            invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+                                 ExecTs&&... exec_args);
 
+        template <typename... ExecTs>
         void create_transfer_pass(string name, invocable<transfer_task_builder&> auto&& setup,
-                                  invocable<transfer_task_execution_context&> auto&& record);
+            invocable_no_capture<transfer_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+                                  ExecTs&&... exec_args);
 
         graph_execution_plan compile(queue_configuration cfg) &&;
 
@@ -275,7 +349,7 @@ namespace tempest::graphics
         {
             size_t producer_pass_index;
             size_t consumer_pass_index;
-            graph_resource_handle resource;
+            base_graph_resource_handle resource;
             enum_mask<rhi::pipeline_stage> producer_stages;
             enum_mask<rhi::pipeline_stage> consumer_stages;
             enum_mask<rhi::memory_access> producer_access;
@@ -313,44 +387,67 @@ namespace tempest::graphics
                                                    span<const size_t> resource_indices);
     };
 
-    inline void graph_builder::create_compute_pass(string name, invocable<compute_task_builder&> auto&& setup,
-                                                   invocable<compute_task_execution_context&> auto&& record)
+    template <typename... ExecTs>
+    inline void graph_builder::create_compute_pass(
+        string name, invocable<compute_task_builder&> auto&& setup,
+        invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
     {
         compute_task_builder builder;
         setup(builder);
 
+        auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+
         _create_pass_entry(
             name, work_type::compute,
-            [record = tempest::move(record)](task_execution_context& ctx) {
-                record(static_cast<compute_task_execution_context&>(ctx));
+            [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                auto compute_ctx = static_cast<compute_task_execution_context&>(ctx);
+                tempest::apply(
+                    [&](auto&&... unpacked) { record(compute_ctx, tempest::forward<decltype(unpacked)>(unpacked)...); },
+                    args);
             },
             builder, builder._prefer_async);
     }
 
-    inline void graph_builder::create_transfer_pass(string name, invocable<transfer_task_builder&> auto&& setup,
-                                                    invocable<transfer_task_execution_context&> auto&& record)
+    template <typename... ExecTs>
+    inline void graph_builder::create_transfer_pass(
+        string name, invocable<transfer_task_builder&> auto&& setup,
+        invocable_no_capture<transfer_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+        ExecTs&&... exec_args)
     {
         transfer_task_builder builder;
         setup(builder);
 
+        auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+
         _create_pass_entry(
             name, work_type::transfer,
-            [record = tempest::move(record)](task_execution_context& ctx) {
-                record(static_cast<transfer_task_execution_context&>(ctx));
+            [record = tempest::move(record), args = std::move(tup)](task_execution_context& ctx) {
+                auto& transfer_ctx = static_cast<transfer_task_execution_context&>(ctx);
+                tempest::apply(
+                    [&](auto&&... unpacked) {
+                        record(transfer_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
+                    },
+                    args);
             },
             builder, builder._prefer_async);
     }
 
-    inline void graph_builder::create_graphics_pass(string name, invocable<graphics_task_builder&> auto&& setup,
-                                                    invocable<graphics_task_execution_context&> auto&& record)
+    template <typename... ExecTs>
+    inline void graph_builder::create_graphics_pass(
+        string name, invocable<graphics_task_builder&> auto&& setup,
+        invocable_no_capture<graphics_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+        ExecTs&&... exec_args)
     {
         graphics_task_builder builder;
         setup(builder);
 
+        auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+
         _create_pass_entry(
             name, work_type::graphics,
-            [record = tempest::move(record)](task_execution_context& ctx) {
-                record(static_cast<graphics_task_execution_context&>(ctx));
+            [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                auto& graphics_ctx = static_cast<graphics_task_execution_context&>(ctx);
+
             },
             builder, false);
     }
@@ -362,6 +459,12 @@ namespace tempest::graphics
 
         void execute();
         void set_execution_plan(graph_execution_plan plan);
+
+        // Access RHI handles
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> get_buffer(const base_graph_resource_handle& handle) const;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> get_image(const base_graph_resource_handle& handle) const;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> get_render_surface(
+            const base_graph_resource_handle& handle) const;
 
       private:
         rhi::device* _device;
@@ -411,9 +514,15 @@ namespace tempest::graphics
         flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::image>>
             _all_images; // External + Owned
 
+        struct execution_fence
+        {
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::fence> fence;
+            bool queue_used = false;
+        };
+
         struct per_frame_fences
         {
-            flat_unordered_map<work_type, rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>> frame_complete_fence;
+            flat_unordered_map<work_type, execution_fence> frame_complete_fence;
         };
 
         vector<per_frame_fences> _per_frame_fences;
@@ -427,6 +536,8 @@ namespace tempest::graphics
 
         flat_unordered_map<work_type, vector<timeline_sem>> _queue_timelines;
 
+        flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::image>> _current_swapchain_images;
+
         size_t _current_frame = 0;
 
         void _construct_owned_resources();
@@ -434,7 +545,7 @@ namespace tempest::graphics
 
         using acquired_swapchains = vector<pair<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>,
                                                 rhi::swapchain_image_acquire_info_result>>;
-        
+
         acquired_swapchains _acquire_swapchain_images();
         void _wait_for_swapchain_acquire(const acquired_swapchains& acquired);
         void _execute_plan(const acquired_swapchains& acquired);

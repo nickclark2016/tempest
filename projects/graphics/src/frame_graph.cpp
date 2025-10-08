@@ -9,9 +9,9 @@ namespace tempest::graphics
 {
     namespace
     {
-        graph_resource_handle copy(const graph_resource_handle& handle)
+        base_graph_resource_handle copy(const base_graph_resource_handle& handle)
         {
-            return graph_resource_handle(handle.handle, handle.version, get_resource_type(handle));
+            return base_graph_resource_handle(handle.handle, handle.version, handle.type);
         }
 
         inline constexpr enum_mask<rhi::memory_access> read_access_mask = make_enum_mask(
@@ -36,29 +36,138 @@ namespace tempest::graphics
             return (access & write_access_mask) != enum_mask<rhi::memory_access>(rhi::memory_access::none);
         }
 
+        inline constexpr enum_mask<rhi::memory_access> get_access_mask_for_layout(rhi::image_layout layout)
+        {
+            switch (layout)
+            {
+            case rhi::image_layout::color_attachment:
+                return make_enum_mask(rhi::memory_access::color_attachment_read,
+                                      rhi::memory_access::color_attachment_write);
+            case rhi::image_layout::depth_stencil_read_write:
+                return make_enum_mask(rhi::memory_access::depth_stencil_attachment_read,
+                                      rhi::memory_access::depth_stencil_attachment_write);
+            case rhi::image_layout::depth_stencil_read_only:
+                return make_enum_mask(rhi::memory_access::depth_stencil_attachment_read);
+            case rhi::image_layout::depth:
+                return make_enum_mask(rhi::memory_access::depth_stencil_attachment_read,
+                                      rhi::memory_access::depth_stencil_attachment_write);
+            case rhi::image_layout::depth_read_only:
+                return make_enum_mask(rhi::memory_access::depth_stencil_attachment_read);
+            case rhi::image_layout::general:
+                return make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write);
+            case rhi::image_layout::present:
+                return make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write);
+            case rhi::image_layout::shader_read_only:
+                return make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::shader_sampled_read);
+            case rhi::image_layout::transfer_dst:
+                return make_enum_mask(rhi::memory_access::transfer_write);
+            case rhi::image_layout::transfer_src:
+                return make_enum_mask(rhi::memory_access::transfer_read);
+            case rhi::image_layout::undefined:
+                return make_enum_mask(rhi::memory_access::none);
+            }
+
+            unreachable();
+        }
+
     } // namespace
 
-    void task_builder::read(graph_resource_handle& handle)
+    void task_builder::read(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle)
     {
         read(handle, make_enum_mask(rhi::pipeline_stage::all), read_access_mask);
     }
 
-    void task_builder::read(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> read_hints,
+    void task_builder::read(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle,
+                            enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> access_hints)
+    {
+        accesses.push_back(scheduled_resource_access{
+            .handle = copy(handle),
+            .stages = read_hints,
+            .accesses = access_hints,
+            .layout = rhi::image_layout::undefined,
+        });
+    }
+
+    void task_builder::read(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout)
+    {
+        read(handle, layout, make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout));
+    }
+
+    void task_builder::read(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout,
+                            enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> access_hints)
+    {
+        accesses.push_back(scheduled_resource_access{
+            .handle = copy(handle),
+            .stages = read_hints,
+            .accesses = access_hints,
+            .layout = layout,
+        });
+    }
+
+    void task_builder::read(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle,
+                            rhi::image_layout layout)
+    {
+        read(handle, layout, make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout));
+    }
+
+    void task_builder::read(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle,
+                            rhi::image_layout layout, enum_mask<rhi::pipeline_stage> read_hints,
                             enum_mask<rhi::memory_access> access_hints)
     {
         accesses.push_back(scheduled_resource_access{
             .handle = copy(handle),
             .stages = read_hints,
             .accesses = access_hints,
+            .layout = layout,
         });
     }
 
-    void task_builder::write(graph_resource_handle& handle)
+    void task_builder::write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle)
     {
         write(handle, make_enum_mask(rhi::pipeline_stage::all), write_access_mask);
     }
 
-    void task_builder::write(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> write_hints,
+    void task_builder::write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle,
+                             enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> access_hints)
+    {
+        handle.version += 1;
+        auto current = copy(handle);
+
+        accesses.push_back(scheduled_resource_access{
+            .handle = tempest::move(current),
+            .stages = write_hints,
+            .accesses = access_hints,
+            .layout = rhi::image_layout::undefined,
+        });
+    }
+
+    void task_builder::write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout)
+    {
+        write(handle, layout, make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout));
+    }
+
+    void task_builder::write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout,
+                             enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> access_hints)
+    {
+        handle.version += 1;
+        auto current = copy(handle);
+
+        accesses.push_back(scheduled_resource_access{
+            .handle = tempest::move(current),
+            .stages = write_hints,
+            .accesses = access_hints,
+            .layout = layout,
+        });
+    }
+
+    void task_builder::write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle,
+                             rhi::image_layout layout)
+    {
+        write(handle, layout, make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout));
+    }
+
+    void task_builder::write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle,
+                             rhi::image_layout layout, enum_mask<rhi::pipeline_stage> write_hints,
                              enum_mask<rhi::memory_access> access_hints)
     {
         handle.version += 1;
@@ -68,16 +177,18 @@ namespace tempest::graphics
             .handle = tempest::move(current),
             .stages = write_hints,
             .accesses = access_hints,
+            .layout = layout,
         });
     }
 
-    void task_builder::read_write(graph_resource_handle& handle)
+    void task_builder::read_write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle)
     {
         read_write(handle, make_enum_mask(rhi::pipeline_stage::all), read_access_mask,
                    make_enum_mask(rhi::pipeline_stage::all), write_access_mask);
     }
 
-    void task_builder::read_write(graph_resource_handle& handle, enum_mask<rhi::pipeline_stage> read_hints,
+    void task_builder::read_write(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle,
+                                  enum_mask<rhi::pipeline_stage> read_hints,
                                   enum_mask<rhi::memory_access> read_access_hints,
                                   enum_mask<rhi::pipeline_stage> write_hints,
                                   enum_mask<rhi::memory_access> write_access_hints)
@@ -100,6 +211,65 @@ namespace tempest::graphics
         });
     }
 
+    void task_builder::read_write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout)
+    {
+        read_write(handle, layout, make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout),
+                   make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout));
+    }
+
+    void task_builder::read_write(graph_resource_handle<rhi::rhi_handle_type::image>& handle, rhi::image_layout layout,
+                                  enum_mask<rhi::pipeline_stage> read_hints,
+                                  enum_mask<rhi::memory_access> read_access_hints,
+                                  enum_mask<rhi::pipeline_stage> write_hints,
+                                  enum_mask<rhi::memory_access> write_access_hints)
+    {
+        auto current = copy(handle);
+        accesses.push_back(scheduled_resource_access{
+            .handle = copy(current),
+            .stages = read_hints,
+            .accesses = read_access_hints,
+            .layout = layout,
+        });
+        handle.version += 1;
+        current = copy(handle);
+        accesses.push_back(scheduled_resource_access{
+            .handle = tempest::move(current),
+            .stages = write_hints,
+            .accesses = write_access_hints,
+            .layout = layout,
+        });
+    }
+
+    void task_builder::read_write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle,
+                                  rhi::image_layout layout)
+    {
+        read_write(handle, layout, make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout),
+                   make_enum_mask(rhi::pipeline_stage::all), get_access_mask_for_layout(layout));
+    }
+
+    void task_builder::read_write(graph_resource_handle<rhi::rhi_handle_type::render_surface>& handle,
+                                  rhi::image_layout layout, enum_mask<rhi::pipeline_stage> read_hints,
+                                  enum_mask<rhi::memory_access> read_access_hints,
+                                  enum_mask<rhi::pipeline_stage> write_hints,
+                                  enum_mask<rhi::memory_access> write_access_hints)
+    {
+        auto current = copy(handle);
+        accesses.push_back(scheduled_resource_access{
+            .handle = copy(current),
+            .stages = read_hints,
+            .accesses = read_access_hints,
+            .layout = layout,
+        });
+        handle.version += 1;
+        current = copy(handle);
+        accesses.push_back(scheduled_resource_access{
+            .handle = tempest::move(current),
+            .stages = write_hints,
+            .accesses = write_access_hints,
+            .layout = layout,
+        });
+    }
+
     void compute_task_builder::prefer_async()
     {
         _prefer_async = true;
@@ -110,10 +280,11 @@ namespace tempest::graphics
         _prefer_async = true;
     }
 
-    graph_resource_handle graph_builder::import_buffer(string name,
-                                                       rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
+    graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::import_buffer(
+        string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::buffer>(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
         auto entry = resource_entry{
             .name = name,
             .handle = copy(handle),
@@ -129,10 +300,11 @@ namespace tempest::graphics
         return handle;
     }
 
-    graph_resource_handle graph_builder::import_image(string name,
-                                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image)
+    graph_resource_handle<rhi::rhi_handle_type::image> graph_builder::import_image(
+        string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::image>(_next_resource_id++, 0, rhi::rhi_handle_type::image);
         auto entry = resource_entry{
             .name = name,
             .handle = copy(handle),
@@ -148,10 +320,11 @@ namespace tempest::graphics
         return handle;
     }
 
-    graph_resource_handle graph_builder::import_render_surface(
+    graph_resource_handle<rhi::rhi_handle_type::render_surface> graph_builder::import_render_surface(
         string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> surface)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::render_surface);
+        auto handle = graph_resource_handle<rhi::rhi_handle_type::render_surface>(_next_resource_id++, 0,
+                                                                                  rhi::rhi_handle_type::render_surface);
         auto entry = resource_entry{
             .name = name,
             .handle = copy(handle),
@@ -167,9 +340,10 @@ namespace tempest::graphics
         return handle;
     }
 
-    graph_resource_handle graph_builder::create_per_frame_buffer(rhi::buffer_desc desc)
+    graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::create_per_frame_buffer(rhi::buffer_desc desc)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::buffer>(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
         auto entry = resource_entry{
             .name = desc.name,
             .handle = copy(handle),
@@ -185,9 +359,10 @@ namespace tempest::graphics
         return handle;
     }
 
-    graph_resource_handle graph_builder::create_per_frame_image(rhi::image_desc desc)
+    graph_resource_handle<rhi::rhi_handle_type::image> graph_builder::create_per_frame_image(rhi::image_desc desc)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::image>(_next_resource_id++, 0, rhi::rhi_handle_type::image);
         auto entry = resource_entry{
             .name = desc.name,
             .handle = copy(handle),
@@ -203,9 +378,10 @@ namespace tempest::graphics
         return handle;
     }
 
-    graph_resource_handle graph_builder::create_temporal_buffer(rhi::buffer_desc desc)
+    graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::create_temporal_buffer(rhi::buffer_desc desc)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::buffer>(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
         auto entry = resource_entry{
             .name = desc.name,
             .handle = copy(handle),
@@ -221,9 +397,10 @@ namespace tempest::graphics
         return handle;
     }
 
-    graph_resource_handle graph_builder::create_temporal_image(rhi::image_desc desc)
+    graph_resource_handle<rhi::rhi_handle_type::image> graph_builder::create_temporal_image(rhi::image_desc desc)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::image>(_next_resource_id++, 0, rhi::rhi_handle_type::image);
         auto entry = resource_entry{
             .name = desc.name,
             .handle = copy(handle),
@@ -239,9 +416,10 @@ namespace tempest::graphics
         return handle;
     }
 
-    graph_resource_handle graph_builder::create_render_target(rhi::image_desc desc)
+    graph_resource_handle<rhi::rhi_handle_type::image> graph_builder::create_render_target(rhi::image_desc desc)
     {
-        auto handle = graph_resource_handle(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::image>(_next_resource_id++, 0, rhi::rhi_handle_type::image);
         auto entry = resource_entry{
             .name = desc.name,
             .handle = copy(handle),
@@ -278,6 +456,7 @@ namespace tempest::graphics
                 .handle = copy(res.handle),
                 .stages = res.stages,
                 .accesses = res.accesses,
+                .layout = res.layout,
             });
 
             if (is_write_access(res.accesses))
@@ -668,6 +847,7 @@ namespace tempest::graphics
             uint64_t queue_index;
             enum_mask<rhi::pipeline_stage> stages;
             enum_mask<rhi::memory_access> access;
+            rhi::image_layout layout;
             uint64_t timeline_value;
             uint64_t last_submit_index;
         };
@@ -729,6 +909,7 @@ namespace tempest::graphics
         {
             enum_mask<rhi::pipeline_stage> stages;
             enum_mask<rhi::memory_access> access_mask;
+            rhi::image_layout layout;
         };
 
         auto future_usage_map = flat_unordered_map<uint64_t, flat_unordered_map<work_type, future_usage>>{};
@@ -744,6 +925,7 @@ namespace tempest::graphics
                     auto& usage = future_usage_map[access.handle.handle][batch.type];
                     usage.stages |= access.stages;
                     usage.access_mask |= access.accesses;
+                    usage.layout = access.layout;
                 }
             }
         }
@@ -792,6 +974,8 @@ namespace tempest::graphics
                             .dst_accesses = future_usage.access_mask,
                             .wait_value = 0,
                             .signal_value = signal_value,
+                            .src_layout = last_usage.layout,
+                            .dst_layout = future_usage.layout,
                         });
 
                         src_instructions.signals.push_back({
@@ -811,7 +995,9 @@ namespace tempest::graphics
                             .src_accesses = last_usage.access,
                             .dst_accesses = future_usage.access_mask,
                             .wait_value = signal_value,
-                            .signal_value = 0 // destination timeline increment optional
+                            .signal_value = 0, // destination timeline increment optional
+                            .src_layout = last_usage.layout,
+                            .dst_layout = future_usage.layout,
                         });
                         instructions.waits.push_back({
                             last_usage.queue,
@@ -836,11 +1022,13 @@ namespace tempest::graphics
                     last_usage.access |= access.accesses;
                     last_usage.timeline_value = batch_timeline;
                     last_usage.last_submit_index = batch_idx;
+                    last_usage.layout = access.layout;
 
                     sched_pass.accesses.push_back({
                         .handle = copy(access.handle),
                         .stages = access.stages,
                         .accesses = access.accesses,
+                        .layout = access.layout,
                     });
                 }
 
@@ -862,15 +1050,42 @@ namespace tempest::graphics
 
     void graph_executor::execute()
     {
-        
+        // Get all queues that need to be waited on
+        const auto frame_in_flight = _current_frame % _device->frames_in_flight();
+        auto fences_to_wait = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>>{};
+        for (auto& [type, fence_info] : _per_frame_fences[frame_in_flight].frame_complete_fence)
+        {
+            if (fence_info.queue_used)
+            {
+                fences_to_wait.push_back(fence_info.fence);
+                fence_info.queue_used = false;
+            }
+        }
+
+        if (!fences_to_wait.empty())
+        {
+            _device->wait(fences_to_wait);
+        }
+
+        _device->release_resources();
+
+        _device->get_primary_work_queue().reset(frame_in_flight);
+        _device->get_dedicated_compute_queue().reset(frame_in_flight);
+        _device->get_dedicated_transfer_queue().reset(frame_in_flight);
+
         const auto acquired_swapchains = _acquire_swapchain_images();
         if (!acquired_swapchains.empty())
         {
+            if (!fences_to_wait.empty())
+            {
+                _device->reset(fences_to_wait);
+            }
+
             _wait_for_swapchain_acquire(acquired_swapchains);
             _execute_plan(acquired_swapchains);
             _present_swapchain_images(acquired_swapchains);
         }
-        
+
         _device->finish_frame();
     }
 
@@ -879,6 +1094,58 @@ namespace tempest::graphics
         _destroy_owned_resources();
         _plan = tempest::move(plan);
         _construct_owned_resources();
+    }
+
+    rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> graph_executor::get_buffer(
+        const base_graph_resource_handle& handle) const
+    {
+        if (get_resource_type(handle) != rhi::rhi_handle_type::buffer)
+        {
+            return rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
+        }
+
+        const auto it = _all_buffers.find(handle.handle);
+        if (it != _all_buffers.cend())
+        {
+            return it->second;
+        }
+        return rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
+    }
+
+    rhi::typed_rhi_handle<rhi::rhi_handle_type::image> graph_executor::get_image(
+        const base_graph_resource_handle& handle) const
+    {
+        if (get_resource_type(handle) == rhi::rhi_handle_type::image)
+        {
+            const auto it = _all_images.find(handle.handle);
+            if (it != _all_images.cend())
+            {
+                return it->second;
+            }
+        }
+        else if (get_resource_type(handle) == rhi::rhi_handle_type::render_surface)
+        {
+            const auto it = _current_swapchain_images.find(handle.handle);
+            if (it != _current_swapchain_images.cend())
+            {
+                return it->second;
+            }
+        }
+
+        return rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+    }
+
+    rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> graph_executor::get_render_surface(
+        const base_graph_resource_handle& handle) const
+    {
+        for (const auto& [res_handle, surface] : _external_surfaces)
+        {
+            if (res_handle == handle.handle)
+            {
+                return surface;
+            }
+        }
+        return rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>::null_handle;
     }
 
     void graph_executor::_construct_owned_resources()
@@ -967,20 +1234,26 @@ namespace tempest::graphics
         {
             if (_plan->queue_cfg.graphics_queues > 0)
             {
-                _per_frame_fences[idx].frame_complete_fence[work_type::graphics] =
-                    _device->create_fence({.signaled = true});
+                _per_frame_fences[idx].frame_complete_fence[work_type::graphics] = {
+                    .fence = _device->create_fence({.signaled = false}),
+                    .queue_used = false,
+                };
             }
 
             if (_plan->queue_cfg.compute_queues > 0)
             {
-                _per_frame_fences[idx].frame_complete_fence[work_type::compute] =
-                    _device->create_fence({.signaled = true});
+                _per_frame_fences[idx].frame_complete_fence[work_type::compute] = {
+                    .fence = _device->create_fence({.signaled = false}),
+                    .queue_used = false,
+                };
             }
 
             if (_plan->queue_cfg.transfer_queues > 0)
             {
-                _per_frame_fences[idx].frame_complete_fence[work_type::transfer] =
-                    _device->create_fence({.signaled = true});
+                _per_frame_fences[idx].frame_complete_fence[work_type::transfer] = {
+                    .fence = _device->create_fence({.signaled = false}),
+                    .queue_used = false,
+                };
             }
         }
     }
@@ -1007,9 +1280,9 @@ namespace tempest::graphics
 
         for (auto& frame_fences : _per_frame_fences)
         {
-            for (const auto& [type, fence] : frame_fences.frame_complete_fence)
+            for (const auto& [type, exec_fence] : frame_fences.frame_complete_fence)
             {
-                _device->destroy_fence(fence);
+                _device->destroy_fence(exec_fence.fence);
             }
         }
 
@@ -1116,24 +1389,40 @@ namespace tempest::graphics
         queue.submit(submits);
     }
 
-    void graph_executor::_execute_plan([[maybe_unused]] const acquired_swapchains& acquired)
+    void graph_executor::_execute_plan(const acquired_swapchains& acquired)
     {
+        _current_swapchain_images.clear();
+        for (const auto& [surface, acquire_info] : acquired)
+        {
+            const auto res_it = tempest::find_if(_external_surfaces.cbegin(), _external_surfaces.cend(),
+                                                 [&](const auto& pair) { return pair.second == surface; });
+            if (res_it != _external_surfaces.cend())
+            {
+                _current_swapchain_images[res_it->first] = acquire_info.image;
+            }
+        }
+
         size_t submission_index = 0;
         for (const auto& submission : _plan->submissions)
         {
-            auto& queue = [&]() -> rhi::work_queue& {
-                switch (submission.type)
+            auto get_queue = [dev = _device](work_type type) -> rhi::work_queue& {
+                switch (type)
                 {
                 case work_type::graphics:
-                    return _device->get_primary_work_queue();
+                    return dev->get_primary_work_queue();
                 case work_type::compute:
-                    return _device->get_dedicated_compute_queue();
+                    return dev->get_dedicated_compute_queue();
                 case work_type::transfer:
-                    return _device->get_dedicated_transfer_queue();
+                    return dev->get_dedicated_transfer_queue();
                 default:
-                    return _device->get_primary_work_queue();
+                    return dev->get_primary_work_queue();
                 }
-            }();
+            };
+
+            auto& queue = get_queue(submission.type);
+
+            auto command_list = queue.get_next_command_list();
+            queue.begin_command_list(command_list, true);
 
             auto submit_info = rhi::work_queue::submit_info{};
             auto timeline_value = _queue_timelines[submission.type][submission.queue_index].value;
@@ -1168,41 +1457,169 @@ namespace tempest::graphics
                 {
                     wait_map[timeline.sem.id].offset = current_value.offset;
                 }
-
-                // Add a pipeline barrier for the resource state transition and queue ownership transfer
             }
 
             // Handle signals on cross-queue ownership transfers with timeline semaphores
-            auto signal_map = flat_unordered_map<uint64_t, sem_value>{}; // semaphore handle -> max signal valu
+            auto signal_map = flat_unordered_map<uint64_t, sem_value>{}; // semaphore handle -> max signal value
 
             for (const auto& pass : submission.passes)
             {
+                auto images_barriers = vector<rhi::work_queue::image_barrier>{};
+                auto buffer_barriers = vector<rhi::work_queue::buffer_barrier>{};
+
                 for (const auto& resource : pass.accesses)
                 {
                     auto prior_usage_it = _current_resource_states.find(resource.handle.handle);
                     if (prior_usage_it != _current_resource_states.cend())
                     {
                         auto& prior_usage = prior_usage_it->second;
-                        const bool cross_queue = prior_usage.queue != submission.type;
+                        const auto cross_queue = prior_usage.queue != submission.type;
 
                         if (cross_queue)
                         {
                             auto sem_to_wait = _queue_timelines[prior_usage.queue][prior_usage.queue_index].sem;
                             auto wait_value = prior_usage.timeline_value;
 
-                            // A semaphore wait is sufficient, the resource contents do not need to be preserved
                             const auto& current_value = wait_map[sem_to_wait.id];
                             if (current_value.offset > wait_value)
                             {
                                 wait_map[sem_to_wait.id].offset = current_value.offset;
                             }
                         }
-                        else
+
+                        rhi::work_queue* src_queue = nullptr;
+                        rhi::work_queue* dst_queue = nullptr;
+
+                        if (cross_queue)
                         {
-                            // Add pipeline barrier for execution and memory dependencies
+                            src_queue = &get_queue(prior_usage.queue);
+                            dst_queue = &queue;
+                        }
+
+                        const auto res_type = get_resource_type(resource.handle);
+                        if (res_type == rhi::rhi_handle_type::image)
+                        {
+                            const auto image_it = _all_images.find(resource.handle.handle);
+                            const auto& img_usage = tempest::get<image_usage>(prior_usage.usage);
+
+                            const auto barrier = rhi::work_queue::image_barrier{
+                                .image = image_it->second,
+                                .old_layout = img_usage.layout,
+                                .new_layout = resource.layout,
+                                .src_stages = prior_usage.stages,
+                                .src_access = prior_usage.accesses,
+                                .dst_stages = resource.stages,
+                                .dst_access = resource.accesses,
+                                .src_queue = src_queue,
+                                .dst_queue = dst_queue,
+                            };
+
+                            images_barriers.push_back(barrier);
+                        }
+                        else if (res_type == rhi::rhi_handle_type::render_surface)
+                        {
+                            const auto surface_it = tempest::find_if(
+                                _external_surfaces.begin(), _external_surfaces.end(),
+                                [&](const auto& pair) { return pair.first == resource.handle.handle; });
+                            const auto render_surface_info_it =
+                                tempest::find_if(acquired.cbegin(), acquired.cend(),
+                                                 [&](const auto& info) { return info.first == surface_it->second; });
+
+                            if (render_surface_info_it != acquired.cend())
+                            {
+                                const auto& img_usage = tempest::get<image_usage>(prior_usage.usage);
+
+                                // Add image layout transition from undefined to first usage
+                                const auto barrier = rhi::work_queue::image_barrier{
+                                    .image = render_surface_info_it->second.image,
+                                    .old_layout = img_usage.layout,
+                                    .new_layout = resource.layout,
+                                    .src_stages = prior_usage.stages,
+                                    .src_access = prior_usage.accesses,
+                                    .dst_stages = resource.stages,
+                                    .dst_access = resource.accesses,
+                                    .src_queue = src_queue,
+                                    .dst_queue = dst_queue,
+                                };
+
+                                images_barriers.push_back(barrier);
+                            }
+                        }
+                        else if (res_type == rhi::rhi_handle_type::buffer)
+                        {
+                            const auto buffer_it = _all_buffers.find(resource.handle.handle);
+                            const auto& buf_usage = tempest::get<buffer_usage>(prior_usage.usage);
+
+                            const auto barrier = rhi::work_queue::buffer_barrier{
+                                .buffer = buffer_it->second,
+                                .src_stages = prior_usage.stages,
+                                .src_access = prior_usage.accesses,
+                                .dst_stages = resource.stages,
+                                .dst_access = resource.accesses,
+                                .src_queue = src_queue,
+                                .dst_queue = dst_queue,
+                                .offset = cross_queue ? 0 : buf_usage.offset,
+                                .size = cross_queue ? numeric_limits<size_t>::max() : buf_usage.range,
+                            };
+
+                            buffer_barriers.push_back(barrier);
+                        }
+                    }
+                    else
+                    {
+                        // If this is an image resource, we need to transition it from undefined to the first usage
+                        // If this is a swapchain image, we need to transition it from the present layout to the first
+                        // usage
+                        const auto res_type = get_resource_type(resource.handle);
+                        if (res_type == rhi::rhi_handle_type::image)
+                        {
+                            const auto image_it = _all_images.find(resource.handle.handle);
+
+                            const auto barrier = rhi::work_queue::image_barrier{
+                                .image = image_it->second,
+                                .old_layout = rhi::image_layout::undefined,
+                                .new_layout = resource.layout,
+                                .src_stages = make_enum_mask(rhi::pipeline_stage::all),
+                                .src_access = make_enum_mask(rhi::memory_access::none),
+                                .dst_stages = resource.stages,
+                                .dst_access = resource.accesses,
+                                .src_queue = nullptr,
+                                .dst_queue = nullptr,
+                            };
+
+                            images_barriers.push_back(barrier);
+                        }
+                        else if (res_type == rhi::rhi_handle_type::render_surface)
+                        {
+                            const auto surface_it = tempest::find_if(
+                                _external_surfaces.begin(), _external_surfaces.end(),
+                                [&](const auto& pair) { return pair.first == resource.handle.handle; });
+                            const auto render_surface_info_it =
+                                tempest::find_if(acquired.cbegin(), acquired.cend(),
+                                                 [&](const auto& info) { return info.first == surface_it->second; });
+
+                            if (render_surface_info_it != acquired.cend())
+                            {
+                                // Add image layout transition from undefined to first usage
+                                const auto barrier = rhi::work_queue::image_barrier{
+                                    .image = render_surface_info_it->second.image,
+                                    .old_layout = rhi::image_layout::undefined,
+                                    .new_layout = resource.layout,
+                                    .src_stages = make_enum_mask(rhi::pipeline_stage::all),
+                                    .src_access = make_enum_mask(rhi::memory_access::none),
+                                    .dst_stages = resource.stages,
+                                    .dst_access = resource.accesses,
+                                    .src_queue = nullptr,
+                                    .dst_queue = nullptr,
+                                };
+
+                                images_barriers.push_back(barrier);
+                            }
                         }
                     }
                 }
+
+                queue.pipeline_barriers(command_list, images_barriers, buffer_barriers);
 
                 // Execute the pass
                 switch (pass.type)
@@ -1211,8 +1628,11 @@ namespace tempest::graphics
                     break;
                 case work_type::compute:
                     break;
-                case work_type::transfer:
+                case work_type::transfer: {
+                    auto executor = transfer_task_execution_context(this, command_list, &queue);
+                    pass.execution_context(executor);
                     break;
+                }
                 default:
                     // Should never reach here
                     break;
@@ -1240,7 +1660,32 @@ namespace tempest::graphics
                             .queue_index = submission.queue_index,
                             .stages = resource.stages,
                             .accesses = resource.accesses,
-                            .usage = image_usage{},
+                            .usage =
+                                image_usage{
+                                    .base_mip = 0,
+                                    .mip_levels = 1,
+                                    .base_array_layer = 0,
+                                    .array_layers = 1,
+                                    .layout = resource.layout,
+                                },
+                            .timeline_value = timeline_value,
+                        };
+                    }
+                    else if (res_type == rhi::rhi_handle_type::render_surface)
+                    {
+                        _current_resource_states[resource.handle.handle] = resource_usage{
+                            .queue = submission.type,
+                            .queue_index = submission.queue_index,
+                            .stages = resource.stages,
+                            .accesses = resource.accesses,
+                            .usage =
+                                image_usage{
+                                    .base_mip = 0,
+                                    .mip_levels = 1,
+                                    .base_array_layer = 0,
+                                    .array_layers = 1,
+                                    .layout = resource.layout,
+                                },
                             .timeline_value = timeline_value,
                         };
                     }
@@ -1255,8 +1700,51 @@ namespace tempest::graphics
                 {
                     signal_map[timeline.sem.id].offset = current_value.offset;
                 }
+            }
 
-                // Add a pipeline barrier for the resource state transition and queue ownership transfer
+            // Set up barriers to transition any resources that were released in this submission to another queue
+            auto release_buffer_ownership = vector<rhi::work_queue::buffer_barrier>{};
+            auto release_image_ownership = vector<rhi::work_queue::image_barrier>{};
+
+            for (const auto& rel_res : submission.released_resources)
+            {
+                const auto type = get_resource_type(rel_res.handle);
+                switch (type)
+                {
+                case rhi::rhi_handle_type::buffer: {
+                    auto barrier = rhi::work_queue::buffer_barrier{
+                        .buffer = get_buffer(rel_res.handle),
+                        .src_stages = rel_res.src_stages,
+                        .src_access = rel_res.src_accesses,
+                        .dst_stages = rel_res.dst_stages,
+                        .dst_access = rel_res.dst_accesses,
+                        .src_queue = &queue,
+                        .dst_queue = &get_queue(rel_res.dst_queue),
+                        .offset = 0,
+                        .size = numeric_limits<size_t>::max(),
+                    };
+                    break;
+                }
+                case rhi::rhi_handle_type::image:
+                    [[fallthrough]];
+                case rhi::rhi_handle_type::render_surface: {
+                    auto barrier = rhi::work_queue::image_barrier{
+                        .image = get_image(rel_res.handle),
+                        .old_layout = rel_res.src_layout,
+                        .new_layout = rel_res.dst_layout,
+                        .src_stages = rel_res.src_stages,
+                        .src_access = rel_res.src_accesses,
+                        .dst_stages = rel_res.dst_stages,
+                        .dst_access = rel_res.dst_accesses,
+                        .src_queue = &queue,
+                        .dst_queue = &get_queue(rel_res.dst_queue),
+                    };
+                    release_image_ownership.push_back(barrier);
+                    break;
+                }
+                default:
+                    break;
+                }
             }
 
             // Fill out the wait and signal semaphores for the submit info
@@ -1280,8 +1768,10 @@ namespace tempest::graphics
 
             // If this is the last submission in the frame for this queue family, signal the frame complete fence
             const auto frame_idx = _current_frame % _device->frames_in_flight();
-            auto fence_handle = _per_frame_fences[frame_idx].frame_complete_fence[submission.type];
+            auto fence_handle = _per_frame_fences[frame_idx].frame_complete_fence[submission.type].fence;
+            _per_frame_fences[frame_idx].frame_complete_fence[submission.type].queue_used = true;
 
+            // Check the rest of the submissions for a queue match
             for (auto idx = submission_index + 1; idx < _plan->submissions.size(); ++idx)
             {
                 if (_plan->submissions[idx].type == submission.type)
@@ -1291,11 +1781,54 @@ namespace tempest::graphics
                 }
             }
 
+            // If this is the last submission in the frame, transition any swapchain images back to present
+            if (submission_index == _plan->submissions.size() - 1)
+            {
+                for (const auto& img : acquired)
+                {
+                    auto swapchain_resource_handle_it =
+                        tempest::find_if(_external_surfaces.begin(), _external_surfaces.end(),
+                                         [&](const auto& pair) { return pair.second == img.first; });
+                    if (swapchain_resource_handle_it != _external_surfaces.cend())
+                    {
+                        auto last_usage_it = _current_resource_states.find(swapchain_resource_handle_it->first);
+
+                        auto barrier = rhi::work_queue::image_barrier{
+                            .image = img.second.image,
+                            .old_layout = last_usage_it == _current_resource_states.end()
+                                              ? rhi::image_layout::undefined
+                                              : get<image_usage>(last_usage_it->second.usage).layout,
+                            .new_layout = rhi::image_layout::present,
+                            .src_stages = last_usage_it == _current_resource_states.end()
+                                              ? make_enum_mask(rhi::pipeline_stage::bottom)
+                                              : last_usage_it->second.stages,
+                            .src_access = last_usage_it == _current_resource_states.end()
+                                              ? make_enum_mask(rhi::memory_access::none)
+                                              : last_usage_it->second.accesses,
+                            .dst_stages = make_enum_mask(rhi::pipeline_stage::top),
+                            .dst_access = make_enum_mask(rhi::memory_access::none),
+                            .src_queue = nullptr,
+                            .dst_queue = nullptr,
+                        };
+
+                        queue.transition_image(command_list, {&barrier, 1});
+
+                        // Remove the swapchain image from the current resource states
+                        _current_resource_states.erase(swapchain_resource_handle_it->first);
+                    }
+                }
+            }
+
+            queue.end_command_list(command_list);
+            submit_info.command_lists.push_back(command_list);
+
             const array submits = {submit_info};
-            queue.submit(submits);
+            queue.submit(submits, fence_handle);
 
             ++submission_index;
         }
+
+        ++_current_frame;
     }
 
     void graph_executor::_present_swapchain_images(const acquired_swapchains& acquired)
@@ -1377,5 +1910,29 @@ namespace tempest::graphics
                 erase_if(_external_surfaces, [&](const auto& pair) { return pair.second == acquired[idx].first; });
             }
         }
+    }
+
+    void transfer_task_execution_context::clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image,
+                                                      float r, float g, float b, float a)
+    {
+        const auto img = _executor->get_image(image);
+        if (!img)
+        {
+            return;
+        }
+
+        _queue->clear_color_image(_cmd_list, img, rhi::image_layout::transfer_dst, r, g, b, a);
+    }
+
+    void transfer_task_execution_context::clear_color(
+        const graph_resource_handle<rhi::rhi_handle_type::render_surface>& surface, float r, float g, float b, float a)
+    {
+        const auto img = _executor->get_image(surface);
+        if (!img)
+        {
+            return;
+        }
+
+        _queue->clear_color_image(_cmd_list, img, rhi::image_layout::transfer_dst, r, g, b, a);
     }
 } // namespace tempest::graphics
