@@ -4,6 +4,7 @@
 
 #if defined(TEMPEST_POSIX_THREADS)
 #include <sched.h>
+#include <unistd.h>
 #endif
 
 namespace tempest
