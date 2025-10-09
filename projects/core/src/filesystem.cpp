@@ -12,6 +12,7 @@
 #include <winioctl.h>
 #else
 #include <dirent.h>
+#include <errno.h>
 #include <iconv.h>
 #include <limits.h>
 #include <sys/stat.h>
