@@ -2,7 +2,9 @@
 #define tempest_core_string_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/assert.hpp>
 #include <tempest/char_traits.hpp>
+#include <tempest/concepts.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
@@ -10,9 +12,7 @@
 #include <tempest/string_view.hpp>
 #include <tempest/vector.hpp>
 
-#include <cassert>
 #include <compare>
-#include <iterator>
 
 namespace tempest
 {
@@ -106,8 +106,8 @@ namespace tempest
 
         using iterator = iter;
         using const_iterator = const_iter;
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = tempest::reverse_iterator<iterator>;
+        using const_reverse_iterator = tempest::reverse_iterator<const_iterator>;
 
         static constexpr size_type npos = ~size_type(0);
 
@@ -718,7 +718,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::assign(
         const basic_string& str, size_type pos, size_type count)
     {
-        assert(pos <= str.size());
+        TEMPEST_ASSERT(pos <= str.size());
         count = tempest::min(count, str.size() - pos);
 
         if (count < small_string_capacity)
@@ -863,7 +863,7 @@ namespace tempest
     inline constexpr typename basic_string<CharT, Traits, Allocator>::value_type& basic_string<
         CharT, Traits, Allocator>::at(size_type pos)
     {
-        assert(pos < size() && "Position out of bounds");
+        TEMPEST_ASSERT(pos < size() && "Position out of bounds");
 
         return data()[pos];
     }
@@ -872,7 +872,7 @@ namespace tempest
     inline constexpr const typename basic_string<CharT, Traits, Allocator>::value_type& basic_string<
         CharT, Traits, Allocator>::at(size_type pos) const
     {
-        assert(pos < size() && "Position out of bounds");
+        TEMPEST_ASSERT(pos < size() && "Position out of bounds");
 
         return data()[pos];
     }
@@ -1143,7 +1143,7 @@ namespace tempest
         {
             if (new_size > capacity())
             {
-                auto new_cap = std::max(new_size, 2 * capacity());
+                auto new_cap = tempest::max(new_size, 2 * capacity());
                 auto new_data = _alloc.allocate(new_cap + 1);
 
                 Traits::move(new_data, data(), insert_pos);
@@ -1239,7 +1239,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::insert(
         const_iterator pos, const basic_string& str, size_type s_index, size_type count)
     {
-        assert(s_index <= str.size());
+        TEMPEST_ASSERT(s_index <= str.size());
         count = tempest::min(count, str.size() - s_index);
 
         return insert(pos, str.data() + s_index, count);
@@ -1455,7 +1455,7 @@ namespace tempest
     inline constexpr basic_string<CharT, Traits, Allocator>& basic_string<CharT, Traits, Allocator>::append(
         const basic_string& str, size_type pos, size_type count)
     {
-        assert(pos <= str.size());
+        TEMPEST_ASSERT(pos <= str.size());
         count = tempest::min(count, str.size() - pos);
 
         return append(str.data() + pos, count);
@@ -2060,7 +2060,7 @@ namespace tempest
         typename basic_string<CharT, Traits, Allocator>::size_type count,
         typename basic_string<CharT, Traits, Allocator>::size_type pos = 0)
     {
-        assert(pos <= src.size() && "Position out of bounds");
+        TEMPEST_ASSERT(pos <= src.size() && "Position out of bounds");
 
         auto len = tempest::min(count, src.size() - pos);
         Traits::copy(dest, src.data() + pos, len);

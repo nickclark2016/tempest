@@ -663,7 +663,7 @@ namespace tempest
     template <typename T, typename Allocator>
     void slot_map<T, Allocator>::_grow() noexcept
     {
-        const size_t new_capacity = std::max<size_t>(_elements.size() * 2, 1);
+        const size_t new_capacity = tempest::max<size_t>(_elements.size() * 2, 1);
         _grow_to(new_capacity);
     }
 

@@ -5,6 +5,8 @@
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 
+#include <compare>
+
 namespace tempest::core
 {
     class object_pool

@@ -1,5 +1,7 @@
 #include <tempest/shelf_pack.hpp>
 
+#include <tempest/assert.hpp>
+
 namespace tempest
 {
     namespace
@@ -300,8 +302,8 @@ namespace tempest
         const auto item_index = id.index();
 
         detail::item item = _items[item_index];
-        assert(item.allocated);
-        assert(item.generation == id.generation());
+        TEMPEST_ASSERT(item.allocated);
+        TEMPEST_ASSERT(item.generation == id.generation());
 
         // Set the item as deallocated.
         _items[item_index].allocated = false;

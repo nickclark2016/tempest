@@ -2,13 +2,12 @@
 #define tempest_core_string_view_hpp
 
 #include <tempest/char_traits.hpp>
+#include <tempest/concepts.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/memory.hpp>
-
-#include <iterator>
 
 namespace tempest
 {
@@ -26,15 +25,15 @@ namespace tempest
         using difference_type = ptrdiff_t;
         using iterator = pointer;
         using const_iterator = const_pointer;
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = tempest::reverse_iterator<iterator>;
+        using const_reverse_iterator = tempest::reverse_iterator<const_iterator>;
 
         constexpr basic_string_view() noexcept = default;
         constexpr basic_string_view(const basic_string_view&) noexcept = default;
         constexpr basic_string_view(const CharT* s, size_type count) noexcept;
         constexpr basic_string_view(const CharT* s) noexcept;
 
-        template <contiguous_iterator It, std::sized_sentinel_for<It> End>
+        template <contiguous_iterator It, sized_sentinel_for<It> End>
         constexpr basic_string_view(It first, End last) noexcept;
 
         template <typename R>
@@ -112,9 +111,9 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    template <contiguous_iterator It, std::sized_sentinel_for<It> End>
+    template <contiguous_iterator It, sized_sentinel_for<It> End>
     constexpr basic_string_view<CharT, Traits>::basic_string_view(It first, End last) noexcept
-        : _start(std::to_address(first)), _end(std::to_address(last))
+        : _start(tempest::to_address(first)), _end(tempest::to_address(last))
     {
     }
 
@@ -501,7 +500,7 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto substr(basic_string_view<CharT, Traits> sv, size_t pos, std::size_t count) noexcept
+    constexpr auto substr(basic_string_view<CharT, Traits> sv, size_t pos, size_t count) noexcept
     {
         return basic_string_view<CharT, Traits>(sv.begin() + pos, count);
     }

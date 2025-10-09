@@ -3,11 +3,11 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/array.hpp>
+#include <tempest/assert.hpp>
 #include <tempest/int.hpp>
+#include <tempest/iterator.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/type_traits.hpp>
-
-#include <cassert>
-#include <iterator>
 
 namespace tempest
 {
@@ -27,8 +27,8 @@ namespace tempest
         using const_reference = const T&;
         using iterator = T*;
         using const_iterator = const T*;
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = tempest::reverse_iterator<iterator>;
+        using const_reverse_iterator = tempest::reverse_iterator<const_iterator>;
 
         static constexpr size_t extent = Extent;
 
@@ -148,22 +148,22 @@ namespace tempest
     template <typename It, typename End>
         requires(!is_convertible_v<End, size_t>)
     inline constexpr span<T, Extent>::span(It start, End end)
-        : _start{std::to_address(start)}, _end{_start + (end - start)}
+        : _start{tempest::to_address(start)}, _end{_start + (end - start)}
     {
     }
 
     template <typename T, size_t Extent>
     template <size_t N>
     inline constexpr span<T, Extent>::span(T (&arr)[N]) noexcept
-        : _start{std::to_address(arr)}, _end{std::to_address(arr) + N}
+        : _start{tempest::to_address(arr)}, _end{tempest::to_address(arr) + N}
     {
     }
 
     template <typename T, size_t Extent>
     template <typename R>
     inline constexpr span<T, Extent>::span(R&& r)
-        : _start{std::addressof(*::tempest::begin(r))},
-          _end{_start + (std::distance(::tempest::begin(r), ::tempest::end(r)))}
+        : _start{tempest::addressof(*::tempest::begin(r))},
+          _end{_start + (tempest::distance(::tempest::begin(r), ::tempest::end(r)))}
     {
     }
 
@@ -175,8 +175,7 @@ namespace tempest
 
     template <typename T, size_t Extent>
     template <typename U, size_t N>
-    inline constexpr span<T, Extent>::span(const array<U, N>& arr) noexcept
-        : _start{arr.data()}, _end{arr.data() + N}
+    inline constexpr span<T, Extent>::span(const array<U, N>& arr) noexcept : _start{arr.data()}, _end{arr.data() + N}
     {
     }
 
@@ -334,7 +333,7 @@ namespace tempest
     template <typename T, size_t Extent>
     inline constexpr span<T, dynamic_extent> span<T, Extent>::subspan(size_type offset, size_type count) const
     {
-        assert(offset + count <= size());
+        TEMPEST_ASSERT(offset + count <= size());
 
         if (count == dynamic_extent)
         {

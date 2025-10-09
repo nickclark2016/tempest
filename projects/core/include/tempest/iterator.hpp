@@ -111,8 +111,8 @@ namespace tempest
     concept indirectly_writable = requires(O&& o, T&& t) {
         *o = tempest::forward<T>(t);
         *tempest::forward<O>(o) = tempest::forward<T>(t);
-        const_cast<iter_reference_t<O>&&>(*o) = tempest::forward<T>(t);
-        const_cast<iter_reference_t<O>&&>(*tempest::forward<O>(o)) = tempest::forward<T>(t);
+        const_cast<iter_reference_t<O> &&>(*o) = tempest::forward<T>(t);
+        const_cast<iter_reference_t<O> &&>(*tempest::forward<O>(o)) = tempest::forward<T>(t);
     };
 
     template <typename It>
@@ -609,6 +609,17 @@ namespace tempest
         { begin(t) } -> input_or_output_iterator;
         { end(t) } -> sentinel_for<decltype(begin(t))>;
     };
+
+    template <typename S, typename I>
+    inline constexpr bool disabled_sized_sentinel_for = false;
+
+    template <typename S, typename I>
+    concept sized_sentinel_for =
+        sentinel_for<S, I> && !disabled_sized_sentinel_for<remove_cvref_t<S>, remove_cvref_t<I>> &&
+        requires(const I& i, const S& s) {
+            { s - i } -> same_as<iter_difference_t<I>>;
+            { i - s } -> same_as<iter_difference_t<I>>;
+        };
 } // namespace tempest
 
 #endif // tempest_core_iterator_hpp

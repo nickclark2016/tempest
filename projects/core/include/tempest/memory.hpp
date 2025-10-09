@@ -9,7 +9,6 @@
 #include <tempest/utility.hpp>
 
 #include <new>
-#include <thread>
 
 namespace tempest
 {
@@ -272,11 +271,7 @@ namespace tempest
     template <typename T, size_t N = 2>
     struct cacheline_aligned_storage
     {
-#ifdef __cpp_lib_hardware_interference_size
-        alignas(N* std::hardware_constructive_interference_size) T data;
-#else
         alignas(N * 64) T data;
-#endif
     };
 
     template <typename T>

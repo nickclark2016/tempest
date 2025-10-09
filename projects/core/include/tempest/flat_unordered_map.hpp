@@ -1,6 +1,7 @@
 #ifndef tempest_core_flat_unordered_map_hpp
 #define tempest_core_flat_unordered_map_hpp
 
+#include <tempest/assert.hpp>
 #include <tempest/array.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/functional.hpp>
@@ -9,7 +10,7 @@
 #include <tempest/memory.hpp>
 #include <tempest/utility.hpp>
 
-#include <cassert>
+#include <compare>
 
 namespace tempest
 {
@@ -463,7 +464,7 @@ namespace tempest
                 break;
             }
 
-            assert(i < _page_count);
+            TEMPEST_ASSERT(i < _page_count);
         }
 
         return cend();
@@ -515,7 +516,7 @@ namespace tempest
                 break;
             }
 
-            assert(i < _page_count);
+            TEMPEST_ASSERT(i < _page_count);
         }
 
         _metadata_pages[next_empty.first].entries[next_empty.second] = h2;
@@ -572,7 +573,7 @@ namespace tempest
                 break;
             }
 
-            assert(i < _page_count);
+            TEMPEST_ASSERT(i < _page_count);
         }
 
         _metadata_pages[next_empty.first].entries[next_empty.second] = h2;
@@ -663,7 +664,7 @@ namespace tempest
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline void flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::_request_grow(size_t new_size)
     {
-        assert(popcount(new_size) == 1); // Ensure that the new size is a power of 2
+        TEMPEST_ASSERT(popcount(new_size) == 1); // Ensure that the new size is a power of 2
 
         auto page_count = new_size / _page_size;
 

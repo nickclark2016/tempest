@@ -1,6 +1,7 @@
 #ifndef tempest_ecs_archetype_hpp
 #define tempest_ecs_archetype_hpp
 
+#include <tempest/assert.hpp>
 #include <tempest/array.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/concepts.hpp>
@@ -586,7 +587,7 @@ namespace tempest::ecs
             reserve(size() + 1);
         }
 
-        assert(_head != null);
+        TEMPEST_ASSERT(_head != null);
         T ent = _head;
 
         auto index = traits_type::as_entity(ent);
@@ -599,7 +600,7 @@ namespace tempest::ecs
 
         block& blk = _chunks[chunk_index].blocks[block_index];
         T next = blk.entities[block_offset];
-        assert(next != null);
+        TEMPEST_ASSERT(next != null);
         _head = next;
 
         blk.occupancy = tempest::set_bit<size_t>(blk.occupancy, block_offset);

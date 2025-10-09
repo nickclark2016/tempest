@@ -1,6 +1,8 @@
 #include <tempest/object_pool.hpp>
 
-#include <cassert>
+#include <tempest/algorithm.hpp>
+#include <tempest/assert.hpp>
+#include <tempest/limits.hpp>
 
 namespace tempest::core
 {
@@ -9,7 +11,7 @@ namespace tempest::core
     {
         auto alloc_size = pool_size * (_resource_size + sizeof(std::uint32_t));
         _memory = reinterpret_cast<byte*>(_alloc->allocate(alloc_size, 1));
-        std::fill_n(_memory, alloc_size, static_cast<byte>(0));
+        tempest::fill_n(_memory, alloc_size, static_cast<byte>(0));
 
         _free_indices = reinterpret_cast<std::uint32_t*>(_memory + pool_size * resource_size);
         _free_index_head = 0;
@@ -42,8 +44,8 @@ namespace tempest::core
             return free_index;
         }
 
-        assert(false);
-        return std::numeric_limits<uint32_t>::max();
+        TEMPEST_ASSERT(false);
+        return numeric_limits<uint32_t>::max();
     }
 
     void object_pool::release_resource(uint32_t index)
@@ -65,7 +67,7 @@ namespace tempest::core
 
     void* object_pool::access(uint32_t index)
     {
-        if (index != std::numeric_limits<uint32_t>::max()) [[likely]]
+        if (index != numeric_limits<uint32_t>::max()) [[likely]]
         {
             return _memory + (index * _resource_size);
         }
@@ -74,7 +76,7 @@ namespace tempest::core
 
     const void* object_pool::access(uint32_t index) const
     {
-        if (index != std::numeric_limits<uint32_t>::max()) [[likely]]
+        if (index != numeric_limits<uint32_t>::max()) [[likely]]
         {
             return _memory + (index * _resource_size);
         }
@@ -94,7 +96,7 @@ namespace tempest::core
         auto total_size = _pool_size * per_element;
 
         _memory = reinterpret_cast<byte*>(_alloc->allocate(total_size, 16));
-        std::fill_n(_memory, total_size, byte(0));
+        fill_n(_memory, total_size, byte(0));
 
         _keys = reinterpret_cast<key*>(_memory);
         _erased = reinterpret_cast<uint32_t*>(_memory + (_pool_size * sizeof(key)));
