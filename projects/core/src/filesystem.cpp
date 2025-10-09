@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <iconv.h>
 #include <limits.h>
+#include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
