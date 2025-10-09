@@ -8,6 +8,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
+#include <tempest/tuple.hpp>
 #include <tempest/vector.hpp>
 
 #include <tempest/vec2.hpp>
@@ -28,20 +29,20 @@ namespace tempest::core
     struct mesh_view
     {
         span<const vertex> vertices;
-        span<const std::uint32_t> indices;
+        span<const uint32_t> indices;
 
         bool has_normals;
         bool has_tangents;
         bool has_colors;
 
-        [[nodiscard]] std::size_t bytes_per_vertex() const noexcept;
-        [[nodiscard]] std::size_t size_bytes() const noexcept;
+        [[nodiscard]] size_t bytes_per_vertex() const noexcept;
+        [[nodiscard]] size_t size_bytes() const noexcept;
     };
 
     struct mesh
     {
         vector<vertex> vertices;
-        vector<std::uint32_t> indices;
+        vector<uint32_t> indices;
         string name;
 
         bool has_normals{};
@@ -55,28 +56,28 @@ namespace tempest::core
 
         bool validate() const;
 
-        vertex& operator[](std::size_t idx) noexcept;
-        const vertex& operator[](std::size_t idx) const noexcept;
+        vertex& operator[](size_t idx) noexcept;
+        const vertex& operator[](size_t idx) const noexcept;
 
-        std::tuple<vertex&, std::uint32_t> get_tri_and_ind(std::size_t idx) noexcept;
-        std::tuple<const vertex&, std::uint32_t> get_tri_and_ind(std::size_t idx) const noexcept;
+        tuple<vertex&, uint32_t> get_tri_and_ind(size_t idx) noexcept;
+        tuple<const vertex&, uint32_t> get_tri_and_ind(size_t idx) const noexcept;
 
-        std::size_t num_triangles() const noexcept;
+        size_t num_triangles() const noexcept;
     };
 
-    inline std::size_t mesh_view::bytes_per_vertex() const noexcept
+    inline size_t mesh_view::bytes_per_vertex() const noexcept
     {
-        std::size_t bpv = (3 + 2 + 3) * sizeof(float);
+        size_t bpv = (3 + 2 + 3) * sizeof(float);
         bpv += (has_normals ? 3 : 0) * sizeof(float);
         bpv += (has_tangents ? 4 : 0) * sizeof(float);
         bpv += (has_colors ? 4 : 0) * sizeof(float);
         return bpv;
     }
 
-    inline std::size_t mesh_view::size_bytes() const noexcept
+    inline size_t mesh_view::size_bytes() const noexcept
     {
-        std::size_t vertex_size = vertices.size() * bytes_per_vertex();
-        std::size_t index_size = indices.size_bytes();
+        size_t vertex_size = vertices.size() * bytes_per_vertex();
+        size_t index_size = indices.size_bytes();
         return vertex_size + index_size;
     }
 

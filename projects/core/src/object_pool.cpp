@@ -9,11 +9,11 @@ namespace tempest::core
     object_pool::object_pool(abstract_allocator* _alloc, uint32_t pool_size, uint32_t resource_size)
         : _alloc{_alloc}, _pool_size{pool_size}, _resource_size{resource_size}
     {
-        auto alloc_size = pool_size * (_resource_size + sizeof(std::uint32_t));
+        auto alloc_size = pool_size * (_resource_size + sizeof(uint32_t));
         _memory = reinterpret_cast<byte*>(_alloc->allocate(alloc_size, 1));
         tempest::fill_n(_memory, alloc_size, static_cast<byte>(0));
 
-        _free_indices = reinterpret_cast<std::uint32_t*>(_memory + pool_size * resource_size);
+        _free_indices = reinterpret_cast<uint32_t*>(_memory + pool_size * resource_size);
         _free_index_head = 0;
 
         for (uint32_t i = 0; i < _pool_size; ++i)
@@ -35,7 +35,7 @@ namespace tempest::core
         _memory = nullptr;
     }
 
-    std::uint32_t object_pool::acquire_resource()
+    uint32_t object_pool::acquire_resource()
     {
         if (_free_index_head < _pool_size)
         {
@@ -83,7 +83,7 @@ namespace tempest::core
         return nullptr;
     }
 
-    std::size_t object_pool::size() const noexcept
+    size_t object_pool::size() const noexcept
     {
         return _pool_size;
     }
@@ -196,7 +196,7 @@ namespace tempest::core
         return nullptr;
     }
 
-    std::size_t generational_object_pool::size() const noexcept
+    size_t generational_object_pool::size() const noexcept
     {
         return _pool_size;
     }

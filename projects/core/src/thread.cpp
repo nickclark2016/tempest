@@ -20,7 +20,7 @@ namespace tempest
     {
         if (joinable())
         {
-            std::terminate();
+            terminate();
         }
     }
 
@@ -33,7 +33,7 @@ namespace tempest
 
         if (joinable())
         {
-            std::terminate();
+            terminate();
         }
 
         _handle = exchange(other._handle, {});
@@ -69,34 +69,34 @@ namespace tempest
     {
         if (!joinable())
         {
-            std::terminate();
+            terminate();
         }
 
 #if defined(TEMPEST_WIN_THREADS)
         if (_handle.id == GetCurrentThreadId())
         {
-            std::terminate();
+            terminate();
         }
 
         if (WaitForSingleObjectEx(_handle.handle, INFINITE, FALSE) == WAIT_FAILED)
         {
-            std::terminate();
+            terminate();
         }
 
         auto result = CloseHandle(_handle.handle);
         if (!result)
         {
-            std::terminate();
+            terminate();
         }
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
         if (_handle == pthread_self())
         {
-            std::terminate();
+            terminate();
         }
 
         if (pthread_join(_handle, nullptr) != 0)
         {
-            std::terminate();
+            terminate();
         }
 #else
 #error "Unsupported platform"
@@ -109,14 +109,14 @@ namespace tempest
     {
         if (!joinable())
         {
-            std::terminate();
+            terminate();
         }
 
 #if defined(TEMPEST_WIN_THREADS)
         // Release the OS handle
         if (!CloseHandle(_handle.handle))
         {
-            std::terminate();
+            terminate();
         }
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
         pthread_detach(_handle);

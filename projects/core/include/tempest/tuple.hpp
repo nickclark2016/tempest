@@ -69,13 +69,13 @@ namespace tempest
 
         template <typename T>
         struct tuple_val<T&>
-        {           
+        {
             constexpr tuple_val(T& u) : val{u} {};
 
             // Reference wrapper
             template <typename U>
             constexpr tuple_val(reference_wrapper<U> u) : val{u.get()} {};
-            
+
             T& val;
         };
 
@@ -146,33 +146,71 @@ namespace tempest
             }
         };
 
-        template <size_t I, typename... Ts>
-        auto& get(tuple_impl<Ts...>& t)
+        template <bool, size_t I>
+        struct tuple_get_helper
         {
-            static_assert(I < sizeof...(Ts), "Index out of bounds.");
-            if constexpr (I == 0)
+          public:
+            template <typename... Ts>
+            static auto& get(tuple_impl<Ts...>& t) noexcept
             {
-                return t.value.val;
+                static_assert(I < sizeof...(Ts), "Index out of bounds.");
+                if constexpr (I == 0)
+                {
+                    return t.value.val;
+                }
+                else
+                {
+                    return tuple_get_helper<false, I - 1>::get(t.rest());
+                }
             }
-            else
-            {
-                return get<I - 1>(t.rest());
-            }
-        }
 
-        template <size_t I, typename... Ts>
-        const auto& get(const tuple_impl<Ts...>& t)
+            template <typename... Ts>
+            static auto&& get(tuple_impl<Ts...>&& t) noexcept
+            {
+                static_assert(I < sizeof...(Ts), "Index out of bounds.");
+                if constexpr (I == 0)
+                {
+                    return tempest::move(t.value.val);
+                }
+                else
+                {
+                    return tuple_get_helper<false, I - 1>::get(tempest::move(t.rest()));
+                }
+            }
+        };
+
+        template <size_t I>
+        struct tuple_get_helper<true, I>
         {
-            static_assert(I < sizeof...(Ts), "Index out of bounds.");
-            if constexpr (I == 0)
+          public:
+            template <typename... Ts>
+            static const auto& get(const tuple_impl<Ts...>& t) noexcept
             {
-                return t.value.val;
+                static_assert(I < sizeof...(Ts), "Index out of bounds.");
+                if constexpr (I == 0)
+                {
+                    return t.value.val;
+                }
+                else
+                {
+                    return tuple_get_helper<true, I - 1>::get(t.rest());
+                }
             }
-            else
+
+            template <typename... Ts>
+            static const auto&& get(const tuple_impl<Ts...>&& t) noexcept
             {
-                return get<I - 1>(t.rest());
+                static_assert(I < sizeof...(Ts), "Index out of bounds.");
+                if constexpr (I == 0)
+                {
+                    return tempest::move(t.value.val);
+                }
+                else
+                {
+                    return tuple_get_helper<true, I - 1>::get(tempest::move(t.rest()));
+                }
             }
-        }
+        };
     } // namespace detail
 
     template <typename...>
@@ -212,10 +250,21 @@ namespace tempest
     {
     };
 
+    template <size_t I, typename Head, typename... Rest>
+    struct tuple_element<I, const tuple<Head, Rest...>> : tuple_element<I - 1, const tuple<Rest...>>
+    {
+    };
+
     template <typename Head, typename... Rest>
     struct tuple_element<0, tuple<Head, Rest...>>
     {
         using type = Head;
+    };
+
+    template <typename Head, typename... Rest>
+    struct tuple_element<0, const tuple<Head, Rest...>>
+    {
+        using type = const Head;
     };
 
     template <typename... Ts>
@@ -273,27 +322,27 @@ namespace tempest
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr typename tuple_element<I, tuple<Ts...>>::type& get(tuple<Ts...>& t) noexcept
+    inline constexpr decltype(auto) get(tuple<Ts...>& t) noexcept
     {
-        return detail::get<I>(t);
+        return detail::tuple_get_helper<false, I>::get(t);
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr const typename tuple_element<I, tuple<Ts...>>::type& get(const tuple<Ts...>& t) noexcept
+    inline constexpr decltype(auto) get(const tuple<Ts...>& t) noexcept
     {
-        return detail::get<I>(t);
+        return detail::tuple_get_helper<true, I>::get(t);
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr typename tuple_element<I, tuple<Ts...>>::type&& get(tuple<Ts...>&& t) noexcept
+    inline constexpr decltype(auto) get(tuple<Ts...>&& t) noexcept
     {
-        return tempest::move(detail::get<I>(t));
+        return detail::tuple_get_helper<false, I>::get(t);
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr const typename tuple_element<I, tuple<Ts...>>::type&& get(const tuple<Ts...>&& t) noexcept
+    inline constexpr decltype(auto) get(const tuple<Ts...>&& t) noexcept
     {
-        return tempest::move(detail::get<I>(t));
+        return detail::tuple_get_helper<true, I>::get(t);
     }
 
     namespace detail

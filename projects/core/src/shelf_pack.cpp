@@ -203,7 +203,7 @@ namespace tempest
             _shelves[new_shelf_index].first_unallocated_index = new_item_index;
 
             const auto next = _shelves[selected_shelf].next;
-            _shelves[selected_shelf].height = static_cast<std::uint16_t>(height);
+            _shelves[selected_shelf].height = static_cast<uint16_t>(height);
             _shelves[selected_shelf].next = new_shelf_index;
 
             if (is_some(next))
@@ -235,7 +235,7 @@ namespace tempest
 
             auto new_item_index = _add_item(tempest::move(item_to_insert));
 
-            _items[selected_item].width = static_cast<std::uint16_t>(width);
+            _items[selected_item].width = static_cast<uint16_t>(width);
             _items[selected_item].next = new_item_index;
 
             if (is_some(element.next))

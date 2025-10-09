@@ -1,7 +1,10 @@
 #include <tempest/vertex.hpp>
 
-#include <algorithm>
-#include <vector>
+#include <tempest/algorithm.hpp>
+#include <tempest/int.hpp>
+#include <tempest/tuple.hpp>
+#include <tempest/utility.hpp>
+#include <tempest/vector.hpp>
 
 namespace tempest::core
 {
@@ -9,16 +12,16 @@ namespace tempest::core
     {
         if (indices.empty())
         {
-            for (std::size_t i = 0; i < vertices.size(); i += 3)
+            for (size_t i = 0; i < vertices.size(); i += 3)
             {
-                std::swap(vertices[i], vertices[i + 2]);
+                tempest::swap(vertices[i], vertices[i + 2]);
             }
         }
         else
         {
-            for (std::size_t i = 0; i < indices.size(); i += 3)
+            for (size_t i = 0; i < indices.size(); i += 3)
             {
-                std::swap(indices[i], indices[i + 2]);
+                tempest::swap(indices[i], indices[i + 2]);
             }
         }
     }
@@ -26,7 +29,7 @@ namespace tempest::core
     void mesh::compute_normals()
     {
         // for each face, add the face normal to each contributing vertex
-        for (std::size_t i = 0; i < num_triangles(); ++i)
+        for (size_t i = 0; i < num_triangles(); ++i)
         {
             vertex& v0 = (*this)[3 * i + 0];
             vertex& v1 = (*this)[3 * i + 1];
@@ -55,11 +58,11 @@ namespace tempest::core
         vector<math::vec3<float>> tangent_dir;
         tangent_dir.resize(num_triangles() * 3);
 
-        for (std::size_t i = 0; i < num_triangles(); ++i)
+        for (size_t i = 0; i < num_triangles(); ++i)
         {
-            auto [v0, idx0] = get_tri_and_ind(3 * i + 0);
-            auto [v1, idx1] = get_tri_and_ind(3 * i + 1);
-            auto [v2, idx2] = get_tri_and_ind(3 * i + 2);
+            auto&& [v0, idx0] = get_tri_and_ind(3 * i + 0);
+            auto&& [v1, idx1] = get_tri_and_ind(3 * i + 1);
+            auto&& [v2, idx2] = get_tri_and_ind(3 * i + 2);
 
             float x1 = v1.position.x - v0.position.x;
             float x2 = v2.position.x - v0.position.x;
@@ -86,7 +89,7 @@ namespace tempest::core
             tangent_dir[idx2] += tdir;
         }
 
-        std::size_t vtx = 0;
+        size_t vtx = 0;
         for (auto& vertex : vertices)
         {
             auto tan = math::vec3(vertex.tangent.x, vertex.tangent.y, vertex.tangent.z);
@@ -104,14 +107,14 @@ namespace tempest::core
     {
         if (!indices.empty())
         {
-            std::uint32_t max_index = *std::max_element(indices.begin(), indices.end());
+            uint32_t max_index = *tempest::max_element(indices.begin(), indices.end());
             return max_index < vertices.size() && indices.size() % 3 == 0;
         }
 
         return true;
     }
 
-    vertex& mesh::operator[](std::size_t idx) noexcept
+    vertex& mesh::operator[](size_t idx) noexcept
     {
         if (indices.empty())
         {
@@ -120,7 +123,7 @@ namespace tempest::core
         return vertices[indices[idx]];
     }
 
-    const vertex& mesh::operator[](std::size_t idx) const noexcept
+    const vertex& mesh::operator[](size_t idx) const noexcept
     {
         if (indices.empty())
         {
@@ -129,27 +132,27 @@ namespace tempest::core
         return vertices[indices[idx]];
     }
 
-    std::tuple<vertex&, std::uint32_t> mesh::get_tri_and_ind(std::size_t idx) noexcept
+    tuple<vertex&, uint32_t> mesh::get_tri_and_ind(size_t idx) noexcept
     {
         if (indices.empty())
         {
-            return std::make_tuple(std::ref(vertices[idx]), static_cast<std::uint32_t>(idx));
+            return make_tuple(ref(vertices[idx]), static_cast<uint32_t>(idx));
         }
         auto index = indices[idx];
-        return std::make_tuple(std::ref(vertices[index]), index);
+        return make_tuple(ref(vertices[index]), index);
     }
 
-    std::tuple<const vertex&, std::uint32_t> mesh::get_tri_and_ind(std::size_t idx) const noexcept
+    tuple<const vertex&, uint32_t> mesh::get_tri_and_ind(size_t idx) const noexcept
     {
         if (indices.empty())
         {
-            return std::make_tuple(std::cref(vertices[idx]), static_cast<std::uint32_t>(idx));
+            return make_tuple(cref(vertices[idx]), static_cast<uint32_t>(idx));
         }
         auto index = indices[idx];
-        return std::make_tuple(std::cref(vertices[index]), index);
+        return make_tuple(cref(vertices[index]), index);
     }
 
-    std::size_t mesh::num_triangles() const noexcept
+    size_t mesh::num_triangles() const noexcept
     {
         return indices.empty() ? vertices.size() / 3 : indices.size() / 3;
     }
