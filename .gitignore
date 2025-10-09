@@ -23,6 +23,7 @@ Makefile
 *.ninja_deps
 *compile_commands.json
 *.clangd
+compile_commands.events.json
 
 # Caches
 TempestCache/
