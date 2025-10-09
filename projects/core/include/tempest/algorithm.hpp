@@ -580,6 +580,24 @@ namespace tempest
             }
         }
     }
+
+    template <input_iterator InputIt, typename UnaryPred>
+    constexpr bool all_of(InputIt begin, InputIt end, UnaryPred p)
+    {
+        return find_if_not(begin, end, p) == end;
+    }
+
+    template <input_iterator InputIt, typename UnaryPred>
+    constexpr bool any_of(InputIt begin, InputIt end, UnaryPred p)
+    {
+        return find_if(begin, end, p) != end;
+    }
+
+    template <input_iterator InputIt, typename UnaryPred>
+    constexpr bool none_of(InputIt begin, InputIt end, UnaryPred p)
+    {
+        return find_if(begin, end, p) == end;
+    }
 } // namespace tempest
 
 #endif // tempest_core_algorithm_hpp

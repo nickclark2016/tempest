@@ -1,29 +1,27 @@
 #include <tempest/flat_unordered_map.hpp>
 
-#include <algorithm>
-
 namespace tempest
 {
     namespace detail
     {
-        std::uint8_t control_byte(std::uint8_t h2) noexcept
+        uint8_t control_byte(uint8_t h2) noexcept
         {
             // return the most significant bit
             return h2 & 0x80;
         }
 
-        std::uint8_t hash_byte(std::uint8_t h2) noexcept
+        uint8_t hash_byte(uint8_t h2) noexcept
         {
             // return the least significant 7 bits
             return h2 & 0x7F;
         }
 
-        bool is_empty(std::uint8_t entry) noexcept
+        bool is_empty(uint8_t entry) noexcept
         {
             return entry == empty_entry;
         }
 
-        bool is_deleted(std::uint8_t entry) noexcept
+        bool is_deleted(uint8_t entry) noexcept
         {
             return entry == deleted_entry;
         }
@@ -45,14 +43,14 @@ namespace tempest
 
         bool metadata_group::any_empty() const noexcept
         {
-            return std::any_of(std::begin(entries), std::end(entries), is_empty);
+            return any_of(begin(entries), end(entries), is_empty);
         }
 
-        std::uint16_t metadata_group::match_byte(std::uint8_t h2) const noexcept
+        uint16_t metadata_group::match_byte(uint8_t h2) const noexcept
         {
-            std::uint16_t result = 0;
+            uint16_t result = 0;
 
-            for (std::size_t i = 0; i < group_size; ++i)
+            for (size_t i = 0; i < group_size; ++i)
             {
                 if (entries[i] == h2)
                 {
@@ -65,8 +63,8 @@ namespace tempest
 
         bool metadata_group::any_empty_or_deleted() const noexcept
         {
-            return std::any_of(std::begin(entries), std::end(entries),
-                               [](std::uint8_t entry) { return is_empty(entry) || is_deleted(entry); });
+            return any_of(begin(entries), end(entries),
+                               [](uint8_t entry) { return is_empty(entry) || is_deleted(entry); });
         }
     } // namespace detail
 } // namespace tempest
