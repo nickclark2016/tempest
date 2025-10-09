@@ -2,6 +2,7 @@
 #define tempest_core_mutex_hpp
 
 #include <tempest/concepts.hpp>
+#include <tempest/exception.hpp>
 #include <tempest/tuple.hpp>
 #include <tempest/utility.hpp>
 
@@ -310,7 +311,7 @@ namespace tempest
     {
         if (!_mutex || owns_lock())
         {
-            std::terminate();
+            terminate();
         }
 
         _mutex->lock();
@@ -322,7 +323,7 @@ namespace tempest
     {
         if (!_mutex || owns_lock())
         {
-            std::terminate();
+            terminate();
         }
         _owns_lock = _mutex->try_lock();
         return _owns_lock;
@@ -333,7 +334,7 @@ namespace tempest
     {
         if (!_mutex || !owns_lock())
         {
-            std::terminate();
+            terminate();
         }
         _mutex->unlock();
         _owns_lock = false;
