@@ -454,7 +454,7 @@ namespace tempest::graphics
         auto pass = pass_entry{};
         pass.name = tempest::move(name);
         pass.type = type;
-        pass.execution_context = std::move(execution_context);
+        pass.execution_context = tempest::move(execution_context);
         pass.async = async;
 
         for (auto&& res : builder.accesses)

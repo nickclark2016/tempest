@@ -452,7 +452,7 @@ namespace tempest::graphics
 
             _create_pass_entry(
                 name, work_type::transfer,
-                [record = tempest::move(record), args = std::move(tup)](task_execution_context& ctx) {
+                [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
                     auto& transfer_ctx = static_cast<transfer_task_execution_context&>(ctx);
                     tempest::apply(
                         [&](auto&&... unpacked) {
@@ -488,7 +488,7 @@ namespace tempest::graphics
             auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
             _create_pass_entry(
                 name, work_type::graphics,
-                [record = tempest::move(record), args = std::move(tup)](task_execution_context& ctx) {
+                [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
                     auto graphics_ctx = static_cast<graphics_task_execution_context&>(ctx);
                     tempest::apply(
                         [&](auto&&... unpacked) {

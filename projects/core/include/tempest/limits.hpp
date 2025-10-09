@@ -5,6 +5,10 @@
 #include <tempest/concepts.hpp>
 #include <tempest/int.hpp>
 
+#ifndef CHAR_BIT
+#define CHAR_BIT 8
+#endif
+
 namespace tempest
 {
     template <typename T>

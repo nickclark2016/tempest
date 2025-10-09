@@ -8,6 +8,7 @@
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/int.hpp>
+#include <tempest/limits.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/relationship_component.hpp>
