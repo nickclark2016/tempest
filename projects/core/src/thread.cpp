@@ -1,6 +1,6 @@
 #include <tempest/thread.hpp>
 
-#include <exception>
+#include <tempest/exception.hpp>
 
 #if defined(TEMPEST_POSIX_THREADS)
 #include <sched.h>
