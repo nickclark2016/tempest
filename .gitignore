@@ -24,6 +24,7 @@ Makefile
 *compile_commands.json
 *.clangd
 compile_commands.events.json
+.cache/
 
 # Caches
 TempestCache/
