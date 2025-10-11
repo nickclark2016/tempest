@@ -599,6 +599,8 @@ namespace tempest::graphics
         void _wait_for_swapchain_acquire(const acquired_swapchains& acquired);
         void _execute_plan(const acquired_swapchains& acquired);
         void _present_swapchain_images(const acquired_swapchains& acquired);
+
+        optional<const scheduled_resource&> _find_resource(const base_graph_resource_handle& handle) const;
     };
 } // namespace tempest::graphics
 

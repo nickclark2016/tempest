@@ -3,6 +3,7 @@
 // TODO: Implement deque + queue
 // TODO: Implement unordered_set + set
 #include <tempest/flat_unordered_map.hpp>
+#include <tempest/rhi_types.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::graphics
@@ -1556,6 +1557,32 @@ namespace tempest::graphics
                         {
                             const auto buffer_it = _all_buffers.find(resource.handle.handle);
                             const auto& buf_usage = tempest::get<buffer_usage>(prior_usage.usage);
+                            auto offset = buf_usage.offset;
+                            auto range = buf_usage.range;
+
+                            const auto create_info = _find_resource(resource.handle);
+
+                            if (create_info && holds_alternative<rhi::buffer_desc>(create_info->creation_info))
+                            {
+                                const auto& buf_desc = get<rhi::buffer_desc>(create_info->creation_info);
+                                const auto total_size = buf_desc.size;
+
+                                // Get size of per-frame buffer
+                                const auto per_frame_size =
+                                    create_info->per_frame ? total_size / _device->frames_in_flight() : total_size;
+                                const auto frame_offset = create_info->per_frame ? per_frame_size * _current_frame %
+                                                                                       _device->frames_in_flight()
+                                                                                 : 0;
+
+                                offset = frame_offset + buf_usage.offset;
+                                range = per_frame_size;
+                            }
+
+                            if (cross_queue)
+                            {
+                                offset = 0;
+                                range = numeric_limits<size_t>::max();
+                            }
 
                             const auto barrier = rhi::work_queue::buffer_barrier{
                                 .buffer = buffer_it->second,
@@ -1565,8 +1592,8 @@ namespace tempest::graphics
                                 .dst_access = resource.accesses,
                                 .src_queue = src_queue,
                                 .dst_queue = dst_queue,
-                                .offset = cross_queue ? 0 : buf_usage.offset,
-                                .size = cross_queue ? numeric_limits<size_t>::max() : buf_usage.range,
+                                .offset = offset,
+                                .size = range,
                             };
 
                             buffer_barriers.push_back(barrier);
@@ -1651,12 +1678,17 @@ namespace tempest::graphics
                     auto res_type = get_resource_type(resource.handle);
                     if (res_type == rhi::rhi_handle_type::buffer)
                     {
+                        auto buf_usage = buffer_usage{
+                            .offset = 0,
+                            .range = numeric_limits<size_t>::max(),
+                        };
+
                         _current_resource_states[resource.handle.handle] = resource_usage{
                             .queue = submission.type,
                             .queue_index = submission.queue_index,
                             .stages = resource.stages,
                             .accesses = resource.accesses,
-                            .usage = buffer_usage{},
+                            .usage = buf_usage,
                             .timeline_value = timeline_value,
                         };
                     }
@@ -1918,6 +1950,18 @@ namespace tempest::graphics
                 erase_if(_external_surfaces, [&](const auto& pair) { return pair.second == acquired[idx].first; });
             }
         }
+    }
+
+    optional<const scheduled_resource&> graph_executor::_find_resource(const base_graph_resource_handle& handle) const
+    {
+        const auto it = tempest::find_if(_plan->resources.cbegin(), _plan->resources.cend(),
+                                         [&](const auto& res) { return res.handle.handle == handle.handle; });
+        if (it != _plan->resources.cend())
+        {
+            return *it;
+        }
+
+        return nullopt;
     }
 
     void transfer_task_execution_context::clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image,

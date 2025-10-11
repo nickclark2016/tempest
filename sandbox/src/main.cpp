@@ -1,5 +1,6 @@
 #include <tempest/frame_graph.hpp>
 #include <tempest/input.hpp>
+#include <tempest/pbr_frame_graph.hpp>
 #include <tempest/pipelines/pbr_pipeline.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
@@ -106,12 +107,41 @@ int main()
     });
 
     auto render_graph_builder = tempest::graphics::graph_builder{};
+    auto cfg = tempest::graphics::pbr_frame_graph_config{
+        .render_target_width = 1280,
+        .render_target_height = 720,
+        .shadow_map_width = 2048,
+        .shadow_map_height = 2048,
+        .hdr_color_format = tempest::rhi::image_format::rgba16_float,
+        .depth_format = tempest::rhi::image_format::d32_float,
+        .tonemapped_color_format = tempest::rhi::image_format::rgba16_float,
+    };
+
+    auto inputs = tempest::graphics::pbr_frame_graph_inputs{};
+
+    [[maybe_unused]] auto pbr_handles =
+        tempest::graphics::create_pbr_frame_graph(render_graph_builder, &device, cfg, inputs);
+
     auto swapchain_handle = render_graph_builder.import_render_surface("Swapchain", swapchain);
+
+    render_graph_builder.create_transfer_pass(
+        "Write to Color Target",
+        [&](tempest::graphics::transfer_task_builder& builder) {
+            builder.write(pbr_handles.tonemapped_color, tempest::rhi::image_layout::transfer_dst,
+                          tempest::make_enum_mask(tempest::rhi::pipeline_stage::clear),
+                          tempest::make_enum_mask(tempest::rhi::memory_access::transfer_write));
+        },
+        [](tempest::graphics::transfer_task_execution_context& ctx, auto color) {
+            ctx.clear_color(color, 0.0f, 0.0f, 1.0f, 1.0f);
+        },
+        pbr_handles.tonemapped_color);
 
     render_graph_builder.create_transfer_pass(
         "Write to Swapchain",
         [&](tempest::graphics::transfer_task_builder& builder) {
-            builder.write(swapchain_handle, tempest::rhi::image_layout::transfer_dst);
+            builder.write(swapchain_handle, tempest::rhi::image_layout::transfer_dst,
+                          tempest::make_enum_mask(tempest::rhi::pipeline_stage::clear),
+                          tempest::make_enum_mask(tempest::rhi::memory_access::transfer_write));
         },
         [](tempest::graphics::transfer_task_execution_context& ctx, auto swapchain_handle) {
             ctx.clear_color(swapchain_handle, 1.0f, 0.0f, 0.0f, 1.0f);

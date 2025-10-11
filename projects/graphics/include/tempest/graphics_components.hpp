@@ -2,15 +2,11 @@
 #define tempest_graphics_graphics_components_hpp
 
 #include <tempest/int.hpp>
+#include <tempest/limits.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
 #include <tempest/vec4.hpp>
-
-#include <cstdint>
-#include <limits>
-#include <numeric>
-#include <span>
 
 namespace tempest::graphics
 {
@@ -22,8 +18,8 @@ namespace tempest::graphics
         uint32_t interleave_stride;
         uint32_t uvs_offset;
         uint32_t normals_offset;
-        uint32_t tangents_offset = std::numeric_limits<uint32_t>::max();
-        uint32_t color_offset = std::numeric_limits<uint32_t>::max();
+        uint32_t tangents_offset = numeric_limits<uint32_t>::max();
+        uint32_t color_offset = numeric_limits<uint32_t>::max();
         uint32_t index_offset;
         uint32_t index_count;
     };
@@ -40,14 +36,14 @@ namespace tempest::graphics
     {
         alpha_behavior type{alpha_behavior::opaque};
 
-        uint32_t albedo_map_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t normal_map_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t metallic_map_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t roughness_map_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t ao_map_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t emissive_map_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t transmission_map_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t thickness_map_id{std::numeric_limits<uint32_t>::max()};
+        uint32_t albedo_map_id{numeric_limits<uint32_t>::max()};
+        uint32_t normal_map_id{numeric_limits<uint32_t>::max()};
+        uint32_t metallic_map_id{numeric_limits<uint32_t>::max()};
+        uint32_t roughness_map_id{numeric_limits<uint32_t>::max()};
+        uint32_t ao_map_id{numeric_limits<uint32_t>::max()};
+        uint32_t emissive_map_id{numeric_limits<uint32_t>::max()};
+        uint32_t transmission_map_id{numeric_limits<uint32_t>::max()};
+        uint32_t thickness_map_id{numeric_limits<uint32_t>::max()};
 
         float alpha_cutoff;
         float metallic_factor;
@@ -67,10 +63,10 @@ namespace tempest::graphics
     {
         math::mat4<float> transform;
         math::mat4<float> inv_transform;
-        uint32_t mesh_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t material_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t parent_id{std::numeric_limits<uint32_t>::max()};
-        uint32_t self_id{std::numeric_limits<uint32_t>::max()};
+        uint32_t mesh_id{numeric_limits<uint32_t>::max()};
+        uint32_t material_id{numeric_limits<uint32_t>::max()};
+        uint32_t parent_id{numeric_limits<uint32_t>::max()};
+        uint32_t self_id{numeric_limits<uint32_t>::max()};
     };
 
     struct renderable_component

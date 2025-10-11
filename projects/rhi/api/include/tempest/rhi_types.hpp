@@ -214,6 +214,7 @@ namespace tempest::rhi
         transfer_src = 0x00000010,
         transfer_dst = 0x00000020,
         vertex = 0x00000040,
+        descriptor = 0x00000080,
     };
 
     enum class image_usage

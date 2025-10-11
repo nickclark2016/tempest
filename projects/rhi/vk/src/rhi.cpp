@@ -1,3 +1,4 @@
+#include <tempest/rhi_types.hpp>
 #include <tempest/vk/rhi.hpp>
 
 #include "window.hpp"
@@ -8,6 +9,7 @@
 #include <tempest/tuple.hpp>
 
 #include <exception>
+#include <vulkan/vulkan_core.h>
 
 namespace tempest::rhi::vk
 {
@@ -367,6 +369,12 @@ namespace tempest::rhi::vk
             if ((usage & rhi::buffer_usage::vertex) == rhi::buffer_usage::vertex)
             {
                 flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            }
+
+            if ((usage & rhi::buffer_usage::descriptor) == rhi::buffer_usage::descriptor)
+            {
+                flags |= VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+                         VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
             }
 
             return flags;
