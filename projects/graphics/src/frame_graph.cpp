@@ -1440,6 +1440,7 @@ namespace tempest::graphics
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::semaphore> sem;
                 uint64_t offset; // Offset from the timeline value at frame start
                 uint64_t queue_value;
+                enum_mask<rhi::pipeline_stage> stages;
             };
 
             // Handle waits on cross-queue ownership transfers with timeline semaphores
@@ -1453,6 +1454,7 @@ namespace tempest::graphics
                         .sem = sem.sem,
                         .offset = 0,
                         .queue_value = sem.value,
+                        .stages = make_enum_mask(rhi::pipeline_stage::none),
                     };
                 }
             }
@@ -1464,6 +1466,7 @@ namespace tempest::graphics
                 if (current_value.offset > wait.value)
                 {
                     wait_map[timeline.sem.id].offset = current_value.offset;
+                    wait_map[timeline.sem.id].stages |= wait.stages;
                 }
             }
 
@@ -1492,6 +1495,7 @@ namespace tempest::graphics
                             if (current_value.offset > wait_value)
                             {
                                 wait_map[sem_to_wait.id].offset = current_value.offset;
+                                wait_map[sem_to_wait.id].stages |= prior_usage.stages;
                             }
                         }
 
@@ -1613,8 +1617,10 @@ namespace tempest::graphics
                                 .image = image_it->second,
                                 .old_layout = rhi::image_layout::undefined,
                                 .new_layout = resource.layout,
-                                .src_stages = make_enum_mask(rhi::pipeline_stage::all),
-                                .src_access = make_enum_mask(rhi::memory_access::none),
+                                .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer,
+                                                             rhi::pipeline_stage::color_attachment_output),
+                                .src_access = make_enum_mask(rhi::memory_access::transfer_write,
+                                                             rhi::memory_access::color_attachment_write),
                                 .dst_stages = resource.stages,
                                 .dst_access = resource.accesses,
                                 .src_queue = nullptr,
@@ -1639,8 +1645,10 @@ namespace tempest::graphics
                                     .image = render_surface_info_it->second.image,
                                     .old_layout = rhi::image_layout::undefined,
                                     .new_layout = resource.layout,
-                                    .src_stages = make_enum_mask(rhi::pipeline_stage::all),
-                                    .src_access = make_enum_mask(rhi::memory_access::none),
+                                    .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer,
+                                                                 rhi::pipeline_stage::color_attachment_output),
+                                    .src_access = make_enum_mask(rhi::memory_access::transfer_write,
+                                                                 rhi::memory_access::color_attachment_write),
                                     .dst_stages = resource.stages,
                                     .dst_access = resource.accesses,
                                     .src_queue = nullptr,
@@ -1738,6 +1746,7 @@ namespace tempest::graphics
                 if (current_value.offset > signal.value)
                 {
                     signal_map[timeline.sem.id].offset = current_value.offset;
+                    signal_map[timeline.sem.id].stages |= signal.stages;
                 }
             }
 
@@ -1793,7 +1802,7 @@ namespace tempest::graphics
                 submit_info.wait_semaphores.push_back({
                     .semaphore = value.sem,
                     .value = value.offset + value.queue_value,
-                    .stages = make_enum_mask(rhi::pipeline_stage::all),
+                    .stages = value.stages,
                 });
             }
 
@@ -1802,7 +1811,7 @@ namespace tempest::graphics
                 submit_info.signal_semaphores.push_back({
                     .semaphore = value.sem,
                     .value = value.offset + value.queue_value,
-                    .stages = make_enum_mask(rhi::pipeline_stage::all),
+                    .stages = value.stages,
                 });
             }
 
