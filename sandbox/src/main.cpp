@@ -131,6 +131,35 @@ int main()
     auto executor = tempest::graphics::graph_executor(device);
     executor.set_execution_plan(tempest::move(plan));
 
+    auto pbr_fg =
+        tempest::graphics::pbr_frame_graph(device,
+                                           {
+                                               .render_target_width = 1280,
+                                               .render_target_height = 720,
+                                               .shadow_map_width = 2048,
+                                               .shadow_map_height = 2048,
+                                               .hdr_color_format = tempest::rhi::image_format::rgba16_float,
+                                               .depth_format = tempest::rhi::image_format::d32_float,
+                                               .tonemapped_color_format = tempest::rhi::image_format::bgra8_srgb,
+                                               .vertex_data_buffer_size = 16 * 1024 * 1024,
+                                               .mesh_data_buffer_size = 16 * 1024 * 1024,
+                                               .material_data_buffer_size = 4 * 1024 * 1024,
+                                               .staging_buffer_size_per_frame = 16 * 1024 * 1024,
+                                               .max_lights = 256,
+                                               .max_anisotropy = 16.0f,
+                                           },
+                                           {
+                                               .entity_registry = nullptr,
+                                           });
+
+    pbr_fg.get_builder()->import_render_surface("Swapchain", swapchain);
+
+    pbr_fg.compile({
+        .graphics_queues = 1,
+        .compute_queues = 1,
+        .transfer_queues = 1,
+    });
+
     while (true)
     {
         tempest::core::input::poll();

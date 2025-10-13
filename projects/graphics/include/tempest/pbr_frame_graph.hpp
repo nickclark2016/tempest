@@ -71,6 +71,24 @@ namespace tempest::graphics
         rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_with_aniso_sampler;
 
         void _initialize();
+
+        struct depth_prepass_outputs
+        {
+            graph_resource_handle<rhi::rhi_handle_type::image> depth;
+            graph_resource_handle<rhi::rhi_handle_type::image> encoded_normals;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+        };
+
+        struct
+        {
+            depth_prepass_outputs depth_prepass;
+        } _resource_handles;
+
+        depth_prepass_outputs _add_depth_prepass(graph_builder& builder);
+        void _release_depth_prepass(depth_prepass_outputs& outputs);
+
+        static void _depth_prepass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
+
     };
 } // namespace tempest::graphics
 

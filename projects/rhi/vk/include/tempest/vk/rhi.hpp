@@ -1,6 +1,7 @@
 #ifndef tempest_rhi_vk_rhi_hpp
 #define tempest_rhi_vk_rhi_hpp
 
+#include <VkBootstrapDispatch.h>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
@@ -524,6 +525,16 @@ namespace tempest::rhi::vk
         const rhi::window_surface* get_window_surface(
             typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
 
+        // Descriptor buffer support
+        bool supports_descriptor_buffers() const noexcept override;
+        size_t get_descriptor_buffer_alignment() const noexcept override;
+        size_t get_descriptor_set_layout_size(
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout) const noexcept override;
+        size_t get_descriptor_set_binding_offset(
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout,
+            uint32_t binding) const noexcept override;
+
+        // Miscellaneous
         void release_resources() override;
         void finish_frame() override;
 
@@ -582,6 +593,7 @@ namespace tempest::rhi::vk
         vkb::Instance* _vkb_instance;
         vkb::Device _vkb_device;
         vkb::DispatchTable _dispatch_table;
+        vkb::InstanceDispatchTable _instance_dispatch_table;
         VmaAllocator _vma_allocator{};
         bool _is_debug_device;
         bool _can_name;
@@ -617,6 +629,9 @@ namespace tempest::rhi::vk
         // Descriptors
         VkDescriptorPool _desc_pool;
         stack_allocator _desc_pool_allocator{128 * 1024};
+
+        // Descriptor buffers
+        VkPhysicalDeviceDescriptorBufferPropertiesEXT _descriptor_buffer_properties{};
 
         void name_object(VkObjectType type, void* handle, const char* name) noexcept;
 

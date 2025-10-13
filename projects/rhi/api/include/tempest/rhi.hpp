@@ -108,6 +108,16 @@ namespace tempest::rhi
         virtual const window_surface* get_window_surface(
             typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;
 
+        // Descriptor buffer support
+        virtual bool supports_descriptor_buffers() const noexcept = 0;
+        virtual size_t get_descriptor_buffer_alignment() const noexcept = 0;
+        virtual size_t get_descriptor_set_layout_size(
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout) const noexcept = 0;
+        virtual size_t get_descriptor_set_binding_offset(
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout,
+            uint32_t binding) const noexcept = 0;
+
+        // Miscellaneous
         virtual void release_resources() = 0;
         virtual void finish_frame() = 0;
 

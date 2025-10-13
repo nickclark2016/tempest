@@ -1263,7 +1263,8 @@ namespace tempest::rhi::vk
 
     device::device(vkb::Device dev, vkb::Instance* instance)
         : _vkb_instance{instance}, _vkb_device{tempest::move(dev)}, _dispatch_table{dev.make_table()},
-          _resource_tracker{this, _dispatch_table}, _descriptor_set_layout_cache{this}, _pipeline_layout_cache{this}
+          _instance_dispatch_table{_vkb_instance->make_table()}, _resource_tracker{this, _dispatch_table},
+          _descriptor_set_layout_cache{this}, _pipeline_layout_cache{this}
 #if TEMPEST_ENABLE_AFTERMATH
           ,
           _crash_tracker{_marker_map}
@@ -1446,6 +1447,14 @@ namespace tempest::rhi::vk
         {
             logger->info("Debug names enabled.");
         }
+
+        auto properties = VkPhysicalDeviceProperties2{};
+        properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+
+        properties.pNext = &_descriptor_buffer_properties;
+        _descriptor_buffer_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
+
+        _instance_dispatch_table.getPhysicalDeviceProperties2(_vkb_device.physical_device.physical_device, &properties);
     }
 
     device::~device()
@@ -2896,6 +2905,46 @@ namespace tempest::rhi::vk
             return swapchain_it->window;
         }
         return nullptr;
+    }
+
+    bool device::supports_descriptor_buffers() const noexcept
+    {
+        return true;
+    }
+
+    size_t device::get_descriptor_buffer_alignment() const noexcept
+    {
+        return _descriptor_buffer_properties.descriptorBufferOffsetAlignment;
+    }
+
+    size_t device::get_descriptor_set_layout_size(
+        typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout) const noexcept
+    {
+        auto desc_set_layout = _descriptor_set_layout_cache.get_layout(layout);
+        if (desc_set_layout != VK_NULL_HANDLE)
+        {
+            // Query the size of the descriptor set layout using vkGetDescriptorSetLayoutSizeEXT
+            auto size = VkDeviceSize{};
+            _dispatch_table.getDescriptorSetLayoutSizeEXT(desc_set_layout, &size);
+            return static_cast<size_t>(size);
+        }
+
+        return 0;
+    }
+
+    size_t device::get_descriptor_set_binding_offset(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout,
+                                                     uint32_t binding) const noexcept
+    {
+        auto desc_set_layout = _descriptor_set_layout_cache.get_layout(layout);
+        if (desc_set_layout != VK_NULL_HANDLE)
+        {
+            // Query the binding offset using vkGetDescriptorSetLayoutBindingOffsetEXT
+            auto offset = VkDeviceSize{};
+            _dispatch_table.getDescriptorSetLayoutBindingOffsetEXT(desc_set_layout, binding, &offset);
+            return static_cast<size_t>(offset);
+        }
+
+        return 0;
     }
 
     void device::release_resources()
@@ -4643,6 +4692,15 @@ namespace tempest::rhi::vk
             .bufferDeviceAddressMultiDevice = VK_FALSE,
         };
 
+        VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+            .pNext = nullptr,
+            .descriptorBuffer = VK_TRUE,
+            .descriptorBufferCaptureReplay = VK_TRUE,
+            .descriptorBufferImageLayoutIgnored = VK_TRUE,
+            .descriptorBufferPushDescriptors = VK_TRUE,
+        };
+
         vkb::PhysicalDeviceSelector selector =
             vkb::PhysicalDeviceSelector(instance)
                 .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
@@ -4798,7 +4856,8 @@ namespace tempest::rhi::vk
                     .shaderIntegerDotProduct = VK_FALSE,
                     .maintenance4 = VK_FALSE,
                 })
-                .add_required_extension_features(fragment_shader_interlock);
+                .add_required_extension_features(fragment_shader_interlock)
+                .add_required_extension_features(descriptor_buffer_features);
 
         auto devices = selector.select_devices();
         if (!devices || devices->empty())
