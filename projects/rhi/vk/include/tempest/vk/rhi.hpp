@@ -236,6 +236,7 @@ namespace tempest::rhi::vk
         VmaAllocation allocation;
         VmaAllocationInfo allocation_info;
         VkBuffer buffer;
+        VkDeviceAddress address;
     };
 
     struct sampler
@@ -530,9 +531,8 @@ namespace tempest::rhi::vk
         size_t get_descriptor_buffer_alignment() const noexcept override;
         size_t get_descriptor_set_layout_size(
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout) const noexcept override;
-        size_t get_descriptor_set_binding_offset(
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout,
-            uint32_t binding) const noexcept override;
+        size_t write_descriptor_buffer(const descriptor_set_desc& desc, byte* dest,
+                                       size_t offset) const noexcept override;
 
         // Miscellaneous
         void release_resources() override;

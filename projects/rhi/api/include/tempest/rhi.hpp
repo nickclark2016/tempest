@@ -113,9 +113,8 @@ namespace tempest::rhi
         virtual size_t get_descriptor_buffer_alignment() const noexcept = 0;
         virtual size_t get_descriptor_set_layout_size(
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout) const noexcept = 0;
-        virtual size_t get_descriptor_set_binding_offset(
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> layout,
-            uint32_t binding) const noexcept = 0;
+        virtual size_t write_descriptor_buffer(const descriptor_set_desc& desc, byte* dest,
+                                               size_t offset) const noexcept = 0;
 
         // Miscellaneous
         virtual void release_resources() = 0;

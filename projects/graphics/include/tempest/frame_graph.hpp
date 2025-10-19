@@ -5,6 +5,7 @@
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/rhi_types.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
 #include <tempest/tuple.hpp>
@@ -144,6 +145,11 @@ namespace tempest::graphics
 
     class task_execution_context
     {
+      public:
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> find_buffer(graph_resource_handle<rhi::rhi_handle_type::buffer> handle) const;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> find_image(graph_resource_handle<rhi::rhi_handle_type::image> handle) const;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> find_image(graph_resource_handle<rhi::rhi_handle_type::render_surface> handle) const;
+
       protected:
         task_execution_context(graph_executor* executor,
                                rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> cmd_list,
@@ -159,10 +165,22 @@ namespace tempest::graphics
 
     class graphics_task_execution_context : public task_execution_context
     {
+      public:
+        void begin_render_pass(const rhi::work_queue::render_pass_info& info);
+        void end_render_pass();
+
+      private:
+        friend class graph_executor;
+
+        using task_execution_context::task_execution_context;
     };
 
     class compute_task_execution_context : public task_execution_context
     {
+      private:
+        friend class graph_executor;
+
+        using task_execution_context::task_execution_context;
     };
 
     class transfer_task_execution_context : public task_execution_context
@@ -300,6 +318,10 @@ namespace tempest::graphics
         // Handle temporal resources
         graph_resource_handle<rhi::rhi_handle_type::buffer> create_temporal_buffer(rhi::buffer_desc desc);
         graph_resource_handle<rhi::rhi_handle_type::image> create_temporal_image(rhi::image_desc desc);
+
+        // Handle persistent resources
+        graph_resource_handle<rhi::rhi_handle_type::buffer> create_buffer(rhi::buffer_desc desc);
+        graph_resource_handle<rhi::rhi_handle_type::image> create_image(rhi::image_desc desc);
 
         // Handle render targets
         graph_resource_handle<rhi::rhi_handle_type::image> create_render_target(rhi::image_desc desc);

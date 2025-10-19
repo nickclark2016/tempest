@@ -106,30 +106,17 @@ int main()
         .layers = 1,
     });
 
-    auto render_graph_builder = tempest::graphics::graph_builder{};
-    auto swapchain_handle = render_graph_builder.import_render_surface("Swapchain", swapchain);
-
-    render_graph_builder.create_transfer_pass(
-        "Write to Swapchain",
-        [&](tempest::graphics::transfer_task_builder& builder) {
-            builder.write(swapchain_handle, tempest::rhi::image_layout::transfer_dst,
-                          tempest::make_enum_mask(tempest::rhi::pipeline_stage::clear),
-                          tempest::make_enum_mask(tempest::rhi::memory_access::transfer_write));
-        },
-        [](tempest::graphics::transfer_task_execution_context& ctx, auto swapchain_handle) {
-            ctx.clear_color(swapchain_handle, 1.0f, 0.0f, 0.0f, 1.0f);
-        },
-        swapchain_handle);
-
-    auto plan = tempest::move(render_graph_builder)
-                    .compile({
-                        .graphics_queues = 1,
-                        .compute_queues = 1,
-                        .transfer_queues = 1,
-                    });
-
-    auto executor = tempest::graphics::graph_executor(device);
-    executor.set_execution_plan(tempest::move(plan));
+    // render_graph_builder.create_transfer_pass(
+    //     "Write to Swapchain",
+    //     [&](tempest::graphics::transfer_task_builder& builder) {
+    //         builder.write(swapchain_handle, tempest::rhi::image_layout::transfer_dst,
+    //                       tempest::make_enum_mask(tempest::rhi::pipeline_stage::clear),
+    //                       tempest::make_enum_mask(tempest::rhi::memory_access::transfer_write));
+    //     },
+    //     [](tempest::graphics::transfer_task_execution_context& ctx, auto swapchain_handle) {
+    //         ctx.clear_color(swapchain_handle, 1.0f, 0.0f, 0.0f, 1.0f);
+    //     },
+    //     swapchain_handle);
 
     auto pbr_fg =
         tempest::graphics::pbr_frame_graph(device,
@@ -142,17 +129,52 @@ int main()
                                                .depth_format = tempest::rhi::image_format::d32_float,
                                                .tonemapped_color_format = tempest::rhi::image_format::bgra8_srgb,
                                                .vertex_data_buffer_size = 16 * 1024 * 1024,
-                                               .mesh_data_buffer_size = 16 * 1024 * 1024,
-                                               .material_data_buffer_size = 4 * 1024 * 1024,
+                                               .max_mesh_count = 16 * 1024 * 1024,
+                                               .max_material_count = 4 * 1024 * 1024,
                                                .staging_buffer_size_per_frame = 16 * 1024 * 1024,
+                                               .max_object_count = 256 * 1024,
                                                .max_lights = 256,
                                                .max_anisotropy = 16.0f,
+                                               .light_clustering =
+                                                   {
+                                                       .cluster_count_x = 16,
+                                                       .cluster_count_y = 9,
+                                                       .cluster_count_z = 24,
+                                                   },
                                            },
                                            {
                                                .entity_registry = nullptr,
                                            });
 
-    pbr_fg.get_builder()->import_render_surface("Swapchain", swapchain);
+    auto render_graph_builder_opt = pbr_fg.get_builder();
+    auto& render_graph_builder = render_graph_builder_opt.value();
+    auto swapchain_handle = render_graph_builder.import_render_surface("Swapchain", swapchain);
+
+    render_graph_builder.create_graphics_pass(
+        "Clear Swapchain",
+        [&](auto& builder) {
+            builder.write(swapchain_handle, tempest::rhi::image_layout::color_attachment,
+                          tempest::make_enum_mask(tempest::rhi::pipeline_stage::color_attachment_output),
+                          tempest::make_enum_mask(tempest::rhi::memory_access::color_attachment_write));
+        },
+        [](tempest::graphics::graphics_task_execution_context& ctx, auto swapchain_handle) {
+            auto render_pass_info = tempest::rhi::work_queue::render_pass_info{};
+            render_pass_info.name = "Clear Swapchain Pass";
+            render_pass_info.width = 1280;
+            render_pass_info.height = 720;
+            render_pass_info.layers = 1;
+            render_pass_info.color_attachments.push_back({
+                .image = ctx.find_image(swapchain_handle),
+                .layout = tempest::rhi::image_layout::color_attachment,
+                .clear_color = {0.0f, 0.0f, 1.0f, 1.0f},
+                .load_op = tempest::rhi::work_queue::load_op::clear,
+                .store_op = tempest::rhi::work_queue::store_op::store,
+            });
+
+            ctx.begin_render_pass(render_pass_info);
+            ctx.end_render_pass();
+        },
+        swapchain_handle);
 
     pbr_fg.compile({
         .graphics_queues = 1,
@@ -169,7 +191,7 @@ int main()
             break;
         }
 
-        executor.execute();
+        pbr_fg.execute();
     }
 
     return 0;

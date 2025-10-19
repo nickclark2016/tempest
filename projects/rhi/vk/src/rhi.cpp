@@ -1,3 +1,4 @@
+#include <tempest/math_utils.hpp>
 #include <tempest/rhi_types.hpp>
 #include <tempest/vk/rhi.hpp>
 
@@ -657,6 +658,11 @@ namespace tempest::rhi::vk
                 flags |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
             }
 
+            if (access & memory_access::descriptor_buffer_read)
+            {
+                flags |= VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT;
+            }
+
             return flags;
         }
 
@@ -1033,6 +1039,11 @@ namespace tempest::rhi::vk
             if ((flags & descriptor_set_layout_flags::push) == descriptor_set_layout_flags::push)
             {
                 vk_flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+            }
+
+            if ((flags & descriptor_set_layout_flags::descriptor_buffer) == descriptor_set_layout_flags::descriptor_buffer)
+            {
+                vk_flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
             }
 
             return vk_flags;
@@ -1572,14 +1583,27 @@ namespace tempest::rhi::vk
             vmaCreateBuffer(_vma_allocator, &buffer_ci, &allocation_ci, &buffer, &allocation, &allocation_info);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create buffer: {}", to_underlying(result));
+            if (desc.name.empty()) {
+                logger->error("Failed to create buffer: {}", to_underlying(result));
+            } else {
+                logger->error("Failed to create buffer '{}': {}", desc.name.c_str(), to_underlying(result));
+            }
             return typed_rhi_handle<rhi_handle_type::buffer>::null_handle;
         }
 
-        vk::buffer buf = {
+        auto buf_dev_address = VkBufferDeviceAddressInfo{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+            .pNext = nullptr,
+            .buffer = buffer,
+        };
+
+        auto address = _dispatch_table.getBufferDeviceAddress(&buf_dev_address);
+
+        auto buf = vk::buffer{
             .allocation = allocation,
             .allocation_info = allocation_info,
             .buffer = buffer,
+            .address = address,
         };
 
         if (!desc.name.empty())
@@ -2932,19 +2956,165 @@ namespace tempest::rhi::vk
         return 0;
     }
 
-    size_t device::get_descriptor_set_binding_offset(typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout,
-                                                     uint32_t binding) const noexcept
+    size_t device::write_descriptor_buffer(const descriptor_set_desc& writes, byte* dest, size_t offset) const noexcept
     {
-        auto desc_set_layout = _descriptor_set_layout_cache.get_layout(layout);
-        if (desc_set_layout != VK_NULL_HANDLE)
+        const auto layout = _descriptor_set_layout_cache.get_layout(writes.layout);
+        const auto get_desc_binding_size = [&](descriptor_type type) -> size_t {
+            switch (type)
+            {
+            case descriptor_type::sampler:
+                return _descriptor_buffer_properties.samplerDescriptorSize;
+            case descriptor_type::combined_image_sampler:
+                return _descriptor_buffer_properties.combinedImageSamplerDescriptorSize;
+            case descriptor_type::sampled_image:
+                return _descriptor_buffer_properties.sampledImageDescriptorSize;
+            case descriptor_type::storage_image:
+                return _descriptor_buffer_properties.storageImageDescriptorSize;
+            case descriptor_type::constant_buffer:
+                return _descriptor_buffer_properties.uniformBufferDescriptorSize;
+            case descriptor_type::structured_buffer:
+                return _descriptor_buffer_properties.storageBufferDescriptorSize;
+            default:
+                logger->error("Unsupported descriptor type for descriptor buffer writing - {}", to_underlying(type));
+                std::terminate();
+            }
+        };
+
+        const auto aligned_offset = math::round_to_next_multiple(offset, get_descriptor_buffer_alignment());
+
+        for (const auto& write : writes.buffers)
         {
-            // Query the binding offset using vkGetDescriptorSetLayoutBindingOffsetEXT
-            auto offset = VkDeviceSize{};
-            _dispatch_table.getDescriptorSetLayoutBindingOffsetEXT(desc_set_layout, binding, &offset);
-            return static_cast<size_t>(offset);
+            auto buf = get_buffer(write.buffer);
+
+            const auto buffer_desc = VkDescriptorAddressInfoEXT{
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT,
+                .pNext = nullptr,
+                .address = buf->address + write.offset,
+                .range = write.size,
+                .format = VK_FORMAT_UNDEFINED,
+            };
+
+            const auto desc_data = [&]() {
+                switch (write.type)
+                {
+                case rhi::descriptor_type::constant_buffer:
+                    return VkDescriptorDataEXT{
+                        .pUniformBuffer = &buffer_desc,
+                    };
+                case rhi::descriptor_type::structured_buffer:
+                    return VkDescriptorDataEXT{
+                        .pStorageBuffer = &buffer_desc,
+                    };
+                default:
+                    logger->error("Unsupported buffer descriptor type for descriptor buffer writing - {}",
+                                  to_underlying(write.type));
+                    std::terminate();
+                };
+            }();
+
+            const auto desc = VkDescriptorGetInfoEXT{
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                .pNext = nullptr,
+                .type = to_vulkan(write.type),
+                .data = desc_data,
+            };
+
+            // Query the descriptor offset
+            // TODO: Cache offsets for better performance
+            VkDeviceSize descriptor_offset = 0;
+            _dispatch_table.getDescriptorSetLayoutBindingOffsetEXT(layout, write.index, &descriptor_offset);
+
+            // Write the descriptor data to the destination buffer
+            _dispatch_table.getDescriptorEXT(&desc, get_desc_binding_size(write.type),
+                                             dest + aligned_offset + descriptor_offset);
         }
 
-        return 0;
+        for (const auto& write : writes.images)
+        {
+            // Query the descriptor offset
+            VkDeviceSize descriptor_offset = 0;
+            _dispatch_table.getDescriptorSetLayoutBindingOffsetEXT(layout, write.index, &descriptor_offset);
+
+            for (size_t i = 0; i < write.images.size(); ++i)
+            {
+                auto img = get_image(write.images[i].image);
+                VkSampler sampler = VK_NULL_HANDLE;
+                if (write.images[i].sampler)
+                {
+                    sampler = get_sampler(write.images[i].sampler)->sampler;
+                }
+
+                const auto image_info = VkDescriptorImageInfo{
+                    .sampler = sampler,
+                    .imageView = img->image_view,
+                    .imageLayout = to_vulkan(write.images[i].layout),
+                };
+
+                const auto desc_data = [&]() {
+                    switch (write.type)
+                    {
+                    case rhi::descriptor_type::sampled_image:
+                        return VkDescriptorDataEXT{
+                            .pSampledImage = &image_info,
+                        };
+                    case rhi::descriptor_type::storage_image:
+                        return VkDescriptorDataEXT{
+                            .pStorageImage = &image_info,
+                        };
+                    case rhi::descriptor_type::combined_image_sampler:
+                        return VkDescriptorDataEXT{
+                            .pCombinedImageSampler = &image_info,
+                        };
+                    default:
+                        logger->error("Unsupported image descriptor type for descriptor buffer writing - {}",
+                                      to_underlying(write.type));
+                        std::terminate();
+                    }
+                }();
+
+                const auto desc = VkDescriptorGetInfoEXT{
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                    .pNext = nullptr,
+                    .type = to_vulkan(write.type),
+                    .data = desc_data,
+                };
+
+                // Write the descriptor data to the destination buffer
+                _dispatch_table.getDescriptorEXT(&desc, get_desc_binding_size(write.type),
+                                                 dest + aligned_offset + descriptor_offset +
+                                                     i * get_desc_binding_size(write.type));
+            }
+        }
+
+        for (const auto& sampler : writes.samplers)
+        {
+            // Query the descriptor offset
+            VkDeviceSize descriptor_offset = 0;
+            _dispatch_table.getDescriptorSetLayoutBindingOffsetEXT(layout, sampler.index, &descriptor_offset);
+
+            for (size_t i = 0; i < sampler.samplers.size(); ++i)
+            {
+                const auto samp = get_sampler(sampler.samplers[i]);
+
+                const auto desc_data = VkDescriptorDataEXT{
+                    .pSampler = &samp->sampler,
+                };
+
+                const auto desc = VkDescriptorGetInfoEXT{
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                    .pNext = nullptr,
+                    .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                    .data = desc_data,
+                };
+
+                // Write the descriptor data to the destination buffer
+                _dispatch_table.getDescriptorEXT(&desc, _descriptor_buffer_properties.sampledImageDescriptorSize,
+                                                 dest + aligned_offset + descriptor_offset +
+                                                     i * _descriptor_buffer_properties.samplerDescriptorSize);
+            }
+        }
+
+        return aligned_offset + get_descriptor_set_layout_size(writes.layout);
     }
 
     void device::release_resources()
@@ -4708,6 +4878,7 @@ namespace tempest::rhi::vk
                 .require_present()
                 .add_required_extension(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME)
                 .add_required_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)
+                .add_required_extension(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)
                 .set_minimum_version(1, 3)
                 .set_required_features({
 #ifdef _DEBUG

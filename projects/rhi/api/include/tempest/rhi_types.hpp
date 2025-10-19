@@ -504,6 +504,7 @@ namespace tempest::rhi
         shader_sampled_read = 0x10000,
         shader_storage_read = 0x20000,
         shader_storage_write = 0x40000,
+        descriptor_buffer_read = 0x80000,
     };
 
     enum class shader_stage
@@ -563,6 +564,7 @@ namespace tempest::rhi
     {
         none = 0x0,
         push = 0x1,
+        descriptor_buffer = 0x2,
     };
 
     struct push_constant_range

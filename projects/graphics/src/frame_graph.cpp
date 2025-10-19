@@ -288,6 +288,24 @@ namespace tempest::graphics
         _prefer_async = true;
     }
 
+    rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> task_execution_context::find_buffer(
+        graph_resource_handle<rhi::rhi_handle_type::buffer> handle) const
+    {
+        return _executor->get_buffer(handle);
+    }
+
+    rhi::typed_rhi_handle<rhi::rhi_handle_type::image> task_execution_context::find_image(
+        graph_resource_handle<rhi::rhi_handle_type::image> handle) const
+    {
+        return _executor->get_image(handle);
+    }
+
+    rhi::typed_rhi_handle<rhi::rhi_handle_type::image> task_execution_context::find_image(
+        graph_resource_handle<rhi::rhi_handle_type::render_surface> handle) const
+    {
+        return _executor->get_image(handle);
+    }
+
     graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::import_buffer(
         string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
     {
@@ -424,6 +442,44 @@ namespace tempest::graphics
         return handle;
     }
 
+    graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::create_buffer(rhi::buffer_desc desc)
+    {
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::buffer>(_next_resource_id++, 0, rhi::rhi_handle_type::buffer);
+        auto entry = resource_entry{
+            .name = desc.name,
+            .handle = copy(handle),
+            .resource = internal_resource{desc},
+            .per_frame = false,
+            .temporal = false,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
+    graph_resource_handle<rhi::rhi_handle_type::image> graph_builder::create_image(rhi::image_desc desc)
+    {
+        auto handle =
+            graph_resource_handle<rhi::rhi_handle_type::image>(_next_resource_id++, 0, rhi::rhi_handle_type::image);
+        auto entry = resource_entry{
+            .name = desc.name,
+            .handle = copy(handle),
+            .resource = internal_resource{desc},
+            .per_frame = false,
+            .temporal = false,
+            .render_target = false,
+            .presentable = false,
+        };
+
+        _resources.push_back(tempest::move(entry));
+
+        return handle;
+    }
+
     graph_resource_handle<rhi::rhi_handle_type::image> graph_builder::create_render_target(rhi::image_desc desc)
     {
         auto handle =
@@ -500,30 +556,36 @@ namespace tempest::graphics
         for (size_t resource_idx = 0; resource_idx < _resources.size(); ++resource_idx)
         {
             const auto& resource = _resources[resource_idx];
-            if (resource.render_target || resource.temporal || holds_alternative<external_resource>(resource.resource))
+            if (holds_alternative<external_resource>(resource.resource))
             {
-                // Render targets and temporal resources are always live
                 live.resource_indices.push_back(resource_idx);
+            }
 
-                // Find any writers for this resource
-                for (size_t pass_idx = 0; pass_idx < _passes.size(); ++pass_idx)
+            // Find any writers for this resource
+            for (size_t pass_idx = 0; pass_idx < _passes.size(); ++pass_idx)
+            {
+                const auto& pass = _passes[pass_idx];
+                if (tempest::find_if(pass.outputs.cbegin(), pass.outputs.cend(), [&](const auto& output) {
+                        return resource.handle.handle == output.handle && resource.handle.type == output.type;
+                    }) != pass.outputs.cend())
                 {
-                    const auto& pass = _passes[pass_idx];
-                    if (tempest::find_if(pass.outputs.cbegin(), pass.outputs.cend(), [&](const auto& output) {
-                            return resource.handle.handle == output.handle && resource.handle.type == output.type;
-                        }) != pass.outputs.cend())
+
+                    if (tempest::find(live.pass_indices.cbegin(), live.pass_indices.cend(), pass_idx) ==
+                        live.pass_indices.cend())
                     {
+                        live.pass_indices.push_back(pass_idx);
+                    }
 
-                        if (tempest::find(live.pass_indices.cbegin(), live.pass_indices.cend(), pass_idx) ==
-                            live.pass_indices.cend())
-                        {
-                            live.pass_indices.push_back(pass_idx);
-                        }
+                    if (tempest::find(work_list.cbegin(), work_list.cend(), pass_idx) == work_list.cend())
+                    {
+                        work_list.push_back(pass_idx);
+                    }
 
-                        if (tempest::find(work_list.cbegin(), work_list.cend(), pass_idx) == work_list.cend())
-                        {
-                            work_list.push_back(pass_idx);
-                        }
+                    // Ensure resource is marked as live
+                    if (tempest::find(live.resource_indices.cbegin(), live.resource_indices.cend(), resource_idx) ==
+                        live.resource_indices.cend())
+                    {
+                        live.resource_indices.push_back(resource_idx);
                     }
                 }
             }
@@ -1070,6 +1132,9 @@ namespace tempest::graphics
             }
         }
 
+        // TODO: Restructure so only the graphics/present fence is waited on here, and all others are waited on
+        // just before their first use in the frame. This can also allow deferral of work queue reset and fence reset
+        // until just before first use in the frame (not first submission on the queue, but first command buffer usage)
         if (!fences_to_wait.empty())
         {
             _device->wait(fences_to_wait);
@@ -1666,8 +1731,11 @@ namespace tempest::graphics
                 // Execute the pass
                 switch (pass.type)
                 {
-                case work_type::graphics:
+                case work_type::graphics: {
+                    auto executor = graphics_task_execution_context(this, command_list, &queue);
+                    pass.execution_context(executor);
                     break;
+                }
                 case work_type::compute:
                     break;
                 case work_type::transfer: {
@@ -1971,6 +2039,16 @@ namespace tempest::graphics
         }
 
         return nullopt;
+    }
+
+    void graphics_task_execution_context::begin_render_pass(const rhi::work_queue::render_pass_info& info)
+    {
+        _queue->begin_rendering(_cmd_list, info);
+    }
+
+    void graphics_task_execution_context::end_render_pass()
+    {
+        _queue->end_rendering(_cmd_list);
     }
 
     void transfer_task_execution_context::clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image,
