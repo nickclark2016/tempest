@@ -6,17 +6,24 @@
 #include <tempest/files.hpp>
 #include <tempest/graphics_components.hpp>
 #include <tempest/int.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/pbr_frame_graph.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
+#include <tempest/to_underlying.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
 
 namespace tempest::graphics
 {
+    namespace
+    {
+        auto log = logger::logger_factory::create({.prefix = "pbr_frame_graph"});
+    }
+
     pbr_frame_graph::pbr_frame_graph(rhi::device& device, pbr_frame_graph_config cfg, pbr_frame_graph_inputs inputs)
         : _device(&device), _cfg(cfg), _inputs(inputs), _builder{graph_builder{}}, _executor{none()}
     {
@@ -52,6 +59,16 @@ namespace tempest::graphics
     void pbr_frame_graph::compile(queue_configuration cfg)
     {
         auto exec_plan = move(_builder).value().compile(cfg);
+
+        for (const auto& sub : exec_plan.submissions)
+        {
+            log->debug("Submission: {}", to_underlying(sub.type));
+            for (const auto& pass : sub.passes)
+            {
+                log->debug("Pass '{}'", pass.name.c_str());
+            }
+        }
+
         _builder = none();
         _executor = graph_executor(*_device);
         _executor->set_execution_plan(tempest::move(exec_plan));
@@ -296,7 +313,7 @@ namespace tempest::graphics
         scene_descriptor_set_bindings.push_back({
             .binding_index = 16,
             .type = rhi::descriptor_type::sampled_image,
-            .count = 1024,
+            .count = _cfg.max_bindless_textures,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
             .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound,
                                     rhi::descriptor_binding_flags::variable_length),
@@ -395,10 +412,8 @@ namespace tempest::graphics
         builder.create_graphics_pass(
             "Depth Prepass",
             [&](graphics_task_builder& task) {
-                task.write(
-                    depth, rhi::image_layout::depth,
-                    make_enum_mask(rhi::pipeline_stage::early_fragment_tests, rhi::pipeline_stage::late_fragment_tests),
-                    make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
+                task.write(depth, rhi::image_layout::depth, make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                           make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
                 task.write(encoded_normals, rhi::image_layout::color_attachment,
                            make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                            make_enum_mask(rhi::memory_access::color_attachment_write));
@@ -839,71 +854,1560 @@ namespace tempest::graphics
 
     pbr_frame_graph::light_culling_pass_outputs pbr_frame_graph::_add_light_culling_pass(graph_builder& builder)
     {
-        return {};
+        const auto num_light_clusters = _cfg.light_clustering.cluster_count_x * _cfg.light_clustering.cluster_count_y *
+                                        _cfg.light_clustering.cluster_count_z;
+        const auto light_range_size = math::round_to_next_multiple(sizeof(light_grid_range) * num_light_clusters, 256);
+
+        auto light_range_buffer = builder.create_buffer({
+            .size = light_range_size,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Light Grid Range Buffer",
+        });
+
+        auto light_indices_buffer = builder.create_buffer({
+            .size = math::round_to_next_multiple(
+                sizeof(uint32_t) * _cfg.light_clustering.max_lights_per_cluster * num_light_clusters, 256),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Light Indices Buffer",
+        });
+
+        auto light_count_buffer = builder.create_buffer({
+            .size = math::round_to_next_multiple(sizeof(uint32_t), 256),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Light Count Buffer",
+        });
+
+        auto layout_bindings = vector<rhi::descriptor_binding_layout>{};
+        layout_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+        layout_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+        layout_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+        layout_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+        layout_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+        layout_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+
+        auto descriptor_set_layout = _device->create_descriptor_set_layout(
+            layout_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::push));
+
+        auto descriptor_set_layouts = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptor_set_layouts.push_back(descriptor_set_layout);
+
+        auto push_constants = vector<rhi::push_constant_range>{};
+        push_constants.push_back({
+            .offset = 0,
+            .range = sizeof(light_culling_info),
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+
+        auto layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptor_set_layouts,
+            .push_constants = push_constants,
+        });
+
+        auto comp_source = core::read_bytes("assets/shaders/cull_lights.comp.spv");
+
+        auto pipeline_desc = rhi::compute_pipeline_desc{
+            .compute_shader = tempest::move(comp_source),
+            .layout = layout,
+            .name = "Light Culling Pipeline",
+        };
+
+        auto pipeline = _device->create_compute_pipeline(pipeline_desc);
+
+        auto light_grid = _pass_output_resource_handles.light_clustering.light_cluster_bounds;
+
+        builder.create_compute_pass(
+            "Light Culling Pass",
+            [&](compute_task_builder& task) {
+                task.write(light_range_buffer, make_enum_mask(rhi::pipeline_stage::compute_shader),
+                           make_enum_mask(rhi::memory_access::shader_write));
+                task.write(light_indices_buffer, make_enum_mask(rhi::pipeline_stage::compute_shader),
+                           make_enum_mask(rhi::memory_access::shader_write));
+                task.write(light_count_buffer, make_enum_mask(rhi::pipeline_stage::compute_shader),
+                           make_enum_mask(rhi::memory_access::shader_write));
+                task.read_write(light_grid, make_enum_mask(rhi::pipeline_stage::compute_shader),
+                                make_enum_mask(rhi::memory_access::shader_read),
+                                make_enum_mask(rhi::pipeline_stage::compute_shader),
+                                make_enum_mask(rhi::memory_access::shader_write));
+                task.read(_global_resources.graph_light_buffer, make_enum_mask(rhi::pipeline_stage::compute_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.upload_pass.scene_constants,
+                          make_enum_mask(rhi::pipeline_stage::compute_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+            },
+            &_light_culling_pass_task, this);
+
+        return {
+            .light_grid = light_grid,
+            .light_grid_ranges = light_range_buffer,
+            .light_indices = light_indices_buffer,
+            .light_index_count = light_count_buffer,
+            .pipeline = pipeline,
+        };
     }
 
     void pbr_frame_graph::_release_light_culling_pass(light_culling_pass_outputs& outputs)
     {
+        _device->destroy_compute_pipeline(outputs.pipeline);
+
         outputs = {};
     }
 
     pbr_frame_graph::shadow_map_pass_outputs pbr_frame_graph::_add_shadow_map_pass(graph_builder& builder)
     {
-        return {};
+        auto shadow_mega_texture = builder.create_render_target({
+            .format = rhi::image_format::d32_float,
+            .type = rhi::image_type::image_2d,
+            .width = _cfg.shadows.shadow_map_width,
+            .height = _cfg.shadows.shadow_map_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::depth_attachment, rhi::image_usage::sampled),
+            .name = "Shadow Map Mega Texture",
+        });
+
+        const auto shadow_buffer_size =
+            math::round_to_next_multiple(sizeof(shadow_map_parameter) * _cfg.shadows.max_shadow_casting_lights, 256);
+
+        auto shadow_data_buffer = builder.create_buffer({
+            .size = shadow_buffer_size,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Shadow Map Data Buffer",
+        });
+
+        // Descriptors
+        // 1 - Vertex pull buffer
+        // 2 - Meshes
+        // 3 - Objects
+        // 4 - Instances
+        // 5 - Materials
+        // 15 - Linear Sampler
+        // 16+ - Bindless Textures
+
+        auto descriptor_bindings = vector<rhi::descriptor_binding_layout>();
+        descriptor_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        descriptor_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        descriptor_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        descriptor_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        descriptor_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        descriptor_bindings.push_back({
+            .binding_index = 15,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        descriptor_bindings.push_back({
+            .binding_index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = _cfg.max_bindless_textures,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto descriptor_set_layout = _device->create_descriptor_set_layout(
+            descriptor_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
+
+        auto descriptor_set_layouts = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptor_set_layouts.push_back(descriptor_set_layout);
+
+        auto push_constants = vector<rhi::push_constant_range>{};
+        push_constants.push_back({
+            .offset = 0,
+            .range = sizeof(directional_shadow_pass_constants),
+            .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+        });
+
+        auto pipeline_layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptor_set_layouts,
+            .push_constants = push_constants,
+        });
+
+        auto vert_source = core::read_bytes("assets/shaders/directional_shadow_map.vert.spv");
+        auto frag_source = core::read_bytes("assets/shaders/directional_shadow_map.frag.spv");
+
+        auto pipeline_desc = rhi::graphics_pipeline_desc{
+            .color_attachment_formats = {},
+            .depth_attachment_format = rhi::image_format::d32_float,
+            .stencil_attachment_format = none(),
+            .vertex_shader = tempest::move(vert_source),
+            .tessellation_control_shader = {},
+            .tessellation_evaluation_shader = {},
+            .geometry_shader = {},
+            .fragment_shader = tempest::move(frag_source),
+            .input_assembly =
+                {
+                    .topology = rhi::primitive_topology::triangle_list,
+                },
+            .vertex_input = none(),
+            .tessellation = none(),
+            .multisample =
+                {
+                    .sample_count = rhi::image_sample_count::sample_count_1,
+                    .sample_shading = none(),
+                    .alpha_to_coverage = false,
+                    .alpha_to_one = false,
+                },
+            .rasterization =
+                {
+                    .depth_clamp_enable = false,
+                    .rasterizer_discard_enable = false,
+                    .polygon_mode = rhi::polygon_mode::fill,
+                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
+                    .depth_bias = none(),
+                    .line_width = 1.0f,
+                },
+            .depth_stencil =
+                {
+                    .depth =
+                        rhi::depth_test{
+                            .write_enable = true,
+                            .compare_op = rhi::compare_op::greater_equal,
+                            .depth_bounds_test_enable = false,
+                            .min_depth_bounds = 0.0f,
+                            .max_depth_bounds = 1.0f,
+                        },
+                    .stencil = none(),
+                },
+            .color_blend =
+                {
+                    .attachments = {},
+                    .blend_constants = {},
+                },
+            .layout = pipeline_layout,
+            .name = "Shadow Map Pass Pipeline",
+        };
+
+        auto pipeline = _device->create_graphics_pipeline(pipeline_desc);
+
+        auto descriptor_buffer = builder.create_per_frame_buffer({
+            .size = _device->get_descriptor_set_layout_size(descriptor_set_layout),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "Shadow Map Pass Descriptor Set Buffer",
+        });
+
+        builder.create_graphics_pass(
+            "Shadow Map Pass",
+            [&](graphics_task_builder& task) {
+                task.read(_global_resources.graph_vertex_pull_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_mesh_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_object_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_instance_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_material_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(descriptor_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+                task.write(shadow_mega_texture, rhi::image_layout::depth,
+                           make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                           make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
+            },
+            &_shadow_map_pass_task, this, descriptor_buffer);
+
+        return {
+            .shadow_map_megatexture = shadow_mega_texture,
+            .shadow_data = shadow_data_buffer,
+            .directional_shadow_pipeline = pipeline,
+        };
     }
 
     void pbr_frame_graph::_release_shadow_map_pass(shadow_map_pass_outputs& outputs)
     {
+        _device->destroy_graphics_pipeline(outputs.directional_shadow_pipeline);
+
         outputs = {};
     }
 
     pbr_frame_graph::pbr_opaque_pass_outputs pbr_frame_graph::_add_pbr_opaque_pass(graph_builder& builder)
     {
-        return {};
+        auto hdr_color_output = builder.create_per_frame_image({
+            .format = _cfg.hdr_color_format,
+            .type = rhi::image_type::image_2d,
+            .width = _cfg.render_target_width,
+            .height = _cfg.render_target_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .name = "PBR Opaque Pass Color Output",
+        });
+
+        // Scene Descriptors
+        // 0 - Scene Constants
+        // 1 - Vertex Pull Buffer
+        // 2 - Meshes
+        // 3 - Objects
+        // 4 - Instances
+        // 5 - Materials
+        // 6 - Ambient Occlusion Texture
+        // 15 - Linear Sampler
+        // 16+ - Bindless Textures
+
+        // Light and Shadow Descriptors
+        // 0 - Lights
+        // 1 - Shadow map parameters
+        // 2 - Shadow map mega texture
+        // 3 - Light grid bounds
+        // 4 - Light indices
+        auto scene_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 6,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 15,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = _cfg.max_bindless_textures,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto scene_descriptors = _device->create_descriptor_set_layout(
+            scene_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
+
+        auto shadow_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto shadow_descriptors = _device->create_descriptor_set_layout(
+            shadow_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
+
+        auto descriptor_set_layouts = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptor_set_layouts.push_back(scene_descriptors);
+        descriptor_set_layouts.push_back(shadow_descriptors);
+
+        auto pipeline_layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptor_set_layouts,
+            .push_constants = {},
+        });
+
+        auto vert_source = core::read_bytes("assets/shaders/pbr.vert.spv");
+        auto frag_source = core::read_bytes("assets/shaders/pbr.frag.spv");
+
+        auto color_formats = vector<rhi::image_format>();
+        color_formats.push_back(_cfg.hdr_color_format);
+
+        auto blending = vector<rhi::color_blend_attachment>();
+        blending.push_back({
+            .blend_enable = false,
+            .src_color_blend_factor = rhi::blend_factor::one,
+            .dst_color_blend_factor = rhi::blend_factor::zero,
+            .color_blend_op = rhi::blend_op::add,
+            .src_alpha_blend_factor = rhi::blend_factor::one,
+            .dst_alpha_blend_factor = rhi::blend_factor::zero,
+            .alpha_blend_op = rhi::blend_op::add,
+        });
+
+        auto pipeline_desc = rhi::graphics_pipeline_desc{
+            .color_attachment_formats = color_formats,
+            .depth_attachment_format = _cfg.depth_format,
+            .stencil_attachment_format = none(),
+            .vertex_shader = tempest::move(vert_source),
+            .tessellation_control_shader = {},
+            .tessellation_evaluation_shader = {},
+            .geometry_shader = {},
+            .fragment_shader = tempest::move(frag_source),
+            .input_assembly =
+                {
+                    .topology = rhi::primitive_topology::triangle_list,
+                },
+            .vertex_input = none(),
+            .tessellation = none(),
+            .multisample =
+                {
+                    .sample_count = rhi::image_sample_count::sample_count_1,
+                    .sample_shading = none(),
+                    .alpha_to_coverage = false,
+                    .alpha_to_one = false,
+                },
+            .rasterization =
+                {
+                    .depth_clamp_enable = false,
+                    .rasterizer_discard_enable = false,
+                    .polygon_mode = rhi::polygon_mode::fill,
+                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
+                    .depth_bias = none(),
+                    .line_width = 1.0f,
+                },
+            .depth_stencil =
+                {
+                    .depth =
+                        rhi::depth_test{
+                            .write_enable = true,
+                            .compare_op = rhi::compare_op::greater_equal,
+                            .depth_bounds_test_enable = false,
+                            .min_depth_bounds = 0.0f,
+                            .max_depth_bounds = 1.0f,
+                        },
+                    .stencil = none(),
+                },
+            .color_blend =
+                {
+                    .attachments = tempest::move(blending),
+                    .blend_constants = {},
+                },
+            .layout = pipeline_layout,
+            .name = "PBR Opaque Pass Pipeline",
+        };
+
+        auto pipeline = _device->create_graphics_pipeline(pipeline_desc);
+
+        auto scene_descriptor_buffer = builder.create_per_frame_buffer({
+            .size = _device->get_descriptor_set_layout_size(scene_descriptors),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "PBR Opaque Pass Scene Descriptor Set Buffer",
+        });
+
+        auto shadow_descriptor_buffer = builder.create_per_frame_buffer({
+            .size = _device->get_descriptor_set_layout_size(shadow_descriptors),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "PBR Opaque Pass Shadow Descriptor Set Buffer",
+        });
+
+        builder.create_graphics_pass(
+            "PBR Opaque Pass",
+            [&](graphics_task_builder& task) {
+                task.read(_pass_output_resource_handles.depth_prepass.depth, rhi::image_layout::depth_stencil_read_only,
+                          make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                          make_enum_mask(rhi::memory_access::depth_stencil_attachment_read));
+                task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.read(_global_resources.graph_vertex_pull_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_mesh_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_object_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_instance_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_material_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_light_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.read(scene_descriptor_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+                task.read(shadow_descriptor_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+
+                task.read(_pass_output_resource_handles.light_culling.light_grid,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.light_culling.light_grid_ranges,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.light_culling.light_indices,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.write(hdr_color_output, rhi::image_layout::color_attachment,
+                           make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                           make_enum_mask(rhi::memory_access::color_attachment_write));
+            },
+            &_pbr_opaque_pass_task, this, scene_descriptor_buffer, shadow_descriptor_buffer);
+
+        return {
+            .hdr_color = hdr_color_output,
+            .pipeline = pipeline,
+        };
     }
 
     void pbr_frame_graph::_release_pbr_opaque_pass(pbr_opaque_pass_outputs& outputs)
     {
+        _device->destroy_graphics_pipeline(outputs.pipeline);
+
         outputs = {};
     }
 
     pbr_frame_graph::mboit_gather_pass_outputs pbr_frame_graph::_add_mboit_gather_pass(graph_builder& builder)
     {
-        return {};
+        auto transparency_accumulation = builder.create_image({
+            .format = rhi::image_format::rgba16_float,
+            .type = rhi::image_type::image_2d,
+            .width = _cfg.render_target_width,
+            .height = _cfg.render_target_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .name = "MBOIT Transparency Accumulation Buffer",
+        });
+
+        auto moments_target = builder.create_image({
+            .format = rhi::image_format::rgba16_float,
+            .type = rhi::image_type::image_2d,
+            .width = _cfg.render_target_width,
+            .height = _cfg.render_target_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage =
+                make_enum_mask(rhi::image_usage::storage, rhi::image_usage::sampled, rhi::image_usage::transfer_dst),
+            .name = "MBOIT Moments Target",
+        });
+
+        auto zeroth_moment_buffer = builder.create_image({
+            .format = rhi::image_format::r32_float,
+            .type = rhi::image_type::image_2d,
+            .width = _cfg.render_target_width,
+            .height = _cfg.render_target_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage =
+                make_enum_mask(rhi::image_usage::storage, rhi::image_usage::sampled, rhi::image_usage::transfer_dst),
+            .name = "MBOIT Zeroth Moment Buffer",
+        });
+
+        // Scene Descriptors
+        // 0 - Scene Constants
+        // 1 - Vertex Pull Buffer
+        // 2 - Meshes
+        // 3 - Objects
+        // 4 - Instances
+        // 5 - Materials
+        // 6 - Moments Buffer
+        // 7 - Zeroth Moment Buffer
+        // 8 - Ambient Occlusion Texture
+        // 15 - Linear Sampler
+        // 16+ - Bindless Textures
+
+        // Shadow and Light Descriptors
+        // 0 - Lights
+        // 1 - Shadow map parameters
+        // 2 - Shadow map mega texture
+        // 3 - Light grid bounds
+        // 4 - Light indices
+
+        auto scene_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 6,
+            .type = rhi::descriptor_type::storage_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 7,
+            .type = rhi::descriptor_type::storage_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 8,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 15,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = _cfg.max_bindless_textures,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto scene_descriptors = _device->create_descriptor_set_layout(
+            scene_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
+
+        auto shadow_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto shadow_descriptors = _device->create_descriptor_set_layout(
+            shadow_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
+
+        auto descriptor_set_layouts = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptor_set_layouts.push_back(scene_descriptors);
+        descriptor_set_layouts.push_back(shadow_descriptors);
+
+        auto pipeline_layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptor_set_layouts,
+            .push_constants = {},
+        });
+
+        auto color_formats = vector<rhi::image_format>();
+        color_formats.push_back(rhi::image_format::rgba16_float);
+
+        auto blending = vector<rhi::color_blend_attachment>();
+        blending.push_back({
+            .blend_enable = false,
+            .src_color_blend_factor = rhi::blend_factor::src_alpha,
+            .dst_color_blend_factor = rhi::blend_factor::one_minus_src_alpha,
+            .color_blend_op = rhi::blend_op::add,
+            .src_alpha_blend_factor = rhi::blend_factor::one,
+            .dst_alpha_blend_factor = rhi::blend_factor::one_minus_constant_alpha,
+            .alpha_blend_op = rhi::blend_op::add,
+        });
+
+        auto vert_source = core::read_bytes("assets/shaders/pbr_oit_gather.vert.spv");
+        auto frag_source = core::read_bytes("assets/shaders/pbr_oit_gather.frag.spv");
+
+        auto pipeline_desc = rhi::graphics_pipeline_desc{
+            .color_attachment_formats = color_formats,
+            .depth_attachment_format = _cfg.depth_format,
+            .stencil_attachment_format = none(),
+            .vertex_shader = tempest::move(vert_source),
+            .tessellation_control_shader = {},
+            .tessellation_evaluation_shader = {},
+            .geometry_shader = {},
+            .fragment_shader = tempest::move(frag_source),
+            .input_assembly =
+                {
+                    .topology = rhi::primitive_topology::triangle_list,
+                },
+            .vertex_input = none(),
+            .tessellation = none(),
+            .multisample =
+                {
+                    .sample_count = rhi::image_sample_count::sample_count_1,
+                    .sample_shading = none(),
+                    .alpha_to_coverage = false,
+                    .alpha_to_one = false,
+                },
+            .rasterization =
+                {
+                    .depth_clamp_enable = false,
+                    .rasterizer_discard_enable = false,
+                    .polygon_mode = rhi::polygon_mode::fill,
+                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
+                    .depth_bias = none(),
+                    .line_width = 1.0f,
+                },
+            .depth_stencil =
+                {
+                    .depth =
+                        rhi::depth_test{
+                            .write_enable = false,
+                            .compare_op = rhi::compare_op::greater_equal,
+                            .depth_bounds_test_enable = false,
+                            .min_depth_bounds = 0.0f,
+                            .max_depth_bounds = 1.0f,
+                        },
+                    .stencil = none(),
+                },
+            .color_blend =
+                {
+                    .attachments = tempest::move(blending),
+                    .blend_constants = {},
+                },
+            .layout = pipeline_layout,
+            .name = "MBOIT Gather Pass Pipeline",
+        };
+
+        auto pipeline = _device->create_graphics_pipeline(pipeline_desc);
+
+        auto scene_descriptor_buffer = builder.create_per_frame_buffer({
+            .size = _device->get_descriptor_set_layout_size(scene_descriptors),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "MBOIT Gather Pass Scene Descriptor Set Buffer",
+        });
+
+        auto shadow_descriptor_buffer = builder.create_per_frame_buffer({
+            .size = _device->get_descriptor_set_layout_size(shadow_descriptors),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "MBOIT Gather Pass Shadow Descriptor Set Buffer",
+        });
+
+        builder.create_transfer_pass(
+            "MBOIT Clear Buffer Pass",
+            [&](transfer_task_builder& task) {
+                task.write(moments_target, rhi::image_layout::transfer_dst, make_enum_mask(rhi::pipeline_stage::clear),
+                           make_enum_mask(rhi::memory_access::transfer_write));
+                task.write(zeroth_moment_buffer, rhi::image_layout::transfer_dst,
+                           make_enum_mask(rhi::pipeline_stage::clear),
+                           make_enum_mask(rhi::memory_access::transfer_write));
+            },
+            [](transfer_task_execution_context& ctx, auto zero_moment, auto moments) {
+                ctx.clear_color(zero_moment, 0.0f, 0.0f, 0.0f, 0.0f);
+                ctx.clear_color(moments, 0.0f, 0.0f, 0.0f, 0.0f);
+            },
+            zeroth_moment_buffer, moments_target);
+
+        builder.create_graphics_pass(
+            "MBOIT Gather Pass",
+            [&](graphics_task_builder& task) {
+                task.read(_pass_output_resource_handles.depth_prepass.depth, rhi::image_layout::depth_stencil_read_only,
+                          make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                          make_enum_mask(rhi::memory_access::depth_stencil_attachment_read));
+
+                task.read(_global_resources.graph_vertex_pull_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_mesh_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_object_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_instance_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_material_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_light_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.read(_pass_output_resource_handles.light_culling.light_grid,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.light_culling.light_grid_ranges,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.light_culling.light_indices,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.write(transparency_accumulation, rhi::image_layout::color_attachment,
+                           make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                           make_enum_mask(rhi::memory_access::color_attachment_write));
+
+                task.read_write(moments_target, rhi::image_layout::general,
+                                make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                                make_enum_mask(rhi::memory_access::shader_read),
+                                make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                                make_enum_mask(rhi::memory_access::shader_write));
+                task.read_write(zeroth_moment_buffer, rhi::image_layout::general,
+                                make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                                make_enum_mask(rhi::memory_access::shader_read),
+                                make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                                make_enum_mask(rhi::memory_access::shader_write));
+            },
+            &_mboit_gather_pass_task, this, scene_descriptor_buffer, shadow_descriptor_buffer);
+
+        return {
+            .transparency_accumulation = transparency_accumulation,
+            .moments_buffer = moments_target,
+            .zeroth_moment_buffer = zeroth_moment_buffer,
+            .pipeline = pipeline,
+        };
     }
 
     void pbr_frame_graph::_release_mboit_gather_pass(mboit_gather_pass_outputs& outputs)
     {
+        _device->destroy_graphics_pipeline(outputs.pipeline);
+
         outputs = {};
     }
 
     pbr_frame_graph::mboit_resolve_pass_outputs pbr_frame_graph::_add_mboit_resolve_pass(graph_builder& builder)
     {
-        return {};
+        auto transparency_accumulator = _pass_output_resource_handles.mboit_gather.transparency_accumulation;
+        auto moments_buffer = _pass_output_resource_handles.mboit_gather.moments_buffer;
+        auto zeroth_moment_buffer = _pass_output_resource_handles.mboit_gather.zeroth_moment_buffer;
+
+        // Scene Descriptors
+        // 0 - Scene Constants
+        // 1 - Vertex Pull Buffer
+        // 2 - Meshes
+        // 3 - Objects
+        // 4 - Instances
+        // 5 - Materials
+        // 6 - Moments Buffer
+        // 7 - Zeroth Moment Buffer
+        // 8 - Ambient Occlusion Texture
+        // 15 - Linear Sampler
+        // 16+ - Bindless Textures
+
+        // Shadow and Light Descriptors
+        // 0 - Lights
+        // 1 - Shadow map parameters
+        // 2 - Shadow map mega texture
+        // 3 - Light grid bounds
+        // 4 - Light indices
+
+        auto scene_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 6,
+            .type = rhi::descriptor_type::storage_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 7,
+            .type = rhi::descriptor_type::storage_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 8,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 15,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = _cfg.max_bindless_textures,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto scene_descriptors = _device->create_descriptor_set_layout(
+            scene_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
+
+        auto shadow_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto shadow_descriptors = _device->create_descriptor_set_layout(
+            shadow_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
+
+        auto descriptor_set_layouts = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptor_set_layouts.push_back(scene_descriptors);
+        descriptor_set_layouts.push_back(shadow_descriptors);
+
+        auto pipeline_layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptor_set_layouts,
+            .push_constants = {},
+        });
+
+        auto color_formats = vector<rhi::image_format>();
+        color_formats.push_back(rhi::image_format::rgba16_float);
+
+        auto blending = vector<rhi::color_blend_attachment>();
+        blending.push_back({
+            .blend_enable = true,
+            .src_color_blend_factor = rhi::blend_factor::one,
+            .dst_color_blend_factor = rhi::blend_factor::one,
+            .color_blend_op = rhi::blend_op::add,
+            .src_alpha_blend_factor = rhi::blend_factor::one,
+            .dst_alpha_blend_factor = rhi::blend_factor::one,
+            .alpha_blend_op = rhi::blend_op::add,
+        });
+
+        auto vert_source = core::read_bytes("assets/shaders/pbr_oit_resolve.vert.spv");
+        auto frag_source = core::read_bytes("assets/shaders/pbr_oit_resolve.frag.spv");
+
+        auto pipeline_desc = rhi::graphics_pipeline_desc{
+            .color_attachment_formats = color_formats,
+            .depth_attachment_format = none(),
+            .stencil_attachment_format = none(),
+            .vertex_shader = tempest::move(vert_source),
+            .tessellation_control_shader = {},
+            .tessellation_evaluation_shader = {},
+            .geometry_shader = {},
+            .fragment_shader = tempest::move(frag_source),
+            .input_assembly =
+                {
+                    .topology = rhi::primitive_topology::triangle_list,
+                },
+            .vertex_input = none(),
+            .tessellation = none(),
+            .multisample =
+                {
+                    .sample_count = rhi::image_sample_count::sample_count_1,
+                    .sample_shading = none(),
+                    .alpha_to_coverage = false,
+                    .alpha_to_one = false,
+                },
+            .rasterization =
+                {
+                    .depth_clamp_enable = false,
+                    .rasterizer_discard_enable = false,
+                    .polygon_mode = rhi::polygon_mode::fill,
+                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
+                    .depth_bias = none(),
+                    .line_width = 1.0f,
+                },
+            .depth_stencil =
+                {
+                    .depth =
+                        rhi::depth_test{
+                            .write_enable = false,
+                            .compare_op = rhi::compare_op::greater_equal,
+                            .depth_bounds_test_enable = false,
+                            .min_depth_bounds = 0.0f,
+                            .max_depth_bounds = 1.0f,
+                        },
+                    .stencil = none(),
+                },
+            .color_blend =
+                {
+                    .attachments = tempest::move(blending),
+                    .blend_constants = {},
+                },
+            .layout = pipeline_layout,
+            .name = "MBOIT Resolve Pass Pipeline",
+        };
+
+        auto pipeline = _device->create_graphics_pipeline(pipeline_desc);
+
+        auto scene_descriptor_buffer = builder.create_per_frame_buffer({
+            .size = _device->get_descriptor_set_layout_size(scene_descriptors),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "MBOIT Resolve Pass Scene Descriptor Set Buffer",
+        });
+
+        auto shadow_descriptor_buffer = builder.create_per_frame_buffer({
+            .size = _device->get_descriptor_set_layout_size(shadow_descriptors),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "MBOIT Resolve Pass Shadow Descriptor Set Buffer",
+        });
+
+        builder.create_graphics_pass(
+            "MBOIT Resolve Pass",
+            [&](graphics_task_builder& task) {
+                task.read(_pass_output_resource_handles.depth_prepass.depth, rhi::image_layout::depth_stencil_read_only,
+                          make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                          make_enum_mask(rhi::memory_access::depth_stencil_attachment_read));
+
+                task.read(_global_resources.graph_vertex_pull_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_mesh_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_object_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_instance_buffer, make_enum_mask(rhi::pipeline_stage::vertex_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_material_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_global_resources.graph_light_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.read(_pass_output_resource_handles.light_culling.light_grid,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.light_culling.light_grid_ranges,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.light_culling.light_indices,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.write(transparency_accumulator, rhi::image_layout::color_attachment,
+                           make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                           make_enum_mask(rhi::memory_access::color_attachment_write));
+
+                task.write(moments_buffer, rhi::image_layout::general,
+                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                           make_enum_mask(rhi::memory_access::shader_write, rhi::memory_access::shader_read));
+                task.write(zeroth_moment_buffer, rhi::image_layout::general,
+                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                           make_enum_mask(rhi::memory_access::shader_write, rhi::memory_access::shader_read));
+            },
+            &_mboit_resolve_pass_task, this, scene_descriptor_buffer, shadow_descriptor_buffer);
+
+        return {
+            .transparency_accumulation = transparency_accumulator,
+            .moments_buffer = moments_buffer,
+            .zeroth_moment_buffer = zeroth_moment_buffer,
+            .pipeline = pipeline,
+        };
     }
 
     void pbr_frame_graph::_release_mboit_resolve_pass(mboit_resolve_pass_outputs& outputs)
     {
+        _device->destroy_graphics_pipeline(outputs.pipeline);
+
         outputs = {};
     }
 
     pbr_frame_graph::mboit_blend_pass_outputs pbr_frame_graph::_add_mboit_blend_pass(graph_builder& builder)
     {
-        return {};
+        auto hdr_color = _pass_output_resource_handles.pbr_opaque.hdr_color;
+
+        // Bindings
+        // 0 - Moments Buffer
+        // 1 - Zeroth Moment Buffer
+        // 2 - Transparency Accumulation Buffer
+        // 3 - Linear Sampler
+
+        auto descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::storage_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::storage_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        descriptor_set_bindings.push_back({
+            .binding_index = 3,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto descriptor_set = _device->create_descriptor_set_layout(
+            descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::push));
+
+        auto descriptor_sets = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptor_sets.push_back(descriptor_set);
+
+        auto pipeline_layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptor_sets,
+            .push_constants = {},
+        });
+
+        auto vert_source = core::read_bytes("assets/shaders/pbr_oit_blend.vert.spv");
+        auto frag_source = core::read_bytes("assets/shaders/pbr_oit_blend.frag.spv");
+
+        auto color_formats = vector<rhi::image_format>();
+        color_formats.push_back(_cfg.hdr_color_format);
+
+        auto blending = vector<rhi::color_blend_attachment>();
+        blending.push_back(rhi::color_blend_attachment{
+            .blend_enable = true,
+            .src_color_blend_factor = rhi::blend_factor::src_alpha,
+            .dst_color_blend_factor = rhi::blend_factor::one_minus_src_alpha,
+            .color_blend_op = rhi::blend_op::add,
+            .src_alpha_blend_factor = rhi::blend_factor::one,
+            .dst_alpha_blend_factor = rhi::blend_factor::one_minus_src_alpha,
+            .alpha_blend_op = rhi::blend_op::add,
+        });
+
+        auto pipeline_desc = rhi::graphics_pipeline_desc{
+            .color_attachment_formats = color_formats,
+            .depth_attachment_format = none(),
+            .stencil_attachment_format = none(),
+            .vertex_shader = tempest::move(vert_source),
+            .tessellation_control_shader = {},
+            .tessellation_evaluation_shader = {},
+            .geometry_shader = {},
+            .fragment_shader = tempest::move(frag_source),
+            .input_assembly =
+                {
+                    .topology = rhi::primitive_topology::triangle_list,
+                },
+            .vertex_input = none(),
+            .tessellation = none(),
+            .multisample =
+                {
+                    .sample_count = rhi::image_sample_count::sample_count_1,
+                    .sample_shading = none(),
+                    .alpha_to_coverage = false,
+                    .alpha_to_one = false,
+                },
+            .rasterization =
+                {
+                    .depth_clamp_enable = false,
+                    .rasterizer_discard_enable = false,
+                    .polygon_mode = rhi::polygon_mode::fill,
+                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
+                    .depth_bias = none(),
+                    .line_width = 1.0f,
+                },
+            .depth_stencil =
+                {
+                    .depth = none(),
+                    .stencil = none(),
+                },
+            .color_blend =
+                {
+                    .attachments = tempest::move(blending),
+                    .blend_constants = {},
+                },
+            .layout = pipeline_layout,
+            .name = "MBOIT Blend Pass Pipeline",
+        };
+
+        auto pipeline = _device->create_graphics_pipeline(pipeline_desc);
+
+        builder.create_graphics_pass(
+            "MBOIT Blend Pass",
+            [&](graphics_task_builder& task) {
+                task.read(_pass_output_resource_handles.mboit_resolve.transparency_accumulation,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.mboit_resolve.moments_buffer, rhi::image_layout::general,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.mboit_resolve.zeroth_moment_buffer, rhi::image_layout::general,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.read_write(hdr_color, rhi::image_layout::color_attachment,
+                                make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                                make_enum_mask(rhi::memory_access::color_attachment_read),
+                                make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                                make_enum_mask(rhi::memory_access::color_attachment_write));
+            },
+            &_mboit_blend_pass_task, this);
+
+        return {
+            .hdr_color = hdr_color,
+            .pipeline = pipeline,
+        };
     }
 
     void pbr_frame_graph::_release_mboit_blend_pass(mboit_blend_pass_outputs& outputs)
     {
+        _device->destroy_graphics_pipeline(outputs.pipeline);
+
         outputs = {};
     }
 
     pbr_frame_graph::tonemapping_pass_outputs pbr_frame_graph::_add_tonemapping_pass(graph_builder& builder)
     {
-        return {};
+        auto tonemapped_buffer = builder.create_render_target({
+            .format = _cfg.tonemapped_color_format,
+            .type = rhi::image_type::image_2d,
+            .width = _cfg.render_target_width,
+            .height = _cfg.render_target_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .name = "MBOIT Moments Target",
+        });
+
+        auto descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        auto descriptor_set = _device->create_descriptor_set_layout(
+            descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::push));
+
+        auto descriptor_sets = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptor_sets.push_back(descriptor_set);
+
+        auto pipeline_layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptor_sets,
+            .push_constants = {},
+        });
+
+        auto vert_source = core::read_bytes("assets/shaders/tonemap.vert.spv");
+        auto frag_source = core::read_bytes("assets/shaders/tonemap.frag.spv");
+
+        auto color_formats = vector<rhi::image_format>();
+        color_formats.push_back(_cfg.tonemapped_color_format);
+
+        auto blending = vector<rhi::color_blend_attachment>();
+        blending.push_back({
+            .blend_enable = false,
+            .src_color_blend_factor = rhi::blend_factor::one,
+            .dst_color_blend_factor = rhi::blend_factor::zero,
+            .color_blend_op = rhi::blend_op::add,
+            .src_alpha_blend_factor = rhi::blend_factor::one,
+            .dst_alpha_blend_factor = rhi::blend_factor::zero,
+            .alpha_blend_op = rhi::blend_op::add,
+        });
+
+        auto pipeline_desc = rhi::graphics_pipeline_desc{
+            .color_attachment_formats = color_formats,
+            .depth_attachment_format = none(),
+            .stencil_attachment_format = none(),
+            .vertex_shader = tempest::move(vert_source),
+            .tessellation_control_shader = {},
+            .tessellation_evaluation_shader = {},
+            .geometry_shader = {},
+            .fragment_shader = tempest::move(frag_source),
+            .input_assembly =
+                {
+                    .topology = rhi::primitive_topology::triangle_list,
+                },
+            .vertex_input = none(),
+            .tessellation = none(),
+            .multisample =
+                {
+                    .sample_count = rhi::image_sample_count::sample_count_1,
+                    .sample_shading = none(),
+                    .alpha_to_coverage = false,
+                    .alpha_to_one = false,
+                },
+            .rasterization =
+                {
+                    .depth_clamp_enable = false,
+                    .rasterizer_discard_enable = false,
+                    .polygon_mode = rhi::polygon_mode::fill,
+                    .cull_mode = make_enum_mask(rhi::cull_mode::back),
+                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
+                    .depth_bias = none(),
+                    .line_width = 1.0f,
+                },
+            .depth_stencil =
+                {
+                    .depth = none(),
+                    .stencil = none(),
+                },
+            .color_blend =
+                {
+                    .attachments = tempest::move(blending),
+                    .blend_constants = {},
+                },
+            .layout = pipeline_layout,
+            .name = "Tonemapping Pass Pipeline",
+        };
+
+        auto pipeline = _device->create_graphics_pipeline(pipeline_desc);
+
+        builder.create_graphics_pass(
+            "Tonemapping Pass",
+            [&](graphics_task_builder& task) {
+                task.read(_pass_output_resource_handles.mboit_blend.hdr_color, rhi::image_layout::shader_read_only,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
+                task.write(tonemapped_buffer, rhi::image_layout::color_attachment,
+                           make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                           make_enum_mask(rhi::memory_access::color_attachment_write));
+            },
+            &_tonemapping_pass_task, this);
+
+        return {
+            .tonemapped_color = tonemapped_buffer,
+            .pipeline = pipeline,
+        };
     }
 
     void pbr_frame_graph::_release_tonemapping_pass(tonemapping_pass_outputs& outputs)
     {
+        _device->destroy_graphics_pipeline(outputs.pipeline);
+
         outputs = {};
     }
 
@@ -994,20 +2498,57 @@ namespace tempest::graphics
     {
     }
 
-    void pbr_frame_graph::_light_culling_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self,
-                                                   graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors)
+    void pbr_frame_graph::_light_culling_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self)
     {
     }
 
     void pbr_frame_graph::_shadow_map_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                                 graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors)
     {
+        auto render_pass_begin = rhi::work_queue::render_pass_info{};
+        render_pass_begin.name = "Shadow Map Pass";
+        render_pass_begin.width = self->_cfg.shadows.shadow_map_width;
+        render_pass_begin.height = self->_cfg.shadows.shadow_map_height;
+        render_pass_begin.layers = 1;
+        render_pass_begin.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = self->_executor->get_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
+            .layout = rhi::image_layout::depth,
+            .clear_depth = 0.0f,
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        };
+
+        ctx.begin_render_pass(render_pass_begin);
+        ctx.end_render_pass();
     }
 
     void pbr_frame_graph::_pbr_opaque_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                                 graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors,
                                                 graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_descriptors)
     {
+        auto render_pass_begin = rhi::work_queue::render_pass_info{};
+        render_pass_begin.name = "PBR Opaque Pass";
+        render_pass_begin.width = self->_cfg.render_target_width;
+        render_pass_begin.height = self->_cfg.render_target_height;
+        render_pass_begin.layers = 1;
+        render_pass_begin.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = self->_executor->get_image(self->_pass_output_resource_handles.depth_prepass.depth),
+            .layout = rhi::image_layout::depth_stencil_read_only,
+            .clear_depth = 0.0f, // IGNORED
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::none,
+        };
+
+        render_pass_begin.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = self->_executor->get_image(self->_pass_output_resource_handles.pbr_opaque.hdr_color),
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        ctx.begin_render_pass(render_pass_begin);
+        ctx.end_render_pass();
     }
 
     void pbr_frame_graph::_mboit_gather_pass_task(
@@ -1015,6 +2556,30 @@ namespace tempest::graphics
         graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors,
         graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_descriptors)
     {
+        auto render_pass_begin = rhi::work_queue::render_pass_info{};
+        render_pass_begin.name = "MBOIT Gather Pass";
+        render_pass_begin.width = self->_cfg.render_target_width;
+        render_pass_begin.height = self->_cfg.render_target_height;
+        render_pass_begin.layers = 1;
+        render_pass_begin.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = self->_executor->get_image(self->_pass_output_resource_handles.depth_prepass.depth),
+            .layout = rhi::image_layout::depth_stencil_read_only,
+            .clear_depth = 0.0f,
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::none,
+        };
+
+        render_pass_begin.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image =
+                self->_executor->get_image(self->_pass_output_resource_handles.mboit_gather.transparency_accumulation),
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 0.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::dont_care,
+        });
+
+        ctx.begin_render_pass(render_pass_begin);
+        ctx.end_render_pass();
     }
 
     void pbr_frame_graph::_mboit_resolve_pass_task(
@@ -1022,14 +2587,67 @@ namespace tempest::graphics
         graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors,
         graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_descriptors)
     {
+        auto render_pass_begin = rhi::work_queue::render_pass_info{};
+        render_pass_begin.name = "MBOIT Resolve Pass";
+        render_pass_begin.width = self->_cfg.render_target_width;
+        render_pass_begin.height = self->_cfg.render_target_height;
+        render_pass_begin.layers = 1;
+        render_pass_begin.depth_attachment = rhi::work_queue::depth_attachment_info{
+            .image = self->_executor->get_image(self->_pass_output_resource_handles.depth_prepass.depth),
+            .layout = rhi::image_layout::depth_stencil_read_only,
+            .clear_depth = 0.0f,
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::none,
+        };
+
+        render_pass_begin.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image =
+                self->_executor->get_image(self->_pass_output_resource_handles.mboit_resolve.transparency_accumulation),
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 0.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        ctx.begin_render_pass(render_pass_begin);
+        ctx.end_render_pass();
     }
 
-    void pbr_frame_graph::_mboit_blend_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
-                                                 graph_resource_handle<rhi::rhi_handle_type::buffer> oit_descriptors)
+    void pbr_frame_graph::_mboit_blend_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self)
     {
+        auto render_pass_begin = rhi::work_queue::render_pass_info{};
+        render_pass_begin.name = "MBOIT Blend Pass";
+        render_pass_begin.width = self->_cfg.render_target_width;
+        render_pass_begin.height = self->_cfg.render_target_height;
+        render_pass_begin.layers = 1;
+        render_pass_begin.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = self->_executor->get_image(self->_pass_output_resource_handles.pbr_opaque.hdr_color),
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::load,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        ctx.begin_render_pass(render_pass_begin);
+        ctx.end_render_pass();
     }
 
     void pbr_frame_graph::_tonemapping_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self)
     {
+        auto render_pass_begin = rhi::work_queue::render_pass_info{};
+        render_pass_begin.name = "Tonemapping Pass";
+        render_pass_begin.width = self->_cfg.render_target_width;
+        render_pass_begin.height = self->_cfg.render_target_height;
+        render_pass_begin.layers = 1;
+        render_pass_begin.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+            .image = self->_executor->get_image(self->_pass_output_resource_handles.tonemapping.tonemapped_color),
+            .layout = rhi::image_layout::color_attachment,
+            .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+            .load_op = rhi::work_queue::load_op::clear,
+            .store_op = rhi::work_queue::store_op::store,
+        });
+
+        ctx.begin_render_pass(render_pass_begin);
+        ctx.end_render_pass();
     }
 } // namespace tempest::graphics

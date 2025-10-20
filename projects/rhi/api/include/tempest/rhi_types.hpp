@@ -467,6 +467,7 @@ namespace tempest::rhi
         fragment_shader = 0x00200,
         early_fragment_tests = 0x00400,
         late_fragment_tests = 0x00800,
+        all_fragment_tests = (early_fragment_tests | late_fragment_tests),
         color_attachment_output = 0x01000,
         // Compute commands
         compute_shader = 0x02000,

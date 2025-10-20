@@ -215,6 +215,7 @@ namespace tempest::rhi
         {
             store,
             dont_care,
+            none,
         };
 
         struct color_attachment_info

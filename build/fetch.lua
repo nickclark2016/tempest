@@ -27,9 +27,9 @@ local slang_dep_path = path.join(_MAIN_SCRIPT_DIR, 'dependencies/slang')
 
 local function fetch_slang(cache_dir)
     if os.target() == 'windows' then
-        local slang_zip_path = path.join(cache_dir, 'slang-2025.6.2-win64.zip')
-        local downloaded = fetch_if_not_exists('https://github.com/shader-slang/slang/releases/download/v2025.6.2/slang-2025.6.2-windows-x86_64.zip', slang_zip_path)
-                
+        local slang_zip_path = path.join(cache_dir, 'slang-2025.19.1-win64.zip')
+        local downloaded = fetch_if_not_exists('https://github.com/shader-slang/slang/releases/download/v2025.19.1/slang-2025.19.1-windows-x86_64.zip', slang_zip_path)
+
         if downloaded then
             zip.extract(slang_zip_path, slang_dep_path)
             
@@ -48,8 +48,8 @@ local function fetch_slang(cache_dir)
     end
 
     if os.target() == 'linux' then
-        local slang_zip_path = path.join(cache_dir, 'slang-2025.6.2-linux-64.zip')
-        local downloaded = fetch_if_not_exists('https://github.com/shader-slang/slang/releases/download/v2025.6.2/slang-2025.6.2-linux-x86_64.zip', slang_zip_path)
+        local slang_zip_path = path.join(cache_dir, 'slang-2025.19.1-linux-64.zip')
+        local downloaded = fetch_if_not_exists('https://github.com/shader-slang/slang/releases/download/v2025.19.1/slang-2025.19.1-linux-x86_64.zip', slang_zip_path)
 
         if downloaded then
             zip.extract(slang_zip_path, slang_dep_path)

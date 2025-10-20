@@ -1,3 +1,4 @@
+#include <tempest/assert.hpp>
 #include <tempest/frame_graph.hpp>
 
 // TODO: Implement deque + queue
@@ -650,12 +651,12 @@ namespace tempest::graphics
             const auto& consumer = _passes[consumer_index];
 
             // Build a set of resource handles the consumer writes (for read/write coalescing)
-            auto consumer_write_handles = vector<uint64_t>();
+            auto consumer_write_handles = vector<base_graph_resource_handle>();
             for (const auto& a : consumer.resource_accesses)
             {
                 if (is_write_access(a.accesses))
                 {
-                    consumer_write_handles.push_back(a.handle.handle);
+                    consumer_write_handles.push_back(a.handle);
                 }
             }
 
@@ -663,8 +664,9 @@ namespace tempest::graphics
             {
                 // If the consumer both reads and writes this resource, *skip* the read access
                 if (is_read_access(access.accesses) &&
-                    tempest::find(consumer_write_handles.cbegin(), consumer_write_handles.cend(),
-                                  access.handle.handle) != consumer_write_handles.cend())
+                    tempest::find_if(consumer_write_handles.cbegin(), consumer_write_handles.cend(),
+                                     [&](const auto& a) { return a.handle == access.handle.handle; }) !=
+                        consumer_write_handles.cend())
                 {
                     continue;
                 }
@@ -674,7 +676,9 @@ namespace tempest::graphics
                 });
 
                 if (resource_it == _resources.cend())
-                    continue;
+                {
+                    continue; // resource not found
+                }
 
                 // For all earlier producers in the live pass list
                 for (size_t producer_index : dep_graph.passes)
@@ -1540,7 +1544,7 @@ namespace tempest::graphics
 
             for (const auto& pass : submission.passes)
             {
-                auto images_barriers = vector<rhi::work_queue::image_barrier>{};
+                auto image_barriers = vector<rhi::work_queue::image_barrier>{};
                 auto buffer_barriers = vector<rhi::work_queue::buffer_barrier>{};
 
                 for (const auto& resource : pass.accesses)
@@ -1579,19 +1583,33 @@ namespace tempest::graphics
                             const auto image_it = _all_images.find(resource.handle.handle);
                             const auto& img_usage = tempest::get<image_usage>(prior_usage.usage);
 
-                            const auto barrier = rhi::work_queue::image_barrier{
-                                .image = image_it->second,
-                                .old_layout = img_usage.layout,
-                                .new_layout = resource.layout,
-                                .src_stages = prior_usage.stages,
-                                .src_access = prior_usage.accesses,
-                                .dst_stages = resource.stages,
-                                .dst_access = resource.accesses,
-                                .src_queue = src_queue,
-                                .dst_queue = dst_queue,
-                            };
+                            auto existing_barrier_it = tempest::find_if(
+                                image_barriers.begin(), image_barriers.end(),
+                                [&](const auto& barrier) { return barrier.image.id == image_it->second.id; });
+                            if (existing_barrier_it != image_barriers.end())
+                            {
+                                // Update existing barrier
+                                TEMPEST_ASSERT(existing_barrier_it->new_layout == resource.layout);
+                                existing_barrier_it->dst_stages |= resource.stages;
+                                existing_barrier_it->dst_access |= resource.accesses;
+                            }
+                            else
+                            {
+                                // Create new barrier
+                                const auto barrier = rhi::work_queue::image_barrier{
+                                    .image = image_it->second,
+                                    .old_layout = img_usage.layout,
+                                    .new_layout = resource.layout,
+                                    .src_stages = prior_usage.stages,
+                                    .src_access = prior_usage.accesses,
+                                    .dst_stages = resource.stages,
+                                    .dst_access = resource.accesses,
+                                    .src_queue = src_queue,
+                                    .dst_queue = dst_queue,
+                                };
 
-                            images_barriers.push_back(barrier);
+                                image_barriers.push_back(barrier);
+                            }
                         }
                         else if (res_type == rhi::rhi_handle_type::render_surface)
                         {
@@ -1606,20 +1624,35 @@ namespace tempest::graphics
                             {
                                 const auto& img_usage = tempest::get<image_usage>(prior_usage.usage);
 
-                                // Add image layout transition from undefined to first usage
-                                const auto barrier = rhi::work_queue::image_barrier{
-                                    .image = render_surface_info_it->second.image,
-                                    .old_layout = img_usage.layout,
-                                    .new_layout = resource.layout,
-                                    .src_stages = prior_usage.stages,
-                                    .src_access = prior_usage.accesses,
-                                    .dst_stages = resource.stages,
-                                    .dst_access = resource.accesses,
-                                    .src_queue = src_queue,
-                                    .dst_queue = dst_queue,
-                                };
+                                auto existing_barrier_it = tempest::find_if(
+                                    image_barriers.begin(), image_barriers.end(), [&](const auto& barrier) {
+                                        return barrier.image.id == render_surface_info_it->second.image.id;
+                                    });
 
-                                images_barriers.push_back(barrier);
+                                if (existing_barrier_it != image_barriers.end())
+                                {
+                                    // Update existing barrier
+                                    TEMPEST_ASSERT(existing_barrier_it->new_layout == resource.layout);
+                                    existing_barrier_it->dst_stages |= resource.stages;
+                                    existing_barrier_it->dst_access |= resource.accesses;
+                                }
+                                else
+                                {
+                                    // Add image layout transition from undefined to first usage
+                                    const auto barrier = rhi::work_queue::image_barrier{
+                                        .image = render_surface_info_it->second.image,
+                                        .old_layout = img_usage.layout,
+                                        .new_layout = resource.layout,
+                                        .src_stages = prior_usage.stages,
+                                        .src_access = prior_usage.accesses,
+                                        .dst_stages = resource.stages,
+                                        .dst_access = resource.accesses,
+                                        .src_queue = src_queue,
+                                        .dst_queue = dst_queue,
+                                    };
+
+                                    image_barriers.push_back(barrier);
+                                }
                             }
                         }
                         else if (res_type == rhi::rhi_handle_type::buffer)
@@ -1653,19 +1686,31 @@ namespace tempest::graphics
                                 range = numeric_limits<size_t>::max();
                             }
 
-                            const auto barrier = rhi::work_queue::buffer_barrier{
-                                .buffer = buffer_it->second,
-                                .src_stages = prior_usage.stages,
-                                .src_access = prior_usage.accesses,
-                                .dst_stages = resource.stages,
-                                .dst_access = resource.accesses,
-                                .src_queue = src_queue,
-                                .dst_queue = dst_queue,
-                                .offset = offset,
-                                .size = range,
-                            };
+                            const auto existing_barrier_it = tempest::find_if(
+                                buffer_barriers.begin(), buffer_barriers.end(),
+                                [&](const auto& barrier) { return barrier.buffer.id == buffer_it->second.id; });
+                            if (existing_barrier_it != buffer_barriers.end())
+                            {
+                                // Update existing barrier
+                                existing_barrier_it->dst_stages |= resource.stages;
+                                existing_barrier_it->dst_access |= resource.accesses;
+                            }
+                            else
+                            {
+                                const auto barrier = rhi::work_queue::buffer_barrier{
+                                    .buffer = buffer_it->second,
+                                    .src_stages = prior_usage.stages,
+                                    .src_access = prior_usage.accesses,
+                                    .dst_stages = resource.stages,
+                                    .dst_access = resource.accesses,
+                                    .src_queue = src_queue,
+                                    .dst_queue = dst_queue,
+                                    .offset = offset,
+                                    .size = range,
+                                };
 
-                            buffer_barriers.push_back(barrier);
+                                buffer_barriers.push_back(barrier);
+                            }
                         }
                     }
                     else
@@ -1692,7 +1737,7 @@ namespace tempest::graphics
                                 .dst_queue = nullptr,
                             };
 
-                            images_barriers.push_back(barrier);
+                            image_barriers.push_back(barrier);
                         }
                         else if (res_type == rhi::rhi_handle_type::render_surface)
                         {
@@ -1720,13 +1765,13 @@ namespace tempest::graphics
                                     .dst_queue = nullptr,
                                 };
 
-                                images_barriers.push_back(barrier);
+                                image_barriers.push_back(barrier);
                             }
                         }
                     }
                 }
 
-                queue.pipeline_barriers(command_list, images_barriers, buffer_barriers);
+                queue.pipeline_barriers(command_list, image_barriers, buffer_barriers);
 
                 // Execute the pass
                 switch (pass.type)

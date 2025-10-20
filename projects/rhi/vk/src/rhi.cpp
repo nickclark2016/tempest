@@ -723,6 +723,8 @@ namespace tempest::rhi::vk
                 return VK_ATTACHMENT_STORE_OP_STORE;
             case rhi::work_queue::store_op::dont_care:
                 return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            case rhi::work_queue::store_op::none:
+                return VK_ATTACHMENT_STORE_OP_NONE;
             }
             unreachable();
         }
@@ -4945,7 +4947,7 @@ namespace tempest::rhi::vk
                     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
                     .pNext = nullptr,
                     .storageBuffer16BitAccess = VK_TRUE,
-                    .uniformAndStorageBuffer16BitAccess = VK_FALSE,
+                    .uniformAndStorageBuffer16BitAccess = VK_TRUE, // Switch to false when Slang fixes #8760
                     .storagePushConstant16 = VK_FALSE,
                     .storageInputOutput16 = VK_FALSE,
                     .multiview = VK_FALSE,

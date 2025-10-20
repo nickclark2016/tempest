@@ -16,8 +16,7 @@ namespace tempest::graphics
     {
         uint32_t render_target_width;
         uint32_t render_target_height;
-        uint32_t shadow_map_width;
-        uint32_t shadow_map_height;
+
         rhi::image_format hdr_color_format;
         rhi::image_format depth_format;
         rhi::image_format tonemapped_color_format;
@@ -28,6 +27,7 @@ namespace tempest::graphics
         uint32_t staging_buffer_size_per_frame;
         uint32_t max_object_count;
         uint32_t max_lights;
+        uint32_t max_bindless_textures;
 
         float max_anisotropy;
 
@@ -36,7 +36,15 @@ namespace tempest::graphics
             uint32_t cluster_count_x;
             uint32_t cluster_count_y;
             uint32_t cluster_count_z;
+            uint32_t max_lights_per_cluster;
         } light_clustering;
+
+        struct
+        {
+            uint32_t shadow_map_width;
+            uint32_t shadow_map_height;
+            uint32_t max_shadow_casting_lights;
+        } shadows;
     };
 
     struct pbr_frame_graph_inputs
@@ -102,6 +110,7 @@ namespace tempest::graphics
         {
             graph_resource_handle<rhi::rhi_handle_type::image> shadow_map_megatexture;
             graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_data;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> directional_shadow_pipeline;
         };
 
         struct light_clustering_pass_outputs
@@ -112,15 +121,17 @@ namespace tempest::graphics
 
         struct light_culling_pass_outputs
         {
-            graph_resource_handle<rhi::rhi_handle_type::buffer> light_cluster_bounds;
-            graph_resource_handle<rhi::rhi_handle_type::buffer> light_index_list;
             graph_resource_handle<rhi::rhi_handle_type::buffer> light_grid;
+            graph_resource_handle<rhi::rhi_handle_type::buffer> light_grid_ranges;
+            graph_resource_handle<rhi::rhi_handle_type::buffer> light_indices;
             graph_resource_handle<rhi::rhi_handle_type::buffer> light_index_count;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline;
         };
 
         struct pbr_opaque_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> hdr_color;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
         };
 
         struct mboit_gather_pass_outputs
@@ -128,6 +139,7 @@ namespace tempest::graphics
             graph_resource_handle<rhi::rhi_handle_type::image> transparency_accumulation;
             graph_resource_handle<rhi::rhi_handle_type::image> moments_buffer;
             graph_resource_handle<rhi::rhi_handle_type::image> zeroth_moment_buffer;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
         };
 
         struct mboit_resolve_pass_outputs
@@ -135,21 +147,19 @@ namespace tempest::graphics
             graph_resource_handle<rhi::rhi_handle_type::image> transparency_accumulation;
             graph_resource_handle<rhi::rhi_handle_type::image> moments_buffer;
             graph_resource_handle<rhi::rhi_handle_type::image> zeroth_moment_buffer;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
         };
 
         struct mboit_blend_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> hdr_color;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
         };
 
         struct tonemapping_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> tonemapped_color;
-        };
-
-        struct tonemap_pass_outputs
-        {
-            graph_resource_handle<rhi::rhi_handle_type::image> tonemapped_color;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
         };
 
         struct
@@ -236,8 +246,7 @@ namespace tempest::graphics
                                     graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors);
         static void _ssao_blur_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
         static void _light_clustering_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self);
-        static void _light_culling_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self,
-                                             graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors);
+        static void _light_culling_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self);
         static void _shadow_map_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                           graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors);
         static void _pbr_opaque_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
@@ -249,8 +258,7 @@ namespace tempest::graphics
         static void _mboit_resolve_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                              graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors,
                                              graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_descriptors);
-        static void _mboit_blend_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
-                                           graph_resource_handle<rhi::rhi_handle_type::buffer> oit_descriptors);
+        static void _mboit_blend_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
         static void _tonemapping_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
 
         enum class material_type : uint32_t
@@ -398,6 +406,18 @@ namespace tempest::graphics
             math::vec4<float> screen_bounds;
             math::vec4<uint32_t> workgroup_count_tile_size_px;
             uint32_t light_count;
+        };
+
+        struct shadow_map_parameter
+        {
+            math::mat4<float> light_proj_matrix;
+            math::vec4<float> shadow_map_region; // x, y, w, h (normalized)
+            float cascade_split_far;
+        };
+
+        struct directional_shadow_pass_constants
+        {
+            math::mat4<float> light_vp;
         };
     };
 } // namespace tempest::graphics

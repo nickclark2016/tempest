@@ -123,8 +123,6 @@ int main()
                                            {
                                                .render_target_width = 1280,
                                                .render_target_height = 720,
-                                               .shadow_map_width = 2048,
-                                               .shadow_map_height = 2048,
                                                .hdr_color_format = tempest::rhi::image_format::rgba16_float,
                                                .depth_format = tempest::rhi::image_format::d32_float,
                                                .tonemapped_color_format = tempest::rhi::image_format::bgra8_srgb,
@@ -134,12 +132,20 @@ int main()
                                                .staging_buffer_size_per_frame = 16 * 1024 * 1024,
                                                .max_object_count = 256 * 1024,
                                                .max_lights = 256,
+                                               .max_bindless_textures = 1024,
                                                .max_anisotropy = 16.0f,
                                                .light_clustering =
                                                    {
                                                        .cluster_count_x = 16,
                                                        .cluster_count_y = 9,
                                                        .cluster_count_z = 24,
+                                                       .max_lights_per_cluster = 128,
+                                                   },
+                                               .shadows =
+                                                   {
+                                                       .shadow_map_width = 16384,
+                                                       .shadow_map_height = 8192,
+                                                       .max_shadow_casting_lights = 16,
                                                    },
                                            },
                                            {
