@@ -91,6 +91,8 @@ namespace tempest::graphics
             graph_resource_handle<rhi::rhi_handle_type::image> depth;
             graph_resource_handle<rhi::rhi_handle_type::image> encoded_normals;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> scene_descriptor_layout;
         };
 
         struct ssao_pass_outputs
@@ -328,7 +330,7 @@ namespace tempest::graphics
             point = 1,
         };
 
-        struct alignas(16) light
+        struct light
         {
             math::vec4<float> color_intensity;
             math::vec4<float> position_falloff;
@@ -348,7 +350,7 @@ namespace tempest::graphics
             math::vec3<float> position;
         };
 
-        struct alignas(16) scene_constants
+        struct scene_constants
         {
             static constexpr size_t ssao_kernel_size = 64;
 

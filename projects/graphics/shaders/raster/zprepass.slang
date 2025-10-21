@@ -3,12 +3,8 @@ import "../common/consts";
 import "../common/lighting";
 import "../common/material";
 import "../common/mesh";
+import "../common/scene";
 import "../common/vertex_pull";
-
-struct SceneGlobals {
-    Camera camera;
-    float2 screen_size;
-};
 
 struct VertexOutput {
     float4 position    : SV_Position;
@@ -25,7 +21,7 @@ struct FragmentOutput {
     float2 encoded_normal : SV_Target0;
 };
 
-[vk_binding(0, 0)] ConstantBuffer<SceneGlobals, Std430DataLayout> scene;
+[vk_binding(0, 0)] ConstantBuffer<SceneGlobals> scene;
 [vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
 [vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
 [vk_binding(3, 0)] StructuredBuffer<ObjectData> objects;

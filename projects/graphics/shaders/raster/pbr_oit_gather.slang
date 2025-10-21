@@ -11,6 +11,7 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
 
 [shader("fragment")]
 [earlydepthstencil]
+[require(spvFragmentShaderPixelInterlockEXT)]
 OitFragmentOutput FSMain(VertexOutput input) : OitFragmentOutput {
     var frag = compute_fragment(input, ambient_occlusion);
 

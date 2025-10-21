@@ -179,6 +179,53 @@ namespace tempest::graphics
         });
 
         _global_resources.graph_per_frame_staging_buffer = staging_buffer;
+
+        // Create samplers
+        auto linear_sampler_desc = rhi::sampler_desc{
+            .mag = rhi::filter::linear,
+            .min = rhi::filter::linear,
+            .mipmap = rhi::mipmap_mode::linear,
+            .address_u = rhi::address_mode::repeat,
+            .address_v = rhi::address_mode::repeat,
+            .address_w = rhi::address_mode::repeat,
+            .mip_lod_bias = 0.0f,
+            .min_lod = 0.0f,
+            .max_lod = numeric_limits<float>::max(),
+            .max_anisotropy = 1.0f,
+            .compare = rhi::compare_op::never,
+            .name = "Linear Sampler",
+        };
+
+        _global_resources.linear_sampler = _device->create_sampler(linear_sampler_desc);
+
+        auto linear_with_aniso_sampler_desc = linear_sampler_desc;
+        linear_with_aniso_sampler_desc.max_anisotropy = _cfg.max_anisotropy;
+        linear_with_aniso_sampler_desc.name = "Linear with Anisotropy Sampler";
+
+        _global_resources.linear_with_aniso_sampler = _device->create_sampler(linear_with_aniso_sampler_desc);
+
+        auto point_sampler_desc = rhi::sampler_desc{
+            .mag = rhi::filter::nearest,
+            .min = rhi::filter::nearest,
+            .mipmap = rhi::mipmap_mode::nearest,
+            .address_u = rhi::address_mode::repeat,
+            .address_v = rhi::address_mode::repeat,
+            .address_w = rhi::address_mode::repeat,
+            .mip_lod_bias = 0.0f,
+            .min_lod = 0.0f,
+            .max_lod = numeric_limits<float>::max(),
+            .max_anisotropy = 1.0f,
+            .compare = rhi::compare_op::never,
+            .name = "Point Sampler",
+        };
+
+        _global_resources.point_sampler = _device->create_sampler(point_sampler_desc);
+        
+        auto point_with_aniso_sampler_desc = point_sampler_desc;
+        point_with_aniso_sampler_desc.max_anisotropy = _cfg.max_anisotropy;
+        point_with_aniso_sampler_desc.name = "Point with Anisotropy Sampler";
+
+        _global_resources.point_with_aniso_sampler = _device->create_sampler(point_with_aniso_sampler_desc);
     }
 
     void pbr_frame_graph::_release_global_resources()
@@ -186,6 +233,11 @@ namespace tempest::graphics
         _device->destroy_buffer(_global_resources.vertex_pull_buffer);
         _device->destroy_buffer(_global_resources.mesh_buffer);
         _device->destroy_buffer(_global_resources.material_buffer);
+
+        _device->destroy_sampler(_global_resources.linear_sampler);
+        _device->destroy_sampler(_global_resources.linear_with_aniso_sampler);
+        _device->destroy_sampler(_global_resources.point_sampler);
+        _device->destroy_sampler(_global_resources.point_with_aniso_sampler);
     }
 
     pbr_frame_graph::frame_upload_pass_outputs pbr_frame_graph::_add_frame_upload_pass(graph_builder& builder)
@@ -324,10 +376,10 @@ namespace tempest::graphics
 
         auto descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(scene_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "Scene Descriptor Set Buffer",
         });
 
@@ -430,6 +482,8 @@ namespace tempest::graphics
             .depth = depth,
             .encoded_normals = encoded_normals,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+            .scene_descriptor_layout = scene_descriptors,
         };
     }
 
@@ -2439,7 +2493,101 @@ namespace tempest::graphics
             .store_op = rhi::work_queue::store_op::store,
         });
 
+        auto scene_constants = self->_pass_output_resource_handles.upload_pass.scene_constants;
+        auto vertex_pull_buffer = self->_global_resources.graph_vertex_pull_buffer;
+        auto mesh_buffer = self->_global_resources.graph_mesh_buffer;
+        auto object_buffer = self->_global_resources.graph_object_buffer;
+        auto instance_buffer = self->_global_resources.graph_instance_buffer;
+        auto material_buffer = self->_global_resources.graph_material_buffer;
+
+        auto scene_descriptor_write_desc = rhi::descriptor_set_desc{};
+        scene_descriptor_write_desc.layout = self->_pass_output_resource_handles.depth_prepass.scene_descriptor_layout;
+
+        scene_descriptor_write_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(scene_constants)),
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(scene_constants)),
+            .buffer = ctx.find_buffer(scene_constants),
+        });
+        scene_descriptor_write_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(vertex_pull_buffer)),
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(vertex_pull_buffer)),
+            .buffer = ctx.find_buffer(vertex_pull_buffer),
+        });
+
+        scene_descriptor_write_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(mesh_buffer)),
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(mesh_buffer)),
+            .buffer = ctx.find_buffer(mesh_buffer),
+        });
+
+        scene_descriptor_write_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(object_buffer)),
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(object_buffer)),
+            .buffer = ctx.find_buffer(object_buffer),
+        });
+
+        scene_descriptor_write_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(instance_buffer)),
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(instance_buffer)),
+            .buffer = ctx.find_buffer(instance_buffer),
+        });
+
+        scene_descriptor_write_desc.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(material_buffer)),
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(material_buffer)),
+            .buffer = ctx.find_buffer(material_buffer),
+        });
+
+        auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        samplers.push_back(self->_global_resources.linear_sampler);
+
+        scene_descriptor_write_desc.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 15,
+            .samplers = move(samplers),
+        });
+
+        auto images = vector<rhi::image_binding_info>();
+        for (uint32_t i = 0;
+             i < self->_cfg.max_bindless_textures && i < self->_global_resources.bindless_textures.size(); i++)
+        {
+            images.push_back(rhi::image_binding_info{
+                .image = self->_global_resources.bindless_textures[i],
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+
+        scene_descriptor_write_desc.images.push_back(rhi::image_binding_descriptor{
+            .index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = move(images),
+        });
+
+        auto scene_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(descriptors));
+
+        self->_device->write_descriptor_buffer(scene_descriptor_write_desc, scene_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(descriptors));
+
+        self->_device->unmap_buffer(ctx.find_buffer(descriptors));
+
+        auto desc_bufs = vector<graph_resource_handle<rhi::rhi_handle_type::buffer>>{};
+        desc_bufs.push_back(descriptors);
+
         ctx.begin_render_pass(render_pass_begin);
+        ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.depth_prepass.pipeline_layout,
+                                    rhi::bind_point::graphics, 0, desc_bufs);
         ctx.end_render_pass();
     }
 

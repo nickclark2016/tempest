@@ -31,7 +31,7 @@ FragmentOutput FSMain(VertexOutput input) {
     if (b0 < 0.00100050033h) {
         discard;
     }
-
+    
     float transmittance = exp(-b0);
     if (isinf(b0)) {
         transmittance = 1e7;

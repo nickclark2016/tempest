@@ -4,6 +4,7 @@
 // TODO: Implement deque + queue
 // TODO: Implement unordered_set + set
 #include <tempest/flat_unordered_map.hpp>
+#include <tempest/int.hpp>
 #include <tempest/rhi_types.hpp>
 #include <tempest/vector.hpp>
 
@@ -305,6 +306,32 @@ namespace tempest::graphics
         graph_resource_handle<rhi::rhi_handle_type::render_surface> handle) const
     {
         return _executor->get_image(handle);
+    }
+
+    void task_execution_context::bind_descriptor_buffers(
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout, rhi::bind_point point, uint32_t first_set,
+        span<const rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>> buffers, span<const uint64_t> offsets)
+    {
+        _queue->bind_descriptor_buffers(_cmd_list, layout, point, first_set, buffers, offsets);
+    }
+
+    void task_execution_context::bind_descriptor_buffers(
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout, rhi::bind_point point, uint32_t first_set,
+        span<const graph_resource_handle<rhi::rhi_handle_type::buffer>> buffers)
+    {
+        vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>> rhi_buffers;
+        rhi_buffers.reserve(buffers.size());
+
+        vector<uint64_t> offsets;
+        offsets.reserve(buffers.size());
+
+        for (const auto& handle : buffers)
+        {
+            rhi_buffers.push_back(find_buffer(handle));
+            offsets.push_back(_executor->get_current_frame_resource_offset(handle));
+        }
+
+        _queue->bind_descriptor_buffers(_cmd_list, layout, point, first_set, rhi_buffers, offsets);
     }
 
     graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::import_buffer(
@@ -1210,6 +1237,41 @@ namespace tempest::graphics
         }
 
         return rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+    }
+
+    uint64_t graph_executor::get_current_frame_resource_offset(
+        graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const
+    {
+        const auto it = tempest::find_if(_plan->resources.cbegin(), _plan->resources.cend(), [&](const auto& res) {
+            return res.handle.handle == buffer.handle && res.handle.type == buffer.type;
+        });
+
+        if (it != _plan->resources.cend() && it->per_frame)
+        {
+            return _current_frame % _device->frames_in_flight() * get<rhi::buffer_desc>(it->creation_info).size;
+        }
+
+        return 0;
+    }
+
+    uint64_t graph_executor::get_resource_size(
+        graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const
+    {
+        const auto it = tempest::find_if(_plan->resources.cbegin(), _plan->resources.cend(), [&](const auto& res) {
+            return res.handle.handle == buffer.handle && res.handle.type == buffer.type;
+        });
+
+        if (it != _plan->resources.cend())
+        {
+            const auto size = get<rhi::buffer_desc>(it->creation_info).size;
+            if (it->per_frame)
+            {
+                return size / _device->frames_in_flight();
+            }
+            return size;
+        }
+
+        return 0;
     }
 
     rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> graph_executor::get_render_surface(

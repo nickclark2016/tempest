@@ -1043,7 +1043,8 @@ namespace tempest::rhi::vk
                 vk_flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
             }
 
-            if ((flags & descriptor_set_layout_flags::descriptor_buffer) == descriptor_set_layout_flags::descriptor_buffer)
+            if ((flags & descriptor_set_layout_flags::descriptor_buffer) ==
+                descriptor_set_layout_flags::descriptor_buffer)
             {
                 vk_flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
             }
@@ -1585,9 +1586,12 @@ namespace tempest::rhi::vk
             vmaCreateBuffer(_vma_allocator, &buffer_ci, &allocation_ci, &buffer, &allocation, &allocation_info);
         if (result != VK_SUCCESS)
         {
-            if (desc.name.empty()) {
+            if (desc.name.empty())
+            {
                 logger->error("Failed to create buffer: {}", to_underlying(result));
-            } else {
+            }
+            else
+            {
                 logger->error("Failed to create buffer '{}': {}", desc.name.c_str(), to_underlying(result));
             }
             return typed_rhi_handle<rhi_handle_type::buffer>::null_handle;
@@ -1606,6 +1610,7 @@ namespace tempest::rhi::vk
             .allocation_info = allocation_info,
             .buffer = buffer,
             .address = address,
+            .usage = buffer_ci.usage,
         };
 
         if (!desc.name.empty())
@@ -4755,6 +4760,56 @@ namespace tempest::rhi::vk
         auto layout = _parent->get_pipeline_layout(pipeline_layout);
         _dispatch->cmdPushConstants(cmds, layout, to_vulkan(stages), offset, static_cast<uint32_t>(values.size()),
                                     values.data());
+    }
+
+    void work_queue::bind_descriptor_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                             typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                             bind_point point, uint32_t first_set_index,
+                                             span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers,
+                                             span<const uint64_t> offsets) noexcept
+    {
+        TEMPEST_ASSERT(offsets.size() == buffers.size() && "Number of offsets must match number of descriptor buffers");
+
+        auto cmds = _parent->get_command_buffer(command_list);
+
+        // First, gather the used VkBuffer handles into a vector of unique handles
+        auto buffer_binding_infos = _allocator.allocate_typed<VkDescriptorBufferBindingInfoEXT>(buffers.size());
+        auto unique_buffer_count = 0u;
+        auto buffer_binding_indices = _allocator.allocate_typed<uint32_t>(buffers.size());
+        auto buffer_bindings_written = 0;
+
+        for (auto buf : buffers)
+        {
+            auto buffer_payload = _parent->get_buffer(buf);
+            auto it = tempest::find_if(buffer_binding_infos, buffer_binding_infos + unique_buffer_count,
+                                       [&](const auto& binding_info) {
+                                           return binding_info.address == buffer_payload->address &&
+                                                  binding_info.usage == buffer_payload->usage;
+                                       });
+
+            auto buffer_binding_index = static_cast<uint32_t>(tempest::distance(buffer_binding_infos, it));
+
+            if (it == buffer_binding_infos + unique_buffer_count)
+            {
+                buffer_binding_infos[unique_buffer_count] = {
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                    .pNext = nullptr,
+                    .address = buffer_payload->address,
+                    .usage = buffer_payload->usage,
+                };
+
+                unique_buffer_count++;
+            }
+
+            buffer_binding_indices[buffer_bindings_written++] = buffer_binding_index;
+        }
+
+        _dispatch->cmdBindDescriptorBuffersEXT(cmds, unique_buffer_count, buffer_binding_infos);
+        _dispatch->cmdSetDescriptorBufferOffsetsEXT(cmds, to_vulkan(point),
+                                                    _parent->get_pipeline_layout(pipeline_layout), first_set_index,
+                                                    static_cast<uint32_t>(buffers.size()), buffer_binding_indices, offsets.data());
+
+        _allocator.reset();
     }
 
     void work_queue::reset(uint64_t frame_in_flight)

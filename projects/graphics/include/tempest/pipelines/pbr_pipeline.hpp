@@ -74,7 +74,7 @@ namespace tempest::graphics
             point = 1,
         };
 
-        struct alignas(16) light
+        struct light
         {
             math::vec4<float> color_intensity;
             math::vec4<float> position_falloff;
@@ -85,26 +85,29 @@ namespace tempest::graphics
             uint32_t enabled;
         };
 
-        struct alignas(16) shadow_map_parameter
+        struct shadow_map_parameter
         {
             math::mat4<float> light_proj_matrix;
             math::vec4<float> shadow_map_region; // x, y, w, h (normalized)
             float cascade_split_far;
         };
 
-        struct alignas(16) scene_data
+        struct scene_constants
         {
+            static constexpr size_t ssao_kernel_size = 64;
+
             camera cam;
             math::vec2<float> screen_size;
             math::vec3<float> ambient_light_color;
             light sun;
             math::vec4<uint32_t> light_grid_count_and_size; // x = light grid count, y = light grid size (in tiles), z =
-                                                         // padding, w = pixel width
-            math::vec2<float> light_grid_z_bounds;       // x = min light grid bounds, y = max light grid bounds (z)
+                                                            // padding, w = pixel width
+            math::vec2<float> light_grid_z_bounds;          // x = min light grid bounds, y = max light grid bounds (z)
             float ssao_strength = 2.0f;
             uint32_t point_light_count{};
+            array<math::vec4<float>, ssao_kernel_size> ssao_sample_kernel;
         };
-
+        
         struct hi_z
         {
             math::vec2<uint32_t> size;
@@ -117,7 +120,7 @@ namespace tempest::graphics
             math::vec4<float> max_bounds;
         };
 
-        struct alignas(16) light_grid_range
+        struct light_grid_range
         {
             uint32_t offset;
             uint32_t range;
@@ -194,9 +197,6 @@ namespace tempest::graphics
       private:
         struct
         {
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> scene_constants;
-            size_t scene_constant_bytes_per_frame = 0;
-
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set_0 =
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set>::null_handle;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> desc_set_0_layout;
@@ -491,7 +491,7 @@ namespace tempest::graphics
 
         uint32_t _object_count = 0;
 
-        gpu::scene_data _scene{};
+        gpu::scene_constants _scene{};
         [[maybe_unused]] ecs::archetype_entity _camera{};
 
         size_t _frame_number = 0;

@@ -359,6 +359,12 @@ namespace tempest::rhi
                            span<const byte>{reinterpret_cast<const byte*>(&value), sizeof(T)});
         }
 
+        virtual void bind_descriptor_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                             typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                             bind_point point, uint32_t first_set_index,
+                                             span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers,
+                                             span<const uint64_t> offsets) noexcept = 0;
+
         virtual void reset(uint64_t frame_in_flight) = 0;
 
       protected:

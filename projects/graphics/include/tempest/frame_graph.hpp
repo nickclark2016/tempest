@@ -146,9 +146,21 @@ namespace tempest::graphics
     class task_execution_context
     {
       public:
-        rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> find_buffer(graph_resource_handle<rhi::rhi_handle_type::buffer> handle) const;
-        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> find_image(graph_resource_handle<rhi::rhi_handle_type::image> handle) const;
-        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> find_image(graph_resource_handle<rhi::rhi_handle_type::render_surface> handle) const;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> find_buffer(
+            graph_resource_handle<rhi::rhi_handle_type::buffer> handle) const;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> find_image(
+            graph_resource_handle<rhi::rhi_handle_type::image> handle) const;
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> find_image(
+            graph_resource_handle<rhi::rhi_handle_type::render_surface> handle) const;
+
+        void bind_descriptor_buffers(rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout,
+                                     rhi::bind_point point, uint32_t first_set,
+                                     span<const rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>> buffers,
+                                     span<const uint64_t> offsets);
+
+        void bind_descriptor_buffers(rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout,
+                                     rhi::bind_point point, uint32_t first_set,
+                                     span<const graph_resource_handle<rhi::rhi_handle_type::buffer>> buffers);
 
       protected:
         task_execution_context(graph_executor* executor,
@@ -542,6 +554,8 @@ namespace tempest::graphics
         rhi::typed_rhi_handle<rhi::rhi_handle_type::image> get_image(const base_graph_resource_handle& handle) const;
         rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> get_render_surface(
             const base_graph_resource_handle& handle) const;
+        uint64_t get_current_frame_resource_offset(graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const;
+        uint64_t get_resource_size(graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const;
 
       private:
         rhi::device* _device;

@@ -70,12 +70,6 @@ namespace tempest::graphics
 
         namespace zprepass
         {
-            struct scene_constants
-            {
-                gpu::camera camera;
-                math::vec2<float> screen_size;
-            };
-
             rhi::descriptor_binding_layout scene_constants_binding_layout = {
                 .binding_index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
@@ -1134,7 +1128,6 @@ namespace tempest::graphics
         // Destroy z prepass
         dev.destroy_descriptor_set(_z_prepass.desc_set_0);
         dev.destroy_graphics_pipeline(_z_prepass.pipeline);
-        dev.destroy_buffer(_z_prepass.scene_constants);
 
         // Destroy shadows
         dev.destroy_graphics_pipeline(_shadows.directional_pipeline);
@@ -2180,16 +2173,6 @@ namespace tempest::graphics
         };
 
         _z_prepass.pipeline = dev.create_graphics_pipeline(tempest::move(z_prepass_desc));
-        _z_prepass.scene_constant_bytes_per_frame =
-            math::round_to_next_multiple(sizeof(zprepass::scene_constants), 256);
-        _z_prepass.scene_constants = dev.create_buffer({
-            .size = static_cast<uint32_t>(_z_prepass.scene_constant_bytes_per_frame * dev.frames_in_flight()),
-            .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::buffer_usage::constant, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::coherent,
-            .access_pattern = rhi::host_access_pattern::random,
-            .name = "Z Prepass Scene Constants",
-        });
     }
 
     void pbr_pipeline::_initialize_clustering([[maybe_unused]] renderer& parent, rhi::device& dev)
@@ -3562,7 +3545,7 @@ namespace tempest::graphics
         _gpu_buffers.mesh_layouts = mesh_layout_buffer;
 
         // Set up scene buffer
-        _gpu_buffers.scene_constants_bytes_per_frame = math::round_to_next_multiple(sizeof(gpu::scene_data), 256);
+        _gpu_buffers.scene_constants_bytes_per_frame = math::round_to_next_multiple(sizeof(gpu::scene_constants), 256);
         const auto scene_buffer_size = _gpu_buffers.scene_constants_bytes_per_frame * dev.frames_in_flight();
 
         auto scene_buffer = dev.create_buffer({
@@ -3731,8 +3714,8 @@ namespace tempest::graphics
 
         // Write the scene data
         const auto scene_data_offset = staging_offset + _gpu_resource_usages.staging_bytes_writen;
-        std::memcpy(staging_buffer_bytes + scene_data_offset, &_scene, sizeof(gpu::scene_data));
-        _gpu_resource_usages.staging_bytes_writen += static_cast<uint32_t>(sizeof(gpu::scene_data));
+        std::memcpy(staging_buffer_bytes + scene_data_offset, &_scene, sizeof(gpu::scene_constants));
+        _gpu_resource_usages.staging_bytes_writen += static_cast<uint32_t>(sizeof(gpu::scene_constants));
 
         // Write the lights data
         const auto light_data_offset = staging_offset + _gpu_resource_usages.staging_bytes_writen;
@@ -3743,7 +3726,7 @@ namespace tempest::graphics
 
         // Copy the scene data to the GPU
         queue.copy(commands, staging_buffer, _gpu_buffers.scene_constants, scene_data_offset,
-                   _gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight, sizeof(gpu::scene_data));
+                   _gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight, sizeof(gpu::scene_constants));
 
         // Copy the lights data to the GPU
         queue.copy(commands, staging_buffer, _gpu_buffers.point_and_spot_lights, light_data_offset,
@@ -3967,8 +3950,8 @@ namespace tempest::graphics
                 .index = 0,
                 .type = rhi::descriptor_type::dynamic_constant_buffer,
                 .offset = 0,
-                .size = static_cast<uint32_t>(math::round_to_next_multiple(sizeof(zprepass::scene_constants), 256)),
-                .buffer = _z_prepass.scene_constants,
+                .size = static_cast<uint32_t>(math::round_to_next_multiple(sizeof(gpu::scene_constants), 256)),
+                .buffer = _gpu_buffers.scene_constants,
             });
 
             // Vertex + Index Buffer
@@ -4053,65 +4036,6 @@ namespace tempest::graphics
             _z_prepass.desc_set_0 = desc_set;
         }
 
-        // Build out the camera data
-        const auto byte_offset = _z_prepass.scene_constant_bytes_per_frame * _frame_in_flight;
-        rhi::work_queue::buffer_barrier pre_scene_constants_upload = {
-            .buffer = _z_prepass.scene_constants,
-            .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer, rhi::pipeline_stage::fragment_shader),
-            .src_access = make_enum_mask(rhi::memory_access::memory_read, rhi::memory_access::memory_write),
-            .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
-            .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
-            .src_queue = nullptr,
-            .dst_queue = nullptr,
-            .offset = byte_offset,
-            .size = _z_prepass.scene_constant_bytes_per_frame,
-        };
-
-        queue.pipeline_barriers(commands, {}, {&pre_scene_constants_upload, 1});
-
-        const auto& camera_data = _entity_registry->get<camera_component>(_camera);
-        const auto& camera_transform = _entity_registry->get<ecs::transform_component>(_camera);
-
-        const auto quat_rot = math::quat(camera_transform.rotation());
-        const auto f = math::extract_forward(quat_rot);
-        const auto u = math::extract_up(quat_rot);
-
-        const auto camera_view = math::look_at(camera_transform.position(), camera_transform.position() + f, u);
-        const auto camera_projection =
-            math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov, camera_data.near_plane);
-
-        const auto scene_constants = zprepass::scene_constants{
-            .camera =
-                {
-                    .proj = camera_projection,
-                    .inv_proj = math::inverse(camera_projection),
-                    .view = camera_view,
-                    .inv_view = math::inverse(camera_view),
-                    .position = camera_transform.position(),
-                },
-            .screen_size =
-                math::vec2{static_cast<float>(_render_target_width), static_cast<float>(_render_target_height)},
-        };
-
-        auto scene_constants_buffer_bytes = dev.map_buffer(_z_prepass.scene_constants);
-        std::memcpy(scene_constants_buffer_bytes + byte_offset, &scene_constants, sizeof(zprepass::scene_constants));
-        dev.unmap_buffer(_z_prepass.scene_constants);
-
-        // Barrier to wait for transfer operations to finish
-        rhi::work_queue::buffer_barrier post_scene_constants_upload = {
-            .buffer = _z_prepass.scene_constants,
-            .src_stages = make_enum_mask(rhi::pipeline_stage::host),
-            .src_access = make_enum_mask(rhi::memory_access::host_write),
-            .dst_stages = make_enum_mask(rhi::pipeline_stage::vertex_shader),
-            .dst_access = make_enum_mask(rhi::memory_access::constant_buffer_read),
-            .src_queue = nullptr,
-            .dst_queue = nullptr,
-            .offset = byte_offset,
-            .size = _z_prepass.scene_constant_bytes_per_frame,
-        };
-
-        queue.pipeline_barriers(commands, {}, {&post_scene_constants_upload, 1});
-
         // Barrier to wait for the encoded normals buffer to be done any previous operations
         rhi::work_queue::image_barrier undefined_to_encoded_normals_attachment = {
             .image = _render_targets.encoded_normals,
@@ -4185,7 +4109,7 @@ namespace tempest::graphics
 
         // Set up dynamic offsets
         const auto scene_constants_offset =
-            static_cast<uint32_t>(_z_prepass.scene_constant_bytes_per_frame * _frame_in_flight);
+            static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight);
         const auto instance_offset = static_cast<uint32_t>(_gpu_buffers.instance_bytes_per_frame * _frame_in_flight);
         const auto object_offset = static_cast<uint32_t>(_gpu_buffers.object_bytes_per_frame * _frame_in_flight);
 
@@ -4678,7 +4602,7 @@ namespace tempest::graphics
         };
 
         const auto scene_constants_offset =
-            static_cast<uint32_t>(_z_prepass.scene_constant_bytes_per_frame * _frame_in_flight);
+            static_cast<uint32_t>(_gpu_buffers.scene_constants_bytes_per_frame * _frame_in_flight);
         const auto lights_offset = static_cast<uint32_t>(_gpu_buffers.lights_bytes_per_frame * _frame_in_flight);
 
         const auto dynamic_offsets = array{

@@ -13,6 +13,7 @@
 #include <vk_mem_alloc.h>
 
 #include <queue>
+#include <vulkan/vulkan_core.h>
 
 #if TEMPEST_ENABLE_AFTERMATH
 #include <tempest/vk/aftermath/gpu_crash_tracker.hpp>
@@ -179,6 +180,12 @@ namespace tempest::rhi::vk
                             enum_mask<rhi::shader_stage> stages, uint32_t offset,
                             span<const byte> values) noexcept override;
 
+        void bind_descriptor_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                     typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
+                                     bind_point point, uint32_t first_set_index,
+                                     span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers,
+                                     span<const uint64_t> offsets) noexcept override;
+
         void reset(uint64_t frame_in_flight) override;
 
       private:
@@ -237,6 +244,7 @@ namespace tempest::rhi::vk
         VmaAllocationInfo allocation_info;
         VkBuffer buffer;
         VkDeviceAddress address;
+        VkBufferUsageFlags usage;
     };
 
     struct sampler
