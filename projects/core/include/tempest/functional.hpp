@@ -134,7 +134,7 @@ namespace tempest
     template <typename T>
     struct unwrap_reference<reference_wrapper<T>>
     {
-        using type = T;
+        using type = T&;
     };
 
     template <typename T>

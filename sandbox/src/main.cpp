@@ -163,11 +163,11 @@ int main()
                           tempest::make_enum_mask(tempest::rhi::pipeline_stage::color_attachment_output),
                           tempest::make_enum_mask(tempest::rhi::memory_access::color_attachment_write));
         },
-        [](tempest::graphics::graphics_task_execution_context& ctx, auto swapchain_handle) {
+        [](tempest::graphics::graphics_task_execution_context& ctx, auto swapchain_handle, auto& device, auto rhi_swapchain) {
             auto render_pass_info = tempest::rhi::work_queue::render_pass_info{};
             render_pass_info.name = "Clear Swapchain Pass";
-            render_pass_info.width = 1280;
-            render_pass_info.height = 720;
+            render_pass_info.width = device.get_render_surface_width(rhi_swapchain);
+            render_pass_info.height = device.get_render_surface_height(rhi_swapchain);
             render_pass_info.layers = 1;
             render_pass_info.color_attachments.push_back({
                 .image = ctx.find_image(swapchain_handle),
@@ -180,7 +180,7 @@ int main()
             ctx.begin_render_pass(render_pass_info);
             ctx.end_render_pass();
         },
-        swapchain_handle);
+        swapchain_handle, tempest::ref(device), swapchain);
 
     pbr_fg.compile({
         .graphics_queues = 1,
