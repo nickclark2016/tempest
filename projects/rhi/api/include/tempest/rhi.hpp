@@ -122,6 +122,8 @@ namespace tempest::rhi
 
         virtual uint32_t frames_in_flight() const noexcept = 0;
 
+        virtual void wait_idle() = 0;
+
       protected:
         device() = default;
     };

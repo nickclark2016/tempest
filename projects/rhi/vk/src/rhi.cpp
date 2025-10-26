@@ -2164,7 +2164,7 @@ namespace tempest::rhi::vk
         VkGraphicsPipelineCreateInfo ci = {
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .pNext = &pipeline_rendering_ci,
-            .flags = 0,
+            .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
             .stageCount = static_cast<uint32_t>(shader_stages.size()),
             .pStages = shader_stages.data(),
             .pVertexInputState = &vertex_input_ci,
@@ -2387,7 +2387,7 @@ namespace tempest::rhi::vk
         VkComputePipelineCreateInfo ci = {
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
             .pNext = nullptr,
-            .flags = 0,
+            .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
             .stage = stage_ci,
             .layout = _pipeline_layout_cache.get_layout(desc.layout),
             .basePipelineHandle = VK_NULL_HANDLE,

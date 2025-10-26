@@ -2,13 +2,17 @@
 #define tempest_graphics_pbr_frame_graph_hpp
 
 #include <tempest/archetype.hpp>
+#include <tempest/flat_map.hpp>
 #include <tempest/frame_graph.hpp>
 #include <tempest/graphics_components.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
+#include <tempest/material.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
+#include <tempest/texture.hpp>
 #include <tempest/vec4.hpp>
+#include <tempest/vertex.hpp>
 
 namespace tempest::graphics
 {
@@ -71,6 +75,9 @@ namespace tempest::graphics
 
         void execute();
 
+        void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+                                 const core::texture_registry& textures, const core::material_registry& materials);
+
       private:
         rhi::device* _device;
         pbr_frame_graph_config _cfg;
@@ -84,6 +91,7 @@ namespace tempest::graphics
         struct frame_upload_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::buffer> scene_constants;
+            graph_resource_handle<rhi::rhi_handle_type::buffer> draw_commands;
         };
 
         struct depth_prepass_outputs
@@ -199,7 +207,13 @@ namespace tempest::graphics
             rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_sampler;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_with_aniso_sampler;
 
-            vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>> bindless_textures;
+            struct
+            {
+                uint64_t vertex_bytes_written = 0;
+                uint64_t mesh_layout_bytes_written = 0;
+                uint64_t material_bytes_written = 0;
+                uint32_t loaded_object_count = 0;
+            } utilization;
         } _global_resources;
 
         void _create_global_resources();
@@ -262,6 +276,11 @@ namespace tempest::graphics
                                              graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_descriptors);
         static void _mboit_blend_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
         static void _tonemapping_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
+
+        void _load_meshes(span<const guid> mesh_ids, const core::mesh_registry& mesh_registry);
+        void _load_textures(span<const guid> texture_ids, const core::texture_registry& texture_registry,
+                            bool generate_mip_maps);
+        void _load_materials(span<const guid> material_ids, const core::material_registry& material_registry);
 
         enum class material_type : uint32_t
         {
@@ -421,6 +440,49 @@ namespace tempest::graphics
         {
             math::mat4<float> light_vp;
         };
+
+        struct draw_batch_key
+        {
+            alpha_behavior alpha_type;
+            bool double_sided;
+
+            constexpr auto operator<=>(const draw_batch_key&) const noexcept = default;
+        };
+
+        struct draw_batch_payload
+        {
+            vector<indexed_indirect_command> commands;
+            size_t indirect_command_offset;
+            ecs::basic_sparse_map<ecs::basic_archetype_registry::entity_type, object_data> objects;
+        };
+
+        struct
+        {
+            flat_unordered_map<guid, size_t> image_to_index;
+            vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>> images;
+
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_sampler;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_sampler;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_sampler_no_aniso;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_sampler_no_aniso;
+        } _bindless_textures = {};
+
+        struct
+        {
+            flat_unordered_map<guid, size_t> material_to_index;
+            vector<material_data> materials;
+        } _materials = {};
+
+        struct
+        {
+            flat_unordered_map<guid, size_t> mesh_to_index;
+            vector<mesh_layout> meshes;
+        } _meshes = {};
+
+        struct
+        {
+            flat_map<draw_batch_key, draw_batch_payload> draw_batches;
+        } _drawables = {};
     };
 } // namespace tempest::graphics
 

@@ -1,9 +1,11 @@
+#include <tempest/asset_database.hpp>
 #include <tempest/frame_graph.hpp>
 #include <tempest/input.hpp>
 #include <tempest/pbr_frame_graph.hpp>
 #include <tempest/pipelines/pbr_pipeline.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/vector.hpp>
 
 namespace tempest::rhi::vk
 {
@@ -106,17 +108,19 @@ int main()
         .layers = 1,
     });
 
-    // render_graph_builder.create_transfer_pass(
-    //     "Write to Swapchain",
-    //     [&](tempest::graphics::transfer_task_builder& builder) {
-    //         builder.write(swapchain_handle, tempest::rhi::image_layout::transfer_dst,
-    //                       tempest::make_enum_mask(tempest::rhi::pipeline_stage::clear),
-    //                       tempest::make_enum_mask(tempest::rhi::memory_access::transfer_write));
-    //     },
-    //     [](tempest::graphics::transfer_task_execution_context& ctx, auto swapchain_handle) {
-    //         ctx.clear_color(swapchain_handle, 1.0f, 0.0f, 0.0f, 1.0f);
-    //     },
-    //     swapchain_handle);
+    auto entity_registry = tempest::ecs::archetype_registry();
+    auto mesh_registry = tempest::core::mesh_registry();
+    auto texture_registry = tempest::core::texture_registry();
+    auto material_registry = tempest::core::material_registry();
+    auto asset_database = tempest::assets::asset_database(&mesh_registry, &texture_registry, &material_registry);
+
+    const auto sponza_prefab =
+        asset_database.import("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", entity_registry);
+
+    const auto sponza_instance = entity_registry.duplicate(sponza_prefab);
+
+    auto entities = tempest::vector<tempest::ecs::archetype_entity>{};
+    entities.push_back(sponza_instance);
 
     auto pbr_fg =
         tempest::graphics::pbr_frame_graph(device,
@@ -149,7 +153,7 @@ int main()
                                                    },
                                            },
                                            {
-                                               .entity_registry = nullptr,
+                                               .entity_registry = &entity_registry,
                                            });
 
     auto render_graph_builder_opt = pbr_fg.get_builder();
@@ -163,7 +167,8 @@ int main()
                           tempest::make_enum_mask(tempest::rhi::pipeline_stage::color_attachment_output),
                           tempest::make_enum_mask(tempest::rhi::memory_access::color_attachment_write));
         },
-        [](tempest::graphics::graphics_task_execution_context& ctx, auto swapchain_handle, auto& device, auto rhi_swapchain) {
+        [](tempest::graphics::graphics_task_execution_context& ctx, auto swapchain_handle, auto& device,
+           auto rhi_swapchain) {
             auto render_pass_info = tempest::rhi::work_queue::render_pass_info{};
             render_pass_info.name = "Clear Swapchain Pass";
             render_pass_info.width = device.get_render_surface_width(rhi_swapchain);
@@ -187,6 +192,21 @@ int main()
         .compute_queues = 1,
         .transfer_queues = 1,
     });
+
+    pbr_fg.upload_objects_sync(entities, mesh_registry, texture_registry, material_registry);
+
+    auto camera = entity_registry.create();
+    tempest::graphics::camera_component camera_data = {
+        .aspect_ratio = 16.0f / 9.0f,
+        .vertical_fov = 100.0f,
+        .near_plane = 0.01f,
+        .far_shadow_plane = 64.0f,
+    };
+    entity_registry.assign(camera, camera_data);
+    auto camera_tx = tempest::ecs::transform_component::identity();
+    camera_tx.position({0.0f, 15.0f, -1.0f});
+    camera_tx.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
+    entity_registry.assign(camera, camera_tx);
 
     while (true)
     {

@@ -2,6 +2,7 @@
 #define tempest_graphics_frame_graph_hpp
 
 #include <tempest/concepts.hpp>
+#include <tempest/enum.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/rhi.hpp>
@@ -181,6 +182,19 @@ namespace tempest::graphics
         void begin_render_pass(const rhi::work_queue::render_pass_info& info);
         void end_render_pass();
 
+        void set_viewport(float x, float y, float width, float height, float min_depth, float max_depth);
+        void set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
+        void set_cull_mode(enum_mask<rhi::cull_mode> mode);
+
+        void bind_pipeline(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline);
+        void bind_index_buffer(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> index_buffer,
+                               rhi::index_format type, uint64_t offset);
+
+        void draw_indirect(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
+                           uint32_t draw_count, uint32_t stride);
+        void draw_indirect(graph_resource_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
+                           uint32_t draw_count, uint32_t stride);
+
       private:
         friend class graph_executor;
 
@@ -202,6 +216,10 @@ namespace tempest::graphics
                          float a);
         void clear_color(const graph_resource_handle<rhi::rhi_handle_type::render_surface>& image, float r, float g,
                          float b, float a);
+
+        void copy_buffer_to_buffer(const graph_resource_handle<rhi::rhi_handle_type::buffer>& src,
+                                   const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst, uint64_t src_offset,
+                                   uint64_t dst_offset, uint64_t size);
 
       private:
         friend class graph_executor;
@@ -586,6 +604,15 @@ namespace tempest::graphics
             uint64_t timeline_value;
         };
 
+        struct write_barrier_details
+        {
+            enum_mask<rhi::pipeline_stage> write_stages;
+            enum_mask<rhi::memory_access> write_accesses;
+
+            enum_mask<rhi::pipeline_stage> read_stages_seen;
+            enum_mask<rhi::memory_access> read_accesses_seen;
+        };
+
         struct per_frame_in_flight_usage
         {
             flat_unordered_map<uint64_t, resource_usage> resource_states; // handle -> state
@@ -593,6 +620,7 @@ namespace tempest::graphics
 
         flat_unordered_map<uint64_t, resource_usage> _current_resource_states; // handle -> state
         vector<per_frame_in_flight_usage> _in_flight_usages;
+        flat_unordered_map<uint64_t, write_barrier_details> _write_barriers; // handle -> details
 
         // Owned resources
         flat_unordered_map<uint64_t, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>> _owned_buffers;

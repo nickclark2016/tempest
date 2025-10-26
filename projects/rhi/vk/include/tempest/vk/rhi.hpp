@@ -549,6 +549,11 @@ namespace tempest::rhi::vk
         uint32_t frame_in_flight() const noexcept;
         uint32_t frames_in_flight() const noexcept override;
 
+        void wait_idle() override
+        {
+            _dispatch_table.deviceWaitIdle();
+        }
+
         typed_rhi_handle<rhi_handle_type::image> acquire_image(image img) noexcept;
 
         typed_rhi_handle<rhi_handle_type::command_list> acquire_command_list(VkCommandBuffer buf) noexcept;

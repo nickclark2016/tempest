@@ -1,4 +1,5 @@
 #include <tempest/assert.hpp>
+#include <tempest/enum.hpp>
 #include <tempest/frame_graph.hpp>
 
 // TODO: Implement deque + queue
@@ -1254,8 +1255,7 @@ namespace tempest::graphics
         return 0;
     }
 
-    uint64_t graph_executor::get_resource_size(
-        graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const
+    uint64_t graph_executor::get_resource_size(graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const
     {
         const auto it = tempest::find_if(_plan->resources.cbegin(), _plan->resources.cend(), [&](const auto& res) {
             return res.handle.handle == buffer.handle && res.handle.type == buffer.type;
@@ -1748,6 +1748,57 @@ namespace tempest::graphics
                                 range = numeric_limits<size_t>::max();
                             }
 
+                            // Search for prior write accesses that have not been waited on yet
+                            const auto existing_write_barrier = _write_barriers.find(resource.handle.handle);
+
+                            auto existing_write_stages = enum_mask<rhi::pipeline_stage>();
+                            auto existing_write_accesses = enum_mask<rhi::memory_access>();
+
+                            if (existing_write_barrier != _write_barriers.cend())
+                            {
+                                // Check if this pass's read usage overlaps with the existing write usage's reads
+                                auto& write_usage = existing_write_barrier->second;
+                                if ((write_usage.read_accesses_seen & resource.accesses) != resource.accesses ||
+                                    (write_usage.read_stages_seen & resource.stages) != resource.stages)
+                                {
+                                    existing_write_stages |= write_usage.write_stages;
+                                    existing_write_accesses |= write_usage.write_accesses;
+                                }
+
+                                // Reset the seen read accesses
+                                if (is_write_access(resource.accesses))
+                                {
+                                    write_usage.read_accesses_seen = enum_mask<rhi::memory_access>();
+                                    write_usage.read_stages_seen = enum_mask<rhi::pipeline_stage>();
+                                    write_usage.write_accesses |= resource.accesses;
+                                    write_usage.write_stages |= resource.stages;
+                                }
+
+                                if (is_read_access(resource.accesses))
+                                {
+                                    write_usage.read_accesses_seen |= resource.accesses;
+                                    write_usage.read_stages_seen |= resource.stages;
+                                }
+                            }
+                            else
+                            {
+                                auto write_usage = write_barrier_details{
+                                    .write_stages = is_write_access(resource.accesses)
+                                                        ? resource.stages
+                                                        : enum_mask<rhi::pipeline_stage>(),
+                                    .write_accesses = is_write_access(resource.accesses)
+                                                          ? resource.accesses
+                                                          : enum_mask<rhi::memory_access>(),
+                                    .read_stages_seen = is_read_access(resource.accesses)
+                                                            ? resource.stages
+                                                            : enum_mask<rhi::pipeline_stage>(),
+                                    .read_accesses_seen = is_read_access(resource.accesses)
+                                                              ? resource.accesses
+                                                              : enum_mask<rhi::memory_access>(),
+                                };
+                                _write_barriers[resource.handle.handle] = write_usage;
+                            }
+
                             const auto existing_barrier_it = tempest::find_if(
                                 buffer_barriers.begin(), buffer_barriers.end(),
                                 [&](const auto& barrier) { return barrier.buffer.id == buffer_it->second.id; });
@@ -1761,8 +1812,8 @@ namespace tempest::graphics
                             {
                                 const auto barrier = rhi::work_queue::buffer_barrier{
                                     .buffer = buffer_it->second,
-                                    .src_stages = prior_usage.stages,
-                                    .src_access = prior_usage.accesses,
+                                    .src_stages = existing_write_stages | prior_usage.stages,
+                                    .src_access = existing_write_accesses | prior_usage.accesses,
                                     .dst_stages = resource.stages,
                                     .dst_access = resource.accesses,
                                     .src_queue = src_queue,
@@ -2158,6 +2209,49 @@ namespace tempest::graphics
         _queue->end_rendering(_cmd_list);
     }
 
+    void graphics_task_execution_context::set_viewport(float x, float y, float width, float height, float min_depth,
+                                                       float max_depth)
+    {
+        _queue->set_viewport(_cmd_list, x, y, width, height, min_depth, max_depth, 0, true);
+    }
+
+    void graphics_task_execution_context::set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+    {
+        _queue->set_scissor_region(_cmd_list, x, y, width, height, 0);
+    }
+
+    void graphics_task_execution_context::set_cull_mode(enum_mask<rhi::cull_mode> mode)
+    {
+        _queue->set_cull_mode(_cmd_list, mode);
+    }
+
+    void graphics_task_execution_context::bind_pipeline(
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline)
+    {
+        _queue->bind(_cmd_list, pipeline);
+    }
+
+    void graphics_task_execution_context::bind_index_buffer(
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> index_buffer, rhi::index_format type, uint64_t offset)
+    {
+        _queue->bind_index_buffer(_cmd_list, index_buffer, offset, type);
+    }
+
+    void graphics_task_execution_context::draw_indirect(
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset, uint32_t draw_count,
+        uint32_t stride)
+    {
+        _queue->draw(_cmd_list, indirect_buffer, offset, draw_count, stride);
+    }
+
+    void graphics_task_execution_context::draw_indirect(
+        graph_resource_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset, uint32_t draw_count,
+        uint32_t stride)
+    {
+        const auto buffer = _executor->get_buffer(indirect_buffer);
+        _queue->draw(_cmd_list, buffer, offset, draw_count, stride);
+    }
+
     void transfer_task_execution_context::clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image,
                                                       float r, float g, float b, float a)
     {
@@ -2180,5 +2274,21 @@ namespace tempest::graphics
         }
 
         _queue->clear_color_image(_cmd_list, img, rhi::image_layout::transfer_dst, r, g, b, a);
+    }
+
+    void transfer_task_execution_context::copy_buffer_to_buffer(
+        const graph_resource_handle<rhi::rhi_handle_type::buffer>& src,
+        const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst, uint64_t src_offset, uint64_t dst_offset,
+        uint64_t size)
+    {
+        const auto src_buf = _executor->get_buffer(src);
+        const auto dst_buf = _executor->get_buffer(dst);
+        if (!src_buf || !dst_buf)
+        {
+            return;
+        }
+
+        // TODO: Handle per-frame offsets
+        _queue->copy(_cmd_list, src_buf, dst_buf, src_offset, dst_offset, size);
     }
 } // namespace tempest::graphics

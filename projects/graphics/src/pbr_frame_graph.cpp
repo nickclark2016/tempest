@@ -1,5 +1,6 @@
 #include <tempest/frame_graph.hpp>
 
+#include <cstring>
 #include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
 #include <tempest/enum.hpp>
@@ -9,11 +10,14 @@
 #include <tempest/logger.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/pbr_frame_graph.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
 #include <tempest/to_underlying.hpp>
+#include <tempest/traits.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/transformations.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
 
@@ -80,6 +84,140 @@ namespace tempest::graphics
         _executor->execute();
     }
 
+    void pbr_frame_graph::upload_objects_sync(span<const ecs::archetype_entity> entities,
+                                              const core::mesh_registry& meshes, const core::texture_registry& textures,
+                                              const core::material_registry& materials)
+    {
+        // Wait for the device to idle for synchronous upload
+        _device->wait_idle();
+
+        vector<guid> mesh_guids;
+        vector<guid> texture_guids;
+        vector<guid> material_guids;
+
+        for (const auto entity : entities)
+        {
+            const auto hierarchy_view = ecs::archetype_entity_hierarchy_view(*_inputs.entity_registry, entity);
+            for (const auto e : hierarchy_view)
+            {
+                const auto mesh_component = _inputs.entity_registry->try_get<core::mesh_component>(e);
+                const auto material_component = _inputs.entity_registry->try_get<core::material_component>(e);
+
+                // Both are needed to render the object
+                if (mesh_component == nullptr || material_component == nullptr)
+                {
+                    continue;
+                }
+
+                // Make sure the GUIDs are both valid
+                const auto mesh_opt = meshes.find(mesh_component->mesh_id);
+                const auto material_opt = materials.find(material_component->material_id);
+
+                if (!mesh_opt.has_value() || !material_opt.has_value())
+                {
+                    continue;
+                }
+
+                // Add the mesh and material GUIDs to the vectors
+                mesh_guids.push_back(mesh_component->mesh_id);
+                material_guids.push_back(material_component->material_id);
+
+                const auto& material = *material_opt;
+
+                if (const auto base_color = material.get_texture(core::material::base_color_texture_name))
+                {
+                    texture_guids.push_back(*base_color);
+                }
+
+                if (const auto mr_texture = material.get_texture(core::material::metallic_roughness_texture_name))
+                {
+                    texture_guids.push_back(*mr_texture);
+                }
+
+                if (const auto normal_texture = material.get_texture(core::material::normal_texture_name))
+                {
+                    texture_guids.push_back(*normal_texture);
+                }
+
+                if (const auto occlusion_texture = material.get_texture(core::material::occlusion_texture_name))
+                {
+                    texture_guids.push_back(*occlusion_texture);
+                }
+
+                if (const auto emissive_texture = material.get_texture(core::material::emissive_texture_name))
+                {
+                    texture_guids.push_back(*emissive_texture);
+                }
+
+                if (const auto transmissive_texture = material.get_texture(core::material::transmissive_texture_name))
+                {
+                    texture_guids.push_back(*transmissive_texture);
+                }
+
+                if (const auto volume_thickness_texture =
+                        material.get_texture(core::material::volume_thickness_texture_name))
+                {
+                    texture_guids.push_back(*volume_thickness_texture);
+                }
+            }
+        }
+
+        // Meshs and textures need to be uploaded before materials, since materials relies on textures being written to
+        // the CPU buffers
+        _load_meshes(mesh_guids, meshes);
+        _load_textures(texture_guids, textures, true);
+        _load_materials(material_guids, materials);
+
+        // Build the render components
+        for (const auto entity : entities)
+        {
+            const auto hierarchy_view = ecs::archetype_entity_hierarchy_view(*_inputs.entity_registry, entity);
+            for (const auto e : hierarchy_view)
+            {
+                const auto mesh_component = _inputs.entity_registry->try_get<core::mesh_component>(e);
+                const auto material_component = _inputs.entity_registry->try_get<core::material_component>(e);
+                // Both are needed to render the object
+                if (mesh_component == nullptr || material_component == nullptr)
+                {
+                    continue;
+                }
+
+                // Make sure the GUIDs are both valid
+                const auto mesh_opt = meshes.find(mesh_component->mesh_id);
+                const auto material_opt = materials.find(material_component->material_id);
+                if (!mesh_opt.has_value() || !material_opt.has_value())
+                {
+                    continue;
+                }
+
+                // Build the renderable component
+                const auto mesh_index = _meshes.mesh_to_index[mesh_component->mesh_id];
+                const auto material_index = _materials.material_to_index[material_component->material_id];
+                const auto is_double_side = material_opt->get_bool(core::material::double_sided_name).value_or(false);
+
+                // Check if there is an existing renderable component
+                const auto rc = _inputs.entity_registry->try_get<renderable_component>(e);
+                const auto object_id = rc ? rc->object_id : _global_resources.utilization.loaded_object_count++;
+
+                // Create the renderable component
+                const auto renderable = renderable_component{
+                    .mesh_id = static_cast<uint32_t>(mesh_index),
+                    .material_id = static_cast<uint32_t>(material_index),
+                    .object_id = object_id,
+                    .double_sided = is_double_side,
+                };
+
+                _inputs.entity_registry->assign_or_replace(e, renderable);
+
+                // If the object has no transform, assign the default transform
+                if (!_inputs.entity_registry->has<ecs::transform_component>(e))
+                {
+                    _inputs.entity_registry->assign_or_replace(e, ecs::transform_component{});
+                }
+            }
+        }
+    }
+
     void pbr_frame_graph::_initialize()
     {
         _create_global_resources();
@@ -102,7 +240,7 @@ namespace tempest::graphics
         auto vertex_pull_buffer = _device->create_buffer({
             .size = _cfg.vertex_data_buffer_size,
             .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::index, rhi::buffer_usage::transfer_dst),
             .access_type = rhi::host_access_type::none,
             .access_pattern = rhi::host_access_pattern::none,
             .name = "Vertex Pull Buffer",
@@ -220,7 +358,7 @@ namespace tempest::graphics
         };
 
         _global_resources.point_sampler = _device->create_sampler(point_sampler_desc);
-        
+
         auto point_with_aniso_sampler_desc = point_sampler_desc;
         point_with_aniso_sampler_desc.max_anisotropy = _cfg.max_anisotropy;
         point_with_aniso_sampler_desc.name = "Point with Anisotropy Sampler";
@@ -251,6 +389,15 @@ namespace tempest::graphics
             .name = "Scene Constants Buffer",
         });
 
+        auto indirect_draw_commands_buffer = builder.create_per_frame_buffer({
+            .size = _cfg.max_object_count * sizeof(indexed_indirect_command),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::indirect, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
+            .name = "Indirect Draw Commands Buffer",
+        });
+
         builder.create_transfer_pass(
             "Frame Upload Pass",
             [&](transfer_task_builder& task) {
@@ -258,11 +405,24 @@ namespace tempest::graphics
                            make_enum_mask(rhi::memory_access::transfer_write));
                 task.read(_global_resources.graph_vertex_pull_buffer, make_enum_mask(rhi::pipeline_stage::copy),
                           make_enum_mask(rhi::memory_access::transfer_read));
+                task.read_write(
+                    _global_resources.graph_per_frame_staging_buffer, make_enum_mask(rhi::pipeline_stage::copy),
+                    make_enum_mask(rhi::memory_access::transfer_read), make_enum_mask(rhi::pipeline_stage::host),
+                    make_enum_mask(rhi::memory_access::host_write));
+                task.write(indirect_draw_commands_buffer, make_enum_mask(rhi::pipeline_stage::host),
+                           make_enum_mask(rhi::memory_access::host_write));
+
+                // Writes to the object and instance buffers
+                task.write(_global_resources.graph_object_buffer, make_enum_mask(rhi::pipeline_stage::copy),
+                           make_enum_mask(rhi::memory_access::transfer_write));
+                task.write(_global_resources.graph_instance_buffer, make_enum_mask(rhi::pipeline_stage::copy),
+                           make_enum_mask(rhi::memory_access::transfer_write));
             },
             &_upload_pass_task, this);
 
         return {
             .scene_constants = scene_constants_buffer,
+            .draw_commands = indirect_draw_commands_buffer,
         };
     }
 
@@ -2468,6 +2628,188 @@ namespace tempest::graphics
     void pbr_frame_graph::_upload_pass_task(transfer_task_execution_context& ctx, pbr_frame_graph* self)
     {
         // No actual rendering commands needed, just resource uploads
+        const auto staging_buffer_offset =
+            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_per_frame_staging_buffer);
+        auto staging_buffer_bytes = self->_device->map_buffer(
+            self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+        auto staging_bytes_written = static_cast<size_t>(0u);
+
+        // Find the camera to upload
+        auto camera = ecs::archetype_entity{ecs::tombstone};
+        auto camera_data = optional<camera_component>();
+        auto camera_transform = optional<ecs::transform_component>();
+
+        self->_inputs.entity_registry->each(
+            [&](ecs::self_component entity, const camera_component& cam_comp, const ecs::transform_component& tx) {
+                camera = entity.entity;
+                camera_data = cam_comp;
+                camera_transform = tx;
+            });
+
+        const auto quat_rot = math::quat(camera_transform->rotation());
+        const auto f = math::extract_forward(quat_rot);
+        const auto u = math::extract_up(quat_rot);
+
+        auto projection = math::perspective(camera_data->aspect_ratio, camera_data->vertical_fov, 0.1f);
+        auto view = math::look_at(camera_transform->position(), camera_transform->position() + f, u);
+
+        // Set up and upload the scene constants
+        auto scene_constants_data = scene_constants{};
+        scene_constants_data.cam = {
+            .proj = projection,
+            .inv_proj = math::inverse(projection),
+            .view = view,
+            .inv_view = math::inverse(view),
+            .position = camera_transform->position(),
+        };
+
+        // Copy scene constants to staging buffer
+        std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written, &scene_constants_data,
+                    sizeof(scene_constants));
+
+        const auto scene_constants_offset = staging_bytes_written;
+
+        staging_bytes_written += sizeof(scene_constants);
+
+        // Build out the draw commands
+        for (auto&& [_, draw_batch] : self->_drawables.draw_batches)
+        {
+            draw_batch.commands.clear();
+        }
+
+        auto entity_registry = self->_inputs.entity_registry;
+        entity_registry->each([&](ecs::self_component self_entity, renderable_component renderable) {
+            const auto entity = self_entity.entity;
+            auto object_payload = object_data{
+                .model = math::mat4(1.0f),
+                .inv_tranpose_model = math::mat4(1.0f),
+                .mesh_id = static_cast<uint32_t>(renderable.mesh_id),
+                .material_id = static_cast<uint32_t>(renderable.material_id),
+                .parent_id = ~0u,
+                .self_id = static_cast<uint32_t>(renderable.object_id),
+            };
+
+            auto ancestors = ecs::archetype_entity_ancestor_view(*entity_registry, entity);
+            for (auto ancestor : ancestors)
+            {
+                if (auto parent_tx = entity_registry->try_get<ecs::transform_component>(ancestor))
+                {
+                    object_payload.model = parent_tx->matrix() * object_payload.model;
+                }
+            }
+
+            object_payload.inv_tranpose_model = math::transpose(math::inverse(object_payload.model));
+
+            const auto alpha = static_cast<alpha_behavior>(self->_materials.materials[renderable.material_id].type);
+            const auto key = draw_batch_key{
+                .alpha_type = alpha,
+                .double_sided = renderable.double_sided,
+            };
+
+            auto& draw_batch = self->_drawables.draw_batches[key];
+            const auto& mesh = self->_meshes.meshes[renderable.mesh_id];
+
+            if (draw_batch.objects.find(entity) == draw_batch.objects.end())
+            {
+                draw_batch.objects.insert(entity, object_payload);
+            }
+            else
+            {
+                draw_batch.objects[entity] = object_payload;
+            }
+
+            draw_batch.commands.push_back({
+                .index_count = mesh.index_count,
+                .instance_count = 1,
+                .first_index = (mesh.mesh_start_offset + mesh.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+                .vertex_offset = 0,
+                .first_instance = static_cast<uint32_t>(draw_batch.objects.index_of(entity)),
+            });
+        });
+
+        auto instance_written_count = 0u;
+        for (const auto& [_, batch] : self->_drawables.draw_batches)
+        {
+            for (auto& cmd : batch.commands)
+            {
+                cmd.first_instance += instance_written_count;
+            }
+            instance_written_count += static_cast<uint32_t>(batch.objects.size());
+        }
+
+        // Upload the object data buffer
+
+        const auto object_buffer = self->_global_resources.graph_object_buffer;
+        auto object_buffer_offset = self->_executor->get_current_frame_resource_offset(object_buffer);
+        auto object_buffer_written = static_cast<size_t>(0u);
+
+        const auto object_buffer_staging_offset = staging_bytes_written;
+
+        for (auto&& [_, draw_batch] : self->_drawables.draw_batches)
+        {
+            std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written,
+                        draw_batch.objects.values(), draw_batch.objects.size() * sizeof(object_data));
+            staging_bytes_written += draw_batch.objects.size() * sizeof(object_data);
+            object_buffer_written += draw_batch.objects.size() * sizeof(object_data);
+        }
+
+        // Write instances
+
+        auto instance_buffer = self->_global_resources.graph_instance_buffer;
+        auto instance_buffer_offset = self->_executor->get_current_frame_resource_offset(instance_buffer);
+        auto instance_bytes_written = static_cast<size_t>(0u);
+
+        const auto instance_buffer_staging_offset = staging_bytes_written;
+
+        auto instances_written = 0u;
+        for (auto&& [_, draw_batch] : self->_drawables.draw_batches)
+        {
+            auto instance_indices = vector<uint32_t>{draw_batch.objects.size()};
+            std::iota(instance_indices.begin(), instance_indices.end(), instances_written);
+            std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written, instance_indices.data(),
+                        instance_indices.size() * sizeof(uint32_t));
+            staging_bytes_written += instance_indices.size() * sizeof(uint32_t);
+            draw_batch.indirect_command_offset = instances_written;
+
+            instances_written += static_cast<uint32_t>(draw_batch.objects.size());
+            instance_bytes_written += draw_batch.objects.size() * sizeof(uint32_t);
+        }
+
+        // Unmap the staging buffer and push copy commands
+        self->_device->unmap_buffer(
+            self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+
+        // Copy from staging buffer to the actual scene constants buffer
+        ctx.copy_buffer_to_buffer(self->_global_resources.graph_per_frame_staging_buffer,
+                                  self->_pass_output_resource_handles.upload_pass.scene_constants,
+                                  staging_buffer_offset + scene_constants_offset,
+                                  self->_executor->get_current_frame_resource_offset(
+                                      self->_pass_output_resource_handles.upload_pass.scene_constants),
+                                  sizeof(scene_constants));
+
+        ctx.copy_buffer_to_buffer(
+            self->_global_resources.graph_per_frame_staging_buffer, self->_global_resources.graph_object_buffer,
+            staging_buffer_offset + object_buffer_staging_offset,
+            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_object_buffer),
+            object_buffer_written);
+
+        ctx.copy_buffer_to_buffer(
+            self->_global_resources.graph_per_frame_staging_buffer, self->_global_resources.graph_instance_buffer,
+            staging_buffer_offset + instance_buffer_staging_offset,
+            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_instance_buffer),
+            instance_bytes_written);
+
+        // Upload draw commands
+        const auto draw_command_buffer = self->_pass_output_resource_handles.upload_pass.draw_commands;
+        auto draw_command_bytes = self->_device->map_buffer(self->_executor->get_buffer(draw_command_buffer));
+        auto draw_command_offset = self->_executor->get_current_frame_resource_offset(draw_command_buffer);
+        for (auto&& [_, draw_batch] : self->_drawables.draw_batches)
+        {
+            std::memcpy(draw_command_bytes + draw_command_offset, draw_batch.commands.data(),
+                        sizeof(indexed_indirect_command) * draw_batch.commands.size());
+            draw_command_offset += sizeof(indexed_indirect_command) * draw_batch.commands.size();
+        }
+        self->_device->unmap_buffer(self->_executor->get_buffer(draw_command_buffer));
     }
 
     void pbr_frame_graph::_depth_prepass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
@@ -2559,11 +2901,13 @@ namespace tempest::graphics
         });
 
         auto images = vector<rhi::image_binding_info>();
-        for (uint32_t i = 0;
-             i < self->_cfg.max_bindless_textures && i < self->_global_resources.bindless_textures.size(); i++)
+        const auto image_count =
+            min(self->_cfg.max_bindless_textures, static_cast<uint32_t>(self->_bindless_textures.images.size()));
+
+        for (uint32_t i = 0; i < image_count; i++)
         {
             images.push_back(rhi::image_binding_info{
-                .image = self->_global_resources.bindless_textures[i],
+                .image = self->_bindless_textures.images[i],
                 .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
                 .layout = rhi::image_layout::shader_read_only,
             });
@@ -2588,6 +2932,30 @@ namespace tempest::graphics
         ctx.begin_render_pass(render_pass_begin);
         ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.depth_prepass.pipeline_layout,
                                     rhi::bind_point::graphics, 0, desc_bufs);
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.depth_prepass.pipeline);
+        ctx.bind_index_buffer(self->_global_resources.vertex_pull_buffer, rhi::index_format::uint32, 0);
+
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+
+        const auto draw_command_buffer = self->_pass_output_resource_handles.upload_pass.draw_commands;
+        const auto draw_command_buffer_offset = self->_executor->get_current_frame_resource_offset(draw_command_buffer);
+
+        for (const auto& [key, draw_batch] : self->_drawables.draw_batches)
+        {
+            if (key.alpha_type == alpha_behavior::opaque)
+            {
+                ctx.draw_indirect(
+                    draw_command_buffer,
+                    static_cast<uint32_t>(draw_command_buffer_offset +
+                                          draw_batch.indirect_command_offset * sizeof(indexed_indirect_command)),
+                    static_cast<uint32_t>(draw_batch.commands.size()), sizeof(indexed_indirect_command));
+            }
+        }
+
         ctx.end_render_pass();
     }
 
@@ -2797,5 +3165,574 @@ namespace tempest::graphics
 
         ctx.begin_render_pass(render_pass_begin);
         ctx.end_render_pass();
+    }
+
+    void pbr_frame_graph::_load_meshes(span<const guid> mesh_ids, const core::mesh_registry& mesh_registry)
+    {
+        auto result = flat_unordered_map<guid, mesh_layout>{};
+
+        auto bytes_written = 0u;
+        auto vertex_bytes_required = 0u;
+        auto layout_bytes_required = 0u;
+
+        for (const auto& mesh_id : mesh_ids)
+        {
+            auto mesh_opt = mesh_registry.find(mesh_id);
+            assert(mesh_opt.has_value());
+
+            auto& mesh = *mesh_opt;
+
+            // Compute vertex size in bytes
+            auto vertex_size = sizeof(float) * 3    // position
+                               + sizeof(float) * 3  // normal
+                               + sizeof(float) * 2  // uv
+                               + sizeof(float) * 4; // tangent
+            if (mesh.has_colors)
+            {
+                vertex_size += sizeof(float) * 4; // color
+            }
+
+            vertex_bytes_required +=
+                static_cast<uint32_t>(vertex_size * mesh.vertices.size() + sizeof(uint32_t) * mesh.indices.size());
+            layout_bytes_required += static_cast<uint32_t>(sizeof(mesh_layout));
+        }
+
+        const auto total_bytes_required = vertex_bytes_required + layout_bytes_required;
+
+        auto staging = _device->create_buffer({
+            .size = total_bytes_required,
+            .location = rhi::memory_location::host,
+            .usage = make_enum_mask(rhi::buffer_usage::transfer_src),
+            .access_type = rhi::host_access_type::incoherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
+            .name = "Staging Buffer",
+        });
+
+        auto dst = _device->map_buffer(staging);
+
+        for (const auto& mesh_id : mesh_ids)
+        {
+            optional<const core::mesh&> mesh_opt = mesh_registry.find(mesh_id);
+            const auto& mesh = *mesh_opt;
+
+            // Region 0
+            // - Positions (3 floats)
+            // Region 1
+            // - Normals (3 floats)
+            // - UVs (2 floats)
+            // - Tangents (3 floats)
+            // - Colors (4 floats, optional)
+
+            mesh_layout layout = {
+                .mesh_start_offset = static_cast<uint32_t>(bytes_written),
+                .positions_offset = 0,
+                .interleave_offset = 3 * static_cast<uint32_t>(sizeof(float) * mesh.vertices.size()),
+                .interleave_stride = 0,
+                .uvs_offset = 0,
+                .normals_offset = static_cast<uint32_t>(2 * sizeof(float)),
+                .tangents_offset = static_cast<uint32_t>(5 * sizeof(float)),
+                .index_offset = 0,
+                .index_count = 0,
+            };
+
+            auto last_offset = 9 * sizeof(float);
+
+            if (mesh.has_colors)
+            {
+                layout.color_offset = static_cast<uint32_t>(last_offset);
+                last_offset += sizeof(float) * 4;
+            }
+
+            layout.interleave_stride = static_cast<uint32_t>(last_offset);
+            layout.index_offset =
+                layout.interleave_offset + layout.interleave_stride * static_cast<uint32_t>(mesh.vertices.size());
+            layout.index_count = static_cast<uint32_t>(mesh.indices.size());
+
+            result[mesh_id] = layout;
+
+            // Position attribute
+            size_t vertices_written = 0;
+            for (const auto& vertex : mesh.vertices)
+            {
+                std::memcpy(dst + bytes_written + vertices_written * 3 * sizeof(float), &vertex.position,
+                            sizeof(float) * 3);
+
+                ++vertices_written;
+            }
+
+            bytes_written += layout.interleave_offset;
+
+            // Interleaved, non-position attributes
+            vertices_written = 0;
+            for (const auto& vertex : mesh.vertices)
+            {
+                std::memcpy(dst + bytes_written + layout.uvs_offset + vertices_written * layout.interleave_stride,
+                            &vertex.uv, 2 * sizeof(float));
+                std::memcpy(dst + bytes_written + layout.normals_offset + vertices_written * layout.interleave_stride,
+                            &vertex.normal, 3 * sizeof(float));
+                std::memcpy(dst + bytes_written + layout.tangents_offset + vertices_written * layout.interleave_stride,
+                            &vertex.tangent, 3 * sizeof(float));
+
+                if (mesh.has_colors)
+                {
+                    std::memcpy(dst + bytes_written + layout.color_offset + vertices_written * layout.interleave_stride,
+                                &vertex.color, 4 * sizeof(float));
+                }
+
+                ++vertices_written;
+            }
+
+            bytes_written += layout.interleave_stride * static_cast<uint32_t>(mesh.vertices.size());
+
+            // Indices
+            std::memcpy(dst + bytes_written, mesh.indices.data(), sizeof(uint32_t) * mesh.indices.size());
+
+            bytes_written += static_cast<uint32_t>(sizeof(uint32_t) * mesh.indices.size());
+        }
+
+        // Write the layouts
+        for (auto&& [guid, layout] : result)
+        {
+            std::memcpy(dst + bytes_written, &layout, sizeof(mesh_layout));
+            bytes_written += static_cast<uint32_t>(sizeof(mesh_layout));
+
+            _meshes.mesh_to_index.insert({guid, _meshes.meshes.size()});
+            _meshes.meshes.push_back(layout);
+        }
+
+        // Flush the staging buffer
+        _device->unmap_buffer(staging);
+        _device->flush_buffers(span(&staging, 1));
+
+        // Upload the staging buffer to the GPU
+        auto& work_queue = _device->get_primary_work_queue();
+        auto cmd_buf = work_queue.get_next_command_list();
+
+        work_queue.begin_command_list(cmd_buf, true);
+        work_queue.copy(cmd_buf, staging, _global_resources.vertex_pull_buffer, 0,
+                        _global_resources.utilization.vertex_bytes_written, vertex_bytes_required);
+        work_queue.copy(cmd_buf, staging, _global_resources.mesh_buffer, vertex_bytes_required,
+                        _global_resources.utilization.mesh_layout_bytes_written, layout_bytes_required);
+        work_queue.end_command_list(cmd_buf);
+
+        rhi::work_queue::submit_info submit_info;
+        submit_info.command_lists.push_back(cmd_buf);
+
+        // Get a fence for the copy operation
+        auto complete_fence = _device->create_fence({
+            .signaled = false,
+        });
+
+        // Submit
+        work_queue.submit(span(&submit_info, 1), complete_fence);
+
+        // Wait for the copy operation to complete
+        _device->wait(span(&complete_fence, 1));
+
+        // Clean up the resources
+        _device->destroy_buffer(staging);
+        _device->destroy_fence(complete_fence);
+
+        _global_resources.utilization.vertex_bytes_written += total_bytes_required;
+        _global_resources.utilization.mesh_layout_bytes_written += layout_bytes_required;
+    }
+
+    namespace
+    {
+        rhi::image_format convert_format(core::texture_format fmt)
+        {
+            switch (fmt)
+            {
+            case core::texture_format::rgba8_srgb:
+                return rhi::image_format::rgba8_srgb;
+            case core::texture_format::rgba8_unorm:
+                return rhi::image_format::rgba8_unorm;
+            case core::texture_format::rgba16_unorm:
+                return rhi::image_format::rgba16_unorm;
+            case core::texture_format::rgba32_float:
+                return rhi::image_format::rgba32_float;
+            default:
+                log->error("Unsupported texture format");
+            }
+
+            unreachable();
+        }
+    } // namespace
+
+    void pbr_frame_graph::_load_textures(span<const guid> texture_ids, const core::texture_registry& texture_registry,
+                                         bool generate_mip_maps)
+    {
+        // Ensure we aren't uploading existing textures
+        vector<guid> next_texture_ids;
+        for (const auto& tex_guid : texture_ids)
+        {
+            if (_bindless_textures.image_to_index.find(tex_guid) != _bindless_textures.image_to_index.end() ||
+                tempest::find(next_texture_ids.begin(), next_texture_ids.end(), tex_guid) != next_texture_ids.end())
+            {
+                continue;
+            }
+            next_texture_ids.push_back(tex_guid);
+        }
+
+        // Create the images
+        vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>> images;
+
+        for (const auto& tex_guid : next_texture_ids)
+        {
+            auto texture_opt = texture_registry.get_texture(tex_guid);
+            assert(texture_opt.has_value());
+
+            const auto& texture = *texture_opt;
+            const auto mip_count = generate_mip_maps ? bit_width(min(texture.width, texture.height))
+                                                     : static_cast<std::uint32_t>(texture.mips.size());
+
+            rhi::image_desc image_desc = {
+                .format = convert_format(texture.format),
+                .type = rhi::image_type::image_2d,
+                .width = texture.width,
+                .height = texture.height,
+                .depth = 1,
+                .array_layers = 1,
+                .mip_levels = mip_count,
+                .sample_count = rhi::image_sample_count::sample_count_1,
+                .tiling = rhi::image_tiling_type::optimal,
+                .location = rhi::memory_location::device,
+                .usage = make_enum_mask(rhi::image_usage::sampled, rhi::image_usage::transfer_dst,
+                                        rhi::image_usage::transfer_src),
+                .name = texture.name,
+            };
+
+            auto image = _device->create_image(image_desc);
+            images.push_back(image);
+        }
+
+        // Set up the staging buffer
+        constexpr auto staging_buffer_size = 1024u * 1024 * 128; // 128 MB
+        auto staging = _device->create_buffer({
+            .size = staging_buffer_size,
+            .location = rhi::memory_location::host,
+            .usage = make_enum_mask(rhi::buffer_usage::transfer_src),
+            .access_type = rhi::host_access_type::incoherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
+            .name = "Staging Buffer",
+        });
+
+        auto staging_ptr = _device->map_buffer(staging);
+
+        // Get the command buffer ready
+        auto& work_queue = _device->get_primary_work_queue();
+        auto cmd_buf = work_queue.get_next_command_list();
+        work_queue.begin_command_list(cmd_buf, true);
+
+        uint32_t images_written = 0;
+        size_t staging_bytes_written = 0;
+
+        for (const auto& tex_guid : next_texture_ids)
+        {
+            auto texture_opt = texture_registry.get_texture(tex_guid);
+            const auto& texture = *texture_opt;
+
+            auto image = images[images_written];
+
+            // Change to a general image layout to be prepared for the copy
+            rhi::work_queue::image_barrier image_barrier = {
+                .image = image,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::general,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+                .src_access = make_enum_mask(rhi::memory_access::none),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+            };
+
+            work_queue.transition_image(cmd_buf, span(&image_barrier, 1));
+
+            uint32_t mips_written = 0;
+
+            for (const auto& mip : texture.mips)
+            {
+                // Ensure there is enough space in the staging buffer
+                const auto bytes_in_mip = mip.data.size();
+                const auto bytes_required = staging_bytes_written + bytes_in_mip;
+
+                if (bytes_required > staging_buffer_size)
+                {
+                    _device->unmap_buffer(staging);
+                    _device->flush_buffers(span(&staging, 1));
+
+                    work_queue.end_command_list(cmd_buf);
+                    auto finished = _device->create_fence({.signaled = false});
+
+                    rhi::work_queue::submit_info submit_info = {};
+                    submit_info.command_lists.push_back(cmd_buf);
+
+                    work_queue.submit(span(&submit_info, 1), finished);
+
+                    _device->wait(span(&finished, 1));
+
+                    _device->destroy_fence(finished);
+
+                    // Start a new command buffer
+                    cmd_buf = work_queue.get_next_command_list();
+                    work_queue.begin_command_list(cmd_buf, true);
+
+                    staging_bytes_written = 0;
+                }
+
+                // Copy the mip data to the staging buffer
+                std::memcpy(staging_ptr + staging_bytes_written, mip.data.data(), bytes_in_mip);
+
+                work_queue.copy(cmd_buf, staging, image, rhi::image_layout::general,
+                                static_cast<uint32_t>(staging_bytes_written), mips_written++);
+
+                staging_bytes_written += bytes_in_mip;
+            }
+
+            ++images_written;
+        }
+
+        // Make sure to clean up and submit the final commands
+        if (staging_bytes_written > 0)
+        {
+            _device->unmap_buffer(staging);
+            _device->flush_buffers(span(&staging, 1));
+            work_queue.end_command_list(cmd_buf);
+
+            rhi::work_queue::submit_info submit_info = {};
+            submit_info.command_lists.push_back(cmd_buf);
+            auto finished = _device->create_fence({.signaled = false});
+
+            work_queue.submit(span(&submit_info, 1), finished);
+            _device->wait(span(&finished, 1));
+            _device->destroy_fence(finished);
+            _device->destroy_buffer(staging);
+        }
+
+        auto commands = work_queue.get_next_command_list();
+        work_queue.begin_command_list(commands, true);
+
+        // Build out the image mips
+        if (generate_mip_maps)
+        {
+            auto image_index = 0u;
+            for (const auto& tex_guid : next_texture_ids)
+            {
+                auto texture_opt = texture_registry.get_texture(tex_guid);
+                const auto& texture = *texture_opt;
+                const auto& image = images[image_index++];
+
+                // Generate mip maps from the number of mips specified in the image source to the number of mips
+                // requested for creation
+                const auto max_mip_count = static_cast<uint32_t>(bit_width(min(texture.width, texture.height)));
+                const auto mip_to_build_from = static_cast<std::uint32_t>(texture.mips.size()) - 1;
+                const auto num_mips_to_generate = max_mip_count - mip_to_build_from;
+
+                work_queue.generate_mip_chain(commands, image, rhi::image_layout::general, mip_to_build_from,
+                                              num_mips_to_generate);
+            }
+        }
+
+        // Transition the image to a shader read layout
+        for (const auto& image : images)
+        {
+            rhi::work_queue::image_barrier image_barrier = {
+                .image = image,
+                .old_layout = rhi::image_layout::general,
+                .new_layout = rhi::image_layout::shader_read_only,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::all_transfer),
+                .src_access = make_enum_mask(rhi::memory_access::transfer_read, rhi::memory_access::transfer_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader,
+                                             rhi::pipeline_stage::compute_shader),
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read),
+            };
+
+            work_queue.transition_image(commands, span(&image_barrier, 1));
+        }
+
+        work_queue.end_command_list(commands);
+        rhi::work_queue::submit_info submit_info = {};
+        submit_info.command_lists.push_back(commands);
+        auto finished = _device->create_fence({.signaled = false});
+        work_queue.submit(span(&submit_info, 1), finished);
+        _device->wait(span(&finished, 1));
+        _device->destroy_fence(finished);
+
+        size_t image_index = 0;
+        for (const auto& guid : next_texture_ids)
+        {
+            _bindless_textures.image_to_index.insert({guid, _bindless_textures.images.size()});
+            _bindless_textures.images.push_back(images[image_index++]);
+        }
+    }
+
+    void pbr_frame_graph::_load_materials(span<const guid> material_ids,
+                                          const core::material_registry& material_registry)
+    {
+        for (const auto& guid : material_ids)
+        {
+            if (_materials.material_to_index.find(guid) != _materials.material_to_index.end())
+            {
+                continue;
+            }
+
+            const auto material_opt = material_registry.find(guid);
+            if (!material_opt.has_value())
+            {
+                continue;
+            }
+
+            const auto& material = *material_opt;
+
+            const auto base_color_factor =
+                material.get_vec4(core::material::base_color_factor_name).value_or(math::vec4<float>{1.0f});
+            const auto emissive_factor =
+                material.get_vec3(core::material::emissive_factor_name).value_or(math::vec3<float>{0.0f});
+            const auto normal_scale = material.get_scalar(core::material::normal_scale_name).value_or(1.0f);
+            const auto metallic_factor = material.get_scalar(core::material::metallic_factor_name).value_or(1.0f);
+            const auto roughness_factor = material.get_scalar(core::material::roughness_factor_name).value_or(1.0f);
+            const auto alpha_cutoff = material.get_scalar(core::material::alpha_cutoff_name).value_or(0.0f);
+            const auto transmissive_factor =
+                material.get_scalar(core::material::transmissive_factor_name).value_or(0.0f);
+            const auto thickness_factor =
+                material.get_scalar(core::material::volume_thickness_factor_name).value_or(0.0f);
+            const auto attenuation_distance =
+                material.get_scalar(core::material::volume_attenuation_distance_name).value_or(0.0f);
+            const auto attenuation_color =
+                material.get_vec3(core::material::volume_attenuation_color_name).value_or(math::vec3<float>{0.0f});
+
+            const auto material_type = [&material]() -> pbr_frame_graph::material_type {
+                auto material_type_str = material.get_string(core::material::alpha_mode_name).value_or("OPAQUE");
+                if (material_type_str == "OPAQUE")
+                {
+                    return material_type::opaque;
+                }
+                else if (material_type_str == "MASK")
+                {
+                    return material_type::mask;
+                }
+                else if (material_type_str == "BLEND")
+                {
+                    return material_type::blend;
+                }
+                else if (material_type_str == "TRANSMISSIVE")
+                {
+                    return material_type::transmissive;
+                }
+                else
+                {
+                    return material_type::opaque;
+                }
+            }();
+
+            auto gpu_material = material_data{
+                .base_color_factor = base_color_factor,
+                .emissive_factor = math::vec4(emissive_factor.x, emissive_factor.y, emissive_factor.z, 1.0f),
+                .attenuation_color = math::vec4(attenuation_color.x, attenuation_color.y, attenuation_color.z, 1.0f),
+                .normal_scale = normal_scale,
+                .metallic_factor = metallic_factor,
+                .roughness_factor = roughness_factor,
+                .alpha_cutoff = alpha_cutoff,
+                .reflectance = 0.0f,
+                .transmission_factor = transmissive_factor,
+                .thickness_factor = thickness_factor,
+                .attenuation_distance = attenuation_distance,
+                .type = material_type,
+            };
+
+            if (const auto albedo_map = material.get_texture(core::material::base_color_texture_name))
+            {
+                const auto texture_id = _bindless_textures.image_to_index[*albedo_map];
+                gpu_material.base_color_texture_id = static_cast<int16_t>(texture_id);
+            }
+            else
+            {
+                gpu_material.base_color_texture_id = material_data::invalid_texture_id;
+            }
+
+            if (const auto metallic_map = material.get_texture(core::material::metallic_roughness_texture_name))
+            {
+                const auto texture_id = _bindless_textures.image_to_index[*metallic_map];
+                gpu_material.metallic_roughness_texture_id = static_cast<int16_t>(texture_id);
+            }
+            else
+            {
+                gpu_material.metallic_roughness_texture_id = material_data::invalid_texture_id;
+            }
+
+            if (const auto normal_map = material.get_texture(core::material::normal_texture_name))
+            {
+                const auto texture_id = _bindless_textures.image_to_index[*normal_map];
+                gpu_material.normal_texture_id = static_cast<int16_t>(texture_id);
+            }
+            else
+            {
+                gpu_material.normal_texture_id = material_data::invalid_texture_id;
+            }
+
+            if (const auto occlusion_map = material.get_texture(core::material::occlusion_texture_name))
+            {
+                const auto texture_id = _bindless_textures.image_to_index[*occlusion_map];
+                gpu_material.occlusion_texture_id = static_cast<int16_t>(texture_id);
+            }
+            else
+            {
+                gpu_material.occlusion_texture_id = material_data::invalid_texture_id;
+            }
+
+            if (const auto emissive_map = material.get_texture(core::material::emissive_texture_name))
+            {
+                const auto texture_id = _bindless_textures.image_to_index[*emissive_map];
+                gpu_material.emissive_texture_id = static_cast<int16_t>(texture_id);
+            }
+            else
+            {
+                gpu_material.emissive_texture_id = material_data::invalid_texture_id;
+            }
+
+            if (const auto transmissive_map = material.get_texture(core::material::transmissive_texture_name))
+            {
+                const auto texture_id = _bindless_textures.image_to_index[*transmissive_map];
+                gpu_material.transmission_texture_id = static_cast<int16_t>(texture_id);
+            }
+            else
+            {
+                gpu_material.transmission_texture_id = material_data::invalid_texture_id;
+            }
+
+            if (const auto thickness_map = material.get_texture(core::material::volume_thickness_texture_name))
+            {
+                const auto texture_id = _bindless_textures.image_to_index[*thickness_map];
+                gpu_material.thickness_texture_id = static_cast<int16_t>(texture_id);
+            }
+            else
+            {
+                gpu_material.thickness_texture_id = material_data::invalid_texture_id;
+            }
+
+            _materials.material_to_index.insert({guid, _materials.materials.size()});
+            _materials.materials.push_back(gpu_material);
+        }
+
+        // Upload the materials to GPU using the staging buffer
+        const auto staging_buffer = _executor->get_buffer(_global_resources.graph_per_frame_staging_buffer);
+        const auto staging_buffer_write_offset = 0; // Always write at the start for now, since we wait idle beforehand
+        const auto write_length = _materials.materials.size() * sizeof(material_data);
+        auto staging_buffer_ptr = _device->map_buffer(staging_buffer);
+        std::memcpy(staging_buffer_ptr + staging_buffer_write_offset, _materials.materials.data(), write_length);
+        _device->unmap_buffer(staging_buffer);
+
+        _device->flush_buffers(span(&staging_buffer, 1));
+
+        auto& wq = _device->get_primary_work_queue();
+        auto cmds = wq.get_next_command_list();
+        wq.begin_command_list(cmds, true);
+        wq.copy(cmds, staging_buffer, _global_resources.material_buffer, staging_buffer_write_offset, 0, write_length);
+        wq.end_command_list(cmds);
+
+        auto submit_info = rhi::work_queue::submit_info{};
+        submit_info.command_lists.push_back(cmds);
+        auto fence = _device->create_fence({.signaled = false});
+        wq.submit({&submit_info, 1}, fence);
+        _device->wait({&fence, 1});
     }
 } // namespace tempest::graphics
