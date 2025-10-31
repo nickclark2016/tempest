@@ -163,6 +163,12 @@ namespace tempest::graphics
                                      rhi::bind_point point, uint32_t first_set,
                                      span<const graph_resource_handle<rhi::rhi_handle_type::buffer>> buffers);
 
+        void push_descriptors(rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout,
+                              rhi::bind_point point, uint32_t set_idx,
+                              span<const rhi::buffer_binding_descriptor> buffers,
+                              span<const rhi::image_binding_descriptor> images,
+                              span<const rhi::sampler_binding_descriptor> samplers);
+
       protected:
         task_execution_context(graph_executor* executor,
                                rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> cmd_list,
@@ -182,18 +188,22 @@ namespace tempest::graphics
         void begin_render_pass(const rhi::work_queue::render_pass_info& info);
         void end_render_pass();
 
-        void set_viewport(float x, float y, float width, float height, float min_depth, float max_depth);
+        void set_viewport(float x, float y, float width, float height, float min_depth, float max_depth,
+                          bool flipped = true);
         void set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
         void set_cull_mode(enum_mask<rhi::cull_mode> mode);
 
         void bind_pipeline(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline);
-        void bind_index_buffer(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> index_buffer,
-                               rhi::index_format type, uint64_t offset);
+        void bind_index_buffer(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> index_buffer, rhi::index_format type,
+                               uint64_t offset);
 
         void draw_indirect(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
                            uint32_t draw_count, uint32_t stride);
         void draw_indirect(graph_resource_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
                            uint32_t draw_count, uint32_t stride);
+
+        void draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0,
+                  uint32_t first_instance = 0);
 
       private:
         friend class graph_executor;

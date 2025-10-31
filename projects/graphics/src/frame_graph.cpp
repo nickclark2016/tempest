@@ -335,6 +335,15 @@ namespace tempest::graphics
         _queue->bind_descriptor_buffers(_cmd_list, layout, point, first_set, rhi_buffers, offsets);
     }
 
+    void task_execution_context::push_descriptors(rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout,
+                                                  rhi::bind_point point, uint32_t set_idx,
+                                                  span<const rhi::buffer_binding_descriptor> buffers,
+                                                  span<const rhi::image_binding_descriptor> images,
+                                                  span<const rhi::sampler_binding_descriptor> samplers)
+    {
+        _queue->push_descriptors(_cmd_list, layout, point, set_idx, buffers, images, samplers);
+    }
+
     graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::import_buffer(
         string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
     {
@@ -1249,7 +1258,27 @@ namespace tempest::graphics
 
         if (it != _plan->resources.cend() && it->per_frame)
         {
-            return _current_frame % _device->frames_in_flight() * get<rhi::buffer_desc>(it->creation_info).size;
+            const auto size = visit(
+                [&](auto&& res) -> size_t {
+                    using type = remove_const_t<remove_reference_t<decltype(res)>>;
+
+                    if constexpr (is_same_v<type, external_resource>)
+                    {
+                        if (auto buf_handle = get_if<rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>>(&res))
+                        {
+                            return _device->get_buffer_size(*buf_handle);
+                        }
+                    }
+                    else if constexpr (is_same_v<type, rhi::buffer_desc>)
+                    {
+                        return res.size;
+                    }
+
+                    return 0;
+                },
+                it->creation_info);
+
+            return _current_frame % _device->frames_in_flight() * size;
         }
 
         return 0;
@@ -1263,8 +1292,28 @@ namespace tempest::graphics
 
         if (it != _plan->resources.cend())
         {
-            const auto size = get<rhi::buffer_desc>(it->creation_info).size;
-            if (it->per_frame)
+            // Check if this is an external resource
+            const auto size = visit(
+                [&](auto&& res) -> size_t {
+                    using type = remove_const_t<remove_reference_t<decltype(res)>>;
+
+                    if constexpr (is_same_v<type, external_resource>)
+                    {
+                        if (auto buf_handle = get_if<rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>>(&res))
+                        {
+                            return _device->get_buffer_size(*buf_handle);
+                        }
+                    }
+                    else if constexpr (is_same_v<type, rhi::buffer_desc>)
+                    {
+                        return res.size;
+                    }
+
+                    return 0;
+                },
+                it->creation_info);
+
+            if (it->per_frame && holds_alternative<external_resource>(it->creation_info))
             {
                 return size / _device->frames_in_flight();
             }
@@ -1657,6 +1706,15 @@ namespace tempest::graphics
                             }
                             else
                             {
+                                // If src is a host operation and there is no ownership transfer or layout transition,
+                                // we can skip the barrier entirely
+                                if ((prior_usage.stages & make_enum_mask(rhi::pipeline_stage::host)) ==
+                                        make_enum_mask(rhi::pipeline_stage::host) &&
+                                    !cross_queue && img_usage.layout == resource.layout)
+                                {
+                                    continue;
+                                }
+
                                 // Create new barrier
                                 const auto barrier = rhi::work_queue::image_barrier{
                                     .image = image_it->second,
@@ -1810,6 +1868,15 @@ namespace tempest::graphics
                             }
                             else
                             {
+                                // If src is a host operation and there is no ownership transfer,
+                                // we can skip the barrier entirely
+                                if ((prior_usage.stages & make_enum_mask(rhi::pipeline_stage::host)) ==
+                                        make_enum_mask(rhi::pipeline_stage::host) &&
+                                    !cross_queue)
+                                {
+                                    continue;
+                                }
+
                                 const auto barrier = rhi::work_queue::buffer_barrier{
                                     .buffer = buffer_it->second,
                                     .src_stages = existing_write_stages | prior_usage.stages,
@@ -2210,9 +2277,9 @@ namespace tempest::graphics
     }
 
     void graphics_task_execution_context::set_viewport(float x, float y, float width, float height, float min_depth,
-                                                       float max_depth)
+                                                       float max_depth, bool flipped)
     {
-        _queue->set_viewport(_cmd_list, x, y, width, height, min_depth, max_depth, 0, true);
+        _queue->set_viewport(_cmd_list, x, y, width, height, min_depth, max_depth, 0, flipped);
     }
 
     void graphics_task_execution_context::set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height)
@@ -2234,7 +2301,7 @@ namespace tempest::graphics
     void graphics_task_execution_context::bind_index_buffer(
         rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> index_buffer, rhi::index_format type, uint64_t offset)
     {
-        _queue->bind_index_buffer(_cmd_list, index_buffer, offset, type);
+        _queue->bind_index_buffer(_cmd_list, index_buffer, static_cast<uint32_t>(offset), type);
     }
 
     void graphics_task_execution_context::draw_indirect(
@@ -2250,6 +2317,12 @@ namespace tempest::graphics
     {
         const auto buffer = _executor->get_buffer(indirect_buffer);
         _queue->draw(_cmd_list, buffer, offset, draw_count, stride);
+    }
+
+    void graphics_task_execution_context::draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex,
+                                               uint32_t first_instance)
+    {
+        _queue->draw(_cmd_list, vertex_count, instance_count, first_vertex, first_instance);
     }
 
     void transfer_task_execution_context::clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image,

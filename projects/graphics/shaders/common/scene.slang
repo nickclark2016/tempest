@@ -10,5 +10,4 @@ struct SceneGlobals {
     float2 light_cluster_depth_range;
     float ao_strength;
     uint point_light_count;
-    Array<float4, 64> ssao_sample_kernel;
 };

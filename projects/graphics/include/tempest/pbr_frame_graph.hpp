@@ -106,14 +106,18 @@ namespace tempest::graphics
         struct ssao_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> ssao_output;
+            graph_resource_handle<rhi::rhi_handle_type::buffer> ssao_constants_buffer;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> ssao_noise_image;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> descriptor_layout;
         };
 
         struct ssao_blur_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> ssao_blurred_output;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
         };
 
         struct shadow_map_pass_outputs
@@ -213,6 +217,7 @@ namespace tempest::graphics
                 uint64_t mesh_layout_bytes_written = 0;
                 uint64_t material_bytes_written = 0;
                 uint32_t loaded_object_count = 0;
+                uint32_t staging_buffer_bytes_written = 0;
             } utilization;
         } _global_resources;
 
@@ -258,6 +263,7 @@ namespace tempest::graphics
         static void _upload_pass_task(transfer_task_execution_context& ctx, pbr_frame_graph* self);
         static void _depth_prepass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                         graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors);
+        static void _ssao_upload_task(transfer_task_execution_context& ctx, pbr_frame_graph* self);
         static void _ssao_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                     graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors);
         static void _ssao_blur_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
@@ -371,8 +377,6 @@ namespace tempest::graphics
 
         struct scene_constants
         {
-            static constexpr size_t ssao_kernel_size = 64;
-
             camera cam;
             math::vec2<float> screen_size;
             math::vec3<float> ambient_light_color;
@@ -382,7 +386,6 @@ namespace tempest::graphics
             math::vec2<float> light_grid_z_bounds;          // x = min light grid bounds, y = max light grid bounds (z)
             float ssao_strength = 2.0f;
             uint32_t point_light_count{};
-            array<math::vec4<float>, ssao_kernel_size> ssao_sample_kernel;
         };
 
         struct lighting_cluster_bounds
@@ -395,6 +398,16 @@ namespace tempest::graphics
         {
             uint32_t offset;
             uint32_t range;
+        };
+
+        struct ssao_constants
+        {
+            static constexpr size_t ssao_kernel_size = 64;
+
+            array<math::vec4<float>, ssao_kernel_size> ssao_sample_kernel;
+            math::vec2<float> noise_scale;
+            float radius;
+            float bias;
         };
 
         struct indirect_command
@@ -483,6 +496,14 @@ namespace tempest::graphics
         {
             flat_map<draw_batch_key, draw_batch_payload> draw_batches;
         } _drawables = {};
+
+        struct
+        {
+            vector<math::vec4<float>> noise_kernel;
+            math::vec2<float> noise_scale;
+            float radius;
+            float bias;
+        } _ssao_data = {};
     };
 } // namespace tempest::graphics
 

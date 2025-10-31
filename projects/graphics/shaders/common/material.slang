@@ -134,7 +134,11 @@ half f0_to_index_of_refraction(half f0) {
 }
 
 half d_ggx(half roughness, half n_dot_h, half3 h, half3 n) {
-    half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
+    // half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
+    
+    half3 nxh = cross(n, h);
+    half one_minus_noh2 = dot(nxh, nxh);
+    
     half alpha = n_dot_h * roughness;
     half k = roughness / (one_minus_noh2 + alpha * alpha);
     half d = k * k * half(1.0 / PI);

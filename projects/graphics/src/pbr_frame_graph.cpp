@@ -1,6 +1,8 @@
 #include <tempest/frame_graph.hpp>
 
 #include <cstring>
+#include <random>
+
 #include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
 #include <tempest/enum.hpp>
@@ -80,6 +82,8 @@ namespace tempest::graphics
 
     void pbr_frame_graph::execute()
     {
+        _global_resources.utilization.staging_buffer_bytes_written = 0;
+
         TEMPEST_ASSERT(_executor.has_value());
         _executor->execute();
     }
@@ -240,7 +244,8 @@ namespace tempest::graphics
         auto vertex_pull_buffer = _device->create_buffer({
             .size = _cfg.vertex_data_buffer_size,
             .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::index, rhi::buffer_usage::transfer_dst),
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::index,
+                                    rhi::buffer_usage::transfer_dst),
             .access_type = rhi::host_access_type::none,
             .access_pattern = rhi::host_access_pattern::none,
             .name = "Vertex Pull Buffer",
@@ -634,7 +639,7 @@ namespace tempest::graphics
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(descriptor_buffer,
                           make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+                          make_enum_mask(rhi::memory_access::shader_read));
             },
             &_depth_prepass_task, this, descriptor_buffer);
 
@@ -671,11 +676,23 @@ namespace tempest::graphics
             .name = "SSAO Output Buffer",
         });
 
+        auto ssao_constant_buffer = builder.create_per_frame_buffer({
+            .size = sizeof(ssao_constants),
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::buffer_usage::constant, rhi::buffer_usage::transfer_dst),
+            .access_type = rhi::host_access_type::none,
+            .access_pattern = rhi::host_access_pattern::none,
+            .name = "SSAO Constants Buffer",
+        });
+
+        const auto noise_image_width = 16u;
+        const auto noise_image_height = 16u;
+
         auto ssao_noise = _device->create_image({
             .format = rhi::image_format::rg16_snorm,
             .type = rhi::image_type::image_2d,
-            .width = 4,
-            .height = 4,
+            .width = noise_image_width,
+            .height = noise_image_height,
             .depth = 1,
             .array_layers = 1,
             .mip_levels = 1,
@@ -686,13 +703,128 @@ namespace tempest::graphics
             .name = "SSAO Noise Texture",
         });
 
+        // Populate the noise image and kernel
+
+        auto rd = std::random_device{};
+        auto generator = std::mt19937{rd()};
+        auto distribution = std::uniform_real_distribution{0.0f, 1.0f};
+
+        auto noise_data = vector<short>(2 * noise_image_width * noise_image_height);
+
+        const auto num_noise_samples = noise_image_width * noise_image_height;
+        for (auto idx = 0u; idx < num_noise_samples; ++idx)
+        {
+            const auto r = distribution(generator);
+            const auto g = distribution(generator);
+
+            // Encode the red and green channels as signed short values
+            const auto encoded_r = static_cast<short>(math::lerp(-32768.0f, 32767.0f, r));
+            const auto encoded_g = static_cast<short>(math::lerp(-32768.0f, 32767.0f, g));
+
+            noise_data[2 * idx + 0] = encoded_r;
+            noise_data[2 * idx + 1] = encoded_g;
+        }
+
+        auto staging_buffer = _device->create_buffer({
+            .size = static_cast<size_t>(noise_data.size() * sizeof(short)),
+            .location = rhi::memory_location::automatic,
+            .usage = make_enum_mask(rhi::buffer_usage::transfer_src),
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
+            .name = "SSAO Noise Staging Buffer",
+        });
+
+        auto staging_buffer_bytes = _device->map_buffer(staging_buffer);
+        std::memcpy(staging_buffer_bytes, noise_data.data(), noise_data.size() * sizeof(short));
+        _device->unmap_buffer(staging_buffer);
+
+        auto& wq = _device->get_primary_work_queue();
+        auto cmds = wq.get_next_command_list();
+        wq.begin_command_list(cmds, true);
+
+        // Transition noise image to dst layout
+        const auto pre_transfer_barriers = array{
+            rhi::work_queue::image_barrier{
+                .image = ssao_noise,
+                .old_layout = rhi::image_layout::undefined,
+                .new_layout = rhi::image_layout::transfer_dst,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::top),
+                .src_access = make_enum_mask(rhi::memory_access::none),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+        };
+        wq.transition_image(cmds, pre_transfer_barriers);
+
+        wq.copy(cmds, staging_buffer, ssao_noise, rhi::image_layout::transfer_dst, 0, 0);
+
+        // Transition noise image to shader read layout
+        const auto post_transfer_barriers = array{
+            rhi::work_queue::image_barrier{
+                .image = ssao_noise,
+                .old_layout = rhi::image_layout::transfer_dst,
+                .new_layout = rhi::image_layout::shader_read_only,
+                .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
+                .src_access = make_enum_mask(rhi::memory_access::transfer_write),
+                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                .dst_access = make_enum_mask(rhi::memory_access::shader_read),
+                .src_queue = nullptr,
+                .dst_queue = nullptr,
+            },
+        };
+
+        wq.transition_image(cmds, post_transfer_barriers);
+
+        wq.end_command_list(cmds);
+
+        auto result_fence = _device->create_fence({
+            .signaled = false,
+        });
+
+        auto submit_info = rhi::work_queue::submit_info{};
+        submit_info.command_lists.push_back(cmds);
+
+        const auto submits = array{submit_info};
+
+        wq.submit(submits, result_fence);
+
+        for (size_t i = 0; i < ssao_constants::ssao_kernel_size; ++i)
+        {
+            const auto sample = math::vec3<float>{
+                distribution(generator) * 2.0f - 1.0f,
+                distribution(generator) * 2.0f - 1.0f,
+                distribution(generator),
+            };
+
+            const auto normalized_sample = math::normalize(sample);
+            const auto scaled_sample = normalized_sample * distribution(generator);
+
+            const auto scale = static_cast<float>(i) / static_cast<float>(ssao_constants::ssao_kernel_size);
+            const auto adjusted_scale = math::lerp(0.1f, 1.0f, scale * scale);
+
+            const auto lerp_adjusted_sample = scaled_sample * adjusted_scale;
+
+            _ssao_data.noise_kernel.push_back(
+                math::vec4<float>{lerp_adjusted_sample.x, lerp_adjusted_sample.y, lerp_adjusted_sample.z, 0.0f});
+        }
+
+        _ssao_data.bias = 0.025f;
+        _ssao_data.radius = 0.5f;
+        _ssao_data.noise_scale = math::vec2<float>{
+            static_cast<float>(_cfg.render_target_width) / static_cast<float>(noise_image_width),
+            static_cast<float>(_cfg.render_target_height) / static_cast<float>(noise_image_height),
+        };
+
         // Descriptor Set Layout
         // 0 - Scene Constants
-        // 1 - Depth Texture
-        // 2 - Encoded Normal Texture
-        // 3 - SSAO Noise Texture
-        // 4 - Linear Sampler
-        // 5 - Point Sampler
+        // 1 - SSAO Constants
+        // 2 - Depth Texture
+        // 3 - Encoded Normal Texture
+        // 4 - SSAO Noise Texture
+        // 5 - Linear Sampler
+        // 6 - Point Sampler
 
         auto scene_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
         scene_descriptor_set_bindings.push_back({
@@ -704,7 +836,7 @@ namespace tempest::graphics
 
         scene_descriptor_set_bindings.push_back({
             .binding_index = 1,
-            .type = rhi::descriptor_type::sampled_image,
+            .type = rhi::descriptor_type::constant_buffer,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
         });
@@ -725,13 +857,20 @@ namespace tempest::graphics
 
         scene_descriptor_set_bindings.push_back({
             .binding_index = 4,
-            .type = rhi::descriptor_type::sampler,
+            .type = rhi::descriptor_type::sampled_image,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
         });
 
         scene_descriptor_set_bindings.push_back({
             .binding_index = 5,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+
+        scene_descriptor_set_bindings.push_back({
+            .binding_index = 6,
             .type = rhi::descriptor_type::sampler,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
@@ -815,16 +954,26 @@ namespace tempest::graphics
 
         auto descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(scene_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "SSAO Descriptor Set Buffer",
         });
+
+        builder.create_transfer_pass(
+            "Upload SSAO Constants",
+            [&](transfer_task_builder& task) {
+                task.write(ssao_constant_buffer, make_enum_mask(rhi::pipeline_stage::copy),
+                           make_enum_mask(rhi::memory_access::transfer_write));
+            },
+            &_ssao_upload_task, this);
 
         builder.create_graphics_pass(
             "SSAO Pass",
             [&](graphics_task_builder& task) {
+                task.read(ssao_constant_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
                 task.read(_pass_output_resource_handles.depth_prepass.depth, rhi::image_layout::shader_read_only,
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
@@ -835,17 +984,26 @@ namespace tempest::graphics
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(descriptor_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+                          make_enum_mask(rhi::memory_access::shader_read));
                 task.write(ssao_output, rhi::image_layout::color_attachment,
                            make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                            make_enum_mask(rhi::memory_access::color_attachment_write));
             },
             &_ssao_pass_task, this, descriptor_buffer);
 
+        const auto fences = array{result_fence};
+        _device->wait(fences);
+
+        _device->destroy_fence(result_fence);
+        _device->destroy_buffer(staging_buffer);
+
         return {
             .ssao_output = ssao_output,
+            .ssao_constants_buffer = ssao_constant_buffer,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
             .ssao_noise_image = ssao_noise,
+            .descriptor_layout = scene_descriptors,
         };
     }
 
@@ -980,6 +1138,7 @@ namespace tempest::graphics
         return {
             .ssao_blurred_output = ssao_blurred_output,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
         };
     }
 
@@ -1388,7 +1547,7 @@ namespace tempest::graphics
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(descriptor_buffer,
                           make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+                          make_enum_mask(rhi::memory_access::shader_read));
                 task.write(shadow_mega_texture, rhi::image_layout::depth,
                            make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
                            make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
@@ -1639,9 +1798,11 @@ namespace tempest::graphics
         builder.create_graphics_pass(
             "PBR Opaque Pass",
             [&](graphics_task_builder& task) {
-                task.read(_pass_output_resource_handles.depth_prepass.depth, rhi::image_layout::depth_stencil_read_only,
-                          make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
-                          make_enum_mask(rhi::memory_access::depth_stencil_attachment_read));
+                task.read_write(_pass_output_resource_handles.depth_prepass.depth, rhi::image_layout::depth,
+                                make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                                make_enum_mask(rhi::memory_access::depth_stencil_attachment_read),
+                                make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                                make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
                 task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
@@ -1662,9 +1823,9 @@ namespace tempest::graphics
 
                 task.read(scene_descriptor_buffer,
                           make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+                          make_enum_mask(rhi::memory_access::shader_read));
                 task.read(shadow_descriptor_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::descriptor_buffer_read));
+                          make_enum_mask(rhi::memory_access::shader_read));
 
                 task.read(_pass_output_resource_handles.light_culling.light_grid,
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
@@ -1676,6 +1837,9 @@ namespace tempest::graphics
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
 
@@ -2020,6 +2184,9 @@ namespace tempest::graphics
                 task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
 
                 task.write(transparency_accumulation, rhi::image_layout::color_attachment,
                            make_enum_mask(rhi::pipeline_stage::color_attachment_output),
@@ -2315,6 +2482,9 @@ namespace tempest::graphics
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
+                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
 
@@ -2629,7 +2799,8 @@ namespace tempest::graphics
     {
         // No actual rendering commands needed, just resource uploads
         const auto staging_buffer_offset =
-            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_per_frame_staging_buffer);
+            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_per_frame_staging_buffer) +
+            self->_global_resources.utilization.staging_buffer_bytes_written;
         auto staging_buffer_bytes = self->_device->map_buffer(
             self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
         auto staging_bytes_written = static_cast<size_t>(0u);
@@ -2650,7 +2821,8 @@ namespace tempest::graphics
         const auto f = math::extract_forward(quat_rot);
         const auto u = math::extract_up(quat_rot);
 
-        auto projection = math::perspective(camera_data->aspect_ratio, camera_data->vertical_fov, 0.1f);
+        auto projection =
+            math::perspective(camera_data->aspect_ratio, camera_data->vertical_fov, camera_data->near_plane);
         auto view = math::look_at(camera_transform->position(), camera_transform->position() + f, u);
 
         // Set up and upload the scene constants
@@ -2810,6 +2982,8 @@ namespace tempest::graphics
             draw_command_offset += sizeof(indexed_indirect_command) * draw_batch.commands.size();
         }
         self->_device->unmap_buffer(self->_executor->get_buffer(draw_command_buffer));
+
+        self->_global_resources.utilization.staging_buffer_bytes_written = static_cast<uint32_t>(staging_bytes_written);
     }
 
     void pbr_frame_graph::_depth_prepass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
@@ -2959,9 +3133,131 @@ namespace tempest::graphics
         ctx.end_render_pass();
     }
 
+    void pbr_frame_graph::_ssao_upload_task(transfer_task_execution_context& ctx, pbr_frame_graph* self)
+    {
+        auto consts = ssao_constants{};
+        for (auto i = static_cast<size_t>(0); i < ssao_constants::ssao_kernel_size; ++i)
+        {
+            consts.ssao_sample_kernel[i] = self->_ssao_data.noise_kernel[i];
+        }
+        consts.noise_scale = self->_ssao_data.noise_scale;
+        consts.bias = self->_ssao_data.bias;
+        consts.radius = self->_ssao_data.radius;
+
+        const auto staging_buffer_offset =
+            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_per_frame_staging_buffer) +
+            self->_global_resources.utilization.staging_buffer_bytes_written;
+        auto staging_buffer_bytes = self->_device->map_buffer(
+            self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+
+        std::memcpy(staging_buffer_bytes + staging_buffer_offset, &consts, sizeof(ssao_constants));
+
+        self->_device->unmap_buffer(
+            self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+
+        ctx.copy_buffer_to_buffer(self->_global_resources.graph_per_frame_staging_buffer,
+                                  self->_pass_output_resource_handles.ssao.ssao_constants_buffer, staging_buffer_offset,
+                                  self->_executor->get_current_frame_resource_offset(
+                                      self->_pass_output_resource_handles.ssao.ssao_constants_buffer),
+                                  sizeof(ssao_constants));
+
+        self->_global_resources.utilization.staging_buffer_bytes_written += sizeof(ssao_constants);
+    }
+
     void pbr_frame_graph::_ssao_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                           graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors)
     {
+        auto ssao_descriptors = rhi::descriptor_set_desc{};
+        ssao_descriptors.layout = self->_pass_output_resource_handles.ssao.descriptor_layout;
+
+        // Binding 0: Scene Constants
+        // Binding 1: SSAO Constants
+        // Binding 2: Depth Texture
+        // Binding 3: Normal Texture
+        // Binding 4: Noise Texture
+        // Binding 5: Linear Sampler
+        // Binding 6: Point Sampler
+
+        ssao_descriptors.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(
+                self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.upload_pass.scene_constants),
+        });
+
+        ssao_descriptors.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::constant_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(
+                self->_pass_output_resource_handles.ssao.ssao_constants_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.ssao.ssao_constants_buffer)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.ssao.ssao_constants_buffer),
+        });
+
+        auto depth_image_bindings = vector<rhi::image_binding_info>{};
+        depth_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.depth_prepass.depth),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        ssao_descriptors.images.push_back(rhi::image_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(depth_image_bindings),
+        });
+
+        auto normal_image_bindings = vector<rhi::image_binding_info>{};
+        normal_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.depth_prepass.encoded_normals),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        ssao_descriptors.images.push_back(rhi::image_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(normal_image_bindings),
+        });
+
+        auto noise_image_bindings = vector<rhi::image_binding_info>{};
+        noise_image_bindings.push_back(rhi::image_binding_info{
+            .image = self->_pass_output_resource_handles.ssao.ssao_noise_image,
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        ssao_descriptors.images.push_back(rhi::image_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(noise_image_bindings),
+        });
+
+        auto linear_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        linear_samplers.push_back(self->_global_resources.linear_sampler);
+
+        ssao_descriptors.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 5,
+            .samplers = tempest::move(linear_samplers),
+        });
+
+        auto point_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        point_samplers.push_back(self->_global_resources.point_sampler);
+
+        ssao_descriptors.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 6,
+            .samplers = tempest::move(point_samplers),
+        });
+
+        auto ssao_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(descriptors));
+        self->_device->write_descriptor_buffer(ssao_descriptors, ssao_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(descriptors));
+
         auto render_pass_begin = rhi::work_queue::render_pass_info{};
         render_pass_begin.name = "SSAO Pass";
         render_pass_begin.width = self->_cfg.render_target_width;
@@ -2982,6 +3278,17 @@ namespace tempest::graphics
         });
 
         ctx.begin_render_pass(render_pass_begin);
+        ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.ssao.pipeline_layout, rhi::bind_point::graphics,
+                                    0, array{descriptors});
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.ssao.pipeline);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f, false);
+
+        ctx.draw(3);
+
         ctx.end_render_pass();
     }
 
@@ -3006,7 +3313,44 @@ namespace tempest::graphics
             .store_op = rhi::work_queue::store_op::store,
         });
 
+        // 0: SSAO Texture
+        // 1: Linear Sampler
+
+        auto images = vector<rhi::image_binding_info>{};
+        images.push_back({
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao.ssao_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        auto image_bindings = array{
+            rhi::image_binding_descriptor{
+                .index = 0,
+                .type = rhi::descriptor_type::sampled_image,
+                .array_offset = 0,
+                .images = tempest::move(images),
+            },
+        };
+
+        auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        samplers.push_back(self->_global_resources.linear_sampler);
+
+        auto sampler_bindings = array{
+            rhi::sampler_binding_descriptor{
+                .index = 1,
+                .samplers = tempest::move(samplers),
+            },
+        };
+
         ctx.begin_render_pass(render_pass_begin);
+        ctx.push_descriptors(self->_pass_output_resource_handles.ssao_blur.pipeline_layout, rhi::bind_point::graphics,
+                             0, {}, image_bindings, sampler_bindings);
+        ctx.bind_pipeline(self->_pass_output_resource_handles.ssao_blur.pipeline);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f, false);
+        ctx.draw(3);
         ctx.end_render_pass();
     }
 
@@ -3386,7 +3730,7 @@ namespace tempest::graphics
             const auto mip_count = generate_mip_maps ? bit_width(min(texture.width, texture.height))
                                                      : static_cast<std::uint32_t>(texture.mips.size());
 
-            rhi::image_desc image_desc = {
+            const auto image_desc = rhi::image_desc{
                 .format = convert_format(texture.format),
                 .type = rhi::image_type::image_2d,
                 .width = texture.width,

@@ -2904,6 +2904,12 @@ namespace tempest::rhi::vk
         }
     }
 
+    size_t device::get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept
+    {
+        auto buf = get_buffer(handle);
+        return buf->allocation_info.size;
+    }
+
     uint32_t device::get_render_surface_width(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept
     {
         auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);

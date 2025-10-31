@@ -99,6 +99,7 @@ namespace tempest::rhi
         virtual byte* map_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
         virtual void unmap_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
         virtual void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept = 0;
+        virtual size_t get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept = 0;
 
         // Swapchain info
         virtual uint32_t get_render_surface_width(
