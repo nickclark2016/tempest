@@ -160,33 +160,22 @@ int main()
     auto render_graph_builder_opt = pbr_fg.get_builder();
     auto& render_graph_builder = render_graph_builder_opt.value();
     auto swapchain_handle = render_graph_builder.import_render_surface("Swapchain", swapchain);
+    auto color_target = pbr_fg.get_tonemapped_color_handle();
 
-    render_graph_builder.create_graphics_pass(
-        "Clear Swapchain",
+    render_graph_builder.create_transfer_pass(
+        "Present to Swapchain",
         [&](auto& builder) {
-            builder.write(swapchain_handle, tempest::rhi::image_layout::color_attachment,
-                          tempest::make_enum_mask(tempest::rhi::pipeline_stage::color_attachment_output),
-                          tempest::make_enum_mask(tempest::rhi::memory_access::color_attachment_write));
+            builder.read(color_target, tempest::rhi::image_layout::transfer_src,
+                         tempest::make_enum_mask(tempest::rhi::pipeline_stage::blit),
+                         tempest::make_enum_mask(tempest::rhi::memory_access::transfer_read));
+            builder.write(swapchain_handle, tempest::rhi::image_layout::transfer_dst,
+                          tempest::make_enum_mask(tempest::rhi::pipeline_stage::blit),
+                          tempest::make_enum_mask(tempest::rhi::memory_access::transfer_write));
         },
-        [](tempest::graphics::graphics_task_execution_context& ctx, auto swapchain_handle, auto& device,
-           auto rhi_swapchain) {
-            auto render_pass_info = tempest::rhi::work_queue::render_pass_info{};
-            render_pass_info.name = "Clear Swapchain Pass";
-            render_pass_info.width = device.get_render_surface_width(rhi_swapchain);
-            render_pass_info.height = device.get_render_surface_height(rhi_swapchain);
-            render_pass_info.layers = 1;
-            render_pass_info.color_attachments.push_back({
-                .image = ctx.find_image(swapchain_handle),
-                .layout = tempest::rhi::image_layout::color_attachment,
-                .clear_color = {0.0f, 0.0f, 1.0f, 1.0f},
-                .load_op = tempest::rhi::work_queue::load_op::clear,
-                .store_op = tempest::rhi::work_queue::store_op::store,
-            });
-
-            ctx.begin_render_pass(render_pass_info);
-            ctx.end_render_pass();
+        [](tempest::graphics::transfer_task_execution_context& ctx, auto swapchain_handle, auto& device, auto color) {
+            ctx.blit(color, swapchain_handle);
         },
-        swapchain_handle, tempest::ref(device), swapchain);
+        swapchain_handle, tempest::ref(device), color_target);
 
     pbr_fg.compile({
         .graphics_queues = 1,
@@ -208,6 +197,25 @@ int main()
     camera_tx.position({0.0f, 15.0f, -1.0f});
     camera_tx.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
     entity_registry.assign(camera, camera_tx);
+
+    auto sun = entity_registry.create();
+    auto sun_data = tempest::graphics::directional_light_component{
+        .color = {1.0f, 1.0f, 1.0f},
+        .intensity = 1.0f,
+    };
+
+    auto sun_shadows = tempest::graphics::shadow_map_component{
+        .size = {4096, 4096},
+        .cascade_count = 4,
+    };
+
+    auto sun_tx = tempest::ecs::transform_component::identity();
+    sun_tx.rotation({tempest::math::as_radians(90.0f), 0.0f, 0.0f});
+
+    entity_registry.assign_or_replace(sun, sun_shadows);
+    entity_registry.assign_or_replace(sun, sun_data);
+    entity_registry.assign_or_replace(sun, sun_tx);
+    entity_registry.name(sun, "Sun");
 
     while (true)
     {

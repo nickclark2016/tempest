@@ -344,6 +344,13 @@ namespace tempest::graphics
         _queue->push_descriptors(_cmd_list, layout, point, set_idx, buffers, images, samplers);
     }
 
+    void task_execution_context::_raw_push_constants(
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout, enum_mask<rhi::shader_stage> stages,
+        uint32_t offset, span<const byte> data)
+    {
+        _queue->push_constants(_cmd_list, layout, stages, offset, data);
+    }
+
     graph_resource_handle<rhi::rhi_handle_type::buffer> graph_builder::import_buffer(
         string name, rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
     {
@@ -1268,13 +1275,16 @@ namespace tempest::graphics
                         {
                             return _device->get_buffer_size(*buf_handle);
                         }
+                        return 0;
                     }
                     else if constexpr (is_same_v<type, rhi::buffer_desc>)
                     {
                         return res.size;
                     }
-
-                    return 0;
+                    else
+                    {
+                        return 0;
+                    }
                 },
                 it->creation_info);
 
@@ -1303,13 +1313,16 @@ namespace tempest::graphics
                         {
                             return _device->get_buffer_size(*buf_handle);
                         }
+                        return 0;
                     }
                     else if constexpr (is_same_v<type, rhi::buffer_desc>)
                     {
                         return res.size;
                     }
-
-                    return 0;
+                    else
+                    {
+                        return 0;
+                    }
                 },
                 it->creation_info);
 
@@ -1787,11 +1800,9 @@ namespace tempest::graphics
                             if (create_info && holds_alternative<rhi::buffer_desc>(create_info->creation_info))
                             {
                                 const auto& buf_desc = get<rhi::buffer_desc>(create_info->creation_info);
-                                const auto total_size = buf_desc.size;
 
                                 // Get size of per-frame buffer
-                                const auto per_frame_size =
-                                    create_info->per_frame ? total_size / _device->frames_in_flight() : total_size;
+                                const auto per_frame_size = buf_desc.size;
                                 const auto frame_offset = create_info->per_frame ? per_frame_size * _current_frame %
                                                                                        _device->frames_in_flight()
                                                                                  : 0;
@@ -1961,8 +1972,11 @@ namespace tempest::graphics
                     pass.execution_context(executor);
                     break;
                 }
-                case work_type::compute:
+                case work_type::compute: {
+                    auto executor = compute_task_execution_context(this, command_list, &queue);
+                    pass.execution_context(executor);
                     break;
+                }
                 case work_type::transfer: {
                     auto executor = transfer_task_execution_context(this, command_list, &queue);
                     pass.execution_context(executor);
@@ -2325,6 +2339,18 @@ namespace tempest::graphics
         _queue->draw(_cmd_list, vertex_count, instance_count, first_vertex, first_instance);
     }
 
+    void compute_task_execution_context::bind_pipeline(
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline)
+    {
+        _queue->bind(_cmd_list, pipeline);
+    }
+
+    void compute_task_execution_context::dispatch(uint32_t group_count_x, uint32_t group_count_y,
+                                                  uint32_t group_count_z)
+    {
+        _queue->dispatch(_cmd_list, group_count_x, group_count_y, group_count_z);
+    }
+
     void transfer_task_execution_context::clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image,
                                                       float r, float g, float b, float a)
     {
@@ -2363,5 +2389,43 @@ namespace tempest::graphics
 
         // TODO: Handle per-frame offsets
         _queue->copy(_cmd_list, src_buf, dst_buf, src_offset, dst_offset, size);
+    }
+
+    void transfer_task_execution_context::fill_buffer(const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst,
+                                                      uint64_t offset, uint64_t size, uint32_t data)
+    {
+        const auto dst_buf = _executor->get_buffer(dst);
+        if (!dst_buf)
+        {
+            return;
+        }
+
+        _queue->fill(_cmd_list, dst_buf, offset, size, data);
+    }
+
+    void transfer_task_execution_context::blit(const graph_resource_handle<rhi::rhi_handle_type::image>& src,
+                                               const graph_resource_handle<rhi::rhi_handle_type::image>& dst)
+    {
+        const auto src_img = _executor->get_image(src);
+        const auto dst_img = _executor->get_image(dst);
+        if (!src_img || !dst_img)
+        {
+            return;
+        }
+        _queue->blit(_cmd_list, src_img, rhi::image_layout::transfer_src, 0, dst_img, rhi::image_layout::transfer_dst,
+                     0);
+    }
+
+    void transfer_task_execution_context::blit(const graph_resource_handle<rhi::rhi_handle_type::image>& src,
+                                               const graph_resource_handle<rhi::rhi_handle_type::render_surface>& dst)
+    {
+        const auto src_img = _executor->get_image(src);
+        const auto dst_img = _executor->get_image(dst);
+        if (!src_img || !dst_img)
+        {
+            return;
+        }
+        _queue->blit(_cmd_list, src_img, rhi::image_layout::transfer_src, 0, dst_img, rhi::image_layout::transfer_dst,
+                     0);
     }
 } // namespace tempest::graphics

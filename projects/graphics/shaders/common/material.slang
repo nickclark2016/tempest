@@ -540,7 +540,7 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
 }
 
 float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, const float4 proj_pos, Texture2D[] textures) {
-    half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb), 1.0h) * px.ambient_occlusion;
+    half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb) * px.ambient_occlusion, 1.0h);
 
     evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, proj_pos, color);
     apply_emissive(mat_state, color, px.uv, textures);

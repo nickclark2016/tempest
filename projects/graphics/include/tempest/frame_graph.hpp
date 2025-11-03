@@ -21,6 +21,7 @@ namespace tempest::graphics
 
     enum class work_type
     {
+        unknown,
         graphics,
         compute,
         transfer,
@@ -169,6 +170,14 @@ namespace tempest::graphics
                               span<const rhi::image_binding_descriptor> images,
                               span<const rhi::sampler_binding_descriptor> samplers);
 
+        template <typename T>
+        void push_constants(rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout,
+                            enum_mask<rhi::shader_stage> stages, uint32_t offset, const T& data)
+        {
+            _raw_push_constants(layout, stages, offset,
+                                span<const byte>(reinterpret_cast<const byte*>(&data), sizeof(T)));
+        }
+
       protected:
         task_execution_context(graph_executor* executor,
                                rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> cmd_list,
@@ -176,6 +185,9 @@ namespace tempest::graphics
             : _executor(executor), _cmd_list(cmd_list), _queue(queue)
         {
         }
+
+        void _raw_push_constants(rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> layout,
+                                 enum_mask<rhi::shader_stage> stages, uint32_t offset, span<const byte> data);
 
         graph_executor* _executor = nullptr;
         rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> _cmd_list;
@@ -213,6 +225,11 @@ namespace tempest::graphics
 
     class compute_task_execution_context : public task_execution_context
     {
+      public:
+        void bind_pipeline(rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline);
+
+        void dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
+
       private:
         friend class graph_executor;
 
@@ -231,6 +248,14 @@ namespace tempest::graphics
                                    const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst, uint64_t src_offset,
                                    uint64_t dst_offset, uint64_t size);
 
+        void fill_buffer(const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst, uint64_t offset, uint64_t size,
+                         uint32_t data);
+
+        void blit(const graph_resource_handle<rhi::rhi_handle_type::image>& src,
+                  const graph_resource_handle<rhi::rhi_handle_type::image>& dst);
+        void blit(const graph_resource_handle<rhi::rhi_handle_type::image>& src,
+                  const graph_resource_handle<rhi::rhi_handle_type::render_surface>& dst);
+
       private:
         friend class graph_executor;
 
@@ -240,7 +265,7 @@ namespace tempest::graphics
     struct scheduled_pass
     {
         string name;
-        work_type type;
+        work_type type = work_type::unknown;
         vector<scheduled_resource_access> accesses;
         vector<base_graph_resource_handle> outputs;
 

@@ -5,12 +5,15 @@
 #include <tempest/flat_map.hpp>
 #include <tempest/frame_graph.hpp>
 #include <tempest/graphics_components.hpp>
+#include <tempest/inplace_vector.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/material.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
+#include <tempest/shelf_pack.hpp>
 #include <tempest/texture.hpp>
+#include <tempest/transform_component.hpp>
 #include <tempest/vec4.hpp>
 #include <tempest/vertex.hpp>
 
@@ -71,6 +74,11 @@ namespace tempest::graphics
 
         optional<graph_builder&> get_builder() noexcept;
 
+        graph_resource_handle<rhi::rhi_handle_type::image> get_tonemapped_color_handle() const noexcept
+        {
+            return _pass_output_resource_handles.tonemapping.tonemapped_color;
+        }
+
         void compile(queue_configuration cfg);
 
         void execute();
@@ -98,39 +106,47 @@ namespace tempest::graphics
         {
             graph_resource_handle<rhi::rhi_handle_type::image> depth;
             graph_resource_handle<rhi::rhi_handle_type::image> encoded_normals;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> scene_descriptor_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> scene_descriptor_layout =
+                rhi::null_handle;
         };
 
         struct ssao_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> ssao_output;
             graph_resource_handle<rhi::rhi_handle_type::buffer> ssao_constants_buffer;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> ssao_noise_image;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> descriptor_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> ssao_noise_image = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> descriptor_layout = rhi::null_handle;
         };
 
         struct ssao_blur_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> ssao_blurred_output;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
         };
 
         struct shadow_map_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> shadow_map_megatexture;
             graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_data;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> directional_shadow_pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> directional_shadow_pipeline =
+                rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> directional_shadow_pipeline_layout =
+                rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> scene_descriptor_layout =
+                rhi::null_handle;
         };
 
         struct light_clustering_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::buffer> light_cluster_bounds;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> descriptor_layout = rhi::null_handle;
         };
 
         struct light_culling_pass_outputs
@@ -139,13 +155,20 @@ namespace tempest::graphics
             graph_resource_handle<rhi::rhi_handle_type::buffer> light_grid_ranges;
             graph_resource_handle<rhi::rhi_handle_type::buffer> light_indices;
             graph_resource_handle<rhi::rhi_handle_type::buffer> light_index_count;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> descriptor_layout = rhi::null_handle;
         };
 
         struct pbr_opaque_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> hdr_color;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> scene_descriptor_layout =
+                rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> shadow_and_lighting_descriptor_layout =
+                rhi::null_handle;
         };
 
         struct mboit_gather_pass_outputs
@@ -153,7 +176,12 @@ namespace tempest::graphics
             graph_resource_handle<rhi::rhi_handle_type::image> transparency_accumulation;
             graph_resource_handle<rhi::rhi_handle_type::image> moments_buffer;
             graph_resource_handle<rhi::rhi_handle_type::image> zeroth_moment_buffer;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> scene_descriptor_layout =
+                rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> shadow_and_lighting_descriptor_layout =
+                rhi::null_handle;
         };
 
         struct mboit_resolve_pass_outputs
@@ -161,19 +189,26 @@ namespace tempest::graphics
             graph_resource_handle<rhi::rhi_handle_type::image> transparency_accumulation;
             graph_resource_handle<rhi::rhi_handle_type::image> moments_buffer;
             graph_resource_handle<rhi::rhi_handle_type::image> zeroth_moment_buffer;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> scene_descriptor_layout =
+                rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout> shadow_and_lighting_descriptor_layout =
+                rhi::null_handle;
         };
 
         struct mboit_blend_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> hdr_color;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
         };
 
         struct tonemapping_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> tonemapped_color;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
         };
 
         struct
@@ -202,14 +237,14 @@ namespace tempest::graphics
             graph_resource_handle<rhi::rhi_handle_type::buffer> graph_light_buffer;
             graph_resource_handle<rhi::rhi_handle_type::buffer> graph_per_frame_staging_buffer;
 
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> vertex_pull_buffer;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> mesh_buffer;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> material_buffer;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> vertex_pull_buffer = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> mesh_buffer = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> material_buffer = rhi::null_handle;
 
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_sampler;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_with_aniso_sampler;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_sampler;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_with_aniso_sampler;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_sampler = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> linear_with_aniso_sampler = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_sampler = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> point_with_aniso_sampler = rhi::null_handle;
 
             struct
             {
@@ -269,6 +304,7 @@ namespace tempest::graphics
         static void _ssao_blur_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
         static void _light_clustering_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self);
         static void _light_culling_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self);
+        static void _shadow_upload_pass_task(transfer_task_execution_context& ctx, pbr_frame_graph* self);
         static void _shadow_map_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                           graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors);
         static void _pbr_opaque_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
@@ -361,7 +397,7 @@ namespace tempest::graphics
             math::vec4<float> position_falloff;
             math::vec4<float> direction_angle;
             array<uint32_t, 6> shadow_map_indices;
-            light_type type;
+            alignas(16) light_type type;
             uint32_t shadow_map_count;
             uint32_t enabled;
         };
@@ -378,12 +414,13 @@ namespace tempest::graphics
         struct scene_constants
         {
             camera cam;
-            math::vec2<float> screen_size;
-            math::vec3<float> ambient_light_color;
-            light sun;
-            math::vec4<uint32_t> light_grid_count_and_size; // x = light grid count, y = light grid size (in tiles), z =
-                                                            // padding, w = pixel width
-            math::vec2<float> light_grid_z_bounds;          // x = min light grid bounds, y = max light grid bounds (z)
+            alignas(16) math::vec2<float> screen_size;
+            alignas(16) math::vec3<float> ambient_light_color;
+            alignas(16) light sun;
+            alignas(16) math::vec4<uint32_t> light_grid_count_and_size; // x = light grid count, y = light grid size (in
+                                                                        // tiles), z = padding, w = pixel width
+            alignas(
+                16) math::vec2<float> light_grid_z_bounds; // x = min light grid bounds, y = max light grid bounds (z)
             float ssao_strength = 2.0f;
             uint32_t point_light_count{};
         };
@@ -449,6 +486,13 @@ namespace tempest::graphics
             float cascade_split_far;
         };
 
+        struct shadow_map_cascade_info
+        {
+            static constexpr size_t max_cascade_count = 6;
+            inplace_vector<math::mat4<float>, max_cascade_count> frustum_view_projections;
+            inplace_vector<float, max_cascade_count> cascade_distances;
+        };
+
         struct directional_shadow_pass_constants
         {
             math::mat4<float> light_vp;
@@ -504,6 +548,27 @@ namespace tempest::graphics
             float radius;
             float bias;
         } _ssao_data = {};
+
+        struct
+        {
+            vector<shadow_map_parameter> shadow_map_parameters;
+            optional<shelf_pack_allocator> shelf_pack;
+            flat_unordered_map<ecs::archetype_entity, shadow_map_cascade_info> light_shadow_data;
+        } _shadow_data = {};
+
+        struct
+        {
+            math::vec3<float> ambient_scene_light;
+            camera primary_camera;
+            light primary_sun;
+            ecs::basic_sparse_map<ecs::archetype_entity, light> point_lights;
+            ecs::basic_sparse_map<ecs::archetype_entity, light> dir_lights;
+        } _scene_data = {};
+
+        static shadow_map_cascade_info _calculate_shadow_map_cascades(const shadow_map_component& shadows,
+                                                                      const ecs::transform_component& light_transform,
+                                                                      const camera_component& camera_data,
+                                                                      const math::mat4<float>& view_matrix);
     };
 } // namespace tempest::graphics
 

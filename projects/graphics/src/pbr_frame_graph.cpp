@@ -410,10 +410,10 @@ namespace tempest::graphics
                            make_enum_mask(rhi::memory_access::transfer_write));
                 task.read(_global_resources.graph_vertex_pull_buffer, make_enum_mask(rhi::pipeline_stage::copy),
                           make_enum_mask(rhi::memory_access::transfer_read));
-                task.read_write(
-                    _global_resources.graph_per_frame_staging_buffer, make_enum_mask(rhi::pipeline_stage::copy),
-                    make_enum_mask(rhi::memory_access::transfer_read), make_enum_mask(rhi::pipeline_stage::host),
-                    make_enum_mask(rhi::memory_access::host_write));
+                task.read_write(_global_resources.graph_per_frame_staging_buffer,
+                                make_enum_mask(rhi::pipeline_stage::copy),
+                                make_enum_mask(rhi::memory_access::transfer_read),
+                                make_enum_mask(rhi::pipeline_stage::none), make_enum_mask(rhi::memory_access::none));
                 task.write(indirect_draw_commands_buffer, make_enum_mask(rhi::pipeline_stage::host),
                            make_enum_mask(rhi::memory_access::host_write));
 
@@ -422,6 +422,10 @@ namespace tempest::graphics
                            make_enum_mask(rhi::memory_access::transfer_write));
                 task.write(_global_resources.graph_instance_buffer, make_enum_mask(rhi::pipeline_stage::copy),
                            make_enum_mask(rhi::memory_access::transfer_write));
+
+                // Writes to the light buffer
+                // task.write(_global_resources.graph_light_buffer, make_enum_mask(rhi::pipeline_stage::copy),
+                //           make_enum_mask(rhi::memory_access::transfer_write));
             },
             &_upload_pass_task, this);
 
@@ -1208,13 +1212,15 @@ namespace tempest::graphics
                            make_enum_mask(rhi::memory_access::shader_write));
                 task.read(_pass_output_resource_handles.upload_pass.scene_constants,
                           make_enum_mask(rhi::pipeline_stage::compute_shader),
-                          make_enum_mask(rhi::memory_access::shader_read));
+                          make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::constant_buffer_read));
             },
             &_light_clustering_pass_task, this);
 
         return {
             .light_cluster_bounds = light_cluster_buffer,
             .pipeline = pipeline,
+            .pipeline_layout = layout,
+            .descriptor_layout = descriptor_set_layout,
         };
     }
 
@@ -1253,7 +1259,7 @@ namespace tempest::graphics
         auto light_count_buffer = builder.create_buffer({
             .size = math::round_to_next_multiple(sizeof(uint32_t), 256),
             .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::buffer_usage::structured),
+            .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
             .access_type = rhi::host_access_type::none,
             .access_pattern = rhi::host_access_pattern::none,
             .name = "Light Count Buffer",
@@ -1327,6 +1333,15 @@ namespace tempest::graphics
 
         auto light_grid = _pass_output_resource_handles.light_clustering.light_cluster_bounds;
 
+        builder.create_transfer_pass(
+            "Reset Light Count Buffer",
+            [&](transfer_task_builder& task) {
+                task.write(light_count_buffer, make_enum_mask(rhi::pipeline_stage::all_transfer),
+                           make_enum_mask(rhi::memory_access::transfer_write));
+            },
+            [](transfer_task_execution_context& ctx, auto light_count) { ctx.fill_buffer(light_count, 0, 4, 0); },
+            light_count_buffer);
+
         builder.create_compute_pass(
             "Light Culling Pass",
             [&](compute_task_builder& task) {
@@ -1334,8 +1349,10 @@ namespace tempest::graphics
                            make_enum_mask(rhi::memory_access::shader_write));
                 task.write(light_indices_buffer, make_enum_mask(rhi::pipeline_stage::compute_shader),
                            make_enum_mask(rhi::memory_access::shader_write));
-                task.write(light_count_buffer, make_enum_mask(rhi::pipeline_stage::compute_shader),
-                           make_enum_mask(rhi::memory_access::shader_write));
+                task.read_write(light_count_buffer, make_enum_mask(rhi::pipeline_stage::compute_shader),
+                                make_enum_mask(rhi::memory_access::shader_read),
+                                make_enum_mask(rhi::pipeline_stage::compute_shader),
+                                make_enum_mask(rhi::memory_access::shader_write));
                 task.read_write(light_grid, make_enum_mask(rhi::pipeline_stage::compute_shader),
                                 make_enum_mask(rhi::memory_access::shader_read),
                                 make_enum_mask(rhi::pipeline_stage::compute_shader),
@@ -1344,7 +1361,7 @@ namespace tempest::graphics
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(_pass_output_resource_handles.upload_pass.scene_constants,
                           make_enum_mask(rhi::pipeline_stage::compute_shader),
-                          make_enum_mask(rhi::memory_access::shader_read));
+                          make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::constant_buffer_read));
             },
             &_light_culling_pass_task, this);
 
@@ -1354,6 +1371,8 @@ namespace tempest::graphics
             .light_indices = light_indices_buffer,
             .light_index_count = light_count_buffer,
             .pipeline = pipeline,
+            .pipeline_layout = layout,
+            .descriptor_layout = descriptor_set_layout,
         };
     }
 
@@ -1382,9 +1401,11 @@ namespace tempest::graphics
         });
 
         const auto shadow_buffer_size =
-            math::round_to_next_multiple(sizeof(shadow_map_parameter) * _cfg.shadows.max_shadow_casting_lights, 256);
+            math::round_to_next_multiple(sizeof(shadow_map_parameter) * _cfg.shadows.max_shadow_casting_lights *
+                                             shadow_map_cascade_info::max_cascade_count,
+                                         256);
 
-        auto shadow_data_buffer = builder.create_buffer({
+        auto shadow_data_buffer = builder.create_per_frame_buffer({
             .size = shadow_buffer_size,
             .location = rhi::memory_location::device,
             .usage = make_enum_mask(rhi::buffer_usage::structured, rhi::buffer_usage::transfer_dst),
@@ -1524,12 +1545,22 @@ namespace tempest::graphics
 
         auto descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(descriptor_set_layout),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "Shadow Map Pass Descriptor Set Buffer",
         });
+
+        builder.create_transfer_pass(
+            "Shadow Data Upload",
+            [&](transfer_task_builder& task) {
+                task.write(shadow_data_buffer, make_enum_mask(rhi::pipeline_stage::copy),
+                           make_enum_mask(rhi::memory_access::transfer_write));
+                task.read(shadow_data_buffer, make_enum_mask(rhi::pipeline_stage::none),
+                          make_enum_mask(rhi::memory_access::none));
+            },
+            &_shadow_upload_pass_task, this);
 
         builder.create_graphics_pass(
             "Shadow Map Pass",
@@ -1554,10 +1585,26 @@ namespace tempest::graphics
             },
             &_shadow_map_pass_task, this, descriptor_buffer);
 
+        _shadow_data.shelf_pack.emplace(
+            math::vec2{
+                _cfg.shadows.shadow_map_width,
+                _cfg.shadows.shadow_map_height,
+            },
+            shelf_pack_allocator::allocator_options{
+                .alignment =
+                    {
+                        32,
+                        32,
+                    },
+                .column_count = 4,
+            });
+
         return {
             .shadow_map_megatexture = shadow_mega_texture,
             .shadow_data = shadow_data_buffer,
             .directional_shadow_pipeline = pipeline,
+            .directional_shadow_pipeline_layout = pipeline_layout,
+            .scene_descriptor_layout = descriptor_set_layout,
         };
     }
 
@@ -1779,19 +1826,19 @@ namespace tempest::graphics
 
         auto scene_descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(scene_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "PBR Opaque Pass Scene Descriptor Set Buffer",
         });
 
         auto shadow_descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(shadow_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "PBR Opaque Pass Shadow Descriptor Set Buffer",
         });
 
@@ -1827,9 +1874,6 @@ namespace tempest::graphics
                 task.read(shadow_descriptor_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
 
-                task.read(_pass_output_resource_handles.light_culling.light_grid,
-                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::shader_read));
                 task.read(_pass_output_resource_handles.light_culling.light_grid_ranges,
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
@@ -1838,6 +1882,9 @@ namespace tempest::graphics
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(_pass_output_resource_handles.shadow_map.shadow_data,
+                          make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
                 task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
@@ -1852,6 +1899,9 @@ namespace tempest::graphics
         return {
             .hdr_color = hdr_color_output,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+            .scene_descriptor_layout = scene_descriptors,
+            .shadow_and_lighting_descriptor_layout = shadow_descriptors,
         };
     }
 
@@ -2120,19 +2170,19 @@ namespace tempest::graphics
 
         auto scene_descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(scene_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "MBOIT Gather Pass Scene Descriptor Set Buffer",
         });
 
         auto shadow_descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(shadow_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "MBOIT Gather Pass Shadow Descriptor Set Buffer",
         });
 
@@ -2188,6 +2238,12 @@ namespace tempest::graphics
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
 
+                task.read(scene_descriptor_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(shadow_descriptor_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
                 task.write(transparency_accumulation, rhi::image_layout::color_attachment,
                            make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                            make_enum_mask(rhi::memory_access::color_attachment_write));
@@ -2210,6 +2266,9 @@ namespace tempest::graphics
             .moments_buffer = moments_target,
             .zeroth_moment_buffer = zeroth_moment_buffer,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+            .scene_descriptor_layout = scene_descriptors,
+            .shadow_and_lighting_descriptor_layout = shadow_descriptors,
         };
     }
 
@@ -2435,19 +2494,19 @@ namespace tempest::graphics
 
         auto scene_descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(scene_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "MBOIT Resolve Pass Scene Descriptor Set Buffer",
         });
 
         auto shadow_descriptor_buffer = builder.create_per_frame_buffer({
             .size = _device->get_descriptor_set_layout_size(shadow_descriptors),
-            .location = rhi::memory_location::device,
+            .location = rhi::memory_location::automatic,
             .usage = make_enum_mask(rhi::buffer_usage::descriptor, rhi::buffer_usage::transfer_dst),
-            .access_type = rhi::host_access_type::none,
-            .access_pattern = rhi::host_access_pattern::none,
+            .access_type = rhi::host_access_type::coherent,
+            .access_pattern = rhi::host_access_pattern::sequential,
             .name = "MBOIT Resolve Pass Shadow Descriptor Set Buffer",
         });
 
@@ -2488,6 +2547,12 @@ namespace tempest::graphics
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
 
+                task.read(scene_descriptor_buffer,
+                          make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.read(shadow_descriptor_buffer, make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+
                 task.write(transparency_accumulator, rhi::image_layout::color_attachment,
                            make_enum_mask(rhi::pipeline_stage::color_attachment_output),
                            make_enum_mask(rhi::memory_access::color_attachment_write));
@@ -2506,6 +2571,9 @@ namespace tempest::graphics
             .moments_buffer = moments_buffer,
             .zeroth_moment_buffer = zeroth_moment_buffer,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+            .scene_descriptor_layout = scene_descriptors,
+            .shadow_and_lighting_descriptor_layout = shadow_descriptors,
         };
     }
 
@@ -2652,6 +2720,7 @@ namespace tempest::graphics
         return {
             .hdr_color = hdr_color,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
         };
     }
 
@@ -2675,7 +2744,8 @@ namespace tempest::graphics
             .sample_count = rhi::image_sample_count::sample_count_1,
             .tiling = rhi::image_tiling_type::optimal,
             .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled),
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled,
+                                    rhi::image_usage::transfer_src),
             .name = "MBOIT Moments Target",
         });
 
@@ -2785,6 +2855,7 @@ namespace tempest::graphics
         return {
             .tonemapped_color = tonemapped_buffer,
             .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
         };
     }
 
@@ -2821,9 +2892,9 @@ namespace tempest::graphics
         const auto f = math::extract_forward(quat_rot);
         const auto u = math::extract_up(quat_rot);
 
-        auto projection =
+        const auto projection =
             math::perspective(camera_data->aspect_ratio, camera_data->vertical_fov, camera_data->near_plane);
-        auto view = math::look_at(camera_transform->position(), camera_transform->position() + f, u);
+        const auto view = math::look_at(camera_transform->position(), camera_transform->position() + f, u);
 
         // Set up and upload the scene constants
         auto scene_constants_data = scene_constants{};
@@ -2834,6 +2905,138 @@ namespace tempest::graphics
             .inv_view = math::inverse(view),
             .position = camera_transform->position(),
         };
+        scene_constants_data.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.1f;
+        scene_constants_data.screen_size = math::vec2(static_cast<float>(self->_cfg.render_target_width),
+                                                      static_cast<float>(self->_cfg.render_target_height));
+
+        self->_scene_data.primary_camera = scene_constants_data.cam;
+
+        // Set up the lights
+        self->_inputs.entity_registry->each([&](ecs::self_component self_entity, point_light_component point_light,
+                                                const ecs::transform_component& transform) {
+            auto gpu_light = light{};
+            gpu_light.color_intensity =
+                math::vec4(point_light.color.r, point_light.color.g, point_light.color.b, point_light.intensity);
+            gpu_light.type = light_type::point;
+            gpu_light.position_falloff =
+                math::vec4(transform.position().x, transform.position().y, transform.position().z, point_light.range);
+            gpu_light.enabled = true;
+
+            self->_scene_data.point_lights.insert_or_replace(self_entity.entity, gpu_light);
+        });
+
+        self->_inputs.entity_registry->each([&](ecs::self_component self_entity, directional_light_component dir_light,
+                                                const ecs::transform_component& transform) {
+            auto gpu_light = light{};
+            gpu_light.color_intensity =
+                math::vec4(dir_light.color.r, dir_light.color.g, dir_light.color.b, dir_light.intensity);
+            gpu_light.type = light_type::directional;
+
+            const auto light_rot = math::rotate(transform.rotation());
+            const auto light_dir = light_rot * math::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+
+            gpu_light.direction_angle = math::vec4(light_dir.x, light_dir.y, light_dir.z, 0.0f);
+            gpu_light.enabled = true;
+            self->_scene_data.dir_lights.insert_or_replace(self_entity.entity, gpu_light);
+        });
+
+        self->_shadow_data.shelf_pack->clear();
+        self->_shadow_data.shadow_map_parameters.clear();
+
+        auto sun_entity = ecs::archetype_entity{ecs::tombstone};
+
+        for (const auto& [e, _] : self->_scene_data.dir_lights)
+        {
+            sun_entity = e;
+            break;
+        }
+
+        scene_constants_data.light_grid_count_and_size = math::vec4{
+            self->_cfg.light_clustering.cluster_count_x,
+            self->_cfg.light_clustering.cluster_count_y,
+            self->_cfg.light_clustering.cluster_count_z,
+            self->_cfg.render_target_width / self->_cfg.light_clustering.cluster_count_x,
+        };
+        scene_constants_data.light_grid_z_bounds = math::vec2{
+            0.1f,
+            1000.0f,
+        };
+
+        self->_shadow_data.light_shadow_data.clear();
+
+        auto shadow_maps_written = 0u;
+        self->_inputs.entity_registry->each(
+            [&](ecs::self_component self_entity, shadow_map_component shadows, ecs::transform_component transform) {
+                const auto cascade_info = _calculate_shadow_map_cascades(shadows, transform, *camera_data, view);
+                self->_shadow_data.light_shadow_data.insert({self_entity.entity, cascade_info});
+
+                auto light = [&]() {
+                    auto point_light_it = self->_scene_data.point_lights.find(self_entity.entity);
+                    if (point_light_it != self->_scene_data.point_lights.end())
+                    {
+                        return point_light_it->second;
+                    }
+
+                    auto dir_light_it = self->_scene_data.dir_lights.find(self_entity.entity);
+                    if (dir_light_it != self->_scene_data.dir_lights.end())
+                    {
+                        return dir_light_it->second;
+                    }
+
+                    terminate();
+                }();
+
+                light.shadow_map_count = shadows.cascade_count;
+                for (auto i = 0u; i < shadows.cascade_count; ++i)
+                {
+                    light.shadow_map_indices[i] = shadow_maps_written++;
+                }
+
+                if (light.type == light_type::directional)
+                {
+                    self->_scene_data.dir_lights.insert_or_replace(self_entity.entity, light);
+                }
+                else
+                {
+                    self->_scene_data.point_lights.insert_or_replace(self_entity.entity, light);
+                }
+            });
+
+        self->_inputs.entity_registry->each([&]([[maybe_unused]] directional_light_component light,
+                                                shadow_map_component shadows, ecs::self_component self_entity) {
+            const auto cascade_it = self->_shadow_data.light_shadow_data.find(self_entity.entity);
+            if (cascade_it == self->_shadow_data.light_shadow_data.end())
+            {
+                return;
+            }
+
+            const auto& cascade = cascade_it->second;
+
+            for (auto i = 0u; i < shadows.cascade_count; ++i)
+            {
+                const auto region = self->_shadow_data.shelf_pack->allocate(shadows.size);
+                const auto x_pos = region->position.x;
+                const auto y_pos = region->position.y;
+                const auto width = region->extent.x;
+                const auto height = region->extent.y;
+
+                const auto& allocator = *self->_shadow_data.shelf_pack;
+
+                self->_shadow_data.shadow_map_parameters.push_back(shadow_map_parameter{
+                    .light_proj_matrix = cascade.frustum_view_projections[i],
+                    .shadow_map_region =
+                        {
+                            static_cast<float>(x_pos) / allocator.extent().x,
+                            static_cast<float>(y_pos) / allocator.extent().y,
+                            static_cast<float>(width) / allocator.extent().x,
+                            static_cast<float>(height) / allocator.extent().y,
+                        },
+                    .cascade_split_far = cascade.cascade_distances[i],
+                });
+            }
+        });
+
+        scene_constants_data.sun = self->_scene_data.dir_lights[sun_entity];
 
         // Copy scene constants to staging buffer
         std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written, &scene_constants_data,
@@ -2947,6 +3150,19 @@ namespace tempest::graphics
             instance_bytes_written += draw_batch.objects.size() * sizeof(uint32_t);
         }
 
+        // Upload the point and spot lights
+
+        auto light_buffer = self->_global_resources.graph_light_buffer;
+        auto light_buffer_offset = self->_executor->get_current_frame_resource_offset(light_buffer);
+        auto light_buffer_written = static_cast<size_t>(0u);
+
+        const auto light_buffer_staging_offset = staging_bytes_written;
+
+        std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written,
+                    self->_scene_data.point_lights.values(), self->_scene_data.point_lights.size() * sizeof(light));
+        staging_bytes_written += self->_scene_data.point_lights.size() * sizeof(light);
+        light_buffer_written += self->_scene_data.point_lights.size() * sizeof(light);
+
         // Unmap the staging buffer and push copy commands
         self->_device->unmap_buffer(
             self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
@@ -2961,15 +3177,15 @@ namespace tempest::graphics
 
         ctx.copy_buffer_to_buffer(
             self->_global_resources.graph_per_frame_staging_buffer, self->_global_resources.graph_object_buffer,
-            staging_buffer_offset + object_buffer_staging_offset,
-            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_object_buffer),
-            object_buffer_written);
+            staging_buffer_offset + object_buffer_staging_offset, object_buffer_offset, object_buffer_written);
 
         ctx.copy_buffer_to_buffer(
             self->_global_resources.graph_per_frame_staging_buffer, self->_global_resources.graph_instance_buffer,
-            staging_buffer_offset + instance_buffer_staging_offset,
-            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_instance_buffer),
-            instance_bytes_written);
+            staging_buffer_offset + instance_buffer_staging_offset, instance_buffer_offset, instance_bytes_written);
+
+        ctx.copy_buffer_to_buffer(
+            self->_global_resources.graph_per_frame_staging_buffer, self->_global_resources.graph_light_buffer,
+            staging_buffer_offset + light_buffer_staging_offset, light_buffer_offset, light_buffer_written);
 
         // Upload draw commands
         const auto draw_command_buffer = self->_pass_output_resource_handles.upload_pass.draw_commands;
@@ -3356,10 +3572,160 @@ namespace tempest::graphics
 
     void pbr_frame_graph::_light_clustering_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self)
     {
+        const auto grid_ci = cluster_grid_create_info{
+            .inv_proj = self->_scene_data.primary_camera.inv_proj,
+            .screen_bounds =
+                {
+                    static_cast<float>(self->_cfg.render_target_width),
+                    static_cast<float>(self->_cfg.render_target_height), 0.1f,
+                    1000.0f, // TODO: Parameterize near and far planes
+                },
+            .workgroup_count_tile_size_px =
+                {
+                    self->_cfg.light_clustering.cluster_count_x,
+                    self->_cfg.light_clustering.cluster_count_y,
+                    self->_cfg.light_clustering.cluster_count_z,
+                    self->_cfg.render_target_width / self->_cfg.light_clustering.cluster_count_x,
+                },
+        };
+
+        auto binding_write = rhi::descriptor_set_desc{};
+        binding_write.layout = self->_pass_output_resource_handles.light_clustering.descriptor_layout;
+        binding_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(
+                self->_pass_output_resource_handles.light_clustering.light_cluster_bounds)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_clustering.light_cluster_bounds),
+        });
+
+        ctx.push_descriptors(self->_pass_output_resource_handles.light_clustering.pipeline_layout,
+                             rhi::bind_point::compute, 0, binding_write.buffers, {}, {});
+
+        ctx.push_constants(self->_pass_output_resource_handles.light_clustering.pipeline_layout,
+                           make_enum_mask(rhi::shader_stage::compute), 0, grid_ci);
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.light_clustering.pipeline);
+
+        ctx.dispatch(self->_cfg.light_clustering.cluster_count_x, self->_cfg.light_clustering.cluster_count_y,
+                     self->_cfg.light_clustering.cluster_count_z);
     }
 
     void pbr_frame_graph::_light_culling_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self)
     {
+        const auto culling_ci = light_culling_info{
+            .inv_proj = self->_scene_data.primary_camera.inv_proj,
+            .screen_bounds =
+                {
+                    static_cast<float>(self->_cfg.render_target_width),
+                    static_cast<float>(self->_cfg.render_target_height), 0.0f,
+                    1000.0f, // TODO: Parameterize near and far planes
+                },
+            .workgroup_count_tile_size_px =
+                {
+                    self->_cfg.light_clustering.cluster_count_x,
+                    self->_cfg.light_clustering.cluster_count_y,
+                    self->_cfg.light_clustering.cluster_count_z,
+                    self->_cfg.render_target_width / self->_cfg.light_clustering.cluster_count_x,
+                },
+            .light_count = static_cast<uint32_t>(self->_scene_data.point_lights.size()),
+        };
+
+        // Binding 0: Scene Globals
+        // Binding 1: Cluster Bounds
+        // Binding 2: Lights
+        // Binding 3: Light Index List
+        // Binding 4: Light Grid
+        // Binding 5: Light Counter
+
+        auto binding_write = rhi::descriptor_set_desc{};
+        binding_write.layout = self->_pass_output_resource_handles.light_culling.descriptor_layout;
+
+        binding_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.upload_pass.scene_constants),
+        });
+
+        binding_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(
+                self->_pass_output_resource_handles.light_clustering.light_cluster_bounds)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_clustering.light_cluster_bounds),
+        });
+
+        binding_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_light_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_light_buffer),
+        });
+
+        binding_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.light_culling.light_indices)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_indices),
+        });
+
+        binding_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(
+                self->_pass_output_resource_handles.light_culling.light_grid_ranges)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_grid_ranges),
+        });
+
+        binding_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(
+                self->_pass_output_resource_handles.light_culling.light_index_count)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_index_count),
+        });
+
+        ctx.push_descriptors(self->_pass_output_resource_handles.light_culling.pipeline_layout,
+                             rhi::bind_point::compute, 0, binding_write.buffers, {}, {});
+        ctx.push_constants(self->_pass_output_resource_handles.light_culling.pipeline_layout,
+                           make_enum_mask(rhi::shader_stage::compute), 0, culling_ci);
+        ctx.bind_pipeline(self->_pass_output_resource_handles.light_culling.pipeline);
+        ctx.dispatch(1, 1, self->_cfg.light_clustering.cluster_count_z / 4);
+    }
+
+    void pbr_frame_graph::_shadow_upload_pass_task(transfer_task_execution_context& ctx, pbr_frame_graph* self)
+    {
+        const auto staging_buffer_offset =
+            self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_per_frame_staging_buffer) +
+            self->_global_resources.utilization.staging_buffer_bytes_written;
+        auto staging_buffer_bytes = self->_device->map_buffer(
+            self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+
+        std::memcpy(staging_buffer_bytes + staging_buffer_offset, self->_shadow_data.shadow_map_parameters.data(),
+                    self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
+
+        self->_device->unmap_buffer(
+            self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+
+        self->_global_resources.utilization.staging_buffer_bytes_written +=
+            static_cast<uint32_t>(self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
+
+        ctx.copy_buffer_to_buffer(self->_global_resources.graph_per_frame_staging_buffer,
+                                  self->_pass_output_resource_handles.shadow_map.shadow_data, staging_buffer_offset,
+                                  self->_executor->get_current_frame_resource_offset(
+                                      self->_pass_output_resource_handles.shadow_map.shadow_data),
+                                  self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
     }
 
     void pbr_frame_graph::_shadow_map_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
@@ -3378,7 +3744,159 @@ namespace tempest::graphics
             .store_op = rhi::work_queue::store_op::store,
         };
 
+        // Scene Descriptors
+        // Binding 1: Vertex Pull Buffer
+        // Binding 2: Mesh Buffer
+        // Binding 3: Object Buffer
+        // Binding 4: Instance Buffer
+        // Binding 5: Material Buffer
+        // Binding 15: Linear Sampler
+        // Binding 16: Bindless Textures
+
+        auto scene_descriptor_write = rhi::descriptor_set_desc{};
+        scene_descriptor_write.layout = self->_pass_output_resource_handles.shadow_map.scene_descriptor_layout;
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_vertex_pull_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_vertex_pull_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_vertex_pull_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_mesh_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_mesh_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_mesh_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_object_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_object_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_object_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_instance_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_instance_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_instance_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_material_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_material_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_material_buffer),
+        });
+
+        auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        samplers.push_back(self->_global_resources.linear_sampler);
+        scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 15,
+            .samplers = move(samplers),
+        });
+
+        auto images = vector<rhi::image_binding_info>();
+        const auto image_count =
+            min(self->_cfg.max_bindless_textures, static_cast<uint32_t>(self->_bindless_textures.images.size()));
+
+        for (uint32_t i = 0; i < image_count; i++)
+        {
+            images.push_back(rhi::image_binding_info{
+                .image = self->_bindless_textures.images[i],
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = move(images),
+        });
+
+        auto scene_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(scene_descriptors));
+        self->_device->write_descriptor_buffer(scene_descriptor_write, scene_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(scene_descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(scene_descriptors));
+
         ctx.begin_render_pass(render_pass_begin);
+
+        ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline_layout,
+                                    rhi::bind_point::graphics, 0, array{scene_descriptors});
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline);
+
+        ctx.set_scissor(0, 0, self->_cfg.shadows.shadow_map_width, self->_cfg.shadows.shadow_map_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.shadows.shadow_map_width),
+                         static_cast<float>(self->_cfg.shadows.shadow_map_height), 0.0f, 1.0f);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+        ctx.bind_index_buffer(self->_global_resources.vertex_pull_buffer, rhi::index_format::uint32, 0);
+
+        const auto draw_command_buffer = self->_pass_output_resource_handles.upload_pass.draw_commands;
+        const auto draw_command_buffer_offset = self->_executor->get_current_frame_resource_offset(draw_command_buffer);
+
+        self->_inputs.entity_registry->each([&]([[maybe_unused]] directional_light_component dir_light,
+                                                [[maybe_unused]] shadow_map_component shadows,
+                                                ecs::self_component self_entity) {
+            const auto light_it = self->_scene_data.dir_lights.find(self_entity.entity);
+            if (light_it == self->_scene_data.dir_lights.end())
+            {
+                return;
+            }
+
+            const auto& light = light_it->second;
+            for (auto cascade_index = 0u; cascade_index < light.shadow_map_count; ++cascade_index)
+            {
+                auto shadow_map_index = light.shadow_map_indices[cascade_index];
+                const auto& parameters = self->_shadow_data.shadow_map_parameters[shadow_map_index];
+
+                // Reconstruct the viewport for this cascade
+                const auto x = parameters.shadow_map_region.x * self->_shadow_data.shelf_pack->extent().x;
+                const auto y = parameters.shadow_map_region.y * self->_shadow_data.shelf_pack->extent().y;
+                const auto width = parameters.shadow_map_region.z * self->_shadow_data.shelf_pack->extent().x;
+                const auto height = parameters.shadow_map_region.w * self->_shadow_data.shelf_pack->extent().y;
+
+                ctx.set_scissor(static_cast<uint32_t>(x), static_cast<uint32_t>(y), static_cast<uint32_t>(width),
+                                static_cast<uint32_t>(height));
+
+                ctx.set_viewport(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width),
+                                 static_cast<float>(height), 0.0f, 1.0f, false);
+
+                ctx.push_constants(self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline_layout,
+                                   make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment), 0,
+                                   parameters.light_proj_matrix);
+
+                for (const auto& [key, draw_batch] : self->_drawables.draw_batches)
+                {
+                    if (key.alpha_type == alpha_behavior::opaque || key.alpha_type == alpha_behavior::mask)
+                    {
+                        ctx.draw_indirect(
+                            draw_command_buffer,
+                            static_cast<uint32_t>(draw_command_buffer_offset + draw_batch.indirect_command_offset *
+                                                                                   sizeof(indexed_indirect_command)),
+                            static_cast<uint32_t>(draw_batch.commands.size()), sizeof(indexed_indirect_command));
+                    }
+                }
+            }
+        });
+
         ctx.end_render_pass();
     }
 
@@ -3393,7 +3911,7 @@ namespace tempest::graphics
         render_pass_begin.layers = 1;
         render_pass_begin.depth_attachment = rhi::work_queue::depth_attachment_info{
             .image = self->_executor->get_image(self->_pass_output_resource_handles.depth_prepass.depth),
-            .layout = rhi::image_layout::depth_stencil_read_only,
+            .layout = rhi::image_layout::depth,
             .clear_depth = 0.0f, // IGNORED
             .load_op = rhi::work_queue::load_op::load,
             .store_op = rhi::work_queue::store_op::none,
@@ -3407,7 +3925,216 @@ namespace tempest::graphics
             .store_op = rhi::work_queue::store_op::store,
         });
 
+        // Scene Descriptors
+        // Binding 0: Scene Constants
+        // Binding 1: Vertex Pull Buffer
+        // Binding 2: Mesh Buffer
+        // Binding 3: Object Buffer
+        // Binding 4: Instance Buffer
+        // Binding 5: Material Buffer
+        // Binding 6: Ambient Occlusion Texture
+        // Binding 15: Linear Sampler
+        // Binding 16: Bindless Textures
+
+        // Light and Shadow Descriptors
+        // Binding 0: Light Buffer
+        // Binding 1: Shadow Matrix Buffer
+        // Binding 2: Shadow Map Megatexture
+        // Binding 3: Light Grid Bounds
+        // Binding 4: Light Indices
+
+        auto scene_descriptor_write = rhi::descriptor_set_desc{};
+        scene_descriptor_write.layout = self->_pass_output_resource_handles.pbr_opaque.scene_descriptor_layout;
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(
+                self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.upload_pass.scene_constants),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_vertex_pull_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_vertex_pull_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_vertex_pull_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_mesh_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_mesh_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_mesh_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_object_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_object_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_object_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_instance_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_instance_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_instance_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_material_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_material_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_material_buffer),
+        });
+
+        auto ambient_occlusion_image_bindings = vector<rhi::image_binding_info>{};
+        ambient_occlusion_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 6,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(ambient_occlusion_image_bindings),
+        });
+
+        auto linear_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        linear_samplers.push_back(self->_global_resources.linear_sampler);
+
+        scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 15,
+            .samplers = tempest::move(linear_samplers),
+        });
+
+        auto bindless_images = vector<rhi::image_binding_info>();
+        const auto image_count =
+            min(self->_cfg.max_bindless_textures, static_cast<uint32_t>(self->_bindless_textures.images.size()));
+        for (uint32_t i = 0; i < image_count; i++)
+        {
+            bindless_images.push_back(rhi::image_binding_info{
+                .image = self->_bindless_textures.images[i],
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(bindless_images),
+        });
+
+        auto scene_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(scene_descriptors));
+        self->_device->write_descriptor_buffer(scene_descriptor_write, scene_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(scene_descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(scene_descriptors));
+
+        auto shadow_light_descriptor_write = rhi::descriptor_set_desc{};
+        shadow_light_descriptor_write.layout =
+            self->_pass_output_resource_handles.pbr_opaque.shadow_and_lighting_descriptor_layout;
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_light_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_light_buffer),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
+        });
+
+        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
+        shadow_map_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .array_offset = 0,
+            .images = tempest::move(shadow_map_image_bindings),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(
+                self->_pass_output_resource_handles.light_culling.light_grid_ranges)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_grid_ranges),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.light_culling.light_indices)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_indices),
+        });
+
+        auto shadow_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(shadow_descriptors));
+        self->_device->write_descriptor_buffer(shadow_light_descriptor_write, shadow_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(shadow_descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(shadow_descriptors));
+
         ctx.begin_render_pass(render_pass_begin);
+
+        ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.pbr_opaque.pipeline_layout,
+                                    rhi::bind_point::graphics, 0, array{scene_descriptors, shadow_descriptors});
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.pbr_opaque.pipeline);
+        ctx.bind_index_buffer(self->_global_resources.vertex_pull_buffer, rhi::index_format::uint32, 0);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f);
+
+        const auto indirect_command_offset = self->_executor->get_current_frame_resource_offset(
+            self->_pass_output_resource_handles.upload_pass.draw_commands);
+
+        for (const auto& [key, batch] : self->_drawables.draw_batches)
+        {
+            if (key.alpha_type == alpha_behavior::opaque || key.alpha_type == alpha_behavior::mask)
+            {
+                ctx.draw_indirect(self->_pass_output_resource_handles.upload_pass.draw_commands,
+                                  static_cast<uint32_t>(indirect_command_offset + batch.indirect_command_offset *
+                                                                                      sizeof(indexed_indirect_command)),
+                                  static_cast<uint32_t>(batch.commands.size()),
+                                  static_cast<uint32_t>(sizeof(indexed_indirect_command)));
+            }
+        }
+
         ctx.end_render_pass();
     }
 
@@ -3438,7 +4165,224 @@ namespace tempest::graphics
             .store_op = rhi::work_queue::store_op::dont_care,
         });
 
+        auto scene_descriptor_write = rhi::descriptor_set_desc{};
+        scene_descriptor_write.layout = self->_pass_output_resource_handles.pbr_opaque.scene_descriptor_layout;
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(
+                self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.upload_pass.scene_constants),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_vertex_pull_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_vertex_pull_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_vertex_pull_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_mesh_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_mesh_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_mesh_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_object_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_object_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_object_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_instance_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_instance_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_instance_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_material_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_material_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_material_buffer),
+        });
+
+        auto moments_image_bindings = vector<rhi::image_binding_info>{};
+        moments_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::general,
+        });
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 6,
+            .type = rhi::descriptor_type::storage_image,
+            .images = tempest::move(moments_image_bindings),
+        });
+
+        auto zeroth_moment_image_bindings = vector<rhi::image_binding_info>{};
+        zeroth_moment_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::general,
+        });
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 7,
+            .type = rhi::descriptor_type::storage_image,
+            .images = tempest::move(zeroth_moment_image_bindings),
+        });
+
+        auto ambient_occlusion_image_bindings = vector<rhi::image_binding_info>{};
+        ambient_occlusion_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 8,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(ambient_occlusion_image_bindings),
+        });
+
+        auto linear_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        linear_samplers.push_back(self->_global_resources.linear_sampler);
+
+        scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 15,
+            .samplers = tempest::move(linear_samplers),
+        });
+
+        auto bindless_images = vector<rhi::image_binding_info>();
+        const auto image_count =
+            min(self->_cfg.max_bindless_textures, static_cast<uint32_t>(self->_bindless_textures.images.size()));
+        for (uint32_t i = 0; i < image_count; i++)
+        {
+            bindless_images.push_back(rhi::image_binding_info{
+                .image = self->_bindless_textures.images[i],
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(bindless_images),
+        });
+
+        auto scene_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(scene_descriptors));
+        self->_device->write_descriptor_buffer(scene_descriptor_write, scene_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(scene_descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(scene_descriptors));
+
+        auto shadow_light_descriptor_write = rhi::descriptor_set_desc{};
+        shadow_light_descriptor_write.layout =
+            self->_pass_output_resource_handles.pbr_opaque.shadow_and_lighting_descriptor_layout;
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_light_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_light_buffer),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
+        });
+
+        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
+        shadow_map_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .array_offset = 0,
+            .images = tempest::move(shadow_map_image_bindings),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(
+                self->_pass_output_resource_handles.light_culling.light_grid_ranges)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_grid_ranges),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.light_culling.light_indices)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_indices),
+        });
+
+        auto shadow_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(shadow_descriptors));
+        self->_device->write_descriptor_buffer(shadow_light_descriptor_write, shadow_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(shadow_descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(shadow_descriptors));
+
         ctx.begin_render_pass(render_pass_begin);
+
+        ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.mboit_gather.pipeline_layout,
+                                    rhi::bind_point::graphics, 0, array{scene_descriptors, shadow_descriptors});
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.mboit_gather.pipeline);
+        ctx.bind_index_buffer(self->_global_resources.vertex_pull_buffer, rhi::index_format::uint32, 0);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f);
+
+        const auto indirect_command_offset = self->_executor->get_current_frame_resource_offset(
+            self->_pass_output_resource_handles.upload_pass.draw_commands);
+
+        for (const auto& [key, batch] : self->_drawables.draw_batches)
+        {
+            if (key.alpha_type == alpha_behavior::transmissive || key.alpha_type == alpha_behavior::transparent)
+            {
+                ctx.draw_indirect(self->_pass_output_resource_handles.upload_pass.draw_commands,
+                                  static_cast<uint32_t>(indirect_command_offset + batch.indirect_command_offset *
+                                                                                      sizeof(indexed_indirect_command)),
+                                  static_cast<uint32_t>(batch.commands.size()),
+                                  static_cast<uint32_t>(sizeof(indexed_indirect_command)));
+            }
+        }
+
         ctx.end_render_pass();
     }
 
@@ -3468,6 +4412,197 @@ namespace tempest::graphics
             .load_op = rhi::work_queue::load_op::clear,
             .store_op = rhi::work_queue::store_op::store,
         });
+
+        auto scene_descriptor_write = rhi::descriptor_set_desc{};
+        scene_descriptor_write.layout = self->_pass_output_resource_handles.pbr_opaque.scene_descriptor_layout;
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::constant_buffer,
+            .offset = static_cast<uint32_t>(self->_executor->get_current_frame_resource_offset(
+                self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.upload_pass.scene_constants)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.upload_pass.scene_constants),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_vertex_pull_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_vertex_pull_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_vertex_pull_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_mesh_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_mesh_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_mesh_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_object_buffer)),
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_object_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_object_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_instance_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_instance_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_instance_buffer),
+        });
+
+        scene_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = static_cast<uint32_t>(
+                self->_executor->get_current_frame_resource_offset(self->_global_resources.graph_material_buffer)),
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_global_resources.graph_material_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_material_buffer),
+        });
+
+        auto moments_image_bindings = vector<rhi::image_binding_info>{};
+        moments_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::general,
+        });
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 6,
+            .type = rhi::descriptor_type::storage_image,
+            .images = tempest::move(moments_image_bindings),
+        });
+
+        auto zeroth_moment_image_bindings = vector<rhi::image_binding_info>{};
+        zeroth_moment_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::general,
+        });
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 7,
+            .type = rhi::descriptor_type::storage_image,
+            .images = tempest::move(zeroth_moment_image_bindings),
+        });
+
+        auto ambient_occlusion_image_bindings = vector<rhi::image_binding_info>{};
+        ambient_occlusion_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 8,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(ambient_occlusion_image_bindings),
+        });
+
+        auto linear_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        linear_samplers.push_back(self->_global_resources.linear_sampler);
+
+        scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 15,
+            .samplers = tempest::move(linear_samplers),
+        });
+
+        auto bindless_images = vector<rhi::image_binding_info>();
+        const auto image_count =
+            min(self->_cfg.max_bindless_textures, static_cast<uint32_t>(self->_bindless_textures.images.size()));
+        for (uint32_t i = 0; i < image_count; i++)
+        {
+            bindless_images.push_back(rhi::image_binding_info{
+                .image = self->_bindless_textures.images[i],
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+
+        scene_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 16,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(bindless_images),
+        });
+
+        auto scene_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(scene_descriptors));
+        self->_device->write_descriptor_buffer(scene_descriptor_write, scene_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(scene_descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(scene_descriptors));
+
+        auto shadow_light_descriptor_write = rhi::descriptor_set_desc{};
+        shadow_light_descriptor_write.layout =
+            self->_pass_output_resource_handles.pbr_opaque.shadow_and_lighting_descriptor_layout;
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size =
+                static_cast<uint32_t>(self->_executor->get_resource_size(self->_global_resources.graph_light_buffer)),
+            .buffer = ctx.find_buffer(self->_global_resources.graph_light_buffer),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
+        });
+
+        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
+        shadow_map_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .array_offset = 0,
+            .images = tempest::move(shadow_map_image_bindings),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(self->_executor->get_resource_size(
+                self->_pass_output_resource_handles.light_culling.light_grid_ranges)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_grid_ranges),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 4,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.light_culling.light_indices)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_indices),
+        });
+
+        auto shadow_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(shadow_descriptors));
+        self->_device->write_descriptor_buffer(shadow_light_descriptor_write, shadow_descriptor_buffer_bytes,
+                                               self->_executor->get_current_frame_resource_offset(shadow_descriptors));
+        self->_device->unmap_buffer(ctx.find_buffer(shadow_descriptors));
 
         ctx.begin_render_pass(render_pass_begin);
         ctx.end_render_pass();
@@ -3508,7 +4643,140 @@ namespace tempest::graphics
         });
 
         ctx.begin_render_pass(render_pass_begin);
+
+        auto hdr_color_image = rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.pbr_opaque.hdr_color),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        };
+        auto hdr_color_images = vector<rhi::image_binding_info>{};
+        hdr_color_images.push_back(hdr_color_image);
+
+        auto image_writes = vector<rhi::image_binding_descriptor>{};
+        auto image_binding_desc = rhi::image_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::sampled_image,
+            .array_offset = 0,
+            .images = tempest::move(hdr_color_images),
+        };
+        image_writes.push_back(image_binding_desc);
+
+        auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        samplers.push_back(self->_global_resources.linear_sampler);
+
+        auto sampler_writes = vector<rhi::sampler_binding_descriptor>{};
+        auto sampler_binding_desc = rhi::sampler_binding_descriptor{
+            .index = 1,
+            .samplers = tempest::move(samplers),
+        };
+        sampler_writes.push_back(sampler_binding_desc);
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.tonemapping.pipeline);
+        ctx.push_descriptors(self->_pass_output_resource_handles.tonemapping.pipeline_layout, rhi::bind_point::graphics,
+                             0, {}, image_writes, sampler_writes);
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f, false);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::none));
+        ctx.draw(3, 1, 0, 0);
+
         ctx.end_render_pass();
+    }
+
+    pbr_frame_graph::shadow_map_cascade_info pbr_frame_graph::_calculate_shadow_map_cascades(
+        const shadow_map_component& shadows, const ecs::transform_component& light_transform,
+        const camera_component& camera_data, const math::mat4<float>& view_matrix)
+    {
+        const auto near_plane = camera_data.near_plane;
+        const auto far_plane = camera_data.far_shadow_plane;
+        const auto clip_range = far_plane - near_plane;
+
+        const auto clip_ratio = far_plane / clip_range;
+
+        shadow_map_cascade_info results;
+        results.cascade_distances.resize(shadows.cascade_count);
+        results.frustum_view_projections.resize(shadows.cascade_count);
+
+        // Compute splits
+        // https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus
+        for (size_t i = 0; i < shadows.cascade_count; ++i)
+        {
+            const auto p = static_cast<float>(i + 1) / static_cast<float>(shadows.cascade_count);
+            const auto logarithm = near_plane * std::pow(clip_ratio, p);
+            const auto uniform = near_plane + clip_range * p;
+            const auto d = 0.95f * (logarithm - uniform) + uniform;
+
+            results.cascade_distances[i] = (d - near_plane) / clip_range;
+        }
+
+        const auto projection_with_clip = math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov,
+                                                            camera_data.near_plane, camera_data.far_shadow_plane);
+        const auto inv_view_proj = math::inverse(projection_with_clip * view_matrix);
+
+        auto last_split = 0.0f;
+        for (uint32_t cascade = 0; cascade < shadows.cascade_count; ++cascade)
+        {
+            array frustum_corners = {
+                math::vec3<float>{-1.0f, 1.0f, 0.0f}, math::vec3<float>{1.0f, 1.0f, 0.0f},
+                math::vec3<float>{1.0f, -1.0f, 0.0f}, math::vec3<float>{-1.0f, -1.0f, 0.0f},
+                math::vec3<float>{-1.0f, 1.0f, 1.0f}, math::vec3<float>{1.0f, 1.0f, 1.0f},
+                math::vec3<float>{1.0f, -1.0f, 1.0f}, math::vec3<float>{-1.0f, -1.0f, 1.0f},
+            };
+
+            for (auto& corner : frustum_corners)
+            {
+                auto inv_corner = inv_view_proj * math::vec4<float>(corner.x, corner.y, corner.z, 1.0f);
+                auto normalized = inv_corner / inv_corner.w;
+                corner = {normalized.x, normalized.y, normalized.z};
+            }
+
+            const auto split_distance = results.cascade_distances[cascade];
+
+            for (auto idx = 0; idx < 4; ++idx)
+            {
+                const auto edge = frustum_corners[idx + 4] - frustum_corners[idx];
+                const auto normalized_far = frustum_corners[idx] + edge * split_distance;
+                const auto normalized_near = frustum_corners[idx] + edge * last_split;
+
+                frustum_corners[idx + 4] = normalized_far;
+                frustum_corners[idx] = normalized_near;
+            }
+
+            auto frustum_center = math::vec3<float>(0.0f);
+            for (const auto& corner : frustum_corners)
+            {
+                frustum_center += corner;
+            }
+            frustum_center /= static_cast<float>(8);
+
+            float radius = 0.0f;
+            for (const auto& corner : frustum_corners)
+            {
+                const auto distance = math::norm(corner - frustum_center);
+                radius = tempest::max(radius, distance);
+            }
+            radius = std::ceil(radius * 16.0f) / 16.0f;
+
+            auto max_extents = math::vec3<float>(radius);
+            auto min_extents = -max_extents;
+
+            const auto light_rotation = math::rotate(light_transform.rotation());
+            const auto light_direction_xyzw = light_rotation * math::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+            const auto light_direction =
+                math::vec3(light_direction_xyzw.x, light_direction_xyzw.y, light_direction_xyzw.z);
+
+            const auto light_view =
+                math::look_at(frustum_center - light_direction * radius, frustum_center, math::vec3(0.0f, 1.0f, 0.0f));
+            const auto light_projection = math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y,
+                                                      min_extents.z - max_extents.z, 0.0f);
+
+            results.cascade_distances[cascade] = (near_plane + split_distance * clip_range) * -1.0f;
+            results.frustum_view_projections[cascade] = light_projection * light_view;
+
+            last_split = results.cascade_distances[cascade];
+        }
+
+        return results;
     }
 
     void pbr_frame_graph::_load_meshes(span<const guid> mesh_ids, const core::mesh_registry& mesh_registry)

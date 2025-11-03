@@ -86,6 +86,17 @@ namespace tempest::rhi
         return id != numeric_limits<uint32_t>::max() && generation != numeric_limits<uint32_t>::max();
     }
 
+    struct null_handle_t
+    {
+        template <rhi_handle_type T>
+        constexpr operator typed_rhi_handle<T>() const noexcept
+        {
+            return typed_rhi_handle<T>::null_handle;
+        }
+    };
+
+    inline constexpr null_handle_t null_handle{};
+
     struct rhi_device_description
     {
         uint32_t device_index;

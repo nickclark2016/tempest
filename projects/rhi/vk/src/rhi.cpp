@@ -4675,7 +4675,7 @@ namespace tempest::rhi::vk
                 .dstBinding = buffer.index,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorType = to_vulkan(buffer.type),
                 .pImageInfo = nullptr,
                 .pBufferInfo = buffer_write_info,
                 .pTexelBufferView = nullptr,

@@ -7,7 +7,7 @@ import "lighting";
 import "material";
 import "mesh";
 import "scene";
-import "tonemap.slang";
+import "tonemap";
 import "vertex_pull";
 
 struct VertexOutput {
