@@ -6,6 +6,7 @@
 #include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
 #include <tempest/enum.hpp>
+#include <tempest/exception.hpp>
 #include <tempest/files.hpp>
 #include <tempest/graphics_components.hpp>
 #include <tempest/int.hpp>
