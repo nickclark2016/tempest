@@ -25,7 +25,7 @@ scoped.group('RHI', function()
             'vma',
         }
 
-        if _OPTIONS['debugshaders'] then
+        if _OPTIONS['debug-shaders'] then
             defines {
                 'TEMPEST_DEBUG_SHADERS',
             }
@@ -40,6 +40,12 @@ scoped.group('RHI', function()
             files {
                 'include/tempest/vk/aftermath/*.hpp',
                 'src/aftermath/*.cpp',
+            }
+        end
+
+        if _OPTIONS['enable-validation-layers'] then
+            defines {
+                'TEMPEST_ENABLE_VALIDATION_LAYERS',
             }
         end
 

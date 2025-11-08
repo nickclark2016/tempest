@@ -172,10 +172,10 @@ int main()
                           tempest::make_enum_mask(tempest::rhi::pipeline_stage::blit),
                           tempest::make_enum_mask(tempest::rhi::memory_access::transfer_write));
         },
-        [](tempest::graphics::transfer_task_execution_context& ctx, auto swapchain_handle, auto& device, auto color) {
+        [](tempest::graphics::transfer_task_execution_context& ctx, auto swapchain_handle, auto color) {
             ctx.blit(color, swapchain_handle);
         },
-        swapchain_handle, tempest::ref(device), color_target);
+        swapchain_handle, color_target);
 
     pbr_fg.compile({
         .graphics_queues = 1,

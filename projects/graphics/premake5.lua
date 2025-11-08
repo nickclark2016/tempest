@@ -148,7 +148,13 @@ scoped.group('Tests', function()
 end)
 
 newoption {
-    trigger = 'debugshaders',
+    trigger = 'debug-shaders',
     description = 'Compile shaders with debug information',
+    category = 'Tempest Engine',
+}
+
+newoption {
+    trigger = 'enable-validation-layers',
+    description = 'Enable Vulkan validation layers',
     category = 'Tempest Engine',
 }

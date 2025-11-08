@@ -167,6 +167,15 @@ scoped.workspace('Tempest', function()
         omitframepointer 'On'
     end)
 
+    scoped.filter({
+        'toolset:clang',
+        'action:gmake*'
+    }, function()
+        disablewarnings {
+            'missing-designated-field-initializers',
+        }
+    end)
+
     startproject 'editor-entrypoint'
 
     include 'dependencies'
