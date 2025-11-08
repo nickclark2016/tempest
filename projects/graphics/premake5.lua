@@ -50,9 +50,9 @@ scoped.project('graphics', function()
 
     scoped.filter({ 'files:shaders/raster/**.slang' }, function()
         buildmessage 'Compiling %{file.relpath}'
-        
+
         scoped.filter({
-            'options:debugshaders'
+            'options:debug-shaders'
         }, function()
             buildcommands {
                 '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O0 -g3',
@@ -61,7 +61,7 @@ scoped.project('graphics', function()
         end)
 
         scoped.filter({
-            'options:not debugshaders'
+            'options:not debug-shaders'
         }, function()
             buildcommands {
                 '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
@@ -84,7 +84,7 @@ scoped.project('graphics', function()
         buildmessage 'Compiling %{file.relpath}'
 
         scoped.filter({
-            'options:debugshaders'
+            'options:debug-shaders'
         }, function()
             buildcommands {
                 '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O0 -g3',
@@ -92,7 +92,7 @@ scoped.project('graphics', function()
         end)
 
         scoped.filter({
-            'options:not debugshaders'
+            'options:not debug-shaders'
         }, function()
             buildcommands {
                 '"%{!fetch.slang.compiler}" "%{!file.abspath}" -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',

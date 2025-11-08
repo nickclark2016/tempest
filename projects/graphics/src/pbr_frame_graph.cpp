@@ -2747,7 +2747,7 @@ namespace tempest::graphics
             .location = rhi::memory_location::device,
             .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::sampled,
                                     rhi::image_usage::transfer_src),
-            .name = "MBOIT Moments Target",
+            .name = "Tonemapped Color Buffer",
         });
 
         auto descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
