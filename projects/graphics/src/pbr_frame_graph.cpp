@@ -3578,7 +3578,8 @@ namespace tempest::graphics
             .screen_bounds =
                 {
                     static_cast<float>(self->_cfg.render_target_width),
-                    static_cast<float>(self->_cfg.render_target_height), 0.1f,
+                    static_cast<float>(self->_cfg.render_target_height),
+                    0.1f,
                     1000.0f, // TODO: Parameterize near and far planes
                 },
             .workgroup_count_tile_size_px =
@@ -3620,7 +3621,8 @@ namespace tempest::graphics
             .screen_bounds =
                 {
                     static_cast<float>(self->_cfg.render_target_width),
-                    static_cast<float>(self->_cfg.render_target_height), 0.0f,
+                    static_cast<float>(self->_cfg.render_target_height),
+                    0.0f,
                     1000.0f, // TODO: Parameterize near and far planes
                 },
             .workgroup_count_tile_size_px =
@@ -4231,7 +4233,7 @@ namespace tempest::graphics
 
         auto moments_image_bindings = vector<rhi::image_binding_info>{};
         moments_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .image = ctx.find_image(self->_pass_output_resource_handles.mboit_resolve.moments_buffer),
             .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
             .layout = rhi::image_layout::general,
         });
@@ -4244,7 +4246,7 @@ namespace tempest::graphics
 
         auto zeroth_moment_image_bindings = vector<rhi::image_binding_info>{};
         zeroth_moment_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .image = ctx.find_image(self->_pass_output_resource_handles.mboit_gather.zeroth_moment_buffer),
             .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
             .layout = rhi::image_layout::general,
         });
@@ -4479,7 +4481,7 @@ namespace tempest::graphics
 
         auto moments_image_bindings = vector<rhi::image_binding_info>{};
         moments_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .image = ctx.find_image(self->_pass_output_resource_handles.mboit_resolve.moments_buffer),
             .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
             .layout = rhi::image_layout::general,
         });
@@ -4492,7 +4494,7 @@ namespace tempest::graphics
 
         auto zeroth_moment_image_bindings = vector<rhi::image_binding_info>{};
         zeroth_moment_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.ssao_blur.ssao_blurred_output),
+            .image = ctx.find_image(self->_pass_output_resource_handles.mboit_resolve.zeroth_moment_buffer),
             .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
             .layout = rhi::image_layout::general,
         });
@@ -4606,6 +4608,32 @@ namespace tempest::graphics
         self->_device->unmap_buffer(ctx.find_buffer(shadow_descriptors));
 
         ctx.begin_render_pass(render_pass_begin);
+
+        ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.mboit_resolve.pipeline_layout,
+                                    rhi::bind_point::graphics, 0, array{scene_descriptors, shadow_descriptors});
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.mboit_resolve.pipeline);
+        ctx.bind_index_buffer(self->_global_resources.vertex_pull_buffer, rhi::index_format::uint32, 0);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f);
+
+        const auto indirect_command_offset = self->_executor->get_current_frame_resource_offset(
+            self->_pass_output_resource_handles.upload_pass.draw_commands);
+
+        for (const auto& [key, batch] : self->_drawables.draw_batches)
+        {
+            if (key.alpha_type == alpha_behavior::transmissive || key.alpha_type == alpha_behavior::transparent)
+            {
+                ctx.draw_indirect(self->_pass_output_resource_handles.upload_pass.draw_commands,
+                                  static_cast<uint32_t>(indirect_command_offset + batch.indirect_command_offset *
+                                                                                      sizeof(indexed_indirect_command)),
+                                  static_cast<uint32_t>(batch.commands.size()),
+                                  static_cast<uint32_t>(sizeof(indexed_indirect_command)));
+            }
+        }
+
         ctx.end_render_pass();
     }
 
@@ -4624,7 +4652,71 @@ namespace tempest::graphics
             .store_op = rhi::work_queue::store_op::store,
         });
 
+        // Bindings
+        // 0 - Moments Buffer
+        // 1 - Zeroth Moment Buffer
+        // 2 - Transparency Accumulation Buffer
+        // 3 - Linear Sampler
+
+        auto moments_image_bindings = vector<rhi::image_binding_info>{};
+        moments_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.mboit_resolve.moments_buffer),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::general,
+        });
+
+        auto zeroth_moment_image_bindings = vector<rhi::image_binding_info>{};
+        zeroth_moment_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.mboit_resolve.zeroth_moment_buffer),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::general,
+        });
+
+        auto transparency_accumulation_image_bindings = vector<rhi::image_binding_info>{};
+        transparency_accumulation_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.mboit_resolve.transparency_accumulation),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        auto image_writes = vector<rhi::image_binding_descriptor>{};
+        image_writes.push_back(rhi::image_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::storage_image,
+            .images = tempest::move(moments_image_bindings),
+        });
+
+        image_writes.push_back(rhi::image_binding_descriptor{
+            .index = 1,
+            .type = rhi::descriptor_type::storage_image,
+            .images = tempest::move(zeroth_moment_image_bindings),
+        });
+
+        image_writes.push_back(rhi::image_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(transparency_accumulation_image_bindings),
+        });
+
+        auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        samplers.push_back(self->_global_resources.linear_sampler);
+        auto sampler_writes = vector<rhi::sampler_binding_descriptor>{};
+        sampler_writes.push_back(rhi::sampler_binding_descriptor{
+            .index = 3,
+            .samplers = tempest::move(samplers),
+        });
+
         ctx.begin_render_pass(render_pass_begin);
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.mboit_blend.pipeline);
+        ctx.push_descriptors(self->_pass_output_resource_handles.mboit_blend.pipeline_layout, rhi::bind_point::graphics,
+                             0, {}, image_writes, sampler_writes);
+        ctx.set_scissor(0, 0, self->_cfg.render_target_width, self->_cfg.render_target_height);
+        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.render_target_width),
+                         static_cast<float>(self->_cfg.render_target_height), 0.0f, 1.0f, false);
+        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::none));
+        ctx.draw(3, 1, 0, 0);
+
         ctx.end_render_pass();
     }
 

@@ -4881,7 +4881,7 @@ namespace tempest::rhi::vk
             .set_engine_version(0, 1, 0)
             .require_api_version(1, 3, 0);
 
-#if defined(_DEBUG)
+#if defined(TEMPEST_ENABLE_VALIDATION_LAYERS)
         bldr.request_validation_layers(true)
             .set_debug_callback(debug_callback)
             .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
