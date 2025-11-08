@@ -603,6 +603,11 @@ namespace tempest::rhi::vk
             return _is_debug_device;
         }
 
+        bool can_name_objects() const noexcept
+        {
+            return _can_name;
+        }
+
       private:
         vkb::Instance* _vkb_instance;
         vkb::Device _vkb_device;

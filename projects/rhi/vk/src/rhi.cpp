@@ -1455,7 +1455,7 @@ namespace tempest::rhi::vk
 #if defined(TEMPEST_DEBUG_SHADERS)
         _can_name = true;
 #else
-        _can_name = _is_debug_device;
+        _can_name = false;
 #endif
         if (_can_name)
         {
@@ -4437,7 +4437,7 @@ namespace tempest::rhi::vk
             .pStencilAttachment = stencil_attachment ? stencil_attachment : nullptr,
         };
 
-        if (_parent->is_debug_device() && !render_pass_info.name.empty())
+        if (_parent->can_name_objects() && !render_pass_info.name.empty())
         {
             VkDebugUtilsLabelEXT label = {
                 .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
@@ -4460,7 +4460,7 @@ namespace tempest::rhi::vk
         auto cmds = _parent->get_command_buffer(command_list);
         _dispatch->cmdEndRendering(cmds);
 
-        if (_parent->is_debug_device() && _is_named_render_pass_active)
+        if (_parent->can_name_objects() && _is_named_render_pass_active)
         {
             _dispatch->cmdEndDebugUtilsLabelEXT(cmds);
             _is_named_render_pass_active = false;
