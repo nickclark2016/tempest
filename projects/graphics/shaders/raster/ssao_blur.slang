@@ -32,17 +32,26 @@ FragmentOutput FSMain(VSOutput vs_out) {
 
     uint width, height;
     ssao_buffer.GetDimensions(width, height);
-    float2 tx_size = 1.0 / float2(width, height);
+    
+    let tx_size = 1.0 / float2(width, height);
+    var sample_count = 0.0f;
 
-    for (int t = -2; t < 2; ++t) {
-        for (int s = -2; s < 2; ++s) {
-            float2 offset = float2(s, t) * tx_size;
-            blur_factor += ssao_buffer.Sample(point_sampler, vs_out.uv + offset).r;
+    for (int t = -2; t <= 2; ++t) {
+        for (int s = -2; s <= 2; ++s) {
+            let offset = float2(s, t) * tx_size;
+            let sample_pos = vs_out.uv + offset;
+
+            if (any(sample_pos < 0.0f) || any(sample_pos > 1.0f)) {
+                continue;
+            }
+
+            blur_factor += ssao_buffer.Sample(point_sampler, sample_pos).r;
+            sample_count += 1.0f;
         }
     }
 
     // Output the visibility value
-    output.visibility = blur_factor / 16;
+    output.visibility = blur_factor / sample_count;
 
     return output;
 }

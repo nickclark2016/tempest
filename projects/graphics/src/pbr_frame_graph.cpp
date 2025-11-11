@@ -41,6 +41,7 @@ namespace tempest::graphics
     {
         _release_frame_upload_pass(_pass_output_resource_handles.upload_pass);
         _release_depth_prepass(_pass_output_resource_handles.depth_prepass);
+        _release_hierarchical_z_buffer_pass(_pass_output_resource_handles.hierarchical_z_buffer);
         _release_ssao_pass(_pass_output_resource_handles.ssao);
         _release_ssao_blur_pass(_pass_output_resource_handles.ssao_blur);
         _release_light_clustering_pass(_pass_output_resource_handles.light_clustering);
@@ -228,6 +229,7 @@ namespace tempest::graphics
         _create_global_resources();
         _pass_output_resource_handles.upload_pass = _add_frame_upload_pass(*_builder);
         _pass_output_resource_handles.depth_prepass = _add_depth_prepass(*_builder);
+        _pass_output_resource_handles.hierarchical_z_buffer = _add_hierarchical_z_buffer_pass(*_builder);
         _pass_output_resource_handles.ssao = _add_ssao_pass(*_builder);
         _pass_output_resource_handles.ssao_blur = _add_ssao_blur_pass(*_builder);
         _pass_output_resource_handles.light_clustering = _add_light_clustering_pass(*_builder);
@@ -660,6 +662,105 @@ namespace tempest::graphics
     void pbr_frame_graph::_release_depth_prepass(depth_prepass_outputs& outputs)
     {
         _device->destroy_graphics_pipeline(outputs.pipeline);
+
+        outputs = {};
+    }
+
+    pbr_frame_graph::hierarchical_z_buffer_pass_outputs pbr_frame_graph::_add_hierarchical_z_buffer_pass(
+        graph_builder& builder)
+    {
+        auto hiz_buffer = builder.create_image({
+            .format = rhi::image_format::r32_float,
+            .type = rhi::image_type::image_2d,
+            .width = _cfg.render_target_width,
+            .height = _cfg.render_target_height,
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 6,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::sampled),
+            .name = "Hierarchical Z Buffer",
+        });
+
+        // Descriptors
+        // 0: Depth input
+        // 1: RW Hi-Z Map
+        // 2: Linear Sampler
+
+        auto hiz_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+        hiz_descriptor_set_bindings.push_back({
+            .binding_index = 0,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+
+        hiz_descriptor_set_bindings.push_back({
+            .binding_index = 1,
+            .type = rhi::descriptor_type::sampler,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+
+        hiz_descriptor_set_bindings.push_back({
+            .binding_index = 2,
+            .type = rhi::descriptor_type::storage_image,
+            .count = 1,
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+
+        // Push Constants
+        // 0: [0, sizeof(hi_z_constants)] - Hi-Z Constants
+
+        auto hiz_descriptors = _device->create_descriptor_set_layout(
+            hiz_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::push));
+
+        auto descriptors = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set_layout>>{};
+        descriptors.push_back(hiz_descriptors);
+
+        auto push_constants = vector<rhi::push_constant_range>();
+        push_constants.push_back({
+            .offset = 0,
+            .range = static_cast<uint32_t>(sizeof(hi_z_constants)),
+            .stages = make_enum_mask(rhi::shader_stage::compute),
+        });
+
+        auto pipeline_layout = _device->create_pipeline_layout({
+            .descriptor_set_layouts = descriptors,
+            .push_constants = tempest::move(push_constants),
+        });
+
+        auto compute_shader_source = core::read_bytes("assets/shaders/hzb.comp.spv");
+
+        auto pipeline = _device->create_compute_pipeline({
+            .compute_shader = tempest::move(compute_shader_source),
+            .layout = pipeline_layout,
+            .name = "Hierarchical Z Buffer Pipeline",
+        });
+
+        builder.create_compute_pass(
+            "Build Hi-Z Buffer",
+            [&](compute_task_builder& task) {
+                task.read(_pass_output_resource_handles.depth_prepass.depth, rhi::image_layout::shader_read_only,
+                          make_enum_mask(rhi::pipeline_stage::compute_shader),
+                          make_enum_mask(rhi::memory_access::shader_read));
+                task.write(hiz_buffer, rhi::image_layout::general, make_enum_mask(rhi::pipeline_stage::compute_shader),
+                           make_enum_mask(rhi::memory_access::shader_write));
+            },
+            &_hierarchical_z_buffer_pass_task, this);
+
+        return {
+            .hzb = hiz_buffer,
+            .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+        };
+    }
+
+    void pbr_frame_graph::_release_hierarchical_z_buffer_pass(hierarchical_z_buffer_pass_outputs& outputs)
+    {
+        _device->destroy_compute_pipeline(outputs.pipeline);
 
         outputs = {};
     }
@@ -2875,7 +2976,7 @@ namespace tempest::graphics
             self->_global_resources.utilization.staging_buffer_bytes_written;
         auto staging_buffer_bytes = self->_device->map_buffer(
             self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
-        auto staging_bytes_written = static_cast<size_t>(0u);
+        auto staging_bytes_written = self->_global_resources.utilization.staging_buffer_bytes_written;
 
         // Find the camera to upload
         auto camera = ecs::archetype_entity{ecs::tombstone};
@@ -3039,14 +3140,6 @@ namespace tempest::graphics
 
         scene_constants_data.sun = self->_scene_data.dir_lights[sun_entity];
 
-        // Copy scene constants to staging buffer
-        std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written, &scene_constants_data,
-                    sizeof(scene_constants));
-
-        const auto scene_constants_offset = staging_bytes_written;
-
-        staging_bytes_written += sizeof(scene_constants);
-
         // Build out the draw commands
         for (auto&& [_, draw_batch] : self->_drawables.draw_batches)
         {
@@ -3112,6 +3205,14 @@ namespace tempest::graphics
             }
             instance_written_count += static_cast<uint32_t>(batch.objects.size());
         }
+
+        // Copy scene constants to staging buffer
+        std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written, &scene_constants_data,
+                    sizeof(scene_constants));
+
+        const auto scene_constants_offset = staging_bytes_written;
+
+        staging_bytes_written += sizeof(scene_constants);
 
         // Upload the object data buffer
 
@@ -3200,7 +3301,8 @@ namespace tempest::graphics
         }
         self->_device->unmap_buffer(self->_executor->get_buffer(draw_command_buffer));
 
-        self->_global_resources.utilization.staging_buffer_bytes_written = static_cast<uint32_t>(staging_bytes_written);
+        self->_global_resources.utilization.staging_buffer_bytes_written +=
+            static_cast<uint32_t>(staging_bytes_written);
     }
 
     void pbr_frame_graph::_depth_prepass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
@@ -3348,6 +3450,63 @@ namespace tempest::graphics
         }
 
         ctx.end_render_pass();
+    }
+
+    void pbr_frame_graph::_hierarchical_z_buffer_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self)
+    {
+        const auto constants = hi_z_constants{
+            .screen_size = {self->_cfg.render_target_width, self->_cfg.render_target_height},
+            .num_levels = 6,
+        };
+
+        auto image_binding_descs = vector<rhi::image_binding_descriptor>{};
+        auto sampler_binding_descs = vector<rhi::sampler_binding_descriptor>{};
+
+        auto depth_image_bindings = vector<rhi::image_binding_info>{};
+        depth_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.depth_prepass.depth),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::shader_read_only,
+        });
+
+        image_binding_descs.push_back(rhi::image_binding_descriptor{
+            .index = 0,
+            .type = rhi::descriptor_type::sampled_image,
+            .images = tempest::move(depth_image_bindings),
+        });
+
+        auto hi_z_image_bindings = vector<rhi::image_binding_info>{};
+        hi_z_image_bindings.push_back(rhi::image_binding_info{
+            .image = ctx.find_image(self->_pass_output_resource_handles.hierarchical_z_buffer.hzb),
+            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+            .layout = rhi::image_layout::general,
+        });
+
+        image_binding_descs.push_back(rhi::image_binding_descriptor{
+            .index = 2,
+            .type = rhi::descriptor_type::storage_image,
+            .images = tempest::move(hi_z_image_bindings),
+        });
+
+        auto linear_sampler_bindings = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        linear_sampler_bindings.push_back(self->_global_resources.linear_sampler);
+
+        sampler_binding_descs.push_back(rhi::sampler_binding_descriptor{
+            .index = 1,
+            .samplers = tempest::move(linear_sampler_bindings),
+        });
+
+        ctx.bind_pipeline(self->_pass_output_resource_handles.hierarchical_z_buffer.pipeline);
+        ctx.push_descriptors(self->_pass_output_resource_handles.hierarchical_z_buffer.pipeline_layout,
+                             rhi::bind_point::compute, 0, {}, image_binding_descs, sampler_binding_descs);
+
+        ctx.push_constants(self->_pass_output_resource_handles.hierarchical_z_buffer.pipeline_layout,
+                           make_enum_mask(rhi::shader_stage::compute), 0, constants);
+
+        const auto group_count_x = static_cast<uint32_t>(math::div_ceil(self->_cfg.render_target_width, 32));
+        const auto group_count_y = static_cast<uint32_t>(math::div_ceil(self->_cfg.render_target_height, 32));
+
+        ctx.dispatch(group_count_x, group_count_y, 1);
     }
 
     void pbr_frame_graph::_ssao_upload_task(transfer_task_execution_context& ctx, pbr_frame_graph* self)

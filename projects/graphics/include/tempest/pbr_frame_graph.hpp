@@ -112,6 +112,13 @@ namespace tempest::graphics
                 rhi::null_handle;
         };
 
+        struct hierarchical_z_buffer_pass_outputs
+        {
+            graph_resource_handle<rhi::rhi_handle_type::image> hzb;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+        };
+
         struct ssao_pass_outputs
         {
             graph_resource_handle<rhi::rhi_handle_type::image> ssao_output;
@@ -215,6 +222,7 @@ namespace tempest::graphics
         {
             frame_upload_pass_outputs upload_pass;
             depth_prepass_outputs depth_prepass;
+            hierarchical_z_buffer_pass_outputs hierarchical_z_buffer;
             ssao_pass_outputs ssao;
             ssao_blur_pass_outputs ssao_blur;
             light_clustering_pass_outputs light_clustering;
@@ -265,6 +273,9 @@ namespace tempest::graphics
         depth_prepass_outputs _add_depth_prepass(graph_builder& builder);
         void _release_depth_prepass(depth_prepass_outputs& outputs);
 
+        hierarchical_z_buffer_pass_outputs _add_hierarchical_z_buffer_pass(graph_builder& builder);
+        void _release_hierarchical_z_buffer_pass(hierarchical_z_buffer_pass_outputs& outputs);
+
         ssao_pass_outputs _add_ssao_pass(graph_builder& builder);
         void _release_ssao_pass(ssao_pass_outputs& outputs);
 
@@ -298,6 +309,7 @@ namespace tempest::graphics
         static void _upload_pass_task(transfer_task_execution_context& ctx, pbr_frame_graph* self);
         static void _depth_prepass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                         graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors);
+        static void _hierarchical_z_buffer_pass_task(compute_task_execution_context& ctx, pbr_frame_graph* self);
         static void _ssao_upload_task(transfer_task_execution_context& ctx, pbr_frame_graph* self);
         static void _ssao_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                     graph_resource_handle<rhi::rhi_handle_type::buffer> descriptors);
@@ -496,6 +508,12 @@ namespace tempest::graphics
         struct directional_shadow_pass_constants
         {
             math::mat4<float> light_vp;
+        };
+
+        struct hi_z_constants
+        {
+            math::vec2<uint> screen_size;
+            uint32_t num_levels;
         };
 
         struct draw_batch_key

@@ -188,6 +188,11 @@ namespace tempest::rhi::vk
 
         void reset(uint64_t frame_in_flight) override;
 
+        // Debugging
+        void begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list,string_view name) override;
+        void end_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list) override;
+        void set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list, string_view name) override;
+
       private:
         vkb::DispatchTable* _dispatch;
         VkQueue _queue;
@@ -195,8 +200,6 @@ namespace tempest::rhi::vk
 
         vector<work_group> _work_groups;
         device* _parent;
-
-        bool _is_named_render_pass_active{false};
 
         resource_tracker* _res_tracker;
 

@@ -136,13 +136,12 @@ half f0_to_index_of_refraction(half f0) {
 half d_ggx(half roughness, half n_dot_h, half3 h, half3 n) {
     // half one_minus_noh2 = 1.0h - n_dot_h * n_dot_h;
     
-    half3 nxh = cross(n, h);
-    half one_minus_noh2 = dot(nxh, nxh);
+    let nxh = cross(n, h);
+    let one_minus_noh2 = dot(nxh, nxh);
     
-    half alpha = n_dot_h * roughness;
-    half k = roughness / (one_minus_noh2 + alpha * alpha);
-    half d = k * k * half(1.0 / PI);
-    return min(d, 65504.0h);
+    let alpha = n_dot_h * roughness;
+    let k = min(roughness / (one_minus_noh2 + alpha * alpha), 453.5h);
+    return k * k * 1.0h / half(PI);
 
     // half3 n_cross_h = cross(n, h);
     // half a = n_dot_h * roughness;
@@ -487,7 +486,7 @@ void fetch_normal(const MaterialState mat_state, inout PixelData pixel, Texture2
         half3 tan_normal = half3(textures[(int) mat_state.mat.normal_map_id].Sample(mat_state.linear_sampler, pixel.uv).rgb) * 2.0h - 1.0h;
         tan_normal.rg *= half(mat_state.mat.normal_scale);
         half3 normal = tan_normal.x * pixel.geom_tangent + tan_normal.y * pixel.geom_bitangent + tan_normal.z * pixel.geom_normal;
-        pixel.shading_normal = normal;
+        pixel.shading_normal = normalize(normal);
     }
 
     if (!pixel.front_face) {

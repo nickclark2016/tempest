@@ -4437,20 +4437,6 @@ namespace tempest::rhi::vk
             .pStencilAttachment = stencil_attachment ? stencil_attachment : nullptr,
         };
 
-        if (_parent->can_name_objects() && !render_pass_info.name.empty())
-        {
-            VkDebugUtilsLabelEXT label = {
-                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-                .pNext = nullptr,
-                .pLabelName = render_pass_info.name.c_str(),
-                .color = {},
-            };
-
-            _dispatch->cmdBeginDebugUtilsLabelEXT(_parent->get_command_buffer(command_list), &label);
-
-            _is_named_render_pass_active = true;
-        }
-
         _dispatch->cmdBeginRendering(_parent->get_command_buffer(command_list), &render_info);
         _allocator.reset();
     }
@@ -4459,12 +4445,6 @@ namespace tempest::rhi::vk
     {
         auto cmds = _parent->get_command_buffer(command_list);
         _dispatch->cmdEndRendering(cmds);
-
-        if (_parent->can_name_objects() && _is_named_render_pass_active)
-        {
-            _dispatch->cmdEndDebugUtilsLabelEXT(cmds);
-            _is_named_render_pass_active = false;
-        }
     }
 
     void work_queue::bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -4821,6 +4801,52 @@ namespace tempest::rhi::vk
     void work_queue::reset(uint64_t frame_in_flight)
     {
         start_frame(static_cast<uint32_t>(frame_in_flight));
+    }
+
+    void work_queue::begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                         string_view name)
+    {
+        if (!_parent->can_name_objects())
+        {
+            return;
+        }
+
+        const auto label = VkDebugUtilsLabelEXT{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pNext = nullptr,
+            .pLabelName = name.data(),
+            .color = {0.0f, 0.0f, 0.0f, 1.0f},
+        };
+
+        _dispatch->cmdBeginDebugUtilsLabelEXT(_parent->get_command_buffer(command_list), &label);
+    }
+
+    void work_queue::end_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list)
+    {
+        if (!_parent->can_name_objects())
+        {
+            return;
+        }
+
+        _dispatch->cmdEndDebugUtilsLabelEXT(_parent->get_command_buffer(command_list));
+    }
+
+    void work_queue::set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                       string_view name)
+    {
+        if (!_parent->can_name_objects())
+        {
+            return;
+        }
+
+        const auto label = VkDebugUtilsLabelEXT{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pNext = nullptr,
+            .pLabelName = name.data(),
+            .color = {0.0f, 0.0f, 0.0f, 1.0f},
+        };
+
+        _dispatch->cmdInsertDebugUtilsLabelEXT(_parent->get_command_buffer(command_list), &label);
     }
 
     void work_group::reset() noexcept

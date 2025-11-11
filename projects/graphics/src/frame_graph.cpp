@@ -1968,18 +1968,24 @@ namespace tempest::graphics
                 switch (pass.type)
                 {
                 case work_type::graphics: {
+                    queue.begin_debug_region(command_list, pass.name.c_str());
                     auto executor = graphics_task_execution_context(this, command_list, &queue);
                     pass.execution_context(executor);
+                    queue.end_debug_region(command_list);
                     break;
                 }
                 case work_type::compute: {
+                    queue.begin_debug_region(command_list, pass.name.c_str());
                     auto executor = compute_task_execution_context(this, command_list, &queue);
                     pass.execution_context(executor);
+                    queue.end_debug_region(command_list);
                     break;
                 }
                 case work_type::transfer: {
+                    queue.begin_debug_region(command_list, pass.name.c_str());
                     auto executor = transfer_task_execution_context(this, command_list, &queue);
                     pass.execution_context(executor);
+                    queue.end_debug_region(command_list);
                     break;
                 }
                 default:

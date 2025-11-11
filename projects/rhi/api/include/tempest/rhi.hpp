@@ -370,6 +370,11 @@ namespace tempest::rhi
 
         virtual void reset(uint64_t frame_in_flight) = 0;
 
+        // Debugging
+        virtual void begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list,string_view name) = 0;
+        virtual void end_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list) = 0;
+        virtual void set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list, string_view name) = 0;
+
       protected:
         work_queue() = default;
     };
