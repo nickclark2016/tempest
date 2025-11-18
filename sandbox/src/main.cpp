@@ -87,9 +87,12 @@ int main()
     auto instance = tempest::rhi::vk::create_instance();
     auto& device = instance->acquire_device(0);
 
+    const auto width = 1920;
+    const auto height = 1080;
+
     auto window = tempest::rhi::vk::create_window_surface({
-        .width = 1280,
-        .height = 720,
+        .width = width,
+        .height = height,
         .name = "Tempest Render Graph Test",
         .fullscreen = false,
     });
@@ -103,8 +106,8 @@ int main()
                 .format = tempest::rhi::image_format::bgra8_srgb,
             },
         .present_mode = tempest::rhi::present_mode::immediate,
-        .width = 1280,
-        .height = 720,
+        .width = width,
+        .height = height,
         .layers = 1,
     });
 
@@ -126,8 +129,8 @@ int main()
     auto pbr_fg =
         tempest::graphics::pbr_frame_graph(device,
                                            {
-                                               .render_target_width = 1280,
-                                               .render_target_height = 720,
+                                               .render_target_width = 1920,
+                                               .render_target_height = 1080,
                                                .hdr_color_format = tempest::rhi::image_format::rgba16_float,
                                                .depth_format = tempest::rhi::image_format::d32_float,
                                                .tonemapped_color_format = tempest::rhi::image_format::bgra8_srgb,

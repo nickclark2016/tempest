@@ -1,3 +1,4 @@
+#include <tempest/rhi_types.hpp>
 #include <tempest/vk/rhi_resource_tracker.hpp>
 
 #include <tempest/algorithm.hpp>
@@ -26,6 +27,12 @@ namespace tempest::rhi::vk
         void release_graphics_pipeline(uint64_t key, device* dev)
         {
             auto resource_key = extract_resource_key<rhi_handle_type::graphics_pipeline>(key);
+            dev->release_resource_immediate(resource_key);
+        }
+
+        void release_compute_pipeline(uint64_t key, device* dev)
+        {
+            auto resource_key = extract_resource_key<rhi_handle_type::compute_pipeline>(key);
             dev->release_resource_immediate(resource_key);
         }
 
@@ -246,7 +253,7 @@ namespace tempest::rhi::vk
         if (it == _tracked_resources.end())
         {
             _tracked_resources[key] = tracked_resource{
-                .destroy_fn = release_descriptor_set,
+                .destroy_fn = release_compute_pipeline,
                 .key = key,
                 .delete_requested = false,
                 .usage_records = {},
@@ -395,8 +402,27 @@ namespace tempest::rhi::vk
 
     bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image) const noexcept
     {
-        auto key = make_resource_key(rhi::rhi_handle_type::image, image.generation, image.id);
-        return _tracked_resources.find(key) != _tracked_resources.end();
+        const auto key = make_resource_key(rhi::rhi_handle_type::image, image.generation, image.id);
+        const auto tracked = _tracked_resources.find(key) != _tracked_resources.end();
+        if (!tracked)
+        {
+            // Check is any mip views are tracked
+            const auto img = _device->get_image(image);
+            for (const auto& mip_view : img->mip_chain_views)
+            {
+                if (mip_view != null_handle)
+                {
+                    const auto mip_key =
+                        make_resource_key(rhi::rhi_handle_type::image, mip_view.generation, mip_view.id);
+                    if (_tracked_resources.find(mip_key) != _tracked_resources.end())
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        return tracked;
     }
 
     bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> sampler) const noexcept
@@ -459,6 +485,24 @@ namespace tempest::rhi::vk
             logger->error("Resource {} is already marked for deletion", key);
             return;
         }
+
+        // Mark the mip views for deletion as well
+        const auto img = _device->get_image(image);
+        for (const auto& mip_view : img->mip_chain_views)
+        {
+            if (mip_view != null_handle)
+            {
+                const auto mip_key =
+                    make_resource_key(rhi::rhi_handle_type::image, mip_view.generation, mip_view.id);
+                auto mip_it = _tracked_resources.find(mip_key);
+                if (mip_it != _tracked_resources.end())
+                {
+                    auto& mip_resource = mip_it->second;
+                    mip_resource.delete_requested = true;
+                }
+            }
+        }
+
         resource.delete_requested = true;
     }
 

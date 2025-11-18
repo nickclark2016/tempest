@@ -7,9 +7,10 @@ struct Constants {
 [[vk_binding(1, 0)]] SamplerState linear_sampler;
 [[vk_binding(2, 0)]] RWTexture2D<float> output_depth_buffer[];
 
-static const uint tile_size = 32;
+static const uint tile_size = 16;
+static const uint tile_stride = tile_size + 1; // Add padding to avoid bank conflicts
 
-groupshared float group_shared_depth_buffer[tile_size];
+groupshared float group_shared_depth_buffer[tile_size * tile_stride];
 
 [shader("compute")]
 [numthreads(tile_size, tile_size, 1)]
@@ -17,11 +18,11 @@ void CSMain(uint3 dispatch_id : SV_DispatchThreadID, uint thread_index : SV_Grou
     let pixel_pos = dispatch_id.xy;
 
     // Read the depth value from the input depth buffer
-    let depth = input_depth_buffer.SampleLevel(linear_sampler, float2(pixel_pos) / float2(constants.image_size), 0);
+    let depth = input_depth_buffer.SampleLevel(linear_sampler, (float2(pixel_pos) + 0.5f) / float2(constants.image_size), 0);
 
     // Write the depth value to the highest level of the output depth buffer
     output_depth_buffer[0][pixel_pos] = depth;
-    group_shared_depth_buffer[thread_index] = depth;
+    group_shared_depth_buffer[thread_index % tile_size + (thread_index / tile_size) * tile_stride] = depth;
 
     // Calculate the number of levels in the output depth buffer
     uint num_levels = constants.num_levels;
@@ -44,10 +45,10 @@ void CSMain(uint3 dispatch_id : SV_DispatchThreadID, uint thread_index : SV_Grou
             let block_pos_prev_offset = block_pos_prev % tile_size;
          
             // Read the depth values of the 2x2 block from the previous level
-            let depth0 = group_shared_depth_buffer[block_pos_prev_offset.x + block_pos_prev_offset.y * tile_size];
-            let depth1 = group_shared_depth_buffer[min(block_pos_prev_offset.x + 1, tile_size - 1) + block_pos_prev_offset.y * tile_size];
-            let depth2 = group_shared_depth_buffer[block_pos_prev_offset.x + min(block_pos_prev_offset.y + 1, tile_size - 1) * tile_size];
-            let depth3 = group_shared_depth_buffer[min(block_pos_prev_offset.x + 1, tile_size - 1) + min(block_pos_prev_offset.y + 1, tile_size - 1) * tile_size];
+            let depth0 = group_shared_depth_buffer[block_pos_prev_offset.x + block_pos_prev_offset.y * tile_stride];
+            let depth1 = group_shared_depth_buffer[min(block_pos_prev_offset.x + 1, tile_size - 1) + block_pos_prev_offset.y * tile_stride];
+            let depth2 = group_shared_depth_buffer[block_pos_prev_offset.x + min(block_pos_prev_offset.y + 1, tile_size - 1) * tile_stride];
+            let depth3 = group_shared_depth_buffer[min(block_pos_prev_offset.x + 1, tile_size - 1) + min(block_pos_prev_offset.y + 1, tile_size - 1) * tile_stride];
          
             // Calculate the minimum depth value of the 2x2 block
             let min_depth = max(max(depth0, depth1), max(depth2, depth3));
@@ -56,7 +57,7 @@ void CSMain(uint3 dispatch_id : SV_DispatchThreadID, uint thread_index : SV_Grou
             output_depth_buffer[level][block_pos] = min_depth;
 
             uint2 block_local_offset = pixel_pos % tile_size;
-            group_shared_depth_buffer[block_local_offset.x + block_local_offset.y * tile_size] = depth;
+            group_shared_depth_buffer[block_local_offset.x + block_local_offset.y * tile_stride] = depth;
         }
     }
 }

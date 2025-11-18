@@ -1,13 +1,13 @@
+#include <tempest/flat_unordered_map.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/rhi_types.hpp>
+#include <tempest/to_underlying.hpp>
+#include <tempest/tuple.hpp>
 #include <tempest/vk/rhi.hpp>
 
 #include "window.hpp"
-
-#include <tempest/flat_unordered_map.hpp>
-#include <tempest/logger.hpp>
-#include <tempest/optional.hpp>
-#include <tempest/tuple.hpp>
 
 #include <exception>
 #include <vulkan/vulkan_core.h>
@@ -1117,6 +1117,51 @@ namespace tempest::rhi::vk
             std::terminate();
         }
 
+        constexpr VkImageAspectFlags compute_aspect_flags(VkFormat fmt)
+        {
+            switch (fmt)
+            {
+            case VK_FORMAT_D16_UNORM:
+            case VK_FORMAT_X8_D24_UNORM_PACK32:
+            case VK_FORMAT_D32_SFLOAT:
+                return VK_IMAGE_ASPECT_DEPTH_BIT;
+            case VK_FORMAT_D16_UNORM_S8_UINT:
+            case VK_FORMAT_D24_UNORM_S8_UINT:
+            case VK_FORMAT_D32_SFLOAT_S8_UINT:
+                return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            case VK_FORMAT_S8_UINT:
+                return VK_IMAGE_ASPECT_STENCIL_BIT;
+            case VK_FORMAT_R8_UNORM:
+            case VK_FORMAT_R8_SNORM:
+            case VK_FORMAT_R16_UNORM:
+            case VK_FORMAT_R16_SNORM:
+            case VK_FORMAT_R16_SFLOAT:
+            case VK_FORMAT_R32_SFLOAT:
+            case VK_FORMAT_R8G8_UNORM:
+            case VK_FORMAT_R8G8_SNORM:
+            case VK_FORMAT_R16G16_UNORM:
+            case VK_FORMAT_R16G16_SNORM:
+            case VK_FORMAT_R16G16_SFLOAT:
+            case VK_FORMAT_R32G32_SFLOAT:
+            case VK_FORMAT_R8G8B8A8_UNORM:
+            case VK_FORMAT_R8G8B8A8_SNORM:
+            case VK_FORMAT_R8G8B8A8_SRGB:
+            case VK_FORMAT_B8G8R8A8_SRGB:
+            case VK_FORMAT_R16G16B16A16_UNORM:
+            case VK_FORMAT_R16G16B16A16_SNORM:
+            case VK_FORMAT_R16G16B16A16_SFLOAT:
+            case VK_FORMAT_R32G32B32A32_SFLOAT:
+            case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+                return VK_IMAGE_ASPECT_COLOR_BIT;
+            default:
+                logger->warn("Unknown image format {}", to_underlying(fmt));
+                break;
+            }
+
+            logger->critical("Invalid image format: {}", to_underlying(fmt));
+            std::terminate();
+        }
+
         constexpr VmaMemoryUsage to_vma(rhi::memory_location location)
         {
             switch (location)
@@ -1493,7 +1538,7 @@ namespace tempest::rhi::vk
             {
                 _dispatch_table.destroyImageView(img.image_view, nullptr);
             }
-            if (img.image && !img.swapchain_image)
+            if (img.image && !img.swapchain_image && img.image_parent == null_handle)
             {
                 vmaDestroyImage(_vma_allocator, img.image, img.allocation);
             }
@@ -1715,7 +1760,7 @@ namespace tempest::rhi::vk
             return typed_rhi_handle<rhi_handle_type::image>::null_handle;
         }
 
-        vk::image img = {
+        auto img = vk::image{
             .allocation = allocation,
             .allocation_info = allocation_info,
             .image = image,
@@ -1725,7 +1770,10 @@ namespace tempest::rhi::vk
             .create_info = ci,
             .view_create_info = view_ci,
             .name = desc.name,
+            .image_parent = null_handle,
         };
+
+        img.mip_chain_views.fill(null_handle);
 
         if (!desc.name.empty())
         {
@@ -2512,11 +2560,38 @@ namespace tempest::rhi::vk
                 {
                     _dispatch_table.destroyImageView(img_it->image_view, nullptr);
                 }
-                if (img_it->image && !img_it->swapchain_image)
+                if (img_it->image && !img_it->swapchain_image && img_it->image_parent == null_handle)
                 {
                     _delete_queue.enqueue(VK_OBJECT_TYPE_IMAGE, img_it->image, img_it->allocation,
                                           _current_frame + num_frames_in_flight);
+                    img_it->mip_chain_views.fill(null_handle);
                 }
+
+                for (const auto& mip_view : img_it->mip_chain_views)
+                {
+                    if (mip_view != null_handle)
+                    {
+                        destroy_image(mip_view);
+                    }
+                }
+
+                // Remove from parent image's mip views if applicable
+                if (img_it->image_parent != null_handle)
+                {
+                    auto parent_image = get_image(img_it->image_parent);
+                    if (parent_image)
+                    {
+                        for (auto& mip_view : parent_image->mip_chain_views)
+                        {
+                            if (mip_view == handle)
+                            {
+                                mip_view = null_handle;
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 _images.erase(img_key);
             }
         }
@@ -2659,6 +2734,76 @@ namespace tempest::rhi::vk
                 _samplers.erase(sampler_key);
             }
         }
+    }
+
+    typed_rhi_handle<rhi::rhi_handle_type::image> device::get_image_mip_view(
+        typed_rhi_handle<rhi::rhi_handle_type::image> image, uint32_t mip) noexcept
+    {
+        auto img = get_image(image);
+        if (!img || mip >= img->create_info.mipLevels)
+        {
+            return typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+        }
+
+        if (img->mip_chain_views[mip] == typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle)
+        {
+            // Create the mip view
+            const auto view_ci = VkImageViewCreateInfo{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .image = img->image,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = img->create_info.format,
+                .components =
+                    {
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                .subresourceRange =
+                    {
+                        .aspectMask = compute_aspect_flags(img->create_info.format),
+                        .baseMipLevel = mip,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+            };
+
+            auto image_view = VkImageView{};
+            auto result = _dispatch_table.createImageView(&view_ci, nullptr, &image_view);
+            if (result != VK_SUCCESS)
+            {
+                logger->error("Failed to create image view for mip level {}: {}", mip, to_underlying(result));
+                return typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+            }
+
+            auto mip_img_view = vk::image{
+                .allocation = VK_NULL_HANDLE,
+                .allocation_info = img->allocation_info,
+                .image = img->image,
+                .image_view = image_view,
+                .swapchain_image = false,
+                .image_aspect = img->image_aspect,
+                .create_info = img->create_info,
+                .view_create_info = view_ci,
+                .name = img->name,
+                .image_parent = image,
+                .mip_chain_views = {},
+            };
+
+            auto mip_key = _images.insert(mip_img_view);
+            auto mip_key_id = get_slot_map_key_id<uint64_t>(mip_key);
+            auto mip_key_gen = get_slot_map_key_generation<uint64_t>(mip_key);
+            img->mip_chain_views[mip] = typed_rhi_handle<rhi::rhi_handle_type::image>{
+                .id = mip_key_id,
+                .generation = mip_key_gen,
+            };
+        }
+
+        return img->mip_chain_views[mip];
     }
 
     void device::recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
@@ -3405,6 +3550,17 @@ namespace tempest::rhi::vk
         return none();
     }
 
+    optional<vk::image&> device::get_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept
+    {
+        const auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
+        auto it = _images.find(key);
+        if (it != _images.end())
+        {
+            return *it;
+        }
+        return none();
+    }
+
     optional<const vk::image&> device::get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
     {
         const auto key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
@@ -3484,8 +3640,23 @@ namespace tempest::rhi::vk
             if (it->image_view)
             {
                 _dispatch_table.destroyImageView(it->image_view, nullptr);
+                if (it->image_parent != null_handle)
+                {
+                    auto parent = get_image(it->image_parent);
+                    if (parent)
+                    {
+                        for (auto& mip_view : parent->mip_chain_views)
+                        {
+                            if (mip_view == handle)
+                            {
+                                mip_view = null_handle;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
-            if (it->image && !it->swapchain_image)
+            if (it->image && !it->swapchain_image && it->image_parent == null_handle)
             {
                 vmaDestroyImage(_vma_allocator, it->image, it->allocation);
             }
@@ -4791,9 +4962,9 @@ namespace tempest::rhi::vk
         }
 
         _dispatch->cmdBindDescriptorBuffersEXT(cmds, unique_buffer_count, buffer_binding_infos);
-        _dispatch->cmdSetDescriptorBufferOffsetsEXT(cmds, to_vulkan(point),
-                                                    _parent->get_pipeline_layout(pipeline_layout), first_set_index,
-                                                    static_cast<uint32_t>(buffers.size()), buffer_binding_indices, offsets.data());
+        _dispatch->cmdSetDescriptorBufferOffsetsEXT(
+            cmds, to_vulkan(point), _parent->get_pipeline_layout(pipeline_layout), first_set_index,
+            static_cast<uint32_t>(buffers.size()), buffer_binding_indices, offsets.data());
 
         _allocator.reset();
     }
@@ -4803,8 +4974,7 @@ namespace tempest::rhi::vk
         start_frame(static_cast<uint32_t>(frame_in_flight));
     }
 
-    void work_queue::begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                         string_view name)
+    void work_queue::begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, string_view name)
     {
         if (!_parent->can_name_objects())
         {
@@ -4831,8 +5001,7 @@ namespace tempest::rhi::vk
         _dispatch->cmdEndDebugUtilsLabelEXT(_parent->get_command_buffer(command_list));
     }
 
-    void work_queue::set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                       string_view name)
+    void work_queue::set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list, string_view name)
     {
         if (!_parent->can_name_objects())
         {

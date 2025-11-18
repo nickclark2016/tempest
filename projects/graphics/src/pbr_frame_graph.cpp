@@ -676,7 +676,7 @@ namespace tempest::graphics
             .height = _cfg.render_target_height,
             .depth = 1,
             .array_layers = 1,
-            .mip_levels = 6,
+            .mip_levels = 5,
             .sample_count = rhi::image_sample_count::sample_count_1,
             .tiling = rhi::image_tiling_type::optimal,
             .location = rhi::memory_location::device,
@@ -707,7 +707,7 @@ namespace tempest::graphics
         hiz_descriptor_set_bindings.push_back({
             .binding_index = 2,
             .type = rhi::descriptor_type::storage_image,
-            .count = 1,
+            .count = 6,
             .stages = make_enum_mask(rhi::shader_stage::compute),
         });
 
@@ -3456,7 +3456,7 @@ namespace tempest::graphics
     {
         const auto constants = hi_z_constants{
             .screen_size = {self->_cfg.render_target_width, self->_cfg.render_target_height},
-            .num_levels = 6,
+            .num_levels = 5,
         };
 
         auto image_binding_descs = vector<rhi::image_binding_descriptor>{};
@@ -3476,11 +3476,15 @@ namespace tempest::graphics
         });
 
         auto hi_z_image_bindings = vector<rhi::image_binding_info>{};
-        hi_z_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.hierarchical_z_buffer.hzb),
-            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
-            .layout = rhi::image_layout::general,
-        });
+        const auto hi_z_image = ctx.find_image(self->_pass_output_resource_handles.hierarchical_z_buffer.hzb);
+        for (uint32_t level = 0; level < constants.num_levels; ++level)
+        {
+            hi_z_image_bindings.push_back(rhi::image_binding_info{
+                .image = self->_device->get_image_mip_view(hi_z_image, level),
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::general,
+            });
+        }
 
         image_binding_descs.push_back(rhi::image_binding_descriptor{
             .index = 2,
@@ -3503,8 +3507,8 @@ namespace tempest::graphics
         ctx.push_constants(self->_pass_output_resource_handles.hierarchical_z_buffer.pipeline_layout,
                            make_enum_mask(rhi::shader_stage::compute), 0, constants);
 
-        const auto group_count_x = static_cast<uint32_t>(math::div_ceil(self->_cfg.render_target_width, 32));
-        const auto group_count_y = static_cast<uint32_t>(math::div_ceil(self->_cfg.render_target_height, 32));
+        const auto group_count_x = static_cast<uint32_t>(math::div_ceil(self->_cfg.render_target_width, 16));
+        const auto group_count_y = static_cast<uint32_t>(math::div_ceil(self->_cfg.render_target_height, 16));
 
         ctx.dispatch(group_count_x, group_count_y, 1);
     }

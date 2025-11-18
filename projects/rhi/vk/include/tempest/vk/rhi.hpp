@@ -6,6 +6,7 @@
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/rhi_types.hpp>
 #include <tempest/slot_map.hpp>
 #include <tempest/vk/rhi_resource_tracker.hpp>
 
@@ -239,6 +240,9 @@ namespace tempest::rhi::vk
         VkImageCreateInfo create_info;
         VkImageViewCreateInfo view_create_info;
         string name;
+
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image_parent = null_handle;
+        array<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>, 16> mip_chain_views;
     };
 
     struct buffer
@@ -508,6 +512,9 @@ namespace tempest::rhi::vk
         void destroy_compute_pipeline(typed_rhi_handle<rhi_handle_type::compute_pipeline> handle) noexcept override;
         void destroy_sampler(typed_rhi_handle<rhi_handle_type::sampler> handle) noexcept override;
 
+        typed_rhi_handle<rhi::rhi_handle_type::image> get_image_mip_view(
+            typed_rhi_handle<rhi::rhi_handle_type::image> image, uint32_t mip) noexcept override;
+
         void recreate_render_surface(typed_rhi_handle<rhi_handle_type::render_surface> handle,
                                      const render_surface_desc& desc) noexcept override;
 
@@ -576,6 +583,7 @@ namespace tempest::rhi::vk
         VkPipelineLayout get_pipeline_layout(typed_rhi_handle<rhi_handle_type::pipeline_layout> handle) const noexcept;
 
         optional<const vk::buffer&> get_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept;
+        optional<vk::image&> get_image(typed_rhi_handle<rhi_handle_type::image> handle) noexcept;
         optional<const vk::image&> get_image(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept;
         optional<const vk::graphics_pipeline&> get_graphics_pipeline(
             typed_rhi_handle<rhi_handle_type::graphics_pipeline> handle) const noexcept;

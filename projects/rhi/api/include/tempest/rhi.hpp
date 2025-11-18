@@ -76,6 +76,9 @@ namespace tempest::rhi
         virtual void destroy_compute_pipeline(typed_rhi_handle<rhi_handle_type::compute_pipeline> handle) noexcept = 0;
         virtual void destroy_sampler(typed_rhi_handle<rhi_handle_type::sampler> handle) noexcept = 0;
 
+        virtual typed_rhi_handle<rhi::rhi_handle_type::image> get_image_mip_view(
+            typed_rhi_handle<rhi::rhi_handle_type::image> image, uint32_t mip) noexcept = 0;
+
         virtual work_queue& get_primary_work_queue() noexcept = 0;
         virtual work_queue& get_dedicated_transfer_queue() noexcept = 0;
         virtual work_queue& get_dedicated_compute_queue() noexcept = 0;
@@ -371,9 +374,11 @@ namespace tempest::rhi
         virtual void reset(uint64_t frame_in_flight) = 0;
 
         // Debugging
-        virtual void begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list,string_view name) = 0;
+        virtual void begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                        string_view name) = 0;
         virtual void end_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list) = 0;
-        virtual void set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list, string_view name) = 0;
+        virtual void set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                                      string_view name) = 0;
 
       protected:
         work_queue() = default;
