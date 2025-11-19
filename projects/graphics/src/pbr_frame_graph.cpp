@@ -1,3 +1,4 @@
+#include <iostream>
 #include <tempest/frame_graph.hpp>
 
 #include <cstring>
@@ -1661,6 +1662,7 @@ namespace tempest::graphics
                            make_enum_mask(rhi::memory_access::transfer_write));
                 task.read(shadow_data_buffer, make_enum_mask(rhi::pipeline_stage::none),
                           make_enum_mask(rhi::memory_access::none));
+                task.depends_on("Frame Upload Pass");
             },
             &_shadow_upload_pass_task, this);
 
@@ -3044,6 +3046,7 @@ namespace tempest::graphics
 
         self->_shadow_data.shelf_pack->clear();
         self->_shadow_data.shadow_map_parameters.clear();
+        self->_shadow_data.light_shadow_data.clear();
 
         auto sun_entity = ecs::archetype_entity{ecs::tombstone};
 
@@ -3063,8 +3066,6 @@ namespace tempest::graphics
             0.1f,
             1000.0f,
         };
-
-        self->_shadow_data.light_shadow_data.clear();
 
         auto shadow_maps_written = 0u;
         self->_inputs.entity_registry->each(
@@ -3260,10 +3261,13 @@ namespace tempest::graphics
 
         const auto light_buffer_staging_offset = staging_bytes_written;
 
-        std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written,
-                    self->_scene_data.point_lights.values(), self->_scene_data.point_lights.size() * sizeof(light));
-        staging_bytes_written += self->_scene_data.point_lights.size() * sizeof(light);
-        light_buffer_written += self->_scene_data.point_lights.size() * sizeof(light);
+        if (!self->_scene_data.point_lights.empty())
+        {
+            std::memcpy(staging_buffer_bytes + staging_buffer_offset + staging_bytes_written,
+                        self->_scene_data.point_lights.values(), self->_scene_data.point_lights.size() * sizeof(light));
+            staging_bytes_written += self->_scene_data.point_lights.size() * sizeof(light);
+            light_buffer_written += self->_scene_data.point_lights.size() * sizeof(light);
+        }
 
         // Unmap the staging buffer and push copy commands
         self->_device->unmap_buffer(
@@ -4018,7 +4022,8 @@ namespace tempest::graphics
         const auto draw_command_buffer = self->_pass_output_resource_handles.upload_pass.draw_commands;
         const auto draw_command_buffer_offset = self->_executor->get_current_frame_resource_offset(draw_command_buffer);
 
-        self->_inputs.entity_registry->each([&]([[maybe_unused]] directional_light_component dir_light,
+        self->_inputs.entity_registry->each([&ctx, self, draw_command_buffer, draw_command_buffer_offset](
+                                                [[maybe_unused]] directional_light_component dir_light,
                                                 [[maybe_unused]] shadow_map_component shadows,
                                                 ecs::self_component self_entity) {
             const auto light_it = self->_scene_data.dir_lights.find(self_entity.entity);
@@ -4027,7 +4032,7 @@ namespace tempest::graphics
                 return;
             }
 
-            const auto& light = light_it->second;
+            const auto light = light_it->second;
             for (auto cascade_index = 0u; cascade_index < light.shadow_map_count; ++cascade_index)
             {
                 auto shadow_map_index = light.shadow_map_indices[cascade_index];

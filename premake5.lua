@@ -43,6 +43,12 @@ scoped.workspace('Tempest', function()
         }, function()
             symbols 'On'
         end)
+
+        scoped.filter({
+            'system:linux'
+        }, function()
+            sanitize { 'Address' }
+        end)
     end)
 
     scoped.filter({

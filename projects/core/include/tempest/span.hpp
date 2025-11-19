@@ -1,6 +1,7 @@
 #ifndef tempest_core_span_hpp
 #define tempest_core_span_hpp
 
+#include <X11/Xdefs.h>
 #include <tempest/algorithm.hpp>
 #include <tempest/array.hpp>
 #include <tempest/assert.hpp>
@@ -159,11 +160,31 @@ namespace tempest
     {
     }
 
+    namespace detail
+    {
+        template <typename T>
+        concept has_begin_pointer = requires(T t) {
+            { t.begin() } -> pointer;
+        };
+
+        template <typename T>
+        inline auto get_begin_ptr(T&& t) noexcept
+        {
+            if constexpr (has_begin_pointer<T>)
+            {
+                return t.begin();
+            }
+            else
+            {
+                return tempest::addressof(*begin(t));
+            }
+        }
+    } // namespace detail
+
     template <typename T, size_t Extent>
     template <typename R>
     inline constexpr span<T, Extent>::span(R&& r)
-        : _start{tempest::addressof(*::tempest::begin(r))},
-          _end{_start + (tempest::distance(::tempest::begin(r), ::tempest::end(r)))}
+        : _start{detail::get_begin_ptr(r)}, _end{_start + (tempest::distance(::tempest::begin(r), ::tempest::end(r)))}
     {
     }
 

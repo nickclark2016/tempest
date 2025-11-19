@@ -5,6 +5,8 @@
 #include <tempest/enum.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
+#include <tempest/int.hpp>
+#include <tempest/limits.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
 #include <tempest/span.hpp>
@@ -43,6 +45,11 @@ namespace tempest::graphics
         constexpr base_graph_resource_handle(uint64_t handle, uint8_t version, uint8_t type)
             : handle(handle), version(version), type(type)
         {
+        }
+
+        inline static constexpr base_graph_resource_handle null()
+        {
+            return base_graph_resource_handle{numeric_limits<uint64_t>::max(), numeric_limits<uint8_t>::max(), numeric_limits<uint8_t>::max()};
         }
     };
 
@@ -113,10 +120,13 @@ namespace tempest::graphics
                         enum_mask<rhi::pipeline_stage> read_hints, enum_mask<rhi::memory_access> read_access_hints,
                         enum_mask<rhi::pipeline_stage> write_hints, enum_mask<rhi::memory_access> write_access_hints);
 
+        void depends_on(string task_name);
+
       private:
         friend class graph_builder;
 
         vector<scheduled_resource_access> accesses;
+        vector<string> dependencies;
     };
 
     class graphics_task_builder : public task_builder
@@ -350,6 +360,7 @@ namespace tempest::graphics
 
         vector<scheduled_resource_access> resource_accesses;
         vector<base_graph_resource_handle> outputs; // Resources written in this pass, subset of resource_accesses
+        vector<string> explicit_dependencies;
     };
 
     struct resource_entry

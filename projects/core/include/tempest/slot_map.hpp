@@ -223,7 +223,7 @@ namespace tempest
 
             for (size_t i = 0; i < key_block::value_count; ++i)
             {
-                const auto skip_list = other_block.skip_field[i / key_block::element_count];
+                const auto skip_list = other_block.skip_field[i / key_block::skip_field_bits_per_element];
                 const auto skip_entry = skip_list & (1 << (i % key_block::skip_field_bits_per_element));
 
                 this_block.key_table[i] = other_block.key_table[i];
@@ -274,7 +274,7 @@ namespace tempest
 
                 for (size_t i = 0; i < key_block::value_count; ++i)
                 {
-                    const auto skip_list = other_block.skip_field[i / key_block::element_count];
+                    const auto skip_list = other_block.skip_field[i / key_block::skip_field_bits_per_element];
                     const auto skip_entry = skip_list & (1 << (i % key_block::skip_field_bits_per_element));
 
                     this_block.key_table[i] = other_block.key_table[i];
@@ -525,7 +525,7 @@ namespace tempest
             // TODO: Investigate optimizing out the integer division
             for (size_t i = 0; i < key_block::value_count; ++i)
             {
-                if (block.skip_field[i / key_block::element_count] &
+                if (block.skip_field[i / key_block::skip_field_bits_per_element] &
                     (1 << (i % key_block::skip_field_bits_per_element)))
                 {
                     destroy_at(&block.typed_ptr()[i]);
@@ -719,7 +719,7 @@ namespace tempest
         {
             for (size_t i = 0; i < key_block::value_count; ++i)
             {
-                if (block.skip_field[i / key_block::element_count] &
+                if (block.skip_field[i / key_block::skip_field_bits_per_element] &
                     (1 << (i % key_block::skip_field_bits_per_element)))
                 {
                     destroy_at(&block.typed_ptr()[i]);

@@ -195,6 +195,9 @@ namespace tempest
 
     template <typename T>
     concept enumeration = is_enum_v<T>;
+
+    template <typename T>
+    concept pointer = is_pointer_v<T>;
 } // namespace tempest
 
 #endif // tempest_core_concepts_hpp

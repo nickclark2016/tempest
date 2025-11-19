@@ -27,12 +27,6 @@ struct FragmentOutput {
     float visibility : SV_Target0;
 }
 
-struct SSAOParams {
-    float radius;
-    float bias;
-    float2 noise_scale;
-};
-
 [shader("vertex")]
 VSOutput VSMain(uint id : SV_VertexID) {
     let vtx = generate_quad_vertex(id);

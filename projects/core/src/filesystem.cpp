@@ -1050,6 +1050,7 @@ namespace tempest::filesystem
             }
         }
 
+        _path.clear();
         return *this;
     }
 

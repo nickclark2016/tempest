@@ -281,6 +281,11 @@ namespace tempest::graphics
         });
     }
 
+    void task_builder::depends_on(string task_name)
+    {
+        dependencies.push_back(tempest::move(task_name));
+    }
+
     void compute_task_builder::prefer_async()
     {
         _prefer_async = true;
@@ -558,6 +563,7 @@ namespace tempest::graphics
         pass.type = type;
         pass.execution_context = tempest::move(execution_context);
         pass.async = async;
+        pass.explicit_dependencies = tempest::move(builder.dependencies);
 
         for (auto&& res : builder.accesses)
         {
@@ -734,6 +740,19 @@ namespace tempest::graphics
 
                     const auto& producer = _passes[producer_index];
 
+                    // Find if there is a direct explicit dependency
+                    const auto explicit_dep_it = tempest::find(consumer.explicit_dependencies.cbegin(),
+                                                               consumer.explicit_dependencies.cend(), producer.name);
+                    if (explicit_dep_it != consumer.explicit_dependencies.cend())
+                    {
+                        auto explicit_dep = dependency_edge{};
+                        explicit_dep.producer_pass_index = producer_index;
+                        explicit_dep.consumer_pass_index = consumer_index;
+                        explicit_dep.resource = base_graph_resource_handle::null();
+
+                        dep_graph.edges.push_back(tempest::move(explicit_dep));
+                    }
+
                     // Producer must *write* this resource to be considered a producer:
                     auto producer_access_it = tempest::find_if(
                         producer.resource_accesses.cbegin(), producer.resource_accesses.cend(), [&](const auto& res) {
@@ -751,7 +770,7 @@ namespace tempest::graphics
                         continue; // skip self-dependencies
                     }
 
-                    dependency_edge dependency{};
+                    auto dependency = dependency_edge{};
                     dependency.producer_pass_index = producer_index;
                     dependency.consumer_pass_index = consumer_index;
                     dependency.resource = copy(access.handle);
