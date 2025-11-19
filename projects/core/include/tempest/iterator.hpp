@@ -111,8 +111,8 @@ namespace tempest
     concept indirectly_writable = requires(O&& o, T&& t) {
         *o = tempest::forward<T>(t);
         *tempest::forward<O>(o) = tempest::forward<T>(t);
-        const_cast<iter_reference_t<O> &&>(*o) = tempest::forward<T>(t);
-        const_cast<iter_reference_t<O> &&>(*tempest::forward<O>(o)) = tempest::forward<T>(t);
+        const_cast<iter_reference_t<O>&&>(*o) = tempest::forward<T>(t);
+        const_cast<iter_reference_t<O>&&>(*tempest::forward<O>(o)) = tempest::forward<T>(t);
     };
 
     template <typename It>
@@ -135,6 +135,9 @@ namespace tempest
         { *it } -> detail::can_reference;
     } && weakly_iteratable<It>;
 
+    template <typename S, typename I>
+    concept sentinel_for = semiregular<S> && input_or_output_iterator<I> && detail::weakly_eq_cmp_with<S, I>;
+
     template <typename It>
     concept input_iterator = iterator<It> && equality_comparable<It> && requires(It it) {
         typename incrementable_traits<It>::difference_type;
@@ -152,8 +155,8 @@ namespace tempest
 
     template <typename It>
     concept forward_iterator =
-        input_iterator<It> && constructible_from<It> && is_reference_v<iter_reference_t<It>> &&
-        same_as<remove_cvref_t<iter_reference_t<It>>, typename indirectly_readable_traits<It>::value_type> &&
+        input_iterator<It> &&
+        sentinel_for<It, It> &&
         requires(It it) {
             { it++ } -> convertible_to<const It&>;
             { *it++ } -> same_as<iter_reference_t<It>>;
@@ -184,9 +187,6 @@ namespace tempest
         same_as<iter_value_t<It>, remove_cvref_t<iter_reference_t<It>>> && requires(const It& it) {
             { &*it } -> same_as<add_pointer_t<iter_reference_t<It>>>;
         };
-
-    template <typename S, typename I>
-    concept sentinel_for = semiregular<S> && input_or_output_iterator<I> && detail::weakly_eq_cmp_with<S, I>;
 
     namespace detail
     {

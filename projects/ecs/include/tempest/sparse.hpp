@@ -1,16 +1,14 @@
 #ifndef tempest_ecs_sparse_hpp
 #define tempest_ecs_sparse_hpp
 
-#include "traits.hpp"
-
 #include <tempest/algorithm.hpp>
 #include <tempest/int.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
 #include <tempest/type_traits.hpp>
+#include <tempest/traits.hpp>
 #include <tempest/utility.hpp>
-
-#include <algorithm>
 
 namespace tempest::ecs
 {
@@ -49,19 +47,20 @@ namespace tempest::ecs
         template <typename K, typename V>
         struct basic_sparse_map_iterator_ptr
         {
-            pair<K, V> val;
+            pair<K&, V&> val;
 
-            [[nodiscard]] constexpr pair<K, V>* operator->() noexcept;
-            [[nodiscard]] constexpr const pair<K, V>* operator->() const noexcept;
+            [[nodiscard]] constexpr pair<K&, V&>* operator->() noexcept;
+            [[nodiscard]] constexpr const pair<K&, V&>* operator->() const noexcept;
         };
 
         template <typename K, typename V>
         struct basic_sparse_map_iterator
         {
-            using value_type = pair<K, V>;
-            using reference = pair<add_lvalue_reference_t<add_const_t<K>>, add_lvalue_reference_t<V>>;
-            using const_reference =
-                pair<add_lvalue_reference_t<add_const_t<K>>, add_lvalue_reference_t<add_const_t<V>>>;
+            using mapped_type = remove_cvref_t<V>;
+
+            using value_type = pair<add_const_t<K>, mapped_type>;
+            using reference = pair<add_lvalue_reference_t<add_const_t<K>>, add_lvalue_reference_t<mapped_type>>;
+            using const_reference = pair<add_lvalue_reference_t<add_const_t<K>>, add_const_t<add_lvalue_reference_t<mapped_type>>>;
             using pointer = basic_sparse_map_iterator_ptr<const K, V>;
             using const_pointer = basic_sparse_map_iterator_ptr<const K, const V>;
             using difference_type = ptrdiff_t;
@@ -220,13 +219,13 @@ namespace tempest::ecs
         }
 
         template <typename K, typename V>
-        inline constexpr pair<K, V>* basic_sparse_map_iterator_ptr<K, V>::operator->() noexcept
+        inline constexpr pair<K&, V&>* basic_sparse_map_iterator_ptr<K, V>::operator->() noexcept
         {
             return &val;
         }
 
         template <typename K, typename V>
-        inline constexpr const pair<K, V>* basic_sparse_map_iterator_ptr<K, V>::operator->() const noexcept
+        inline constexpr const pair<K&, V&>* basic_sparse_map_iterator_ptr<K, V>::operator->() const noexcept
         {
             return &val;
         }
@@ -349,14 +348,14 @@ namespace tempest::ecs
         inline constexpr basic_sparse_map_iterator<K, V>::reference basic_sparse_map_iterator<K,
                                                                                               V>::operator*() noexcept
         {
-            return pair<const K&, V&>(keys[get_index()], values[get_index()]);
+            return reference(keys[get_index()], values[get_index()]);
         }
 
         template <typename K, typename V>
         inline constexpr basic_sparse_map_iterator<K, V>::const_reference basic_sparse_map_iterator<K, V>::operator*()
             const noexcept
         {
-            return pair<const K&, const V&>(keys[get_index()], values[get_index()]);
+            return const_reference(keys[get_index()], values[get_index()]);
         }
 
         template <typename K, typename V>
@@ -407,8 +406,8 @@ namespace tempest::ecs
 
         using iterator = detail::basic_sparse_set_iterator<T>;
         using const_iterator = iterator;
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = tempest::reverse_iterator<iterator>;
+        using const_reverse_iterator = tempest::reverse_iterator<const_iterator>;
 
         using size_type = size_t;
         using pointer = T*;
@@ -518,10 +517,11 @@ namespace tempest::ecs
             detail::basic_sparse_map_iterator_ptr<typename reference::first_type, typename reference::second_type>;
         using const_pointer = detail::basic_sparse_map_iterator_ptr<typename const_reference::first_type,
                                                                     typename const_reference::second_type>;
+
         using iterator = detail::basic_sparse_map_iterator<K, V>;
         using const_iterator = detail::basic_sparse_map_iterator<K, const V>;
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = tempest::reverse_iterator<iterator>;
+        using const_reverse_iterator = tempest::reverse_iterator<const_iterator>;
 
         constexpr basic_sparse_map() noexcept;
         constexpr basic_sparse_map(const basic_sparse_map& rhs);
@@ -767,7 +767,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_set<T, Allocator>::reverse_iterator basic_sparse_set<T, Allocator>::rbegin()
         const noexcept
     {
-        return std::make_reverse_iterator(end());
+        return tempest::make_reverse_iterator(end());
     }
 
     template <typename T, typename Allocator>
@@ -781,7 +781,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_set<T, Allocator>::reverse_iterator basic_sparse_set<T, Allocator>::rend()
         const noexcept
     {
-        return std::make_reverse_iterator(begin());
+        return tempest::make_reverse_iterator(begin());
     }
 
     template <typename T, typename Allocator>
@@ -1183,7 +1183,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V,
                                                                                           Allocator>::rbegin() noexcept
     {
-        return std::make_reverse_iterator(end());
+        return tempest::make_reverse_iterator(end());
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1197,14 +1197,14 @@ namespace tempest::ecs
     inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<
         K, V, Allocator>::crbegin() const noexcept
     {
-        return std::make_reverse_iterator(cend());
+        return tempest::make_reverse_iterator(cend());
     }
 
     template <typename K, typename V, typename Allocator>
     inline constexpr basic_sparse_map<K, V, Allocator>::reverse_iterator basic_sparse_map<K, V,
                                                                                           Allocator>::rend() noexcept
     {
-        return std::make_reverse_iterator(begin());
+        return tempest::make_reverse_iterator(begin());
     }
 
     template <typename K, typename V, typename Allocator>
@@ -1218,7 +1218,7 @@ namespace tempest::ecs
     inline constexpr basic_sparse_map<K, V, Allocator>::const_reverse_iterator basic_sparse_map<
         K, V, Allocator>::crend() const noexcept
     {
-        return std::make_reverse_iterator(cbegin());
+        return tempest::make_reverse_iterator(cbegin());
     }
 
     template <typename K, typename V, typename Allocator>

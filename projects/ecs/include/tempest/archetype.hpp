@@ -20,6 +20,8 @@
 #include <tempest/traits.hpp>
 #include <tempest/vector.hpp>
 
+#include <algorithm>
+
 namespace tempest::ecs
 {
     struct basic_archetype_type_info

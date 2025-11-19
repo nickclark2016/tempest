@@ -1,4 +1,3 @@
-#include <iostream>
 #include <tempest/frame_graph.hpp>
 
 #include <cstring>
