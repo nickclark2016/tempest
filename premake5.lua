@@ -43,12 +43,6 @@ scoped.workspace('Tempest', function()
         }, function()
             symbols 'On'
         end)
-
-        scoped.filter({
-            'system:linux'
-        }, function()
-            sanitize { 'Address' }
-        end)
     end)
 
     scoped.filter({
@@ -182,9 +176,21 @@ scoped.workspace('Tempest', function()
         }
     end)
 
+    scoped.filter({
+        'options:use-asan'
+    }, function()
+        sanitize { 'Address' }
+    end)
+
     startproject 'editor-entrypoint'
 
     include 'dependencies'
     include 'projects'
     include 'sandbox'
 end)
+
+newoption {
+    trigger = 'use-asan',
+    description = 'Use AddressSanitizer',
+    category = 'Tempest Engine',
+}
