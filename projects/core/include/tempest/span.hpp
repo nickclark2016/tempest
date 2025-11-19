@@ -1,7 +1,6 @@
 #ifndef tempest_core_span_hpp
 #define tempest_core_span_hpp
 
-#include <X11/Xdefs.h>
 #include <tempest/algorithm.hpp>
 #include <tempest/array.hpp>
 #include <tempest/assert.hpp>
