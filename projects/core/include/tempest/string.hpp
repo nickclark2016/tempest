@@ -387,7 +387,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    inline constexpr basic_string<CharT, Traits, Allocator>::iter::operator pointer() const noexcept
+    inline constexpr basic_string<CharT, Traits, Allocator>::iter::operator basic_string<
+        CharT, Traits, Allocator>::iter::pointer() const noexcept
     {
         return ptr;
     }
@@ -500,7 +501,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
-    inline constexpr basic_string<CharT, Traits, Allocator>::const_iter::operator pointer() const noexcept
+    inline constexpr basic_string<CharT, Traits, Allocator>::const_iter::operator basic_string<
+        CharT, Traits, Allocator>::const_iter::pointer() const noexcept
     {
         return ptr;
     }
