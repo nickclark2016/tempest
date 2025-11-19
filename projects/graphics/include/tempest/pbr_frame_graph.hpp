@@ -512,7 +512,7 @@ namespace tempest::graphics
 
         struct hi_z_constants
         {
-            math::vec2<uint> screen_size;
+            math::vec2<uint32_t> screen_size;
             uint32_t num_levels;
         };
 
