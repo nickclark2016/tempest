@@ -218,6 +218,13 @@ namespace tempest::graphics
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
         };
 
+        struct skybox_pass_outputs
+        {
+            graph_resource_handle<rhi::rhi_handle_type::image> hdr_color;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline = rhi::null_handle;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout = rhi::null_handle;
+        };
+
         struct
         {
             frame_upload_pass_outputs upload_pass;
@@ -228,6 +235,7 @@ namespace tempest::graphics
             light_clustering_pass_outputs light_clustering;
             light_culling_pass_outputs light_culling;
             shadow_map_pass_outputs shadow_map;
+            skybox_pass_outputs skybox;
             pbr_opaque_pass_outputs pbr_opaque;
             mboit_gather_pass_outputs mboit_gather;
             mboit_resolve_pass_outputs mboit_resolve;
@@ -291,6 +299,9 @@ namespace tempest::graphics
         shadow_map_pass_outputs _add_shadow_map_pass(graph_builder& builder);
         void _release_shadow_map_pass(shadow_map_pass_outputs& outputs);
 
+        skybox_pass_outputs _add_skybox_pass(graph_builder& builder);
+        void _release_skybox_pass(skybox_pass_outputs& outputs);
+
         pbr_opaque_pass_outputs _add_pbr_opaque_pass(graph_builder& builder);
         void _release_pbr_opaque_pass(pbr_opaque_pass_outputs& outputs);
 
@@ -319,6 +330,7 @@ namespace tempest::graphics
         static void _shadow_upload_pass_task(transfer_task_execution_context& ctx, pbr_frame_graph* self);
         static void _shadow_map_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                           graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors);
+        static void _skybox_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self);
         static void _pbr_opaque_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                           graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors,
                                           graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_descriptors);
@@ -581,6 +593,7 @@ namespace tempest::graphics
             light primary_sun;
             ecs::basic_sparse_map<ecs::archetype_entity, light> point_lights;
             ecs::basic_sparse_map<ecs::archetype_entity, light> dir_lights;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> skybox_texture = rhi::null_handle;
         } _scene_data = {};
 
         static shadow_map_cascade_info _calculate_shadow_map_cascades(const shadow_map_component& shadows,
