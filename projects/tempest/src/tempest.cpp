@@ -1,3 +1,4 @@
+#include <tempest/renderer.hpp>
 #include <tempest/tempest.hpp>
 
 #include <tempest/input.hpp>
@@ -21,7 +22,41 @@ namespace tempest
         auto log = logger::logger_factory::create({.prefix{"tempest::engine"}});
     } // namespace
 
-    engine_context::engine_context() : _asset_database(&_mesh_reg, &_texture_reg, &_material_reg)
+    engine_context::engine_context()
+        : _asset_database(&_mesh_reg, &_texture_reg, &_material_reg),
+          _render(graphics::renderer::builder()
+                      .set_pbr_frame_graph_config({
+                          .render_target_width = 1920,
+                          .render_target_height = 1080,
+                          .hdr_color_format = tempest::rhi::image_format::rgba16_float,
+                          .depth_format = tempest::rhi::image_format::d32_float,
+                          .tonemapped_color_format = tempest::rhi::image_format::bgra8_srgb,
+                          .vertex_data_buffer_size = 16 * 1024 * 1024,
+                          .max_mesh_count = 16 * 1024 * 1024,
+                          .max_material_count = 4 * 1024 * 1024,
+                          .staging_buffer_size_per_frame = 16 * 1024 * 1024,
+                          .max_object_count = 256 * 1024,
+                          .max_lights = 256,
+                          .max_bindless_textures = 1024,
+                          .max_anisotropy = 16.0f,
+                          .light_clustering =
+                              {
+                                  .cluster_count_x = 16,
+                                  .cluster_count_y = 9,
+                                  .cluster_count_z = 24,
+                                  .max_lights_per_cluster = 128,
+                              },
+                          .shadows =
+                              {
+                                  .shadow_map_width = 16384,
+                                  .shadow_map_height = 8192,
+                                  .max_shadow_casting_lights = 16,
+                              },
+                      })
+                      .set_pbr_frame_graph_inputs({
+                          .entity_registry = &_entity_registry,
+                      })
+                      .build())
     {
         if (!std::setlocale(LC_ALL, "en_US.UTF-8"))
         {
@@ -115,6 +150,8 @@ namespace tempest
         {
             init_cb(*this);
         }
+
+        _render.finalize_graph();
 
         _render.upload_objects_sync(_entities_to_load, get_mesh_registry(), get_texture_registry(),
                                     get_material_registry());

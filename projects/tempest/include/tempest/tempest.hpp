@@ -5,7 +5,7 @@
 #include <tempest/asset_database.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
-#include <tempest/render_pipeline.hpp>
+#include <tempest/renderer.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/tuple.hpp>
 #include <tempest/vector.hpp>
@@ -55,10 +55,6 @@ namespace tempest
 
         ecs::archetype_entity load_entity(ecs::archetype_entity src);
 
-        template <typename T, typename... Ts>
-            requires derived_from<T, graphics::render_pipeline>
-        T* register_pipeline(rhi::window_surface* surface, Ts&&... args);
-
       private:
         ecs::archetype_registry _entity_registry;
         core::material_registry _material_reg;
@@ -85,13 +81,6 @@ namespace tempest
 
         graphics::renderer _render;
     };
-
-    template <typename T, typename... Ts>
-        requires derived_from<T, graphics::render_pipeline>
-    inline T* engine_context::register_pipeline(rhi::window_surface* surface, Ts&&... args)
-    {
-        return _render.register_window<T>(surface, tempest::forward<Ts>(args)...);
-    }
 } // namespace tempest
 
 #endif // tempest_tempest_engine_h
