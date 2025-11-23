@@ -9,7 +9,7 @@ namespace tempest::editor
     void run()
     {
         auto engine = tempest::engine_context{};
-        auto [win_surface, inputs] = engine.register_window({
+        auto [win_surface, render_surface, inputs] = engine.register_window({
             .width = 1920,
             .height = 1080,
             .name = "Tempest Editor",

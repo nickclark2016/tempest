@@ -5,6 +5,8 @@
 #include <tempest/memory.hpp>
 #include <tempest/pbr_frame_graph.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/rhi_types.hpp>
+#include <tempest/tuple.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::graphics
@@ -37,7 +39,9 @@ namespace tempest::graphics
             vector<function<void(pbr_frame_graph&)>> _pbr_customization_callbacks = {};
         };
 
-        unique_ptr<rhi::window_surface> create_window(const rhi::window_surface_desc& desc);
+        tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>
+        create_window(const rhi::window_surface_desc& desc, bool install_swapchain_blit = true);
+        
         void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
                                  const core::texture_registry& textures, const core::material_registry& materials);
 

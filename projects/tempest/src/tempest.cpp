@@ -1,4 +1,5 @@
 #include <tempest/renderer.hpp>
+#include <tempest/rhi_types.hpp>
 #include <tempest/tempest.hpp>
 
 #include <tempest/input.hpp>
@@ -82,9 +83,10 @@ namespace tempest
 #endif
     }
 
-    tuple<rhi::window_surface*, core::input_group> engine_context::register_window(rhi::window_surface_desc desc)
+    tuple<rhi::window_surface*, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>, core::input_group>
+    engine_context::register_window(rhi::window_surface_desc desc, bool install_swapchain_blit)
     {
-        auto window = _render.create_window(desc);
+        auto [window, surface] = _render.create_window(desc, install_swapchain_blit);
         auto keyboard = make_unique<core::keyboard>();
         auto mouse = make_unique<core::mouse>();
 
@@ -95,14 +97,16 @@ namespace tempest
 
         _windows.push_back({
             .surface = tempest::move(window),
+            .render_surface = surface,
             .keyboard = tempest::move(keyboard),
             .mouse = tempest::move(mouse),
         });
 
-        return make_tuple(_windows.back().surface.get(), core::input_group{
-                                                             .kb = _windows.back().keyboard.get(),
-                                                             .ms = _windows.back().mouse.get(),
-                                                         });
+        return make_tuple(_windows.back().surface.get(), _windows.back().render_surface,
+                          core::input_group{
+                              .kb = _windows.back().keyboard.get(),
+                              .ms = _windows.back().mouse.get(),
+                          });
     }
 
     void engine_context::register_on_initialize_callback(function<void(engine_context&)> callback)

@@ -1,5 +1,6 @@
 #include "tempest/frame_graph.hpp"
 #include <tempest/renderer.hpp>
+#include <tempest/rhi_types.hpp>
 
 namespace tempest::graphics
 {
@@ -35,40 +36,49 @@ namespace tempest::graphics
         return renderer(tempest::move(instance), device, tempest::move(graph));
     }
 
-    unique_ptr<rhi::window_surface> renderer::create_window(const rhi::window_surface_desc& desc)
+    tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>> renderer::
+        create_window(const rhi::window_surface_desc& desc, bool install_swapchain_blit)
     {
         auto win = rhi::vk::create_window_surface(desc);
-        auto surface = _device->create_render_surface({
-            .window = win.get(),
-            .min_image_count = 2,
-            .format =
-                {
-                    .space = rhi::color_space::srgb_nonlinear,
-                    .format = rhi::image_format::bgra8_srgb,
+
+        if (install_swapchain_blit)
+        {
+            auto surface = _device->create_render_surface({
+                .window = win.get(),
+                .min_image_count = 2,
+                .format =
+                    {
+                        .space = rhi::color_space::srgb_nonlinear,
+                        .format = rhi::image_format::bgra8_srgb,
+                    },
+                .present_mode = rhi::present_mode::immediate,
+                .width = win->framebuffer_width(),
+                .height = win->framebuffer_height(),
+                .layers = 1,
+            });
+
+            auto imported_handle = _graph->get_builder()->import_render_surface("Render Surface", surface);
+            _graph->get_builder()->create_transfer_pass(
+                "Present to Swapchain",
+                [&](transfer_task_builder& builder) {
+                    auto color_handle = _graph->get_tonemapped_color_handle();
+                    builder.read(color_handle, rhi::image_layout::transfer_src,
+                                 make_enum_mask(rhi::pipeline_stage::blit),
+                                 make_enum_mask(rhi::memory_access::transfer_read));
+                    builder.write(imported_handle, rhi::image_layout::transfer_dst,
+                                  make_enum_mask(rhi::pipeline_stage::blit),
+                                  make_enum_mask(rhi::memory_access::transfer_write));
                 },
-            .present_mode = rhi::present_mode::immediate,
-            .width = win->framebuffer_width(),
-            .height = win->framebuffer_height(),
-            .layers = 1,
-        });
+                [](transfer_task_execution_context& ctx, auto swapchain_handle, auto color_handle) {
+                    ctx.blit(color_handle, swapchain_handle);
+                },
+                imported_handle, _graph->get_tonemapped_color_handle());
 
-        auto imported_handle = _graph->get_builder()->import_render_surface("Render Surface", surface);
-        _graph->get_builder()->create_transfer_pass(
-            "Present to Swapchain",
-            [&](transfer_task_builder& builder) {
-                auto color_handle = _graph->get_tonemapped_color_handle();
-                builder.read(color_handle, rhi::image_layout::transfer_src, make_enum_mask(rhi::pipeline_stage::blit),
-                             make_enum_mask(rhi::memory_access::transfer_read));
-                builder.write(imported_handle, rhi::image_layout::transfer_dst,
-                              make_enum_mask(rhi::pipeline_stage::blit),
-                              make_enum_mask(rhi::memory_access::transfer_write));
-            },
-            [](transfer_task_execution_context& ctx, auto swapchain_handle, auto color_handle) {
-                ctx.blit(color_handle, swapchain_handle);
-            },
-            imported_handle, _graph->get_tonemapped_color_handle());
+            return make_tuple(tempest::move(win), surface);
+        }
 
-        return win;
+        return make_tuple(tempest::move(win),
+                          static_cast<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>(rhi::null_handle));
     }
 
     void renderer::upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
@@ -86,7 +96,8 @@ namespace tempest::graphics
         });
     }
 
-    void renderer::render() {
+    void renderer::render()
+    {
         _graph->execute();
     }
 

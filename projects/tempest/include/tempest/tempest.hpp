@@ -19,6 +19,7 @@ namespace tempest
         struct window_context
         {
             unique_ptr<rhi::window_surface> surface;
+            rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface = rhi::null_handle;
             unique_ptr<core::keyboard> keyboard;
             unique_ptr<core::mouse> mouse;
         };
@@ -26,7 +27,8 @@ namespace tempest
       public:
         engine_context();
 
-        tuple<rhi::window_surface*, core::input_group> register_window(rhi::window_surface_desc desc);
+        tuple<rhi::window_surface*, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>, core::input_group>
+        register_window(rhi::window_surface_desc desc, bool install_swapchain_blit = true);
         void register_on_initialize_callback(function<void(engine_context&)> callback);
         void register_on_close_callback(function<void(engine_context&)> callback);
         void register_on_fixed_update_callback(function<void(engine_context&, std::chrono::duration<float>)> callback);
