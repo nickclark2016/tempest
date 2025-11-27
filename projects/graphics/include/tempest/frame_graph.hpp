@@ -49,7 +49,8 @@ namespace tempest::graphics
 
         inline static constexpr base_graph_resource_handle null()
         {
-            return base_graph_resource_handle{numeric_limits<uint64_t>::max(), numeric_limits<uint8_t>::max(), numeric_limits<uint8_t>::max()};
+            return base_graph_resource_handle{numeric_limits<uint64_t>::max(), numeric_limits<uint8_t>::max(),
+                                              numeric_limits<uint8_t>::max()};
         }
     };
 
@@ -218,6 +219,9 @@ namespace tempest::graphics
         void bind_pipeline(rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline);
         void bind_index_buffer(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> index_buffer, rhi::index_format type,
                                uint64_t offset);
+        void bind_vertex_buffers(uint32_t first_binding,
+                                 span<const rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>> buffers,
+                                 span<const size_t> offsets);
 
         void draw_indirect(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
                            uint32_t draw_count, uint32_t stride);
@@ -226,6 +230,9 @@ namespace tempest::graphics
 
         void draw(uint32_t vertex_count, uint32_t instance_count = 1, uint32_t first_vertex = 0,
                   uint32_t first_instance = 0);
+
+        void draw_indexed(uint32_t index_count, uint32_t instance_count = 1, uint32_t first_index = 0,
+                          int32_t vertex_offset = 0, uint32_t first_instance = 0);
 
       private:
         friend class graph_executor;

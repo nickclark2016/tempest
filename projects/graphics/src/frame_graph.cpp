@@ -2343,6 +2343,13 @@ namespace tempest::graphics
         _queue->bind_index_buffer(_cmd_list, index_buffer, static_cast<uint32_t>(offset), type);
     }
 
+    void graphics_task_execution_context::bind_vertex_buffers(
+        uint32_t first_binding, span<const rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>> buffers,
+        span<const size_t> offsets)
+    {
+        _queue->bind_vertex_buffers(_cmd_list, first_binding, buffers, offsets);
+    }
+
     void graphics_task_execution_context::draw_indirect(
         rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> indirect_buffer, uint32_t offset, uint32_t draw_count,
         uint32_t stride)
@@ -2362,6 +2369,12 @@ namespace tempest::graphics
                                                uint32_t first_instance)
     {
         _queue->draw(_cmd_list, vertex_count, instance_count, first_vertex, first_instance);
+    }
+
+    void graphics_task_execution_context::draw_indexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index,
+                                                      int32_t vertex_offset, uint32_t first_instance)
+    {
+        _queue->draw(_cmd_list, index_count, instance_count, first_index, vertex_offset, first_instance);
     }
 
     void compute_task_execution_context::bind_pipeline(

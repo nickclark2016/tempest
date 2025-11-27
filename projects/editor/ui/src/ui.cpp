@@ -1,3 +1,6 @@
+#include <tempest/enum.hpp>
+#include <tempest/frame_graph.hpp>
+#include <tempest/rhi_types.hpp>
 #include <tempest/ui.hpp>
 
 #include <tempest/tuple.hpp>
@@ -326,8 +329,7 @@ namespace tempest::editor::ui
 
         struct render_state
         {
-            rhi::work_queue* queue;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands;
+            graphics::graphics_task_execution_context* exec_context;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
         };
@@ -605,8 +607,7 @@ namespace tempest::editor::ui
         ImGui::Render();
     }
 
-    void ui_context::render_ui_commands(rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> command_list,
-                                        rhi::work_queue& wq) noexcept
+    void ui_context::render_ui_commands(graphics::graphics_task_execution_context& exec) noexcept
     {
         auto& draw_data = _impl->imgui_context->Viewports[0]->DrawDataP;
         if (!draw_data.Valid)
@@ -721,10 +722,10 @@ namespace tempest::editor::ui
         auto setup_render_state = [&bd = _impl->render_backend_data](
                                       ImDrawData& draw_data,
                                       rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline,
-                                      per_frame_buffer_data* rb, int fb_width, int fb_height, rhi::work_queue& queue,
-                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::command_list> commands) {
-            queue.bind(commands, pipeline);
-            queue.set_cull_mode(commands, make_enum_mask(rhi::cull_mode::none));
+                                      per_frame_buffer_data* rb, int fb_width, int fb_height,
+                                      graphics::graphics_task_execution_context& exec) {
+            exec.bind_pipeline(pipeline);
+            exec.set_cull_mode(make_enum_mask(rhi::cull_mode::none));
 
             if (draw_data.TotalVtxCount > 0)
             {
@@ -736,13 +737,13 @@ namespace tempest::editor::ui
                     size_t(0),
                 };
 
-                queue.bind_vertex_buffers(commands, 0, vertex_buffers, vertex_buffer_offsets);
-                queue.bind_index_buffer(commands, rb->index_buffer, 0,
-                                        sizeof(ImDrawIdx) == 2 ? rhi::index_format::uint16 : rhi::index_format::uint32);
+                exec.bind_vertex_buffers(0, vertex_buffers, vertex_buffer_offsets);
+                exec.bind_index_buffer(rb->index_buffer,
+                                       sizeof(ImDrawIdx) == 2 ? rhi::index_format::uint16 : rhi::index_format::uint32,
+                                       0);
             }
 
-            queue.set_viewport(commands, 0, 0, static_cast<float>(fb_width), static_cast<float>(fb_height), 0, 1, 0,
-                               false);
+            exec.set_viewport(0, 0, static_cast<float>(fb_width), static_cast<float>(fb_height), 0, 1, false);
 
             const array scale = {
                 2.0f / draw_data.DisplaySize.x,
@@ -754,19 +755,16 @@ namespace tempest::editor::ui
                 -1.0f - draw_data.DisplayPos.y * scale[1],
             };
 
-            queue.typed_push_constants(commands, bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 0,
-                                       scale);
-            queue.typed_push_constants(commands, bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 8,
-                                       translate);
+            exec.push_constants(bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 0, scale);
+            exec.push_constants(bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 8, translate);
         };
 
-        setup_render_state(draw_data, _impl->render_backend_data.pipeline, &rb, fb_width, fb_height, wq, command_list);
+        setup_render_state(draw_data, _impl->render_backend_data.pipeline, &rb, fb_width, fb_height, exec);
 
         // Set up the render state for imgui
         ImGuiPlatformIO& platform_io = _impl->imgui_context->PlatformIO;
         render_state state = {
-            .queue = &wq,
-            .commands = command_list,
+            .exec_context = &exec,
             .pipeline = _impl->render_backend_data.pipeline,
             .pipeline_layout = _impl->render_backend_data.pipeline_layout,
         };
@@ -789,7 +787,7 @@ namespace tempest::editor::ui
                     if (cmd.UserCallback != ImDrawCallback_ResetRenderState)
                     {
                         setup_render_state(draw_data, _impl->render_backend_data.viewport_pipeline, &rb, fb_width,
-                                           fb_height, wq, command_list);
+                                           fb_height, exec);
                     }
                     else
                     {
@@ -829,9 +827,9 @@ namespace tempest::editor::ui
                     }
 
                     // Apply the scissor test
-                    wq.set_scissor_region(
-                        command_list, static_cast<int32_t>(clip_min.x), static_cast<int32_t>(clip_min.y),
-                        static_cast<uint32_t>(clip_max.x - clip_min.x), static_cast<uint32_t>(clip_max.y - clip_min.y));
+                    exec.set_scissor(static_cast<uint32_t>(clip_min.x), static_cast<uint32_t>(clip_min.y),
+                                     static_cast<uint32_t>(clip_max.x - clip_min.x),
+                                     static_cast<uint32_t>(clip_max.y - clip_min.y));
 
                     // Push the descriptor set for the texture
                     auto packed_texture_id = cmd.GetTexID();
@@ -854,11 +852,10 @@ namespace tempest::editor::ui
                         .layout = rhi::image_layout::shader_read_only,
                     });
 
-                    wq.push_descriptors(command_list, _impl->render_backend_data.pipeline_layout,
-                                        rhi::bind_point::graphics, 0, {}, {&image_desc, 1}, {});
-
-                    wq.draw(command_list, cmd.ElemCount, 1u, cmd.IdxOffset + global_idx_offset,
-                            static_cast<int32_t>(cmd.VtxOffset + global_vtx_offset), 0);
+                    exec.push_descriptors(_impl->render_backend_data.pipeline_layout, rhi::bind_point::graphics, 0, {},
+                                          {&image_desc, 1}, {});
+                    exec.draw_indexed(cmd.ElemCount, 1u, cmd.IdxOffset + global_idx_offset,
+                                      static_cast<int32_t>(cmd.VtxOffset + global_vtx_offset), 0);
                 }
             }
 
@@ -867,7 +864,7 @@ namespace tempest::editor::ui
         }
 
         platform_io.Renderer_RenderState = nullptr;
-        wq.set_scissor_region(command_list, 0, 0, static_cast<uint32_t>(fb_width), static_cast<uint32_t>(fb_height));
+        exec.set_scissor(0, 0, static_cast<uint32_t>(fb_width), static_cast<uint32_t>(fb_height));
     }
 
     bool ui_context::begin_window(window_info info)
@@ -1640,7 +1637,7 @@ namespace tempest::editor::ui
         ui_rpi.name = "UI Render Pass";
 
         queue.begin_rendering(command_list, ui_rpi);
-        _ui_ctx->render_ui_commands(command_list, queue);
+        // _ui_ctx->render_ui_commands(command_list, queue);
         queue.end_rendering(command_list);
 
         // Transition the swapchain image to present layout
@@ -1782,5 +1779,47 @@ namespace tempest::editor::ui
         {
             pipeline.pipeline->upload_objects_sync(dev, entities, meshes, textures, materials);
         }
+    }
+
+    graphics::graph_resource_handle<rhi::rhi_handle_type::image> create_ui_pass(
+        string name, ui_context& ui_ctx, graphics::graph_builder& builder, rhi::device& dev,
+        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target, uint32_t width, uint32_t height)
+    {
+        builder.create_graphics_pass(
+            tempest::move(name),
+            [&](graphics::graphics_task_builder& task) {
+                task.read_write(
+                    render_target, rhi::image_layout::color_attachment,
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                    make_enum_mask(rhi::memory_access::color_attachment_write),
+                    make_enum_mask(rhi::pipeline_stage::color_attachment_output, rhi::pipeline_stage::fragment_shader),
+                    make_enum_mask(rhi::memory_access::color_attachment_write,
+                                   rhi::memory_access::color_attachment_read));
+            },
+            [](graphics::graphics_task_execution_context& ctx,
+               graphics::graph_resource_handle<rhi::rhi_handle_type::image> rt, ui_context* ui, uint32_t width,
+               uint32_t height) {
+                const auto rt_handle = ctx.find_image(rt);
+                auto rp_begin_info = rhi::work_queue::render_pass_info{};
+                rp_begin_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+                    .image = rt_handle,
+                    .layout = rhi::image_layout::color_attachment,
+                    .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+                    .load_op = rhi::work_queue::load_op::load,
+                    .store_op = rhi::work_queue::store_op::store,
+                });
+                rp_begin_info.x = 0;
+                rp_begin_info.y = 0;
+                rp_begin_info.width = width;
+                rp_begin_info.height = height;
+                rp_begin_info.name = "UI Render Pass";
+
+                ctx.begin_render_pass(rp_begin_info);
+                ui->render_ui_commands(ctx);
+                ctx.end_render_pass();
+            },
+            render_target, &ui_ctx, width, height);
+
+        return render_target;
     }
 } // namespace tempest::editor::ui
