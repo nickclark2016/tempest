@@ -104,6 +104,10 @@ namespace tempest::rhi
         virtual void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept = 0;
         virtual size_t get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept = 0;
 
+        // Image Management
+        virtual size_t get_image_width(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept = 0;
+        virtual size_t get_image_height(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept = 0;
+
         // Swapchain info
         virtual uint32_t get_render_surface_width(
             typed_rhi_handle<rhi_handle_type::render_surface> surface) const noexcept = 0;

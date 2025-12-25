@@ -538,6 +538,9 @@ namespace tempest::rhi::vk
         void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept override;
         size_t get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept override;
 
+        size_t get_image_width(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept override;
+        size_t get_image_height(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept override;
+
         uint32_t get_render_surface_width(
             typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept override;
         uint32_t get_render_surface_height(

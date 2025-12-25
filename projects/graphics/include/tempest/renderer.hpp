@@ -49,6 +49,26 @@ namespace tempest::graphics
 
         void render();
 
+        pbr_frame_graph& get_frame_graph() noexcept
+        {
+            return *_graph;
+        }
+
+        const pbr_frame_graph& get_frame_graph() const noexcept
+        {
+            return *_graph;
+        }
+
+        rhi::device& get_device() noexcept
+        {
+            return *_device;
+        }
+
+        const rhi::device& get_device() const noexcept
+        {
+            return *_device;
+        }
+
       private:
         explicit renderer(unique_ptr<rhi::instance> instance, rhi::device& device, unique_ptr<pbr_frame_graph> graph);
 

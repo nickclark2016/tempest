@@ -113,7 +113,7 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'toolset:clang',
         'system:windows',
-        'action:gmake*',
+        'action:gmake* or ninja',
         'configurations:debug',
         'kind:ConsoleApp or SharedLib or WindowedApp'
     }, function()

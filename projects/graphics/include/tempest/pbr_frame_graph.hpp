@@ -72,11 +72,16 @@ namespace tempest::graphics
         pbr_frame_graph& operator=(const pbr_frame_graph&) = delete;
         pbr_frame_graph& operator=(pbr_frame_graph&&) noexcept = delete;
 
-        optional<graph_builder&> get_builder() noexcept;
+        optional<graph_builder&> get_builder() & noexcept;
 
         graph_resource_handle<rhi::rhi_handle_type::image> get_tonemapped_color_handle() const noexcept
         {
             return _pass_output_resource_handles.tonemapping.tonemapped_color;
+        }
+
+        rhi::image_format get_tonemapped_color_format() const noexcept
+        {
+            return _cfg.tonemapped_color_format;
         }
 
         void compile(queue_configuration cfg);
@@ -268,7 +273,7 @@ namespace tempest::graphics
                 uint64_t mesh_layout_bytes_written = 0;
                 uint64_t material_bytes_written = 0;
                 uint32_t loaded_object_count = 0;
-                uint32_t staging_buffer_bytes_written = 0;
+                size_t staging_buffer_bytes_written = 0;
             } utilization;
         } _global_resources;
 

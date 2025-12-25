@@ -1783,7 +1783,7 @@ namespace tempest::editor::ui
 
     graphics::graph_resource_handle<rhi::rhi_handle_type::image> create_ui_pass(
         string name, ui_context& ui_ctx, graphics::graph_builder& builder, rhi::device& dev,
-        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target, uint32_t width, uint32_t height)
+        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target)
     {
         builder.create_graphics_pass(
             tempest::move(name),
@@ -1797,9 +1797,11 @@ namespace tempest::editor::ui
                                    rhi::memory_access::color_attachment_read));
             },
             [](graphics::graphics_task_execution_context& ctx,
-               graphics::graph_resource_handle<rhi::rhi_handle_type::image> rt, ui_context* ui, uint32_t width,
-               uint32_t height) {
+               graphics::graph_resource_handle<rhi::rhi_handle_type::image> rt, ui_context* ui, rhi::device* device) {
                 const auto rt_handle = ctx.find_image(rt);
+                const auto width = static_cast<uint32_t>(device->get_image_width(rt_handle));
+                const auto height = static_cast<uint32_t>(device->get_image_height(rt_handle));
+
                 auto rp_begin_info = rhi::work_queue::render_pass_info{};
                 rp_begin_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
                     .image = rt_handle,
@@ -1818,7 +1820,7 @@ namespace tempest::editor::ui
                 ui->render_ui_commands(ctx);
                 ctx.end_render_pass();
             },
-            render_target, &ui_ctx, width, height);
+            render_target, &ui_ctx, &dev);
 
         return render_target;
     }

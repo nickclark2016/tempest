@@ -56,7 +56,7 @@ namespace tempest::graphics
         _release_global_resources();
     }
 
-    optional<graph_builder&> pbr_frame_graph::get_builder() noexcept
+    optional<graph_builder&> pbr_frame_graph::get_builder() & noexcept
     {
         if (_builder.has_value())
         {
@@ -770,7 +770,7 @@ namespace tempest::graphics
     pbr_frame_graph::ssao_pass_outputs pbr_frame_graph::_add_ssao_pass(graph_builder& builder)
     {
         auto ssao_output = builder.create_render_target({
-            .format = rhi::image_format::r32_float,
+            .format = rhi::image_format::r16_unorm,
             .type = rhi::image_type::image_2d,
             .width = _cfg.render_target_width,
             .height = _cfg.render_target_height,
@@ -1126,7 +1126,7 @@ namespace tempest::graphics
     pbr_frame_graph::ssao_blur_pass_outputs pbr_frame_graph::_add_ssao_blur_pass(graph_builder& builder)
     {
         auto ssao_blurred_output = builder.create_per_frame_image({
-            .format = rhi::image_format::r32_float,
+            .format = rhi::image_format::r16_unorm,
             .type = rhi::image_type::image_2d,
             .width = _cfg.render_target_width,
             .height = _cfg.render_target_height,
@@ -3879,8 +3879,7 @@ namespace tempest::graphics
             .screen_bounds =
                 {
                     static_cast<float>(self->_cfg.render_target_width),
-                    static_cast<float>(self->_cfg.render_target_height),
-                    0.1f,
+                    static_cast<float>(self->_cfg.render_target_height), 0.1f,
                     1000.0f, // TODO: Parameterize near and far planes
                 },
             .workgroup_count_tile_size_px =
@@ -3922,8 +3921,7 @@ namespace tempest::graphics
             .screen_bounds =
                 {
                     static_cast<float>(self->_cfg.render_target_width),
-                    static_cast<float>(self->_cfg.render_target_height),
-                    0.0f,
+                    static_cast<float>(self->_cfg.render_target_height), 0.0f,
                     1000.0f, // TODO: Parameterize near and far planes
                 },
             .workgroup_count_tile_size_px =

@@ -3055,6 +3055,18 @@ namespace tempest::rhi::vk
         return buf->allocation_info.size;
     }
 
+    size_t device::get_image_width(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
+    {
+        auto img = get_image(handle);
+        return img->create_info.extent.width;
+    }
+
+    size_t device::get_image_height(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept
+    {
+        auto img = get_image(handle);
+        return img->create_info.extent.height;
+    }
+
     uint32_t device::get_render_surface_width(typed_rhi_handle<rhi_handle_type::render_surface> handle) const noexcept
     {
         auto swapchain_key = create_slot_map_key<uint64_t>(handle.id, handle.generation);
