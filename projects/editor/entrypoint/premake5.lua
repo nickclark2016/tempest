@@ -24,7 +24,7 @@ scoped.project('editor-entrypoint', function()
 
     uses {
         'tempest',
-        'editor-ui',
+        'imgui',
     }
 
     scoped.filter({

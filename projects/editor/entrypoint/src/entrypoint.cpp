@@ -1,7 +1,8 @@
 #include <tempest/archetype.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
-#include <tempest/ui.hpp>
+
+#include "ui.hpp"
 
 namespace tempest::editor
 {
@@ -50,7 +51,6 @@ namespace tempest::editor
                 ctx.blit(color_target, swapchain_handle);
             },
             final_color_target, imported_surface_handle);
-        ;
     }
 
     static void run()
