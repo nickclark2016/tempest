@@ -2,55 +2,13 @@
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
 
-#include "ui.hpp"
+#include "editor.hpp"
 
 namespace tempest::editor
 {
-    static void setup_render_graph(engine_context& ctx, rhi::window_surface* win_surface, ui::ui_context* ui_ctx)
+    static unique_ptr<editor> setup_render_graph(engine_context& ctx, rhi::window_surface* win_surface, ui::ui_context* ui_ctx)
     {
-        graphics::pbr_frame_graph& render_graph = ctx.get_renderer().get_frame_graph();
-        auto render_graph_builder_opt = render_graph.get_builder(); // Use auto to avoid unnecessary type declaration
-
-        if (!render_graph_builder_opt.has_value())
-        {
-            return;
-        }
-
-        auto& render_graph_builder = render_graph_builder_opt.value();
-
-        auto surface = ctx.get_renderer().get_device().create_render_surface({
-            .window = win_surface,
-            .min_image_count = 3,
-            .format =
-                {
-                    .space = rhi::color_space::srgb_nonlinear,
-                    .format = rhi::image_format::bgra8_srgb,
-                },
-            .present_mode = rhi::present_mode::immediate,
-            .width = win_surface->framebuffer_width(),
-            .height = win_surface->framebuffer_height(),
-            .layers = 1,
-        });
-
-        auto tonemapped_color_target = render_graph.get_tonemapped_color_handle();
-        auto imported_surface_handle = render_graph_builder.import_render_surface("Render Surface", surface);
-
-        auto final_color_target = ui::create_ui_pass("Editor UI Pass", *ui_ctx, render_graph_builder,
-                                                     ctx.get_renderer().get_device(), tonemapped_color_target);
-
-        render_graph_builder.create_transfer_pass(
-            "Blit to Swapchain Pass",
-            [&](graphics::transfer_task_builder& task) {
-                task.read(final_color_target, rhi::image_layout::transfer_src,
-                          make_enum_mask(rhi::pipeline_stage::blit), make_enum_mask(rhi::memory_access::transfer_read));
-                task.write(imported_surface_handle, rhi::image_layout::transfer_dst,
-                           make_enum_mask(rhi::pipeline_stage::blit),
-                           make_enum_mask(rhi::memory_access::transfer_write));
-            },
-            [](graphics::transfer_task_execution_context& ctx, auto color_target, auto swapchain_handle) {
-                ctx.blit(color_target, swapchain_handle);
-            },
-            final_color_target, imported_surface_handle);
+        return make_unique<editor>(ctx, win_surface, ui_ctx);
     }
 
     static void run()
@@ -70,9 +28,10 @@ namespace tempest::editor
                                      engine.get_renderer().get_frame_graph().get_tonemapped_color_format(), 3);
 
         auto camera = static_cast<ecs::archetype_entity>(ecs::null);
+        auto ui_editor = unique_ptr<editor>();
 
         engine.register_on_initialize_callback([&](engine_context& ctx) {
-            setup_render_graph(ctx, win_surface, &ui_ctx);
+            ui_editor = setup_render_graph(ctx, win_surface, &ui_ctx);
 
             auto sponza_prefab = ctx.get_asset_database().import(
                 "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", ctx.get_registry());
@@ -118,14 +77,9 @@ namespace tempest::editor
         });
 
         engine.register_on_variable_update_callback(
-            [&camera, &win_surface, &ui_ctx](engine_context& ctx, auto dt) mutable {
-                const auto window_width = win_surface->framebuffer_width();
-                const auto window_height = win_surface->framebuffer_height();
-                auto& cam_data = ctx.get_registry().get<graphics::camera_component>(camera);
-                cam_data.aspect_ratio = static_cast<float>(window_width) / window_height;
-
+            [&camera, &win_surface, &ui_ctx, &ui_editor](engine_context& ctx, auto dt) mutable {
                 ui_ctx.begin_ui_commands();
-
+                ui_editor->draw({});
                 ui_ctx.finish_ui_commands();
             });
 

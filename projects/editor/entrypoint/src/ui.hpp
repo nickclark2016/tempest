@@ -41,7 +41,10 @@ namespace tempest::editor::ui
 
     graphics::graph_resource_handle<rhi::rhi_handle_type::image> create_ui_pass(
         string name, ui_context& ui_ctx, graphics::graph_builder& builder, rhi::device& dev,
-        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target);
+        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target,
+        span<graphics::graph_resource_handle<rhi::rhi_handle_type::image>> targets_to_read = {});
+
+    void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height);
 } // namespace tempest::editor::ui
 
 #endif // tempest_editor_ui_ui_hpp

@@ -1156,7 +1156,8 @@ namespace tempest::editor::ui
 
     graphics::graph_resource_handle<rhi::rhi_handle_type::image> create_ui_pass(
         string name, ui_context& ui_ctx, graphics::graph_builder& builder, rhi::device& dev,
-        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target)
+        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target,
+        span<graphics::graph_resource_handle<rhi::rhi_handle_type::image>> targets_to_read)
     {
         builder.create_graphics_pass(
             tempest::move(name),
@@ -1168,6 +1169,13 @@ namespace tempest::editor::ui
                     make_enum_mask(rhi::pipeline_stage::color_attachment_output, rhi::pipeline_stage::fragment_shader),
                     make_enum_mask(rhi::memory_access::color_attachment_write,
                                    rhi::memory_access::color_attachment_read));
+
+                for (auto& target : targets_to_read)
+                {
+                    task.read(target, rhi::image_layout::shader_read_only,
+                              make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                              make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::shader_sampled_read));
+                }
             },
             [](graphics::graphics_task_execution_context& ctx,
                graphics::graph_resource_handle<rhi::rhi_handle_type::image> rt, ui_context* ui, rhi::device* device) {
@@ -1196,5 +1204,11 @@ namespace tempest::editor::ui
             render_target, &ui_ctx, &dev);
 
         return render_target;
+    }
+
+    void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height)
+    {
+        const auto id = math::pack_uint32x2(img.id, img.generation);
+        ImGui::Image(bit_cast<ImTextureID>(id), ImVec2(static_cast<float>(width), static_cast<float>(height)));
     }
 } // namespace tempest::editor::ui

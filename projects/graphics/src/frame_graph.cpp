@@ -1355,6 +1355,38 @@ namespace tempest::graphics
         return 0;
     }
 
+    void graph_executor::resize_render_target(graph_resource_handle<rhi::rhi_handle_type::image> img, uint32_t width,
+                                              uint32_t height)
+    {
+        const auto it = tempest::find_if(_plan->resources.cbegin(), _plan->resources.cend(), [&](const auto& res) {
+            return res.handle.handle == img.handle && res.handle.type == img.type;
+        });
+
+        if (it == _plan->resources.cend() || !holds_alternative<rhi::image_desc>(it->creation_info))
+        {
+            return;
+        }
+
+        const auto& image_desc = get<rhi::image_desc>(it->creation_info);
+
+        // Find and destroy the old image
+        const auto old_image_it = _owned_images.find(img.handle);
+        if (old_image_it != _owned_images.cend())
+        {
+            _device->destroy_image(old_image_it->second);
+            _owned_images.erase(old_image_it);
+        }
+
+        // Create new image with updated dimensions
+        auto new_desc = image_desc;
+        new_desc.width = width;
+        new_desc.height = height;
+
+        auto new_image = _device->create_image(new_desc);
+        _owned_images[img.handle] = new_image;
+        _all_images[img.handle] = new_image;
+    }
+
     rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> graph_executor::get_render_surface(
         const base_graph_resource_handle& handle) const
     {
@@ -2371,8 +2403,9 @@ namespace tempest::graphics
         _queue->draw(_cmd_list, vertex_count, instance_count, first_vertex, first_instance);
     }
 
-    void graphics_task_execution_context::draw_indexed(uint32_t index_count, uint32_t instance_count, uint32_t first_index,
-                                                      int32_t vertex_offset, uint32_t first_instance)
+    void graphics_task_execution_context::draw_indexed(uint32_t index_count, uint32_t instance_count,
+                                                       uint32_t first_index, int32_t vertex_offset,
+                                                       uint32_t first_instance)
     {
         _queue->draw(_cmd_list, index_count, instance_count, first_index, vertex_offset, first_instance);
     }

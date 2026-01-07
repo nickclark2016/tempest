@@ -54,6 +54,18 @@ namespace tempest::graphics
         }
     };
 
+    inline constexpr bool operator==(const base_graph_resource_handle& lhs,
+                                 const base_graph_resource_handle& rhs) noexcept
+    {
+        return lhs.handle == rhs.handle && lhs.version == rhs.version && lhs.type == rhs.type;
+    }
+
+    inline constexpr bool operator!=(const base_graph_resource_handle& lhs,
+                                 const base_graph_resource_handle& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     template <rhi::rhi_handle_type T>
     struct graph_resource_handle : base_graph_resource_handle
     {
@@ -627,6 +639,9 @@ namespace tempest::graphics
             const base_graph_resource_handle& handle) const;
         uint64_t get_current_frame_resource_offset(graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const;
         uint64_t get_resource_size(graph_resource_handle<rhi::rhi_handle_type::buffer> buffer) const;
+
+        void resize_render_target(graph_resource_handle<rhi::rhi_handle_type::image> img, uint32_t width,
+                                  uint32_t height);
 
       private:
         rhi::device* _device;

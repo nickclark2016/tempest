@@ -65,6 +65,30 @@ namespace tempest::graphics
         return none();
     }
 
+    void pbr_frame_graph::resize_render_target(graphics::graph_resource_handle<rhi::rhi_handle_type::image> img,
+                                               uint32_t width, uint32_t height)
+    {
+        _executor->resize_render_target(img, width, height);
+    }
+
+    void pbr_frame_graph::resize_render_targets(uint32_t width, uint32_t height)
+    {
+        _executor->resize_render_target(_pass_output_resource_handles.depth_prepass.depth, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.depth_prepass.encoded_normals, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.hierarchical_z_buffer.hzb, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.ssao.ssao_output, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.pbr_opaque.hdr_color, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.ssao_blur.ssao_blurred_output, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.tonemapping.tonemapped_color, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.mboit_gather.transparency_accumulation, width,
+                                        height);
+        _executor->resize_render_target(_pass_output_resource_handles.mboit_gather.moments_buffer, width, height);
+        _executor->resize_render_target(_pass_output_resource_handles.mboit_gather.zeroth_moment_buffer, width, height);
+
+        _cfg.render_target_width = width;
+        _cfg.render_target_height = height;
+    }
+
     void pbr_frame_graph::compile(queue_configuration cfg)
     {
         auto exec_plan = move(_builder).value().compile(cfg);

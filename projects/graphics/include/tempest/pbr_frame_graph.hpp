@@ -79,10 +79,19 @@ namespace tempest::graphics
             return _pass_output_resource_handles.tonemapping.tonemapped_color;
         }
 
+        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> get_tonemapped_color_image() const noexcept
+        {
+            return _executor->get_image(get_tonemapped_color_handle());
+        }
+
         rhi::image_format get_tonemapped_color_format() const noexcept
         {
             return _cfg.tonemapped_color_format;
         }
+
+        void resize_render_target(graphics::graph_resource_handle<rhi::rhi_handle_type::image> img, uint32_t width,
+                                  uint32_t height);
+        void resize_render_targets(uint32_t width, uint32_t height);
 
         void compile(queue_configuration cfg);
 
@@ -90,6 +99,11 @@ namespace tempest::graphics
 
         void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
                                  const core::texture_registry& textures, const core::material_registry& materials);
+
+        math::vec2<uint32_t> get_render_target_size() const noexcept
+        {
+            return { _cfg.render_target_width, _cfg.render_target_height };
+        }
 
       private:
         rhi::device* _device;

@@ -96,9 +96,7 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'action:vs*'
     }, function()
-        flags {
-            'MultiProcessorCompile',
-        }
+        multiprocessorcompile 'On'
     end)
 
     scoped.filter({
