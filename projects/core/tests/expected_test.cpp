@@ -397,13 +397,13 @@ TEST(expected, visit_value_void_return)
     auto e = tempest::expected<char, int>{'c'};
     auto called = false;
 
-    tempest::visit(e, [&](auto c) {
+    tempest::visit([&](auto c) {
         if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(c)>, char>)
         {
             called = true;
             EXPECT_EQ(c, 'c');
         }
-    });
+    }, e);
 
     EXPECT_TRUE(called);
 }
@@ -413,13 +413,13 @@ TEST(expected, visit_error_void_return)
     auto e = tempest::expected<char, int>{tempest::unexpected(42)};
     auto called = false;
 
-    tempest::visit(e, [&](auto err) {
+    tempest::visit([&](auto err) {
         if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(err)>, int>)
         {
             called = true;
             EXPECT_EQ(err, 42);
         }
-    });
+    }, e);
 
     EXPECT_TRUE(called);
 }
@@ -428,7 +428,7 @@ TEST(expected, visit_value_with_return)
 {
     auto e = tempest::expected<char, int>{'c'};
 
-    const auto result = tempest::visit(e, [&](auto c) {
+    const auto result = tempest::visit([&](auto c) {
         if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(c)>, char>)
         {
             return true;
@@ -437,7 +437,7 @@ TEST(expected, visit_value_with_return)
         {
             return false;
         }
-    });
+    }, e);
 
     EXPECT_TRUE(result);
 }
@@ -446,7 +446,7 @@ TEST(expected, visit_error_with_return)
 {
     auto e = tempest::expected<char, int>{tempest::unexpected(42)};
 
-    const auto result = tempest::visit(e, [&](auto err) {
+    const auto result = tempest::visit([&](auto err) {
         if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(err)>, int>)
         {
             return err;
@@ -455,7 +455,7 @@ TEST(expected, visit_error_with_return)
         {
             return -1;
         }
-    });
+    }, e);
 
     EXPECT_EQ(result, 42);
 }
@@ -476,7 +476,7 @@ TEST(expected, visit_value_with_return_callable_object)
     };
 
     auto e = tempest::expected<char, int>{'d'};
-    const auto result = tempest::visit(e, Callable{});
+    const auto result = tempest::visit(Callable{}, e);
 
     EXPECT_EQ(result, 'd');
 }
@@ -496,7 +496,7 @@ TEST(expected, visit_error_with_return_callable_object)
     };
 
     auto e = tempest::expected<char, int>{tempest::unexpected(84)};
-    const auto result = tempest::visit(e, Callable{});
+    const auto result = tempest::visit(Callable{}, e);
     EXPECT_EQ(result, 84);
 }
 
@@ -505,7 +505,7 @@ TEST(expected_void, visit_value_void_return)
     auto e = tempest::expected<void, int>{};
     auto called = false;
 
-    tempest::visit(e, [&](auto...) { called = true; });
+    tempest::visit([&](auto...) { called = true; }, e);
 
     EXPECT_TRUE(called);
 }
@@ -526,7 +526,7 @@ TEST(expected_void, visit_error_with_return_callable_object)
     };
 
     auto e = tempest::expected<void, int>{tempest::unexpected(168)};
-    const auto result = tempest::visit(e, Callable{});
+    const auto result = tempest::visit(Callable{}, e);
 
     EXPECT_EQ(result, 168);
 }
@@ -547,7 +547,7 @@ TEST(expected_void, visit_value_with_return_callable_object)
     };
 
     auto e = tempest::expected<void, int>{};
-    const auto result = tempest::visit(e, Callable{});
+    const auto result = tempest::visit(Callable{}, e);
     
     EXPECT_EQ(result, 42);
 }

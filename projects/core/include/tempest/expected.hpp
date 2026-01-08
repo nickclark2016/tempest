@@ -1830,15 +1830,29 @@ namespace tempest
     } // namespace detail
 
     template <typename T, typename E, typename Callable>
-    inline constexpr auto visit(expected<T, E>& exp, Callable&& func)
+    inline constexpr auto visit(Callable&& func, expected<T, E>& exp)
     {
         return detail::expected_visitor<expected<T, E>&, Callable>()(exp, tempest::forward<Callable>(func));
     }
 
     template <typename T, typename E, typename Callable>
-    inline constexpr auto visit(const expected<T, E>& exp, Callable&& func)
+    inline constexpr auto visit(Callable&& func, const expected<T, E>& exp)
     {
         return detail::expected_visitor<const expected<T, E>&, Callable>()(exp, tempest::forward<Callable>(func));
+    }
+
+    template <typename T, typename E, typename Callable>
+    inline constexpr auto visit(Callable&& func, expected<T, E>&& exp)
+    {
+        return detail::expected_visitor<expected<T, E>&, Callable>()(tempest::move(exp),
+                                                                     tempest::forward<Callable>(func));
+    }
+
+    template <typename T, typename E, typename Callable>
+    inline constexpr auto visit(Callable&& func, const expected<T, E>&& exp)
+    {
+        return detail::expected_visitor<const expected<T, E>&, Callable>()(tempest::move(exp),
+                                                                           tempest::forward<Callable>(func));
     }
 } // namespace tempest
 
