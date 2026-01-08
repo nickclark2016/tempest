@@ -113,7 +113,7 @@ namespace tempest
     template <typename CharT, typename Traits>
     template <contiguous_iterator It, sized_sentinel_for<It> End>
     constexpr basic_string_view<CharT, Traits>::basic_string_view(It first, End last) noexcept
-        : _start(tempest::to_address(first)), _end(tempest::to_address(last))
+        : _start(tempest::to_address(first)), _end(tempest::to_address(first) + tempest::distance(first, last))
     {
     }
 
