@@ -867,7 +867,7 @@ namespace tempest
         else if (_has_value && !other._has_value)
         {
             auto temp_error = tempest::move(other._error);
-            other.tempest::destroy_at(&other._error);
+            tempest::destroy_at(&other._error);
             (void)tempest::construct_at(&other._value, tempest::move(_value));
             tempest::destroy_at(&_value);
             (void)tempest::construct_at(&_error, tempest::move(temp_error));
@@ -876,7 +876,7 @@ namespace tempest
         else
         {
             auto temp_value = tempest::move(other._value);
-            other.tempest::destroy_at(&other._value);
+            tempest::destroy_at(&other._value);
             (void)tempest::construct_at(&other._error, tempest::move(_error));
             tempest::destroy_at(&_error);
             (void)tempest::construct_at(&_value, tempest::move(temp_value));
@@ -1527,7 +1527,7 @@ namespace tempest
         else if (_has_value && !other._has_value)
         {
             auto temp_error = tempest::move(other._error);
-            other.tempest::destroy_at(&other._error);
+            tempest::destroy_at(&other._error);
             other._has_value = true;
             tempest::destroy_at(&_error);
             (void)tempest::construct_at(&_error, tempest::move(temp_error));
@@ -1538,7 +1538,7 @@ namespace tempest
             auto temp_error = tempest::move(_error);
             tempest::destroy_at(&_error);
             _has_value = true;
-            other.tempest::destroy_at(&other._error);
+            tempest::destroy_at(&other._error);
             (void)tempest::construct_at(&other._error, tempest::move(temp_error));
             other._has_value = false;
         }
@@ -1573,6 +1573,272 @@ namespace tempest
         {
             return lhs.error() == rhs.error();
         }
+    }
+
+    namespace detail
+    {
+        template <typename Exp, typename Callable>
+        struct expected_visitor;
+
+        template <typename T, typename E, typename Callable>
+        struct expected_visitor<expected<T, E>&, Callable>
+        {
+            auto operator()(expected<T, E>& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable, T&>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func), exp.value());
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func), exp.value());
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+            }
+        };
+
+        template <typename E, typename Callable>
+        struct expected_visitor<expected<void, E>&, Callable>
+        {
+            auto operator()(expected<void, E>& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+            }
+        };
+
+        template <typename T, typename E, typename Callable>
+        struct expected_visitor<const expected<T, E>&, Callable>
+        {
+            auto operator()(const expected<T, E>& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable, const T&>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func), exp.value());
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func), exp.value());
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+            }
+        };
+
+        template <typename E, typename Callable>
+        struct expected_visitor<const expected<void, E>&, Callable>
+        {
+            auto operator()(const expected<void, E>& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), exp.error());
+                    }
+                }
+            }
+        };
+
+        template <typename T, typename E, typename Callable>
+        struct expected_visitor<expected<T, E>&&, Callable>
+        {
+            auto operator()(expected<T, E>&& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable, T&&>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func), tempest::move(exp).value());
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func), tempest::move(exp).value());
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+            }
+        };
+
+        template <typename E, typename Callable>
+        struct expected_visitor<expected<void, E>&&, Callable>
+        {
+            auto operator()(expected<void, E>&& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+            }
+        };
+
+        template <typename T, typename E, typename Callable>
+        struct expected_visitor<const expected<T, E>&&, Callable>
+        {
+            auto operator()(const expected<T, E>&& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable, const T&&>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func), tempest::move(exp).value());
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func), tempest::move(exp).value());
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+            }
+        };
+
+        template <typename E, typename Callable>
+        struct expected_visitor<const expected<void, E>&&, Callable>
+        {
+            auto operator()(const expected<void, E>&& exp, Callable&& func) const
+            {
+                using result_type = invoke_result_t<Callable>;
+                if constexpr (is_void_v<result_type>)
+                {
+                    if (exp.has_value())
+                    {
+                        invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+                else
+                {
+                    if (exp.has_value())
+                    {
+                        return invoke(tempest::forward<Callable>(func));
+                    }
+                    else
+                    {
+                        return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
+                    }
+                }
+            }
+        };
+    } // namespace detail
+
+    template <typename T, typename E, typename Callable>
+    inline constexpr auto visit(expected<T, E>& exp, Callable&& func)
+    {
+        return detail::expected_visitor<expected<T, E>&, Callable>()(exp, tempest::forward<Callable>(func));
+    }
+
+    template <typename T, typename E, typename Callable>
+    inline constexpr auto visit(const expected<T, E>& exp, Callable&& func)
+    {
+        return detail::expected_visitor<const expected<T, E>&, Callable>()(exp, tempest::forward<Callable>(func));
     }
 } // namespace tempest
 
