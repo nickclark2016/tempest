@@ -46,7 +46,7 @@ namespace tempest::editor
                 .aspect_ratio = 16.0f / 9.0f,
                 .vertical_fov = 100.0f,
                 .near_plane = 0.01f,
-                .far_shadow_plane = 64.0f,
+                .far_shadow_plane = 128.0f,
             };
 
             ctx.get_registry().assign(camera, camera_data);
