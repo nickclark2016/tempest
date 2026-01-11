@@ -5193,9 +5193,10 @@ namespace tempest::graphics
             results.cascade_distances[i] = (d - near_plane) / clip_range;
         }
 
-        const auto projection_with_clip = math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov,
-                                                            camera_data.near_plane, camera_data.far_shadow_plane);
-        const auto inv_view_proj = math::inverse(projection_with_clip * view_matrix);
+        const auto light_proj = math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov,
+                                                  camera_data.near_plane, camera_data.far_shadow_plane);
+
+        const auto inv_view_matrix = math::inverse(light_proj * view_matrix);
 
         auto last_split = 0.0f;
         for (uint32_t cascade = 0; cascade < shadows.cascade_count; ++cascade)
@@ -5209,8 +5210,8 @@ namespace tempest::graphics
 
             for (auto& corner : frustum_corners)
             {
-                auto inv_corner = inv_view_proj * math::vec4<float>(corner.x, corner.y, corner.z, 1.0f);
-                auto normalized = inv_corner / inv_corner.w;
+                const auto view_corner = inv_view_matrix * math::vec4<float>(corner.x, corner.y, corner.z, 1.0f);
+                const auto normalized = view_corner / view_corner.w;
                 corner = {normalized.x, normalized.y, normalized.z};
             }
 

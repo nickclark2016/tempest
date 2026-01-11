@@ -287,8 +287,9 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
             uint shadow_map_index = lighting.shadow_map_indices[i];
             const ShadowMapParameter shadow_map_param = lights.shadow_map_params[shadow_map_index];
 
-            if (view_pos.z > -shadow_map_param.cascade_split) {
-                cascade_index = i + 1;
+            if (view_pos.z <= shadow_map_param.cascade_split) {
+                cascade_index = i;
+                break;
             }
         }
 
