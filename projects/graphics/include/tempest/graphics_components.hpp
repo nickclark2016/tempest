@@ -82,7 +82,6 @@ namespace tempest::graphics
         float aspect_ratio;
         float vertical_fov;
         float near_plane;
-        float far_shadow_plane;
     };
 
     struct directional_light_component
@@ -100,7 +99,9 @@ namespace tempest::graphics
 
     struct shadow_map_component
     {
-        math::vec2<uint32_t> size;
+        float shadow_distance;
+        float split_lambda;
+        float blend_fraction;
         uint32_t cascade_count;
     };
 } // namespace tempest::graphics

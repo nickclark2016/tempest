@@ -14,7 +14,7 @@ groupshared float group_shared_depth_buffer[tile_size * tile_stride];
 
 [shader("compute")]
 [numthreads(tile_size, tile_size, 1)]
-void CSMain(uint3 dispatch_id : SV_DispatchThreadID, uint thread_index : SV_GroupIndex, [vk_push_constant] uniform Constants constants) {
+void CSMain(uint3 dispatch_id : SV_DispatchThreadID, uint thread_index : SV_GroupIndex, uniform Constants constants) {
     let pixel_pos = dispatch_id.xy;
 
     // Read the depth value from the input depth buffer

@@ -190,6 +190,10 @@ namespace tempest::math
         const vec4<T> result = {-rhs[0], -rhs[1], -rhs[2], -rhs[3]};
         return result;
     }
+
+    using float4 = vec4<float>;
+    using uint4 = vec4<uint32_t>;
+    using int4 = vec4<int32_t>;
 } // namespace tempest::math
 
 #endif // tempest_math_vec4_hpp__

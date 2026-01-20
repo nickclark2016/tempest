@@ -453,8 +453,8 @@ namespace tempest::graphics
                            make_enum_mask(rhi::memory_access::transfer_write));
 
                 // Writes to the light buffer
-                // task.write(_global_resources.graph_light_buffer, make_enum_mask(rhi::pipeline_stage::copy),
-                //           make_enum_mask(rhi::memory_access::transfer_write));
+                task.write(_global_resources.graph_light_buffer, make_enum_mask(rhi::pipeline_stage::copy),
+                           make_enum_mask(rhi::memory_access::transfer_write));
             },
             &_upload_pass_task, this);
 
@@ -1023,7 +1023,7 @@ namespace tempest::graphics
         auto frag_source = core::read_bytes("assets/shaders/ssao.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
-        color_formats.push_back(rhi::image_format::r32_float);
+        color_formats.push_back(rhi::image_format::r16_unorm);
 
         auto blending = vector<rhi::color_blend_attachment>();
         blending.push_back({
@@ -1194,7 +1194,7 @@ namespace tempest::graphics
         auto frag_source = core::read_bytes("assets/shaders/ssao_blur.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
-        color_formats.push_back(rhi::image_format::r32_float);
+        color_formats.push_back(rhi::image_format::r16_unorm);
 
         auto blending = vector<rhi::color_blend_attachment>();
         blending.push_back({
@@ -1513,11 +1513,11 @@ namespace tempest::graphics
 
     pbr_frame_graph::shadow_map_pass_outputs pbr_frame_graph::_add_shadow_map_pass(graph_builder& builder)
     {
-        auto shadow_mega_texture = builder.create_render_target({
+        const auto shadow_rt_descriptor = rhi::image_desc{
             .format = rhi::image_format::d32_float,
             .type = rhi::image_type::image_2d,
-            .width = _cfg.shadows.shadow_map_width,
-            .height = _cfg.shadows.shadow_map_height,
+            .width = _cfg.shadows.directional_shadow_map_width,
+            .height = _cfg.shadows.directional_shadow_map_height,
             .depth = 1,
             .array_layers = 1,
             .mip_levels = 1,
@@ -1525,13 +1525,27 @@ namespace tempest::graphics
             .tiling = rhi::image_tiling_type::optimal,
             .location = rhi::memory_location::device,
             .usage = make_enum_mask(rhi::image_usage::depth_attachment, rhi::image_usage::sampled),
-            .name = "Shadow Map Mega Texture",
-        });
+            .name = "Shadow Map Atlas Target",
+        };
 
-        const auto shadow_buffer_size =
-            math::round_to_next_multiple(sizeof(shadow_map_parameter) * _cfg.shadows.max_shadow_casting_lights *
-                                             shadow_map_cascade_info::max_cascade_count,
-                                         256);
+        for (size_t i = 0; i < _directional_shadows.atlas_pool.atlas_slots.capacity(); ++i)
+        {
+            auto shadow_rt = builder.create_per_frame_image(shadow_rt_descriptor);
+
+            const auto inserted = _directional_shadows.atlas_pool.atlas_slots.try_push_back({
+                .shadow_atlas = shadow_rt,
+                .light_entity = ecs::null,
+                .in_use = false,
+                .atlas_resolution = math::uint2{shadow_rt_descriptor.width, shadow_rt_descriptor.height},
+            });
+
+            if (!inserted)
+            {
+                log->critical("Failed to insert shadow atlas slot into pool!");
+            }
+        }
+
+        const auto shadow_buffer_size = math::round_to_next_multiple(sizeof(shadow_gpu_layout), 256);
 
         auto shadow_data_buffer = builder.create_per_frame_buffer({
             .size = shadow_buffer_size,
@@ -1605,7 +1619,7 @@ namespace tempest::graphics
         push_constants.push_back({
             .offset = 0,
             .range = sizeof(directional_shadow_pass_constants),
-            .stages = make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment),
+            .stages = make_enum_mask(rhi::shader_stage::vertex),
         });
 
         auto pipeline_layout = _device->create_pipeline_layout({
@@ -1708,28 +1722,17 @@ namespace tempest::graphics
                 task.read(descriptor_buffer,
                           make_enum_mask(rhi::pipeline_stage::vertex_shader, rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
-                task.write(shadow_mega_texture, rhi::image_layout::depth,
-                           make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
-                           make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
+
+                for (auto& tex : _directional_shadows.atlas_pool.atlas_slots)
+                {
+                    task.write(tex.shadow_atlas, rhi::image_layout::depth,
+                               make_enum_mask(rhi::pipeline_stage::all_fragment_tests),
+                               make_enum_mask(rhi::memory_access::depth_stencil_attachment_write));
+                }
             },
             &_shadow_map_pass_task, this, descriptor_buffer);
 
-        _shadow_data.shelf_pack.emplace(
-            math::vec2{
-                _cfg.shadows.shadow_map_width,
-                _cfg.shadows.shadow_map_height,
-            },
-            shelf_pack_allocator::allocator_options{
-                .alignment =
-                    {
-                        32,
-                        32,
-                    },
-                .column_count = 4,
-            });
-
         return {
-            .shadow_map_megatexture = shadow_mega_texture,
             .shadow_data = shadow_data_buffer,
             .directional_shadow_pipeline = pipeline,
             .directional_shadow_pipeline_layout = pipeline_layout,
@@ -1902,12 +1905,14 @@ namespace tempest::graphics
         // 15 - Linear Sampler
         // 16+ - Bindless Textures
 
-        // Light and Shadow Descriptors
+        // Shadow and Light Descriptors
         // 0 - Lights
-        // 1 - Shadow map parameters
-        // 2 - Shadow map mega texture
-        // 3 - Light grid bounds
-        // 4 - Light indices
+        // 1 - Light grid bounds
+        // 2 - Light indices
+        // 3 - Shadow map parameters
+        // 4 - Shadow map sampler
+        // 5 - Shadow map textures
+
         auto scene_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
         scene_descriptor_set_bindings.push_back({
             .binding_index = 0,
@@ -1962,12 +1967,16 @@ namespace tempest::graphics
             .type = rhi::descriptor_type::sampled_image,
             .count = _cfg.max_bindless_textures,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
+            .flags = make_enum_mask(rhi::descriptor_binding_flags::variable_length,
+                                    rhi::descriptor_binding_flags::partially_bound),
         });
 
         auto scene_descriptors = _device->create_descriptor_set_layout(
             scene_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
 
         auto shadow_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+
+        // Lights
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 0,
             .type = rhi::descriptor_type::structured_buffer,
@@ -1982,10 +1991,12 @@ namespace tempest::graphics
         });
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 2,
-            .type = rhi::descriptor_type::sampled_image,
+            .type = rhi::descriptor_type::structured_buffer,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
         });
+
+        // Shadows
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 3,
             .type = rhi::descriptor_type::structured_buffer,
@@ -1994,9 +2005,16 @@ namespace tempest::graphics
         });
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 4,
-            .type = rhi::descriptor_type::structured_buffer,
+            .type = rhi::descriptor_type::sampler,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 4,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+            .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
         });
 
         auto shadow_descriptors = _device->create_descriptor_set_layout(
@@ -2142,9 +2160,14 @@ namespace tempest::graphics
                 task.read(_pass_output_resource_handles.light_culling.light_indices,
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
-                task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
-                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::shader_read));
+
+                for (auto& tex : _directional_shadows.atlas_pool.atlas_slots)
+                {
+                    task.read(tex.shadow_atlas, rhi::image_layout::shader_read_only,
+                              make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                              make_enum_mask(rhi::memory_access::shader_read));
+                }
+
                 task.read(_pass_output_resource_handles.shadow_map.shadow_data,
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
@@ -2238,10 +2261,11 @@ namespace tempest::graphics
 
         // Shadow and Light Descriptors
         // 0 - Lights
-        // 1 - Shadow map parameters
-        // 2 - Shadow map mega texture
-        // 3 - Light grid bounds
-        // 4 - Light indices
+        // 1 - Light grid bounds
+        // 2 - Light indices
+        // 3 - Shadow map parameters
+        // 4 - Shadow map sampler
+        // 5 - Shadow map textures
 
         auto scene_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
         scene_descriptor_set_bindings.push_back({
@@ -2315,6 +2339,8 @@ namespace tempest::graphics
             scene_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
 
         auto shadow_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+
+        // Lights
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 0,
             .type = rhi::descriptor_type::structured_buffer,
@@ -2329,10 +2355,12 @@ namespace tempest::graphics
         });
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 2,
-            .type = rhi::descriptor_type::sampled_image,
+            .type = rhi::descriptor_type::structured_buffer,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
         });
+
+        // Shadows
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 3,
             .type = rhi::descriptor_type::structured_buffer,
@@ -2341,9 +2369,16 @@ namespace tempest::graphics
         });
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 4,
-            .type = rhi::descriptor_type::structured_buffer,
+            .type = rhi::descriptor_type::sampler,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 4,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+            .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
         });
 
         auto shadow_descriptors = _device->create_descriptor_set_layout(
@@ -2493,9 +2528,14 @@ namespace tempest::graphics
                 task.read(_pass_output_resource_handles.light_culling.light_indices,
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
-                task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
-                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::shader_read));
+
+                for (auto& tex : _directional_shadows.atlas_pool.atlas_slots)
+                {
+                    task.read(tex.shadow_atlas, rhi::image_layout::shader_read_only,
+                              make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                              make_enum_mask(rhi::memory_access::shader_read));
+                }
+
                 task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
@@ -2562,10 +2602,11 @@ namespace tempest::graphics
 
         // Shadow and Light Descriptors
         // 0 - Lights
-        // 1 - Shadow map parameters
-        // 2 - Shadow map mega texture
-        // 3 - Light grid bounds
-        // 4 - Light indices
+        // 1 - Light grid bounds
+        // 2 - Light indices
+        // 3 - Shadow map parameters
+        // 4 - Shadow map sampler
+        // 5 - Shadow map textures
 
         auto scene_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
         scene_descriptor_set_bindings.push_back({
@@ -2639,6 +2680,8 @@ namespace tempest::graphics
             scene_descriptor_set_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::descriptor_buffer));
 
         auto shadow_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
+
+        // Lights
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 0,
             .type = rhi::descriptor_type::structured_buffer,
@@ -2653,10 +2696,12 @@ namespace tempest::graphics
         });
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 2,
-            .type = rhi::descriptor_type::sampled_image,
+            .type = rhi::descriptor_type::structured_buffer,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
         });
+
+        // Shadows
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 3,
             .type = rhi::descriptor_type::structured_buffer,
@@ -2665,9 +2710,16 @@ namespace tempest::graphics
         });
         shadow_descriptor_set_bindings.push_back({
             .binding_index = 4,
-            .type = rhi::descriptor_type::structured_buffer,
+            .type = rhi::descriptor_type::sampler,
             .count = 1,
             .stages = make_enum_mask(rhi::shader_stage::fragment),
+        });
+        shadow_descriptor_set_bindings.push_back({
+            .binding_index = 5,
+            .type = rhi::descriptor_type::sampled_image,
+            .count = 4,
+            .stages = make_enum_mask(rhi::shader_stage::fragment),
+            .flags = make_enum_mask(rhi::descriptor_binding_flags::partially_bound),
         });
 
         auto shadow_descriptors = _device->create_descriptor_set_layout(
@@ -2802,9 +2854,14 @@ namespace tempest::graphics
                 task.read(_pass_output_resource_handles.light_culling.light_indices,
                           make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
-                task.read(_pass_output_resource_handles.shadow_map.shadow_map_megatexture,
-                          rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                          make_enum_mask(rhi::memory_access::shader_read));
+
+                for (auto& tex : _directional_shadows.atlas_pool.atlas_slots)
+                {
+                    task.read(tex.shadow_atlas, rhi::image_layout::shader_read_only,
+                              make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                              make_enum_mask(rhi::memory_access::shader_read));
+                }
+
                 task.read(_pass_output_resource_handles.ssao_blur.ssao_blurred_output,
                           rhi::image_layout::shader_read_only, make_enum_mask(rhi::pipeline_stage::fragment_shader),
                           make_enum_mask(rhi::memory_access::shader_read));
@@ -3202,10 +3259,6 @@ namespace tempest::graphics
             self->_scene_data.dir_lights.insert_or_replace(self_entity.entity, gpu_light);
         });
 
-        self->_shadow_data.shelf_pack->clear();
-        self->_shadow_data.shadow_map_parameters.clear();
-        self->_shadow_data.light_shadow_data.clear();
-
         auto sun_entity = ecs::archetype_entity{ecs::tombstone};
 
         for (const auto& [e, _] : self->_scene_data.dir_lights)
@@ -3226,74 +3279,36 @@ namespace tempest::graphics
         };
 
         auto shadow_maps_written = 0u;
-        self->_inputs.entity_registry->each(
-            [&](ecs::self_component self_entity, shadow_map_component shadows, ecs::transform_component transform) {
-                const auto cascade_info = _calculate_shadow_map_cascades(shadows, transform, *camera_data, view);
-                self->_shadow_data.light_shadow_data.insert({self_entity.entity, cascade_info});
-
-                auto light = [&]() {
-                    auto point_light_it = self->_scene_data.point_lights.find(self_entity.entity);
-                    if (point_light_it != self->_scene_data.point_lights.end())
-                    {
-                        return point_light_it->second;
-                    }
-
-                    auto dir_light_it = self->_scene_data.dir_lights.find(self_entity.entity);
-                    if (dir_light_it != self->_scene_data.dir_lights.end())
-                    {
-                        return dir_light_it->second;
-                    }
-
-                    terminate();
-                }();
-
-                light.shadow_map_count = shadows.cascade_count;
-                for (auto i = 0u; i < shadows.cascade_count; ++i)
+        self->_inputs.entity_registry->each([&](ecs::self_component self_entity, shadow_map_component shadows) {
+            auto light = [&]() {
+                auto point_light_it = self->_scene_data.point_lights.find(self_entity.entity);
+                if (point_light_it != self->_scene_data.point_lights.end())
                 {
-                    light.shadow_map_indices[i] = shadow_maps_written++;
+                    return point_light_it->second;
                 }
 
-                if (light.type == light_type::directional)
+                auto dir_light_it = self->_scene_data.dir_lights.find(self_entity.entity);
+                if (dir_light_it != self->_scene_data.dir_lights.end())
                 {
-                    self->_scene_data.dir_lights.insert_or_replace(self_entity.entity, light);
+                    return dir_light_it->second;
                 }
-                else
-                {
-                    self->_scene_data.point_lights.insert_or_replace(self_entity.entity, light);
-                }
-            });
 
-        self->_inputs.entity_registry->each([&]([[maybe_unused]] directional_light_component light,
-                                                shadow_map_component shadows, ecs::self_component self_entity) {
-            const auto cascade_it = self->_shadow_data.light_shadow_data.find(self_entity.entity);
-            if (cascade_it == self->_shadow_data.light_shadow_data.end())
-            {
-                return;
-            }
+                terminate();
+            }();
 
-            const auto& cascade = cascade_it->second;
-
+            light.shadow_map_count = shadows.cascade_count;
             for (auto i = 0u; i < shadows.cascade_count; ++i)
             {
-                const auto region = self->_shadow_data.shelf_pack->allocate(shadows.size);
-                const auto x_pos = region->position.x;
-                const auto y_pos = region->position.y;
-                const auto width = region->extent.x;
-                const auto height = region->extent.y;
+                light.shadow_map_indices[i] = shadow_maps_written++;
+            }
 
-                const auto& allocator = *self->_shadow_data.shelf_pack;
-
-                self->_shadow_data.shadow_map_parameters.push_back(shadow_map_parameter{
-                    .light_proj_matrix = cascade.frustum_view_projections[i],
-                    .shadow_map_region =
-                        {
-                            static_cast<float>(x_pos) / allocator.extent().x,
-                            static_cast<float>(y_pos) / allocator.extent().y,
-                            static_cast<float>(width) / allocator.extent().x,
-                            static_cast<float>(height) / allocator.extent().y,
-                        },
-                    .cascade_split_far = cascade.cascade_distances[i],
-                });
+            if (light.type == light_type::directional)
+            {
+                self->_scene_data.dir_lights.insert_or_replace(self_entity.entity, light);
+            }
+            else
+            {
+                self->_scene_data.point_lights.insert_or_replace(self_entity.entity, light);
             }
         });
 
@@ -4038,38 +4053,126 @@ namespace tempest::graphics
         auto staging_buffer_bytes = self->_device->map_buffer(
             self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
 
-        std::memcpy(staging_buffer_bytes + staging_buffer_offset, self->_shadow_data.shadow_map_parameters.data(),
-                    self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
+        auto camera = ecs::archetype_entity{ecs::tombstone};
+        auto camera_data = optional<camera_component>();
+        auto camera_transform = optional<ecs::transform_component>();
 
-        self->_device->unmap_buffer(
-            self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+        self->_inputs.entity_registry->each(
+            [&](ecs::self_component entity, const camera_component& cam_comp, const ecs::transform_component& tx) {
+                camera = entity.entity;
+                camera_data = cam_comp;
+                camera_transform = tx;
+            });
 
-        self->_global_resources.utilization.staging_buffer_bytes_written +=
-            static_cast<uint32_t>(self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
+        self->_directional_shadows.directional_shadows.clear();
+        auto gpu_shadow_data = shadow_gpu_layout{};
+        auto shadowed_dir_light_count = 0u;
 
-        ctx.copy_buffer_to_buffer(self->_global_resources.graph_per_frame_staging_buffer,
-                                  self->_pass_output_resource_handles.shadow_map.shadow_data, staging_buffer_offset,
-                                  self->_executor->get_current_frame_resource_offset(
-                                      self->_pass_output_resource_handles.shadow_map.shadow_data),
-                                  self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
+        // Reset usage
+        for (auto& img : self->_directional_shadows.atlas_pool.atlas_slots)
+        {
+            img.in_use = false;
+        }
+
+        self->_inputs.entity_registry->each([&](directional_light_component light,
+                                                const ecs::transform_component& transform, shadow_map_component shadows,
+                                                ecs::self_component self_entity) {
+            if (self->_directional_shadows.directional_shadows.size() >=
+                self->_directional_shadows.atlas_pool.atlas_slots.size())
+            {
+                log->critical("Exceeded maximum number of directional lights with shadows supported!");
+                return;
+            }
+
+            // Create a camera with corrected aspect ratio matching the actual render target
+            auto corrected_camera = *camera_data;
+            corrected_camera.aspect_ratio = static_cast<float>(self->_cfg.render_target_width) / 
+                                           static_cast<float>(self->_cfg.render_target_height);
+
+            auto csm_data = self->_create_shadow_data(
+                transform, shadows, corrected_camera, *camera_transform,
+                {self->_cfg.shadows.directional_shadow_map_width, self->_cfg.shadows.directional_shadow_map_height});
+
+            // Build the GPU shadow data
+            gpu_shadow_data.directional_lights[shadowed_dir_light_count] =
+                shadow_gpu_layout::directional_shadow_gpu_layout{};
+            gpu_shadow_data.directional_lights[shadowed_dir_light_count].cascade_count = shadows.cascade_count;
+            gpu_shadow_data.directional_lights[shadowed_dir_light_count].atlas_index =
+                csm_data.directional_light_atlas_index;
+            gpu_shadow_data.directional_lights[shadowed_dir_light_count].inv_atlas_resolution =
+                math::vec2<float>{1.0f / static_cast<float>(csm_data.atlas_resolution.x),
+                                  1.0f / static_cast<float>(csm_data.atlas_resolution.y)};
+
+            for (auto i = 0u; i < shadows.cascade_count; ++i)
+            {
+                gpu_shadow_data.directional_lights[shadowed_dir_light_count].cascades[i] = {
+                    .light_view_projection = csm_data.cascades[i].light_view_projection,
+                    .atlas_offset = math::vec2<float>(static_cast<float>(csm_data.cascades[i].atlas_offset.x) /
+                                                          static_cast<float>(csm_data.atlas_resolution.x),
+                                                      static_cast<float>(csm_data.cascades[i].atlas_offset.y) /
+                                                          static_cast<float>(csm_data.atlas_resolution.y)),
+                    .atlas_scale = math::vec2<float>(static_cast<float>(csm_data.cascades[i].cascade_resolution.x) /
+                                                         static_cast<float>(csm_data.atlas_resolution.x),
+                                                     static_cast<float>(csm_data.cascades[i].cascade_resolution.y) /
+                                                         static_cast<float>(csm_data.atlas_resolution.y)),
+                    .split_depth = csm_data.cascades[i].split_depth,
+                    .blend_start = csm_data.cascades[i].blend_start,
+                    .texel_size_ws = csm_data.cascades[i].texel_size_ws,
+                    .cascade_index = i,
+                };
+            }
+
+            self->_directional_shadows.atlas_pool.atlas_slots[csm_data.directional_light_atlas_index].in_use = true;
+            self->_directional_shadows.directional_shadows.insert(make_pair(self_entity.entity, std::move(csm_data)));
+
+            ++shadowed_dir_light_count;
+        });
+
+        // Upload shadows
+        auto shadow_data_buffer = self->_pass_output_resource_handles.shadow_map.shadow_data;
+        auto shadow_data_buffer_offset = self->_executor->get_current_frame_resource_offset(shadow_data_buffer);
+        auto shadow_data_written = static_cast<size_t>(0u);
+        const auto shadow_data_buffer_staging_offset = self->_global_resources.utilization.staging_buffer_bytes_written;
+
+        if (shadowed_dir_light_count > 0)
+        {
+            gpu_shadow_data.directional_light_count = shadowed_dir_light_count;
+            std::memcpy(staging_buffer_bytes + staging_buffer_offset +
+                            self->_global_resources.utilization.staging_buffer_bytes_written,
+                        &gpu_shadow_data, sizeof(shadow_gpu_layout::directional_shadow_gpu_layout));
+            staging_buffer_bytes += sizeof(shadow_gpu_layout::directional_shadow_gpu_layout);
+            shadow_data_written += sizeof(shadow_gpu_layout::directional_shadow_gpu_layout);
+
+            // TODO: Handle point and spot light shadows
+
+            ctx.copy_buffer_to_buffer(self->_global_resources.graph_per_frame_staging_buffer,
+                                      self->_pass_output_resource_handles.shadow_map.shadow_data,
+                                      staging_buffer_offset + shadow_data_buffer_staging_offset,
+                                      shadow_data_buffer_offset, shadow_data_written);
+
+            self->_global_resources.utilization.staging_buffer_bytes_written +=
+                static_cast<uint32_t>(shadow_data_written);
+        }
+
+        // std::memcpy(staging_buffer_bytes + staging_buffer_offset, self->_shadow_data.shadow_map_parameters.data(),
+        //             self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
+
+        // self->_device->unmap_buffer(
+        //     self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
+
+        // self->_global_resources.utilization.staging_buffer_bytes_written +=
+        //     static_cast<uint32_t>(self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
+
+        // ctx.copy_buffer_to_buffer(self->_global_resources.graph_per_frame_staging_buffer,
+        //                           self->_pass_output_resource_handles.shadow_map.shadow_data, staging_buffer_offset,
+        //                           self->_executor->get_current_frame_resource_offset(
+        //                               self->_pass_output_resource_handles.shadow_map.shadow_data),
+        //                           self->_shadow_data.shadow_map_parameters.size() * sizeof(shadow_map_parameter));
     }
 
     void pbr_frame_graph::_shadow_map_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self,
                                                 graph_resource_handle<rhi::rhi_handle_type::buffer> scene_descriptors)
     {
-        auto render_pass_begin = rhi::work_queue::render_pass_info{};
-        render_pass_begin.name = "Shadow Map Pass";
-        render_pass_begin.width = self->_cfg.shadows.shadow_map_width;
-        render_pass_begin.height = self->_cfg.shadows.shadow_map_height;
-        render_pass_begin.layers = 1;
-        render_pass_begin.depth_attachment = rhi::work_queue::depth_attachment_info{
-            .image = self->_executor->get_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
-            .layout = rhi::image_layout::depth,
-            .clear_depth = 0.0f,
-            .load_op = rhi::work_queue::load_op::clear,
-            .store_op = rhi::work_queue::store_op::store,
-        };
-
         // Scene Descriptors
         // Binding 1: Vertex Pull Buffer
         // Binding 2: Mesh Buffer
@@ -4162,69 +4265,101 @@ namespace tempest::graphics
                                                self->_executor->get_current_frame_resource_offset(scene_descriptors));
         self->_device->unmap_buffer(ctx.find_buffer(scene_descriptors));
 
-        ctx.begin_render_pass(render_pass_begin);
-
-        ctx.bind_descriptor_buffers(self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline_layout,
-                                    rhi::bind_point::graphics, 0, array{scene_descriptors});
-
-        ctx.bind_pipeline(self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline);
-
-        ctx.set_scissor(0, 0, self->_cfg.shadows.shadow_map_width, self->_cfg.shadows.shadow_map_height);
-        ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.shadows.shadow_map_width),
-                         static_cast<float>(self->_cfg.shadows.shadow_map_height), 0.0f, 1.0f);
-        ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
-        ctx.bind_index_buffer(self->_global_resources.vertex_pull_buffer, rhi::index_format::uint32, 0);
-
-        const auto draw_command_buffer = self->_pass_output_resource_handles.upload_pass.draw_commands;
-        const auto draw_command_buffer_offset = self->_executor->get_current_frame_resource_offset(draw_command_buffer);
-
-        self->_inputs.entity_registry->each([&ctx, self, draw_command_buffer, draw_command_buffer_offset](
-                                                [[maybe_unused]] directional_light_component dir_light,
-                                                [[maybe_unused]] shadow_map_component shadows,
-                                                ecs::self_component self_entity) {
-            const auto light_it = self->_scene_data.dir_lights.find(self_entity.entity);
-            if (light_it == self->_scene_data.dir_lights.end())
+        for (const auto& [entity, dir_shadow_data] : self->_directional_shadows.directional_shadows)
+        {
+            const auto& atlas_image =
+                self->_directional_shadows.atlas_pool.atlas_slots[dir_shadow_data.directional_light_atlas_index];
+            if (!atlas_image.in_use)
             {
-                return;
+                continue;
             }
 
-            const auto light = light_it->second;
-            for (auto cascade_index = 0u; cascade_index < light.shadow_map_count; ++cascade_index)
-            {
-                auto shadow_map_index = light.shadow_map_indices[cascade_index];
-                const auto& parameters = self->_shadow_data.shadow_map_parameters[shadow_map_index];
+            auto render_pass_begin = rhi::work_queue::render_pass_info{};
+            render_pass_begin.name = "Directional Shadow Map Pass";
+            render_pass_begin.width = atlas_image.atlas_resolution.x;
+            render_pass_begin.height = atlas_image.atlas_resolution.y;
+            render_pass_begin.layers = 1;
+            render_pass_begin.depth_attachment = rhi::work_queue::depth_attachment_info{
+                .image = self->_executor->get_image(atlas_image.shadow_atlas),
+                .layout = rhi::image_layout::depth,
+                .clear_depth = 0.0f,
+                .load_op = rhi::work_queue::load_op::clear,
+                .store_op = rhi::work_queue::store_op::store,
+            };
 
-                // Reconstruct the viewport for this cascade
-                const auto x = parameters.shadow_map_region.x * self->_shadow_data.shelf_pack->extent().x;
-                const auto y = parameters.shadow_map_region.y * self->_shadow_data.shelf_pack->extent().y;
-                const auto width = parameters.shadow_map_region.z * self->_shadow_data.shelf_pack->extent().x;
-                const auto height = parameters.shadow_map_region.w * self->_shadow_data.shelf_pack->extent().y;
+            ctx.begin_render_pass(render_pass_begin);
 
-                ctx.set_scissor(static_cast<uint32_t>(x), static_cast<uint32_t>(y), static_cast<uint32_t>(width),
-                                static_cast<uint32_t>(height));
+            ctx.bind_descriptor_buffers(
+                self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline_layout,
+                rhi::bind_point::graphics, 0, array{scene_descriptors});
 
-                ctx.set_viewport(static_cast<float>(x), static_cast<float>(y), static_cast<float>(width),
-                                 static_cast<float>(height), 0.0f, 1.0f, false);
+            ctx.bind_pipeline(self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline);
 
-                ctx.push_constants(self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline_layout,
-                                   make_enum_mask(rhi::shader_stage::vertex, rhi::shader_stage::fragment), 0,
-                                   parameters.light_proj_matrix);
+            ctx.set_scissor(0, 0, self->_cfg.shadows.directional_shadow_map_width,
+                            self->_cfg.shadows.directional_shadow_map_height);
+            ctx.set_viewport(0.0f, 0.0f, static_cast<float>(self->_cfg.shadows.directional_shadow_map_width),
+                             static_cast<float>(self->_cfg.shadows.directional_shadow_map_height), 0.0f, 1.0f);
+            ctx.set_cull_mode(make_enum_mask(rhi::cull_mode::back));
+            ctx.bind_index_buffer(self->_global_resources.vertex_pull_buffer, rhi::index_format::uint32, 0);
 
-                for (const auto& [key, draw_batch] : self->_drawables.draw_batches)
+            const auto draw_command_buffer = self->_pass_output_resource_handles.upload_pass.draw_commands;
+            const auto draw_command_buffer_offset =
+                self->_executor->get_current_frame_resource_offset(draw_command_buffer);
+
+            self->_inputs.entity_registry->each([&ctx, self, draw_command_buffer, draw_command_buffer_offset](
+                                                    [[maybe_unused]] directional_light_component dir_light,
+                                                    [[maybe_unused]] shadow_map_component shadows,
+                                                    ecs::self_component self_entity) {
+                const auto light_it = self->_scene_data.dir_lights.find(self_entity.entity);
+                if (light_it == self->_scene_data.dir_lights.end())
                 {
-                    if (key.alpha_type == alpha_behavior::opaque || key.alpha_type == alpha_behavior::mask)
+                    return;
+                }
+
+                const auto light = light_it->second;
+
+                // Get cascade shadow data
+                const auto shadow_it = self->_directional_shadows.directional_shadows.find(self_entity.entity);
+                if (shadow_it == self->_directional_shadows.directional_shadows.end())
+                {
+                    return;
+                }
+
+                const auto& shadow_data = shadow_it->second;
+
+                for (auto cascade_index = 0u; cascade_index < light.shadow_map_count; ++cascade_index)
+                {
+                    const auto& cascade = shadow_data.cascades[cascade_index];
+
+                    const auto x = cascade.atlas_offset.x;
+                    const auto y = cascade.atlas_offset.y;
+                    const auto w = cascade.cascade_resolution.x;
+                    const auto h = cascade.cascade_resolution.y;
+
+                    ctx.set_scissor(x, y, w, h);
+                    ctx.set_viewport(static_cast<float>(x), static_cast<float>(y), static_cast<float>(w),
+                                     static_cast<float>(h), 0.0f, 1.0f, false);
+                    ctx.push_constants(
+                        self->_pass_output_resource_handles.shadow_map.directional_shadow_pipeline_layout,
+                        make_enum_mask(rhi::shader_stage::vertex), 0, cascade.light_view_projection);
+
+                    for (const auto& [key, draw_batch] : self->_drawables.draw_batches)
                     {
-                        ctx.draw_indirect(
-                            draw_command_buffer,
-                            static_cast<uint32_t>(draw_command_buffer_offset + draw_batch.indirect_command_offset *
-                                                                                   sizeof(indexed_indirect_command)),
-                            static_cast<uint32_t>(draw_batch.commands.size()), sizeof(indexed_indirect_command));
+                        if (key.alpha_type == alpha_behavior::opaque || key.alpha_type == alpha_behavior::mask)
+                        {
+                            ctx.draw_indirect(draw_command_buffer,
+                                              static_cast<uint32_t>(draw_command_buffer_offset +
+                                                                    draw_batch.indirect_command_offset *
+                                                                        sizeof(indexed_indirect_command)),
+                                              static_cast<uint32_t>(draw_batch.commands.size()),
+                                              sizeof(indexed_indirect_command));
+                        }
                     }
                 }
-            }
-        });
+            });
 
-        ctx.end_render_pass();
+            ctx.end_render_pass();
+        }
     }
 
     void pbr_frame_graph::_skybox_pass_task(graphics_task_execution_context& ctx, pbr_frame_graph* self)
@@ -4460,41 +4595,52 @@ namespace tempest::graphics
             .index = 1,
             .type = rhi::descriptor_type::structured_buffer,
             .offset = 0,
-            .size = static_cast<uint32_t>(
-                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
-            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
-        });
-
-        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
-        shadow_map_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
-            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
-            .layout = rhi::image_layout::shader_read_only,
-        });
-
-        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
-            .index = 2,
-            .type = rhi::descriptor_type::sampled_image,
-            .array_offset = 0,
-            .images = tempest::move(shadow_map_image_bindings),
-        });
-
-        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
-            .index = 3,
-            .type = rhi::descriptor_type::structured_buffer,
-            .offset = 0,
             .size = static_cast<uint32_t>(self->_executor->get_resource_size(
                 self->_pass_output_resource_handles.light_culling.light_grid_ranges)),
             .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_grid_ranges),
         });
 
         shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
-            .index = 4,
+            .index = 2,
             .type = rhi::descriptor_type::structured_buffer,
             .offset = 0,
             .size = static_cast<uint32_t>(
                 self->_executor->get_resource_size(self->_pass_output_resource_handles.light_culling.light_indices)),
             .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_indices),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
+        });
+
+        auto shadow_map_sampler_bindings = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        shadow_map_sampler_bindings.push_back(self->_global_resources.linear_sampler);
+
+        shadow_light_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 4,
+            .samplers = tempest::move(shadow_map_sampler_bindings),
+        });
+
+        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
+        for (const auto& tex : self->_directional_shadows.atlas_pool.atlas_slots)
+        {
+            shadow_map_image_bindings.push_back(rhi::image_binding_info{
+                .image = ctx.find_image(tex.shadow_atlas),
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+
+        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::sampled_image,
+            .array_offset = 0,
+            .images = tempest::move(shadow_map_image_bindings),
         });
 
         auto shadow_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(shadow_descriptors));
@@ -4708,41 +4854,52 @@ namespace tempest::graphics
             .index = 1,
             .type = rhi::descriptor_type::structured_buffer,
             .offset = 0,
-            .size = static_cast<uint32_t>(
-                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
-            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
-        });
-
-        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
-        shadow_map_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
-            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
-            .layout = rhi::image_layout::shader_read_only,
-        });
-
-        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
-            .index = 2,
-            .type = rhi::descriptor_type::sampled_image,
-            .array_offset = 0,
-            .images = tempest::move(shadow_map_image_bindings),
-        });
-
-        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
-            .index = 3,
-            .type = rhi::descriptor_type::structured_buffer,
-            .offset = 0,
             .size = static_cast<uint32_t>(self->_executor->get_resource_size(
                 self->_pass_output_resource_handles.light_culling.light_grid_ranges)),
             .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_grid_ranges),
         });
 
         shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
-            .index = 4,
+            .index = 2,
             .type = rhi::descriptor_type::structured_buffer,
             .offset = 0,
             .size = static_cast<uint32_t>(
                 self->_executor->get_resource_size(self->_pass_output_resource_handles.light_culling.light_indices)),
             .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_indices),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
+        });
+
+        auto shadow_map_sampler_bindings = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        shadow_map_sampler_bindings.push_back(self->_global_resources.linear_sampler);
+
+        shadow_light_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 4,
+            .samplers = tempest::move(shadow_map_sampler_bindings),
+        });
+
+        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
+        for (const auto& tex : self->_directional_shadows.atlas_pool.atlas_slots)
+        {
+            shadow_map_image_bindings.push_back(rhi::image_binding_info{
+                .image = ctx.find_image(tex.shadow_atlas),
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+
+        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::sampled_image,
+            .array_offset = 0,
+            .images = tempest::move(shadow_map_image_bindings),
         });
 
         auto shadow_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(shadow_descriptors));
@@ -4956,41 +5113,52 @@ namespace tempest::graphics
             .index = 1,
             .type = rhi::descriptor_type::structured_buffer,
             .offset = 0,
-            .size = static_cast<uint32_t>(
-                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
-            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
-        });
-
-        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
-        shadow_map_image_bindings.push_back(rhi::image_binding_info{
-            .image = ctx.find_image(self->_pass_output_resource_handles.shadow_map.shadow_map_megatexture),
-            .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
-            .layout = rhi::image_layout::shader_read_only,
-        });
-
-        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
-            .index = 2,
-            .type = rhi::descriptor_type::sampled_image,
-            .array_offset = 0,
-            .images = tempest::move(shadow_map_image_bindings),
-        });
-
-        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
-            .index = 3,
-            .type = rhi::descriptor_type::structured_buffer,
-            .offset = 0,
             .size = static_cast<uint32_t>(self->_executor->get_resource_size(
                 self->_pass_output_resource_handles.light_culling.light_grid_ranges)),
             .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_grid_ranges),
         });
 
         shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
-            .index = 4,
+            .index = 2,
             .type = rhi::descriptor_type::structured_buffer,
             .offset = 0,
             .size = static_cast<uint32_t>(
                 self->_executor->get_resource_size(self->_pass_output_resource_handles.light_culling.light_indices)),
             .buffer = ctx.find_buffer(self->_pass_output_resource_handles.light_culling.light_indices),
+        });
+
+        shadow_light_descriptor_write.buffers.push_back(rhi::buffer_binding_descriptor{
+            .index = 3,
+            .type = rhi::descriptor_type::structured_buffer,
+            .offset = 0,
+            .size = static_cast<uint32_t>(
+                self->_executor->get_resource_size(self->_pass_output_resource_handles.shadow_map.shadow_data)),
+            .buffer = ctx.find_buffer(self->_pass_output_resource_handles.shadow_map.shadow_data),
+        });
+
+        auto shadow_map_sampler_bindings = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
+        shadow_map_sampler_bindings.push_back(self->_global_resources.linear_sampler);
+
+        shadow_light_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
+            .index = 4,
+            .samplers = tempest::move(shadow_map_sampler_bindings),
+        });
+
+        auto shadow_map_image_bindings = vector<rhi::image_binding_info>{};
+        for (const auto& tex : self->_directional_shadows.atlas_pool.atlas_slots)
+        {
+            shadow_map_image_bindings.push_back(rhi::image_binding_info{
+                .image = ctx.find_image(tex.shadow_atlas),
+                .sampler = rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle,
+                .layout = rhi::image_layout::shader_read_only,
+            });
+        }
+
+        shadow_light_descriptor_write.images.push_back(rhi::image_binding_descriptor{
+            .index = 5,
+            .type = rhi::descriptor_type::sampled_image,
+            .array_offset = 0,
+            .images = tempest::move(shadow_map_image_bindings),
         });
 
         auto shadow_descriptor_buffer_bytes = self->_device->map_buffer(ctx.find_buffer(shadow_descriptors));
@@ -5165,103 +5333,6 @@ namespace tempest::graphics
         ctx.draw(3, 1, 0, 0);
 
         ctx.end_render_pass();
-    }
-
-    pbr_frame_graph::shadow_map_cascade_info pbr_frame_graph::_calculate_shadow_map_cascades(
-        const shadow_map_component& shadows, const ecs::transform_component& light_transform,
-        const camera_component& camera_data, const math::mat4<float>& view_matrix)
-    {
-        const auto near_plane = camera_data.near_plane;
-        const auto far_plane = camera_data.far_shadow_plane;
-        const auto clip_range = far_plane - near_plane;
-
-        const auto clip_ratio = far_plane / clip_range;
-
-        shadow_map_cascade_info results;
-        results.cascade_distances.resize(shadows.cascade_count);
-        results.frustum_view_projections.resize(shadows.cascade_count);
-
-        // Compute splits
-        // https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus
-        for (size_t i = 0; i < shadows.cascade_count; ++i)
-        {
-            const auto p = static_cast<float>(i + 1) / static_cast<float>(shadows.cascade_count);
-            const auto logarithm = near_plane * std::pow(clip_ratio, p);
-            const auto uniform = near_plane + clip_range * p;
-            const auto d = 0.95f * (logarithm - uniform) + uniform;
-
-            results.cascade_distances[i] = (d - near_plane) / clip_range;
-        }
-
-        const auto light_proj = math::perspective(camera_data.aspect_ratio, camera_data.vertical_fov,
-                                                  camera_data.near_plane, camera_data.far_shadow_plane);
-
-        const auto inv_view_matrix = math::inverse(light_proj * view_matrix);
-
-        auto last_split = 0.0f;
-        for (uint32_t cascade = 0; cascade < shadows.cascade_count; ++cascade)
-        {
-            array frustum_corners = {
-                math::vec3<float>{-1.0f, 1.0f, 0.0f}, math::vec3<float>{1.0f, 1.0f, 0.0f},
-                math::vec3<float>{1.0f, -1.0f, 0.0f}, math::vec3<float>{-1.0f, -1.0f, 0.0f},
-                math::vec3<float>{-1.0f, 1.0f, 1.0f}, math::vec3<float>{1.0f, 1.0f, 1.0f},
-                math::vec3<float>{1.0f, -1.0f, 1.0f}, math::vec3<float>{-1.0f, -1.0f, 1.0f},
-            };
-
-            for (auto& corner : frustum_corners)
-            {
-                const auto view_corner = inv_view_matrix * math::vec4<float>(corner.x, corner.y, corner.z, 1.0f);
-                const auto normalized = view_corner / view_corner.w;
-                corner = {normalized.x, normalized.y, normalized.z};
-            }
-
-            const auto split_distance = results.cascade_distances[cascade];
-
-            for (auto idx = 0; idx < 4; ++idx)
-            {
-                const auto edge = frustum_corners[idx + 4] - frustum_corners[idx];
-                const auto normalized_far = frustum_corners[idx] + edge * split_distance;
-                const auto normalized_near = frustum_corners[idx] + edge * last_split;
-
-                frustum_corners[idx + 4] = normalized_far;
-                frustum_corners[idx] = normalized_near;
-            }
-
-            auto frustum_center = math::vec3<float>(0.0f);
-            for (const auto& corner : frustum_corners)
-            {
-                frustum_center += corner;
-            }
-            frustum_center /= static_cast<float>(8);
-
-            float radius = 0.0f;
-            for (const auto& corner : frustum_corners)
-            {
-                const auto distance = math::norm(corner - frustum_center);
-                radius = tempest::max(radius, distance);
-            }
-            radius = std::ceil(radius * 16.0f) / 16.0f;
-
-            auto max_extents = math::vec3<float>(radius);
-            auto min_extents = -max_extents;
-
-            const auto light_rotation = math::rotate(light_transform.rotation());
-            const auto light_direction_xyzw = light_rotation * math::vec4(0.0f, 0.0f, 1.0f, 0.0f);
-            const auto light_direction =
-                math::vec3(light_direction_xyzw.x, light_direction_xyzw.y, light_direction_xyzw.z);
-
-            const auto light_view =
-                math::look_at(frustum_center - light_direction * radius, frustum_center, math::vec3(0.0f, 1.0f, 0.0f));
-            const auto light_projection = math::ortho(min_extents.x, max_extents.x, min_extents.y, max_extents.y,
-                                                      min_extents.z - max_extents.z, 0.0f);
-
-            results.cascade_distances[cascade] = (near_plane + split_distance * clip_range) * -1.0f;
-            results.frustum_view_projections[cascade] = light_projection * light_view;
-
-            last_split = results.cascade_distances[cascade];
-        }
-
-        return results;
     }
 
     void pbr_frame_graph::_load_meshes(span<const guid> mesh_ids, const core::mesh_registry& mesh_registry)
@@ -5831,5 +5902,241 @@ namespace tempest::graphics
         auto fence = _device->create_fence({.signaled = false});
         wq.submit({&submit_info, 1}, fence);
         _device->wait({&fence, 1});
+    }
+
+    namespace
+    {
+        auto split_shadow_atlas(uint32_t n, uint32_t width, uint32_t height)
+        {
+            auto results = inplace_vector<math::uint4, 4>{};
+            const auto aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+            const auto cols = static_cast<uint32_t>(std::ceil(std::sqrt(n * aspect_ratio)));
+            const auto rows = static_cast<uint32_t>(std::ceil(static_cast<float>(n) / static_cast<float>(cols)));
+
+            // Calculate the size of each square tile
+            const auto tile_size_x = tempest::min(static_cast<float>(width) / static_cast<float>(cols),
+                                                  static_cast<float>(height) / static_cast<float>(rows));
+
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                const auto col = i % cols;
+                const auto row = i / cols;
+                const auto px = col * tile_size_x;
+                const auto py = row * tile_size_x;
+
+                results.push_back(math::uint4{
+                    static_cast<uint32_t>(px),
+                    static_cast<uint32_t>(py),
+                    static_cast<uint32_t>(tile_size_x),
+                    static_cast<uint32_t>(tile_size_x),
+                });
+            }
+
+            return results;
+        }
+
+        array<math::float3, 8> compute_frustum_corners_ws(const camera_component& cam, const math::float4x4& inv_view,
+                                                          float near_split, float far_split)
+        {
+            const auto fov_radians = math::as_radians(cam.vertical_fov);
+            const auto tan_half_fov_y = std::tan(fov_radians * 0.5f);
+            const auto tan_half_fov_x = tan_half_fov_y * cam.aspect_ratio;
+
+            const auto near_x = near_split * tan_half_fov_x;
+            const auto near_y = near_split * tan_half_fov_y;
+
+            const auto far_x = far_split * tan_half_fov_x;
+            const auto far_y = far_split * tan_half_fov_y;
+
+            auto corners = array<math::float3, 8>{
+                math::float3{-near_x, -near_y, -near_split}, math::float3{near_x, -near_y, -near_split},
+                math::float3{near_x, near_y, -near_split},   math::float3{-near_x, near_y, -near_split},
+                math::float3{-far_x, -far_y, -far_split},    math::float3{far_x, -far_y, -far_split},
+                math::float3{far_x, far_y, -far_split},      math::float3{-far_x, far_y, -far_split},
+            };
+
+            // Transform View Space -> World Space
+            for (auto& corner : corners)
+            {
+                const auto corner_ws4 = inv_view * math::float4{corner.x, corner.y, corner.z, 1.0f};
+                corner = math::float3{corner_ws4.x, corner_ws4.y, corner_ws4.z} / corner_ws4.w;
+            }
+
+            return corners;
+        }
+
+        auto fit_cascade_to_light_with_extent(math::float3 light_dir_ws, span<const math::float3, 8> frustum_corners_ws,
+                                              math::uint2 cascade_resolution)
+        {
+            const auto light_dir = math::normalize(light_dir_ws);
+
+            // Compute frustum center in world space
+            auto frustum_center_ws = math::float3{0.0f};
+            for (const auto& corner : frustum_corners_ws)
+            {
+                frustum_center_ws += corner;
+            }
+            frustum_center_ws *= (1.0f / 8.0f);
+
+            // Build light view matrix - light looks down its direction toward the frustum center
+            const auto up_vector =
+                std::abs(light_dir.y) > 0.99f ? math::float3{0.0f, 0.0f, 1.0f} : math::float3{0.0f, 1.0f, 0.0f};
+            
+            // Build view matrix centered on frustum - we'll adjust the position after computing bounds
+            const auto light_view = math::look_at(frustum_center_ws, frustum_center_ws + light_dir, up_vector);
+
+            // Transform all frustum corners to light space
+            auto min_ls = math::float3{std::numeric_limits<float>::max()};
+            auto max_ls = math::float3{std::numeric_limits<float>::lowest()};
+
+            for (const auto& corner_ws : frustum_corners_ws)
+            {
+                const auto corner_ls4 = light_view * math::float4{corner_ws.x, corner_ws.y, corner_ws.z, 1.0f};
+                const auto corner_ls = math::float3{corner_ls4.x, corner_ls4.y, corner_ls4.z};
+
+                min_ls = math::min(min_ls, corner_ls);
+                max_ls = math::max(max_ls, corner_ls);
+            }
+
+            // Extend XY bounds to capture shadow casters outside the view frustum
+            // Use relative expansion to scale with cascade size
+            const float extent_x = max_ls.x - min_ls.x;
+            const float extent_y = max_ls.y - min_ls.y;
+            
+            // Add 80% margin on each side - captures objects near frustum edges (braziers, planters, etc)
+            const float margin_factor = 0.8f;
+            const float margin_x = extent_x * margin_factor;
+            const float margin_y = extent_y * margin_factor;
+            
+            min_ls.x -= margin_x;
+            max_ls.x += margin_x;
+            min_ls.y -= margin_y;
+            max_ls.y += margin_y;
+
+            // Make bounds square to prevent aspect ratio distortion
+            const float max_extent = tempest::max(max_ls.x - min_ls.x, max_ls.y - min_ls.y);
+            const auto center_x = (min_ls.x + max_ls.x) * 0.5f;
+            const auto center_y = (min_ls.y + max_ls.y) * 0.5f;
+            
+            min_ls.x = center_x - max_extent * 0.5f;
+            max_ls.x = center_x + max_extent * 0.5f;
+            min_ls.y = center_y - max_extent * 0.5f;
+            max_ls.y = center_y + max_extent * 0.5f;
+
+            // Extend Z bounds significantly to capture shadow casters above/behind the frustum
+            // In light space, negative Z is toward the light, positive Z is away from it
+            // For a downward pointing light, structures above the frustum need min_ls.z extension
+            const float z_range = max_ls.z - min_ls.z;
+            
+            // Extend "behind" the frustum (toward the light) to catch tall structures
+            // Scale based on the frustum's Z depth, plus a large fixed amount for tall geometry
+            min_ls.z -= tempest::max(z_range * 2.0f, 500.0f);
+            
+            // Extend "forward" (away from light) to catch objects that cast shadows into the frustum
+            // This needs to be even larger to capture distant geometry
+            max_ls.z += tempest::max(z_range * 3.0f, 1000.0f);
+
+            // Compute texel size for shadow map filtering and stabilization
+            const auto texel_size_ws = max_extent / static_cast<float>(cascade_resolution.x);
+
+            // Snap bounds to texel grid to eliminate shimmering during camera movement
+            const auto snap_x = std::floor(center_x / texel_size_ws) * texel_size_ws;
+            const auto snap_y = std::floor(center_y / texel_size_ws) * texel_size_ws;
+
+            const auto offset_x = snap_x - center_x;
+            const auto offset_y = snap_y - center_y;
+
+            min_ls.x += offset_x;
+            max_ls.x += offset_x;
+            min_ls.y += offset_y;
+            max_ls.y += offset_y;
+
+            // Build orthographic projection with computed bounds
+            // ortho(left, right, top, bottom, near, far) maps near->0, far->1 in NDC Z
+            // In light space, we have negative Z toward light, so we negate for the projection
+            const auto light_proj = math::ortho(min_ls.x, max_ls.x, max_ls.y, min_ls.y, -max_ls.z, -min_ls.z);
+            const auto light_view_proj = light_proj * light_view;
+
+            return std::make_tuple(light_view_proj, texel_size_ws);
+        }
+    } // namespace
+
+    pbr_frame_graph::csm_shadow_data pbr_frame_graph::_create_shadow_data(
+        const ecs::transform_component& light_transform, const shadow_map_component& shadow_comp,
+        const camera_component& cam, const ecs::transform_component& camera_transform, math::uint2 atlas_resolution)
+    {
+        const auto near_z = cam.near_plane;
+        auto prev_split = near_z;
+        const auto max_shadow_distance = shadow_comp.shadow_distance;
+        const auto regions = split_shadow_atlas(shadow_comp.cascade_count, atlas_resolution.x, atlas_resolution.y);
+
+        auto result = csm_shadow_data{};
+        result.cascades.resize(shadow_comp.cascade_count);
+
+        const auto quat_rot = math::quat(camera_transform.rotation());
+        const auto f = math::extract_forward(quat_rot);
+        const auto u = math::extract_up(quat_rot);
+
+        const auto projection = math::perspective(cam.aspect_ratio, cam.vertical_fov, cam.near_plane);
+        const auto view = math::look_at(camera_transform.position(), camera_transform.position() + f, u);
+        const auto inv_view = math::inverse(view);
+
+        const auto light_rot = math::rotate(light_transform.rotation());
+        const auto light_dir = light_rot * math::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+
+        // First pass: compute the max Y extent from the last cascade
+        const auto last_cascade_idx = shadow_comp.cascade_count - 1;
+        const auto t_last = static_cast<float>(last_cascade_idx + 1) / static_cast<float>(shadow_comp.cascade_count);
+        const auto log_split_last = near_z * std::pow(max_shadow_distance / near_z, t_last);
+        const auto uniform_split_last = near_z + (max_shadow_distance - near_z) * t_last;
+        const auto split_depth_last =
+            shadow_comp.split_lambda * log_split_last + (1.0f - shadow_comp.split_lambda) * uniform_split_last;
+
+        float prev_split_last = near_z;
+        for (auto i = 0u; i < last_cascade_idx; ++i)
+        {
+            const auto t = static_cast<float>(i + 1) / static_cast<float>(shadow_comp.cascade_count);
+            const auto log_split = near_z * std::pow(max_shadow_distance / near_z, t);
+            const auto uniform_split = near_z + (max_shadow_distance - near_z) * t;
+            prev_split_last = shadow_comp.split_lambda * log_split + (1.0f - shadow_comp.split_lambda) * uniform_split;
+        }
+
+        const auto last_frustum_corners = compute_frustum_corners_ws(cam, inv_view, prev_split_last, split_depth_last);
+
+        // Second pass: build cascades with shared max Y extent
+        prev_split = near_z;
+        for (auto i = 0u; i < shadow_comp.cascade_count; ++i)
+        {
+            const auto t = static_cast<float>(i + 1) / static_cast<float>(shadow_comp.cascade_count);
+            const auto log_split = near_z * std::pow(max_shadow_distance / near_z, t);
+            const auto uniform_split = near_z + (max_shadow_distance - near_z) * t;
+            const auto split_depth =
+                shadow_comp.split_lambda * log_split + (1.0f - shadow_comp.split_lambda) * uniform_split;
+
+            const auto& region = regions[i];
+
+            const auto near_split = prev_split;
+            const auto far_split = split_depth;
+            prev_split = split_depth;
+
+            const auto frustum_corners = compute_frustum_corners_ws(cam, inv_view, near_split, far_split);
+            const auto [light_view_proj, texel_size_ws] = fit_cascade_to_light_with_extent(
+                {light_dir.x, light_dir.y, light_dir.z}, frustum_corners, math::uint2{region.z, region.w});
+
+            result.cascades[i] = {
+                .cascade_resolution = math::uint2{region.z, region.w},
+                .atlas_offset = math::uint2{region.x, region.y},
+                .light_view_projection = light_view_proj,
+                .cascade_index = i,
+                .split_depth = split_depth,
+                .blend_start = split_depth * (1.0f - shadow_comp.blend_fraction),
+                .texel_size_ws = texel_size_ws,
+            };
+        }
+
+        result.atlas_resolution = atlas_resolution;
+        result.directional_light_atlas_index = static_cast<uint32_t>(_directional_shadows.directional_shadows.size());
+
+        return result;
     }
 } // namespace tempest::graphics

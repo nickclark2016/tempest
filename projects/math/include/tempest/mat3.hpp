@@ -195,6 +195,9 @@ namespace tempest::math
 
         return vec3(m00, m10, m20);
     }
+
+    using float3x3 = mat3<float>;
+    using fmat3 = mat3<float>;
 } // namespace tempest::math
 
 #endif // tempest_math_mat3_hpp__

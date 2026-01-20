@@ -4,6 +4,7 @@ import camera;
 import clusters;
 import consts;
 import lighting;
+import shadows;
 
 enum class MaterialType : uint {
     OPAQUE,
@@ -47,9 +48,6 @@ struct LightingState {
     float3 ambient_color_factor;
     uint num_point_and_spot_lights;
     StructuredBuffer<Light> point_and_spot_lights;
-    Texture2D shadow_map_mt;
-    StructuredBuffer<ShadowMapParameter> shadow_map_params;
-    SamplerState shadow_map_sampler;
     uint3 light_grid_counts; // (num_clusters_x, num_clusters_y, num_clusters_z) for clustered lighting
     float2 light_grid_depth_bounds; // (min_depth, max_depth) for clustered lighting
     StructuredBuffer<LightGridRange> light_grid;
@@ -269,7 +267,62 @@ half3 compute_base_model(const PixelData px, const Light light, half3 light_dir,
     return color;
 }
 
-void evaluate_directional_light(const PixelData px, const MaterialState mat_state, const Camera camera, const float3 world_pos, const float3 view_pos, inout half4 color, const LightingState lights) {
+half sample_directional_shadow(
+    RWStructuredBuffer<ShadowMapParameters> shadows,
+    float3 world_pos,
+    float view_depth,
+    SamplerState shadow_sampler,
+    Texture2D[ShadowMapParameters.MAX_DIRECTIONAL_LIGHTS] atlases,
+    uint shadow_index = 0
+)
+{
+    uint cascade_idx = 0;
+
+    let shadow = shadows[0];
+    let dir_shadows = shadow.directional_shadow_maps[shadow_index];
+    let cascade_count = dir_shadows.cascade_count;
+
+    for (uint i = 0; i < cascade_count; ++i)
+    {
+        let cascade = dir_shadows.cascades[i];
+        if (view_depth <= cascade.split_depth)
+        {
+            cascade_idx = i;
+            break;
+        }
+    }
+
+    let cascade = dir_shadows.cascades[cascade_idx];
+
+    float4 light_clip = mul(cascade.light_view_projection, float4(world_pos, 1.0));
+    float3 ndc = light_clip.xyz / light_clip.w;
+    
+    // Outside shadow frustum
+    if (ndc.x < -1 || ndc.x > 1 ||
+        ndc.y < -1 || ndc.y > 1 ||
+        ndc.z <  0 || ndc.z > 1)
+        return 1.0h;
+
+    float2 uv = ndc.xy * 0.5 + 0.5;
+    uv = cascade.atlas_offset + uv * cascade.atlas_scale;
+    
+    float shadow_depth = atlases[dir_shadows.atlas_index].Sample(shadow_sampler, uv).r;
+
+    // Standard depth comparison with conservative bias
+    const float bias = max(cascade.texel_size_ws * 0.05, 0.0001);
+    return (ndc.z >= shadow_depth - bias) ? 1.0h : 0.0h;
+}
+
+void evaluate_directional_light(const PixelData px,
+                                const MaterialState mat_state,
+                                const Camera camera,
+                                const float3 world_pos,
+                                const float3 view_pos,
+                                inout half4 color,
+                                const LightingState lights,
+                                SamplerState shadow_sampler,
+                                RWStructuredBuffer<ShadowMapParameters> shadow_params,
+                                Texture2D[ShadowMapParameters.MAX_DIRECTIONAL_LIGHTS] shadow_map_atlases) {
     const Light lighting = lights.sun;
     half3 l = half3(-lighting.direction.xyz);   
     half3 base = compute_base_model(px, lighting, l, mat_state, camera, world_pos, view_pos);
@@ -280,53 +333,14 @@ void evaluate_directional_light(const PixelData px, const MaterialState mat_stat
     half n_dot_l = saturate(dot(px.shading_normal, l));
 
     if (n_dot_l > 0.0h) {
-        // Get the pixel position in light space
-        uint cascade_count = lighting.shadow_map_count;
-        uint cascade_index = 0;
-        for (uint i = 0; i < cascade_count - 1; ++i) {
-            uint shadow_map_index = lighting.shadow_map_indices[i];
-            const ShadowMapParameter shadow_map_param = lights.shadow_map_params[shadow_map_index];
-
-            if (view_pos.z <= shadow_map_param.cascade_split) {
-                cascade_index = i;
-                break;
-            }
-        }
-
-        uint selected_shadow_map_index = lighting.shadow_map_indices[cascade_index];
-        const ShadowMapParameter shadow_map_param = lights.shadow_map_params[selected_shadow_map_index];
-
-        // compute the xy position in the shadow map relative to the cascade bounds
-        float4 shadow_coord = mul(shadow_bias_matrix, mul(shadow_map_param.view_proj_matrix, float4(world_pos, 1.0)));
-        shadow_coord.xyz /= shadow_coord.w;
-
-        // Build a matrix to transform the shadow coordinate to the space of the shadow map param region
-        // lerp x from shadow_map_region.x to shadow_map_region.x + shadow_map_region.z
-        // lerp y from shadow_map_region.y to shadow_map_region.y + shadow_map_region.w
-        // Matrix is:
-        // [shadow_map_region.z, 0, shadow_map_region.x, 0]
-        // [0, shadow_map_region.w, shadow_map_region.y, 0]
-        // [0, 0, 1, 0]
-        // [0, 0, 0, 1]
-        
-        float4x4 shadow_map_transform = float4x4(
-            shadow_map_param.shadow_map_region.z, 0, 0, shadow_map_param.shadow_map_region.x,
-            0, shadow_map_param.shadow_map_region.w, 0, shadow_map_param.shadow_map_region.y,
-            0, 0, 1, 0,
-            0, 0, 0, 1
+        // TODO: CSM with PCF for directional light shadows
+        visibility = sample_directional_shadow(
+            shadow_params,
+            world_pos,
+            -view_pos.z,
+            shadow_sampler,
+            shadow_map_atlases
         );
-        
-        float4 shadow_coord_transformed = mul(shadow_map_transform, shadow_coord);
-        float shadow_x = shadow_coord_transformed.x;
-        float shadow_y = shadow_coord_transformed.y;
-
-        // read the shadow map
-        if (shadow_coord.z > -1.0 && shadow_coord.z < 1.0) {
-            float dist = lights.shadow_map_mt.Sample(lights.shadow_map_sampler, float2(shadow_x, shadow_y)).r;
-            if (shadow_coord.w > 0 && dist - 0.0005 > shadow_coord.z) {
-                visibility = 0.0h;
-            }
-        }
     }
 
     half3 color_comp = (base.rgb * half3(lighting.color_intensity.rgb)) * (half(lighting.color_intensity.w) * n_dot_l * visibility);
@@ -407,34 +421,37 @@ void evaluate_point_lights(const PixelData px, const MaterialState mat_state, co
         }
 
     }
-
-    // for (uint i = 0; i < lighting.num_point_and_spot_lights; ++i) {
-    //     const Light light = lighting.point_and_spot_lights[i];
-
-    //     float3 pos_to_light = light.position_falloff.xyz - world_pos;
-    //     half3 light_dir = half3(normalize(pos_to_light));
-
-    //     half n_dot_l = saturate(dot(px.shading_normal, light_dir));
-
-    //     half3 base = compute_base_model(px, light, light_dir, mat_state, camera, world_pos, view_pos);
-
-    //     half visibility = 1.0h;
-
-    //     // If the normal is facing towards the light, compute shadows
-    //     if (n_dot_l > 0.0h) {
-    //         // TODO: Implement shadow mapping for point lights
-    //     }
-
-    //     float attenuation = compute_square_falloff_attenuation(pos_to_light, light.position_falloff.w);
-
-    //     half3 color_comp = (base.rgb * half3(light.color_intensity.rgb)) * (half(light.color_intensity.w * attenuation) * n_dot_l * visibility);
-    //     color.rgb += color_comp;
-    // }
 }
 
-void evaluate_lights(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, const float4 proj_pos, inout half4 color) {
-    evaluate_directional_light(px, mat_state, camera, world_pos, view_pos, color, lighting);
-    evaluate_point_lights(px, mat_state, camera, world_pos, view_pos, proj_pos, color, lighting);
+struct LightingInputs {
+    PixelData px;
+    MaterialState mat_state;
+    LightingState lighting;
+    Camera camera;
+    float3 world_pos;
+    float3 view_pos;
+    float4 proj_pos;
+}
+
+void evaluate_lights(LightingInputs lighting, SamplerState shadow_sampler, RWStructuredBuffer<ShadowMapParameters> shadow_params, Texture2D[ShadowMapParameters.MAX_DIRECTIONAL_LIGHTS] shadow_atlases, inout half4 color) {
+    evaluate_directional_light(lighting.px,
+                               lighting.mat_state,
+                               lighting.camera,
+                               lighting.world_pos,
+                               lighting.view_pos,
+                               color,
+                               lighting.lighting,
+                               shadow_sampler,
+                               shadow_params,
+                               shadow_atlases);
+    evaluate_point_lights(lighting.px,
+                          lighting.mat_state,
+                          lighting.camera,
+                          lighting.world_pos,
+                          lighting.view_pos,
+                          lighting.proj_pos,
+                          color,
+                          lighting.lighting);
 }
 
 half fetch_metallic(const MaterialState mat_state, float2 uv, Texture2D[] textures) {
@@ -539,10 +556,30 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
     color.rgb += emissive.rgb;
 }
 
-float4 evaluate_material(const PixelData px, const MaterialState mat_state, const LightingState lighting, const Camera camera, const float3 world_pos, const float3 view_pos, const float4 proj_pos, Texture2D[] textures) {
+float4 evaluate_material(const PixelData px,
+                         const MaterialState mat_state,
+                         const LightingState lighting,
+                         const Camera camera,
+                         const float3 world_pos,
+                         const float3 view_pos,
+                         const float4 proj_pos,
+                         SamplerState shadow_sampler,
+                         RWStructuredBuffer<ShadowMapParameters> shadows,
+                         Texture2D[ShadowMapParameters.MAX_DIRECTIONAL_LIGHTS] dir_shadow_maps,
+                         Texture2D[] textures) {
     half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb) * px.ambient_occlusion, 1.0h);
 
-    evaluate_lights(px, mat_state, lighting, camera, world_pos, view_pos, proj_pos, color);
+    let light_state = LightingInputs(
+        px,
+        mat_state,
+        lighting,
+        camera,
+        world_pos,
+        view_pos,
+        proj_pos
+    );
+
+    evaluate_lights(light_state, shadow_sampler, shadows, dir_shadow_maps, color);
     apply_emissive(mat_state, color, px.uv, textures);
 
     return color;

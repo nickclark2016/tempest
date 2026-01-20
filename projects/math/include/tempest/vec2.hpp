@@ -183,6 +183,10 @@ namespace tempest::math
     {
         return v / norm(v);
     }
+
+    using float2 = vec2<float>;
+    using uint2 = vec2<uint32_t>;
+    using int2 = vec2<int32_t>;
 } // namespace tempest::math
 
 #endif // tempest_math_vec2_hpp__

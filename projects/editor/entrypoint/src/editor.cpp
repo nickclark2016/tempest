@@ -195,6 +195,11 @@ namespace tempest::editor
             const bool has_children = rel_comp && rel_comp->first_child != ecs::tombstone;
 
             auto draw_children = [&]() {
+                if (rel_comp == nullptr)
+                {
+                    return;
+                }
+
                 auto child = rel_comp->first_child;
                 while (child != ecs::tombstone)
                 {
@@ -258,15 +263,16 @@ namespace tempest::editor
 
         if (ImGui::Begin("Scene Hierarchy", &_entity_hierarchy_state.open))
         {
-            _ctx->get_registry().each(
-                [&](ecs::relationship_component<ecs::archetype_entity> rel_comp, ecs::self_component self) {
-                    const auto is_root = rel_comp.parent == ecs::tombstone;
-                    if (is_root)
-                    {
-                        render_entity_node(self.entity, _ctx->get_registry(), _entity_hierarchy_state.selected_entity,
-                                           render_entity_node);
-                    }
-                });
+            _ctx->get_registry().each([&](ecs::self_component self) {
+                const auto rel_comp =
+                    _ctx->get_registry().try_get<ecs::relationship_component<ecs::archetype_entity>>(self.entity);
+                const auto is_root = rel_comp ? rel_comp->parent == ecs::tombstone : true;
+                if (is_root)
+                {
+                    render_entity_node(self.entity, _ctx->get_registry(), _entity_hierarchy_state.selected_entity,
+                                       render_entity_node);
+                }
+            });
         }
 
         ImGui::End();

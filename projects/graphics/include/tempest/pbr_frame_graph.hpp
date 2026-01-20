@@ -48,8 +48,8 @@ namespace tempest::graphics
 
         struct
         {
-            uint32_t shadow_map_width;
-            uint32_t shadow_map_height;
+            uint32_t directional_shadow_map_width;
+            uint32_t directional_shadow_map_height;
             uint32_t max_shadow_casting_lights;
         } shadows;
     };
@@ -102,7 +102,7 @@ namespace tempest::graphics
 
         math::vec2<uint32_t> get_render_target_size() const noexcept
         {
-            return { _cfg.render_target_width, _cfg.render_target_height };
+            return {_cfg.render_target_width, _cfg.render_target_height};
         }
 
       private:
@@ -157,7 +157,6 @@ namespace tempest::graphics
 
         struct shadow_map_pass_outputs
         {
-            graph_resource_handle<rhi::rhi_handle_type::image> shadow_map_megatexture;
             graph_resource_handle<rhi::rhi_handle_type::buffer> shadow_data;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> directional_shadow_pipeline =
                 rhi::null_handle;
@@ -522,13 +521,6 @@ namespace tempest::graphics
             uint32_t light_count;
         };
 
-        struct shadow_map_parameter
-        {
-            math::mat4<float> light_proj_matrix;
-            math::vec4<float> shadow_map_region; // x, y, w, h (normalized)
-            float cascade_split_far;
-        };
-
         struct shadow_map_cascade_info
         {
             static constexpr size_t max_cascade_count = 6;
@@ -598,12 +590,74 @@ namespace tempest::graphics
             float bias;
         } _ssao_data = {};
 
+        struct csm_shadow_cascade
+        {
+            math::uint2 cascade_resolution;
+            math::uint2 atlas_offset;
+            math::fmat4 light_view_projection;
+
+            uint32_t cascade_index;
+            float split_depth;
+            float blend_start;
+            float texel_size_ws;
+        };
+
+        struct csm_shadow_data
+        {
+            uint32_t directional_light_atlas_index;
+            inplace_vector<csm_shadow_cascade, 4> cascades;
+            math::uint2 atlas_resolution;
+        };
+
+        csm_shadow_data _create_shadow_data(const ecs::transform_component& light_transform,
+                                            const shadow_map_component& shadow_comp, const camera_component& cam,
+                                            const ecs::transform_component& camera_transform,
+                                            math::uint2 atlas_resolution);
+
+        struct directional_shadow_map_atlas_slot
+        {
+            graph_resource_handle<rhi::rhi_handle_type::image> shadow_atlas;
+            ecs::archetype_entity light_entity = ecs::null;
+            bool in_use = false;
+            math::uint2 atlas_resolution;
+        };
+
+        struct directional_shadow_map_atlas_pool
+        {
+            inplace_vector<directional_shadow_map_atlas_slot, 4> atlas_slots;
+        };
+
         struct
         {
-            vector<shadow_map_parameter> shadow_map_parameters;
-            optional<shelf_pack_allocator> shelf_pack;
-            flat_unordered_map<ecs::archetype_entity, shadow_map_cascade_info> light_shadow_data;
-        } _shadow_data = {};
+            directional_shadow_map_atlas_pool atlas_pool;
+            flat_unordered_map<ecs::archetype_entity, csm_shadow_data> directional_shadows;
+        } _directional_shadows;
+
+        struct shadow_gpu_layout
+        {
+            struct csm_cascade_gpu_layout
+            {
+                math::float4x4 light_view_projection;
+                math::float2 atlas_offset;
+                math::float2 atlas_scale;
+                float split_depth;
+                float blend_start;
+                float texel_size_ws;
+                uint32_t cascade_index;
+            };
+
+            struct directional_shadow_gpu_layout
+            {
+                uint32_t atlas_index;
+                uint32_t cascade_count;
+                math::float2 inv_atlas_resolution;
+
+                array<csm_cascade_gpu_layout, 4> cascades;
+            };
+
+            alignas(16) array<directional_shadow_gpu_layout, 4> directional_lights;
+            alignas(16) uint32_t directional_light_count;
+        };
 
         struct
         {
@@ -614,11 +668,6 @@ namespace tempest::graphics
             ecs::basic_sparse_map<ecs::archetype_entity, light> dir_lights;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> skybox_texture = rhi::null_handle;
         } _scene_data = {};
-
-        static shadow_map_cascade_info _calculate_shadow_map_cascades(const shadow_map_component& shadows,
-                                                                      const ecs::transform_component& light_transform,
-                                                                      const camera_component& camera_data,
-                                                                      const math::mat4<float>& view_matrix);
     };
 } // namespace tempest::graphics
 

@@ -2,7 +2,6 @@
 #include <tempest/frame_graph.hpp>
 #include <tempest/input.hpp>
 #include <tempest/pbr_frame_graph.hpp>
-#include <tempest/pipelines/pbr_pipeline.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/vector.hpp>
@@ -151,8 +150,8 @@ int main()
                                                    },
                                                .shadows =
                                                    {
-                                                       .shadow_map_width = 16384,
-                                                       .shadow_map_height = 8192,
+                                                       .directional_shadow_map_width = 16384,
+                                                       .directional_shadow_map_height = 8192,
                                                        .max_shadow_casting_lights = 16,
                                                    },
                                            },
@@ -193,7 +192,6 @@ int main()
         .aspect_ratio = 16.0f / 9.0f,
         .vertical_fov = 100.0f,
         .near_plane = 0.01f,
-        .far_shadow_plane = 64.0f,
     };
     entity_registry.assign(camera, camera_data);
     auto camera_tx = tempest::ecs::transform_component::identity();
@@ -208,7 +206,7 @@ int main()
     };
 
     auto sun_shadows = tempest::graphics::shadow_map_component{
-        .size = {4096, 4096},
+        .shadow_distance = 128.0f,
         .cascade_count = 4,
     };
 

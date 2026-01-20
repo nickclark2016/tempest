@@ -4,7 +4,7 @@ import "../common/clusters";
 
 [shader("compute")]
 [numthreads(1, 1, 1)]
-void CSMain(uint3 work_group_id : SV_GroupID, [vk_push_constant] uniform ClusterGridCreateInfo create_info) {
+void CSMain(uint3 work_group_id : SV_GroupID, uniform ClusterGridCreateInfo create_info) {
     const float3 eye_position_view = float3(0.0);
     const uint tile_size_px = create_info.workgroup_count_tile_size_px.w;
     const uint tile_index = work_group_id.x + work_group_id.y * create_info.workgroup_count_tile_size_px.x + work_group_id.z * create_info.workgroup_count_tile_size_px.x * create_info.workgroup_count_tile_size_px.y;

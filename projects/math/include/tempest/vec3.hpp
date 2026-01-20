@@ -224,6 +224,22 @@ namespace tempest::math
     {
         return vec3(as_degrees(v.x), as_degrees(v.y), as_degrees(v.z));
     }
+
+    template <typename T>
+    inline constexpr vec3<T> min(const vec3<T>& lhs, const vec3<T>& rhs)
+    {
+        return vec3<T>(lhs.x < rhs.x ? lhs.x : rhs.x, lhs.y < rhs.y ? lhs.y : rhs.y, lhs.z < rhs.z ? lhs.z : rhs.z);
+    }
+
+    template <typename T>
+    inline constexpr vec3<T> max(const vec3<T>& lhs, const vec3<T>& rhs)
+    {
+        return vec3<T>(lhs.x > rhs.x ? lhs.x : rhs.x, lhs.y > rhs.y ? lhs.y : rhs.y, lhs.z > rhs.z ? lhs.z : rhs.z);
+    }
+
+    using float3 = vec3<float>;
+    using uint3 = vec3<uint32_t>;
+    using int3 = vec3<int32_t>;
 } // namespace tempest::math
 
 #endif // tempest_math_vec3_hpp__

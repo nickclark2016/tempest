@@ -7,18 +7,6 @@ enum LightType : uint
     SPOT
 };
 
-struct ShadowMapParameter
-{
-    float4x4 view_proj_matrix;
-    float4 shadow_map_region; // x, y, width, height - normalized
-    float cascade_split;
-    
-    // Padding
-    float _padding0;
-    float _padding1;
-    float _padding2;
-};
-
 struct PackedU6 {
     uint4 block_0;
     uint2 block_1;

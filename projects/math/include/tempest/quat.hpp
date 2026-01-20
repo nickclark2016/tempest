@@ -197,6 +197,8 @@ namespace tempest::math
         const T z = roll(q);
         return vec3(x, y, z);
     }
+
+    using fquat = quat<float>;
 } // namespace tempest::math
 
 #endif // tempest_math_quat_hpp__

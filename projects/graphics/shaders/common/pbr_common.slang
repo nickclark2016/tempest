@@ -7,6 +7,7 @@ import "lighting";
 import "material";
 import "mesh";
 import "scene";
+import "shadows";
 import "tonemap";
 import "vertex_pull";
 
@@ -32,6 +33,7 @@ struct PBROutput {
     float depth;
 };
 
+// Geometry and scene data
 [vk_binding(0, 0)] ConstantBuffer<SceneGlobals, Std430DataLayout> scene;
 [vk_binding(1, 0)] StructuredBuffer<uint> vertex_pull_buffer;
 [vk_binding(2, 0)] StructuredBuffer<Mesh> meshes;
@@ -41,11 +43,15 @@ struct PBROutput {
 [vk_binding(15, 0)] SamplerState linear_sampler;
 [vk_binding(16, 0)] Texture2D bindless_textures[];
 
+// Lights
 [vk_binding(0, 1)] StructuredBuffer<Light> lights;
-[vk_binding(1, 1)] StructuredBuffer<ShadowMapParameter> shadow_map_params;
-[vk_binding(2, 1)] Texture2D shadow_map_mt;
-[vk_binding(3, 1)] StructuredBuffer<LightGridRange> light_grid;
-[vk_binding(4, 1)] StructuredBuffer<uint> global_light_index_list;
+[vk_binding(1, 1)] StructuredBuffer<LightGridRange> light_grid;
+[vk_binding(2, 1)] StructuredBuffer<uint> global_light_index_list;
+
+// Shadows
+[vk_binding(3, 1)] RWStructuredBuffer<ShadowMapParameters> shadow_map_params;
+[vk_binding(4, 1)] SamplerState shadow_map_sampler;
+[vk_binding(5, 1)] Texture2D shadow_maps[ShadowMapParameters.MAX_DIRECTIONAL_LIGHTS];
 
 half2 calculate_velocity(half4 new_position, half4 previous_position) {
     previous_position /= previous_position.w;
@@ -96,9 +102,6 @@ PBROutput compute_fragment(VertexOutput input, Texture2D ao_texture) {
     lighting.sun = scene.sun;
     lighting.ambient_color_factor = scene.ambient_light.rgb;
     lighting.point_and_spot_lights = lights;
-    lighting.shadow_map_mt = shadow_map_mt;
-    lighting.shadow_map_params = shadow_map_params;
-    lighting.shadow_map_sampler = linear_sampler;
     lighting.num_point_and_spot_lights = scene.point_light_count;
     lighting.light_grid_counts = scene.tile_cluster_count_and_size.xyz;
     lighting.light_grid_depth_bounds = scene.light_cluster_depth_range;
@@ -124,7 +127,7 @@ PBROutput compute_fragment(VertexOutput input, Texture2D ao_texture) {
     half ao = (half) ao_texture.Sample(linear_sampler, screen_uv).r;
     pd.ambient_occlusion = pow(ao, (half) scene.ao_strength);
 
-    float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position, input.view_position, input.current_position, bindless_textures);
+    float4 color = evaluate_material(pd, material, lighting, scene.camera, input.world_position, input.view_position, input.current_position, shadow_map_sampler, shadow_map_params, shadow_maps, bindless_textures);
 
     PBROutput output;
 

@@ -31,7 +31,7 @@ namespace tempest
                           .render_target_height = 1080,
                           .hdr_color_format = tempest::rhi::image_format::rgba16_float,
                           .depth_format = tempest::rhi::image_format::d32_float,
-                          .tonemapped_color_format = tempest::rhi::image_format::bgra8_srgb,
+                          .tonemapped_color_format = tempest::rhi::image_format::rgba8_srgb,
                           .vertex_data_buffer_size = 16 * 1024 * 1024,
                           .max_mesh_count = 16 * 1024 * 1024,
                           .max_material_count = 4 * 1024 * 1024,
@@ -49,8 +49,8 @@ namespace tempest
                               },
                           .shadows =
                               {
-                                  .shadow_map_width = 16384,
-                                  .shadow_map_height = 8192,
+                                  .directional_shadow_map_width = 4096,
+                                  .directional_shadow_map_height = 4096,
                                   .max_shadow_casting_lights = 16,
                               },
                       })

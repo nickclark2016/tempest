@@ -47,7 +47,7 @@ struct PushConstants {
 
 [shader("compute")]
 [numthreads(16, 9, 4)]
-void CSMain(uint invocation_id : SV_GroupIndex, uint3 group_id : SV_GroupID, [vk_push_constant] uniform PushConstants pc) {
+void CSMain(uint invocation_id : SV_GroupIndex, uint3 group_id : SV_GroupID, uniform PushConstants pc) {
     uint thread_count = pc.create_info.workgroup_count_tile_size_px.x * pc.create_info.workgroup_count_tile_size_px.y * pc.create_info.workgroup_count_tile_size_px.z;
     uint light_count = pc.light_count; // TODO: Get this from the light buffer, dynamic range binding in the render graph
     uint num_batches = (light_count + thread_count - 1) / thread_count;

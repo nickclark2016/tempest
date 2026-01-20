@@ -6,7 +6,8 @@
 
 namespace tempest::editor
 {
-    static unique_ptr<editor> setup_render_graph(engine_context& ctx, rhi::window_surface* win_surface, ui::ui_context* ui_ctx)
+    static unique_ptr<editor> setup_render_graph(engine_context& ctx, rhi::window_surface* win_surface,
+                                                 ui::ui_context* ui_ctx)
     {
         return make_unique<editor>(ctx, win_surface, ui_ctx);
     }
@@ -46,7 +47,6 @@ namespace tempest::editor
                 .aspect_ratio = 16.0f / 9.0f,
                 .vertical_fov = 100.0f,
                 .near_plane = 0.01f,
-                .far_shadow_plane = 128.0f,
             };
 
             ctx.get_registry().assign(camera, camera_data);
@@ -63,7 +63,9 @@ namespace tempest::editor
             };
 
             auto sun_shadows = tempest::graphics::shadow_map_component{
-                .size = {4096, 4096},
+                .shadow_distance = 2048.0f,
+                .split_lambda = 0.9f,
+                .blend_fraction = 0.1f,
                 .cascade_count = 4,
             };
 
