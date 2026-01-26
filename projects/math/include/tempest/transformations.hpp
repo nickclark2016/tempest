@@ -336,7 +336,7 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr mat4<T> ortho(const T left, const T right, const T top, const T bottom, const T near, const T far)
+    inline constexpr mat4<T> ortho(const T left, const T right, const T bottom, const T top, const T near, const T far)
     {
         const auto sx = T(2) / (right - left);
         const auto sy = T(2) / (top - bottom);

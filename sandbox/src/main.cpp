@@ -206,7 +206,9 @@ int main()
     };
 
     auto sun_shadows = tempest::graphics::shadow_map_component{
-        .shadow_distance = 128.0f,
+        .shadow_distance = 2048.0f,
+        .split_lambda = 0.9f,
+        .blend_fraction = 0.1f,
         .cascade_count = 4,
     };
 

@@ -271,6 +271,7 @@ half sample_directional_shadow(
     RWStructuredBuffer<ShadowMapParameters> shadows,
     float3 world_pos,
     float view_depth,
+    float n_dot_l,
     SamplerState shadow_sampler,
     Texture2D[ShadowMapParameters.MAX_DIRECTIONAL_LIGHTS] atlases,
     uint shadow_index = 0
@@ -294,23 +295,25 @@ half sample_directional_shadow(
 
     let cascade = dir_shadows.cascades[cascade_idx];
 
-    float4 light_clip = mul(cascade.light_view_projection, float4(world_pos, 1.0));
-    float3 ndc = light_clip.xyz / light_clip.w;
+    let light_clip = mul(cascade.light_view_projection, float4(world_pos, 1.0));
+    let ndc = light_clip.xyz / light_clip.w;
     
     // Outside shadow frustum
     if (ndc.x < -1 || ndc.x > 1 ||
         ndc.y < -1 || ndc.y > 1 ||
-        ndc.z <  0 || ndc.z > 1)
+        ndc.z <  0 || ndc.z > 1) {
         return 1.0h;
+    }
 
-    float2 uv = ndc.xy * 0.5 + 0.5;
-    uv = cascade.atlas_offset + uv * cascade.atlas_scale;
+    let uv = cascade.atlas_offset + (ndc.xy * 0.5 + 0.5) * cascade.atlas_scale;
+    let shadow_depth = atlases[dir_shadows.atlas_index].Sample(shadow_sampler, uv).r;
+
+    let texel_bias = cascade.texel_size_ws * 0.025;
+    let slope_scale = cascade.texel_size_ws * 0.5;
+    let slope_bias = slope_scale * (1.0 - n_dot_l);
+    let bias = max(texel_bias + slope_bias, 0.0001);
     
-    float shadow_depth = atlases[dir_shadows.atlas_index].Sample(shadow_sampler, uv).r;
-
-    // Standard depth comparison with conservative bias
-    const float bias = max(cascade.texel_size_ws * 0.05, 0.0001);
-    return (ndc.z >= shadow_depth - bias) ? 1.0h : 0.0h;
+    return select(ndc.z >= shadow_depth - bias, 1.0h, 0.0h);
 }
 
 void evaluate_directional_light(const PixelData px,
@@ -338,6 +341,7 @@ void evaluate_directional_light(const PixelData px,
             shadow_params,
             world_pos,
             -view_pos.z,
+            n_dot_l,
             shadow_sampler,
             shadow_map_atlases
         );

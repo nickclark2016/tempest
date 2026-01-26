@@ -1771,6 +1771,7 @@ namespace tempest::rhi::vk
             .view_create_info = view_ci,
             .name = desc.name,
             .image_parent = null_handle,
+            .mip_chain_views = {},
         };
 
         img.mip_chain_views.fill(null_handle);
@@ -3452,6 +3453,7 @@ namespace tempest::rhi::vk
                     },
                 .view_create_info = {},
                 .name = "Swapchain Image",
+                .mip_chain_views = {},
             }));
         }
 
