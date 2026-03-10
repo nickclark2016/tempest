@@ -12,7 +12,7 @@ namespace tempest::assets
     {
       public:
         gltf_importer(core::mesh_registry* mesh_reg, core::texture_registry* texture_reg, core::material_registry* material_reg) noexcept;
-        ecs::archetype_entity import(asset_database& db, span<const byte> bytes, ecs::archetype_registry& registry, optional<string_view> path) override;
+        auto import(asset_database& asset_db, span<const byte> bytes, ecs::archetype_registry& registry, optional<string_view> path) -> ecs::archetype_entity override;
 
       private:
         core::mesh_registry* _mesh_reg;

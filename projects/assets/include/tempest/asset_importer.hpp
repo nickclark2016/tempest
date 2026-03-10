@@ -22,9 +22,9 @@ namespace tempest::assets
         asset_importer& operator=(const asset_importer&) = delete;
         asset_importer& operator=(asset_importer&&) noexcept = delete;
 
-        [[nodiscard]] virtual ecs::archetype_entity import(asset_database& db, string_view path,
+        [[nodiscard]] virtual ecs::archetype_entity import(asset_database& asset_db, string_view path,
                                                            ecs::archetype_registry& registry);
-        [[nodiscard]] virtual ecs::archetype_entity import(asset_database& db, span<const byte> data,
+        [[nodiscard]] virtual ecs::archetype_entity import(asset_database& asset_db, span<const byte> data,
                                                            ecs::archetype_registry& registry,
                                                            optional<string_view> asset_path) = 0;
     };

@@ -20,6 +20,9 @@ namespace tempest
     /// @param t Reference to the object to forward.
     /// @return Forwarded reference.
     template <typename T>
+#if defined(_MSC_VER) && !defined(__clang__)
+    [[msvc::intrinsic]]
+#endif
     inline constexpr T&& forward(remove_reference_t<T>& t) noexcept
     {
         return static_cast<T&&>(t);
@@ -30,6 +33,9 @@ namespace tempest
     /// @param t Reference to the object to forward.
     /// @return Forwarded reference.
     template <typename T>
+#if defined(_MSC_VER) && !defined(__clang__)
+    [[msvc::intrinsic]]
+#endif
     inline constexpr T&& forward(remove_reference_t<T>&& t) noexcept
     {
         static_assert(!is_lvalue_reference<T>::value, "Can't forward an rvalue as an lvalue.");

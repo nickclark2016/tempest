@@ -11,6 +11,9 @@ namespace tempest
     /// @param t Object to move.
     /// @return Xvalue expression of the object.
     template <typename T>
+#if defined(_MSC_VER) && !defined(__clang__)
+    [[msvc::intrinsic]]
+#endif
     inline constexpr remove_reference_t<T>&& move(T&& t) noexcept
     {
         return static_cast<remove_reference_t<T>&&>(t);

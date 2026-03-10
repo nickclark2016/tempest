@@ -7,9 +7,10 @@ scoped = require 'build/premake-scoped'
 scoped.workspace('Tempest', function()
     configurations { 'Debug', 'Release', 'RelWithDebugInfo' }
     platforms { 'x64' }
+    defaultplatform 'x64'
 
     scoped.filter({
-        'action:gmake*'
+        'action:not vs*'
     }, function()
          toolset 'clang'
     end)
@@ -39,7 +40,7 @@ scoped.workspace('Tempest', function()
         end)
 
         scoped.filter({
-            'action:gmake*'
+            'action:not vs*'
         }, function()
             symbols 'On'
         end)
@@ -69,7 +70,7 @@ scoped.workspace('Tempest', function()
         end)
         
         scoped.filter({
-            'action:gmake*',
+            'action:not vs*',
         }, function()
             symbols 'On'
         end)
@@ -111,8 +112,8 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'toolset:clang',
         'system:windows',
-        'action:gmake* or ninja',
-        'configurations:debug',
+        'action:not vs*',
+        'configurations:Debug',
         'kind:ConsoleApp or SharedLib or WindowedApp'
     }, function()
         linkoptions {
@@ -128,8 +129,8 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'toolset:clang',
         'system:windows',
-        'action:gmake*',
-        'configurations:relwithdebuginfo',
+        'action:not vs*',
+        'configurations:RelWithDebugInfo or Release',
         'kind:ConsoleApp or SharedLib or WindowedApp'
     }, function()
         linkoptions {
@@ -143,23 +144,6 @@ scoped.workspace('Tempest', function()
     end)
 
     scoped.filter({
-        'toolset:clang',
-        'system:windows',
-        'action:gmake*',
-        'configurations:release',
-        'kind:ConsoleApp or SharedLib or WindowedApp'
-    }, function()
-        linkoptions {
-            '-dll',
-            '-Xlinker /NODEFAULTLIB:libcmt'
-        }
-
-        links {
-            "libcmt"
-        }
-    end)
-
-    scoped.filter({
         'configurations:Release'
     }, function()
         omitframepointer 'On'
@@ -167,7 +151,7 @@ scoped.workspace('Tempest', function()
 
     scoped.filter({
         'toolset:clang',
-        'action:gmake*'
+        'action:not vs*'
     }, function()
         disablewarnings {
             'missing-designated-field-initializers',
@@ -178,6 +162,28 @@ scoped.workspace('Tempest', function()
         'options:use-asan'
     }, function()
         sanitize { 'Address' }
+    end)
+
+    scoped.filter({
+        'toolset:msc*',
+        'configurations:RelWithDebugInfo',
+    }, function()
+        dynamicdebugging 'On'
+    end)
+
+    scoped.filter({
+        'toolset:clang*',
+        'system:windows',
+        'action:not vs*',
+        'configurations:Debug',
+    }, function()
+        buildoptions {
+            '-gcodeview'
+        }
+
+        linkoptions {
+            '-Wl,/DEBUG'
+        }
     end)
 
     startproject 'editor-entrypoint'

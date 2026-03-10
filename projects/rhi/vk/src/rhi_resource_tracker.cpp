@@ -408,6 +408,11 @@ namespace tempest::rhi::vk
         {
             // Check is any mip views are tracked
             const auto img = _device->get_image(image);
+            if (!img)
+            {
+                return false;
+            }
+
             for (const auto& mip_view : img->mip_chain_views)
             {
                 if (mip_view != null_handle)
@@ -492,8 +497,7 @@ namespace tempest::rhi::vk
         {
             if (mip_view != null_handle)
             {
-                const auto mip_key =
-                    make_resource_key(rhi::rhi_handle_type::image, mip_view.generation, mip_view.id);
+                const auto mip_key = make_resource_key(rhi::rhi_handle_type::image, mip_view.generation, mip_view.id);
                 auto mip_it = _tracked_resources.find(mip_key);
                 if (mip_it != _tracked_resources.end())
                 {

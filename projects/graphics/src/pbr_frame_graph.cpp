@@ -3932,7 +3932,8 @@ namespace tempest::graphics
             .screen_bounds =
                 {
                     static_cast<float>(self->_cfg.render_target_width),
-                    static_cast<float>(self->_cfg.render_target_height), 0.1f,
+                    static_cast<float>(self->_cfg.render_target_height),
+                    0.1f,
                     1000.0f, // TODO: Parameterize near and far planes
                 },
             .workgroup_count_tile_size_px =
@@ -3974,7 +3975,8 @@ namespace tempest::graphics
             .screen_bounds =
                 {
                     static_cast<float>(self->_cfg.render_target_width),
-                    static_cast<float>(self->_cfg.render_target_height), 0.0f,
+                    static_cast<float>(self->_cfg.render_target_height),
+                    0.0f,
                     1000.0f, // TODO: Parameterize near and far planes
                 },
             .workgroup_count_tile_size_px =

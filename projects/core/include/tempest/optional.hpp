@@ -170,11 +170,11 @@ namespace tempest
         constexpr auto transform(Fn&& fn) const&& -> optional<invoke_result_t<Fn, const T&&>>;
 
         template <typename Fn>
-            requires invocable<Fn, T&> && is_same_v<optional<remove_cvref_t<invoke_result_t<Fn>>>, optional<T>>
+            requires invocable<Fn> && is_same_v<remove_cvref_t<invoke_result_t<Fn>>, optional<T>>
         constexpr optional or_else(Fn&& f) const&;
 
         template <typename Fn>
-            requires invocable<Fn, T&&> && is_same_v<optional<remove_cvref_t<invoke_result_t<Fn>>>, optional<T>>
+            requires invocable<Fn> && is_same_v<remove_cvref_t<invoke_result_t<Fn>>, optional<T>>
         constexpr optional or_else(Fn&& f) &&;
 
       private:
@@ -803,32 +803,28 @@ namespace tempest
 
     template <typename T>
     template <typename Fn>
-        requires invocable<Fn, T&> && is_same_v<optional<remove_cvref_t<invoke_result_t<Fn>>>, optional<T>>
+        requires invocable<Fn> && is_same_v<remove_cvref_t<invoke_result_t<Fn>>, optional<T>>
     inline constexpr optional<T> optional<T>::or_else(Fn&& f) const&
     {
         if (*this)
         {
             return *this;
         }
-        else
-        {
-            return tempest::invoke(tempest::forward<Fn>(f), **this);
-        }
+
+        return tempest::invoke(tempest::forward<Fn>(f));
     }
 
     template <typename T>
     template <typename Fn>
-        requires invocable<Fn, T&&> && is_same_v<optional<remove_cvref_t<invoke_result_t<Fn>>>, optional<T>>
+        requires invocable<Fn> && is_same_v<remove_cvref_t<invoke_result_t<Fn>>, optional<T>>
     inline constexpr optional<T> optional<T>::or_else(Fn&& f) &&
     {
         if (*this)
         {
             return tempest::move(*this);
         }
-        else
-        {
-            return tempest::invoke(tempest::forward<Fn>(f), tempest::move(**this));
-        }
+
+        return tempest::invoke(tempest::forward<Fn>(f));
     }
 
     template <typename T>
