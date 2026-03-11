@@ -33,9 +33,9 @@ namespace tempest::assets
                        core::material_registry* material_reg) noexcept;
 
         void register_importer(unique_ptr<asset_importer> importer, string_view extension);
-        [[nodiscard]] ecs::archetype_entity import(string_view path, ecs::archetype_registry& registry);
-        [[nodiscard]] guid register_asset_metadata(asset_metadata meta);
-        [[nodiscard]] optional<const asset_metadata&> get_asset_metadata(guid id) const;
+        [[nodiscard]] auto import(string_view path, ecs::archetype_registry& registry) -> ecs::archetype_entity;
+        [[nodiscard]] auto register_asset_metadata(asset_metadata meta) -> guid;
+        [[nodiscard]] auto get_asset_metadata(guid asset_id) const -> optional<const asset_metadata&>;
 
       private:
         flat_unordered_map<string, unique_ptr<asset_importer>> _importers;

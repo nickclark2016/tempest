@@ -1,8 +1,9 @@
 #ifndef tempest_core_flat_unordered_map_hpp
 #define tempest_core_flat_unordered_map_hpp
 
-#include <tempest/assert.hpp>
+#include <cstdarg>
 #include <tempest/array.hpp>
+#include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/hash.hpp>
@@ -173,6 +174,8 @@ namespace tempest
         iterator find(const K& key) noexcept;
         const_iterator find(const K& key) const noexcept;
 
+        [[nodiscard]] bool contains(const K& key) const noexcept;
+
         detail::flat_unordered_map_insert_result<iterator> insert(const value_type& value);
         detail::flat_unordered_map_insert_result<iterator> insert(value_type&& value);
 
@@ -234,11 +237,11 @@ namespace tempest
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::flat_unordered_map(const flat_unordered_map& other)
-        : _metadata_alloc{metadata_alloc_traits::select_on_container_copy_construction(other._metadata_alloc)},
+        : _page_count(other._page_count),
+          _metadata_alloc{metadata_alloc_traits::select_on_container_copy_construction(other._metadata_alloc)},
           _alloc{alloc_traits::select_on_container_copy_construction(other._alloc)}, _hash{other._hash},
           _metadata_strategy{other._metadata_strategy}
     {
-        _page_count = other._page_count;
         _metadata_pages = _request_empty_metadata_pages(_page_count);
         _data_pages = _request_empty_data_pages(_page_count);
 
@@ -260,14 +263,11 @@ namespace tempest
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::flat_unordered_map(flat_unordered_map&& other) noexcept
-        : _metadata_alloc{tempest::move(other._metadata_alloc)}, _alloc{tempest::move(other._alloc)},
-          _hash{tempest::move(other._hash)}, _metadata_strategy{tempest::move(other._metadata_strategy)}
+        : _metadata_pages(other._metadata_pages), _data_pages(other._data_pages), _size(other._size),
+          _page_count(other._page_count), _metadata_alloc{tempest::move(other._metadata_alloc)},
+          _alloc{tempest::move(other._alloc)}, _hash{tempest::move(other._hash)},
+          _metadata_strategy{tempest::move(other._metadata_strategy)}
     {
-        _metadata_pages = other._metadata_pages;
-        _data_pages = other._data_pages;
-        _size = other._size;
-        _page_count = other._page_count;
-
         other._metadata_pages = nullptr;
         other._data_pages = nullptr;
         other._size = 0;
@@ -468,6 +468,12 @@ namespace tempest
         }
 
         return cend();
+    }
+
+    template <typename K, typename V, typename Hash, typename KeyEquals, typename Allocator>
+    inline bool flat_unordered_map<K, V, Hash, KeyEquals, Allocator>::contains(const K& key) const noexcept
+    {
+        return find(key) != cend();
     }
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>

@@ -17,7 +17,6 @@
 #include <filesystem>
 
 #include <cmath>
-#include <math.h>
 #include <simdjson.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -31,7 +30,7 @@ namespace tempest::assets
 
     namespace
     {
-        auto log = logger::logger_factory::create({
+        auto log = logger::logger_factory::create({ // NOLINT
             .prefix = "tempest::gltf_importer",
         });
 

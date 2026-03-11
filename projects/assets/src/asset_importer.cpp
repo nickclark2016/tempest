@@ -4,9 +4,9 @@
 
 namespace tempest::assets
 {
-    ecs::archetype_entity asset_importer::import(asset_database& db, string_view path, ecs::archetype_registry& registry)
+    auto asset_importer::import(asset_database& asset_db, string_view path, ecs::archetype_registry& registry) -> ecs::archetype_entity
     {
         auto bytes = core::read_bytes(path);
-        return import(db, bytes, registry, some(path));
+        return import(asset_db, bytes, registry, some(path));
     }
 }

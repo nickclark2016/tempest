@@ -18,9 +18,9 @@ namespace tempest::assets
         _importers[string(extension)] = move(importer);
     }
 
-    ecs::archetype_entity asset_database::import(string_view path, ecs::archetype_registry& registry)
+    auto asset_database::import(string_view path, ecs::archetype_registry& registry) -> ecs::archetype_entity
     {
-        auto extension_it = search_last_of(path, '.');
+        const auto* extension_it = search_last_of(path, '.');
         if (extension_it == path.end())
         {
             return ecs::tombstone;
@@ -29,7 +29,7 @@ namespace tempest::assets
         auto importer_it = _importers.find(string(extension_it, path.end()));
         if (importer_it != _importers.end())
         {
-            auto ent = importer_it->second->import(*this, path, registry);
+            const auto ent = importer_it->second->import(*this, path, registry);
             if (!registry.has<prefab_tag_t>(ent))
             {
                 registry.assign(ent, prefab_tag);
@@ -40,23 +40,23 @@ namespace tempest::assets
         return ecs::tombstone;
     }
 
-    guid asset_database::register_asset_metadata(asset_metadata meta)
+    auto asset_database::register_asset_metadata(asset_metadata meta) -> guid
     {
-        guid g;
+        auto unique_id = guid{};
         do
         {
-            g = guid::generate_random_guid();
-        } while (_metadata.find(g) != _metadata.end());
+            unique_id = guid::generate_random_guid();
+        } while (_metadata.contains(unique_id));
 
-        _metadata.insert({move(g), move(meta)});
-        return g;
+        _metadata.insert({move(unique_id), move(meta)});
+        return unique_id;
     }
 
-    optional<const asset_database::asset_metadata&> asset_database::get_asset_metadata(guid id) const
+    auto asset_database::get_asset_metadata(guid asset_id) const -> optional<const asset_database::asset_metadata&>
     {
-        if (auto it = _metadata.find(id); it != _metadata.end())
+        if (auto iter = _metadata.find(asset_id); iter != _metadata.end())
         {
-            return it->second;
+            return iter->second;
         }
         return none();
     }
