@@ -80,6 +80,11 @@ project 'glfw'
 
     filter {}
 
+    usage "PUBLIC"
+        scoped.filter({ 'system:linux' }, function()
+            links { 'X11' }
+        end)
+
     usage "INTERFACE"
         externalincludedirs {
             '%{root}/dependencies/glfw/include'
@@ -92,7 +97,3 @@ project 'glfw'
         links {
             'glfw'
         }
-
-        scoped.filter({ 'system:linux' }, function()
-            links { 'X11' }
-        end)
