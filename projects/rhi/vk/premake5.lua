@@ -53,7 +53,10 @@ scoped.group('RHI', function()
 
         scoped.usage('INTERFACE', function()
             links {
-                'rhi-vk'
+                'glfw',
+                'rhi-vk',
+                'vk-bootstrap',
+                'vma'
             }
 
             dependson {

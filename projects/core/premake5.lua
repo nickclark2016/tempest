@@ -73,6 +73,8 @@ scoped.project('core', function()
 
         links {
             'core',
+            'glfw',
+            'tlsf',
         }
 
         scoped.filter({

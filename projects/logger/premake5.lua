@@ -44,6 +44,7 @@ scoped.project('logger', function()
 
         links {
             'logger',
+            'spdlog',
         }
     end)
 end)

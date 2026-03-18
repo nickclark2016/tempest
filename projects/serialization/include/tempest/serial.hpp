@@ -3,6 +3,7 @@
 
 #include <tempest/array.hpp>
 #include <tempest/bit.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/int.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/span.hpp>
@@ -152,6 +153,38 @@ namespace tempest::serialization
             auto chars = archive.read(size * sizeof(CharT));
             tempest::memcpy(str.data(), chars.data(), size * sizeof(CharT));
             return str;
+        }
+    };
+
+    template <typename Key, typename Value, typename Hash, typename KeyEqual, typename Allocator>
+    struct serializer<binary_archive, flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>>
+    {
+        static auto serialize(binary_archive& archive, const flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>& map) -> void
+        {
+            const auto size = static_cast<uint64_t>(map.size());
+            
+            serializer<binary_archive, uint64_t>::serialize(archive, size);
+            
+            for (const auto& [key, value] : map)
+            {
+                serializer<binary_archive, Key>::serialize(archive, key);
+                serializer<binary_archive, Value>::serialize(archive, value);
+            }
+        }
+
+        static auto deserialize(binary_archive& archive) -> flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>
+        {
+            const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
+            auto map = flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>{};
+            
+            for (uint64_t i = 0; i < size; ++i)
+            {
+                auto key = serializer<binary_archive, Key>::deserialize(archive);
+                auto value = serializer<binary_archive, Value>::deserialize(archive);
+                map.insert({tempest::move(key), tempest::move(value)});
+            }
+
+            return map;
         }
     };
 

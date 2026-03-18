@@ -174,7 +174,7 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'toolset:clang*',
         'system:windows',
-        'action:not vs*',
+        'action:ninja',
         'configurations:Debug',
     }, function()
         buildoptions {

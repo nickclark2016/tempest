@@ -193,7 +193,6 @@ TEST(binary_archive, write_vector_of_ints)
     value.push_back(2);
     value.push_back(3);
     value.push_back(4);
-    value.push_back(5);
      
     archiver.serialize(value);
 
@@ -215,4 +214,52 @@ TEST(binary_archive, write_vector_of_strings)
 
     const auto deserialized_value = archiver.deserialize<tempest::vector<tempest::string>>();
     EXPECT_EQ(value, deserialized_value);
+}
+
+TEST(binary_archive, write_flat_unordered_map_trivial_key_value)
+{
+    auto archive = tempest::serialization::binary_archive{};
+    auto archiver = tempest::serialization::archiver{archive};
+
+    auto value = tempest::flat_unordered_map<int, int>{};
+
+    // NOLINTBEGIN
+    value.insert({1, 10});
+    value.insert({2, 20});
+    value.insert({3, 30});
+    // NOLINTEND
+
+    archiver.serialize(value);
+
+    const auto deserialized_value = archiver.deserialize<tempest::flat_unordered_map<int, int>>();
+    EXPECT_EQ(value.size(), deserialized_value.size());
+    for (const auto& [key, val] : value)
+    {
+        const auto iter = deserialized_value.find(key);
+        EXPECT_NE(iter, deserialized_value.end());
+        EXPECT_EQ(val, iter->second);
+    }
+}
+
+TEST(binary_archive, write_flat_unordered_map_string_key_value)
+{
+    auto archive = tempest::serialization::binary_archive{};
+    auto archiver = tempest::serialization::archiver{archive};
+
+    auto value = tempest::flat_unordered_map<tempest::string, tempest::string>{};
+
+    value.insert({"Hello", "World"});
+    value.insert({"Foo", "Bar"});
+    value.insert({"Key", "Value"});
+
+    archiver.serialize(value);
+
+    const auto deserialized_value = archiver.deserialize<tempest::flat_unordered_map<tempest::string, tempest::string>>();
+    EXPECT_EQ(value.size(), deserialized_value.size());
+    for (const auto& [key, val] : value)
+    {
+        const auto iter = deserialized_value.find(key);
+        EXPECT_NE(iter, deserialized_value.end());
+        EXPECT_EQ(val, iter->second);
+    }
 }

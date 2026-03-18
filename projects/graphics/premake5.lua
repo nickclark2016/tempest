@@ -45,6 +45,8 @@ scoped.project('graphics', function()
 
         links {
             'graphics',
+            'vk-bootstrap',
+            'vma',
         }
     end)
 

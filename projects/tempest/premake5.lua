@@ -45,17 +45,7 @@ scoped.project('tempest', function()
         }
 
         links {
-            'tempest',
-            -- List out the third party dependencies
-            'glfw',
-            'imgui',
-            'miniz',
-            'simdjson',
-            'spdlog',
-            'tinyexr',
-            'tlsf',
-            'vk-bootstrap',
-            'vma'
+            'tempest'
         }
 
         if _OPTIONS['enable-aftermath'] then
