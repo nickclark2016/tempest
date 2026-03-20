@@ -43,7 +43,6 @@ scoped.project('assets', function()
         links {
             'assets',
             'miniz',
-            'stb',
             'simdjson',
             'tinyexr',
         }
