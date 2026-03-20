@@ -28,6 +28,7 @@ scoped.project('assets', function()
             'ecs',
             'logger',
             'math',
+            'serialization',
         }
     end)
 
@@ -58,4 +59,28 @@ scoped.project('assets', function()
 
     externalwarnings 'Off'
     warnings 'Extra'        
+end)
+
+scoped.group('Tests', function()
+    scoped.project('assets-tests', function()
+        kind 'ConsoleApp'
+        language 'C++'
+        cppdialect 'C++20'
+
+        targetdir '%{binaries}'
+        objdir '%{intermediates}'
+
+        files {
+            'tests/**.cpp',
+        }
+
+        uses {
+            'googletest',
+            'assets',
+            'serialization',
+        }
+
+        externalwarnings 'Off'
+        warnings 'Extra'
+    end)
 end)

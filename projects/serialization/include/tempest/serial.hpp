@@ -32,6 +32,7 @@ namespace tempest::serialization
       public:
         auto write(span<const byte> data) -> void;
         [[nodiscard]] auto read(size_t count) -> span<const byte>;
+        [[nodiscard]] auto written_size() const noexcept -> size_t;
 
       private:
         vector<byte> _buffer;
@@ -75,7 +76,7 @@ namespace tempest::serialization
             serializer<binary_archive, uint64_t>::serialize(archive, size);
             if constexpr (is_trivially_copyable_v<T>)
             {
-                const auto byte_span = as_bytes(span{vec.data(), vec.size() * sizeof(T)});
+                const auto byte_span = as_bytes(span{vec.data(), vec.size()});
                 archive.write(byte_span);
             }
             else
@@ -142,7 +143,7 @@ namespace tempest::serialization
         {
             const auto size = static_cast<uint64_t>(str.size());
             serializer<binary_archive, uint64_t>::serialize(archive, size);
-            archive.write(as_bytes(span{str.data(), str.size() * sizeof(CharT)}));
+            archive.write(as_bytes(span{str.data(), str.size()}));
         }
 
         static auto deserialize(binary_archive& archive) -> basic_string<CharT, Traits, Allocator>

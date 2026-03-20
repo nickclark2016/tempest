@@ -4,6 +4,9 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
+#include <tempest/asset_serializers.hpp>
+#include <tempest/asset_type_id.hpp>
+#include <tempest/serial.hpp>
 #include <tempest/files.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/material.hpp>
@@ -394,7 +397,8 @@ namespace tempest::assets
         }
 
         auto process_texture(const image_payload& img, optional<simdjson::dom::element> sampler,
-                             core::texture_registry* tex_reg, const flat_unordered_map<uint32_t, vector<byte>>& buffers)
+                             core::texture_registry* tex_reg, const flat_unordered_map<uint32_t, vector<byte>>& buffers,
+                             asset_database& asset_db, string_view source_path)
             -> guid
         {
             auto sampler_state = core::sampler_state{};
@@ -488,7 +492,13 @@ namespace tempest::assets
                 tex.name = img.name;
             }
 
-            return tex_reg->register_texture(tempest::move(tex));
+            serialization::binary_archive blob_ar;
+            serialization::serializer<serialization::binary_archive, core::texture>::serialize(blob_ar, tex);
+            auto tex_id = tex_reg->register_texture(tempest::move(tex));
+            auto tex_blob = blob_ar.read(blob_ar.written_size());
+            asset_db.register_asset_with_guid(tex_id, asset_type_id::of<core::texture>(), source_path);
+            asset_db.store_blob(tex_id, tex_blob);
+            return tex_id;
         }
 
         struct mesh_process_result
@@ -706,7 +716,8 @@ namespace tempest::assets
         }
 
         auto process_material(const simdjson::dom::element& mat,
-                              const flat_unordered_map<uint64_t, guid>& texture_guids, core::material_registry* mat_reg)
+                              const flat_unordered_map<uint64_t, guid>& texture_guids, core::material_registry* mat_reg,
+                              asset_database& asset_db, string_view source_path)
             -> guid
         {
             auto material = core::material{};
@@ -720,7 +731,13 @@ namespace tempest::assets
             process_base_material_model(mat, material, texture_guids);
             process_material_extensions(mat, texture_guids, material);
 
-            return mat_reg->register_material(tempest::move(material));
+            serialization::binary_archive blob_ar;
+            serialization::serializer<serialization::binary_archive, core::material>::serialize(blob_ar, material);
+            auto mat_id = mat_reg->register_material(tempest::move(material));
+            auto mat_blob = blob_ar.read(blob_ar.written_size());
+            asset_db.register_asset_with_guid(mat_id, asset_type_id::of<core::material>(), source_path);
+            asset_db.store_blob(mat_id, mat_blob);
+            return mat_id;
         }
 
         auto process_mesh_positions(const vector<byte>& buffer, const accessor_payload& accessor,
@@ -936,7 +953,8 @@ namespace tempest::assets
 
         auto process_mesh(const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents,
                           const simdjson::dom::element& prim, span<buffer_view_payload> views,
-                          span<accessor_payload> accessors, core::mesh_registry* mesh_reg) -> mesh_process_result
+                          span<accessor_payload> accessors, core::mesh_registry* mesh_reg,
+                          asset_database& asset_db, string_view source_path) -> mesh_process_result
         {
             mesh_process_result result;
 
@@ -1022,7 +1040,12 @@ namespace tempest::assets
                 mesh.compute_tangents();
             }
 
+            serialization::binary_archive blob_ar;
+            serialization::serializer<serialization::binary_archive, core::mesh>::serialize(blob_ar, mesh);
             result.mesh_id = mesh_reg->register_mesh(move(mesh));
+            auto mesh_blob = blob_ar.read(blob_ar.written_size());
+            asset_db.register_asset_with_guid(result.mesh_id, asset_type_id::of<core::mesh>(), source_path);
+            asset_db.store_blob(result.mesh_id, mesh_blob);
 
             if (auto material = prim["material"].get_int64(); material.error() == simdjson::error_code::SUCCESS)
             {
@@ -1098,7 +1121,8 @@ namespace tempest::assets
 
     auto process_textures(const sjd::object& doc, const flat_unordered_map<uint32_t, image_payload>& image_contents,
                           const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents,
-                          core::texture_registry* texture_registry) -> flat_unordered_map<uint64_t, guid>
+                          core::texture_registry* texture_registry,
+                          asset_database& asset_db, string_view source_path) -> flat_unordered_map<uint64_t, guid>
     {
         auto texture_guids = flat_unordered_map<uint64_t, guid>{};
         sjd::array textures;
@@ -1119,7 +1143,8 @@ namespace tempest::assets
                 }
 
                 auto guid =
-                    process_texture(image_contents.find(image_id)->second, sampler, texture_registry, buffer_contents);
+                    process_texture(image_contents.find(image_id)->second, sampler, texture_registry, buffer_contents,
+                                    asset_db, source_path);
                 texture_guids.insert({texture_id, guid});
                 ++texture_id;
             }
@@ -1129,7 +1154,8 @@ namespace tempest::assets
     }
 
     auto process_materials(const sjd::object& doc, const flat_unordered_map<uint64_t, guid>& texture_guids,
-                           core::material_registry* material_registry) -> flat_unordered_map<uint32_t, guid>
+                           core::material_registry* material_registry,
+                           asset_database& asset_db, string_view source_path) -> flat_unordered_map<uint32_t, guid>
     {
         auto material_guids = flat_unordered_map<uint32_t, guid>{};
         sjd::array materials;
@@ -1138,7 +1164,7 @@ namespace tempest::assets
             auto material_id = 0U;
             for (const auto& mat : materials)
             {
-                auto guid = process_material(mat, texture_guids, material_registry);
+                auto guid = process_material(mat, texture_guids, material_registry, asset_db, source_path);
                 material_guids.insert({material_id, guid});
 
                 ++material_id;
@@ -1157,7 +1183,8 @@ namespace tempest::assets
     auto process_meshes(const sjd::object& doc, const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents,
                         span<buffer_view_payload> buffer_views, span<accessor_payload> accessors,
                         const flat_unordered_map<uint32_t, guid>& material_guids, core::mesh_registry* mesh_registry,
-                        ecs::archetype_registry& registry) -> flat_unordered_map<uint32_t, mesh_processing_result>
+                        ecs::archetype_registry& registry,
+                        asset_database& asset_db, string_view source_path) -> flat_unordered_map<uint32_t, mesh_processing_result>
     {
         auto mesh_primitives = flat_unordered_map<uint32_t, mesh_processing_result>{};
         auto meshes = sjd::array{};
@@ -1172,7 +1199,8 @@ namespace tempest::assets
                 for (const auto& prim : mesh["primitives"])
                 {
                     auto [mesh_id, material_idx] =
-                        process_mesh(buffer_contents, prim, buffer_views, accessors, mesh_registry);
+                        process_mesh(buffer_contents, prim, buffer_views, accessors, mesh_registry,
+                                     asset_db, source_path);
 
                     const auto mesh_comp = core::mesh_component{
                         .mesh_id = mesh_id,
@@ -1463,10 +1491,13 @@ namespace tempest::assets
         auto image_contents = load_image_contents(doc.value(), base_path);
         auto buffer_views = read_buffer_views(doc.at_key("bufferViews"));
         auto accessors = read_accessors(doc.at_key("accessors"));
-        auto texture_guids = process_textures(doc.value(), image_contents, buffer_contents, _texture_reg);
-        auto material_guids = process_materials(doc.value(), texture_guids, _material_reg);
+        const auto source_path = path.has_value() ? path.value() : string_view{};
+        auto texture_guids = process_textures(doc.value(), image_contents, buffer_contents, _texture_reg,
+                                              asset_db, source_path);
+        auto material_guids = process_materials(doc.value(), texture_guids, _material_reg, asset_db, source_path);
         auto mesh_primitives =
-            process_meshes(doc.value(), buffer_contents, buffer_views, accessors, material_guids, _mesh_reg, registry);
+            process_meshes(doc.value(), buffer_contents, buffer_views, accessors, material_guids, _mesh_reg, registry,
+                           asset_db, source_path);
 
         process_nodes(doc.value(), mesh_primitives, registry, ent);
 

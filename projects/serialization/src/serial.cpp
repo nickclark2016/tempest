@@ -18,4 +18,9 @@ namespace tempest::serialization
         
         return {};
     }
+
+    auto binary_archive::written_size() const noexcept -> size_t
+    {
+        return _buffer.size();
+    }
 }

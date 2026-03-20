@@ -36,3 +36,6 @@ TempestCache/
 
 # UI configuration files
 *.ini
+
+# Generated asset files
+**.tassetdb

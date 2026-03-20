@@ -2,6 +2,7 @@
 #include <tempest/rhi_types.hpp>
 #include <tempest/tempest.hpp>
 
+#include <tempest/default_importers.hpp>
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/relationship_component.hpp>
@@ -24,7 +25,7 @@ namespace tempest
     } // namespace
 
     engine_context::engine_context()
-        : _asset_database(&_mesh_reg, &_texture_reg, &_material_reg),
+        : _asset_database(&_asset_type_reg),
           _render(graphics::renderer::builder()
                       .set_pbr_frame_graph_config({
                           .render_target_width = 1920,
@@ -81,6 +82,8 @@ namespace tempest
         SetConsoleOutputCP(CP_UTF8);
         SetConsoleCP(CP_UTF8);
 #endif
+
+        assets::register_default_importers(_asset_database, &_mesh_reg, &_texture_reg, &_material_reg);
     }
 
     tuple<rhi::window_surface*, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>, core::input_group>

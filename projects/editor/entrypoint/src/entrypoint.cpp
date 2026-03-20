@@ -34,7 +34,7 @@ namespace tempest::editor
         engine.register_on_initialize_callback([&](engine_context& ctx) {
             ui_editor = setup_render_graph(ctx, win_surface, &ui_ctx);
 
-            auto sponza_prefab = ctx.get_asset_database().import(
+            auto sponza_prefab = ctx.get_asset_database().load(
                 "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", ctx.get_registry());
             auto sponza_instance = ctx.load_entity(sponza_prefab);
             ctx.get_registry().get<tempest::ecs::transform_component>(sponza_instance).scale({0.125f});

@@ -3,6 +3,7 @@
 
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
+#include <tempest/asset_type_registry.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/renderer.hpp>
@@ -62,6 +63,7 @@ namespace tempest
         core::material_registry _material_reg;
         core::mesh_registry _mesh_reg;
         core::texture_registry _texture_reg;
+        assets::asset_type_registry _asset_type_reg;
         assets::asset_database _asset_database;
 
         vector<window_context> _windows;
