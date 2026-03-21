@@ -77,10 +77,10 @@ scoped.group('Tests', function()
         uses {
             'googletest',
             'assets',
-            'serialization',
         }
 
         externalwarnings 'Off'
         warnings 'Extra'
+        linkgroups 'On'
     end)
 end)
