@@ -23,7 +23,7 @@ namespace tempest::assets
     {
     }
 
-    void asset_database::open(string_view db_path)
+    auto asset_database::open(string_view db_path) -> void
     {
         _db_path = string(db_path);
 
@@ -140,7 +140,7 @@ namespace tempest::assets
         log->info("Loaded database with {} sources, {} assets from '{}'.", _sources.size(), _assets.size(), std::string_view(db_path.data(), db_path.size()));
     }
 
-    bool asset_database::save() const
+    auto asset_database::save() const -> bool
     {
         if (_db_path.empty())
         {
@@ -237,7 +237,7 @@ namespace tempest::assets
         return true;
     }
 
-    ecs::archetype_entity asset_database::load(string_view source_path, ecs::archetype_registry& registry)
+    auto asset_database::load(string_view source_path, ecs::archetype_registry& registry) -> ecs::archetype_entity
     {
         // Check if source exists in the database
         auto path_it = _source_path_to_index.find(string(source_path));
@@ -250,7 +250,7 @@ namespace tempest::assets
         return _load_via_import(source_path, registry);
     }
 
-    const asset_entry* asset_database::find_by_guid(const guid& asset_id) const
+    auto asset_database::find_by_guid(const guid& asset_id) const -> const asset_entry*
     {
         auto iter = _asset_guid_to_index.find(asset_id);
         if (iter != _asset_guid_to_index.end())
@@ -260,7 +260,7 @@ namespace tempest::assets
         return nullptr;
     }
 
-    const asset_entry* asset_database::find_by_path(string_view path) const
+    auto asset_database::find_by_path(string_view path) const -> const asset_entry*
     {
         // Find the source entry for this path
         auto src_it = _source_path_to_index.find(string(path));
@@ -282,7 +282,7 @@ namespace tempest::assets
         return nullptr;
     }
 
-    guid asset_database::register_asset(asset_type_id type, string_view source_path)
+    auto asset_database::register_asset(asset_type_id type, string_view source_path) -> guid
     {
         auto& src = _get_or_create_source(source_path);
 
@@ -305,9 +305,9 @@ namespace tempest::assets
         return new_id;
     }
 
-    bool asset_database::register_asset_with_guid(const guid& id, asset_type_id type, string_view source_path)
+    auto asset_database::register_asset_with_guid(const guid& uid, asset_type_id type, string_view source_path) -> bool
     {
-        if (_asset_guid_to_index.find(id) != _asset_guid_to_index.end())
+        if (_asset_guid_to_index.contains(uid))
         {
             return false;
         }
@@ -315,7 +315,7 @@ namespace tempest::assets
         auto& src = _get_or_create_source(source_path);
 
         auto entry = make_unique<asset_entry>(asset_entry{
-            .id = id,
+            .id = uid,
             .type = type,
             .blob_offset = 0,
             .blob_size = 0,
@@ -325,13 +325,13 @@ namespace tempest::assets
         });
 
         auto index = _assets.size();
-        _asset_guid_to_index.insert({id, index});
+        _asset_guid_to_index.insert({uid, index});
         _assets.push_back(tempest::move(entry));
 
         return true;
     }
 
-    void asset_database::store_blob(const guid& asset_id, span<const byte> data)
+    auto asset_database::store_blob(const guid& asset_id, span<const byte> data) -> void
     {
         auto iter = _asset_guid_to_index.find(asset_id);
         if (iter == _asset_guid_to_index.end())
@@ -346,7 +346,7 @@ namespace tempest::assets
         _blob_data.insert(_blob_data.end(), data.begin(), data.end());
     }
 
-    span<const byte> asset_database::get_blob(const guid& asset_id) const
+    auto asset_database::get_blob(const guid& asset_id) const -> span<const byte>
     {
         auto iter = _asset_guid_to_index.find(asset_id);
         if (iter == _asset_guid_to_index.end())
@@ -363,7 +363,7 @@ namespace tempest::assets
         return span<const byte>{_blob_data.data() + entry->blob_offset, static_cast<size_t>(entry->blob_size)};
     }
 
-    void asset_database::register_importer(unique_ptr<asset_importer> importer, string_view extension)
+    auto asset_database::register_importer(unique_ptr<asset_importer> importer, string_view extension) -> void
     {
         _importers[string(extension)] = move(importer);
     }
@@ -389,8 +389,8 @@ namespace tempest::assets
         return none();
     }
 
-    ecs::archetype_entity asset_database::_load_from_blobs(string_view source_path,
-                                                            ecs::archetype_registry& registry)
+    auto asset_database::_load_from_blobs(string_view source_path,
+                                                            ecs::archetype_registry& registry) -> ecs::archetype_entity
     {
         auto src_it = _source_path_to_index.find(string(source_path));
         if (src_it == _source_path_to_index.end())
@@ -574,13 +574,13 @@ namespace tempest::assets
             flat_unordered_map<ecs::archetype_entity, size_t> entity_to_index;
 
             function<void(ecs::archetype_entity)> collect;
-            collect = [&](ecs::archetype_entity e) {
+            collect = [&](ecs::archetype_entity entity) {
                 auto idx = all_entities.size();
-                all_entities.push_back(e);
-                entity_to_index.insert({e, idx});
+                all_entities.push_back(entity);
+                entity_to_index.insert({entity, idx});
 
                 auto* rel =
-                    registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(e);
+                    registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;
@@ -601,14 +601,14 @@ namespace tempest::assets
 
             for (size_t i = 0; i < all_entities.size(); ++i)
             {
-                auto e = all_entities[i];
+                auto entity = all_entities[i];
                 entity_hierarchy::entity_record record;
 
                 // Serialize components using registered handlers
                 for (const auto& handler : _component_serializers)
                 {
                     vector<byte> bytes;
-                    if (handler.serialize(registry, e, bytes))
+                    if (handler.serialize(registry, entity, bytes))
                     {
                         record.components.push_back({handler.type_hash, tempest::move(bytes)});
                     }
@@ -616,7 +616,7 @@ namespace tempest::assets
 
                 // Record child indices
                 auto* rel =
-                    registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(e);
+                    registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;

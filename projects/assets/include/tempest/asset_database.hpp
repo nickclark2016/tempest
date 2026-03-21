@@ -26,7 +26,9 @@ namespace tempest::assets
 
     struct content_hash
     {
-        array<byte, 32> data{};
+        static constexpr size_t hash_size = 32;
+
+        array<byte, hash_size> data{};
     };
 
     struct source_entry
@@ -62,13 +64,13 @@ namespace tempest::assets
 
         /// Try to serialize the component from `entity` into `out_bytes`.
         /// Returns true if the entity has this component and serialization succeeded.
-        function<bool(const ecs::archetype_registry& registry, ecs::archetype_entity entity,
-                       vector<byte>& out_bytes)> serialize;
+        function<bool(const ecs::archetype_registry& registry, ecs::archetype_entity entity, vector<byte>& out_bytes)>
+            serialize;
 
         /// Assign the component described by `bytes` onto `entity`.
         /// Returns true on success.
-        function<bool(ecs::archetype_registry& registry, ecs::archetype_entity entity,
-                       span<const byte> bytes)> deserialize;
+        function<bool(ecs::archetype_registry& registry, ecs::archetype_entity entity, span<const byte> bytes)>
+            deserialize;
     };
 
     class asset_database
@@ -82,37 +84,35 @@ namespace tempest::assets
 
         explicit asset_database(asset_type_registry* type_reg) noexcept;
 
-        void open(string_view db_path);
-        bool save() const;
+        auto open(string_view db_path) -> void;
+        auto save() const -> bool;
 
-        [[nodiscard]] ecs::archetype_entity load(string_view source_path,
-                                                  ecs::archetype_registry& registry);
+        [[nodiscard]] auto load(string_view source_path, ecs::archetype_registry& registry) -> ecs::archetype_entity;
+        [[nodiscard]] auto find_by_guid(const guid& asset_id) const -> const asset_entry*;
+        [[nodiscard]] auto find_by_path(string_view path) const -> const asset_entry*;
 
-        [[nodiscard]] const asset_entry* find_by_guid(const guid& asset_id) const;
-        [[nodiscard]] const asset_entry* find_by_path(string_view path) const;
+        auto register_asset(asset_type_id type, string_view source_path) -> guid;
+        auto register_asset_with_guid(const guid& uid, asset_type_id type, string_view source_path) -> bool;
+        auto store_blob(const guid& asset_id, span<const byte> blob_data) -> void;
+        [[nodiscard]] auto get_blob(const guid& asset_id) const -> span<const byte>;
 
-        guid register_asset(asset_type_id type, string_view source_path);
-        bool register_asset_with_guid(const guid& id, asset_type_id type, string_view source_path);
-        void store_blob(const guid& asset_id, span<const byte> blob_data);
-        span<const byte> get_blob(const guid& asset_id) const;
-
-        void register_importer(unique_ptr<asset_importer> importer, string_view extension);
+        auto register_importer(unique_ptr<asset_importer> importer, string_view extension) -> void;
 
         /// Register a trivial ECS component type for entity hierarchy serialization.
         /// The component is serialized/deserialized via memcpy.
         template <typename T>
             requires is_trivial_v<T>
-        void register_component();
+        auto register_component() -> void;
 
         [[nodiscard]] auto register_asset_metadata(asset_metadata meta) -> guid;
         [[nodiscard]] auto get_asset_metadata(guid asset_id) const -> optional<const asset_metadata&>;
 
-        asset_type_registry* type_registry() noexcept
+        [[nodiscard]] auto type_registry() noexcept -> asset_type_registry*
         {
             return _type_reg;
         }
 
-        const asset_type_registry* type_registry() const noexcept
+        [[nodiscard]] auto type_registry() const noexcept -> const asset_type_registry*
         {
             return _type_reg;
         }
@@ -137,12 +137,12 @@ namespace tempest::assets
         vector<component_serializer> _component_serializers;
         flat_unordered_map<size_t, size_t> _component_hash_to_index;
 
-        [[nodiscard]] ecs::archetype_entity _load_from_blobs(string_view source_path,
-                                                              ecs::archetype_registry& registry);
-        [[nodiscard]] ecs::archetype_entity _load_via_import(string_view source_path,
-                                                              ecs::archetype_registry& registry);
+        [[nodiscard]] auto _load_from_blobs(string_view source_path, ecs::archetype_registry& registry)
+            -> ecs::archetype_entity;
+        [[nodiscard]] auto _load_via_import(string_view source_path, ecs::archetype_registry& registry)
+            -> ecs::archetype_entity;
 
-        source_entry& _get_or_create_source(string_view source_path);
+        auto _get_or_create_source(string_view source_path) -> source_entry&;
     };
 
     template <typename T>
@@ -157,37 +157,36 @@ namespace tempest::assets
             return;
         }
 
-        component_serializer cs;
-        cs.type_hash = hash;
-        cs.component_size = sizeof(T);
-
-        cs.serialize = [](const ecs::archetype_registry& registry, ecs::archetype_entity entity,
-                          vector<byte>& out_bytes) -> bool {
-            const auto* comp = registry.try_get<T>(entity);
-            if (comp == nullptr)
-            {
-                return false;
-            }
-            out_bytes.resize(sizeof(T));
-            tempest::memcpy(out_bytes.data(), comp, sizeof(T));
-            return true;
-        };
-
-        cs.deserialize = [](ecs::archetype_registry& registry, ecs::archetype_entity entity,
-                            span<const byte> bytes) -> bool {
-            if (bytes.size() != sizeof(T))
-            {
-                return false;
-            }
-            T comp;
-            tempest::memcpy(&comp, bytes.data(), sizeof(T));
-            registry.assign(entity, comp);
-            return true;
+        auto serializer = component_serializer{
+            .type_hash = hash,
+            .component_size = sizeof(T),
+            .serialize = [](const ecs::archetype_registry& registry, ecs::archetype_entity entity,
+                            vector<byte>& out_bytes) -> bool {
+                const auto* comp = registry.try_get<T>(entity);
+                if (comp == nullptr)
+                {
+                    return false;
+                }
+                out_bytes.resize(sizeof(T));
+                tempest::memcpy(out_bytes.data(), comp, sizeof(T));
+                return true;
+            },
+            .deserialize = [](ecs::archetype_registry& registry, ecs::archetype_entity entity,
+                              span<const byte> bytes) -> bool {
+                if (bytes.size() != sizeof(T))
+                {
+                    return false;
+                }
+                T comp;
+                tempest::memcpy(&comp, bytes.data(), sizeof(T));
+                registry.assign(entity, comp);
+                return true;
+            },
         };
 
         auto index = _component_serializers.size();
         _component_hash_to_index.insert({hash, index});
-        _component_serializers.push_back(tempest::move(cs));
+        _component_serializers.push_back(tempest::move(serializer));
     }
 
     struct asset_metadata_component
