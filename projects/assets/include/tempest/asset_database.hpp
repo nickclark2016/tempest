@@ -85,7 +85,7 @@ namespace tempest::assets
         explicit asset_database(asset_type_registry* type_reg) noexcept;
 
         auto open(string_view db_path) -> void;
-        auto save() const -> bool;
+        [[nodiscard]] auto save() const -> bool;
 
         [[nodiscard]] auto load(string_view source_path, ecs::archetype_registry& registry) -> ecs::archetype_entity;
         [[nodiscard]] auto find_by_guid(const guid& asset_id) const -> const asset_entry*;

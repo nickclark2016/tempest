@@ -2,7 +2,7 @@
 
 namespace tempest::assets
 {
-    const type_entry* asset_type_registry::find(asset_type_id type_id) const
+    auto asset_type_registry::find(asset_type_id type_id) const -> const type_entry*
     {
         auto iter = _hash_to_index.find(type_id.hash());
         if (iter != _hash_to_index.end())
@@ -12,7 +12,7 @@ namespace tempest::assets
         return nullptr;
     }
 
-    const type_entry* asset_type_registry::find_by_name(string_view name) const
+    auto asset_type_registry::find_by_name(string_view name) const -> const type_entry*
     {
         auto iter = _name_to_index.find(string(name));
         if (iter != _name_to_index.end())
@@ -22,7 +22,7 @@ namespace tempest::assets
         return nullptr;
     }
 
-    optional<string_view> asset_type_registry::name_of(asset_type_id type_id) const
+    auto asset_type_registry::name_of(asset_type_id type_id) const -> optional<string_view>
     {
         const auto* entry = find(type_id);
         if (entry != nullptr)
@@ -32,7 +32,7 @@ namespace tempest::assets
         return nullopt;
     }
 
-    optional<bool> asset_type_registry::validate(asset_type_id type_id, string_view name) const
+    auto asset_type_registry::validate(asset_type_id type_id, string_view name) const -> optional<bool>
     {
         const auto* entry = find(type_id);
         if (entry == nullptr)

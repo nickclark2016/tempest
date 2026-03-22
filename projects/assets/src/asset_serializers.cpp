@@ -16,7 +16,7 @@ namespace tempest::serialization
         // We serialize as flat_unordered_map<string, T> using a capture approach.
 
         // Textures
-        static constexpr string_view texture_names[] = {
+        static constexpr auto texture_names = tempest::array{
             core::material::base_color_texture_name,
             core::material::metallic_roughness_texture_name,
             core::material::normal_texture_name,
@@ -49,7 +49,7 @@ namespace tempest::serialization
         }
 
         // Scalars
-        static constexpr string_view scalar_names[] = {
+        static constexpr auto scalar_names = tempest::array{
             core::material::metallic_factor_name,
             core::material::roughness_factor_name,
             core::material::normal_scale_name,
@@ -82,7 +82,7 @@ namespace tempest::serialization
         }
 
         // Bools
-        static constexpr string_view bool_names[] = {
+        static constexpr auto bool_names = tempest::array{
             core::material::double_sided_name,
         };
 
@@ -113,7 +113,7 @@ namespace tempest::serialization
         }
 
         // Vec3s
-        static constexpr string_view vec3_names[] = {
+        static constexpr auto vec3_names = tempest::array{
             core::material::emissive_factor_name,
             core::material::volume_attenuation_color_name,
         };
@@ -143,7 +143,7 @@ namespace tempest::serialization
         }
 
         // Vec4s
-        static constexpr string_view vec4_names[] = {
+        static constexpr auto vec4_names = tempest::array{
             core::material::base_color_factor_name,
         };
 
@@ -173,7 +173,7 @@ namespace tempest::serialization
         }
 
         // Strings
-        static constexpr string_view string_names[] = {
+        static constexpr auto string_names = tempest::array{
             core::material::alpha_mode_name,
         };
 

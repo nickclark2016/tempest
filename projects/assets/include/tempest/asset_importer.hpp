@@ -19,14 +19,14 @@ namespace tempest::assets
         asset_importer(asset_importer&&) noexcept = delete;
         virtual ~asset_importer() = default;
 
-        asset_importer& operator=(const asset_importer&) = delete;
-        asset_importer& operator=(asset_importer&&) noexcept = delete;
+        asset_importer& operator=(const asset_importer&) = delete;     // NOLINT
+        asset_importer& operator=(asset_importer&&) noexcept = delete; // NOLINT
 
-        [[nodiscard]] virtual ecs::archetype_entity import(asset_database& asset_db, string_view path,
-                                                           ecs::archetype_registry& registry);
-        [[nodiscard]] virtual ecs::archetype_entity import(asset_database& asset_db, span<const byte> data,
-                                                           ecs::archetype_registry& registry,
-                                                           optional<string_view> asset_path) = 0;
+        [[nodiscard]] virtual auto import(asset_database& asset_db, string_view path, ecs::archetype_registry& registry)
+            -> ecs::archetype_entity;
+        [[nodiscard]] virtual auto import(asset_database& asset_db, span<const byte> data,
+                                          ecs::archetype_registry& registry, optional<string_view> asset_path)
+            -> ecs::archetype_entity = 0;
     };
 } // namespace tempest::assets
 

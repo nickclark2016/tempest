@@ -34,15 +34,15 @@ namespace tempest::assets
         asset_type_registry() = default;
 
         template <typename T>
-        bool register_type(asset_deserializer_fn deserializer, asset_serializer_fn serializer);
+        auto register_type(asset_deserializer_fn deserializer, asset_serializer_fn serializer) -> bool;
 
-        [[nodiscard]] const type_entry* find(asset_type_id type_id) const;
-        [[nodiscard]] const type_entry* find_by_name(string_view name) const;
-        [[nodiscard]] optional<string_view> name_of(asset_type_id type_id) const;
-        [[nodiscard]] optional<bool> validate(asset_type_id type_id, string_view name) const;
+        [[nodiscard]] auto find(asset_type_id type_id) const -> const type_entry*;
+        [[nodiscard]] auto find_by_name(string_view name) const -> const type_entry*;
+        [[nodiscard]] auto name_of(asset_type_id type_id) const -> optional<string_view>;
+        [[nodiscard]] auto validate(asset_type_id type_id, string_view name) const -> optional<bool>;
 
         template <typename Fn>
-        void for_each(Fn&& func) const;
+        auto for_each(Fn&& func) const -> void;
 
       private:
         vector<unique_ptr<type_entry>> _entries;
@@ -51,7 +51,7 @@ namespace tempest::assets
     };
 
     template <typename T>
-    bool asset_type_registry::register_type(asset_deserializer_fn deserializer, asset_serializer_fn serializer)
+    auto asset_type_registry::register_type(asset_deserializer_fn deserializer, asset_serializer_fn serializer) -> bool
     {
         auto type_id = asset_type_id::of<T>();
         auto name = string(core::type_name<T>::value());
@@ -62,12 +62,7 @@ namespace tempest::assets
         {
             // Idempotent: same type registered again
             const auto& existing = _entries[hash_it->second];
-            if (existing->canonical_name == name)
-            {
-                return true;
-            }
-            // Hash collision with different name — reject
-            return false;
+            return existing->canonical_name == name;
         }
 
         // Check if already registered by name
