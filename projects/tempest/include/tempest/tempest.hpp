@@ -4,6 +4,7 @@
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_registry.hpp>
+#include <tempest/event_registry.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/renderer.hpp>
@@ -41,6 +42,9 @@ namespace tempest
         [[nodiscard]] ecs::archetype_registry& get_registry() noexcept;
         [[nodiscard]] const ecs::archetype_registry& get_registry() const noexcept;
 
+        [[nodiscard]] event::event_registry& get_event_registry() noexcept;
+        [[nodiscard]] const event::event_registry& get_event_registry() const noexcept;
+
         [[nodiscard]] core::material_registry& get_material_registry() noexcept;
         [[nodiscard]] const core::material_registry& get_material_registry() const noexcept;
         [[nodiscard]] core::mesh_registry& get_mesh_registry() noexcept;
@@ -59,6 +63,7 @@ namespace tempest
         ecs::archetype_entity load_entity(ecs::archetype_entity src);
 
       private:
+        event::event_registry _event_registry;
         ecs::archetype_registry _entity_registry;
         core::material_registry _material_reg;
         core::mesh_registry _mesh_reg;

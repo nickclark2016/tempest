@@ -125,31 +125,31 @@ auto main() -> int
 
     auto camera = entity_registry.create();
     tempest::graphics::camera_component camera_data = {
-        .aspect_ratio = 16.0f / 9.0f,
-        .vertical_fov = 100.0f,
-        .near_plane = 0.01f,
+        .aspect_ratio = 16.0F / 9.0F,
+        .vertical_fov = 100.0F,
+        .near_plane = 0.01F,
     };
     entity_registry.assign(camera, camera_data);
     auto camera_tx = tempest::ecs::transform_component::identity();
-    camera_tx.position({0.0f, 15.0f, -1.0f});
-    camera_tx.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
+    camera_tx.position({0.0F, 15.0F, -1.0F});
+    camera_tx.rotation({0.0F, tempest::math::as_radians(90.0F), 0.0F});
     entity_registry.assign(camera, camera_tx);
 
     auto sun = entity_registry.create();
     auto sun_data = tempest::graphics::directional_light_component{
-        .color = {1.0f, 1.0f, 1.0f},
-        .intensity = 1.0f,
+        .color = {1.0F, 1.0F, 1.0F},
+        .intensity = 1.0F,
     };
 
     auto sun_shadows = tempest::graphics::shadow_map_component{
-        .shadow_distance = 2048.0f,
-        .split_lambda = 0.9f,
-        .blend_fraction = 0.1f,
+        .shadow_distance = 2048.0F,
+        .split_lambda = 0.9F,
+        .blend_fraction = 0.1F,
         .cascade_count = 4,
     };
 
     auto sun_tx = tempest::ecs::transform_component::identity();
-    sun_tx.rotation({tempest::math::as_radians(90.0f), 0.0f, 0.0f});
+    sun_tx.rotation({tempest::math::as_radians(90.0F), 0.0F, 0.0F});
 
     entity_registry.assign_or_replace(sun, sun_shadows);
     entity_registry.assign_or_replace(sun, sun_data);
@@ -168,7 +168,7 @@ auto main() -> int
         pbr_fg.execute();
     }
 
-    asset_database.save();
+    (void)asset_database.save();
 
     return 0;
 }

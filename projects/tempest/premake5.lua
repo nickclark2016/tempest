@@ -24,6 +24,7 @@ scoped.project('tempest', function()
             'assets',
             'core',
             'ecs',
+            'event',
             'graphics',
             'logger',
             'math',

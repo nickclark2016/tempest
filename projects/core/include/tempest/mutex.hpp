@@ -7,6 +7,8 @@
 #include <tempest/utility.hpp>
 
 #if defined(TEMPEST_WIN_THREADS)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #elif defined(TEMPEST_POSIX_THREADS)
 #include <pthread.h>

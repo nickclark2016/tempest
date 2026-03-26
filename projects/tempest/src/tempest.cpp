@@ -225,6 +225,16 @@ namespace tempest
         return _entity_registry;
     }
 
+    event::event_registry& engine_context::get_event_registry() noexcept
+    {
+        return _event_registry;
+    }
+
+    const event::event_registry& engine_context::get_event_registry() const noexcept
+    {
+        return _event_registry;
+    }
+
     core::material_registry& engine_context::get_material_registry() noexcept
     {
         return _material_reg;
