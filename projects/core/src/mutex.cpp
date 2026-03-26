@@ -65,6 +65,14 @@ namespace tempest
     }
 
 #elif defined(TEMPEST_POSIX_THREADS)
+    mutex::~mutex()
+    {
+        if (pthread_mutex_destroy(&_handle) != 0)
+        {
+            std::terminate();
+        }
+    }
+
     void mutex::lock()
     {
         if (pthread_mutex_lock(&_handle) != 0)

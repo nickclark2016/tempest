@@ -31,9 +31,11 @@ namespace tempest
 
         constexpr mutex() noexcept;
         mutex(const mutex&) = delete;
+        mutex(mutex&&) = delete;
         ~mutex();
 
         mutex& operator=(const mutex&) = delete;
+        mutex& operator=(mutex&&) = delete;
 
         void lock();
         bool try_lock();
