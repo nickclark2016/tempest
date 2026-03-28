@@ -90,9 +90,7 @@ TEST(asset_type_registry, register_new_type_succeeds)
     tempest::assets::asset_type_registry registry;
 
     auto result = registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -105,17 +103,13 @@ TEST(asset_type_registry, register_same_type_twice_is_idempotent)
     tempest::assets::asset_type_registry registry;
 
     auto result1 = registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
 
     auto result2 = registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -129,9 +123,7 @@ TEST(asset_type_registry, find_returns_correct_entry)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -158,9 +150,7 @@ TEST(asset_type_registry, find_by_name_returns_correct_entry)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -178,9 +168,7 @@ TEST(asset_type_registry, name_of_returns_correct_name)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -197,9 +185,7 @@ TEST(asset_type_registry, validate_returns_true_for_matching_pair)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -217,9 +203,7 @@ TEST(asset_type_registry, validate_returns_false_for_mismatched_name)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -246,9 +230,7 @@ TEST(asset_type_registry, references_remain_valid_after_additional_registrations
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -262,17 +244,13 @@ TEST(asset_type_registry, references_remain_valid_after_additional_registrations
 
     // Register more types to potentially cause vector reallocation
     registry.register_type<type_b>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
 
     registry.register_type<type_c>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -388,8 +366,7 @@ TEST(serializer_material, roundtrip)
 
     tempest::core::material mat;
     mat.set_name("test_material");
-    mat.set_vec4(tempest::core::material::base_color_factor_name,
-                 tempest::math::vec4<float>{1.0f, 0.5f, 0.25f, 1.0f});
+    mat.set_vec4(tempest::core::material::base_color_factor_name, tempest::math::vec4<float>{1.0f, 0.5f, 0.25f, 1.0f});
     mat.set_scalar(tempest::core::material::metallic_factor_name, 0.8f);
     mat.set_scalar(tempest::core::material::roughness_factor_name, 0.4f);
     mat.set_bool(tempest::core::material::double_sided_name, true);
@@ -515,9 +492,7 @@ TEST(asset_database, save_then_open_roundtrips)
     // Register a type
     tempest::assets::asset_type_registry type_reg;
     type_reg.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -526,8 +501,7 @@ TEST(asset_database, save_then_open_roundtrips)
     tempest::assets::asset_database database(&type_reg);
     database.open(test_db_path);
 
-    auto asset_id =
-        database.register_asset(tempest::assets::asset_type_id::of<type_a>(), "test/source_file.gltf");
+    auto asset_id = database.register_asset(tempest::assets::asset_type_id::of<type_a>(), "test/source_file.gltf");
 
     // Store a blob
     tempest::vector<tempest::byte> blob;
@@ -566,9 +540,7 @@ TEST(asset_database, find_by_path_returns_correct_result)
 
     tempest::assets::asset_type_registry type_reg;
     type_reg.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) {
-            return true;
-        },
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
         [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
             return true;
         });
@@ -576,8 +548,7 @@ TEST(asset_database, find_by_path_returns_correct_result)
     tempest::assets::asset_database database(&type_reg);
     database.open(test_db_path);
 
-    auto asset_id =
-        database.register_asset(tempest::assets::asset_type_id::of<type_a>(), "test/my_model.gltf");
+    auto asset_id = database.register_asset(tempest::assets::asset_type_id::of<type_a>(), "test/my_model.gltf");
 
     const auto* entry = database.find_by_path("test/my_model.gltf");
     ASSERT_NE(entry, nullptr);
@@ -635,16 +606,14 @@ namespace
         [[nodiscard]] tempest::ecs::archetype_entity import(tempest::assets::asset_database& asset_db,
                                                             tempest::span<const tempest::byte> data,
                                                             tempest::ecs::archetype_registry& registry,
-                                                            tempest::optional<tempest::string_view> path)
-            override
+                                                            tempest::optional<tempest::string_view> path) override
         {
             (void)data;
             ++import_call_count;
 
             // Register an asset and store a blob, just like a real importer would.
             auto source = path.has_value() ? path.value() : tempest::string_view("unknown");
-            auto asset_id =
-                asset_db.register_asset(tempest::assets::asset_type_id::of<fake_single_asset>(), source);
+            auto asset_id = asset_db.register_asset(tempest::assets::asset_type_id::of<fake_single_asset>(), source);
             last_registered_asset_id = asset_id;
 
             tempest::vector<tempest::byte> blob;
@@ -682,8 +651,7 @@ namespace
         [[nodiscard]] tempest::ecs::archetype_entity import(tempest::assets::asset_database& asset_db,
                                                             tempest::span<const tempest::byte> data,
                                                             tempest::ecs::archetype_registry& registry,
-                                                            tempest::optional<tempest::string_view> path)
-            override
+                                                            tempest::optional<tempest::string_view> path) override
         {
             (void)data;
             ++import_call_count;
@@ -693,33 +661,30 @@ namespace
             // Register 2 textures
             for (int i = 0; i < 2; ++i)
             {
-                auto tex_id =
-                    asset_db.register_asset(tempest::assets::asset_type_id::of<fake_texture>(), source);
+                auto tex_id = asset_db.register_asset(tempest::assets::asset_type_id::of<fake_texture>(), source);
                 fake_texture tex{.width = 64 * (i + 1), .height = 32 * (i + 1)};
-                auto tex_bytes = tempest::span<const tempest::byte>{
-                    reinterpret_cast<const tempest::byte*>(&tex), sizeof(tex)};
+                auto tex_bytes =
+                    tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(&tex), sizeof(tex)};
                 asset_db.store_blob(tex_id, tex_bytes);
                 produced_texture_ids.push_back(tex_id);
             }
 
             // Register 1 mesh
             {
-                auto mesh_id =
-                    asset_db.register_asset(tempest::assets::asset_type_id::of<fake_mesh>(), source);
+                auto mesh_id = asset_db.register_asset(tempest::assets::asset_type_id::of<fake_mesh>(), source);
                 fake_mesh mesh{.vertex_count = 1024};
-                auto mesh_bytes = tempest::span<const tempest::byte>{
-                    reinterpret_cast<const tempest::byte*>(&mesh), sizeof(mesh)};
+                auto mesh_bytes =
+                    tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(&mesh), sizeof(mesh)};
                 asset_db.store_blob(mesh_id, mesh_bytes);
                 produced_mesh_ids.push_back(mesh_id);
             }
 
             // Register 1 material
             {
-                auto mat_id =
-                    asset_db.register_asset(tempest::assets::asset_type_id::of<fake_material>(), source);
+                auto mat_id = asset_db.register_asset(tempest::assets::asset_type_id::of<fake_material>(), source);
                 fake_material mat{.roughness = 0.42f};
-                auto mat_bytes = tempest::span<const tempest::byte>{
-                    reinterpret_cast<const tempest::byte*>(&mat), sizeof(mat)};
+                auto mat_bytes =
+                    tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(&mat), sizeof(mat)};
                 asset_db.store_blob(mat_id, mat_bytes);
                 produced_material_ids.push_back(mat_id);
             }
@@ -751,9 +716,10 @@ TEST(asset_database_load, falls_back_to_importer_when_not_cached)
     auto* mock_ptr = new mock_importer();
     database.register_importer(tempest::unique_ptr<tempest::assets::asset_importer>(mock_ptr), ".mock");
 
-    tempest::ecs::archetype_registry entity_reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
 
-    auto result = database.load("test_file.mock", entity_reg);
+    auto result = database.load("test_file.mock", reg);
 
     EXPECT_TRUE(result != tempest::ecs::tombstone);
     EXPECT_EQ(mock_ptr->import_call_count, 1);
@@ -769,9 +735,10 @@ TEST(asset_database_load, returns_tombstone_for_unknown_extension)
     tempest::assets::asset_type_registry type_reg;
     tempest::assets::asset_database database(&type_reg);
 
-    tempest::ecs::archetype_registry entity_reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
 
-    auto result = database.load("test_file.unknown", entity_reg);
+    auto result = database.load("test_file.unknown", reg);
 
     EXPECT_TRUE(result == tempest::ecs::tombstone);
 }
@@ -794,10 +761,11 @@ TEST(asset_database_load, cached_asset_resolves_from_blobs)
 
         database.open(test_db_path);
 
-        tempest::ecs::archetype_registry entity_reg;
+        auto events = tempest::event::event_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events);
 
         // First load triggers import — the mock importer registers the asset itself.
-        auto result1 = database.load("test_file.mock", entity_reg);
+        auto result1 = database.load("test_file.mock", reg);
         EXPECT_TRUE(result1 != tempest::ecs::tombstone);
         EXPECT_EQ(mock_ptr->import_call_count, 1);
 
@@ -818,10 +786,11 @@ TEST(asset_database_load, cached_asset_resolves_from_blobs)
 
         database.open(test_db_path);
 
-        tempest::ecs::archetype_registry entity_reg;
+        auto events = tempest::event::event_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events);
 
         // Second load should resolve from blobs (source found in database).
-        auto result2 = database.load("test_file.mock", entity_reg);
+        auto result2 = database.load("test_file.mock", reg);
         EXPECT_TRUE(result2 != tempest::ecs::tombstone);
 
         // The importer should NOT have been called.
@@ -860,9 +829,10 @@ TEST(asset_database_load, multi_asset_import_registers_all_assets)
     auto* importer_ptr = new multi_asset_importer();
     database.register_importer(tempest::unique_ptr<tempest::assets::asset_importer>(importer_ptr), ".multi");
 
-    tempest::ecs::archetype_registry entity_reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
 
-    auto result = database.load("scene.multi", entity_reg);
+    auto result = database.load("scene.multi", reg);
     EXPECT_TRUE(result != tempest::ecs::tombstone);
     EXPECT_EQ(importer_ptr->import_call_count, 1);
 
@@ -917,8 +887,9 @@ TEST(asset_database_load, multi_asset_import_roundtrips_through_save_and_open)
 
         database.open(test_db_path);
 
-        tempest::ecs::archetype_registry entity_reg;
-        auto result = database.load("scene.multi", entity_reg);
+        auto events = tempest::event::event_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events);
+        auto result = database.load("scene.multi", reg);
         EXPECT_TRUE(result != tempest::ecs::tombstone);
         EXPECT_EQ(importer_ptr->import_call_count, 1);
 
@@ -940,8 +911,9 @@ TEST(asset_database_load, multi_asset_import_roundtrips_through_save_and_open)
 
         database.open(test_db_path);
 
-        tempest::ecs::archetype_registry entity_reg;
-        auto result = database.load("scene.multi", entity_reg);
+        auto events = tempest::event::event_registry();
+        auto reg = tempest::ecs::basic_archetype_registry(events);
+        auto result = database.load("scene.multi", reg);
         EXPECT_TRUE(result != tempest::ecs::tombstone);
 
         // The importer should NOT have been called.

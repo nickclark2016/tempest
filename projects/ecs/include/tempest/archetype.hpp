@@ -5,6 +5,7 @@
 #include <tempest/array.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/concepts.hpp>
+#include <tempest/event_registry.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/int.hpp>
@@ -732,6 +733,8 @@ namespace tempest::ecs
     class basic_archetype_registry
     {
       public:
+        explicit basic_archetype_registry(event::event_registry& event_registry);
+
         using entity_type = entity;
 
         template <typename... Ts>
@@ -790,6 +793,8 @@ namespace tempest::ecs
 
         flat_unordered_map<entity, tempest::string> _names;
 
+        event::event_registry* _event_registry;
+
         size_t _index_of_component_in_archetype(size_t arch_index, size_t component_id) const;
     };
 
@@ -802,6 +807,11 @@ namespace tempest::ecs
     struct is_duplicatable<self_component> : false_type
     {
     };
+
+    inline basic_archetype_registry::basic_archetype_registry(event::event_registry& event_registry)
+        : _event_registry(&event_registry)
+    {
+    }
 
     template <typename... Ts>
         requires(is_trivial_v<Ts> && ...)

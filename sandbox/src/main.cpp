@@ -43,7 +43,8 @@ auto main() -> int
         .layers = 1,
     });
 
-    auto entity_registry = tempest::ecs::archetype_registry();
+    auto event_registry = tempest::event::event_registry();
+    auto entity_registry = tempest::ecs::archetype_registry(event_registry);
     auto mesh_registry = tempest::core::mesh_registry();
     auto texture_registry = tempest::core::texture_registry();
     auto material_registry = tempest::core::material_registry();

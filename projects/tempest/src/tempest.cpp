@@ -25,8 +25,9 @@ namespace tempest
     } // namespace
 
     engine_context::engine_context()
-        : _asset_database(&_asset_type_reg),
-          _render(graphics::renderer::builder()
+        : _entity_registry(_event_registry),
+          _asset_database(&_asset_type_reg),
+            _render(graphics::renderer::builder()
                       .set_pbr_frame_graph_config({
                           .render_target_width = 1920,
                           .render_target_height = 1080,

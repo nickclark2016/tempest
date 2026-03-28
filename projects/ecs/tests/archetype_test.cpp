@@ -124,7 +124,8 @@ TEST(basic_archetype, single_type_with_resize)
 
 TEST(basic_archetype_registry, create)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
 
     reg.replace<int>(entity, 3);
@@ -137,8 +138,10 @@ TEST(basic_archetype_registry, create)
 
 TEST(basic_archetype_registry, create_initialized)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create_initialized<int, float>(3, 3.14f);
+    
     ASSERT_EQ(reg.size(), 1);
     ASSERT_EQ(reg.get<int>(entity), 3);
     ASSERT_EQ(reg.get<float>(entity), 3.14f);
@@ -146,10 +149,12 @@ TEST(basic_archetype_registry, create_initialized)
 
 TEST(basic_archetype_registry, create_swapped)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<float, int>();
     reg.replace<int>(entity, 3);
     reg.replace<float>(entity, 3.14f);
+
     ASSERT_EQ(reg.size(), 1);
     ASSERT_EQ(reg.get<int>(entity), 3);
     ASSERT_EQ(reg.get<float>(entity), 3.14f);
@@ -157,7 +162,8 @@ TEST(basic_archetype_registry, create_swapped)
 
 TEST(basic_archetype_registry, create_and_assign)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
 
     reg.assign_or_replace<int>(entity, 3);
@@ -173,7 +179,8 @@ TEST(basic_archetype_registry, create_and_assign)
 
 TEST(basic_archetype_registry, has_component)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
 
     ASSERT_TRUE(reg.has<int>(entity));
@@ -183,35 +190,42 @@ TEST(basic_archetype_registry, has_component)
 
 TEST(basic_archetype_registry, remove_component)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
     reg.remove<int>(entity);
+
     ASSERT_FALSE(reg.has<int>(entity));
     ASSERT_TRUE(reg.has<float>(entity));
 }
 
 TEST(basic_archetype_registry, try_get_component_with_component)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
     reg.replace<int>(entity, 3);
     reg.replace<float>(entity, 3.14f);
+
     ASSERT_EQ(reg.try_get<int>(entity), &reg.get<int>(entity));
     ASSERT_EQ(reg.try_get<float>(entity), &reg.get<float>(entity));
 }
 
 TEST(basic_archetype_registry, try_get_component_with_failure)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
     reg.replace<int>(entity, 3);
     reg.replace<float>(entity, 3.14f);
+
     ASSERT_EQ(reg.try_get<char>(entity), nullptr);
 }
 
 TEST(basic_archetype_registry, remove_lots_of_components)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float, char, double, short, long, long long>();
     reg.remove<int>(entity);
 
@@ -250,7 +264,8 @@ TEST(basic_archetype_registry, remove_lots_of_components)
 
 TEST(basic_archetype_registry, create_multiple_different_archetypes_with_removes_and_assigns)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto e1 = reg.create<int, float>();
     auto e2 = reg.create<int, float, char>();
     auto e3 = reg.create<int, float, char, double>();
@@ -352,7 +367,8 @@ TEST(basic_archetype_registry, create_multiple_different_archetypes_with_removes
 
 TEST(basic_archetype_registry, each_single_component)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto e1 = reg.create<int>();
     auto e2 = reg.create<int>();
     auto e3 = reg.create<int>();
@@ -384,7 +400,8 @@ TEST(basic_archetype_registry, each_single_component)
 
 TEST(basic_archetype_registry, each_single_component_no_match)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto e1 = reg.create<int>();
     auto e2 = reg.create<int>();
     auto e3 = reg.create<int>();
@@ -415,7 +432,8 @@ TEST(basic_archetype_registry, each_single_component_no_match)
 
 TEST(basic_archetype_registry, each_multiple_components_single_component_match)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto e1 = reg.create<int, float>();
     auto e2 = reg.create<int, float>();
     auto e3 = reg.create<int, float>();
@@ -465,7 +483,8 @@ TEST(basic_archetype_registry, each_multiple_components_single_component_match)
 
 TEST(basic_archetype_registry, each_multiple_components_with_multiple_match_and_extra_components)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
     auto e1 = reg.create<int, float, char>();
     auto e2 = reg.create<int, float, char>();
     auto e3 = reg.create<int, float, char>();
@@ -524,7 +543,8 @@ TEST(basic_archetype_registry, each_multiple_components_with_multiple_match_and_
 
 TEST(basic_archetype_registry, each_has_single_component_test_against_multiple)
 {
-    tempest::ecs::basic_archetype_registry reg;
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
 
     auto e1 = reg.create<int>();
     auto e2 = reg.create<int>();

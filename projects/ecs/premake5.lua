@@ -30,6 +30,7 @@ scoped.project('ecs', function()
     scoped.usage("PUBLIC", function()
         uses {
             'core',
+            'event',
             'math',
         }
     end)
