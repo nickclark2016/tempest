@@ -36,7 +36,7 @@ namespace tempest::assets
         _blob_data.clear();
 
         // Try to read existing database file
-        std::ifstream file(string(db_path).c_str(), std::ios::binary);
+        auto file = std::ifstream(string(db_path).c_str(), std::ios::binary);
         if (!file.is_open())
         {
             log->info("No existing database file at '{}', starting empty.", std::string_view(db_path.data(), db_path.size()));
@@ -44,7 +44,7 @@ namespace tempest::assets
         }
 
         // Read binary header
-        serialization::binary_header header;
+        auto header = serialization::binary_header{};
         file.read(reinterpret_cast<char*>(&header), sizeof(header));
         if (!file || header.magic != db_magic || header.version != db_version)
         {
@@ -53,14 +53,14 @@ namespace tempest::assets
         }
 
         // Read the rest of the file into a buffer
-        auto data_size = static_cast<size_t>(header.data_length);
-        vector<byte> buffer;
+        const auto data_size = static_cast<size_t>(header.data_length);
+        auto buffer = vector<byte>{};
         buffer.resize(data_size);
         file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(data_size));
         file.close();
 
         serialization::binary_archive archive;
-        archive.write(span<const byte>{buffer.data(), buffer.size()});
+        archive.write(tempest::move(buffer));
 
         // Read type registry entries and validate
         auto num_types = serialization::serializer<serialization::binary_archive, uint64_t>::deserialize(archive);
@@ -94,7 +94,7 @@ namespace tempest::assets
             });
 
             auto source_index = _sources.size();
-            string path_copy = entry->source_path;
+            auto path_copy = entry->source_path;
             _source_path_to_index.insert({tempest::move(path_copy), source_index});
             _source_id_to_index.insert({entry->id, source_index});
             _sources.push_back(tempest::move(entry));
@@ -418,8 +418,7 @@ namespace tempest::assets
         // Depth-first resolve dependencies with visited set
         flat_unordered_map<guid, bool> visited;
 
-        function<bool(const asset_entry&)> resolve_asset;
-        resolve_asset = [&](const asset_entry& entry) -> bool {
+        auto resolve_asset = [&](const asset_entry& entry, const auto& resolver) -> bool {
             auto visit_it = visited.find(entry.id);
             if (visit_it != visited.end())
             {
@@ -435,7 +434,7 @@ namespace tempest::assets
                 const auto* dep_entry = find_by_guid(dep_id);
                 if (dep_entry != nullptr)
                 {
-                    if (!resolve_asset(*dep_entry))
+                    if (!resolver(*dep_entry, resolver))
                     {
                         return false;
                     }
@@ -463,7 +462,7 @@ namespace tempest::assets
         // Resolve all assets for this source
         for (const auto* asset : source_assets)
         {
-            resolve_asset(*asset);
+            resolve_asset(*asset, resolve_asset);
         }
 
         // Find the entity hierarchy blob and reconstruct

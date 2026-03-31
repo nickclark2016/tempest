@@ -437,8 +437,8 @@ namespace tempest::ecs
             reg.assign_or_replace(child, rel);
         }
 
-        auto& opt_parent_rel = reg.get<rel_comp_type>(parent);
-        auto& opt_child_rel = reg.get<rel_comp_type>(child);
+        auto opt_parent_rel = reg.get<rel_comp_type>(parent);
+        auto opt_child_rel = reg.get<rel_comp_type>(child);
 
         // If the parent has no children, set the child as the first child
         // And the parent as the parent of the child
@@ -446,6 +446,10 @@ namespace tempest::ecs
         {
             opt_parent_rel.first_child = child;
             opt_child_rel.parent = parent;
+
+            // Replace the components to update the archetype
+            reg.replace(parent, opt_parent_rel);
+            reg.replace(child, opt_child_rel);
         }
         else
         {
@@ -454,6 +458,10 @@ namespace tempest::ecs
             opt_child_rel.next_sibling = opt_parent_rel.first_child;
             opt_child_rel.parent = parent;
             opt_parent_rel.first_child = child;
+            
+            // Replace the components to update the archetype
+            reg.replace(parent, opt_parent_rel);
+            reg.replace(child, opt_child_rel);
         }
     }
 } // namespace tempest::ecs

@@ -7,6 +7,18 @@ namespace tempest::serialization
         _buffer.insert(_buffer.end(), data.begin(), data.end());
     }
 
+    auto binary_archive::write(vector<byte> data) -> void
+    {
+        if (_buffer.empty())
+        {
+            _buffer = std::move(data);
+        }
+        else
+        {
+            _buffer.insert(_buffer.end(), data.begin(), data.end());
+        }
+    }
+
     auto binary_archive::read(size_t count) -> span<const byte>
     {
         if (_read_offset + count <= _buffer.size())

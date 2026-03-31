@@ -750,25 +750,19 @@ namespace tempest::ecs
         void destroy(entity_type entity);
 
         template <typename T>
-        remove_cvref_t<T>& assign(entity_type entity, T&& component);
+        const remove_cvref_t<T>& assign(entity_type entity, T&& component);
 
         template <typename T>
-        remove_cvref_t<T>& replace(entity_type entity, T&& component);
+        const remove_cvref_t<T>& replace(entity_type entity, T&& component);
 
         template <typename T>
-        remove_cvref_t<T>& assign_or_replace(entity_type entity, T&& component);
+        const remove_cvref_t<T>& assign_or_replace(entity_type entity, T&& component);
 
         template <typename T>
         void remove(entity_type entity);
 
         template <typename T>
-        remove_cvref_t<T>& get(entity_type entity);
-
-        template <typename T>
         const remove_cvref_t<T>& get(entity_type entity) const;
-
-        template <typename T>
-        remove_cvref_t<T>* try_get(entity_type entity) noexcept;
 
         template <typename T>
         const remove_cvref_t<T>* try_get(entity_type entity) const noexcept;
@@ -870,14 +864,14 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline remove_cvref_t<T>& basic_archetype_registry::assign(typename basic_archetype_registry::entity_type entity,
-                                                               T&& component)
+    inline const remove_cvref_t<T>& basic_archetype_registry::assign(
+        typename basic_archetype_registry::entity_type entity, T&& component)
     {
         auto key = _entity_archetype_mapping[entity];
         auto archetype_index = key.archetype_index;
 
         // Get the archetype
-        auto existing_arch = &_archetypes[key.archetype_index];
+        auto* existing_arch = &_archetypes[key.archetype_index];
 
         // Get the archetype of the entity + component
         using component_type = remove_cvref_t<T>;
@@ -962,7 +956,7 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline remove_cvref_t<T>& basic_archetype_registry::replace(typename basic_archetype_registry::entity_type entity,
+    inline const remove_cvref_t<T>& basic_archetype_registry::replace(typename basic_archetype_registry::entity_type entity,
                                                                 T&& value)
     {
         using component_type = remove_cvref_t<T>;
@@ -990,7 +984,7 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline remove_cvref_t<T>& basic_archetype_registry::assign_or_replace(
+    inline const remove_cvref_t<T>& basic_archetype_registry::assign_or_replace(
         typename basic_archetype_registry::entity_type entity, T&& value)
     {
         if (has<T>(entity))
@@ -1110,20 +1104,6 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline remove_cvref_t<T>& basic_archetype_registry::get(typename basic_archetype_registry::entity_type entity)
-    {
-        using component_type = remove_cvref_t<T>;
-        static const auto type_info = create_archetype_type_info<component_type>();
-
-        auto key = _entity_archetype_mapping[entity];
-        auto archetype_index = key.archetype_index;
-        const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
-        auto& arch = _archetypes[archetype_index];
-        auto data = arch.element_at(key.archetype_key, type_index);
-        return *reinterpret_cast<T*>(data);
-    }
-
-    template <typename T>
     inline const remove_cvref_t<T>& basic_archetype_registry::get(
         typename basic_archetype_registry::entity_type entity) const
     {
@@ -1136,28 +1116,6 @@ namespace tempest::ecs
         auto& arch = _archetypes[archetype_index];
         auto data = arch.element_at(key.archetype_key, type_index);
         return *reinterpret_cast<const T*>(data);
-    }
-
-    template <typename T>
-    inline remove_cvref_t<T>* basic_archetype_registry::try_get(
-        typename basic_archetype_registry::entity_type entity) noexcept
-    {
-        using component_type = remove_cvref_t<T>;
-        static const auto type_info = create_archetype_type_info<component_type>();
-        basic_archetype_entity key = _entity_archetype_mapping[entity];
-
-        // Check if the archetype contains the component
-        const auto& hash = _hashes[key.archetype_index];
-        if ((hash.hash[type_info.index / 8] & static_cast<byte>(1 << (type_info.index % 8))) == static_cast<byte>(0))
-        {
-            return nullptr;
-        }
-
-        auto archetype_index = key.archetype_index;
-        const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
-        auto& arch = _archetypes[archetype_index];
-        auto data = arch.element_at(key.archetype_key, type_index);
-        return reinterpret_cast<remove_cvref_t<T>*>(data);
     }
 
     template <typename T>

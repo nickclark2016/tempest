@@ -58,8 +58,9 @@ namespace tempest::assets
             free(image_data);
         }
 
-        auto ent = registry.create<core::texture_component>();
-        registry.get<core::texture_component>(ent).texture_id = id;
+        auto ent = registry.create_initialized<core::texture_component>(core::texture_component{
+            .texture_id = id,
+        });
 
         asset_database::asset_metadata meta = {
             .path = path ? *path : "EXR of Unknown Origin",

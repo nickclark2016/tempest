@@ -1507,7 +1507,7 @@ namespace tempest::assets
         {
             // There exists at least one child
             const auto child = ent_rel->first_child;
-            auto* child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
+            const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
             const auto has_siblings = child_rel->next_sibling != ecs::tombstone;
 
             // If there are no siblings, copy the components from the parent to the child and delete the parent
@@ -1522,7 +1522,7 @@ namespace tempest::assets
                 }
 
                 // Transform
-                auto* transform = registry.try_get<ecs::transform_component>(ent);
+                const auto* transform = registry.try_get<ecs::transform_component>(ent);
                 if (transform != nullptr)
                 {
                     // Merge the parent and child transforms
@@ -1536,7 +1536,9 @@ namespace tempest::assets
                 }
 
                 // Remove the parent relationship
-                child_rel->parent = ecs::tombstone;
+                auto child_relationship = *child_rel;
+                child_relationship.parent = ecs::tombstone;
+                registry.replace(child, child_relationship);
 
                 //// Delete the parent
                 registry.destroy(ent);

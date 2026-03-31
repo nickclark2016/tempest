@@ -57,7 +57,9 @@ auto main() -> int
         asset_database.load("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", entity_registry);
 
     const auto sponza_instance = entity_registry.duplicate(sponza_prefab);
-    entity_registry.get<tempest::ecs::transform_component>(sponza_instance).scale({0.125f});
+    auto sponza_transform = tempest::ecs::transform_component{};
+    sponza_transform.scale({0.125F});
+    entity_registry.assign_or_replace(sponza_instance, sponza_transform);
 
     auto entities = tempest::vector<tempest::ecs::archetype_entity>{};
     entities.push_back(sponza_instance);

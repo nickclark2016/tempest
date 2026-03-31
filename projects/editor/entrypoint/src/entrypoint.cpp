@@ -37,7 +37,11 @@ namespace tempest::editor
             auto sponza_prefab = ctx.get_asset_database().load(
                 "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", ctx.get_registry());
             auto sponza_instance = ctx.load_entity(sponza_prefab);
-            ctx.get_registry().get<tempest::ecs::transform_component>(sponza_instance).scale({0.125f});
+
+            auto sponza_transform = ctx.get_registry().get<tempest::ecs::transform_component>(sponza_instance);
+            sponza_transform.scale({0.125f});
+            ctx.get_registry().replace(sponza_instance, sponza_transform);
+
             ctx.get_registry().name(sponza_instance, "Sponza");
 
             camera = ctx.get_registry().create();

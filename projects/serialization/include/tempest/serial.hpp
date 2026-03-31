@@ -31,6 +31,7 @@ namespace tempest::serialization
     {
       public:
         auto write(span<const byte> data) -> void;
+        auto write(vector<byte> data) -> void;
         [[nodiscard]] auto read(size_t count) -> span<const byte>;
         [[nodiscard]] auto written_size() const noexcept -> size_t;
 
