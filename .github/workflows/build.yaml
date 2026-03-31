@@ -43,7 +43,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ windows-2022 ]
+        os: [ windows-2022, windows-2025-vs2026 ]
         config: [ debug, release ]
     
     steps:
@@ -58,7 +58,11 @@ jobs:
         with:
           ref: master
       - name: Generate Project Files
+        if: matrix.os == 'windows-2022'
         run: premake5 vs2022
+      - name: Generate Project Files
+        if: matrix.os == 'windows-2025-vs2026'
+        run: premake5 vs2025
       - name: Fetch Dependencies
         run: premake5 fetch
       - name: Build
