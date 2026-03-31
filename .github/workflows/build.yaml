@@ -59,17 +59,9 @@ jobs:
           ref: master
       - name: Generate Project Files
         if: matrix.os == 'windows-2022'
-        run: premake5 vs2022
-      - name: Generate Project Files
-        if: matrix.os == 'windows-2025-vs2026'
-        run: premake5 vs2026
+        run: premake5 ${{ case(matrix.os == 'windows-2022', 'vs2022', 'vs2026') }}
       - name: Fetch Dependencies
         run: premake5 fetch
       - name: Build
-        if: matrix.os == 'windows-2022'
         run: |
-          msbuild build/vs2022/Tempest.sln -p:Configuration=${{ matrix.config }} -p:Platform=x64 -m
-      - name: Build
-        if: matrix.os == 'windows-2025-vs2026'
-        run: |
-          msbuild build/vs2026/Tempest.slnx -p:Configuration=${{ matrix.config }} -p:Platform=x64 -m
+          msbuild build/${{ case(matrix.os == 'windows-2022', 'vs2022', 'vs2026') }}/Tempest.sln -p:Configuration=${{ matrix.config }} -p:Platform=x64 -m
