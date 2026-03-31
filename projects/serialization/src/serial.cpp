@@ -11,7 +11,7 @@ namespace tempest::serialization
     {
         if (_buffer.empty())
         {
-            _buffer = std::move(data);
+            _buffer = tempest::move(data);
         }
         else
         {
