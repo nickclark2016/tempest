@@ -2,6 +2,8 @@
 
 #include <cstring>
 #include <gtest/gtest.h>
+#include <tempest/ecs_events.hpp>
+#include <tempest/traits.hpp>
 
 TEST(basic_archetype_type_info, get_trivial_type_info)
 {
@@ -559,4 +561,139 @@ TEST(basic_archetype_registry, each_has_single_component_test_against_multiple)
     reg.each(func);
 
     ASSERT_EQ(0.0f, fsum);
+}
+
+TEST(basic_archetype_registry, create_entity_emit_event)
+{
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
+
+    auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+
+    [[maybe_unused]] const auto subscription_handle = events.dispatcher<tempest::ecs::entity_created_event<tempest::ecs::entity>>().subscribe([&event_entity](auto evt) -> void {
+        event_entity = evt.entity;
+    });
+
+    const auto created_entity = reg.create();
+    ASSERT_EQ(created_entity, event_entity);
+}
+
+TEST(basic_archetype_registry, destroy_entity_emit_event)
+{
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
+
+    auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+
+    [[maybe_unused]] const auto subscription_handle = events.dispatcher<tempest::ecs::entity_destroyed_event<tempest::ecs::entity>>().subscribe([&event_entity](auto evt) -> void {
+        event_entity = evt.entity;
+    });
+
+    const auto created_entity = reg.create();
+    reg.destroy(created_entity);
+    ASSERT_EQ(created_entity, event_entity);
+}
+
+TEST(basic_archetype_registry, component_added_emit_event)
+{
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
+
+    auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto event_component_value = 0;
+
+    constexpr auto component_value = 42;
+
+    [[maybe_unused]] const auto subscription_handle = events
+        .dispatcher<tempest::ecs::component_added_event<tempest::ecs::entity, int>>()
+        .subscribe([&event_entity, &event_component_value](auto evt) -> void {
+            event_entity = evt.entity;
+            event_component_value = evt.component;
+        });
+
+    const auto created_entity = reg.create();
+    reg.assign_or_replace(created_entity, component_value);
+
+    ASSERT_EQ(created_entity, event_entity);
+    ASSERT_EQ(component_value, event_component_value);
+}
+
+TEST(basic_archetype_registry, component_replaced_emit_event)
+{
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
+
+    auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto event_old_component_value = 0;
+    auto event_new_component_value = 0;
+
+    constexpr auto old_component_value = 42;
+    constexpr auto new_component_value = 84;
+
+    [[maybe_unused]] const auto subscription_handle = events
+        .dispatcher<tempest::ecs::component_replaced_event<tempest::ecs::entity, int>>()
+        .subscribe([&event_entity, &event_old_component_value, &event_new_component_value](auto evt) -> void {
+            event_entity = evt.entity;
+            event_old_component_value = evt.old_component;
+            event_new_component_value = evt.new_component;
+        });
+
+    const auto created_entity = reg.create();
+    reg.assign_or_replace(created_entity, old_component_value);
+    reg.replace(created_entity, new_component_value);
+
+    ASSERT_EQ(created_entity, event_entity);
+    ASSERT_EQ(old_component_value, event_old_component_value);
+    ASSERT_EQ(new_component_value, event_new_component_value);
+}
+
+TEST(basic_archetype_registry, component_removed_emit_event)
+{
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
+
+    auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto event_component_value = 0;
+
+    constexpr auto component_value = 42;
+
+    [[maybe_unused]] const auto subscription_handle = events
+        .dispatcher<tempest::ecs::component_removed_event<tempest::ecs::entity, int>>()
+        .subscribe([&event_entity, &event_component_value](auto evt) -> void {
+            event_entity = evt.entity;
+            event_component_value = evt.component;
+        });
+
+    const auto created_entity = reg.create();
+    reg.assign_or_replace(created_entity, component_value);
+    reg.remove<int>(created_entity);
+
+    ASSERT_EQ(created_entity, event_entity);
+    ASSERT_EQ(component_value, event_component_value);
+}
+
+TEST(basic_archetype_registry, component_removed_emit_event_with_multiple_components)
+{
+    auto events = tempest::event::event_registry();
+    auto reg = tempest::ecs::basic_archetype_registry(events);
+
+    auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
+    auto event_component_value = 0;
+
+    constexpr auto component_value = 42;
+
+    [[maybe_unused]] const auto subscription_handle = events
+        .dispatcher<tempest::ecs::component_removed_event<tempest::ecs::entity, int>>()
+        .subscribe([&event_entity, &event_component_value](auto evt) -> void {
+            event_entity = evt.entity;
+            event_component_value = evt.component;
+        });
+
+    const auto created_entity = reg.create<int, float>();
+    reg.assign_or_replace(created_entity, component_value);
+    reg.assign_or_replace(created_entity, 3.14f);
+    reg.remove<int>(created_entity);
+
+    ASSERT_EQ(created_entity, event_entity);
+    ASSERT_EQ(component_value, event_component_value);
 }

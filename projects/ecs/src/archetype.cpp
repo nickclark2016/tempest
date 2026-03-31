@@ -1,3 +1,4 @@
+#include "tempest/ecs_events.hpp"
 #include <tempest/archetype.hpp>
 
 #include <tempest/algorithm.hpp>
@@ -285,6 +286,10 @@ namespace tempest::ecs
         auto& archetype = _archetypes[archetype_index];
         archetype.erase(key.archetype_key);
         _entities.release(entity);
+
+        _event_registry->dispatcher<entity_destroyed_event<entity_type>>().publish(entity_destroyed_event{
+            .entity = entity,
+        });
     }
 
     typename basic_archetype_registry::entity_type basic_archetype_registry::duplicate(

@@ -20,9 +20,9 @@ namespace tempest::assets
                     optional<string_view> path) -> ecs::archetype_entity override;
 
       private:
-        core::mesh_registry* _mesh_reg;
-        core::texture_registry* _texture_reg;
-        core::material_registry* _material_reg;
+        [[maybe_unused]] core::mesh_registry* _mesh_reg;
+        [[maybe_unused]] core::texture_registry* _texture_reg;
+        [[maybe_unused]] core::material_registry* _material_reg;
     };
 } // namespace tempest::assets
 

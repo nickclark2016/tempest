@@ -8,6 +8,7 @@ scoped.workspace('Tempest', function()
     configurations { 'Debug', 'Release', 'RelWithDebugInfo' }
     platforms { 'x64' }
     defaultplatform 'x64'
+    location 'build/%{_ACTION}'
 
     scoped.filter({
         'action:not vs*'

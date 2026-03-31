@@ -1,10 +1,11 @@
 #ifndef tempest_ecs_archetype_hpp
 #define tempest_ecs_archetype_hpp
 
-#include <tempest/assert.hpp>
 #include <tempest/array.hpp>
+#include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/concepts.hpp>
+#include <tempest/ecs_events.hpp>
 #include <tempest/event_registry.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
@@ -300,8 +301,9 @@ namespace tempest::ecs
         };
 
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::basic_entity_store_iterator(
-            T* chunks, size_t index, size_t end) noexcept
+        inline constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::basic_entity_store_iterator(T* chunks,
+                                                                                                    size_t index,
+                                                                                                    size_t end) noexcept
             : chunks{chunks}, index{index}, end{end}
         {
         }
@@ -850,6 +852,11 @@ namespace tempest::ecs
         replace(key, self_component{
                          .entity = key,
                      });
+
+        _event_registry->dispatcher<entity_created_event<basic_archetype_registry::entity_type>>().publish({
+            .entity = key,
+        });
+
         return key;
     }
 
@@ -945,6 +952,12 @@ namespace tempest::ecs
 
         _entity_archetype_mapping[entity] = key;
 
+        _event_registry->dispatcher<component_added_event<basic_archetype_registry::entity_type, component_type>>()
+            .publish({
+                .entity = entity,
+                .component = *result_ptr,
+            });
+
         return *result_ptr;
     }
 
@@ -960,9 +973,18 @@ namespace tempest::ecs
         const auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
 
         auto& arch = _archetypes[archetype_index];
-        auto data = arch.element_at(key.archetype_key, type_index);
+        auto* data = arch.element_at(key.archetype_key, type_index);
+
+        const auto old_value = *reinterpret_cast<component_type*>(data);
 
         auto* res = construct_at(reinterpret_cast<component_type*>(data), value);
+
+        _event_registry->dispatcher<component_replaced_event<basic_archetype_registry::entity_type, component_type>>()
+            .publish({
+                .entity = entity,
+                .old_component = old_value,
+                .new_component = *res,
+            });
 
         return *res;
     }
@@ -973,12 +995,9 @@ namespace tempest::ecs
     {
         if (has<T>(entity))
         {
-            return replace(entity, value);
+            return replace(entity, tempest::move(value));
         }
-        else
-        {
-            return assign(entity, value);
-        }
+        return assign(entity, tempest::move(value));
     }
 
     template <typename T>
@@ -994,7 +1013,10 @@ namespace tempest::ecs
         auto type_index = _index_of_component_in_archetype(archetype_index, type_info.index);
 
         auto* arch = &_archetypes[archetype_index];
-        auto data = arch->element_at(key.archetype_key, type_index);
+        auto* data = arch->element_at(key.archetype_key, type_index);
+
+        const auto old_value = *reinterpret_cast<component_type*>(data);
+
         (void)destroy_at(reinterpret_cast<component_type*>(data));
 
         // Create a hash without the component
@@ -1003,16 +1025,15 @@ namespace tempest::ecs
             static_cast<byte>(~(1 << (detail::get_archetype_type_index<component_type>() % 8)));
 
         // Check if the archetype already exists
-        auto it = tempest::find(_hashes.begin(), _hashes.end(), hash);
+        const auto* archetype_it = tempest::find(_hashes.begin(), _hashes.end(), hash);
 
-        if (it == _hashes.end())
+        if (archetype_it == _hashes.end())
         {
-
             // Create a new archetype
             auto existing_storage_view = arch->storages();
             vector<basic_archetype_type_info> new_types;
 
-            for (auto& storage : existing_storage_view)
+            for (const auto& storage : existing_storage_view)
             {
                 if (storage.type_info().index != type_info_index)
                 {
@@ -1028,10 +1049,10 @@ namespace tempest::ecs
             new_arch.reserve(capacity);
             _hashes.push_back(hash);
 
-            it = _hashes.end() - 1;
+            archetype_it = _hashes.end() - 1;
         }
 
-        auto new_archetype_index = tempest::distance(_hashes.begin(), it);
+        auto new_archetype_index = tempest::distance(_hashes.cbegin(), archetype_it);
         auto& new_arch = _archetypes[new_archetype_index];
         auto new_key = new_arch.allocate();
 
@@ -1056,8 +1077,8 @@ namespace tempest::ecs
             if (existing_bit && new_bit)
             {
                 // Copy the component
-                auto existing_data = arch->element_at(key.archetype_key, existing_component_index);
-                auto new_data = new_arch.element_at(new_key, new_component_index);
+                auto* existing_data = arch->element_at(key.archetype_key, existing_component_index);
+                auto* new_data = new_arch.element_at(new_key, new_component_index);
                 copy_n(existing_data, arch->storages()[existing_component_index].type_info().size, new_data);
 
                 ++components_written;
@@ -1080,6 +1101,12 @@ namespace tempest::ecs
         };
 
         _entity_archetype_mapping[entity] = entity_key;
+
+        _event_registry->dispatcher<component_removed_event<basic_archetype_registry::entity_type, component_type>>()
+            .publish({
+                .entity = entity,
+                .component = old_value,
+            });
     }
 
     template <typename T>
