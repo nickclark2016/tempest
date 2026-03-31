@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-24.04 ]
-        config: [ debug, release ]
+        config: [ Debug, Release, RelWithDebugInfo ]
     
     steps:
       - name: Checkout
@@ -31,11 +31,11 @@ jobs:
         with:
           ref: master
       - name: Generate Project Files
-        run: premake5 gmake
+        run: premake5 ninja --cc=clang --shell=posix
       - name: Fetch Dependencies
         run: premake5 fetch
       - name: Build
-        run: make config=${{ matrix.config }}_x64 -j$(nproc)
+        run: ninja -C build/ninja ${{ matrix.config }}_x64
 
   cpp-windows-build:
     name: Build Windows
@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         os: [ windows-2022, windows-2025-vs2026 ]
-        config: [ debug, release ]
+        config: [ Debug, Release, RelWithDebugInfo ]
     
     steps:
       - name: Checkout
@@ -62,10 +62,14 @@ jobs:
         run: premake5 vs2022
       - name: Generate Project Files
         if: matrix.os == 'windows-2025-vs2026'
-        run: premake5 vs2025
+        run: premake5 vs2026
       - name: Fetch Dependencies
         run: premake5 fetch
       - name: Build
+        if: matrix.os == 'windows-2022'
         run: |
-          $config = (Get-Culture).TextInfo.ToTitleCase("${{ matrix.config }}")
-          msbuild -p:Configuration=$config -p:Platform=x64 -m
+          msbuild build/vs2022/Tempest.sln -p:Configuration=${{ matrix.config }} -p:Platform=x64 -m
+      - name: Build
+        if: matrix.os == 'windows-2025-vs2026'
+        run: |
+          msbuild build/vs2026/Tempest.slnx -p:Configuration=${{ matrix.config }} -p:Platform=x64 -m
