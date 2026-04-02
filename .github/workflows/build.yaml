@@ -36,6 +36,8 @@ jobs:
         run: premake5 fetch
       - name: Build
         run: ninja -C build/ninja ${{ matrix.config }}_x64
+      - name: Run Tests
+        run: ninja -C build/ninja test_${{ matrix.config }}_x64
 
   cpp-windows-build:
     name: Build Windows
