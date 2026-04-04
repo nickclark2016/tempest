@@ -29,10 +29,7 @@ scoped.project('tempest', function()
             'logger',
             'math',
             'rhi-api',
-        }
-
-        links {
-            'rhi-vk',
+            'serialization',
         }
     end)
 
@@ -69,6 +66,43 @@ scoped.project('tempest', function()
             links {
                 'pthread',
                 'X11',
+            }
+        end)
+
+        links {
+            'rhi-vk',
+        }
+
+        scoped.filter({
+            'configurations:Release',
+        }, function()
+            linktimeoptimization 'On'
+        end)
+
+        scoped.filter({
+            'configurations:Release',
+            'toolset:clang*',
+        }, function()
+            linker 'lld'
+            
+            wholearchive {
+                'assets',
+                'core',
+                'ecs',
+                'event',
+                'graphics',
+                'logger',
+                'math',
+                'rhi-api',
+                'rhi-vk',
+                'serialization',
+
+                'miniz',
+                'simdjson',
+                'tinyexr',
+                'tlsf',
+                'vk-bootstrap',
+                'vma',
             }
         end)
     end)

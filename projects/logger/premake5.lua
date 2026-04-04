@@ -31,7 +31,9 @@ scoped.project('logger', function()
     externalwarnings 'Off'
     warnings 'Extra'
 
-    uses { 'spdlog' }
+    scoped.usage("PUBLIC", function()
+        uses { 'core' }
+    end)
 
     scoped.usage("INTERFACE", function()
         externalincludedirs {
@@ -44,7 +46,6 @@ scoped.project('logger', function()
 
         links {
             'logger',
-            'spdlog',
         }
     end)
 end)
