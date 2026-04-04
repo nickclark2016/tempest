@@ -74,13 +74,13 @@ scoped.project('tempest', function()
         }
 
         scoped.filter({
-            'configurations:Release',
+            'options:enable-lto'
         }, function()
             linktimeoptimization 'On'
         end)
 
         scoped.filter({
-            'configurations:Release',
+            'options:enable-lto',
             'toolset:clang*',
         }, function()
             linker 'lld'
@@ -115,3 +115,25 @@ scoped.project('tempest', function()
         }
     end)
 end)
+
+local gcc = premake.tools.gcc
+local gcc_whole_archive = gcc.wholearchive
+
+if os.target() == 'windows' then
+    local msc = premake.tools.msc
+    local msc_whole_archive = msc.wholearchive
+
+    gcc.wholearchive = function(cfg)
+        local archives = premake.config.getwholearchive(cfg)
+        archives = table.translate(archives, function(archive)
+            return '-Wl,/WHOLEARCHIVE:' .. archive
+        end)
+        return archives
+    end
+end
+
+newoption {
+    trigger = 'enable-lto',
+    description = 'Enable Link Time Optimization',
+    category = 'Tempest Engine',
+}

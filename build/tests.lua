@@ -57,8 +57,12 @@ local function ninja_test_target(wks)
         test_targets[configkey] = existing_targets
     end
 
+    local sorted_configkeys = table.keys(test_targets)
+    table.sort(sorted_configkeys)
+
     -- Emit individual test targets
-    for configkey, targets in pairs(test_targets) do
+    for _, configkey in ipairs(sorted_configkeys) do
+        local targets = test_targets[configkey]
         if #targets == 0 then
             goto continue
         end
