@@ -28,8 +28,6 @@ namespace tempest::graphics
 {
     namespace
     {
-        auto log = logger::logger_factory::create({.prefix = "pbr_frame_graph"});
-
         auto calculate_view_matrix(const ecs::transform_component& tx)
         {
             const auto position = tx.position();
@@ -102,15 +100,6 @@ namespace tempest::graphics
     void pbr_frame_graph::compile(queue_configuration cfg)
     {
         auto exec_plan = move(_builder).value().compile(cfg);
-
-        for (const auto& sub : exec_plan.submissions)
-        {
-            log->debug("Submission: {}", to_underlying(sub.type));
-            for (const auto& pass : sub.passes)
-            {
-                log->debug("Pass '{}'", pass.name.c_str());
-            }
-        }
 
         _builder = none();
         _executor = graph_executor(*_device);
@@ -1551,7 +1540,7 @@ namespace tempest::graphics
 
             if (!inserted)
             {
-                log->critical("Failed to insert shadow atlas slot into pool!");
+                terminate();
             }
         }
 
@@ -4096,7 +4085,6 @@ namespace tempest::graphics
             if (self->_directional_shadows.directional_shadows.size() >=
                 self->_directional_shadows.atlas_pool.atlas_slots.size())
             {
-                log->critical("Exceeded maximum number of directional lights with shadows supported!");
                 return;
             }
 
@@ -5522,8 +5510,6 @@ namespace tempest::graphics
                 return rhi::image_format::rgba16_unorm;
             case core::texture_format::rgba32_float:
                 return rhi::image_format::rgba32_float;
-            default:
-                log->error("Unsupported texture format");
             }
 
             unreachable();
@@ -5537,7 +5523,7 @@ namespace tempest::graphics
         vector<guid> next_texture_ids;
         for (const auto& tex_guid : texture_ids)
         {
-            if (_bindless_textures.image_to_index.find(tex_guid) != _bindless_textures.image_to_index.end() ||
+            if (_bindless_textures.image_to_index.contains(tex_guid) ||
                 tempest::find(next_texture_ids.begin(), next_texture_ids.end(), tex_guid) != next_texture_ids.end())
             {
                 continue;

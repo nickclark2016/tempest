@@ -774,7 +774,7 @@ TEST(asset_database_load, cached_asset_resolves_from_blobs)
         ASSERT_NE(entry, nullptr);
         saved_asset_id = entry->id;
 
-        database.save();
+        (void)database.save();
     }
 
     // Second pass: load from saved database

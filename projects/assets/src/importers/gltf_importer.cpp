@@ -33,10 +33,6 @@ namespace tempest::assets
 
     namespace
     {
-        auto log = logger::logger_factory::create({ // NOLINT
-            .prefix = "tempest::gltf_importer",
-        });
-
         enum class component_type : uint16_t
         {
             BYTE = 5120,
@@ -1318,7 +1314,7 @@ namespace tempest::assets
         return scale;
     }
 
-    auto extract_transformation_matrix(const simdjson::dom::object& node, uint32_t node_id)
+    auto extract_transformation_matrix(const simdjson::dom::object& node, [[maybe_unused]] uint32_t node_id)
         -> optional<ecs::transform_component>
     {
         auto matrix_json = sjd::array{};
@@ -1349,9 +1345,6 @@ namespace tempest::assets
 
             if (!math::decompose(transform_matrix, translation_vec, rotation_quat, scale_vec))
             {
-                log->warn("Failed to decompose transform matrix for node {}, using identity transform instead",
-                          node_id);
-
                 return ecs::transform_component::identity();
             }
 

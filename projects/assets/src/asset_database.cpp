@@ -11,10 +11,6 @@ namespace tempest::assets
 {
     namespace
     {
-        auto log = logger::logger_factory::create({
-            .prefix = "tempest::asset_database",
-        });
-
         constexpr array<uint8_t, 4> db_magic = {'T', 'E', 'B', 'F'};
         constexpr uint16_t db_version = 2;
     } // namespace
@@ -39,7 +35,6 @@ namespace tempest::assets
         auto file = std::ifstream(string(db_path).c_str(), std::ios::binary);
         if (!file.is_open())
         {
-            log->info("No existing database file at '{}', starting empty.", std::string_view(db_path.data(), db_path.size()));
             return;
         }
 
@@ -48,7 +43,6 @@ namespace tempest::assets
         file.read(reinterpret_cast<char*>(&header), sizeof(header));
         if (!file || header.magic != db_magic || header.version != db_version)
         {
-            log->warn("Invalid or incompatible database header at '{}', starting empty.", std::string_view(db_path.data(), db_path.size()));
             return;
         }
 
@@ -72,8 +66,6 @@ namespace tempest::assets
             auto validation = _type_reg->validate(type_id, type_name);
             if (validation.has_value() && !validation.value())
             {
-                log->warn("Type registry mismatch for hash {}: expected '{}', skipping database.",
-                          type_hash, std::string_view(type_name.data(), type_name.size()));
                 return;
             }
         }
@@ -136,15 +128,12 @@ namespace tempest::assets
             auto blob_span = archive.read(static_cast<size_t>(blob_size));
             _blob_data.insert(_blob_data.end(), blob_span.begin(), blob_span.end());
         }
-
-        log->info("Loaded database with {} sources, {} assets from '{}'.", _sources.size(), _assets.size(), std::string_view(db_path.data(), db_path.size()));
     }
 
     auto asset_database::save() const -> bool
     {
         if (_db_path.empty())
         {
-            log->error("Cannot save: no database path set. Call open() first.");
             return false;
         }
 
@@ -224,7 +213,6 @@ namespace tempest::assets
         std::ofstream file(_db_path.c_str(), std::ios::binary);
         if (!file.is_open())
         {
-            log->error("Failed to open '{}' for writing.", std::string_view(_db_path.data(), _db_path.size()));
             return false;
         }
 
@@ -233,7 +221,6 @@ namespace tempest::assets
         file.write(reinterpret_cast<const char*>(all_data.data()), static_cast<std::streamsize>(all_data.size()));
         file.close();
 
-        log->info("Saved database with {} sources, {} assets to '{}'.", _sources.size(), _assets.size(), std::string_view(_db_path.data(), _db_path.size()));
         return true;
     }
 
@@ -336,7 +323,6 @@ namespace tempest::assets
         auto iter = _asset_guid_to_index.find(asset_id);
         if (iter == _asset_guid_to_index.end())
         {
-            log->error("Cannot store blob: asset GUID not found.");
             return;
         }
 

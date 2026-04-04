@@ -10,8 +10,6 @@ namespace tempest::rhi::vk
 {
     namespace
     {
-        auto logger = logger::logger_factory::create({.prefix{"tempest::graphics::vk::window_surface"}});
-
         static consteval array<core::key, GLFW_KEY_LAST + 1> build_key_map()
         {
             array<core::key, GLFW_KEY_LAST + 1> keys;
@@ -295,10 +293,6 @@ namespace tempest::rhi::vk
         {
             glfwSetCursor(_window, cursor);
         }
-        else
-        {
-            logger->error("Failed to create cursor for shape: {}", static_cast<uint32_t>(shape));
-        }
     }
 
     vector<rhi::window_surface::monitor> window_surface::get_monitors() const noexcept
@@ -447,7 +441,6 @@ namespace tempest::rhi::vk
                                        desc.fullscreen ? glfwGetPrimaryMonitor() : nullptr, nullptr);
         if (window == nullptr)
         {
-            logger->error("Failed to create GLFW window: {}", desc.name.c_str());
             return nullptr;
         }
 

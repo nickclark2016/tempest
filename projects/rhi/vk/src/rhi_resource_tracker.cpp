@@ -10,8 +10,6 @@ namespace tempest::rhi::vk
 {
     namespace
     {
-        auto logger = logger::logger_factory::create({.prefix{"tempest::rhi::vk::rhi_resource_tracker"}});
-
         void release_buffer(uint64_t key, device* dev)
         {
             auto resource_key = extract_resource_key<rhi_handle_type::buffer>(key);
@@ -73,10 +71,6 @@ namespace tempest::rhi::vk
         else
         {
             auto& resource = it->second;
-            if (resource.delete_requested)
-            {
-                logger->error("Buffer Resource {}:{} is already marked for deletion", buffer.generation, buffer.id);
-            }
 
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
@@ -111,13 +105,7 @@ namespace tempest::rhi::vk
         else
         {
             auto& resource = it->second;
-            if (resource.delete_requested)
-            {
-                // Get the resource name
-                const auto& name = _device->get_image(image)->name;
-                logger->warn("Image Resource {}:{} ({}) is already marked for deletion", image.generation, image.id,
-                             name.empty() ? "Unknown" : name.c_str());
-            }
+            
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
@@ -151,10 +139,7 @@ namespace tempest::rhi::vk
         else
         {
             auto& resource = it->second;
-            if (resource.delete_requested)
-            {
-                logger->error("Sampler Resource {}:{} is already marked for deletion", sampler.generation, sampler.id);
-            }
+
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
@@ -188,11 +173,7 @@ namespace tempest::rhi::vk
         else
         {
             auto& resource = it->second;
-            if (resource.delete_requested)
-            {
-                logger->error("Graphics Pipeline Resource {}:{} is already marked for deletion", pipeline.generation,
-                              pipeline.id);
-            }
+
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
@@ -226,11 +207,7 @@ namespace tempest::rhi::vk
         else
         {
             auto& resource = it->second;
-            if (resource.delete_requested)
-            {
-                logger->error("Descriptor Set Resource {}:{} is already marked for deletion", desc_set.generation,
-                              desc_set.id);
-            }
+
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
@@ -264,11 +241,7 @@ namespace tempest::rhi::vk
         else
         {
             auto& resource = it->second;
-            if (resource.delete_requested)
-            {
-                logger->error("Compute Pipeline Resource {}:{} is already marked for deletion", pipeline.generation,
-                              pipeline.id);
-            }
+
             // Check if the resource is already tracking usage on the queue and queue index
             auto usage_it = find_if(resource.usage_records.begin(), resource.usage_records.end(),
                                     [queue](const resource_usage_record& record) { return record.queue == queue; });
@@ -289,7 +262,6 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
@@ -307,7 +279,6 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
@@ -325,7 +296,6 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
@@ -344,7 +314,6 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
@@ -363,7 +332,6 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
@@ -382,7 +350,6 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
@@ -397,13 +364,13 @@ namespace tempest::rhi::vk
     bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer) const noexcept
     {
         auto key = make_resource_key(rhi::rhi_handle_type::buffer, buffer.generation, buffer.id);
-        return _tracked_resources.find(key) != _tracked_resources.end();
+        return _tracked_resources.contains(key);
     }
 
     bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> image) const noexcept
     {
         const auto key = make_resource_key(rhi::rhi_handle_type::image, image.generation, image.id);
-        const auto tracked = _tracked_resources.find(key) != _tracked_resources.end();
+        const auto tracked = _tracked_resources.contains(key);
         if (!tracked)
         {
             // Check is any mip views are tracked
@@ -419,7 +386,7 @@ namespace tempest::rhi::vk
                 {
                     const auto mip_key =
                         make_resource_key(rhi::rhi_handle_type::image, mip_view.generation, mip_view.id);
-                    if (_tracked_resources.find(mip_key) != _tracked_resources.end())
+                    if (_tracked_resources.contains(mip_key))
                     {
                         return true;
                     }
@@ -433,28 +400,28 @@ namespace tempest::rhi::vk
     bool resource_tracker::is_tracked(rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> sampler) const noexcept
     {
         auto key = make_resource_key(rhi::rhi_handle_type::sampler, sampler.generation, sampler.id);
-        return _tracked_resources.find(key) != _tracked_resources.end();
+        return _tracked_resources.contains(key);
     }
 
     bool resource_tracker::is_tracked(
         rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline) const noexcept
     {
         auto key = make_resource_key(rhi::rhi_handle_type::graphics_pipeline, pipeline.generation, pipeline.id);
-        return _tracked_resources.find(key) != _tracked_resources.end();
+        return _tracked_resources.contains(key);
     }
 
     bool resource_tracker::is_tracked(
         rhi::typed_rhi_handle<rhi::rhi_handle_type::descriptor_set> desc_set) const noexcept
     {
         auto key = make_resource_key(rhi::rhi_handle_type::descriptor_set, desc_set.generation, desc_set.id);
-        return _tracked_resources.find(key) != _tracked_resources.end();
+        return _tracked_resources.contains(key);
     }
 
     bool resource_tracker::is_tracked(
         rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline) const noexcept
     {
         auto key = make_resource_key(rhi::rhi_handle_type::compute_pipeline, pipeline.generation, pipeline.id);
-        return _tracked_resources.find(key) != _tracked_resources.end();
+        return _tracked_resources.contains(key);
     }
 
     void resource_tracker::request_release(rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buffer)
@@ -463,13 +430,11 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
         if (resource.delete_requested)
         {
-            logger->error("Resource {} is already marked for deletion", key);
             return;
         }
         resource.delete_requested = true;
@@ -481,13 +446,11 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
         if (resource.delete_requested)
         {
-            logger->error("Resource {} is already marked for deletion", key);
             return;
         }
 
@@ -516,13 +479,11 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
         if (resource.delete_requested)
         {
-            logger->error("Resource {} is already marked for deletion", key);
             return;
         }
         resource.delete_requested = true;
@@ -534,13 +495,11 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
         if (resource.delete_requested)
         {
-            logger->error("Resource {} is already marked for deletion", key);
             return;
         }
         resource.delete_requested = true;
@@ -552,13 +511,11 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
         if (resource.delete_requested)
         {
-            logger->error("Resource {} is already marked for deletion", key);
             return;
         }
         resource.delete_requested = true;
@@ -570,13 +527,11 @@ namespace tempest::rhi::vk
         auto it = _tracked_resources.find(key);
         if (it == _tracked_resources.end())
         {
-            logger->error("Resource {} is not tracked", key);
             return;
         }
         auto& resource = it->second;
         if (resource.delete_requested)
         {
-            logger->error("Resource {} is already marked for deletion", key);
             return;
         }
         resource.delete_requested = true;

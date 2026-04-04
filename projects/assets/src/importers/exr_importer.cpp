@@ -7,13 +7,6 @@
 
 namespace tempest::assets
 {
-    namespace
-    {
-        auto log = logger::logger_factory::create({
-            .prefix = "tempest::exr_importer",
-        });
-    }
-
     exr_importer::exr_importer(core::texture_registry* tex_reg) : _texture_reg(tex_reg)
     {
     }
@@ -31,7 +24,6 @@ namespace tempest::assets
 
         if (result < 0)
         {
-            log->error("Failed to load EXR image: {}", err);
             return ecs::tombstone;
         }
 

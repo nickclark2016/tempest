@@ -1,3 +1,5 @@
+#include <format>
+#include <iostream>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
@@ -16,8 +18,6 @@ namespace tempest::rhi::vk
 {
     namespace
     {
-        auto logger = logger::logger_factory::create({.prefix{"tempest::rhi::vk::rhi"}});
-
         [[maybe_unused]] VKAPI_ATTR VkBool32 VKAPI_CALL
         debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                        [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -25,23 +25,23 @@ namespace tempest::rhi::vk
         {
             if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
-                logger->error("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                std::cerr << "[[ERROR]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
             {
-                logger->warn("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                std::cerr << "[[WARNING]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
             {
-                logger->info("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                std::cout << "[[INFO]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
             {
-                logger->debug("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                std::cout << "[[VERBOSE]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
             }
             else
             {
-                logger->debug("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                std::cout << "[[DEBUG]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
             }
 
             return VK_FALSE;
@@ -60,7 +60,6 @@ namespace tempest::rhi::vk
             case rhi::present_mode::fifo_relaxed:
                 return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
             default:
-                logger->critical("Invalid present mode: {}", static_cast<uint32_t>(mode));
                 std::terminate();
             }
         }
@@ -126,7 +125,6 @@ namespace tempest::rhi::vk
             case rhi::image_format::a2bgr10_unorm_pack32:
                 return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
             default:
-                logger->critical("Invalid image format: {}", static_cast<uint32_t>(fmt));
                 std::terminate();
             }
         }
@@ -232,7 +230,6 @@ namespace tempest::rhi::vk
             case rhi::buffer_format::rgba32_sint:
                 return VK_FORMAT_R32G32B32A32_SINT;
             default:
-                logger->critical("Invalid buffer format: {}", static_cast<uint32_t>(fmt));
                 std::terminate();
             }
         }
@@ -246,7 +243,6 @@ namespace tempest::rhi::vk
             case rhi::vertex_input_rate::instance:
                 return VK_VERTEX_INPUT_RATE_INSTANCE;
             default:
-                logger->critical("Invalid vertex input rate: {}", static_cast<uint32_t>(rate));
                 std::terminate();
             }
         }
@@ -286,7 +282,6 @@ namespace tempest::rhi::vk
             case rhi::color_space::srgb_nonlinear:
                 return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
             default:
-                logger->critical("Invalid color space: {}", static_cast<uint32_t>(color_space));
                 std::terminate();
             }
         }
@@ -1113,7 +1108,6 @@ namespace tempest::rhi::vk
                 return VK_IMAGE_ASPECT_COLOR_BIT;
             }
 
-            logger->critical("Invalid image format: {}", to_underlying(fmt));
             std::terminate();
         }
 
@@ -1154,11 +1148,9 @@ namespace tempest::rhi::vk
             case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
                 return VK_IMAGE_ASPECT_COLOR_BIT;
             default:
-                logger->warn("Unknown image format {}", to_underlying(fmt));
                 break;
             }
 
-            logger->critical("Invalid image format: {}", to_underlying(fmt));
             std::terminate();
         }
 
@@ -1173,7 +1165,6 @@ namespace tempest::rhi::vk
             case rhi::memory_location::automatic:
                 return VMA_MEMORY_USAGE_AUTO;
             default:
-                logger->critical("Invalid memory location: {}", static_cast<uint32_t>(location));
                 std::terminate();
             }
         }
@@ -1381,7 +1372,6 @@ namespace tempest::rhi::vk
 
             if (result != VK_SUCCESS)
             {
-                logger->critical("Failed to create VMA allocator: {}", to_underlying(result));
                 std::terminate();
             }
         }
@@ -1439,7 +1429,6 @@ namespace tempest::rhi::vk
         }
         else
         {
-            logger->critical("Failed to find a suitable queue family for the device.");
             std::terminate();
         }
 
@@ -1484,7 +1473,6 @@ namespace tempest::rhi::vk
             auto result = _dispatch_table.createDescriptorPool(&pool_ci, nullptr, &descriptor_pool);
             if (result != VK_SUCCESS)
             {
-                logger->critical("Failed to create descriptor pool: {}", to_underlying(result));
                 std::terminate();
             }
 
@@ -1492,20 +1480,12 @@ namespace tempest::rhi::vk
         }
 
         _is_debug_device = _vkb_instance->debug_messenger != nullptr;
-        if (_is_debug_device)
-        {
-            logger->info("Device in debug mode. Using {}", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
 
 #if defined(TEMPEST_DEBUG_SHADERS)
         _can_name = true;
 #else
         _can_name = false;
 #endif
-        if (_can_name)
-        {
-            logger->info("Debug names enabled.");
-        }
 
         auto properties = VkPhysicalDeviceProperties2{};
         properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
@@ -1631,14 +1611,6 @@ namespace tempest::rhi::vk
             vmaCreateBuffer(_vma_allocator, &buffer_ci, &allocation_ci, &buffer, &allocation, &allocation_info);
         if (result != VK_SUCCESS)
         {
-            if (desc.name.empty())
-            {
-                logger->error("Failed to create buffer: {}", to_underlying(result));
-            }
-            else
-            {
-                logger->error("Failed to create buffer '{}': {}", desc.name.c_str(), to_underlying(result));
-            }
             return typed_rhi_handle<rhi_handle_type::buffer>::null_handle;
         }
 
@@ -1724,7 +1696,6 @@ namespace tempest::rhi::vk
         auto result = vmaCreateImage(_vma_allocator, &ci, &allocation_ci, &image, &allocation, &allocation_info);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create image: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::image>::null_handle;
         }
 
@@ -1756,7 +1727,6 @@ namespace tempest::rhi::vk
         result = _dispatch_table.createImageView(&view_ci, nullptr, &image_view);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create image view: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::image>::null_handle;
         }
 
@@ -1810,7 +1780,6 @@ namespace tempest::rhi::vk
         auto result = _dispatch_table.createFence(&fence_ci, nullptr, &fence);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create fence: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::fence>::null_handle;
         }
 
@@ -1847,7 +1816,6 @@ namespace tempest::rhi::vk
         auto result = _dispatch_table.createSemaphore(&sem_ci, nullptr, &semaphore);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create semaphore: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::semaphore>::null_handle;
         }
 
@@ -1890,7 +1858,6 @@ namespace tempest::rhi::vk
         auto pipeline_layout = _pipeline_layout_cache.get_layout(desc.layout);
         if (!pipeline_layout)
         {
-            logger->error("Failed to create graphics pipeline: invalid pipeline layout");
             return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
         }
 
@@ -1913,7 +1880,6 @@ namespace tempest::rhi::vk
             auto result = _dispatch_table.createShaderModule(&shader_ci, nullptr, &shader_module);
             if (result != VK_SUCCESS)
             {
-                logger->error("Failed to create shader module: {}", to_underlying(result));
                 return make_pair(VkShaderModule{}, VkPipelineShaderStageCreateInfo{});
             }
             VkPipelineShaderStageCreateInfo stage_ci = {
@@ -2236,7 +2202,6 @@ namespace tempest::rhi::vk
         auto result = _dispatch_table.createGraphicsPipelines(VK_NULL_HANDLE, 1, &ci, nullptr, &pipeline);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create graphics pipeline: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::graphics_pipeline>::null_handle;
         }
 
@@ -2279,7 +2244,6 @@ namespace tempest::rhi::vk
         auto result = _dispatch_table.allocateDescriptorSets(&alloc_info, &desc_set);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to allocate descriptor set: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::descriptor_set>::null_handle;
         }
 
@@ -2419,7 +2383,6 @@ namespace tempest::rhi::vk
         auto result = _dispatch_table.createShaderModule(&shader_ci, nullptr, &shader_module);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create shader module: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::compute_pipeline>::null_handle;
         }
 
@@ -2447,7 +2410,6 @@ namespace tempest::rhi::vk
         result = _dispatch_table.createComputePipelines(VK_NULL_HANDLE, 1, &ci, nullptr, &pipeline);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create compute pipeline: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::compute_pipeline>::null_handle;
         }
 
@@ -2500,7 +2462,6 @@ namespace tempest::rhi::vk
         auto result = _dispatch_table.createSampler(&sampler_ci, nullptr, &sampler);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create sampler: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::sampler>::null_handle;
         }
 
@@ -2777,7 +2738,6 @@ namespace tempest::rhi::vk
             auto result = _dispatch_table.createImageView(&view_ci, nullptr, &image_view);
             if (result != VK_SUCCESS)
             {
-                logger->error("Failed to create image view for mip level {}: {}", mip, to_underlying(result));
                 return typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
             }
 
@@ -2816,7 +2776,6 @@ namespace tempest::rhi::vk
         auto swapchain_it = _swapchains.find(swapchain_key);
         if (swapchain_it == _swapchains.end())
         {
-            logger->error("Failed to recreate render surface: invalid handle");
             return;
         }
 
@@ -2936,7 +2895,6 @@ namespace tempest::rhi::vk
         case VK_ERROR_OUT_OF_DATE_KHR:
             return unexpected{swapchain_error_code::out_of_date};
         default:
-            logger->error("Failed to acquire next image: {}", to_underlying(result));
             break;
         }
 
@@ -3006,7 +2964,6 @@ namespace tempest::rhi::vk
             auto result = vmaMapMemory(_vma_allocator, buf_it->allocation, &mapped_data);
             if (result != VK_SUCCESS)
             {
-                logger->error("Failed to map buffer: {}", to_underlying(result));
                 return nullptr;
             }
             return reinterpret_cast<byte*>(mapped_data);
@@ -3146,7 +3103,6 @@ namespace tempest::rhi::vk
             case descriptor_type::structured_buffer:
                 return _descriptor_buffer_properties.storageBufferDescriptorSize;
             default:
-                logger->error("Unsupported descriptor type for descriptor buffer writing - {}", to_underlying(type));
                 std::terminate();
             }
         };
@@ -3177,8 +3133,6 @@ namespace tempest::rhi::vk
                         .pStorageBuffer = &buffer_desc,
                     };
                 default:
-                    logger->error("Unsupported buffer descriptor type for descriptor buffer writing - {}",
-                                  to_underlying(write.type));
                     std::terminate();
                 };
             }();
@@ -3237,8 +3191,6 @@ namespace tempest::rhi::vk
                             .pCombinedImageSampler = &image_info,
                         };
                     default:
-                        logger->error("Unsupported image descriptor type for descriptor buffer writing - {}",
-                                      to_underlying(write.type));
                         std::terminate();
                     }
                 }();
@@ -3360,7 +3312,6 @@ namespace tempest::rhi::vk
         auto surf_res = window->get_surface(_vkb_instance->instance);
         if (!surf_res)
         {
-            logger->error("Failed to create render surface for window: {}", desc.window->name().c_str());
             return typed_rhi_handle<rhi_handle_type::render_surface>::null_handle;
         }
 
@@ -3781,8 +3732,6 @@ namespace tempest::rhi::vk
             };
 
             _dispatch_table.setDebugUtilsObjectNameEXT(&name_info);
-
-            logger->debug("Named object {} - {}", handle, name);
         }
     }
 
@@ -5057,7 +5006,6 @@ namespace tempest::rhi::vk
             auto result = dispatch->allocateCommandBuffers(&cmd_buffer_ci, cmds.data());
             if (result != VK_SUCCESS)
             {
-                logger->error("Failed to allocate command buffer: {}", to_underlying(result));
                 return typed_rhi_handle<rhi_handle_type::command_list>::null_handle;
             }
 
@@ -5374,7 +5322,6 @@ namespace tempest::rhi::vk
         auto result = _dev->get_dispatch_table().createDescriptorSetLayout(&layout_info, nullptr, &layout);
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create descriptor set layout: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::descriptor_set_layout>::null_handle;
         }
 
@@ -5405,7 +5352,6 @@ namespace tempest::rhi::vk
         auto cache_entry_it = _cache_slots.find(key);
         if (cache_entry_it == _cache_slots.end())
         {
-            logger->error("Failed to release descriptor set layout: layout not found in cache");
             return false;
         }
 
@@ -5433,7 +5379,6 @@ namespace tempest::rhi::vk
         auto cache_entry_it = _cache_slots.find(key);
         if (cache_entry_it == _cache_slots.end())
         {
-            logger->error("Failed to get descriptor set layout: layout not found in cache");
             return VK_NULL_HANDLE;
         }
         return cache_entry_it->layout;
@@ -5456,7 +5401,6 @@ namespace tempest::rhi::vk
         auto cache_entry_it = _cache_slots.find(key);
         if (cache_entry_it == _cache_slots.end())
         {
-            logger->error("Failed to add usage: layout not found in cache");
             return false;
         }
         slot_entry& cache_value = *cache_entry_it;
@@ -5535,7 +5479,6 @@ namespace tempest::rhi::vk
 
         if (result != VK_SUCCESS)
         {
-            logger->error("Failed to create pipeline layout: {}", to_underlying(result));
             return typed_rhi_handle<rhi_handle_type::pipeline_layout>::null_handle;
         }
 
@@ -5563,7 +5506,6 @@ namespace tempest::rhi::vk
         auto cache_entry_it = _cache_slots.find(key);
         if (cache_entry_it == _cache_slots.end())
         {
-            logger->error("Failed to get pipeline layout: layout not found in cache");
             return VK_NULL_HANDLE;
         }
         return cache_entry_it->layout;
@@ -5603,7 +5545,6 @@ namespace tempest::rhi::vk
         auto cache_entry_it = _cache_slots.find(key);
         if (cache_entry_it == _cache_slots.end())
         {
-            logger->error("Failed to release pipeline layout: layout not found in cache");
             return false;
         }
         slot_entry& cache_value = *cache_entry_it;
@@ -5632,7 +5573,6 @@ namespace tempest::rhi::vk
         auto cache_entry_it = _cache_slots.find(key);
         if (cache_entry_it == _cache_slots.end())
         {
-            logger->error("Failed to add usage: layout not found in cache");
             return false;
         }
         slot_entry& cache_value = *cache_entry_it;

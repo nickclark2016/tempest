@@ -19,11 +19,6 @@
 
 namespace tempest
 {
-    namespace
-    {
-        auto log = logger::logger_factory::create({.prefix{"tempest::engine"}});
-    } // namespace
-
     engine_context::engine_context()
         : _entity_registry(_event_registry),
           _asset_database(&_asset_type_reg),
@@ -63,7 +58,6 @@ namespace tempest
     {
         if (!std::setlocale(LC_ALL, "en_US.UTF-8"))
         {
-            log->error("Failed to set C locale to en_US.UTF-8");
         }
 
         try
@@ -76,7 +70,6 @@ namespace tempest
         }
         catch (const std::runtime_error&)
         {
-            log->error("std::locale(\"en_US.UTF-8\") not supported on this platform.");
         }
 
 #ifdef _WIN32
@@ -204,14 +197,10 @@ namespace tempest
 
     exit_main_loop:
 
-        log->info("Engine exiting main loop");
-
         for (auto&& close_cb : _on_close_callbacks)
         {
             close_cb(*this);
         }
-
-        log->info("Engine has stopped");
 
         std::exit(0);
     }
