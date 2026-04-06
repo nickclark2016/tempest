@@ -7,6 +7,7 @@
 #include <tempest/event_registry.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/renderer.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/tuple.hpp>
@@ -63,6 +64,9 @@ namespace tempest
         ecs::archetype_entity load_entity(ecs::archetype_entity src);
 
       private:
+        vector<unique_ptr<log_sink>> _log_sinks;
+        logger _logger;
+
         event::event_registry _event_registry;
         ecs::archetype_registry _entity_registry;
         core::material_registry _material_reg;
@@ -77,13 +81,13 @@ namespace tempest
         vector<function<void(engine_context&, std::chrono::duration<float>)>> _on_fixed_update_callbacks;
         vector<function<void(engine_context&, std::chrono::duration<float>)>> _on_variable_update_callbacks;
 
-        std::chrono::steady_clock::time_point _last_frame_time{};
-        std::chrono::duration<float> _delta_frame_time{};
+        std::chrono::steady_clock::time_point _last_frame_time;
+        std::chrono::duration<float> _delta_frame_time;
 
         bool _should_close{false};
 
-        void _update_fixed(std::chrono::duration<float> dt);
-        void _update_variable(std::chrono::duration<float> dt);
+        void _update_fixed(std::chrono::duration<float> delta_time);
+        void _update_variable(std::chrono::duration<float> delta_time);
         void _render_frame();
 
         vector<ecs::archetype_entity> _entities_to_load;

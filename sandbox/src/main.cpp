@@ -3,6 +3,7 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/frame_graph.hpp>
 #include <tempest/input.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/pbr_frame_graph.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
@@ -48,7 +49,7 @@ auto main() -> int
     auto mesh_registry = tempest::core::mesh_registry();
     auto texture_registry = tempest::core::texture_registry();
     auto material_registry = tempest::core::material_registry();
-    auto asset_type_reg = tempest::assets::asset_type_registry();    
+    auto asset_type_reg = tempest::assets::asset_type_registry();
     auto asset_database = tempest::assets::asset_database(&asset_type_reg);
     tempest::assets::register_default_importers(asset_database, &mesh_registry, &texture_registry, &material_registry);
     asset_database.open("sandbox.tassetdb");
@@ -158,6 +159,11 @@ auto main() -> int
     entity_registry.assign_or_replace(sun, sun_data);
     entity_registry.assign_or_replace(sun, sun_tx);
     entity_registry.name(sun, "Sun");
+
+    auto stdout_sink = tempest::stdout_log_sink();
+    auto logger = tempest::logger(stdout_sink);
+
+    logger.trace("Application started");
 
     while (true)
     {

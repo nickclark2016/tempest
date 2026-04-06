@@ -19,10 +19,30 @@
 
 namespace tempest
 {
+    namespace
+    {
+        auto make_default_log_sinks()
+        {
+            auto sinks = vector<unique_ptr<log_sink>>{};
+            sinks.push_back(make_unique<mt_stdout_log_sink>(log_level::trace, log_level::fatal));
+            return sinks;
+        }
+
+        auto make_default_logger(span<unique_ptr<log_sink>> sinks)
+        {
+            auto logger = tempest::logger();
+            for (auto& sink : sinks)
+            {
+                logger = tempest::logger(*sink);
+            }
+            return logger;
+        }
+    } // namespace
+
     engine_context::engine_context()
-        : _entity_registry(_event_registry),
-          _asset_database(&_asset_type_reg),
-            _render(graphics::renderer::builder()
+        : _log_sinks(make_default_log_sinks()), _logger(make_default_logger(_log_sinks)),
+          _entity_registry(_event_registry), _asset_database(&_asset_type_reg),
+          _render(graphics::renderer::builder()
                       .set_pbr_frame_graph_config({
                           .render_target_width = 1920,
                           .render_target_height = 1080,
@@ -56,8 +76,9 @@ namespace tempest
                       })
                       .build())
     {
-        if (!std::setlocale(LC_ALL, "en_US.UTF-8"))
+        if (::setlocale(LC_ALL, "en_US.UTF-8") == nullptr)
         {
+            _logger.error("Failed to set locale to UTF-8. Logging may not work correctly.");
         }
 
         try
@@ -70,6 +91,7 @@ namespace tempest
         }
         catch (const std::runtime_error&)
         {
+            _logger.error("Failed to set global locale to UTF-8. Logging may not work correctly.");
         }
 
 #ifdef _WIN32
@@ -147,10 +169,14 @@ namespace tempest
 
     void engine_context::run()
     {
+        _logger.trace("Starting engine");
+
+        _logger.trace("Running initialization callbacks");
         for (auto&& init_cb : _on_initialize_callbacks)
         {
             init_cb(*this);
         }
+        _logger.trace("Finished initialization callbacks");
 
         _render.finalize_graph();
 
@@ -164,6 +190,7 @@ namespace tempest
         auto current_time = std::chrono::steady_clock::now();
         std::chrono::duration<double> accumulator = std::chrono::duration<double>(0.0);
 
+        _logger.trace("Starting main loop");
         while (!_should_close)
         {
             auto frame_start_time = std::chrono::steady_clock::now();
@@ -196,86 +223,89 @@ namespace tempest
         }
 
     exit_main_loop:
+        _logger.trace("Exiting main loop");
 
+        _logger.trace("Running close callbacks");
         for (auto&& close_cb : _on_close_callbacks)
         {
             close_cb(*this);
         }
+        _logger.trace("Finished close callbacks");
 
         std::exit(0);
     }
 
-    ecs::archetype_registry& engine_context::get_registry() noexcept
+    auto engine_context::get_registry() noexcept -> ecs::archetype_registry&
     {
         return _entity_registry;
     }
 
-    const ecs::archetype_registry& engine_context::get_registry() const noexcept
+    auto engine_context::get_registry() const noexcept -> const ecs::archetype_registry&
     {
         return _entity_registry;
     }
 
-    event::event_registry& engine_context::get_event_registry() noexcept
+    auto engine_context::get_event_registry() noexcept -> event::event_registry&
     {
         return _event_registry;
     }
 
-    const event::event_registry& engine_context::get_event_registry() const noexcept
+    auto engine_context::get_event_registry() const noexcept -> const event::event_registry&
     {
         return _event_registry;
     }
 
-    core::material_registry& engine_context::get_material_registry() noexcept
+    auto engine_context::get_material_registry() noexcept -> core::material_registry&
     {
         return _material_reg;
     }
 
-    const core::material_registry& engine_context::get_material_registry() const noexcept
+    auto engine_context::get_material_registry() const noexcept -> const core::material_registry&
     {
         return _material_reg;
     }
 
-    core::mesh_registry& engine_context::get_mesh_registry() noexcept
+    auto engine_context::get_mesh_registry() noexcept -> core::mesh_registry&
     {
         return _mesh_reg;
     }
 
-    const core::mesh_registry& engine_context::get_mesh_registry() const noexcept
+    auto engine_context::get_mesh_registry() const noexcept -> const core::mesh_registry&
     {
         return _mesh_reg;
     }
 
-    core::texture_registry& engine_context::get_texture_registry() noexcept
+    auto engine_context::get_texture_registry() noexcept -> core::texture_registry&
     {
         return _texture_reg;
     }
 
-    const core::texture_registry& engine_context::get_texture_registry() const noexcept
+    auto engine_context::get_texture_registry() const noexcept -> const core::texture_registry&
     {
         return _texture_reg;
     }
 
-    assets::asset_database& engine_context::get_asset_database() noexcept
+    auto engine_context::get_asset_database() noexcept -> assets::asset_database&
     {
         return _asset_database;
     }
 
-    const assets::asset_database& engine_context::get_asset_database() const noexcept
+    auto engine_context::get_asset_database() const noexcept -> const assets::asset_database&
     {
         return _asset_database;
     }
 
-    graphics::renderer& engine_context::get_renderer() noexcept
+    auto engine_context::get_renderer() noexcept -> graphics::renderer&
     {
         return _render;
     }
 
-    const graphics::renderer& engine_context::get_renderer() const noexcept
+    auto engine_context::get_renderer() const noexcept -> const graphics::renderer&
     {
         return _render;
     }
 
-    void engine_context::_update_fixed(std::chrono::duration<float> fixed_step)
+    void engine_context::_update_fixed(std::chrono::duration<float> delta_time)
     {
         for (auto& window : _windows)
         {
@@ -293,17 +323,17 @@ namespace tempest
             return;
         }
 
-        for (auto&& cb : _on_fixed_update_callbacks)
+        for (auto&& callback : _on_fixed_update_callbacks)
         {
-            cb(*this, fixed_step);
+            callback(*this, delta_time);
         }
     }
 
-    void engine_context::_update_variable(std::chrono::duration<float> free_step)
+    void engine_context::_update_variable(std::chrono::duration<float> delta_time)
     {
-        for (auto&& cb : _on_variable_update_callbacks)
+        for (auto&& callback : _on_variable_update_callbacks)
         {
-            cb(*this, free_step);
+            callback(*this, delta_time);
         }
     }
 

@@ -359,10 +359,10 @@ namespace tempest::graphics
             .address_u = rhi::address_mode::repeat,
             .address_v = rhi::address_mode::repeat,
             .address_w = rhi::address_mode::repeat,
-            .mip_lod_bias = 0.0f,
-            .min_lod = 0.0f,
+            .mip_lod_bias = 0.0F,
+            .min_lod = 0.0F,
             .max_lod = numeric_limits<float>::max(),
-            .max_anisotropy = 1.0f,
+            .max_anisotropy = 1.0F,
             .compare = rhi::compare_op::never,
             .name = "Linear Sampler",
         };
@@ -382,10 +382,10 @@ namespace tempest::graphics
             .address_u = rhi::address_mode::repeat,
             .address_v = rhi::address_mode::repeat,
             .address_w = rhi::address_mode::repeat,
-            .mip_lod_bias = 0.0f,
-            .min_lod = 0.0f,
+            .mip_lod_bias = 0.0F,
+            .min_lod = 0.0F,
             .max_lod = numeric_limits<float>::max(),
-            .max_anisotropy = 1.0f,
+            .max_anisotropy = 1.0F,
             .compare = rhi::compare_op::never,
             .name = "Point Sampler",
         };
@@ -4387,7 +4387,7 @@ namespace tempest::graphics
         });
 
         auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
-        samplers.push_back(self->_global_resources.linear_sampler);
+        samplers.push_back(self->_global_resources.linear_with_aniso_sampler);
 
         auto sampler_bindings = vector<rhi::sampler_binding_descriptor>{};
         sampler_bindings.push_back(rhi::sampler_binding_descriptor{
@@ -4528,7 +4528,7 @@ namespace tempest::graphics
         });
 
         auto linear_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
-        linear_samplers.push_back(self->_global_resources.linear_sampler);
+        linear_samplers.push_back(self->_global_resources.linear_with_aniso_sampler);
 
         scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
             .index = 15,
@@ -4791,7 +4791,7 @@ namespace tempest::graphics
         });
 
         auto linear_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
-        linear_samplers.push_back(self->_global_resources.linear_sampler);
+        linear_samplers.push_back(self->_global_resources.linear_with_aniso_sampler);
 
         scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
             .index = 15,
@@ -5054,7 +5054,7 @@ namespace tempest::graphics
         });
 
         auto linear_samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
-        linear_samplers.push_back(self->_global_resources.linear_sampler);
+        linear_samplers.push_back(self->_global_resources.linear_with_aniso_sampler);
 
         scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
             .index = 15,

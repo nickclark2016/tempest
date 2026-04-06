@@ -225,6 +225,7 @@ namespace tempest
         using mutex_type = Mutex;
 
         unique_lock() noexcept;
+        unique_lock(const unique_lock&) = delete;
         unique_lock(unique_lock&& other) noexcept;
         explicit unique_lock(mutex_type& m);
         unique_lock(mutex_type& m, adopt_lock_t);
@@ -232,6 +233,7 @@ namespace tempest
 
         ~unique_lock();
 
+        unique_lock& operator=(const unique_lock&) = delete;
         unique_lock& operator=(unique_lock&& rhs) noexcept;
 
         void lock();
@@ -378,7 +380,7 @@ namespace tempest
     }
 
     // TODO: Implement lock, try_lock, and unlock free functions
-    // TODO: Implement scoped_guard
+    // TODO: Implement scoped_lock
 } // namespace tempest
 
 #endif // tempest_core_mutex_hpp
