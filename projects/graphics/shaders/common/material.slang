@@ -2,6 +2,7 @@
 
 import camera;
 import clusters;
+import colorspace;
 import consts;
 import lighting;
 import shadows;
@@ -479,6 +480,8 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel, Texture
             discard;
         }
 
+        texture_color = iec_linear_to_srgb(texture_color);
+
         color = texture_color * texture_factor;
     }
     
@@ -550,8 +553,10 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
     
     if (mat_state.mat.emissive_texture_id >= 0) {
         Texture2D emissive_texture = textures[(int) mat_state.mat.emissive_texture_id];
-        
         float4 emissive_color = emissive_texture.Sample(mat_state.linear_sampler, uv);
+        
+        emissive_color = iec_linear_to_srgb(emissive_color);
+
         emissive_color.rgb *= emissive_color.a;
 
         emissive.rgb *= half3(emissive_color.rgb);

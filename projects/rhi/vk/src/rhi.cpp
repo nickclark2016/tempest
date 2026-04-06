@@ -1512,13 +1512,13 @@ namespace tempest::rhi::vk
         _descriptor_set_layout_cache.destroy();
         _pipeline_layout_cache.destroy();
 
-        for (auto img : _images)
+        for (auto&& img : _images)
         {
-            if (img.image_view)
+            if (img.image_view != VK_NULL_HANDLE)
             {
                 _dispatch_table.destroyImageView(img.image_view, nullptr);
             }
-            if (img.image && !img.swapchain_image && img.image_parent == null_handle)
+            if (img.image != VK_NULL_HANDLE && !img.swapchain_image && img.image_parent == null_handle)
             {
                 vmaDestroyImage(_vma_allocator, img.image, img.allocation);
             }
@@ -1527,7 +1527,7 @@ namespace tempest::rhi::vk
 
         for (auto buf : _buffers)
         {
-            if (buf.buffer)
+            if (buf.buffer != VK_NULL_HANDLE)
             {
                 vmaDestroyBuffer(_vma_allocator, buf.buffer, buf.allocation);
             }
