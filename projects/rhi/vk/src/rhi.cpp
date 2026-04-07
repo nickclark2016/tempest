@@ -4164,7 +4164,7 @@ namespace tempest::rhi::vk
             .srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
             .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-            .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
             .oldLayout = to_vulkan(current_layout),
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = _queue_family_index,
@@ -4180,26 +4180,40 @@ namespace tempest::rhi::vk
                 },
         };
 
+        VkDependencyInfo dep_info_pre = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 0,
+            .pBufferMemoryBarriers = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &pre_barrier,
+        };
+
+        _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info_pre);
+
         auto width = image->create_info.extent.width;
         auto height = image->create_info.extent.height;
 
-        auto mip_width = width;
-        auto mip_height = height;
+        // Compute the source mip dimensions (the mip we start cascading from)
+        auto src_width = std::max(1u, width >> base_mip);
+        auto src_height = std::max(1u, height >> base_mip);
 
-        auto blits = _allocator.allocate_typed<VkImageBlit>(mip_count - 1);
-
-        // From mips 1 to mip_count - 1, blit from mip 0 to mip i
-        for (size_t i = 1; i < mip_count; ++i)
+        // Generate mips by cascading: each level is generated from the previous one.
+        // This ensures proper downsampling since bilinear filtering only uses 4 texels,
+        // so a 2x reduction per step is required for correct results.
+        for (uint32_t i = 1; i < mip_count; ++i)
         {
-            // Get mip width and height
-            mip_width = std::max(1u, width >> i);
-            mip_height = std::max(1u, height >> i);
+            auto dst_width = std::max(1u, src_width >> 1);
+            auto dst_height = std::max(1u, src_height >> 1);
 
-            blits[i - 1] = {
+            VkImageBlit blit = {
                 .srcSubresource =
                     {
                         .aspectMask = image->image_aspect,
-                        .mipLevel = base_mip,
+                        .mipLevel = base_mip + i - 1,
                         .baseArrayLayer = 0,
                         .layerCount = 1,
                     },
@@ -4211,15 +4225,15 @@ namespace tempest::rhi::vk
                             .z = 0,
                         },
                         {
-                            .x = static_cast<int32_t>(width),
-                            .y = static_cast<int32_t>(height),
+                            .x = static_cast<int32_t>(src_width),
+                            .y = static_cast<int32_t>(src_height),
                             .z = 1,
                         },
                     },
                 .dstSubresource =
                     {
                         .aspectMask = image->image_aspect,
-                        .mipLevel = base_mip + static_cast<uint32_t>(i),
+                        .mipLevel = base_mip + i,
                         .baseArrayLayer = 0,
                         .layerCount = 1,
                     },
@@ -4231,12 +4245,59 @@ namespace tempest::rhi::vk
                             .z = 0,
                         },
                         {
-                            .x = static_cast<int32_t>(mip_width),
-                            .y = static_cast<int32_t>(mip_height),
+                            .x = static_cast<int32_t>(dst_width),
+                            .y = static_cast<int32_t>(dst_height),
                             .z = 1,
                         },
                     },
             };
+
+            _dispatch->cmdBlitImage(_parent->get_command_buffer(command_list), image->image, VK_IMAGE_LAYOUT_GENERAL,
+                                    image->image, VK_IMAGE_LAYOUT_GENERAL, 1, &blit, VK_FILTER_LINEAR);
+
+            // Insert a barrier so the destination mip is fully written before
+            // it is read as the source for the next level
+            if (i + 1 < mip_count)
+            {
+                VkImageMemoryBarrier2 mip_barrier = {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                    .srcQueueFamilyIndex = _queue_family_index,
+                    .dstQueueFamilyIndex = _queue_family_index,
+                    .image = image->image,
+                    .subresourceRange =
+                        {
+                            .aspectMask = image->image_aspect,
+                            .baseMipLevel = base_mip + i,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                };
+
+                VkDependencyInfo mip_dep_info = {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .memoryBarrierCount = 0,
+                    .pMemoryBarriers = nullptr,
+                    .bufferMemoryBarrierCount = 0,
+                    .pBufferMemoryBarriers = nullptr,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &mip_barrier,
+                };
+
+                _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &mip_dep_info);
+            }
+
+            src_width = dst_width;
+            src_height = dst_height;
         }
 
         // Transition image to original layout
@@ -4262,18 +4323,6 @@ namespace tempest::rhi::vk
                 },
         };
 
-        VkDependencyInfo dep_info_pre = {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .memoryBarrierCount = 0,
-            .pMemoryBarriers = nullptr,
-            .bufferMemoryBarrierCount = 0,
-            .pBufferMemoryBarriers = nullptr,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &pre_barrier,
-        };
-
         VkDependencyInfo dep_info_post = {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .pNext = nullptr,
@@ -4286,12 +4335,7 @@ namespace tempest::rhi::vk
             .pImageMemoryBarriers = &post_barrier,
         };
 
-        // Record the commands
-        _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info_pre);
-        _dispatch->cmdBlitImage(_parent->get_command_buffer(command_list), image->image, VK_IMAGE_LAYOUT_GENERAL,
-                                image->image, VK_IMAGE_LAYOUT_GENERAL, mip_count - 1, blits, VK_FILTER_LINEAR);
         _dispatch->cmdPipelineBarrier2(_parent->get_command_buffer(command_list), &dep_info_post);
-        _allocator.reset();
 
         used_images[command_list].push_back(img);
     }

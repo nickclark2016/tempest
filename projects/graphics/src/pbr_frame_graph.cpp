@@ -3560,7 +3560,7 @@ namespace tempest::graphics
         });
 
         auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
-        samplers.push_back(self->_global_resources.linear_sampler);
+        samplers.push_back(self->_global_resources.linear_with_aniso_sampler);
 
         scene_descriptor_write_desc.samplers.push_back(rhi::sampler_binding_descriptor{
             .index = 15,
@@ -4225,7 +4225,7 @@ namespace tempest::graphics
         });
 
         auto samplers = vector<rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>>{};
-        samplers.push_back(self->_global_resources.linear_sampler);
+        samplers.push_back(self->_global_resources.linear_with_aniso_sampler);
         scene_descriptor_write.samplers.push_back(rhi::sampler_binding_descriptor{
             .index = 15,
             .samplers = move(samplers),
