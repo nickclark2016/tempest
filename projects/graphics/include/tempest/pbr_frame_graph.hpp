@@ -463,7 +463,7 @@ namespace tempest::graphics
                                                                         // tiles), z = padding, w = pixel width
             alignas(
                 16) math::vec2<float> light_grid_z_bounds; // x = min light grid bounds, y = max light grid bounds (z)
-            float ssao_strength = 2.0f;
+            float ssao_strength = 1.0F;
             uint32_t point_light_count{};
         };
 

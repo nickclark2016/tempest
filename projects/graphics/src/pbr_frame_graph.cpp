@@ -942,7 +942,7 @@ namespace tempest::graphics
         }
 
         _ssao_data.bias = 0.025f;
-        _ssao_data.radius = 0.5f;
+        _ssao_data.radius = 0.25f;
         _ssao_data.noise_scale = math::vec2<float>{
             static_cast<float>(_cfg.render_target_width) / static_cast<float>(noise_image_width),
             static_cast<float>(_cfg.render_target_height) / static_cast<float>(noise_image_height),
@@ -3223,7 +3223,7 @@ namespace tempest::graphics
             .inv_view = math::inverse(view),
             .position = camera_transform->position(),
         };
-        scene_constants_data.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.15f;
+        scene_constants_data.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.1f;
         scene_constants_data.screen_size = math::vec2(static_cast<float>(self->_cfg.render_target_width),
                                                       static_cast<float>(self->_cfg.render_target_height));
 

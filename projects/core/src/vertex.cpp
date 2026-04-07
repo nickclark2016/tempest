@@ -55,8 +55,8 @@ namespace tempest::core
 
     void mesh::compute_tangents()
     {
-        vector<math::vec3<float>> tangent_dir;
-        tangent_dir.resize(num_triangles() * 3);
+        // Per-triangle tdir accumulator (bitangent)
+        auto tangent_dir = vector<math::vec3<float>>(num_triangles() * 3, math::vec3<float>(0.0F));
 
         for (size_t i = 0; i < num_triangles(); ++i)
         {
@@ -64,22 +64,37 @@ namespace tempest::core
             auto&& [v1, idx1] = get_tri_and_ind(3 * i + 1);
             auto&& [v2, idx2] = get_tri_and_ind(3 * i + 2);
 
-            float x1 = v1.position.x - v0.position.x;
-            float x2 = v2.position.x - v0.position.x;
-            float y1 = v1.position.y - v0.position.y;
-            float y2 = v2.position.y - v0.position.y;
-            float z1 = v1.position.z - v0.position.z;
-            float z2 = v2.position.z - v0.position.z;
+            // Edge vectors
+            math::vec3<float> edge1 = v1.position - v0.position;
+            math::vec3<float> edge2 = v2.position - v0.position;
 
+            // UV deltas
             float s1 = v1.uv.x - v0.uv.x;
             float s2 = v2.uv.x - v0.uv.x;
             float t1 = v1.uv.y - v0.uv.y;
             float t2 = v2.uv.y - v0.uv.y;
 
-            float r = 1.0F / (s1 * t2 - s2 * t1);
-            math::vec3<float> sdir((t2 * x1 - t1 * x2) * r, (t2 * y1 - t1 * y2) * r, (t2 * z1 - t1 * z2) * r);
-            math::vec3<float> tdir((s1 * x2 - s2 * x1) * r, (s1 * y2 - s2 * y1) * r, (s1 * z2 - s2 * z1) * r);
+            float denom = s1 * t2 - s2 * t1;
 
+            math::vec3<float> sdir;
+            math::vec3<float> tdir;
+
+            if (fabs(denom) > 1e-6f) // valid UV triangle
+            {
+                float r = 1.0f / denom;
+                sdir = (edge1 * t2 - edge2 * t1) * r;
+                tdir = (edge2 * s1 - edge1 * s2) * r;
+            }
+            else // degenerate UVs: fallback tangent/bitangent
+            {
+                // Pick a vector perpendicular to normal for sdir
+                math::vec3<float> n = v0.normal;
+                math::vec3<float> up = fabs(n.z) < 0.999f ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
+                sdir = normalize(cross(up, n));
+                tdir = normalize(cross(n, sdir));
+            }
+
+            // Accumulate per-vertex tangent (sdir) and bitangent (tdir)
             v0.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0f);
             v1.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0f);
             v2.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0f);
@@ -89,15 +104,20 @@ namespace tempest::core
             tangent_dir[idx2] += tdir;
         }
 
+        // Final orthogonalize & compute handedness
         size_t vtx = 0;
         for (auto& vertex : vertices)
         {
-            auto tan = math::vec3(vertex.tangent.x, vertex.tangent.y, vertex.tangent.z);
-            auto t = math::normalize(tan - (vertex.normal * math::dot(vertex.normal, tan)));
+            math::vec3<float> n = vertex.normal;
+            math::vec3<float> t = math::vec3(vertex.tangent.x, vertex.tangent.y, vertex.tangent.z);
 
-            auto handedness = math::dot(math::cross(tan, vertex.normal), tangent_dir[vtx++]) < 0.0f ? -1.0f : 1.0f;
+            // Gram-Schmidt orthogonalization
+            t = normalize(t - n * math::dot(n, t));
 
-            vertex.tangent = math::vec4<float>(t.x, t.y, t.z, handedness);
+            // Handedness
+            float handedness = math::dot(math::cross(n, t), tangent_dir[vtx++]) < 0.0f ? -1.0f : 1.0f;
+
+            vertex.tangent = math::vec4(t.x, t.y, t.z, handedness);
         }
 
         has_tangents = true;
