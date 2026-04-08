@@ -176,28 +176,32 @@ struct OpenPBRBxDF : IBxDF {
         let glossy_diffuse = specular_slab.reflection + (1.0 - specular_slab.fresnel) * diffuse_slab;
 
         // 2. opaque-base material: mix(glossy-diffuse material, subsurface slab, subsurface weight)
-        let subsurface_slab = float3(0.0);
-        let opaque_base = glossy_diffuse;
+        var subsurface_slab = float3(0.0);
+        var opaque_base = glossy_diffuse;
         if (params.subsurface.weight > 0.0) {
             subsurface_slab = evaluate_subsurface_slab(params.subsurface, params.diffuse, n_dot_l);
             opaque_base = lerp(glossy_diffuse, subsurface_slab, params.subsurface.weight);
         }
 
         // 3. dielectric-base material: mix(opaque-base material, translucent slab, translucent weight)
-        let transmission_slab = float3(0.0);
-        let dielectric_base = opaque_base;
+        var transmission_slab = float3(0.0);
+        var dielectric_base = opaque_base;
         if (params.transmission.weight > 0.0) {
             transmission_slab = evaluate_translucent_slab(params.transmission);
             dielectric_base = lerp(opaque_base, transmission_slab, params.transmission.weight);
         }
 
         // 4. base-substrate material: mix(dielectric-base material, metal slab, metal weight)
-        let metal_slab = evaluate_metal_slab(params.metal, D, V, v_dot_h);
-        let substrate = lerp(dielectric_base, metal_slab, params.metal.weight);
+        var metal_slab = float3(0.0);
+        var substrate = dielectric_base;
+        if (params.metal.weight> 0.0) {
+            metal_slab = evaluate_metal_slab(params.metal, D, V, v_dot_h);
+            substrate = lerp(dielectric_base, metal_slab, params.metal.weight);
+        }
 
         // 5. coat material: layer(base-substrate material, coat slab)
-        let coat_fresnel = 0.0;
-        let coat_reflection = float3(0.0);
+        var coat_fresnel = 0.0;
+        var coat_reflection = float3(0.0);
         if (params.coat.weight > 0.0) {
             let coat = evaluate_coat_slab(params.coat, geometry.coat_normal, h, wi, wo, v_dot_h);
             coat_fresnel = coat.fresnel;
@@ -208,7 +212,7 @@ struct OpenPBRBxDF : IBxDF {
         }
 
         // 6. open-pbr surface: mix(coat material, fuzz slab, fuzz weight)
-        let fuzz_slab = float3(0.0);
+        var fuzz_slab = float3(0.0);
         if (params.fuzz.weight > 0.0) {
             fuzz_slab = evaluate_fuzz_slab(params.fuzz, n_dot_h, cl, cv);
             substrate = lerp(substrate, fuzz_slab, params.fuzz.weight);

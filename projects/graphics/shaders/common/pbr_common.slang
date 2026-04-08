@@ -10,8 +10,8 @@ import "scene";
 import "shadows";
 import "tonemap";
 import "vertex_pull";
-import "../bxdf/bxdf";
-import "../bxdf/openpbr";
+import "bxdf/bxdf";
+import "bxdf/openpbr";
 
 struct VertexOutput {
     float4 position         : SV_Position;

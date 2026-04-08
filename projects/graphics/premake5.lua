@@ -78,7 +78,7 @@ scoped.project('graphics', function()
         }
 
         buildinputs {
-            '%{!prj.location}/shaders/common/**.slang',
+            'shaders/common/**.slang',
         }
     end)
 
@@ -106,7 +106,7 @@ scoped.project('graphics', function()
         }
 
         buildinputs {
-            '%{!prj.location}/shaders/common/**.slang',
+            'shaders/common/**.slang',
         }
     end)
 
