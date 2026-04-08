@@ -481,9 +481,14 @@ namespace tempest::rhi
     };
 } // namespace tempest::rhi
 
+namespace tempest
+{
+    class logger;
+}
+
 namespace tempest::rhi::vk
 {
-    extern unique_ptr<rhi::instance> create_instance() noexcept;
+    extern unique_ptr<rhi::instance> create_instance(logger* log) noexcept;
     extern unique_ptr<rhi::window_surface> create_window_surface(const rhi::window_surface_desc& desc) noexcept;
 } // namespace tempest::rhi::vk
 

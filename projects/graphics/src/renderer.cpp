@@ -23,9 +23,9 @@ namespace tempest::graphics
         return *this;
     }
 
-    renderer renderer::builder::build()
+    renderer renderer::builder::build(logger& log)
     {
-        auto instance = rhi::vk::create_instance();
+        auto instance = rhi::vk::create_instance(&log);
         auto& device = instance->acquire_device(0);
 
         auto graph = make_unique<pbr_frame_graph>(device, _pbr_cfg, _pbr_inputs);
@@ -33,7 +33,7 @@ namespace tempest::graphics
         {
             callback(*graph);
         }
-        return renderer(tempest::move(instance), device, tempest::move(graph));
+        return renderer(log, tempest::move(instance), device, tempest::move(graph));
     }
 
     tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>> renderer::
@@ -101,8 +101,9 @@ namespace tempest::graphics
         _graph->execute();
     }
 
-    renderer::renderer(unique_ptr<rhi::instance> instance, rhi::device& device, unique_ptr<pbr_frame_graph> graph)
-        : _instance(tempest::move(instance)), _device(&device), _graph(tempest::move(graph))
+    renderer::renderer(logger& log, unique_ptr<rhi::instance> instance, rhi::device& device,
+                       unique_ptr<pbr_frame_graph> graph)
+        : _log(&log), _instance(tempest::move(instance)), _device(&device), _graph(tempest::move(graph))
     {
     }
 } // namespace tempest::graphics

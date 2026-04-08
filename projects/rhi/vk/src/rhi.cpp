@@ -12,6 +12,7 @@
 #include "window.hpp"
 
 #include <exception>
+#include <format>
 #include <vulkan/vulkan_core.h>
 
 namespace tempest::rhi::vk
@@ -21,27 +22,34 @@ namespace tempest::rhi::vk
         [[maybe_unused]] VKAPI_ATTR VkBool32 VKAPI_CALL
         debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                        [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT messageType,
-                       const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, [[maybe_unused]] void* pUserData)
+                       const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
         {
+            auto* log = static_cast<logger*>(pUserData);
+
             if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
-                std::cerr << "[[ERROR]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
+                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                log->error({msg.cbegin(), msg.cend()});
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
             {
-                std::cerr << "[[WARNING]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
+                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                log->warn({msg.cbegin(), msg.cend()});
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
             {
-                std::cout << "[[INFO]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
+                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                log->info({msg.cbegin(), msg.cend()});
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
             {
-                std::cout << "[[VERBOSE]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
+                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                log->debug({msg.cbegin(), msg.cend()});
             }
             else
             {
-                std::cout << "[[DEBUG]] Vulkan Validation Message: " << pCallbackData->pMessage << std::endl;
+                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                log->debug({msg.cbegin(), msg.cend()});
             }
 
             return VK_FALSE;
@@ -5073,7 +5081,7 @@ namespace tempest::rhi::vk
         return none();
     }
 
-    unique_ptr<rhi::instance> create_instance() noexcept
+    unique_ptr<rhi::instance> create_instance([[maybe_unused]] logger* log) noexcept
     {
         vkb::InstanceBuilder bldr;
         bldr.set_app_name("Tempest Application")
@@ -5085,6 +5093,7 @@ namespace tempest::rhi::vk
 #if defined(TEMPEST_ENABLE_VALIDATION_LAYERS)
         bldr.request_validation_layers(true)
             .set_debug_callback(debug_callback)
+            .set_debug_callback_user_data_pointer(log)
             .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
             .add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)

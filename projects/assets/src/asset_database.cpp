@@ -2,6 +2,7 @@
 #include <tempest/asset_serializers.hpp>
 #include <tempest/entity_hierarchy.hpp>
 #include <tempest/files.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/serial.hpp>
 
@@ -30,6 +31,7 @@ namespace tempest::assets
         _assets.clear();
         _asset_guid_to_index.clear();
         _blob_data.clear();
+        _dirty = false;
 
         // Try to read existing database file
         auto file = std::ifstream(string(db_path).c_str(), std::ios::binary);
@@ -102,9 +104,8 @@ namespace tempest::assets
             auto blob_size = serialization::serializer<serialization::binary_archive, uint64_t>::deserialize(archive);
             auto source_id = serialization::serializer<serialization::binary_archive, guid>::deserialize(archive);
             auto deps = serialization::serializer<serialization::binary_archive, vector<guid>>::deserialize(archive);
-            auto meta =
-                serialization::serializer<serialization::binary_archive,
-                                          flat_unordered_map<string, string>>::deserialize(archive);
+            auto meta = serialization::serializer<serialization::binary_archive,
+                                                  flat_unordered_map<string, string>>::deserialize(archive);
 
             auto entry = make_unique<asset_entry>(asset_entry{
                 .id = asset_id,
@@ -137,6 +138,11 @@ namespace tempest::assets
             return false;
         }
 
+        if (!_dirty && filesystem::exists(_db_path))
+        {
+            return false;
+        }
+
         serialization::binary_archive archive;
 
         // Write type registry section
@@ -146,8 +152,7 @@ namespace tempest::assets
         _type_reg->for_each([&archive](const type_entry& entry) {
             serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
                 archive, static_cast<uint64_t>(entry.id.hash()));
-            serialization::serializer<serialization::binary_archive, string>::serialize(archive,
-                                                                                        entry.canonical_name);
+            serialization::serializer<serialization::binary_archive, string>::serialize(archive, entry.canonical_name);
         });
 
         // Write source table
@@ -169,14 +174,13 @@ namespace tempest::assets
             serialization::serializer<serialization::binary_archive, guid>::serialize(archive, asset->id);
             serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
                 archive, static_cast<uint64_t>(asset->type.hash()));
-            serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive,
-                                                                                          asset->blob_offset);
+            serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive, asset->blob_offset);
             serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive, asset->blob_size);
             serialization::serializer<serialization::binary_archive, guid>::serialize(archive, asset->source_id);
             serialization::serializer<serialization::binary_archive, vector<guid>>::serialize(archive,
                                                                                               asset->dependencies);
-            serialization::serializer<serialization::binary_archive,
-                                      flat_unordered_map<string, string>>::serialize(archive, asset->user_metadata);
+            serialization::serializer<serialization::binary_archive, flat_unordered_map<string, string>>::serialize(
+                archive, asset->user_metadata);
         }
 
         // Write blob section
@@ -375,8 +379,8 @@ namespace tempest::assets
         return none();
     }
 
-    auto asset_database::_load_from_blobs(string_view source_path,
-                                                            ecs::archetype_registry& registry) -> ecs::archetype_entity
+    auto asset_database::_load_from_blobs(string_view source_path, ecs::archetype_registry& registry)
+        -> ecs::archetype_entity
     {
         auto src_it = _source_path_to_index.find(string(source_path));
         if (src_it == _source_path_to_index.end())
@@ -463,8 +467,8 @@ namespace tempest::assets
                     serialization::binary_archive blob_archive;
                     blob_archive.write(blob);
                     auto hierarchy =
-                        serialization::serializer<serialization::binary_archive,
-                                                  entity_hierarchy>::deserialize(blob_archive);
+                        serialization::serializer<serialization::binary_archive, entity_hierarchy>::deserialize(
+                            blob_archive);
 
                     // Create an entity for each record
                     vector<ecs::archetype_entity> entities(hierarchy.records.size());
@@ -511,8 +515,7 @@ namespace tempest::assets
         return root;
     }
 
-    ecs::archetype_entity asset_database::_load_via_import(string_view source_path,
-                                                            ecs::archetype_registry& registry)
+    ecs::archetype_entity asset_database::_load_via_import(string_view source_path, ecs::archetype_registry& registry)
     {
         const auto* extension_it = search_last_of(source_path, '.');
         if (extension_it == source_path.end())
@@ -564,16 +567,14 @@ namespace tempest::assets
                 all_entities.push_back(entity);
                 entity_to_index.insert({entity, idx});
 
-                auto* rel =
-                    registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
+                auto* rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;
                     while (child != ecs::tombstone)
                     {
                         collect(child);
-                        auto* child_rel =
-                            registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
+                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
                         child = child_rel->next_sibling;
                     }
                 }
@@ -600,16 +601,14 @@ namespace tempest::assets
                 }
 
                 // Record child indices
-                auto* rel =
-                    registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
+                auto* rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;
                     while (child != ecs::tombstone)
                     {
                         record.child_indices.push_back(entity_to_index[child]);
-                        auto* child_rel =
-                            registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
+                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
                         child = child_rel->next_sibling;
                     }
                 }
@@ -650,6 +649,9 @@ namespace tempest::assets
         _source_id_to_index.insert({new_id, index});
         auto& ref = *entry;
         _sources.push_back(tempest::move(entry));
+
+        _dirty = true;
+
         return ref;
     }
 } // namespace tempest::assets

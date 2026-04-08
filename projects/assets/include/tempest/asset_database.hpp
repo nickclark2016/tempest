@@ -143,6 +143,8 @@ namespace tempest::assets
             -> ecs::archetype_entity;
 
         auto _get_or_create_source(string_view source_path) -> source_entry&;
+
+        bool _dirty = false;
     };
 
     template <typename T>

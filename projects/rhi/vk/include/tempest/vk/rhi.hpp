@@ -3,6 +3,7 @@
 
 #include <VkBootstrapDispatch.h>
 #include <tempest/inplace_vector.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
@@ -674,7 +675,7 @@ namespace tempest::rhi::vk
 #endif
     };
 
-    unique_ptr<rhi::instance> create_instance() noexcept;
+    unique_ptr<rhi::instance> create_instance(logger* log) noexcept;
     unique_ptr<rhi::window_surface> create_window_surface(const rhi::window_surface_desc& desc) noexcept;
 } // namespace tempest::rhi::vk
 

@@ -29,17 +29,39 @@ namespace tempest::filesystem
         /// </summary>
         /// <typeparam name="T">The type to check.</typeparam>
         template <typename T>
-        concept path_source_type = (is_specialization_v<T, basic_string> || is_specialization_v<T, basic_string_view> ||
-                                    (is_convertible_v<T, basic_string_view<char>> ||
-                                     is_convertible_v<T, basic_string_view<wchar_t>>));
-                                     
+        concept path_source_type =
+            (is_specialization_v<T, basic_string> || is_specialization_v<T, basic_string_view> ||
+             (is_convertible_v<T, basic_string_view<char>> || is_convertible_v<T, basic_string_view<wchar_t>>));
+
         string convert_wide_to_narrow(tempest::wstring_view wide_str);
         wstring convert_narrow_to_wide(tempest::string_view narrow_str);
 
         template <typename T>
+        struct fs_char_type;
+
+        template <typename T>
+            requires requires { typename remove_cvref_t<T>::value_type; }
+        struct fs_char_type<T>
+        {
+            using type = remove_const_t<typename remove_cvref_t<T>::value_type>;
+        };
+
+        template <character_type T>
+        struct fs_char_type<T*>
+        {
+            using type = remove_const_t<remove_pointer_t<remove_cvref_t<T>>>;
+        };
+
+        template <character_type T, size_t N>
+        struct fs_char_type<T[N]>
+        {
+            using type = remove_const_t<remove_extent_t<remove_cvref_t<T>>>;
+        };
+
+        template <typename T>
         auto convert_to_native(const T& p)
         {
-            using char_type = remove_const_t<typename iterator_traits<decay_t<T>>::value_type>;
+            using char_type = fs_char_type<T>::type;
 
             if constexpr (is_same_v<char_type, native_path_char_type>)
             {
@@ -59,7 +81,7 @@ namespace tempest::filesystem
             }
             else
             {
-                static_assert(false, "Unsupported character type for path conversion.");
+                static_assert(!is_same_v<char_type, char_type>, "Unsupported character type for path conversion.");
             }
         }
     } // namespace detail

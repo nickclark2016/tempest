@@ -82,6 +82,7 @@ struct BxDFParams {
 struct BxDFResult {
     float3 bxdf;
     float3 diffuse;
+    float3 subsurface;
     float3 specular;
     float3 coat;
     float3 transmission;

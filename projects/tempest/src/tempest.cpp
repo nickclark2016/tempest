@@ -74,7 +74,7 @@ namespace tempest
                       .set_pbr_frame_graph_inputs({
                           .entity_registry = &_entity_registry,
                       })
-                      .build())
+                      .build(_logger))
     {
         if (::setlocale(LC_ALL, "en_US.UTF-8") == nullptr)
         {

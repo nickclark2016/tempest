@@ -2,6 +2,7 @@
 #define tempest_graphics_renderer_hpp
 
 #include <tempest/functional.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/pbr_frame_graph.hpp>
 #include <tempest/rhi.hpp>
@@ -31,7 +32,7 @@ namespace tempest::graphics
             builder& set_pbr_frame_graph_inputs(pbr_frame_graph_inputs inputs);
             builder& add_pbr_frame_graph_customization_callback(function<void(pbr_frame_graph&)> callback);
 
-            renderer build();
+            renderer build(logger& log);
 
           private:
             pbr_frame_graph_config _pbr_cfg = {};
@@ -41,7 +42,7 @@ namespace tempest::graphics
 
         tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>
         create_window(const rhi::window_surface_desc& desc, bool install_swapchain_blit = true);
-        
+
         void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
                                  const core::texture_registry& textures, const core::material_registry& materials);
 
@@ -70,8 +71,9 @@ namespace tempest::graphics
         }
 
       private:
-        explicit renderer(unique_ptr<rhi::instance> instance, rhi::device& device, unique_ptr<pbr_frame_graph> graph);
+        explicit renderer(logger& log, unique_ptr<rhi::instance> instance, rhi::device& device, unique_ptr<pbr_frame_graph> graph);
 
+        logger* _log;
         unique_ptr<rhi::instance> _instance;
         rhi::device* _device;
         unique_ptr<pbr_frame_graph> _graph;
