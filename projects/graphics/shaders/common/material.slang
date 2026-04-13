@@ -480,7 +480,7 @@ void fetch_diffuse(const MaterialState mat_state, inout PixelData pixel, Texture
             discard;
         }
 
-        texture_color = iec_linear_to_srgb(texture_color);
+        texture_color.rgb = iec_srgb_to_linear(texture_color.rgb);
 
         color = texture_color * texture_factor;
     }
@@ -555,7 +555,7 @@ void apply_emissive(const MaterialState mat_state, inout half4 color, const half
         Texture2D emissive_texture = textures[(int) mat_state.mat.emissive_texture_id];
         float4 emissive_color = emissive_texture.Sample(mat_state.linear_sampler, uv);
         
-        emissive_color = iec_linear_to_srgb(emissive_color);
+        emissive_color.rgb = iec_srgb_to_linear(emissive_color.rgb);
 
         emissive_color.rgb *= emissive_color.a;
 
@@ -576,7 +576,8 @@ float4 evaluate_material(const PixelData px,
                          RWStructuredBuffer<ShadowMapParameters> shadows,
                          Texture2D[ShadowMapParameters.MAX_DIRECTIONAL_LIGHTS] dir_shadow_maps,
                          Texture2D[] textures) {
-    half4 color = px.diffuse * half4(half3(lighting.ambient_color_factor.rgb) * px.ambient_occlusion, 1.0h);
+    half4 color = half4(0, 0, 0, px.diffuse.a);
+    color.rgb += px.diffuse.rgb * half3(lighting.ambient_color_factor.rgb) * px.ambient_occlusion * half3(1.0 - px.metallic);
 
     let light_state = LightingInputs(
         px,

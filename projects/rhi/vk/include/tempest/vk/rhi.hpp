@@ -40,7 +40,7 @@ namespace tempest::rhi::vk
         vector<vkb::PhysicalDevice> _vkb_phys_devices;
         vector<unique_ptr<vk::device>> _devices;
 
-        friend unique_ptr<rhi::instance> create_instance() noexcept;
+        friend unique_ptr<rhi::instance> create_instance(logger* log, bool headless) noexcept;
     };
 
     struct work_group
@@ -125,6 +125,10 @@ namespace tempest::rhi::vk
         void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                   typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::image> dst,
                   image_layout layout, size_t src_offset = 0, uint32_t dst_mip = 0) noexcept override;
+        void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                  typed_rhi_handle<rhi_handle_type::image> src, image_layout src_layout,
+                  typed_rhi_handle<rhi_handle_type::buffer> dst, size_t dst_offset = 0,
+                  uint32_t src_mip = 0) noexcept override;
 
         // Barrier commands
         void pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -675,7 +679,7 @@ namespace tempest::rhi::vk
 #endif
     };
 
-    unique_ptr<rhi::instance> create_instance(logger* log) noexcept;
+    unique_ptr<rhi::instance> create_instance(logger* log, bool headless) noexcept;
     unique_ptr<rhi::window_surface> create_window_surface(const rhi::window_surface_desc& desc) noexcept;
 } // namespace tempest::rhi::vk
 

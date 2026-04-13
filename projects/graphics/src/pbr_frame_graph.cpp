@@ -3223,7 +3223,7 @@ namespace tempest::graphics
             .inv_view = math::inverse(view),
             .position = camera_transform->position(),
         };
-        scene_constants_data.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.05f;
+        scene_constants_data.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.15F;
         scene_constants_data.screen_size = math::vec2(static_cast<float>(self->_cfg.render_target_width),
                                                       static_cast<float>(self->_cfg.render_target_height));
 
@@ -5789,7 +5789,7 @@ namespace tempest::graphics
                 .metallic_factor = metallic_factor,
                 .roughness_factor = roughness_factor,
                 .alpha_cutoff = alpha_cutoff,
-                .reflectance = 0.0f,
+                .reflectance = 0.5F,
                 .transmission_factor = transmissive_factor,
                 .thickness_factor = thickness_factor,
                 .attenuation_distance = attenuation_distance,

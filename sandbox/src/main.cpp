@@ -11,7 +11,7 @@
 
 namespace tempest::rhi::vk
 {
-    unique_ptr<rhi::instance> create_instance(tempest::logger* log) noexcept;
+    unique_ptr<rhi::instance> create_instance(tempest::logger* log, bool headless) noexcept;
     unique_ptr<rhi::window_surface> create_window_surface(const rhi::window_surface_desc& desc) noexcept;
 } // namespace tempest::rhi::vk
 

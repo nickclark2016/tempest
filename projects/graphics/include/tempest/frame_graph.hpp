@@ -285,6 +285,10 @@ namespace tempest::graphics
         void blit(const graph_resource_handle<rhi::rhi_handle_type::image>& src,
                   const graph_resource_handle<rhi::rhi_handle_type::render_surface>& dst);
 
+        void copy_image_to_buffer(const graph_resource_handle<rhi::rhi_handle_type::image>& src,
+                                  const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst,
+                                  size_t dst_offset = 0, uint32_t src_mip = 0);
+
       private:
         friend class graph_executor;
 

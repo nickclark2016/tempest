@@ -298,6 +298,10 @@ namespace tempest::rhi
         virtual void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                           typed_rhi_handle<rhi_handle_type::buffer> src, typed_rhi_handle<rhi_handle_type::image> dst,
                           image_layout layout, size_t src_offset = 0, uint32_t dst_mip = 0) noexcept = 0;
+        virtual void copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::image> src, image_layout src_layout,
+                          typed_rhi_handle<rhi_handle_type::buffer> dst, size_t dst_offset = 0,
+                          uint32_t src_mip = 0) noexcept = 0;
 
         // Barrier commands
         virtual void pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -488,7 +492,7 @@ namespace tempest
 
 namespace tempest::rhi::vk
 {
-    extern unique_ptr<rhi::instance> create_instance(logger* log) noexcept;
+    extern unique_ptr<rhi::instance> create_instance(logger* log, bool headless = false) noexcept;
     extern unique_ptr<rhi::window_surface> create_window_surface(const rhi::window_surface_desc& desc) noexcept;
 } // namespace tempest::rhi::vk
 

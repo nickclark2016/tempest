@@ -1214,7 +1214,8 @@ namespace tempest::graphics
         _device->get_dedicated_transfer_queue().reset(frame_in_flight);
 
         const auto acquired_swapchains = _acquire_swapchain_images();
-        if (!acquired_swapchains.empty())
+        const bool headless = _external_surfaces.empty();
+        if (headless || !acquired_swapchains.empty())
         {
             if (!fences_to_wait.empty())
             {
@@ -1223,7 +1224,10 @@ namespace tempest::graphics
 
             _wait_for_swapchain_acquire(acquired_swapchains);
             _execute_plan(acquired_swapchains);
-            _present_swapchain_images(acquired_swapchains);
+            if (!headless)
+            {
+                _present_swapchain_images(acquired_swapchains);
+            }
         }
 
         _device->finish_frame();
@@ -2498,5 +2502,18 @@ namespace tempest::graphics
         }
         _queue->blit(_cmd_list, src_img, rhi::image_layout::transfer_src, 0, dst_img, rhi::image_layout::transfer_dst,
                      0);
+    }
+
+    void transfer_task_execution_context::copy_image_to_buffer(
+        const graph_resource_handle<rhi::rhi_handle_type::image>& src,
+        const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst, size_t dst_offset, uint32_t src_mip)
+    {
+        const auto src_img = _executor->get_image(src);
+        const auto dst_buf = _executor->get_buffer(dst);
+        if (!src_img || !dst_buf)
+        {
+            return;
+        }
+        _queue->copy(_cmd_list, src_img, rhi::image_layout::transfer_src, dst_buf, dst_offset, src_mip);
     }
 } // namespace tempest::graphics

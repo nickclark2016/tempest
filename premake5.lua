@@ -11,6 +11,10 @@ scoped.workspace('Tempest', function()
     defaultplatform 'x64'
     location 'build/%{_ACTION}'
 
+    if _ACTION == 'compilecommands' then
+        os.mkdir('build/compilecommands')
+    end
+
     scoped.filter({
         'action:not vs*'
     }, function()
@@ -193,6 +197,7 @@ scoped.workspace('Tempest', function()
     include 'dependencies'
     include 'projects'
     include 'sandbox'
+    include 'screenshot'
 end)
 
 newoption {

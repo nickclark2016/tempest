@@ -4420,6 +4420,45 @@ namespace tempest::rhi::vk
         used_images[command_list].push_back(dst);
     }
 
+    void work_queue::copy(typed_rhi_handle<rhi_handle_type::command_list> command_list,
+                          typed_rhi_handle<rhi_handle_type::image> src, image_layout src_layout,
+                          typed_rhi_handle<rhi_handle_type::buffer> dst, size_t dst_offset,
+                          uint32_t src_mip) noexcept
+    {
+        const auto& img = *_parent->get_image(src);
+
+        const VkBufferImageCopy copy_region = {
+            .bufferOffset = dst_offset,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource =
+                {
+                    .aspectMask = img.view_create_info.subresourceRange.aspectMask,
+                    .mipLevel = src_mip,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            .imageOffset =
+                {
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
+                },
+            .imageExtent =
+                {
+                    .width = img.create_info.extent.width,
+                    .height = img.create_info.extent.height,
+                    .depth = img.create_info.extent.depth,
+                },
+        };
+        _dispatch->cmdCopyImageToBuffer(_parent->get_command_buffer(command_list), img.image, to_vulkan(src_layout),
+                                        _parent->get_buffer(dst)->buffer, 1, &copy_region);
+
+        // Track the image and buffer for the resource tracker
+        used_images[command_list].push_back(src);
+        used_buffers[command_list].push_back(dst);
+    }
+
     void work_queue::pipeline_barriers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                        span<const image_barrier> image_barriers,
                                        span<const buffer_barrier> buffer_barriers) noexcept
@@ -5081,7 +5120,7 @@ namespace tempest::rhi::vk
         return none();
     }
 
-    unique_ptr<rhi::instance> create_instance([[maybe_unused]] logger* log) noexcept
+    unique_ptr<rhi::instance> create_instance([[maybe_unused]] logger* log, bool headless) noexcept
     {
         vkb::InstanceBuilder bldr;
         bldr.set_app_name("Tempest Application")
@@ -5147,8 +5186,14 @@ namespace tempest::rhi::vk
         vkb::PhysicalDeviceSelector selector =
             vkb::PhysicalDeviceSelector(instance)
                 .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-                .defer_surface_initialization()
-                .require_present()
+                .defer_surface_initialization();
+
+        if (!headless)
+        {
+            selector = tempest::move(selector).require_present();
+        }
+
+        selector = tempest::move(selector)
                 .add_required_extension(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME)
                 .add_required_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)
                 .add_required_extension(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)
