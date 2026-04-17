@@ -293,9 +293,8 @@ namespace tempest::graphics
 
     void task_builder::fallback(base_graph_resource_handle produced, base_graph_resource_handle alternative)
     {
-        uint64_t p_v, a_v;
-        __builtin_memcpy(&p_v, &produced, sizeof(uint64_t));
-        __builtin_memcpy(&a_v, &alternative, sizeof(uint64_t));
+        const auto p_v = bit_cast<uint64_t>(produced);
+        const auto a_v = bit_cast<uint64_t>(alternative);
         _resource_fallbacks[p_v] = a_v;
     }
 
