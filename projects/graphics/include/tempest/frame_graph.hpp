@@ -91,6 +91,11 @@ namespace tempest::graphics
         rhi::image_layout layout;
     };
 
+    class task_execution_context;
+    class graphics_task_execution_context;
+    class compute_task_execution_context;
+    class transfer_task_execution_context;
+
     class task_builder
     {
       public:
@@ -135,21 +140,79 @@ namespace tempest::graphics
 
         void depends_on(string task_name);
 
-      private:
+        void enable_if(function<bool()> condition);
+        void fallback(base_graph_resource_handle produced, base_graph_resource_handle alternative);
+
+      protected:
         friend class graph_builder;
 
         vector<scheduled_resource_access> accesses;
         vector<string> dependencies;
+        function<bool()> _enable_condition = [] { return true; };
+        function<void(task_execution_context&)> _fallback_exec;
+        flat_unordered_map<uint64_t, uint64_t> _resource_fallbacks;
     };
 
     class graphics_task_builder : public task_builder
     {
+      public:
+        using task_builder::fallback;
+
+        template <typename... ExecTs>
+        void fallback(invocable_no_capture<graphics_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
+        {
+            if constexpr (sizeof...(ExecTs) == 0)
+            {
+                _fallback_exec = [record = tempest::move(record)](task_execution_context& ctx) {
+                    auto graphics_ctx = reinterpret_cast<graphics_task_execution_context*>(&ctx);
+                    record(*graphics_ctx);
+                };
+            }
+            else
+            {
+                auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+                _fallback_exec = [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                    auto graphics_ctx = reinterpret_cast<graphics_task_execution_context*>(&ctx);
+                    tempest::apply(
+                        [&](auto&&... unpacked) {
+                            record(*graphics_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
+                        },
+                        args);
+                };
+            }
+        }
     };
 
     class compute_task_builder : public task_builder
     {
       public:
         void prefer_async();
+
+        using task_builder::fallback;
+
+        template <typename... ExecTs>
+        void fallback(invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
+        {
+            if constexpr (sizeof...(ExecTs) == 0)
+            {
+                _fallback_exec = [record = tempest::move(record)](task_execution_context& ctx) {
+                    auto compute_ctx = reinterpret_cast<compute_task_execution_context*>(&ctx);
+                    record(*compute_ctx);
+                };
+            }
+            else
+            {
+                auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+                _fallback_exec = [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                    auto compute_ctx = reinterpret_cast<compute_task_execution_context*>(&ctx);
+                    tempest::apply(
+                        [&](auto&&... unpacked) {
+                            record(*compute_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
+                        },
+                        args);
+                };
+            }
+        }
 
       private:
         friend class graph_builder;
@@ -161,6 +224,32 @@ namespace tempest::graphics
     {
       public:
         void prefer_async();
+
+        using task_builder::fallback;
+
+        template <typename... ExecTs>
+        void fallback(invocable_no_capture<transfer_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
+        {
+            if constexpr (sizeof...(ExecTs) == 0)
+            {
+                _fallback_exec = [record = tempest::move(record)](task_execution_context& ctx) {
+                    auto transfer_ctx = reinterpret_cast<transfer_task_execution_context*>(&ctx);
+                    record(*transfer_ctx);
+                };
+            }
+            else
+            {
+                auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
+                _fallback_exec = [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                    auto transfer_ctx = reinterpret_cast<transfer_task_execution_context*>(&ctx);
+                    tempest::apply(
+                        [&](auto&&... unpacked) {
+                            record(*transfer_ctx, tempest::forward<decltype(unpacked)>(unpacked)...);
+                        },
+                        args);
+                };
+            }
+        }
 
       private:
         friend class graph_builder;
@@ -303,6 +392,9 @@ namespace tempest::graphics
         vector<base_graph_resource_handle> outputs;
 
         function<void(task_execution_context&)> execution_context;
+        function<bool()> enable_condition;
+        function<void(task_execution_context&)> fallback_exec;
+        flat_unordered_map<uint64_t, uint64_t> resource_fallbacks;
     };
 
     struct ownership_transfer
@@ -384,6 +476,10 @@ namespace tempest::graphics
         vector<scheduled_resource_access> resource_accesses;
         vector<base_graph_resource_handle> outputs; // Resources written in this pass, subset of resource_accesses
         vector<string> explicit_dependencies;
+
+        function<bool()> enable_condition;
+        function<void(task_execution_context&)> fallback_exec;
+        flat_unordered_map<uint64_t, uint64_t> resource_fallbacks;
     };
 
     struct resource_entry
@@ -650,6 +746,7 @@ namespace tempest::graphics
       private:
         rhi::device* _device;
         optional<graph_execution_plan> _plan;
+        flat_unordered_map<uint64_t, uint64_t> _execution_alias_map;
 
         struct buffer_usage
         {

@@ -469,3 +469,103 @@ TEST(frame_graph, imported_swapchain)
     ASSERT_EQ(plan.submissions[0].passes.size(), 1);
     ASSERT_EQ(plan.submissions[0].passes[0].name, "Present Pass");
 }
+
+TEST(frame_graph, dynamic_pass_enabling)
+{
+    using namespace tempest;
+
+    auto builder = graphics::graph_builder{};
+
+    auto depth_image = builder.create_image({
+        .format = rhi::image_format::d32_float,
+        .type = rhi::image_type::image_2d,
+        .width = 1920,
+        .height = 1080,
+        .depth = 1,
+        .array_layers = 1,
+        .mip_levels = 1,
+        .sample_count = rhi::image_sample_count::sample_count_1,
+        .tiling = rhi::image_tiling_type::optimal,
+        .location = rhi::memory_location::device,
+        .usage = make_enum_mask(rhi::image_usage::depth_attachment),
+        .name = "Depth Image",
+    });
+
+    auto ao_image = builder.create_image({
+        .format = rhi::image_format::r8_unorm,
+        .type = rhi::image_type::image_2d,
+        .width = 1920,
+        .height = 1080,
+        .depth = 1,
+        .array_layers = 1,
+        .mip_levels = 1,
+        .sample_count = rhi::image_sample_count::sample_count_1,
+        .tiling = rhi::image_tiling_type::optimal,
+        .location = rhi::memory_location::device,
+        .usage = make_enum_mask(rhi::image_usage::storage, rhi::image_usage::sampled),
+        .name = "Ambient Occlusion Image",
+    });
+
+    auto color_image = builder.create_image({
+        .format = rhi::image_format::rgba8_srgb,
+        .type = rhi::image_type::image_2d,
+        .width = 1920,
+        .height = 1080,
+        .depth = 1,
+        .array_layers = 1,
+        .mip_levels = 1,
+        .sample_count = rhi::image_sample_count::sample_count_1,
+        .tiling = rhi::image_tiling_type::optimal,
+        .location = rhi::memory_location::device,
+        .usage = make_enum_mask(rhi::image_usage::color_attachment),
+        .name = "Color Target",
+    });
+
+    bool enable_ssao = false;
+
+    builder.create_graphics_pass(
+        "Depth Prepass",
+        [&](graphics::graphics_task_builder& task) {
+            task.write(depth_image, rhi::image_layout::depth);
+        },
+        []([[maybe_unused]] graphics::graphics_task_execution_context& ctx) {});
+
+    builder.create_compute_pass(
+        "Clear AO",
+        [&](graphics::compute_task_builder& task) {
+            task.write(ao_image, rhi::image_layout::general);
+        },
+        []([[maybe_unused]] graphics::compute_task_execution_context& ctx) {});
+
+    builder.create_compute_pass(
+        "SSAO",
+        [&](graphics::compute_task_builder& task) {
+            auto prev_ao = ao_image; 
+            task.read(depth_image, rhi::image_layout::shader_read_only);
+            task.write(ao_image, rhi::image_layout::general);
+            
+            task.enable_if([&]{ return enable_ssao; });
+            task.fallback(ao_image, prev_ao); 
+        },
+        []([[maybe_unused]] graphics::compute_task_execution_context& ctx) {});
+
+    builder.create_graphics_pass(
+        "PBR Opaque",
+        [&](graphics::graphics_task_builder& task) {
+            task.read(depth_image, rhi::image_layout::depth_read_only);
+            task.read(ao_image, rhi::image_layout::shader_read_only);
+            task.write(color_image, rhi::image_layout::color_attachment);
+        },
+        []([[maybe_unused]] graphics::graphics_task_execution_context& ctx) {});
+
+    auto queue_cfg = graphics::queue_configuration{
+        .graphics_queues = 1,
+        .compute_queues = 0,
+        .transfer_queues = 0,
+    };
+
+    auto plan = tempest::move(builder).compile(queue_cfg);
+
+    ASSERT_EQ(plan.submissions.size(), 1);
+    ASSERT_EQ(plan.submissions[0].passes.size(), 4);
+}

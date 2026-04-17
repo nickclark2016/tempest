@@ -286,6 +286,19 @@ namespace tempest::graphics
         dependencies.push_back(tempest::move(task_name));
     }
 
+    void task_builder::enable_if(function<bool()> condition)
+    {
+        _enable_condition = tempest::move(condition);
+    }
+
+    void task_builder::fallback(base_graph_resource_handle produced, base_graph_resource_handle alternative)
+    {
+        uint64_t p_v, a_v;
+        __builtin_memcpy(&p_v, &produced, sizeof(uint64_t));
+        __builtin_memcpy(&a_v, &alternative, sizeof(uint64_t));
+        _resource_fallbacks[p_v] = a_v;
+    }
+
     void compute_task_builder::prefer_async()
     {
         _prefer_async = true;
@@ -564,6 +577,9 @@ namespace tempest::graphics
         pass.execution_context = tempest::move(execution_context);
         pass.async = async;
         pass.explicit_dependencies = tempest::move(builder.dependencies);
+        pass.enable_condition = tempest::move(builder._enable_condition);
+        pass.fallback_exec = tempest::move(builder._fallback_exec);
+        pass.resource_fallbacks = tempest::move(builder._resource_fallbacks);
 
         for (auto&& res : builder.accesses)
         {
@@ -1170,6 +1186,9 @@ namespace tempest::graphics
                 }
 
                 sched_pass.execution_context = pass.execution_context;
+                sched_pass.enable_condition = pass.enable_condition;
+                sched_pass.fallback_exec = pass.fallback_exec;
+                sched_pass.resource_fallbacks = pass.resource_fallbacks;
                 instructions.passes.push_back(move(sched_pass));
             }
 
@@ -1248,7 +1267,27 @@ namespace tempest::graphics
             return rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
         }
 
-        const auto it = _all_buffers.find(handle.handle);
+        uint64_t target_handle = handle.handle;
+        
+        auto pack = [](const base_graph_resource_handle& h) {
+            uint64_t v;
+            __builtin_memcpy(&v, &h, sizeof(uint64_t));
+            return v;
+        };
+
+        // Resolve aliases
+        uint64_t current_val = pack(handle);
+        auto alias = _execution_alias_map.find(current_val);
+        while (alias != _execution_alias_map.end())
+        {
+            current_val = alias->second;
+            base_graph_resource_handle aliased_handle;
+            __builtin_memcpy(&aliased_handle, &current_val, sizeof(uint64_t));
+            target_handle = aliased_handle.handle;
+            alias = _execution_alias_map.find(current_val);
+        }
+
+        const auto it = _all_buffers.find(target_handle);
         if (it != _all_buffers.cend())
         {
             return it->second;
@@ -1259,17 +1298,39 @@ namespace tempest::graphics
     rhi::typed_rhi_handle<rhi::rhi_handle_type::image> graph_executor::get_image(
         const base_graph_resource_handle& handle) const
     {
-        if (get_resource_type(handle) == rhi::rhi_handle_type::image)
+        uint64_t target_handle = handle.handle;
+        rhi::rhi_handle_type target_type = get_resource_type(handle);
+        
+        auto pack = [](const base_graph_resource_handle& h) {
+            uint64_t v;
+            __builtin_memcpy(&v, &h, sizeof(uint64_t));
+            return v;
+        };
+
+        // Resolve aliases
+        uint64_t current_val = pack(handle);
+        auto alias = _execution_alias_map.find(current_val);
+        while (alias != _execution_alias_map.end())
         {
-            const auto it = _all_images.find(handle.handle);
+            current_val = alias->second;
+            base_graph_resource_handle aliased_handle;
+            __builtin_memcpy(&aliased_handle, &current_val, sizeof(uint64_t));
+            target_handle = aliased_handle.handle;
+            target_type = get_resource_type(aliased_handle);
+            alias = _execution_alias_map.find(current_val);
+        }
+
+        if (target_type == rhi::rhi_handle_type::image)
+        {
+            const auto it = _all_images.find(target_handle);
             if (it != _all_images.cend())
             {
                 return it->second;
             }
         }
-        else if (get_resource_type(handle) == rhi::rhi_handle_type::render_surface)
+        else if (target_type == rhi::rhi_handle_type::render_surface)
         {
-            const auto it = _current_swapchain_images.find(handle.handle);
+            const auto it = _current_swapchain_images.find(target_handle);
             if (it != _current_swapchain_images.cend())
             {
                 return it->second;
@@ -1648,6 +1709,7 @@ namespace tempest::graphics
     void graph_executor::_execute_plan(const acquired_swapchains& acquired)
     {
         _current_swapchain_images.clear();
+        _execution_alias_map.clear();
         for (const auto& [surface, acquire_info] : acquired)
         {
             const auto res_it = tempest::find_if(_external_surfaces.cbegin(), _external_surfaces.cend(),
@@ -1757,66 +1819,16 @@ namespace tempest::graphics
                         }
 
                         const auto res_type = get_resource_type(resource.handle);
-                        if (res_type == rhi::rhi_handle_type::image)
+                        if (res_type == rhi::rhi_handle_type::image || res_type == rhi::rhi_handle_type::render_surface)
                         {
-                            const auto image_it = _all_images.find(resource.handle.handle);
-                            const auto& img_usage = tempest::get<image_usage>(prior_usage.usage);
-
-                            auto existing_barrier_it = tempest::find_if(
-                                image_barriers.begin(), image_barriers.end(),
-                                [&](const auto& barrier) { return barrier.image.id == image_it->second.id; });
-                            if (existing_barrier_it != image_barriers.end())
-                            {
-                                // Update existing barrier
-                                TEMPEST_ASSERT(existing_barrier_it->new_layout == resource.layout);
-                                existing_barrier_it->dst_stages |= resource.stages;
-                                existing_barrier_it->dst_access |= resource.accesses;
-                            }
-                            else
-                            {
-                                // If src is a host operation and there is no ownership transfer or layout transition,
-                                // we can skip the barrier entirely
-                                if ((prior_usage.stages & make_enum_mask(rhi::pipeline_stage::host)) ==
-                                        make_enum_mask(rhi::pipeline_stage::host) &&
-                                    !cross_queue && img_usage.layout == resource.layout)
-                                {
-                                    continue;
-                                }
-
-                                // Create new barrier
-                                const auto barrier = rhi::work_queue::image_barrier{
-                                    .image = image_it->second,
-                                    .old_layout = img_usage.layout,
-                                    .new_layout = resource.layout,
-                                    .src_stages = prior_usage.stages,
-                                    .src_access = prior_usage.accesses,
-                                    .dst_stages = resource.stages,
-                                    .dst_access = resource.accesses,
-                                    .src_queue = src_queue,
-                                    .dst_queue = dst_queue,
-                                };
-
-                                image_barriers.push_back(barrier);
-                            }
-                        }
-                        else if (res_type == rhi::rhi_handle_type::render_surface)
-                        {
-                            const auto surface_it = tempest::find_if(
-                                _external_surfaces.begin(), _external_surfaces.end(),
-                                [&](const auto& pair) { return pair.first == resource.handle.handle; });
-                            const auto render_surface_info_it =
-                                tempest::find_if(acquired.cbegin(), acquired.cend(),
-                                                 [&](const auto& info) { return info.first == surface_it->second; });
-
-                            if (render_surface_info_it != acquired.cend())
+                            const auto physical_image = get_image(resource.handle);
+                            if (physical_image.id != rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle.id)
                             {
                                 const auto& img_usage = tempest::get<image_usage>(prior_usage.usage);
 
                                 auto existing_barrier_it = tempest::find_if(
-                                    image_barriers.begin(), image_barriers.end(), [&](const auto& barrier) {
-                                        return barrier.image.id == render_surface_info_it->second.image.id;
-                                    });
-
+                                    image_barriers.begin(), image_barriers.end(),
+                                    [&](const auto& barrier) { return barrier.image.id == physical_image.id; });
                                 if (existing_barrier_it != image_barriers.end())
                                 {
                                     // Update existing barrier
@@ -1826,9 +1838,18 @@ namespace tempest::graphics
                                 }
                                 else
                                 {
-                                    // Add image layout transition from undefined to first usage
+                                    // If src is a host operation and there is no ownership transfer or layout transition,
+                                    // we can skip the barrier entirely
+                                    if ((prior_usage.stages & make_enum_mask(rhi::pipeline_stage::host)) ==
+                                            make_enum_mask(rhi::pipeline_stage::host) &&
+                                        !cross_queue && img_usage.layout == resource.layout)
+                                    {
+                                        continue;
+                                    }
+
+                                    // Create new barrier
                                     const auto barrier = rhi::work_queue::image_barrier{
-                                        .image = render_surface_info_it->second.image,
+                                        .image = physical_image,
                                         .old_layout = img_usage.layout,
                                         .new_layout = resource.layout,
                                         .src_stages = prior_usage.stages,
@@ -1845,7 +1866,7 @@ namespace tempest::graphics
                         }
                         else if (res_type == rhi::rhi_handle_type::buffer)
                         {
-                            const auto buffer_it = _all_buffers.find(resource.handle.handle);
+                            const auto physical_buffer = get_buffer(resource.handle);
                             const auto& buf_usage = tempest::get<buffer_usage>(prior_usage.usage);
                             auto offset = buf_usage.offset;
                             auto range = buf_usage.range;
@@ -1925,7 +1946,7 @@ namespace tempest::graphics
 
                             const auto existing_barrier_it = tempest::find_if(
                                 buffer_barriers.begin(), buffer_barriers.end(),
-                                [&](const auto& barrier) { return barrier.buffer.id == buffer_it->second.id; });
+                                [&](const auto& barrier) { return barrier.buffer.id == physical_buffer.id; });
                             if (existing_barrier_it != buffer_barriers.end())
                             {
                                 // Update existing barrier
@@ -1944,7 +1965,7 @@ namespace tempest::graphics
                                 }
 
                                 const auto barrier = rhi::work_queue::buffer_barrier{
-                                    .buffer = buffer_it->second,
+                                    .buffer = physical_buffer,
                                     .src_stages = existing_write_stages | prior_usage.stages,
                                     .src_access = existing_write_accesses | prior_usage.accesses,
                                     .dst_stages = resource.stages,
@@ -2019,27 +2040,50 @@ namespace tempest::graphics
 
                 queue.pipeline_barriers(command_list, image_barriers, buffer_barriers);
 
+                bool skip_pass = pass.enable_condition && !pass.enable_condition();
+                if (skip_pass)
+                {
+                    for (const auto& [produced, alternative] : pass.resource_fallbacks)
+                    {
+                        _execution_alias_map[produced] = alternative;
+                    }
+                }
+
+                auto execute_lambda = [&](task_execution_context& executor) {
+                    if (skip_pass)
+                    {
+                        if (pass.fallback_exec)
+                        {
+                            pass.fallback_exec(executor);
+                        }
+                    }
+                    else if (pass.execution_context)
+                    {
+                        pass.execution_context(executor);
+                    }
+                };
+
                 // Execute the pass
                 switch (pass.type)
                 {
                 case work_type::graphics: {
                     queue.begin_debug_region(command_list, pass.name.c_str());
                     auto executor = graphics_task_execution_context(this, command_list, &queue);
-                    pass.execution_context(executor);
+                    execute_lambda(executor);
                     queue.end_debug_region(command_list);
                     break;
                 }
                 case work_type::compute: {
                     queue.begin_debug_region(command_list, pass.name.c_str());
                     auto executor = compute_task_execution_context(this, command_list, &queue);
-                    pass.execution_context(executor);
+                    execute_lambda(executor);
                     queue.end_debug_region(command_list);
                     break;
                 }
                 case work_type::transfer: {
                     queue.begin_debug_region(command_list, pass.name.c_str());
                     auto executor = transfer_task_execution_context(this, command_list, &queue);
-                    pass.execution_context(executor);
+                    execute_lambda(executor);
                     queue.end_debug_region(command_list);
                     break;
                 }
