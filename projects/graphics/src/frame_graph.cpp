@@ -1269,9 +1269,7 @@ namespace tempest::graphics
         uint64_t target_handle = handle.handle;
         
         auto pack = [](const base_graph_resource_handle& h) {
-            uint64_t v;
-            __builtin_memcpy(&v, &h, sizeof(uint64_t));
-            return v;
+            return bit_cast<uint64_t>(h);
         };
 
         // Resolve aliases
@@ -1281,7 +1279,7 @@ namespace tempest::graphics
         {
             current_val = alias->second;
             base_graph_resource_handle aliased_handle;
-            __builtin_memcpy(&aliased_handle, &current_val, sizeof(uint64_t));
+            aliased_handle = bit_cast<base_graph_resource_handle>(current_val);
             target_handle = aliased_handle.handle;
             alias = _execution_alias_map.find(current_val);
         }
@@ -1301,9 +1299,7 @@ namespace tempest::graphics
         rhi::rhi_handle_type target_type = get_resource_type(handle);
         
         auto pack = [](const base_graph_resource_handle& h) {
-            uint64_t v;
-            __builtin_memcpy(&v, &h, sizeof(uint64_t));
-            return v;
+            return bit_cast<uint64_t>(h);
         };
 
         // Resolve aliases
@@ -1313,7 +1309,7 @@ namespace tempest::graphics
         {
             current_val = alias->second;
             base_graph_resource_handle aliased_handle;
-            __builtin_memcpy(&aliased_handle, &current_val, sizeof(uint64_t));
+            aliased_handle = bit_cast<base_graph_resource_handle>(current_val);
             target_handle = aliased_handle.handle;
             target_type = get_resource_type(aliased_handle);
             alias = _execution_alias_map.find(current_val);
