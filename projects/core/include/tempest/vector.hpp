@@ -51,6 +51,10 @@ namespace tempest
         constexpr vector(vector&& other) noexcept;
         constexpr vector(vector&& other, const Allocator& alloc);
 
+        template <typename... Ts>
+            requires (sizeof...(Ts) > 0) && (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
+        constexpr vector(init_list_t, Ts&&... values);
+
         constexpr ~vector();
 
         constexpr vector& operator=(const vector& other)
@@ -285,6 +289,19 @@ namespace tempest
                 push_back(tempest::move(value));
             }
         }
+    }
+
+    template <typename T, typename Allocator>
+    template <typename... Ts>
+        requires (sizeof...(Ts) > 0) && (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
+    constexpr vector<T, Allocator>::vector(init_list_t, Ts&&... values)
+    {
+        static_assert(sizeof...(Ts) > 0, "At least one value must be provided");
+        static_assert((conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>),
+                      "All values must be convertible or constructible to T");
+
+        reserve(sizeof...(Ts));
+        (push_back(tempest::forward<Ts>(values)), ...);
     }
 
     template <typename T, typename Allocator>
@@ -994,6 +1011,10 @@ namespace tempest
             vec._end = vec._data + count;
         }
     } // namespace unsafe
+
+    // Deduction guides
+    template <typename... Ts>
+    vector(init_list_t, Ts&&...) -> vector<common_type_t<Ts...>>;
 } // namespace tempest
 
 #endif // tempest_core_vector_hpp

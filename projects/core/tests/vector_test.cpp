@@ -80,6 +80,17 @@ TEST(vector, move_constructor)
     EXPECT_EQ(v1.capacity(), 0);
 }
 
+TEST(vector, variadic_constructor)
+{
+    vector<int> v(tempest::init_list, 1, 2, 3, 4, 5);
+    EXPECT_EQ(v.size(), 5);
+    EXPECT_GE(v.capacity(), 5);
+    for (int i = 0; i < 5; ++i)
+    {
+        EXPECT_EQ(v[i], i + 1);
+    }
+}
+
 TEST(vector, copy_assignment)
 {
     vector<int> v1(10, 42);

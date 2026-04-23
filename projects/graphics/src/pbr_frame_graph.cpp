@@ -21,6 +21,7 @@
 #include <tempest/traits.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transformations.hpp>
+#include <tempest/utility.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
 
@@ -714,27 +715,27 @@ namespace tempest::graphics
         // 1: RW Hi-Z Map
         // 2: Linear Sampler
 
-        auto hiz_descriptor_set_bindings = vector<rhi::descriptor_binding_layout>();
-        hiz_descriptor_set_bindings.push_back({
-            .binding_index = 0,
-            .type = rhi::descriptor_type::sampled_image,
-            .count = 1,
-            .stages = make_enum_mask(rhi::shader_stage::compute),
-        });
-
-        hiz_descriptor_set_bindings.push_back({
-            .binding_index = 1,
-            .type = rhi::descriptor_type::sampler,
-            .count = 1,
-            .stages = make_enum_mask(rhi::shader_stage::compute),
-        });
-
-        hiz_descriptor_set_bindings.push_back({
-            .binding_index = 2,
-            .type = rhi::descriptor_type::storage_image,
-            .count = 6,
-            .stages = make_enum_mask(rhi::shader_stage::compute),
-        });
+        auto hiz_descriptor_set_bindings = vector(
+            tempest::init_list,
+            rhi::descriptor_binding_layout{
+                .binding_index = 0,
+                .type = rhi::descriptor_type::sampled_image,
+                .count = 1,
+                .stages = make_enum_mask(rhi::shader_stage::compute),
+            },
+            rhi::descriptor_binding_layout{
+                .binding_index = 1,
+                .type = rhi::descriptor_type::sampler,
+                .count = 1,
+                .stages = make_enum_mask(rhi::shader_stage::compute),
+            },
+            rhi::descriptor_binding_layout{
+                .binding_index = 2,
+                .type = rhi::descriptor_type::storage_image,
+                .count = 6,
+                .stages = make_enum_mask(rhi::shader_stage::compute),
+            }
+        );
 
         // Push Constants
         // 0: [0, sizeof(hi_z_constants)] - Hi-Z Constants

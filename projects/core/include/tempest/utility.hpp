@@ -510,5 +510,9 @@ namespace tempest
     using make_sequence_for = make_index_sequence<sizeof...(Ts)>;
 
     auto memcpy(void* dst, const void* src, size_t count) noexcept -> void*;
+
+    struct init_list_t {};
+
+    inline constexpr init_list_t init_list{};
 } // namespace tempest
 #endif // tempest_core_utility_hpp
