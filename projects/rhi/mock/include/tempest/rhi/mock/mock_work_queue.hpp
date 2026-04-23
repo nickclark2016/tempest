@@ -5,11 +5,17 @@
 
 namespace tempest::rhi::mock
 {
-    class mock_work_queue : public rhi::work_queue
+    class mock_work_queue final : public rhi::work_queue
     {
       public:
         mock_work_queue() = default;
+        mock_work_queue(const mock_work_queue&) = delete;
+        mock_work_queue(mock_work_queue&&) = delete;
+
         ~mock_work_queue() override = default;
+
+        mock_work_queue& operator=(const mock_work_queue&) = delete;
+        mock_work_queue& operator=(mock_work_queue&&) = delete;
 
         size_t get_history_count() const noexcept
         {
@@ -27,17 +33,14 @@ namespace tempest::rhi::mock
 
         typed_rhi_handle<rhi_handle_type::command_list> get_next_command_list() noexcept override
         {
-            return typed_rhi_handle<rhi_handle_type::command_list>{_next_handle++};
+            return typed_rhi_handle<rhi_handle_type::command_list>{_next_handle++, 0};
         }
 
         bool submit(span<const submit_info> infos,
                     typed_rhi_handle<rhi_handle_type::fence> fence =
                         typed_rhi_handle<rhi_handle_type::fence>::null_handle) noexcept override
         {
-            _history.push_back(submit_cmd{
-                vector<submit_info>(infos.begin(), infos.end()),
-                fence
-            });
+            _history.push_back(submit_cmd{vector<submit_info>(infos.begin(), infos.end()), fence});
             return true;
         }
 
@@ -63,16 +66,22 @@ namespace tempest::rhi::mock
                               span<const image_barrier> image_barriers) noexcept override
         {
             _history.push_back(transition_image_cmd{
-                command_list,
-                vector<image_barrier>(image_barriers.begin(), image_barriers.end())
-            });
+                command_list, vector<image_barrier>(image_barriers.begin(), image_barriers.end())});
         }
 
         void clear_color_image(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                               typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float r,
-                               float g, float b, float a) noexcept override
+                               typed_rhi_handle<rhi_handle_type::image> image, image_layout layout, float red,
+                               float green, float blue, float alpha) noexcept override
         {
-            _history.push_back(clear_color_image_cmd{command_list, image, layout, r, g, b, a});
+            _history.push_back(clear_color_image_cmd{
+                .command_list = command_list,
+                .image = image,
+                .layout = layout,
+                .r = red,
+                .g = green,
+                .b = blue,
+                .a = alpha,
+            });
         }
 
         void blit(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -85,8 +94,7 @@ namespace tempest::rhi::mock
 
         void generate_mip_chain(typed_rhi_handle<rhi_handle_type::command_list> command_list,
                                 typed_rhi_handle<rhi_handle_type::image> img, image_layout current_layout,
-                                uint32_t base_mip = 0,
-                                uint32_t mip_count = numeric_limits<uint32_t>::max()) override
+                                uint32_t base_mip = 0, uint32_t mip_count = numeric_limits<uint32_t>::max()) override
         {
             _history.push_back(generate_mip_chain_cmd{command_list, img, current_layout, base_mip, mip_count});
         }
@@ -125,11 +133,9 @@ namespace tempest::rhi::mock
                                span<const image_barrier> img_barriers,
                                span<const buffer_barrier> buf_barriers) noexcept override
         {
-            _history.push_back(pipeline_barriers_cmd{
-                command_list,
-                vector<image_barrier>(img_barriers.begin(), img_barriers.end()),
-                vector<buffer_barrier>(buf_barriers.begin(), buf_barriers.end())
-            });
+            _history.push_back(pipeline_barriers_cmd{command_list,
+                                                     vector<image_barrier>(img_barriers.begin(), img_barriers.end()),
+                                                     vector<buffer_barrier>(buf_barriers.begin(), buf_barriers.end())});
         }
 
         void begin_rendering(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -150,8 +156,8 @@ namespace tempest::rhi::mock
         }
 
         void draw(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                  typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t offset,
-                  uint32_t draw_count, uint32_t stride) noexcept override
+                  typed_rhi_handle<rhi_handle_type::buffer> indirect_buffer, uint32_t offset, uint32_t draw_count,
+                  uint32_t stride) noexcept override
         {
             _history.push_back(draw_indirect_cmd{command_list, indirect_buffer, offset, draw_count, stride});
         }
@@ -166,7 +172,8 @@ namespace tempest::rhi::mock
                   uint32_t instance_count, uint32_t first_index, int32_t vertex_offset,
                   uint32_t first_instance) noexcept override
         {
-            _history.push_back(draw_indexed_cmd{command_list, index_count, instance_count, first_index, vertex_offset, first_instance});
+            _history.push_back(draw_indexed_cmd{command_list, index_count, instance_count, first_index, vertex_offset,
+                                                first_instance});
         }
 
         void bind_index_buffer(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -176,31 +183,45 @@ namespace tempest::rhi::mock
             _history.push_back(bind_index_buffer_cmd{command_list, buffer, offset, index_type});
         }
 
-        void bind_vertex_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                 uint32_t first_binding,
+        void bind_vertex_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t first_binding,
                                  span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers,
                                  span<const size_t> offsets) noexcept override
         {
             _history.push_back(bind_vertex_buffers_cmd{
-                command_list,
-                first_binding,
+                command_list, first_binding,
                 vector<typed_rhi_handle<rhi_handle_type::buffer>>(buffers.begin(), buffers.end()),
-                vector<size_t>(offsets.begin(), offsets.end())
+                vector<size_t>(offsets.begin(), offsets.end())});
+        }
+
+        void set_scissor_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, int32_t xpos,
+                                int32_t ypos, uint32_t width, uint32_t height,
+                                uint32_t region_index = 0) noexcept override
+        {
+            _history.push_back(set_scissor_region_cmd{
+                .command_list = command_list,
+                .x = xpos,
+                .y = ypos,
+                .width = width,
+                .height = height,
+                .region_index = region_index,
             });
         }
 
-        void set_scissor_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, int32_t x,
-                                int32_t y, uint32_t width, uint32_t height,
-                                uint32_t region_index = 0) noexcept override
+        void set_viewport(typed_rhi_handle<rhi_handle_type::command_list> command_list, float xpos, float ypos,
+                          float width, float height, float min_depth, float max_depth, uint32_t viewport_index = 0,
+                          bool flipped = false) noexcept override
         {
-            _history.push_back(set_scissor_region_cmd{command_list, x, y, width, height, region_index});
-        }
-
-        void set_viewport(typed_rhi_handle<rhi_handle_type::command_list> command_list, float x, float y,
-                          float width, float height, float min_depth, float max_depth,
-                          uint32_t viewport_index = 0, bool flipped = false) noexcept override
-        {
-            _history.push_back(set_viewport_cmd{command_list, x, y, width, height, min_depth, max_depth, viewport_index, flipped});
+            _history.push_back(set_viewport_cmd{
+                .command_list = command_list,
+                .x = xpos,
+                .y = ypos,
+                .width = width,
+                .height = height,
+                .min_depth = min_depth,
+                .max_depth = max_depth,
+                .viewport_index = viewport_index,
+                .flipped = flipped,
+            });
         }
 
         void set_cull_mode(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -215,10 +236,15 @@ namespace tempest::rhi::mock
             _history.push_back(bind_compute_pipeline_cmd{command_list, pipeline});
         }
 
-        void dispatch(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t x, uint32_t y,
-                      uint32_t z) noexcept override
+        void dispatch(typed_rhi_handle<rhi_handle_type::command_list> command_list, uint32_t xpos, uint32_t ypos,
+                      uint32_t zpos) noexcept override
         {
-            _history.push_back(dispatch_cmd{command_list, x, y, z});
+            _history.push_back(dispatch_cmd{
+                .command_list = command_list,
+                .x = xpos,
+                .y = ypos,
+                .z = zpos,
+            });
         }
 
         void bind(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -227,13 +253,9 @@ namespace tempest::rhi::mock
                   span<const uint32_t> dynamic_offsets = {}) noexcept override
         {
             _history.push_back(bind_descriptor_sets_cmd{
-                command_list,
-                pipeline_layout,
-                point,
-                first_set_index,
+                command_list, pipeline_layout, point, first_set_index,
                 vector<typed_rhi_handle<rhi_handle_type::descriptor_set>>(sets.begin(), sets.end()),
-                vector<uint32_t>(dynamic_offsets.begin(), dynamic_offsets.end())
-            });
+                vector<uint32_t>(dynamic_offsets.begin(), dynamic_offsets.end())});
         }
 
         void push_constants(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -241,31 +263,21 @@ namespace tempest::rhi::mock
                             enum_mask<rhi::shader_stage> stages, uint32_t offset,
                             span<const byte> values) noexcept override
         {
-            _history.push_back(push_constants_cmd{
-                command_list,
-                pipeline_layout,
-                stages,
-                offset,
-                vector<byte>(values.begin(), values.end())
-            });
+            _history.push_back(push_constants_cmd{command_list, pipeline_layout, stages, offset,
+                                                  vector<byte>(values.begin(), values.end())});
         }
 
         void push_descriptors(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                              typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout,
-                              bind_point point, uint32_t set_index,
-                              span<const buffer_binding_descriptor> buffers,
+                              typed_rhi_handle<rhi_handle_type::pipeline_layout> pipeline_layout, bind_point point,
+                              uint32_t set_index, span<const buffer_binding_descriptor> buffers,
                               span<const image_binding_descriptor> images,
                               span<const sampler_binding_descriptor> samplers) noexcept override
         {
-            _history.push_back(push_descriptors_cmd{
-                command_list,
-                pipeline_layout,
-                point,
-                set_index,
-                vector<buffer_binding_descriptor>(buffers.begin(), buffers.end()),
-                vector<image_binding_descriptor>(images.begin(), images.end()),
-                vector<sampler_binding_descriptor>(samplers.begin(), samplers.end())
-            });
+            _history.push_back(
+                push_descriptors_cmd{command_list, pipeline_layout, point, set_index,
+                                     vector<buffer_binding_descriptor>(buffers.begin(), buffers.end()),
+                                     vector<image_binding_descriptor>(images.begin(), images.end()),
+                                     vector<sampler_binding_descriptor>(samplers.begin(), samplers.end())});
         }
 
         void bind_descriptor_buffers(typed_rhi_handle<rhi_handle_type::command_list> command_list,
@@ -275,13 +287,9 @@ namespace tempest::rhi::mock
                                      span<const uint64_t> offsets) noexcept override
         {
             _history.push_back(bind_descriptor_buffers_cmd{
-                command_list,
-                pipeline_layout,
-                point,
-                first_set_index,
+                command_list, pipeline_layout, point, first_set_index,
                 vector<typed_rhi_handle<rhi_handle_type::buffer>>(buffers.begin(), buffers.end()),
-                vector<uint64_t>(offsets.begin(), offsets.end())
-            });
+                vector<uint64_t>(offsets.begin(), offsets.end())});
         }
 
         void reset(uint64_t frame_in_flight) override
@@ -289,8 +297,7 @@ namespace tempest::rhi::mock
             _history.push_back(reset_cmd{frame_in_flight});
         }
 
-        void begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                                string_view name) override
+        void begin_debug_region(typed_rhi_handle<rhi_handle_type::command_list> command_list, string_view name) override
         {
             _history.push_back(begin_debug_region_cmd{command_list, string(name)});
         }
@@ -300,8 +307,7 @@ namespace tempest::rhi::mock
             _history.push_back(end_debug_region_cmd{command_list});
         }
 
-        void set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list,
-                              string_view name) override
+        void set_debug_marker(typed_rhi_handle<rhi_handle_type::command_list> command_list, string_view name) override
         {
             _history.push_back(set_debug_marker_cmd{command_list, string(name)});
         }
