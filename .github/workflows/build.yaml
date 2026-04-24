@@ -22,7 +22,7 @@ jobs:
       - name: Configure Ubuntu Libraries
         run: sudo apt-get install -y libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev mesa-common-dev
       - name: Install Clang 22
-        uses: egor-tensin/setup-clang@v2.1
+        uses: egor-tensin/setup-clang@v2.2
         with:
           version: 22
           platform: x64
