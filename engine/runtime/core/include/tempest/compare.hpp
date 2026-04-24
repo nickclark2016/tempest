@@ -42,7 +42,7 @@ namespace tempest
     class weak_ordering;
     class partial_ordering;
 
-    class TEMPEST_API partial_ordering
+    class partial_ordering
     {
         constexpr explicit partial_ordering(comparison_categories::ordering o) noexcept;
         constexpr partial_ordering(comparison_categories::no_order o) noexcept;
@@ -146,14 +146,12 @@ namespace tempest
         }
     }
 
-#ifdef TEMPEST_API_EXPORT
     inline constexpr partial_ordering partial_ordering::less{comparison_categories::ordering::less};
     inline constexpr partial_ordering partial_ordering::equivalent{comparison_categories::ordering::equal};
     inline constexpr partial_ordering partial_ordering::greater{comparison_categories::ordering::greater};
     inline constexpr partial_ordering partial_ordering::unordered{comparison_categories::no_order::unordered};
-#endif
 
-    class TEMPEST_API weak_ordering
+    class weak_ordering
     {
         constexpr explicit weak_ordering(comparison_categories::ordering o) noexcept;
 
@@ -254,13 +252,11 @@ namespace tempest
         }
     }
 
-#ifdef TEMPEST_API_EXPORT
     inline constexpr weak_ordering weak_ordering::less{comparison_categories::ordering::less};
     inline constexpr weak_ordering weak_ordering::equivalent{comparison_categories::ordering::equal};
     inline constexpr weak_ordering weak_ordering::greater{comparison_categories::ordering::greater};
-#endif
 
-    class TEMPEST_API strong_ordering
+    class strong_ordering
     {
         constexpr explicit strong_ordering(comparison_categories::ordering o) noexcept;
 
@@ -367,12 +363,10 @@ namespace tempest
         }
     }
 
-#ifdef TEMPEST_API_EXPORT
     inline constexpr strong_ordering strong_ordering::less{comparison_categories::ordering::less};
     inline constexpr strong_ordering strong_ordering::equal{comparison_categories::ordering::equal};
     inline constexpr strong_ordering strong_ordering::equivalent{comparison_categories::ordering::equal};
     inline constexpr strong_ordering strong_ordering::greater{comparison_categories::ordering::greater};
-#endif
 
     namespace detail
     {
