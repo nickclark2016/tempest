@@ -1,13 +1,14 @@
 #ifndef tempest_rhi_mock_mock_device_hpp
 #define tempest_rhi_mock_mock_device_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi/mock/mock_device_commands.hpp>
 #include <tempest/rhi/mock/mock_work_queue.hpp>
 
 namespace tempest::rhi::mock
 {
-    class mock_device final : public rhi::device
+    class TEMPEST_API mock_device final : public rhi::device
     {
       public:
         mock_device() = default;

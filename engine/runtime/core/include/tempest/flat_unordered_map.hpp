@@ -58,9 +58,9 @@ namespace tempest
         static_assert(sizeof(metadata_entry) == 1, "metadata_entry must be 1 byte");
 
         template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
-        struct flat_unordered_map_iterator
+        struct TEMPEST_API flat_unordered_map_iterator
         {
-            using value_type = pair<const K, V>;
+            using value_type = pair<K, V>;
             using pointer = conditional_t<Const, const value_type*, value_type*>;
             using reference = conditional_t<Const, const value_type&, value_type&>;
             using difference_type = ptrdiff_t;
@@ -69,12 +69,33 @@ namespace tempest
                                            flat_unordered_map<K, V, Hash, KeyEqual, Allocator>>;
 
             flat_unordered_map_iterator() noexcept = default;
-            flat_unordered_map_iterator(size_t idx, map_type* map) noexcept;
+            flat_unordered_map_iterator(size_t idx, map_type* map) noexcept : _index{idx}, _map{map}
+            {
+            }
 
-            flat_unordered_map_iterator& operator++() noexcept;
-            flat_unordered_map_iterator operator++(int) noexcept;
-            reference operator*() const noexcept;
-            pointer operator->() const noexcept;
+            flat_unordered_map_iterator& operator++() noexcept
+            {
+                _index = _map->_next_occupied_index(_index + 1);
+
+                return *this;
+            }
+
+            flat_unordered_map_iterator operator++(int) noexcept
+            {
+                auto copy = *this;
+                ++(*this);
+                return copy;
+            }
+
+            reference operator*() const noexcept
+            {
+                return _map->_data_pages[_index / _map->_page_size][_index % _map->_page_size];
+            }
+
+            pointer operator->() const noexcept
+            {
+                return &_map->_data_pages[_index / _map->_page_size][_index % _map->_page_size];
+            }
 
             friend bool operator==(const flat_unordered_map_iterator& lhs,
                                    const flat_unordered_map_iterator& rhs) noexcept
@@ -131,7 +152,7 @@ namespace tempest
     /// @tparam Allocator Allocator type conforming to the C++17 Allocator concept.
     template <typename K, typename V, typename Hash = tempest::hash<K>, typename KeyEqual = tempest::equal_to<K>,
               typename Allocator = allocator<tempest::pair<const K, V>>>
-    class flat_unordered_map
+    class TEMPEST_API flat_unordered_map
     {
       public:
         using value_type = tempest::pair<const K, V>;
@@ -196,7 +217,7 @@ namespace tempest
         static constexpr double _default_load_factor{0.75};
 
         using metadata_page = detail::metadata_group;
-        using data_page = array<tempest::pair<const K, V>, _page_size>;
+        using data_page = array<tempest::pair<K, V>, _page_size>;
 
         using alloc_type = typename allocator_traits<Allocator>::template rebind_alloc<data_page>;
         using alloc_traits = allocator_traits<alloc_type>;
@@ -922,48 +943,6 @@ namespace tempest
         _size = 0;
         _page_count = 0;
     }
-
-    namespace detail
-    {
-        template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
-        inline flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>::flat_unordered_map_iterator(
-            size_t idx, map_type* map) noexcept
-            : _index{idx}, _map{map}
-        {
-        }
-
-        template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
-        inline flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>& flat_unordered_map_iterator<
-            K, V, Hash, KeyEqual, Allocator, Const>::operator++() noexcept
-        {
-            _index = _map->_next_occupied_index(_index + 1);
-
-            return *this;
-        }
-
-        template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
-        inline flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const> flat_unordered_map_iterator<
-            K, V, Hash, KeyEqual, Allocator, Const>::operator++(int) noexcept
-        {
-            auto copy = *this;
-            ++(*this);
-            return copy;
-        }
-
-        template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
-        inline typename flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>::reference
-        flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>::operator*() const noexcept
-        {
-            return _map->_data_pages[_index / _map->_page_size][_index % _map->_page_size];
-        }
-
-        template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
-        inline typename flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>::pointer
-        flat_unordered_map_iterator<K, V, Hash, KeyEqual, Allocator, Const>::operator->() const noexcept
-        {
-            return &_map->_data_pages[_index / _map->_page_size][_index % _map->_page_size];
-        }
-    } // namespace detail
 
     template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator>
     inline bool flat_unordered_map<K, V, Hash, KeyEqual, Allocator>::operator==(

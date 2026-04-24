@@ -1,6 +1,7 @@
 #ifndef tempest_core_array_hpp
 #define tempest_core_array_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
@@ -9,7 +10,11 @@ namespace tempest
 {
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    struct array
+    struct
+#if defined(_MSC_VER) && !defined(__clang__)
+        TEMPEST_API
+#endif
+        array
     {
         using value_type = T;
         using size_type = size_t;

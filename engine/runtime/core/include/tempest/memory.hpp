@@ -276,7 +276,7 @@ namespace tempest
     };
 
     template <typename T>
-    class allocator
+    class TEMPEST_API allocator
     {
       public:
         using value_type = T;
@@ -290,35 +290,24 @@ namespace tempest
         constexpr allocator(allocator&&) noexcept = default;
 
         template <typename U>
-        constexpr allocator(const allocator<U>&) noexcept;
+        constexpr allocator(const allocator<U>&) noexcept {}
 
         constexpr ~allocator() = default;
 
         allocator& operator=(const allocator&) noexcept = default;
         allocator& operator=(allocator&&) noexcept = default;
 
-        [[nodiscard]] constexpr T* allocate(size_t n);
-        void deallocate(T* ptr, size_t n);
+        [[nodiscard]] constexpr T* allocate(size_t n)
+        {
+            void* data = ::operator new[](sizeof(T) * n, std::align_val_t(alignof(T)), std::nothrow);
+            return static_cast<T*>(data);
+        }
+
+        void deallocate(T* ptr, [[maybe_unused]] size_t n)
+        {
+            ::operator delete[](ptr, std::align_val_t(alignof(T)), std::nothrow);
+        }
     };
-
-    template <typename T>
-    template <typename U>
-    constexpr allocator<T>::allocator(const allocator<U>&) noexcept
-    {
-    }
-
-    template <typename T>
-    constexpr T* allocator<T>::allocate(size_t n)
-    {
-        void* data = ::operator new[](sizeof(T) * n, std::align_val_t(alignof(T)), std::nothrow);
-        return static_cast<T*>(data);
-    }
-
-    template <typename T>
-    void allocator<T>::deallocate(T* ptr, [[maybe_unused]] size_t n)
-    {
-        ::operator delete[](ptr, std::align_val_t(alignof(T)), std::nothrow);
-    }
 
     template <typename T, typename U>
     [[nodiscard]] constexpr bool operator==(const allocator<T>&, const allocator<U>&) noexcept
@@ -497,15 +486,18 @@ namespace tempest
     }
 
     template <typename T>
-    struct default_delete
+    struct TEMPEST_API default_delete
     {
         constexpr default_delete() noexcept = default;
 
         template <typename U>
             requires convertible_to<U*, T*>
-        constexpr default_delete(const default_delete<U>&) noexcept;
+        constexpr default_delete(const default_delete<U>&) noexcept {}
 
-        void operator()(T* ptr) const noexcept;
+        void operator()(T* ptr) const noexcept
+        {
+            delete ptr;
+        }
     };
 
     template <typename T>
@@ -515,85 +507,141 @@ namespace tempest
 
         template <typename U>
             requires convertible_to<U (*)[], T (*)[]>
-        constexpr default_delete(const default_delete<U[]>&) noexcept;
+        constexpr default_delete(const default_delete<U[]>&) noexcept {}
 
-        void operator()(T* ptr) const noexcept;
+        void operator()(T* ptr) const noexcept
+        {
+            delete[] ptr;
+        }
     };
 
-    template <typename T>
-    template <typename U>
-        requires convertible_to<U*, T*>
-    inline constexpr default_delete<T>::default_delete(const default_delete<U>&) noexcept
-    {
-    }
-
-    template <typename T>
-    inline void default_delete<T>::operator()(T* ptr) const noexcept
-    {
-        delete ptr;
-    }
-
-    template <typename T>
-    template <typename U>
-        requires convertible_to<U (*)[], T (*)[]>
-    inline constexpr default_delete<T[]>::default_delete(const default_delete<U[]>&) noexcept
-    {
-    }
-
-    template <typename T>
-    inline void default_delete<T[]>::operator()(T* ptr) const noexcept
-    {
-        delete[] ptr;
-    }
-
     template <typename T, typename Deleter = default_delete<T>>
-    class unique_ptr
+    class TEMPEST_API unique_ptr
     {
       public:
         using pointer = T*;
         using element_type = T;
 
         constexpr unique_ptr() noexcept = default;
-        constexpr unique_ptr(nullptr_t) noexcept;
+        
+        constexpr unique_ptr(nullptr_t) noexcept
+        {
+        }
 
-        explicit constexpr unique_ptr(pointer p) noexcept;
-        constexpr unique_ptr(pointer p, const Deleter& d) noexcept;
+        explicit constexpr unique_ptr(pointer p) noexcept : _ptr{p}
+        {
+        }
 
-        constexpr unique_ptr(unique_ptr&& other) noexcept;
+        constexpr unique_ptr(pointer p, const Deleter& d) noexcept : _ptr{p}, _deleter{d}
+        {
+        }
+
+        constexpr unique_ptr(unique_ptr&& other) noexcept
+            : _ptr{other.release()}, _deleter{tempest::move(other._deleter)}
+        {
+        }
 
         template <typename U, typename E>
             requires convertible_to<U*, T*> && convertible_to<E, Deleter> && (!is_array_v<U>)
-        constexpr unique_ptr(unique_ptr<U, E>&& other) noexcept;
+        constexpr unique_ptr(unique_ptr<U, E>&& other) noexcept
+            : _ptr{other.release()}, _deleter{tempest::move(other._deleter)}
+        {
+        }
 
         unique_ptr(const unique_ptr&) = delete;
 
-        ~unique_ptr();
+        ~unique_ptr()
+        {
+            if (_ptr)
+            {
+                _deleter(_ptr);
+            }
+        }
 
-        constexpr unique_ptr& operator=(unique_ptr&& other) noexcept;
+        constexpr unique_ptr& operator=(unique_ptr&& other) noexcept
+        {
+            if (this == addressof(other)) [[unlikely]]
+            {
+                return *this;
+            }
+
+            reset(other.release());
+            _deleter = tempest::move(other._deleter);
+            return *this;
+        }
 
         template <typename U, typename E>
-        constexpr unique_ptr& operator=(unique_ptr<U, E>&& other) noexcept;
+        constexpr unique_ptr& operator=(unique_ptr<U, E>&& other) noexcept
+        {
+            reset(other.release());
+            _deleter = tempest::move(other._deleter);
+            return *this;
+        }
 
-        constexpr unique_ptr& operator=(nullptr_t) noexcept;
+        constexpr unique_ptr& operator=(nullptr_t) noexcept
+        {
+            reset();
+            return *this;
+        }
 
         unique_ptr& operator=(const unique_ptr&) = delete;
 
-        [[nodiscard]] constexpr pointer release() noexcept;
 
-        constexpr void reset(pointer p = pointer()) noexcept;
+        [[nodiscard]] constexpr pointer release() noexcept
+        {
+            return tempest::exchange(_ptr, nullptr);
+        }
 
-        constexpr void reset(nullptr_t) noexcept;
+        constexpr void reset(pointer p = pointer()) noexcept
+        {
+            if (_ptr)
+            {
+                _deleter(_ptr);
+            }
+            _ptr = p;
+        }
 
-        void swap(unique_ptr& other) noexcept;
+        constexpr void reset(nullptr_t) noexcept
+        {
+            reset();
+        }
 
-        constexpr pointer get() const noexcept;
-        constexpr Deleter& get_deleter() noexcept;
-        constexpr const Deleter& get_deleter() const noexcept;
+        void swap(unique_ptr& other) noexcept
+        {
+            using tempest::swap;
+            swap(_ptr, other._ptr);
+            swap(_deleter, other._deleter);
+        }
 
-        explicit constexpr operator bool() const noexcept;
+        constexpr pointer get() const noexcept
+        {
+            return _ptr;
+        }
 
-        constexpr add_lvalue_reference_t<T> operator*() const noexcept(noexcept(*declval<pointer>()));
-        constexpr pointer operator->() const noexcept;
+        constexpr Deleter& get_deleter() noexcept
+        {
+            return _deleter;
+        }
+
+        constexpr const Deleter& get_deleter() const noexcept
+        {
+            return _deleter;
+        }
+
+        explicit constexpr operator bool() const noexcept
+        {
+            return _ptr != nullptr;
+        }
+
+        constexpr add_lvalue_reference_t<T> operator*() const noexcept(noexcept(*declval<pointer>()))
+        {
+            return *_ptr;
+        }
+
+        constexpr pointer operator->() const noexcept
+        {
+            return _ptr;
+        }
 
       private:
         pointer _ptr{nullptr};
@@ -603,140 +651,6 @@ namespace tempest
         template <typename U, typename E>
         friend class unique_ptr;
     };
-
-    template <typename T, typename Deleter>
-    inline constexpr unique_ptr<T, Deleter>::unique_ptr(nullptr_t) noexcept
-    {
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr unique_ptr<T, Deleter>::unique_ptr(pointer p) noexcept : _ptr{p}
-    {
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr unique_ptr<T, Deleter>::unique_ptr(pointer p, const Deleter& d) noexcept : _ptr{p}, _deleter{d}
-    {
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr unique_ptr<T, Deleter>::unique_ptr(unique_ptr&& other) noexcept
-        : _ptr{other.release()}, _deleter{tempest::move(other._deleter)}
-    {
-    }
-
-    template <typename T, typename Deleter>
-    template <typename U, typename E>
-        requires convertible_to<U*, T*> && convertible_to<E, Deleter> && (!is_array_v<U>)
-    inline constexpr unique_ptr<T, Deleter>::unique_ptr(unique_ptr<U, E>&& other) noexcept
-        : _ptr{other.release()}, _deleter{tempest::move(other._deleter)}
-    {
-    }
-
-    template <typename T, typename Deleter>
-    inline unique_ptr<T, Deleter>::~unique_ptr()
-    {
-        if (_ptr)
-        {
-            _deleter(_ptr);
-        }
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr unique_ptr<T, Deleter>& unique_ptr<T, Deleter>::operator=(unique_ptr&& other) noexcept
-    {
-        if (this == addressof(other)) [[unlikely]]
-        {
-            return *this;
-        }
-
-        reset(other.release());
-        _deleter = tempest::move(other._deleter);
-        return *this;
-    }
-
-    template <typename T, typename Deleter>
-    template <typename U, typename E>
-    inline constexpr unique_ptr<T, Deleter>& unique_ptr<T, Deleter>::operator=(unique_ptr<U, E>&& other) noexcept
-    {
-        reset(other.release());
-        _deleter = tempest::move(other._deleter);
-        return *this;
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr unique_ptr<T, Deleter>& unique_ptr<T, Deleter>::operator=(nullptr_t) noexcept
-    {
-        reset();
-        return *this;
-    }
-
-    template <typename T, typename Deleter>
-    [[nodiscard]] inline constexpr typename unique_ptr<T, Deleter>::pointer unique_ptr<T, Deleter>::release() noexcept
-    {
-        return tempest::exchange(_ptr, nullptr);
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr void unique_ptr<T, Deleter>::reset(pointer p) noexcept
-    {
-        if (_ptr)
-        {
-            _deleter(_ptr);
-        }
-        _ptr = p;
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr void unique_ptr<T, Deleter>::reset(nullptr_t) noexcept
-    {
-        reset();
-    }
-
-    template <typename T, typename Deleter>
-    inline void unique_ptr<T, Deleter>::swap(unique_ptr& other) noexcept
-    {
-        using tempest::swap;
-        swap(_ptr, other._ptr);
-        swap(_deleter, other._deleter);
-    }
-
-    template <typename T, typename Deleter>
-    [[nodiscard]] inline constexpr typename unique_ptr<T, Deleter>::pointer unique_ptr<T, Deleter>::get() const noexcept
-    {
-        return _ptr;
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr Deleter& unique_ptr<T, Deleter>::get_deleter() noexcept
-    {
-        return _deleter;
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr const Deleter& unique_ptr<T, Deleter>::get_deleter() const noexcept
-    {
-        return _deleter;
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr unique_ptr<T, Deleter>::operator bool() const noexcept
-    {
-        return _ptr != nullptr;
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr add_lvalue_reference_t<T> unique_ptr<T, Deleter>::operator*() const
-        noexcept(noexcept(*declval<pointer>()))
-    {
-        return *_ptr;
-    }
-
-    template <typename T, typename Deleter>
-    inline constexpr typename unique_ptr<T, Deleter>::pointer unique_ptr<T, Deleter>::operator->() const noexcept
-    {
-        return _ptr;
-    }
 
     template <typename T, typename Deleter>
     inline void swap(unique_ptr<T, Deleter>& lhs, unique_ptr<T, Deleter>& rhs) noexcept

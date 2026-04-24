@@ -1,8 +1,9 @@
 #ifndef tempest_math_quat_hpp__
 #define tempest_math_quat_hpp__
 
-#include "math_utils.hpp"
-#include "vec3.hpp"
+#include <tempest/api.hpp>
+#include <tempest/math_utils.hpp>
+#include <tempest/vec3.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -15,7 +16,7 @@ namespace tempest::math
 #pragma warning(disable : 4201)
 #endif
     template <typename T>
-    struct alignas(sizeof(T) * 4) quat
+    struct TEMPEST_API alignas(sizeof(T) * 4) quat
     {
 
         union {

@@ -2,6 +2,7 @@
 #define tempest_core_string_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/api.hpp>
 #include <tempest/assert.hpp>
 #include <tempest/char_traits.hpp>
 #include <tempest/concepts.hpp>
@@ -17,7 +18,7 @@
 namespace tempest
 {
     template <typename CharT, typename Traits = char_traits<CharT>, typename Allocator = ::tempest::allocator<CharT>>
-    class basic_string
+    class TEMPEST_API basic_string
     {
         static constexpr bool is_noexecpt_movable =
             allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||

@@ -1,11 +1,12 @@
 #ifndef tempest_rhi_mock_mock_work_queue_hpp
 #define tempest_rhi_mock_mock_work_queue_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/rhi/mock/mock_commands.hpp>
 
 namespace tempest::rhi::mock
 {
-    class mock_work_queue final : public rhi::work_queue
+    class TEMPEST_API mock_work_queue final : public rhi::work_queue
     {
       public:
         mock_work_queue() = default;

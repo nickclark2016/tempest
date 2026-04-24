@@ -282,7 +282,7 @@ namespace tempest::rhi
         sequential,
     };
 
-    struct TEMPEST_API buffer_desc
+    struct buffer_desc
     {
         size_t size;
         memory_location location;
@@ -292,7 +292,7 @@ namespace tempest::rhi
         string name;
     };
 
-    struct TEMPEST_API image_desc
+    struct image_desc
     {
         image_format format;
         image_type type;
@@ -357,7 +357,7 @@ namespace tempest::rhi
         string name;
     };
 
-    struct TEMPEST_API fence_info
+    struct fence_info
     {
         bool signaled;
     };
@@ -368,7 +368,7 @@ namespace tempest::rhi
         timeline,
     };
 
-    struct TEMPEST_API semaphore_info
+    struct semaphore_info
     {
         semaphore_type type;
         uint64_t initial_value;
@@ -408,7 +408,7 @@ namespace tempest::rhi
         fifo_relaxed,
     };
 
-    struct TEMPEST_API render_surface_format
+    struct render_surface_format
     {
         color_space space;
         image_format format;
@@ -428,7 +428,7 @@ namespace tempest::rhi
         enum_mask<image_usage> supported_usages;
     };
 
-    struct TEMPEST_API render_surface_desc
+    struct render_surface_desc
     {
         const window_surface* window;
         uint32_t min_image_count;
@@ -439,7 +439,7 @@ namespace tempest::rhi
         uint32_t layers;
     };
 
-    struct TEMPEST_API window_surface_desc
+    struct window_surface_desc
     {
         uint32_t width;
         uint32_t height;
@@ -455,7 +455,7 @@ namespace tempest::rhi
         invalid_swapchain_argument,
     };
 
-    struct TEMPEST_API swapchain_image_acquire_info_result
+    struct swapchain_image_acquire_info_result
     {
         typed_rhi_handle<rhi_handle_type::semaphore> acquire_sem;
         typed_rhi_handle<rhi_handle_type::semaphore> render_complete_sem;
@@ -550,7 +550,7 @@ namespace tempest::rhi
         variable_length = 0x02,
     };
 
-    struct TEMPEST_API descriptor_binding_layout
+    struct descriptor_binding_layout
     {
         uint32_t binding_index;
         descriptor_type type;

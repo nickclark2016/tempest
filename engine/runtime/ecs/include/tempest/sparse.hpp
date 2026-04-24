@@ -15,7 +15,7 @@ namespace tempest::ecs
     namespace detail
     {
         template <typename T>
-        struct basic_sparse_set_iterator
+        struct TEMPEST_API basic_sparse_set_iterator
         {
             using value_type = T;
             using pointer = const T*;
@@ -45,7 +45,7 @@ namespace tempest::ecs
         };
 
         template <typename K, typename V>
-        struct basic_sparse_map_iterator_ptr
+        struct TEMPEST_API basic_sparse_map_iterator_ptr
         {
             pair<K&, V&> val;
 
@@ -54,7 +54,7 @@ namespace tempest::ecs
         };
 
         template <typename K, typename V>
-        struct basic_sparse_map_iterator
+        struct TEMPEST_API basic_sparse_map_iterator
         {
             using mapped_type = remove_cvref_t<V>;
 
@@ -397,7 +397,7 @@ namespace tempest::ecs
     } // namespace detail
 
     template <typename T, typename Allocator = allocator<T>>
-    class basic_sparse_set
+    class TEMPEST_API basic_sparse_set
     {
       public:
         using traits_type = entity_traits<T>;
@@ -499,7 +499,7 @@ namespace tempest::ecs
     };
 
     template <typename K, typename V, typename Allocator = allocator<K>>
-    class basic_sparse_map : public basic_sparse_map_interface<K>
+    class TEMPEST_API basic_sparse_map : public basic_sparse_map_interface<K>
     {
       public:
         using traits_type = entity_traits<K>;

@@ -248,7 +248,7 @@ namespace tempest
                 static bool non_empty_function(T* fp) noexcept;
 
                 template <typename C, typename T>
-                static bool non_empty_function(T C::*mp) noexcept;
+                static bool non_empty_function(T C::* mp) noexcept;
 
                 template <typename F>
                 static bool non_empty_function(const F& f) noexcept;
@@ -383,7 +383,7 @@ namespace tempest
 
         template <typename Fn>
         template <typename C, typename T>
-        inline bool function_base::manager<Fn>::non_empty_function(T C::*mp) noexcept
+        inline bool function_base::manager<Fn>::non_empty_function(T C::* mp) noexcept
         {
             return mp != nullptr;
         }
@@ -437,7 +437,7 @@ namespace tempest
     } // namespace detail
 
     template <typename M, typename T>
-    constexpr auto mem_fn(M T::*pm) noexcept
+    constexpr auto mem_fn(M T::* pm) noexcept
     {
         return [pm](T& obj, auto&&... args) -> decltype(auto) {
             return tempest::invoke(pm, obj, tempest::forward<decltype(args)>(args)...);
@@ -445,7 +445,11 @@ namespace tempest
     }
 
     template <typename R, typename... Args>
-    class function<R(Args...)> : private detail::function_base
+    class
+#if defined(_WIN32) && !defined(__clang__)
+        TEMPEST_API
+#endif
+            function<R(Args...)> : private detail::function_base
     {
         template <typename Fn>
         using handler = detail::function_target_handler<R(Args...), decay_t<Fn>>;
@@ -453,10 +457,34 @@ namespace tempest
       public:
         using result_type = R;
 
-        function() noexcept;
-        function(nullptr_t) noexcept;
-        function(const function& fn);
-        function(function&& fn) noexcept;
+        function() noexcept : detail::function_base()
+        {
+        }
+
+        function(nullptr_t) noexcept : detail::function_base()
+        {
+        }
+
+        function(const function& fn) : detail::function_base()
+        {
+            if (static_cast<bool>(fn))
+            {
+                fn._manager_fn(_data, fn._data, detail::function_manager_operation::CLONE_FUNCTOR);
+                _invoker = fn._invoker;
+                _manager_fn = fn._manager_fn;
+            }
+        }
+
+        function(function&& fn) noexcept : detail::function_base()
+        {
+            if (static_cast<bool>(fn))
+            {
+                _data = fn._data;
+
+                _invoker = tempest::exchange(fn._invoker, nullptr);
+                _manager_fn = tempest::exchange(fn._manager_fn, nullptr);
+            }
+        }
 
         template <typename Fn>
             requires is_invocable_v<Fn, Args...> && (!is_same_v<decay_t<Fn>, function<R(Args...)>>)
@@ -473,9 +501,28 @@ namespace tempest
 
         ~function() = default;
 
-        function& operator=(const function& fn);
-        function& operator=(function&& fn) noexcept;
-        function& operator=(nullptr_t) noexcept;
+        function& operator=(const function& fn)
+        {
+            function(fn).swap(*this);
+            return *this;
+        }
+
+        function& operator=(function&& fn) noexcept
+        {
+            function(tempest::move(fn)).swap(*this);
+            return *this;
+        }
+
+        function& operator=(nullptr_t) noexcept
+        {
+            if (_manager_fn)
+            {
+                _manager_fn(_data, _data, detail::function_manager_operation::DESTROY_FUNCTOR);
+                _manager_fn = nullptr;
+                _invoker = nullptr;
+            }
+            return *this;
+        }
 
         template <typename Fn>
             requires is_invocable_v<Fn, Args...> && (!is_same_v<decay_t<Fn>, function<R(Args...)>>)
@@ -486,13 +533,28 @@ namespace tempest
         }
 
         template <typename Fn>
-        function& operator=(reference_wrapper<Fn> fn) noexcept;
+        function& operator=(reference_wrapper<Fn> fn) noexcept
+        {
+            function(fn).swap(*this);
+            return *this;
+        }
 
-        void swap(function& fn) noexcept;
+        void swap(function& fn) noexcept
+        {
+            tempest::swap(_data, fn._data);
+            tempest::swap(_manager_fn, fn._manager_fn);
+            tempest::swap(_invoker, fn._invoker);
+        }
 
-        explicit operator bool() const noexcept;
+        explicit operator bool() const noexcept
+        {
+            return !empty();
+        }
 
-        R operator()(Args... args) const;
+        R operator()(Args... args) const
+        {
+            return _invoker(_data, tempest::forward<Args>(args)...);
+        }
 
       private:
         using invoker_type_t = R (*)(const detail::any_func_data&, Args&&...);
@@ -513,7 +575,7 @@ namespace tempest
         };
 
         template <typename R, typename T, typename... Args>
-        struct function_deduction_guide_helper<R (T::*)(Args...)&>
+        struct function_deduction_guide_helper<R (T::*)(Args...) &>
         {
             using type = R(Args...);
         };
@@ -577,93 +639,6 @@ namespace tempest
 
     template <typename Fn>
     function(Fn) -> function<detail::function_deduction_guide<Fn, decltype(&Fn::operator())>>;
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>::function() noexcept : detail::function_base()
-    {
-    }
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>::function(nullptr_t) noexcept : detail::function_base()
-    {
-    }
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>::function(const function& fn) : detail::function_base()
-    {
-        if (static_cast<bool>(fn))
-        {
-            fn._manager_fn(_data, fn._data, detail::function_manager_operation::CLONE_FUNCTOR);
-            _invoker = fn._invoker;
-            _manager_fn = fn._manager_fn;
-        }
-    }
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>::function(function&& fn) noexcept : detail::function_base()
-    {
-        if (static_cast<bool>(fn))
-        {
-            _data = fn._data;
-
-            _invoker = tempest::exchange(fn._invoker, nullptr);
-            _manager_fn = tempest::exchange(fn._manager_fn, nullptr);
-        }
-    }
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>& function<R(Args...)>::operator=(const function& fn)
-    {
-        function(fn).swap(*this);
-        return *this;
-    }
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>& function<R(Args...)>::operator=(function&& fn) noexcept
-    {
-        function(tempest::move(fn)).swap(*this);
-        return *this;
-    }
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>& function<R(Args...)>::operator=(nullptr_t) noexcept
-    {
-        if (_manager_fn)
-        {
-            _manager_fn(_data, _data, detail::function_manager_operation::DESTROY_FUNCTOR);
-            _manager_fn = nullptr;
-            _invoker = nullptr;
-        }
-        return *this;
-    }
-
-    template <typename R, typename... Args>
-    template <typename Fn>
-    inline function<R(Args...)>& function<R(Args...)>::operator=(reference_wrapper<Fn> fn) noexcept
-    {
-        function(fn).swap(*this);
-        return *this;
-    }
-
-    template <typename R, typename... Args>
-    inline void function<R(Args...)>::swap(function& fn) noexcept
-    {
-        tempest::swap(_data, fn._data);
-        tempest::swap(_manager_fn, fn._manager_fn);
-        tempest::swap(_invoker, fn._invoker);
-    }
-
-    template <typename R, typename... Args>
-    inline function<R(Args...)>::operator bool() const noexcept
-    {
-        return !empty();
-    }
-
-    template <typename R, typename... Args>
-    inline R function<R(Args...)>::operator()(Args... args) const
-    {
-        return _invoker(_data, tempest::forward<Args>(args)...);
-    }
 
     template <typename R, typename... Args>
     inline void swap(function<R(Args...)>& lhs, function<R(Args...)>& rhs) noexcept

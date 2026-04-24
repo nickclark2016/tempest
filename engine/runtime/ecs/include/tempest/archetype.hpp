@@ -438,20 +438,20 @@ namespace tempest::ecs
     } // namespace detail
 
     template <typename T, size_t N, integral O>
-    class basic_entity_store
+    class TEMPEST_API basic_entity_store
     {
       public:
         static constexpr size_t entities_per_chunk = N;
         static constexpr size_t entities_per_block = sizeof(O) * CHAR_BIT;
         static constexpr size_t blocks_per_chunk = entities_per_chunk / entities_per_block;
 
-        struct block
+        struct TEMPEST_API block
         {
             O occupancy{0};
             array<T, entities_per_block> entities{};
         };
 
-        struct chunk
+        struct TEMPEST_API chunk
         {
             using value_type = T;
 

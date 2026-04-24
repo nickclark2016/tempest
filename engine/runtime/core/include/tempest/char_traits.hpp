@@ -2,6 +2,7 @@
 #define tempest_core_char_traits_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
@@ -46,7 +47,7 @@ namespace tempest
     class char_traits;
 
     template <>
-    class char_traits<char>
+    class TEMPEST_API char_traits<char>
     {
       public:
         using char_type = char;
@@ -79,7 +80,7 @@ namespace tempest
     };
 
     template <>
-    class char_traits<wchar_t>
+    class TEMPEST_API char_traits<wchar_t>
     {
       public:
         using char_type = wchar_t;

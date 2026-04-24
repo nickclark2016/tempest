@@ -45,7 +45,7 @@ namespace tempest
     } // namespace detail
 
     template <typename T>
-    class optional
+    class TEMPEST_API optional
     {
       public:
         using value_type = T;
@@ -70,11 +70,14 @@ namespace tempest
             requires(detail::allow_direct_conversion<T, U>::value)
         constexpr optional(U&& value);
 
-        ~optional()
-            requires is_trivially_destructible_v<T>
-        = default;
-
-        ~optional() noexcept(is_nothrow_destructible_v<T>);
+        ~optional() noexcept(is_nothrow_destructible_v<T>)
+        {
+            if (has_value())
+            {
+                tempest::destroy_at(&_data.value);
+                _has_value = false;
+            }
+        }
 
         optional& operator=(nullopt_t) noexcept(is_nothrow_destructible_v<T>);
 
@@ -179,12 +182,18 @@ namespace tempest
         constexpr optional or_else(Fn&& f) &&;
 
       private:
-        union impl {
+        union TEMPEST_API impl {
             T value;
             char c;
 
-            impl() noexcept;
-            ~impl();
+            impl() noexcept
+            {
+                c = 'c';
+            }
+
+            ~impl()
+            {
+            }
         } _data;
 
         bool _has_value = false;
@@ -307,16 +316,6 @@ namespace tempest
     }
 
     template <typename T>
-    inline optional<T>::impl::impl() noexcept : c{}
-    {
-    }
-
-    template <typename T>
-    inline optional<T>::impl::~impl()
-    {
-    }
-
-    template <typename T>
     inline constexpr optional<T>::optional(const optional& other)
     {
         if (other.has_value())
@@ -370,16 +369,6 @@ namespace tempest
     {
         (void)tempest::construct_at(&_data.value, tempest::forward<U>(value));
         _has_value = true;
-    }
-
-    template <typename T>
-    inline optional<T>::~optional() noexcept(is_nothrow_destructible_v<T>)
-    {
-        if (has_value())
-        {
-            tempest::destroy_at(&_data.value);
-            _has_value = false;
-        }
     }
 
     template <typename T>

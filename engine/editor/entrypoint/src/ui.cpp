@@ -2,6 +2,7 @@
 
 #include <tempest/enum.hpp>
 #include <tempest/frame_graph.hpp>
+#include <tempest/math_utils.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
 

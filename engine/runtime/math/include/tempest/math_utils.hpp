@@ -2,6 +2,7 @@
 #define tempest_math_math_utils_hpp__
 
 #include <tempest/api.hpp>
+#include <tempest/vec3.hpp>
 
 #include <bit>
 #include <cmath>
@@ -43,6 +44,18 @@ namespace tempest::math
     {
         const T pi_rad = radians * constants::inv_pi<T>;
         return pi_rad * static_cast<T>(180);
+    }
+
+    template <typename T>
+    inline constexpr vec3<T> as_radians(const vec3<T>& v)
+    {
+        return vec3(as_radians(v.x), as_radians(v.y), as_radians(v.z));
+    }
+
+    template <typename T>
+    inline constexpr vec3<T> as_degrees(const vec3<T>& v)
+    {
+        return vec3(as_degrees(v.x), as_degrees(v.y), as_degrees(v.z));
     }
 
     template <typename T>

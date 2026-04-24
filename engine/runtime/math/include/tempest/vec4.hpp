@@ -1,13 +1,16 @@
 #ifndef tempest_math_vec4_hpp__
 #define tempest_math_vec4_hpp__
 
+#include <tempest/api.hpp>
+
+#include <cmath>
 #include <cstddef>
 #include <type_traits>
 
 namespace tempest::math
 {
     template <typename T>
-    struct alignas(sizeof(T) * 4) vec4
+    struct TEMPEST_API alignas(sizeof(T) * 4) vec4
     {
 #if defined(_MSC_VER) && !defined(__clang__)
 #pragma warning(push)

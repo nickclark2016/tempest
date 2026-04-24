@@ -1,15 +1,16 @@
 #ifndef tempest_math_vec3_hpp__
 #define tempest_math_vec3_hpp__
 
-#include "math_utils.hpp"
+#include <tempest/api.hpp>
 
+#include <cmath>
 #include <cstddef>
 #include <type_traits>
 
 namespace tempest::math
 {
     template <typename T>
-    struct alignas(sizeof(T) * 4) vec3
+    struct TEMPEST_API alignas(sizeof(T) * 4) vec3
     {
 #if defined(_MSC_VER) && !defined(__clang__)
 #pragma warning(push)
@@ -211,18 +212,6 @@ namespace tempest::math
     {
         const auto prod = lhs * rhs;
         return prod[0] + prod[1] + prod[2];
-    }
-
-    template <typename T>
-    inline constexpr vec3<T> as_radians(const vec3<T>& v)
-    {
-        return vec3(as_radians(v.x), as_radians(v.y), as_radians(v.z));
-    }
-
-    template <typename T>
-    inline constexpr vec3<T> as_degrees(const vec3<T>& v)
-    {
-        return vec3(as_degrees(v.x), as_degrees(v.y), as_degrees(v.z));
     }
 
     template <typename T>

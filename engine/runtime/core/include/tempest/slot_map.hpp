@@ -1,6 +1,7 @@
 #ifndef tempest_core_slot_map_hpp
 #define tempest_core_slot_map_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/type_traits.hpp>
@@ -94,7 +95,7 @@ namespace tempest
     };
 
     template <typename T, typename Allocator = allocator<T>>
-    class slot_map
+    class TEMPEST_API slot_map
     {
       public:
         using value_type = T;

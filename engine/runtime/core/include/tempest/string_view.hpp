@@ -12,7 +12,7 @@
 namespace tempest
 {
     template <typename CharT, typename Traits = char_traits<CharT>>
-    class basic_string_view
+    class TEMPEST_API basic_string_view
     {
       public:
         using traits_type = Traits;

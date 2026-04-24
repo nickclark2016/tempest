@@ -2,6 +2,7 @@
 #define tempest_inplace_vector_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
@@ -9,7 +10,7 @@
 namespace tempest
 {
     template <typename T, size_t N>
-    class inplace_vector
+    class TEMPEST_API inplace_vector
     {
       public:
         using value_type = T;

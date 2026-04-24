@@ -64,7 +64,11 @@ namespace tempest
     /// @tparam T1 First type.
     /// @tparam T2 Second type.
     template <typename T1, typename T2>
-    struct pair
+    struct
+#if defined(_MSC_VER) && !defined(__clang__)
+        TEMPEST_API
+#endif
+        pair
     {
         /// @brief Type of the first object.
         using first_type = T1;
@@ -73,10 +77,10 @@ namespace tempest
         using second_type = T2;
 
         /// @brief First object.
-        T1 first{};
+        T1 first;
 
         /// @brief Second object.
-        T2 second{};
+        T2 second;
 
         /// @brief Default constructor.
         constexpr pair() = default;
@@ -427,12 +431,12 @@ namespace tempest
     constexpr auto operator<=>(const pair<T, U>& lhs, const pair<T, U>& rhs)
     {
         tempest::compare_three_way cmp;
-        
+
         if (auto c = cmp(lhs.first, rhs.first); c != 0)
         {
             return c;
         }
-        
+
         return cmp(lhs.second, rhs.second);
     }
 
@@ -513,7 +517,9 @@ namespace tempest
     TEMPEST_API
     auto memcpy(void* dst, const void* src, size_t count) noexcept -> void*;
 
-    struct TEMPEST_API init_list_t {};
+    struct TEMPEST_API init_list_t
+    {
+    };
 
     inline constexpr init_list_t init_list{};
 } // namespace tempest

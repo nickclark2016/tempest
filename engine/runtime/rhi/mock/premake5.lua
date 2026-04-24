@@ -1,6 +1,6 @@
 scoped.group('RHI', function()
     scoped.project('rhi-mock', function()
-        kind 'StaticLib'
+        kind 'SharedLib'
         language 'C++'
         cppdialect 'C++20'
 
@@ -56,24 +56,25 @@ scoped.group('RHI', function()
         end)
     end)
 
-    scoped.project('rhi-mock-tests', function()
-        kind 'ConsoleApp'
-        language 'C++'
-        cppdialect 'C++20'
+    scoped.group('Tests', function()
+        scoped.project('rhi-mock-tests', function()
+            kind 'ConsoleApp'
+            language 'C++'
+            cppdialect 'C++20'
 
-        targetdir '%{binaries}'
-        objdir '%{intermediates}'
+            targetdir '%{binaries}'
+            objdir '%{intermediates}'
 
-        files {
-            'tests/*.cpp',
-        }
+            files {
+                'tests/*.cpp',
+            }
 
-        uses {
-            'googletest',
-            'rhi-mock',
-            'tempest',
-        }
+            uses {
+                'googletest',
+                'rhi-mock',
+            }
 
-        warnings 'Extra'
+            warnings 'Extra'
+        end)
     end)
 end)

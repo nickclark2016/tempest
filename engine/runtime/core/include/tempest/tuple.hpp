@@ -1,6 +1,7 @@
 #ifndef tempest_core_tuple_hpp
 #define tempest_core_tuple_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/meta.hpp>
 #include <tempest/type_traits.hpp>
@@ -57,7 +58,11 @@ namespace tempest
         };
 
         template <typename T>
-        struct tuple_val
+        struct
+#if defined(_MSC_VER) && !defined(__clang__)
+            TEMPEST_API
+#endif
+            tuple_val
         {
             constexpr tuple_val() : val{} {};
 
@@ -68,7 +73,11 @@ namespace tempest
         };
 
         template <typename T>
-        struct tuple_val<T&>
+        struct
+#if defined(_MSC_VER) && !defined(__clang__)
+            TEMPEST_API
+#endif
+            tuple_val<T&>
         {
             constexpr tuple_val(T& u) : val{u} {};
 
@@ -80,7 +89,11 @@ namespace tempest
         };
 
         template <>
-        struct tuple_impl<>
+        struct
+#if defined(_MSC_VER) && !defined(__clang__)
+            TEMPEST_API
+#endif
+            tuple_impl < >
         {
             constexpr tuple_impl() noexcept = default;
             constexpr tuple_impl(const tuple_impl&) = default;
@@ -94,12 +107,16 @@ namespace tempest
         };
 
         template <typename Head, typename... Rest>
-        struct tuple_impl<Head, Rest...> : tuple_impl<Rest...>
+        struct
+#if defined(_MSC_VER) && !defined(__clang__)
+            TEMPEST_API
+#endif
+            tuple_impl<Head, Rest...> : tuple_impl<Rest...>
         {
             using type = Head;
             using base = tuple_impl<Rest...>;
 
-            tuple_val<type> value{};
+            tuple_val<type> value;
 
             constexpr tuple_impl() = default;
 
@@ -137,8 +154,11 @@ namespace tempest
 
             constexpr void swap(tuple_impl& rhs) noexcept(is_nothrow_swappable_v<type> &&
                                                           (is_nothrow_swappable_v<Rest> && ...))
+                requires(is_swappable_v<Head> && ... && is_swappable_v<Rest>)
             {
-                swap(value, rhs.value);
+                using tempest::swap;
+
+                swap(value.val, rhs.value.val);
                 if constexpr (sizeof...(Rest) > 0)
                 {
                     rest().swap(rhs.rest());
@@ -279,7 +299,11 @@ namespace tempest
     inline constexpr size_t tuple_size_v = tuple_size<T>::value;
 
     template <typename... Ts>
-    class tuple : public detail::tuple_impl<Ts...>
+    class
+#if defined(_MSC_VER) && !defined(__clang__)
+        TEMPEST_API
+#endif
+        tuple : public detail::tuple_impl<Ts...>
     {
       public:
         constexpr tuple() = default;

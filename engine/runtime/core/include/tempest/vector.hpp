@@ -2,6 +2,7 @@
 #define tempest_core_vector_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/api.hpp>
 #include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/iterator.hpp>
@@ -20,7 +21,7 @@ namespace tempest
     }
 
     template <typename T, typename Allocator = allocator<T>>
-    class vector
+    class TEMPEST_API vector
     {
       public:
         using value_type = T;
