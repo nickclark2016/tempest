@@ -195,9 +195,8 @@ scoped.workspace('Tempest', function()
     startproject 'editor-entrypoint'
 
     include 'dependencies'
-    include 'projects'
+    include 'engine'
     include 'sandbox'
-    include 'screenshot'
 end)
 
 newoption {
