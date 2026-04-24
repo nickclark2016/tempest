@@ -1,4 +1,5 @@
 scoped.group('Runtime', function()
+    include 'api/premake5.lua'
     include 'assets/premake5.lua'
     include 'core/premake5.lua'
     include 'ecs/premake5.lua'

@@ -1,6 +1,7 @@
 #ifndef tempest_core_memory_hpp
 #define tempest_core_memory_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/limits.hpp>
@@ -171,7 +172,7 @@ namespace tempest
         return d_first;
     }
 
-    class no_copy
+    class TEMPEST_API no_copy
     {
       public:
         no_copy(const no_copy&) = delete;
@@ -182,7 +183,7 @@ namespace tempest
       private:
     };
 
-    class no_move
+    class TEMPEST_API no_move
     {
       public:
         no_move(no_move&&) noexcept = delete;
@@ -195,7 +196,7 @@ namespace tempest
     {
     };
 
-    class abstract_allocator
+    class TEMPEST_API abstract_allocator
     {
       public:
         virtual ~abstract_allocator() = default;
@@ -203,7 +204,7 @@ namespace tempest
         virtual void deallocate(void* ptr) = 0;
     };
 
-    class stack_allocator final : public abstract_allocator
+    class TEMPEST_API stack_allocator final : public abstract_allocator
     {
       public:
         explicit stack_allocator(size_t bytes);
@@ -238,7 +239,7 @@ namespace tempest
         size_t _allocated_bytes{0};
     };
 
-    class heap_allocator final : public abstract_allocator
+    class TEMPEST_API heap_allocator final : public abstract_allocator
     {
       public:
         explicit heap_allocator(size_t bytes);

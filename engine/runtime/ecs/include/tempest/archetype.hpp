@@ -1,6 +1,7 @@
 #ifndef tempest_ecs_archetype_hpp
 #define tempest_ecs_archetype_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
@@ -26,7 +27,7 @@
 
 namespace tempest::ecs
 {
-    struct basic_archetype_type_info
+    struct TEMPEST_API basic_archetype_type_info
     {
         string_view name;
         uint16_t size;
@@ -37,6 +38,7 @@ namespace tempest::ecs
 
     namespace detail
     {
+        TEMPEST_API
         size_t get_archetype_type_index(string_view name);
 
         template <typename T>
@@ -67,7 +69,7 @@ namespace tempest::ecs
         return ti;
     }
 
-    class basic_archetype_storage
+    class TEMPEST_API basic_archetype_storage
     {
       public:
         basic_archetype_storage(basic_archetype_type_info info, size_t initial_capacity = 0);
@@ -102,7 +104,7 @@ namespace tempest::ecs
         return _size;
     }
 
-    struct basic_archetype_key
+    struct TEMPEST_API basic_archetype_key
     {
         uint32_t index;
         uint32_t generation;
@@ -118,7 +120,7 @@ namespace tempest::ecs
         return !(lhs == rhs);
     }
 
-    class basic_archetype
+    class TEMPEST_API basic_archetype
     {
       public:
         using key_type = basic_archetype_key;
@@ -732,7 +734,7 @@ namespace tempest::ecs
         _head = traits_type::construct(current_cap, 0);
     }
 
-    class basic_archetype_registry
+    class TEMPEST_API basic_archetype_registry
     {
       public:
         explicit basic_archetype_registry(event::event_registry& event_registry);
@@ -794,7 +796,7 @@ namespace tempest::ecs
         size_t _index_of_component_in_archetype(size_t arch_index, size_t component_id) const;
     };
 
-    struct self_component
+    struct TEMPEST_API self_component
     {
         basic_archetype_registry::entity_type entity;
     };
@@ -1289,7 +1291,7 @@ namespace tempest::ecs
 
     using archetype_registry = basic_archetype_registry;
 
-    class basic_archetype_entity_hierarchy_iterator
+    class TEMPEST_API basic_archetype_entity_hierarchy_iterator
     {
       public:
         using value_type = basic_archetype_registry::entity_type;
@@ -1393,7 +1395,7 @@ namespace tempest::ecs
         return !(lhs == rhs);
     }
 
-    class basic_archetype_entity_hierarchy_view
+    class TEMPEST_API basic_archetype_entity_hierarchy_view
     {
       public:
         using iterator = basic_archetype_entity_hierarchy_iterator;
@@ -1457,7 +1459,7 @@ namespace tempest::ecs
         return {*_registry, tombstone, 0};
     }
 
-    class basic_archetype_entity_ancestor_iterator
+    class TEMPEST_API basic_archetype_entity_ancestor_iterator
     {
       public:
         using value_type = basic_archetype_registry::entity_type;
@@ -1522,7 +1524,7 @@ namespace tempest::ecs
         return !(lhs == rhs);
     }
 
-    class basic_archetype_entity_ancestor_view
+    class TEMPEST_API basic_archetype_entity_ancestor_view
     {
       public:
         using iterator = basic_archetype_entity_ancestor_iterator;
@@ -1582,7 +1584,7 @@ namespace tempest::ecs
         return {*_registry, tombstone};
     }
 
-    void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
+    TEMPEST_API void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
                                           basic_archetype_registry::entity_type child);
 
     using archetype_entity_hierarchy_iterator = basic_archetype_entity_hierarchy_iterator;

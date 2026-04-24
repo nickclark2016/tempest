@@ -31,8 +31,16 @@ scoped.project('logger', function()
     externalwarnings 'Off'
     warnings 'Extra'
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
     scoped.usage("PUBLIC", function()
-        uses { 'core' }
+        uses { 'api', 'core' }
     end)
 
     scoped.usage("logger:includedirs", function()

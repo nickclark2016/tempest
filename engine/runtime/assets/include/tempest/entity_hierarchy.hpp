@@ -1,13 +1,14 @@
 #ifndef tempest_assets_entity_hierarchy_hpp
 #define tempest_assets_entity_hierarchy_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::assets
 {
-    struct entity_hierarchy
+    struct TEMPEST_API entity_hierarchy
     {
         struct entity_record
         {

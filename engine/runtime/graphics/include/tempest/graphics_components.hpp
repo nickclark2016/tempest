@@ -1,6 +1,7 @@
 #ifndef tempest_graphics_graphics_components_hpp
 #define tempest_graphics_graphics_components_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/mat4.hpp>
@@ -10,7 +11,7 @@
 
 namespace tempest::graphics
 {
-    struct mesh_layout
+    struct TEMPEST_API mesh_layout
     {
         uint32_t mesh_start_offset;
         uint32_t positions_offset;
@@ -32,7 +33,7 @@ namespace tempest::graphics
         transmissive = 3,
     };
 
-    struct material_payload
+    struct TEMPEST_API material_payload
     {
         alpha_behavior type{alpha_behavior::opaque};
 
@@ -59,7 +60,7 @@ namespace tempest::graphics
         math::vec3<float> volume_attenuation_color;
     };
 
-    struct object_payload
+    struct TEMPEST_API object_payload
     {
         math::mat4<float> transform;
         math::mat4<float> inv_transform;
@@ -69,7 +70,7 @@ namespace tempest::graphics
         uint32_t self_id{numeric_limits<uint32_t>::max()};
     };
 
-    struct renderable_component
+    struct TEMPEST_API renderable_component
     {
         uint32_t mesh_id;
         uint32_t material_id;
@@ -77,27 +78,27 @@ namespace tempest::graphics
         bool double_sided;
     };
 
-    struct camera_component
+    struct TEMPEST_API camera_component
     {
         float aspect_ratio;
         float vertical_fov;
         float near_plane;
     };
 
-    struct directional_light_component
+    struct TEMPEST_API directional_light_component
     {
         math::vec3<float> color;
         float intensity;
     };
 
-    struct point_light_component
+    struct TEMPEST_API point_light_component
     {
         math::vec3<float> color;
         float intensity;
         float range;
     };
 
-    struct shadow_map_component
+    struct TEMPEST_API shadow_map_component
     {
         float shadow_distance;
         float split_lambda;

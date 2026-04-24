@@ -1,13 +1,14 @@
 #ifndef tempest_assets_asset_type_id_hpp
 #define tempest_assets_asset_type_id_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
 #include <tempest/meta.hpp>
 
 namespace tempest::assets
 {
-    class asset_type_id
+    class TEMPEST_API asset_type_id
     {
       public:
         constexpr asset_type_id() noexcept = default;

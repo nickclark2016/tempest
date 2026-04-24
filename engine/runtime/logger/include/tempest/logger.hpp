@@ -1,6 +1,7 @@
 #ifndef tempest_logger_logger_hpp
 #define tempest_logger_logger_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/int.hpp>
 #include <tempest/mutex.hpp>
@@ -21,7 +22,7 @@ namespace tempest
         fatal,
     };
 
-    class log_sink
+    class TEMPEST_API log_sink
     {
       public:
         explicit log_sink(log_level min_level = log_level::trace, log_level max_level = log_level::fatal);
@@ -42,7 +43,7 @@ namespace tempest
         log_level _max_level;
     };
 
-    class stdout_log_sink : public log_sink
+    class TEMPEST_API stdout_log_sink : public log_sink
     {
       public:
         using log_sink::log_sink;
@@ -51,7 +52,7 @@ namespace tempest
         void do_log(log_level level, string_view message, source_location location) override;
     };
 
-    class mt_stdout_log_sink final : public stdout_log_sink
+    class TEMPEST_API mt_stdout_log_sink final : public stdout_log_sink
     {
       public:
         using stdout_log_sink::stdout_log_sink;
@@ -63,7 +64,7 @@ namespace tempest
         mutex _mutex;
     };
 
-    class logger
+    class TEMPEST_API logger
     {
       public:
         template <typename... Sinks>

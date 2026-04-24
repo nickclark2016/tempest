@@ -1,6 +1,7 @@
 #ifndef tempest_core_mutex_hpp
 #define tempest_core_mutex_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/exception.hpp>
 #include <tempest/tuple.hpp>
@@ -18,7 +19,7 @@
 
 namespace tempest
 {
-    class mutex
+    class TEMPEST_API mutex
     {
       public:
 #if defined(TEMPEST_WIN_THREADS)
@@ -84,7 +85,7 @@ namespace tempest
         return _handle;
     }
 
-    class shared_mutex
+    class TEMPEST_API shared_mutex
     {
       public:
 #if defined(TEMPEST_WIN_THREADS)
@@ -166,14 +167,14 @@ namespace tempest
         t.unlock_shared();
     };
 
-    struct adopt_lock_t
+    struct TEMPEST_API adopt_lock_t
     {
         explicit constexpr adopt_lock_t() = default;
     };
 
     inline constexpr adopt_lock_t adopt_lock{};
 
-    struct defer_lock_t
+    struct TEMPEST_API defer_lock_t
     {
         explicit constexpr defer_lock_t() = default;
     };

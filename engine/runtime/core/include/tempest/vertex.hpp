@@ -1,6 +1,7 @@
 #ifndef tempest_vertex_hpp
 #define tempest_vertex_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
@@ -17,7 +18,7 @@
 
 namespace tempest::core
 {
-    struct vertex
+    struct TEMPEST_API vertex
     {
         math::vec3<float> position;
         math::vec2<float> uv;
@@ -26,7 +27,7 @@ namespace tempest::core
         math::vec4<float> color;
     };
 
-    struct mesh_view
+    struct TEMPEST_API mesh_view
     {
         span<const vertex> vertices;
         span<const uint32_t> indices;
@@ -39,7 +40,7 @@ namespace tempest::core
         [[nodiscard]] size_t size_bytes() const noexcept;
     };
 
-    struct mesh
+    struct TEMPEST_API mesh
     {
         vector<vertex> vertices;
         vector<uint32_t> indices;
@@ -81,7 +82,7 @@ namespace tempest::core
         return vertex_size + index_size;
     }
 
-    class mesh_registry
+    class TEMPEST_API mesh_registry
     {
       public:
         mesh_registry() = default;
@@ -124,7 +125,7 @@ namespace tempest::core
         flat_unordered_map<guid, mesh> _meshes;
     };
 
-    struct mesh_component
+    struct TEMPEST_API mesh_component
     {
         guid mesh_id;
     };

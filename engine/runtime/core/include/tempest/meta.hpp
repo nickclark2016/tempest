@@ -2,6 +2,7 @@
 #define tempest_core_meta_hpp
 
 #include <tempest/algorithm.hpp>
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/int.hpp>
 #include <tempest/string_view.hpp>
@@ -483,7 +484,7 @@ namespace tempest::core
         }
     };
 
-    class type_info final
+    class TEMPEST_API type_info final
     {
       public:
         template <typename T>

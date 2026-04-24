@@ -1,15 +1,17 @@
 #ifndef tempest_rhi_vk_window_hpp
 #define tempest_rhi_vk_window_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
+#include <tempest/rhi.hpp>
 #include <tempest/string.hpp>
 
-#include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
+#include <GLFW/glfw3.h>
 
 namespace tempest::rhi::vk
 {
-    class window_surface : public rhi::window_surface
+    class TEMPEST_API window_surface : public rhi::window_surface
     {
       public:
         window_surface(GLFWwindow* win, string name, uint32_t width, uint32_t height) noexcept;
@@ -129,7 +131,7 @@ namespace tempest::rhi::vk
 
         void set_cursor_shape(cursor_shape shape) noexcept override;
 
-        vector<rhi::window_surface::monitor> get_monitors() const noexcept override;
+        span<const monitor> get_monitors() const noexcept override;
 
         void execute_keyboard_callbacks(const core::key_state& state) const noexcept;
         void execute_mouse_callbacks(const core::mouse_button_state& state) const noexcept;
@@ -169,6 +171,8 @@ namespace tempest::rhi::vk
         uint32_t _height;
         uint32_t _framebuffer_width;
         uint32_t _framebuffer_height;
+
+        vector<monitor> _monitors;
 
         vector<function<void(const core::key_state&)>> _keyboard_callbacks;
         vector<function<void(const core::mouse_button_state&)>> _mouse_callbacks;

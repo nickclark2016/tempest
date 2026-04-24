@@ -27,8 +27,17 @@ scoped.project('ecs', function()
     externalwarnings 'Off'
     warnings 'Extra'
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
     scoped.usage("PUBLIC", function()
         uses {
+            'api',
             'core',
             'event',
             'math',
@@ -74,9 +83,8 @@ scoped.group('Tests', function()
         }
 
         uses {
-            'ecs',
+            'tempest',
             'googletest',
-            'tlsf',
         }
 
         scoped.filter({ 'system:linux' }, function()

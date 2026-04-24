@@ -1,15 +1,14 @@
 #ifndef tempest_core_object_pool_hpp
 #define tempest_core_object_pool_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/compare.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 
-#include <compare>
-
 namespace tempest::core
 {
-    class object_pool
+    class TEMPEST_API object_pool
     {
       public:
         object_pool(abstract_allocator* _alloc, uint32_t pool_size, uint32_t resource_size);
@@ -40,7 +39,7 @@ namespace tempest::core
         uint32_t _used_index_count{0};
     };
 
-    class generational_object_pool
+    class TEMPEST_API generational_object_pool
     {
       public:
         struct key
@@ -48,7 +47,6 @@ namespace tempest::core
             uint32_t index;
             uint32_t generation;
 
-            constexpr auto operator<=>(const key&) const noexcept = default;
             constexpr operator bool() const noexcept
             {
                 return index != ~0u && generation != ~0u;

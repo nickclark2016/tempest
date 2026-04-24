@@ -16,8 +16,17 @@ scoped.project('serialization', function(prj)
         'include',
     }
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
     scoped.usage('PUBLIC', function()
         uses {
+            'api',
             'core',
             'logger',
             'math',
@@ -60,7 +69,7 @@ scoped.group('Tests', function()
 
         uses {
             'googletest',
-            'serialization'
+            'tempest'
         }
     
         externalwarnings 'Off'

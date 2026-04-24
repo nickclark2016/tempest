@@ -1,6 +1,7 @@
 #ifndef tempest_core_utility_hpp
 #define tempest_core_utility_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/compare.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/forward.hpp>
@@ -444,7 +445,7 @@ namespace tempest
     template <auto V>
     inline constexpr nontype_t<V> nontype{};
 
-    struct in_place_t
+    struct TEMPEST_API in_place_t
     {
         constexpr explicit in_place_t() = default;
     };
@@ -509,9 +510,10 @@ namespace tempest
     template <typename... Ts>
     using make_sequence_for = make_index_sequence<sizeof...(Ts)>;
 
+    TEMPEST_API
     auto memcpy(void* dst, const void* src, size_t count) noexcept -> void*;
 
-    struct init_list_t {};
+    struct TEMPEST_API init_list_t {};
 
     inline constexpr init_list_t init_list{};
 } // namespace tempest

@@ -1,6 +1,7 @@
 #ifndef tempest_ecs_transform_component_hpp
 #define tempest_ecs_transform_component_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/mat4.hpp>
 #include <tempest/transformations.hpp>
 #include <tempest/type_traits.hpp>
@@ -8,7 +9,7 @@
 
 namespace tempest::ecs
 {
-    class transform_component
+    class TEMPEST_API transform_component
     {
       public:
         static constexpr transform_component identity() noexcept

@@ -1,6 +1,7 @@
 #ifndef tempest_core_texture_hpp
 #define tempest_core_texture_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
@@ -47,14 +48,14 @@ namespace tempest::core
         repeat,
     };
 
-    struct texture_mip_data
+    struct TEMPEST_API texture_mip_data
     {
         vector<byte> data;
         uint32_t width{};
         uint32_t height{};
     };
 
-    struct sampler_state
+    struct TEMPEST_API sampler_state
     {
         magnify_texture_filter mag_filter = magnify_texture_filter::linear;
         minify_texture_filter min_filter = minify_texture_filter::linear;
@@ -62,7 +63,7 @@ namespace tempest::core
         texture_wrap_mode wrap_t = texture_wrap_mode::repeat;
     };
 
-    struct texture
+    struct TEMPEST_API texture
     {
         vector<texture_mip_data> mips{};
         uint32_t width{};
@@ -76,7 +77,7 @@ namespace tempest::core
         string name{};
     };
 
-    class texture_registry
+    class TEMPEST_API texture_registry
     {
       public:
         texture_registry() = default;
@@ -100,7 +101,7 @@ namespace tempest::core
         flat_unordered_map<guid, texture> _textures;
     };
 
-    struct texture_component
+    struct TEMPEST_API texture_component
     {
         guid texture_id;
     };

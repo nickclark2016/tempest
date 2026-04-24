@@ -1,6 +1,7 @@
 #ifndef tempest_input_keyboard_hpp
 #define tempest_input_keyboard_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/enum.hpp>
@@ -154,7 +155,7 @@ namespace tempest::core
         num_lock = 0x20
     };
 
-    struct key_state
+    struct TEMPEST_API key_state
     {
         key k = key::unknown;
         key_action action = key_action::release;
@@ -168,7 +169,7 @@ namespace tempest::core
                         static_cast<underlying_type_t<key_modifier>>(modifiers)));
     }
 
-    class keyboard
+    class TEMPEST_API keyboard
     {
       public:
         void set(key_state state)

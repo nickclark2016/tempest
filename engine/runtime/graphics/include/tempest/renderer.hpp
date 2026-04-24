@@ -1,6 +1,7 @@
 #ifndef tempest_graphics_renderer_hpp
 #define tempest_graphics_renderer_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
@@ -14,10 +15,10 @@ namespace tempest::graphics
 {
     class renderer;
 
-    class renderer
+    class TEMPEST_API renderer
     {
       public:
-        class builder
+        class TEMPEST_API builder
         {
           public:
             builder() = default;

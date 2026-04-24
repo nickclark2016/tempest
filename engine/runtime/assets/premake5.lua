@@ -22,8 +22,17 @@ scoped.project('assets', function()
         'tinyexr',
     }
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
     scoped.usage("PUBLIC", function()
         uses {
+            'api',
             'core',
             'ecs',
             'logger',
@@ -82,7 +91,7 @@ scoped.group('Tests', function()
 
         uses {
             'googletest',
-            'assets',
+            'tempest',
         }
 
         externalwarnings 'Off'

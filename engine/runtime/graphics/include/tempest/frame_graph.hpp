@@ -1,6 +1,7 @@
 #ifndef tempest_graphics_frame_graph_hpp
 #define tempest_graphics_frame_graph_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/flat_unordered_map.hpp>
@@ -29,7 +30,7 @@ namespace tempest::graphics
         transfer,
     };
 
-    struct base_graph_resource_handle
+    struct TEMPEST_API base_graph_resource_handle
     {
         uint64_t handle : 48 = {};
         uint64_t version : 11 = {};
@@ -67,7 +68,7 @@ namespace tempest::graphics
     }
 
     template <rhi::rhi_handle_type T>
-    struct graph_resource_handle : base_graph_resource_handle
+    struct TEMPEST_API graph_resource_handle : base_graph_resource_handle
     {
         using base_graph_resource_handle::base_graph_resource_handle;
     };
@@ -83,7 +84,7 @@ namespace tempest::graphics
         return static_cast<rhi::rhi_handle_type>(handle.type);
     }
 
-    struct scheduled_resource_access
+    struct TEMPEST_API scheduled_resource_access
     {
         base_graph_resource_handle handle;
         enum_mask<rhi::pipeline_stage> stages;
@@ -96,7 +97,7 @@ namespace tempest::graphics
     class compute_task_execution_context;
     class transfer_task_execution_context;
 
-    class task_builder
+    class TEMPEST_API task_builder
     {
       public:
         void read(graph_resource_handle<rhi::rhi_handle_type::buffer>& handle);
@@ -153,7 +154,7 @@ namespace tempest::graphics
         flat_unordered_map<uint64_t, uint64_t> _resource_fallbacks;
     };
 
-    class graphics_task_builder : public task_builder
+    class TEMPEST_API graphics_task_builder : public task_builder
     {
       public:
         using task_builder::fallback;
@@ -183,7 +184,7 @@ namespace tempest::graphics
         }
     };
 
-    class compute_task_builder : public task_builder
+    class TEMPEST_API compute_task_builder : public task_builder
     {
       public:
         void prefer_async();
@@ -220,7 +221,7 @@ namespace tempest::graphics
         bool _prefer_async = false;
     };
 
-    class transfer_task_builder : public task_builder
+    class TEMPEST_API transfer_task_builder : public task_builder
     {
       public:
         void prefer_async();
@@ -257,7 +258,7 @@ namespace tempest::graphics
         bool _prefer_async = false;
     };
 
-    class task_execution_context
+    class TEMPEST_API task_execution_context
     {
       public:
         rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> find_buffer(
@@ -306,7 +307,7 @@ namespace tempest::graphics
         rhi::work_queue* _queue = nullptr;
     };
 
-    class graphics_task_execution_context : public task_execution_context
+    class TEMPEST_API graphics_task_execution_context : public task_execution_context
     {
       public:
         void begin_render_pass(const rhi::work_queue::render_pass_info& info);
@@ -341,7 +342,7 @@ namespace tempest::graphics
         using task_execution_context::task_execution_context;
     };
 
-    class compute_task_execution_context : public task_execution_context
+    class TEMPEST_API compute_task_execution_context : public task_execution_context
     {
       public:
         void bind_pipeline(rhi::typed_rhi_handle<rhi::rhi_handle_type::compute_pipeline> pipeline);
@@ -354,7 +355,7 @@ namespace tempest::graphics
         using task_execution_context::task_execution_context;
     };
 
-    class transfer_task_execution_context : public task_execution_context
+    class TEMPEST_API transfer_task_execution_context : public task_execution_context
     {
       public:
         void clear_color(const graph_resource_handle<rhi::rhi_handle_type::image>& image, float r, float g, float b,
@@ -384,7 +385,7 @@ namespace tempest::graphics
         using task_execution_context::task_execution_context;
     };
 
-    struct scheduled_pass
+    struct TEMPEST_API scheduled_pass
     {
         string name;
         work_type type = work_type::unknown;
@@ -397,7 +398,7 @@ namespace tempest::graphics
         flat_unordered_map<uint64_t, uint64_t> resource_fallbacks;
     };
 
-    struct ownership_transfer
+    struct TEMPEST_API ownership_transfer
     {
         base_graph_resource_handle handle;
 
@@ -416,7 +417,7 @@ namespace tempest::graphics
         rhi::image_layout dst_layout;
     };
 
-    struct timeline_reference
+    struct TEMPEST_API timeline_reference
     {
         work_type type;
         uint64_t queue_index;
@@ -424,7 +425,7 @@ namespace tempest::graphics
         enum_mask<rhi::pipeline_stage> stages;
     };
 
-    struct submit_instructions
+    struct TEMPEST_API submit_instructions
     {
         work_type type;
         uint32_t queue_index;
@@ -442,7 +443,7 @@ namespace tempest::graphics
                 rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>;
     using internal_resource = variant<rhi::buffer_desc, rhi::image_desc>;
 
-    struct scheduled_resource
+    struct TEMPEST_API scheduled_resource
     {
         base_graph_resource_handle handle;
         variant<external_resource, rhi::buffer_desc, rhi::image_desc> creation_info;
@@ -452,21 +453,21 @@ namespace tempest::graphics
         bool presentable;
     };
 
-    struct queue_configuration
+    struct TEMPEST_API queue_configuration
     {
         uint32_t graphics_queues = 0;
         uint32_t compute_queues = 0;
         uint32_t transfer_queues = 0;
     };
 
-    struct graph_execution_plan
+    struct TEMPEST_API graph_execution_plan
     {
         vector<scheduled_resource> resources;
         vector<submit_instructions> submissions;
         queue_configuration queue_cfg;
     };
 
-    struct pass_entry
+    struct TEMPEST_API pass_entry
     {
         string name;
         work_type type;
@@ -482,7 +483,7 @@ namespace tempest::graphics
         flat_unordered_map<uint64_t, uint64_t> resource_fallbacks;
     };
 
-    struct resource_entry
+    struct TEMPEST_API resource_entry
     {
         string name;
         base_graph_resource_handle handle;
@@ -495,7 +496,7 @@ namespace tempest::graphics
         bool presentable = false;
     };
 
-    class graph_builder
+    class TEMPEST_API graph_builder
     {
       public:
         // Import assets external to the graph
@@ -551,7 +552,7 @@ namespace tempest::graphics
                                 task_builder& builder, bool async);
     };
 
-    class graph_compiler
+    class TEMPEST_API graph_compiler
     {
       public:
         graph_compiler(vector<resource_entry> resources, vector<pass_entry> passes, queue_configuration cfg);
@@ -717,14 +718,14 @@ namespace tempest::graphics
         }
     }
 
-    struct execution_fence
+    struct TEMPEST_API execution_fence
     {
         rhi::typed_rhi_handle<rhi::rhi_handle_type::fence> fence =
             rhi::typed_rhi_handle<rhi::rhi_handle_type::fence>::null_handle;
         bool queue_used = false;
     };
 
-    class graph_executor
+    class TEMPEST_API graph_executor
     {
       public:
         explicit graph_executor(rhi::device& device);

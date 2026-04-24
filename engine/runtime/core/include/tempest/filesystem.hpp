@@ -1,6 +1,7 @@
 #ifndef tempest_filesystem_hpp
 #define tempest_filesystem_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/iterator.hpp>
@@ -33,8 +34,8 @@ namespace tempest::filesystem
             (is_specialization_v<T, basic_string> || is_specialization_v<T, basic_string_view> ||
              (is_convertible_v<T, basic_string_view<char>> || is_convertible_v<T, basic_string_view<wchar_t>>));
 
-        string convert_wide_to_narrow(tempest::wstring_view wide_str);
-        wstring convert_narrow_to_wide(tempest::string_view narrow_str);
+        [[nodiscard]] TEMPEST_API string convert_wide_to_narrow(tempest::wstring_view wide_str);
+        [[nodiscard]] TEMPEST_API wstring convert_narrow_to_wide(tempest::string_view narrow_str);
 
         template <typename T>
         struct fs_char_type;
@@ -89,7 +90,7 @@ namespace tempest::filesystem
     class path;
     class file_status;
 
-    class path_iterator
+    class TEMPEST_API path_iterator
     {
       public:
         using value_type = basic_string_view<detail::native_path_char_type>;
@@ -122,7 +123,7 @@ namespace tempest::filesystem
         return !(lhs == rhs);
     }
 
-    class path
+    class TEMPEST_API path
     {
       public:
         using value_type = detail::native_path_char_type;
@@ -352,7 +353,7 @@ namespace tempest::filesystem
         unknown = 0xFFFF
     };
 
-    class file_status
+    class TEMPEST_API file_status
     {
       public:
         file_status() noexcept;
@@ -391,37 +392,37 @@ namespace tempest::filesystem
         permissions _permissions = permissions::unknown;
     };
 
-    [[nodiscard]] bool is_block_file(const file_status& status);
-    [[nodiscard]] bool is_block_file(const path& p);
-    [[nodiscard]] bool is_character_file(const file_status& status);
-    [[nodiscard]] bool is_character_file(const path& p);
-    [[nodiscard]] bool is_directory(const file_status& status);
-    [[nodiscard]] bool is_directory(const path& p);
-    [[nodiscard]] bool is_empty(const path& p);
-    [[nodiscard]] bool is_fifo(const file_status& status);
-    [[nodiscard]] bool is_fifo(const path& p);
-    [[nodiscard]] bool is_other(const file_status& status);
-    [[nodiscard]] bool is_other(const path& p);
-    [[nodiscard]] bool is_regular_file(const file_status& status);
-    [[nodiscard]] bool is_regular_file(const path& p);
-    [[nodiscard]] bool is_socket(const file_status& status);
-    [[nodiscard]] bool is_socket(const path& p);
-    [[nodiscard]] bool is_symlink(const file_status& status);
-    [[nodiscard]] bool is_symlink(const path& p);
-    [[nodiscard]] bool status_known(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_block_file(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_block_file(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_character_file(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_character_file(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_directory(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_directory(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_empty(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_fifo(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_fifo(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_other(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_other(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_regular_file(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_regular_file(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_socket(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_socket(const path& p);
+    [[nodiscard]] TEMPEST_API bool is_symlink(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool is_symlink(const path& p);
+    [[nodiscard]] TEMPEST_API bool status_known(const file_status& status);
 
-    [[nodiscard]] file_status status(const path& p);
-    [[nodiscard]] file_status symlink_status(const path& p);
+    [[nodiscard]] TEMPEST_API file_status status(const path& p);
+    [[nodiscard]] TEMPEST_API file_status symlink_status(const path& p);
 
-    [[nodiscard]] bool exists(const file_status& status);
-    [[nodiscard]] bool exists(const path& p);
+    [[nodiscard]] TEMPEST_API bool exists(const file_status& status);
+    [[nodiscard]] TEMPEST_API bool exists(const path& p);
 
-    [[nodiscard]] path current_path();
-    void current_path(const path& p);
+    [[nodiscard]] TEMPEST_API path current_path();
+    TEMPEST_API void current_path(const path& p);
 
-    [[nodiscard]] size_t file_size(const path& p);
+    [[nodiscard]] TEMPEST_API size_t file_size(const path& p);
 
-    class directory_entry
+    class TEMPEST_API directory_entry
     {
       public:
         directory_entry() = default;
@@ -450,7 +451,7 @@ namespace tempest::filesystem
     };
 
     // Filesystem Iterators
-    class directory_iterator
+    class TEMPEST_API directory_iterator
     {
       public:
         using value_type = directory_entry;
@@ -494,39 +495,46 @@ namespace tempest::filesystem
         return lhs._dir == rhs._dir && lhs._index == rhs._index;
     }
 
+    TEMPEST_API
     inline directory_iterator begin(directory_iterator it) noexcept
     {
         return it;
     }
 
+    TEMPEST_API
     inline directory_iterator end([[maybe_unused]] directory_iterator it) noexcept
     {
         return directory_iterator();
     }
 
-    path relative(const path& p);
-    path relative(const path& p, const path& base);
+    [[nodiscard]] TEMPEST_API path relative(const path& p);
+    [[nodiscard]] TEMPEST_API path relative(const path& p, const path& base);
 
+    TEMPEST_API
     inline void swap(path& lhs, path& rhs) noexcept
     {
         lhs.swap(rhs);
     }
 
+    TEMPEST_API
     inline typename path::iterator begin(const path& p) noexcept
     {
         return p.begin();
     }
 
+    TEMPEST_API
     inline typename path::iterator cbegin(const path& p) noexcept
     {
         return p.cbegin();
     }
 
+    TEMPEST_API
     inline typename path::iterator end(const path& p) noexcept
     {
         return p.end();
     }
 
+    TEMPEST_API
     inline typename path::iterator cend(const path& p) noexcept
     {
         return p.cend();

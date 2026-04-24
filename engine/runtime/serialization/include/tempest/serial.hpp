@@ -1,6 +1,7 @@
 #ifndef tempest_serialization_serial_hpp
 #define tempest_serialization_serial_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/flat_unordered_map.hpp>
@@ -13,7 +14,7 @@
 
 namespace tempest::serialization
 {
-    struct binary_header
+    struct TEMPEST_API binary_header
     {
         array<uint8_t, 4> magic; // "TEBF" (tempest engine binary format)
         uint16_t version;
@@ -27,7 +28,7 @@ namespace tempest::serialization
         { arch.read(size_t{}) } -> same_as<span<const byte>>;
     };
 
-    class binary_archive
+    class TEMPEST_API binary_archive
     {
       public:
         auto write(span<const byte> data) -> void;
@@ -51,6 +52,7 @@ namespace tempest::serialization
         requires is_trivially_copyable_v<T>
     struct serializer<binary_archive, T>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const T& value) -> void
         {
             const auto obj_span = span<const T>{&value, 1};
@@ -58,6 +60,7 @@ namespace tempest::serialization
             archive.write(byte_span);
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> T
         {
             const auto byte_span = archive.read(sizeof(T));
@@ -71,6 +74,7 @@ namespace tempest::serialization
     template <typename T, typename Allocator>
     struct serializer<binary_archive, vector<T, Allocator>>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const vector<T>& vec) -> void
         {
             const auto size = static_cast<uint64_t>(vec.size());
@@ -89,6 +93,7 @@ namespace tempest::serialization
             }
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> vector<T>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
@@ -116,6 +121,7 @@ namespace tempest::serialization
     template <typename T>
     struct serializer<binary_archive, optional<T>>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const optional<T>& opt) -> void
         {
             const auto has_value = opt.has_value();
@@ -126,6 +132,7 @@ namespace tempest::serialization
             }
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> optional<T>
         {
             const auto has_value = serializer<binary_archive, bool>::deserialize(archive);
@@ -140,6 +147,7 @@ namespace tempest::serialization
     template <typename CharT, typename Traits, typename Allocator>
     struct serializer<binary_archive, basic_string<CharT, Traits, Allocator>>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const basic_string<CharT, Traits, Allocator>& str) -> void
         {
             const auto size = static_cast<uint64_t>(str.size());
@@ -147,6 +155,7 @@ namespace tempest::serialization
             archive.write(as_bytes(span{str.data(), str.size()}));
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> basic_string<CharT, Traits, Allocator>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
@@ -161,6 +170,7 @@ namespace tempest::serialization
     template <typename Key, typename Value, typename Hash, typename KeyEqual, typename Allocator>
     struct serializer<binary_archive, flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>& map) -> void
         {
             const auto size = static_cast<uint64_t>(map.size());
@@ -174,6 +184,7 @@ namespace tempest::serialization
             }
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);

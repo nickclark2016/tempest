@@ -18,12 +18,21 @@ scoped.group('RHI', function()
         }
 
         uses {
+            'api',
             'glfw',
             'logger',
             'rhi-api',
             'vk-bootstrap',
             'vma',
         }
+
+        scoped.filter({
+            'options:shared-engine',
+        }, function()
+            defines {
+                'TEMPEST_API_EXPORT'
+            }
+        end)
 
         if _OPTIONS['debug-shaders'] then
             defines {

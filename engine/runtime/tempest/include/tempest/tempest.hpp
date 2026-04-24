@@ -1,6 +1,7 @@
 #ifndef tempest_tempest_engine_h
 #define tempest_tempest_engine_h
 
+#include <tempest/api.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_type_registry.hpp>
@@ -17,9 +18,9 @@
 
 namespace tempest
 {
-    class engine_context
+    class TEMPEST_API engine_context
     {
-        struct window_context
+        struct TEMPEST_API window_context
         {
             unique_ptr<rhi::window_surface> surface;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface = rhi::null_handle;

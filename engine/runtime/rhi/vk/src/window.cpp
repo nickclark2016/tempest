@@ -172,10 +172,10 @@ namespace tempest::rhi::vk
             return actions;
         }
 
-        static constexpr auto glfw_to_tempest_keys = build_key_map();
-        static constexpr auto glfw_to_tempest_key_actions = build_key_action_map();
-        static constexpr auto glfw_to_tempest_mouse_buttons = build_mouse_button_map();
-        static constexpr auto glfw_to_tempest_mouse_actions = build_mouse_action_map();
+        inline constexpr auto glfw_to_tempest_keys = build_key_map();
+        inline constexpr auto glfw_to_tempest_key_actions = build_key_action_map();
+        inline constexpr auto glfw_to_tempest_mouse_buttons = build_mouse_button_map();
+        inline constexpr auto glfw_to_tempest_mouse_actions = build_mouse_action_map();
     } // namespace
 
     window_surface::window_surface(GLFWwindow* win, string name, uint32_t width, uint32_t height) noexcept
@@ -187,6 +187,50 @@ namespace tempest::rhi::vk
         glfwGetFramebufferSize(_window, &fb_width, &fb_height);
         _framebuffer_width = static_cast<uint32_t>(fb_width);
         _framebuffer_height = static_cast<uint32_t>(fb_height);
+
+        {
+            int count = 0;
+            GLFWmonitor** glfw_monitors = glfwGetMonitors(&count);
+            _monitors.reserve(static_cast<size_t>(count));
+
+            for (int i = 0; i < count; ++i)
+            {
+                auto glfw_monitor = glfw_monitors[i];
+                auto current_mode = glfwGetVideoMode(glfw_monitor);
+
+                int xpos, ypos, width, height;
+                glfwGetMonitorWorkarea(glfw_monitor, &xpos, &ypos, &width, &height);
+
+                int x, y;
+                glfwGetMonitorPos(glfw_monitor, &x, &y);
+
+                float x_scale, y_scale;
+                glfwGetMonitorContentScale(glfw_monitor, &x_scale, &y_scale);
+
+                rhi::window_surface::monitor monitor{
+                    .work_x = xpos,
+                    .work_y = ypos,
+                    .work_width = static_cast<uint32_t>(width),
+                    .work_height = static_cast<uint32_t>(height),
+                    .x = x,
+                    .y = y,
+                    .content_scale_x = x_scale,
+                    .content_scale_y = y_scale,
+                    .name = glfwGetMonitorName(glfw_monitor),
+                    .current_video_mode =
+                        {
+                            .width = static_cast<uint32_t>(current_mode->width),
+                            .height = static_cast<uint32_t>(current_mode->height),
+                            .refresh_rate = static_cast<uint32_t>(current_mode->refreshRate),
+                            .red_bits = static_cast<uint8_t>(current_mode->redBits),
+                            .green_bits = static_cast<uint8_t>(current_mode->greenBits),
+                            .blue_bits = static_cast<uint8_t>(current_mode->blueBits),
+                        },
+                };
+
+                _monitors.push_back(tempest::move(monitor));
+            }
+        }
     }
 
     window_surface::~window_surface()
@@ -295,53 +339,9 @@ namespace tempest::rhi::vk
         }
     }
 
-    vector<rhi::window_surface::monitor> window_surface::get_monitors() const noexcept
+    span<const window_surface::monitor> window_surface::get_monitors() const noexcept
     {
-        vector<rhi::window_surface::monitor> monitors;
-
-        int count = 0;
-        GLFWmonitor** glfw_monitors = glfwGetMonitors(&count);
-        monitors.reserve(static_cast<size_t>(count));
-
-        for (int i = 0; i < count; ++i)
-        {
-            auto glfw_monitor = glfw_monitors[i];
-            auto current_mode = glfwGetVideoMode(glfw_monitor);
-
-            int xpos, ypos, width, height;
-            glfwGetMonitorWorkarea(glfw_monitor, &xpos, &ypos, &width, &height);
-
-            int x, y;
-            glfwGetMonitorPos(glfw_monitor, &x, &y);
-
-            float x_scale, y_scale;
-            glfwGetMonitorContentScale(glfw_monitor, &x_scale, &y_scale);
-
-            rhi::window_surface::monitor monitor{
-                .work_x = xpos,
-                .work_y = ypos,
-                .work_width = static_cast<uint32_t>(width),
-                .work_height = static_cast<uint32_t>(height),
-                .x = x,
-                .y = y,
-                .content_scale_x = x_scale,
-                .content_scale_y = y_scale,
-                .name = glfwGetMonitorName(glfw_monitor),
-                .current_video_mode =
-                    {
-                        .width = static_cast<uint32_t>(current_mode->width),
-                        .height = static_cast<uint32_t>(current_mode->height),
-                        .refresh_rate = static_cast<uint32_t>(current_mode->refreshRate),
-                        .red_bits = static_cast<uint8_t>(current_mode->redBits),
-                        .green_bits = static_cast<uint8_t>(current_mode->greenBits),
-                        .blue_bits = static_cast<uint8_t>(current_mode->blueBits),
-                    },
-            };
-
-            monitors.push_back(tempest::move(monitor));
-        }
-
-        return monitors;
+        return _monitors;
     }
 
     void window_surface::execute_keyboard_callbacks(const core::key_state& state) const noexcept

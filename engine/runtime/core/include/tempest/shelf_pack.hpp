@@ -1,6 +1,7 @@
 #ifndef tempest_core_shelf_pack_hpp
 #define tempest_core_shelf_pack_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/expected.hpp>
 #include <tempest/int.hpp>
 #include <tempest/span.hpp>
@@ -11,7 +12,7 @@ namespace tempest
 {
     namespace detail
     {
-        struct shelf
+        struct TEMPEST_API shelf
         {
             using shelf_index = uint16_t;
             using item_index = uint16_t;
@@ -30,7 +31,7 @@ namespace tempest
             bool is_empty;
         };
 
-        struct item
+        struct TEMPEST_API item
         {
             static constexpr uint16_t none = static_cast<uint16_t>(~0);
 
@@ -50,7 +51,7 @@ namespace tempest
         };
     } // namespace detail
 
-    class shelf_pack_allocator
+    class TEMPEST_API shelf_pack_allocator
     {
       public:
         struct allocator_options
@@ -120,10 +121,10 @@ namespace tempest
         void _init();
     };
 
-    bool operator==(const shelf_pack_allocator::allocation_id& lhs,
+    TEMPEST_API bool operator==(const shelf_pack_allocator::allocation_id& lhs,
                     const shelf_pack_allocator::allocation_id& rhs) noexcept;
 
-    bool operator!=(const shelf_pack_allocator::allocation_id& lhs,
+    TEMPEST_API bool operator!=(const shelf_pack_allocator::allocation_id& lhs,
                     const shelf_pack_allocator::allocation_id& rhs) noexcept;
 
     inline math::vec2<uint32_t> shelf_pack_allocator::extent() const noexcept

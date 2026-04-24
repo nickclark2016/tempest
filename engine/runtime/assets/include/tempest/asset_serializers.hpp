@@ -1,6 +1,7 @@
 #ifndef tempest_assets_asset_serializers_hpp
 #define tempest_assets_asset_serializers_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/entity_hierarchy.hpp>
 #include <tempest/guid.hpp>
@@ -21,6 +22,7 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, core::texture_mip_data>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const core::texture_mip_data& mip) -> void
         {
             serializer<binary_archive, vector<byte>>::serialize(archive, mip.data);
@@ -28,6 +30,7 @@ namespace tempest::serialization
             serializer<binary_archive, uint32_t>::serialize(archive, mip.height);
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> core::texture_mip_data
         {
             auto data = serializer<binary_archive, vector<byte>>::deserialize(archive);
@@ -44,6 +47,7 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, core::sampler_state>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const core::sampler_state& sampler) -> void
         {
             serializer<binary_archive, uint32_t>::serialize(archive, static_cast<uint32_t>(sampler.mag_filter));
@@ -52,6 +56,7 @@ namespace tempest::serialization
             serializer<binary_archive, uint32_t>::serialize(archive, static_cast<uint32_t>(sampler.wrap_t));
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> core::sampler_state
         {
             auto mag = serializer<binary_archive, uint32_t>::deserialize(archive);
@@ -70,6 +75,7 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, core::texture>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const core::texture& tex) -> void
         {
             serializer<binary_archive, uint32_t>::serialize(archive, static_cast<uint32_t>(tex.format));
@@ -81,6 +87,7 @@ namespace tempest::serialization
             serializer<binary_archive, vector<core::texture_mip_data>>::serialize(archive, tex.mips);
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> core::texture
         {
             auto format = static_cast<core::texture_format>(
@@ -109,6 +116,7 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, core::vertex>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const core::vertex& vert) -> void
         {
             // vertex is POD with vec3, vec2, vec3, vec4, vec4 - serialize as raw bytes
@@ -116,6 +124,7 @@ namespace tempest::serialization
             archive.write(byte_span);
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> core::vertex
         {
             const auto byte_span = archive.read(sizeof(core::vertex));
@@ -128,6 +137,7 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, core::mesh>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const core::mesh& mesh) -> void
         {
             serializer<binary_archive, vector<core::vertex>>::serialize(archive, mesh.vertices);
@@ -138,6 +148,7 @@ namespace tempest::serialization
             serializer<binary_archive, bool>::serialize(archive, mesh.has_colors);
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> core::mesh
         {
             auto vertices = serializer<binary_archive, vector<core::vertex>>::deserialize(archive);
@@ -162,7 +173,10 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, core::material>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const core::material& mat) -> void;
+
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> core::material;
     };
 
@@ -171,6 +185,7 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, assets::entity_hierarchy::entity_record>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive,
                               const assets::entity_hierarchy::entity_record& record) -> void
         {
@@ -184,6 +199,7 @@ namespace tempest::serialization
             serializer<binary_archive, vector<size_t>>::serialize(archive, record.child_indices);
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> assets::entity_hierarchy::entity_record
         {
             auto num_components = serializer<binary_archive, uint64_t>::deserialize(archive);
@@ -203,6 +219,7 @@ namespace tempest::serialization
     template <>
     struct serializer<binary_archive, assets::entity_hierarchy>
     {
+        TEMPEST_API
         static auto serialize(binary_archive& archive, const assets::entity_hierarchy& hierarchy) -> void
         {
             serializer<binary_archive, vector<assets::entity_hierarchy::entity_record>>::serialize(
@@ -210,6 +227,7 @@ namespace tempest::serialization
             serializer<binary_archive, uint64_t>::serialize(archive, static_cast<uint64_t>(hierarchy.root_index));
         }
 
+        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> assets::entity_hierarchy
         {
             auto records =

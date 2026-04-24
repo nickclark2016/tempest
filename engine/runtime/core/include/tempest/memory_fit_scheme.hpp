@@ -51,7 +51,7 @@ namespace tempest::core
             range<T> range;
         };
 
-        optional<fit> optimal_block = std::nullopt;
+        optional<fit> optimal_block = nullopt;
         T best_fit = len - len;
 
         for (size_t i = 0; i < _free.size(); ++i)
@@ -75,7 +75,7 @@ namespace tempest::core
             }
             else
             {
-                optimal_block = ([&]() -> std::optional<fit> {
+                optimal_block = ([&]() -> optional<fit> {
                     if (optimal_block)
                     {
                         if (range_size < (optimal_block->range.end - optimal_block->range.start))
@@ -124,8 +124,8 @@ namespace tempest::core
     template <typename T>
     inline void best_fit_scheme<T>::release(range<T>&& rng)
     {
-        auto free_iter = std::find_if(_free.begin(), _free.end(), [&rng](range<T>& r) { return r.start > rng.start; });
-        const size_t idx = std::distance(_free.begin(), free_iter);
+        auto free_iter = find_if(_free.begin(), _free.end(), [&rng](range<T>& r) { return r.start > rng.start; });
+        const size_t idx = distance(_free.begin(), free_iter);
 
         if (idx > 0 && rng.start == _free[idx - 1].end)
         {

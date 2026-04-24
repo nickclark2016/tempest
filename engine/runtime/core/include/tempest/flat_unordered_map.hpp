@@ -1,7 +1,7 @@
 #ifndef tempest_core_flat_unordered_map_hpp
 #define tempest_core_flat_unordered_map_hpp
 
-#include <cstdarg>
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/assert.hpp>
 #include <tempest/bit.hpp>
@@ -26,7 +26,7 @@ namespace tempest
         constexpr metadata_entry deleted_entry = 0b1000'0000;
 
         /// @brief Strategy for metadata entry operations.
-        struct metadata_entry_strategy
+        struct TEMPEST_API metadata_entry_strategy
         {
             /// @brief Fetches if the metadata entry represents an empty slot.
             /// @param e Entry to check.
@@ -44,7 +44,7 @@ namespace tempest
             bool is_deleted(metadata_entry e) const noexcept;
         };
 
-        struct metadata_group
+        struct TEMPEST_API metadata_group
         {
             static constexpr size_t group_size = 16;
 

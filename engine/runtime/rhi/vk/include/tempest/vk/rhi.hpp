@@ -1,6 +1,7 @@
 #ifndef tempest_rhi_vk_rhi_hpp
 #define tempest_rhi_vk_rhi_hpp
 
+#include <tempest/api.hpp>
 #include <VkBootstrapDispatch.h>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/logger.hpp>
@@ -26,7 +27,7 @@ namespace tempest::rhi::vk
     class device;
     class work_queue;
 
-    class instance : public rhi::instance
+    class TEMPEST_API instance : public rhi::instance
     {
       public:
         explicit instance(vkb::Instance instance, vector<vkb::PhysicalDevice> devices) noexcept;
@@ -43,7 +44,7 @@ namespace tempest::rhi::vk
         friend unique_ptr<rhi::instance> create_instance(logger* log, bool headless) noexcept;
     };
 
-    struct work_group
+    struct TEMPEST_API work_group
     {
         VkCommandPool pool = VK_NULL_HANDLE;
         vector<VkCommandBuffer> cmd_buffers;
@@ -60,7 +61,7 @@ namespace tempest::rhi::vk
         optional<typed_rhi_handle<rhi_handle_type::command_list>> current_command_buffer() const noexcept;
     };
 
-    class work_queue : public rhi::work_queue
+    class TEMPEST_API work_queue : public rhi::work_queue
     {
       public:
         work_queue() = default;
@@ -234,7 +235,7 @@ namespace tempest::rhi::vk
             used_samplers;
     };
 
-    struct image
+    struct TEMPEST_API image
     {
         VmaAllocation allocation;
         VmaAllocationInfo allocation_info;
@@ -250,7 +251,7 @@ namespace tempest::rhi::vk
         array<rhi::typed_rhi_handle<rhi::rhi_handle_type::image>, 16> mip_chain_views;
     };
 
-    struct buffer
+    struct TEMPEST_API buffer
     {
         VmaAllocation allocation;
         VmaAllocationInfo allocation_info;
@@ -259,29 +260,29 @@ namespace tempest::rhi::vk
         VkBufferUsageFlags usage;
     };
 
-    struct sampler
+    struct TEMPEST_API sampler
     {
         VkSampler sampler;
         VkSamplerCreateInfo create_info;
     };
 
-    struct fence
+    struct TEMPEST_API fence
     {
         VkFence fence;
     };
 
-    struct semaphore
+    struct TEMPEST_API semaphore
     {
         VkSemaphore semaphore;
         semaphore_type type;
     };
 
-    struct fif_data
+    struct TEMPEST_API fif_data
     {
         typed_rhi_handle<rhi_handle_type::semaphore> image_acquired;
     };
 
-    struct swapchain
+    struct TEMPEST_API swapchain
     {
         vkb::Swapchain swapchain;
         VkSurfaceKHR surface;
@@ -291,7 +292,7 @@ namespace tempest::rhi::vk
         const rhi::window_surface* window;
     };
 
-    struct graphics_pipeline
+    struct TEMPEST_API graphics_pipeline
     {
         inplace_vector<VkShaderModule, 5> shader_modules;
         VkPipeline pipeline;
@@ -300,7 +301,7 @@ namespace tempest::rhi::vk
         graphics_pipeline_desc desc;
     };
 
-    struct compute_pipeline
+    struct TEMPEST_API compute_pipeline
     {
         VkShaderModule shader_module;
         VkPipeline pipeline;
@@ -309,7 +310,7 @@ namespace tempest::rhi::vk
         compute_pipeline_desc desc;
     };
 
-    struct delete_queue
+    struct TEMPEST_API delete_queue
     {
         VmaAllocator allocator{};
         vkb::DispatchTable* dispatch{};
@@ -334,7 +335,7 @@ namespace tempest::rhi::vk
         std::queue<delete_resource> dq{};
     };
 
-    struct descriptor_set
+    struct TEMPEST_API descriptor_set
     {
         VkDescriptorSet set;
         VkDescriptorPool pool;
@@ -345,7 +346,7 @@ namespace tempest::rhi::vk
         vector<typed_rhi_handle<rhi_handle_type::sampler>> bound_samplers;
     };
 
-    class descriptor_set_layout_cache
+    class TEMPEST_API descriptor_set_layout_cache
     {
       public:
         struct cache_key
@@ -474,7 +475,7 @@ namespace tempest::rhi::vk
         stack_allocator _allocator{4 * 1024};
     };
 
-    class device : public rhi::device
+    class TEMPEST_API device : public rhi::device
     {
       public:
         explicit device(vkb::Device dev, vkb::Instance* instance);

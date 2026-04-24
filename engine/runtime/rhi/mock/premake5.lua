@@ -23,6 +23,20 @@ scoped.group('RHI', function()
 
         warnings 'Extra'
 
+        scoped.filter({
+            'options:shared-engine',
+        }, function()
+            defines {
+                'TEMPEST_API_EXPORT'
+            }
+        end)
+
+        scoped.usage('PUBLIC', function()
+            uses {
+                'api',
+            }
+        end)
+
         scoped.usage('INTERFACE', function()
             includedirs {
                 'include',
@@ -57,6 +71,7 @@ scoped.group('RHI', function()
         uses {
             'googletest',
             'rhi-mock',
+            'tempest',
         }
 
         warnings 'Extra'

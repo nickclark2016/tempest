@@ -1,6 +1,7 @@
 #ifndef tempest_graphics_pbr_frame_graph_hpp
 #define tempest_graphics_pbr_frame_graph_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/flat_map.hpp>
 #include <tempest/frame_graph.hpp>
@@ -19,7 +20,7 @@
 
 namespace tempest::graphics
 {
-    struct pbr_frame_graph_config
+    struct TEMPEST_API pbr_frame_graph_config
     {
         uint32_t render_target_width;
         uint32_t render_target_height;
@@ -54,12 +55,12 @@ namespace tempest::graphics
         } shadows;
     };
 
-    struct pbr_frame_graph_inputs
+    struct TEMPEST_API pbr_frame_graph_inputs
     {
         ecs::archetype_registry* entity_registry = nullptr;
     };
 
-    class pbr_frame_graph
+    class TEMPEST_API pbr_frame_graph
     {
       public:
         pbr_frame_graph(rhi::device& device, pbr_frame_graph_config cfg, pbr_frame_graph_inputs inputs);

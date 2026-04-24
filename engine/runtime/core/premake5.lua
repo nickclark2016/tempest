@@ -38,6 +38,14 @@ scoped.project('core', function()
 
     uses { 'glfw', 'tlsf' }
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
     scoped.usage("core:defines", function()
         scoped.filter({
             'system:windows'
@@ -61,7 +69,7 @@ scoped.project('core', function()
     end)
 
     scoped.usage("PUBLIC", function()
-        uses { 'core:defines', 'math' }
+        uses { 'api', 'core:defines', 'math' }
     end)
 
     scoped.usage("core:includedirs", function()
@@ -109,10 +117,9 @@ scoped.group('Tests', function()
         }
 
         uses {
-            'core',
-            'glfw',
+            'rhi-vk',
+            'tempest',
             'googletest',
-            'tlsf',
         }
     
         externalwarnings 'Off'

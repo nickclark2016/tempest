@@ -1,6 +1,7 @@
 #ifndef tempest_assets_asset_importer_hpp
 #define tempest_assets_asset_importer_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/int.hpp>
 #include <tempest/optional.hpp>
@@ -11,7 +12,7 @@ namespace tempest::assets
 {
     class asset_database;
 
-    class asset_importer
+    class TEMPEST_API asset_importer
     {
       public:
         asset_importer() noexcept = default;

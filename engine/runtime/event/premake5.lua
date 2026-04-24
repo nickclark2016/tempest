@@ -19,8 +19,16 @@ scoped.project('event', function()
     externalwarnings 'Off'
     warnings 'Extra'
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
     scoped.usage("PUBLIC", function()
-        uses { 'core' }
+        uses { 'api', 'core' }
     end)
 
     scoped.usage("event:includedirs", function()
@@ -58,7 +66,7 @@ scoped.group('Tests', function()
         }
 
         uses {
-            'event',
+            'tempest',
             'googletest',
         }
 

@@ -1,6 +1,7 @@
 #ifndef tempest_core_source_location_hpp
 #define tempest_core_source_location_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 
 // If (GNUC or CLANG) and not (_GLIBCXX_SRCLOC or _LIBCPP_SOURCE_LOCATION)
@@ -9,7 +10,7 @@
 // TODO: Investigate a robust way to test for this. Maybe C++26 static reflection will provide a solution.
 namespace std
 {
-    class source_location
+    class TEMPEST_API source_location
     {
         struct __impl
         {
@@ -58,7 +59,7 @@ namespace std
 
 namespace tempest
 {
-    struct source_location
+    struct TEMPEST_API source_location
     {
       public:
 #if defined(_MSC_VER)

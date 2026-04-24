@@ -17,6 +17,14 @@ scoped.project('math', function()
     }
 
     scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
+    scoped.filter({
         'toolset:msc*'
     }, function()
         buildoptions {
@@ -26,9 +34,15 @@ scoped.project('math', function()
 
     warnings 'Extra'
 
-    scoped.usage("math:includedirs", function()
+    scoped.usage('math:includedirs', function()
         externalincludedirs {
             '%{root}/engine/runtime/math/include',
+        }
+    end)
+
+    scoped.usage('PUBLIC', function()
+        uses {
+            'api',
         }
     end)
 
@@ -66,7 +80,7 @@ scoped.group('Tests', function()
 
         uses {
             'googletest',
-            'math',
+            'tempest',
         }
 
         warnings 'Extra'

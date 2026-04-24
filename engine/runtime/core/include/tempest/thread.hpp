@@ -1,6 +1,7 @@
 #ifndef tempest_core_thread_hpp
 #define tempest_core_thread_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/compare.hpp>
 #include <tempest/int.hpp>
@@ -32,7 +33,7 @@ namespace tempest
         using thread_handle = uint32_t;
         using native_handle_type = void*;
 
-        struct thread_id
+        struct TEMPEST_API thread_id
         {
             void* handle;
             thread_handle id;
@@ -43,7 +44,7 @@ namespace tempest
 #endif
     } // namespace detail
 
-    class thread
+    class TEMPEST_API thread
     {
       public:
         using native_handle_type = detail::native_handle_type;
@@ -181,11 +182,11 @@ namespace tempest
 
     namespace this_thread
     {
-        thread::id get_id() noexcept;
-        void yield() noexcept;
+        TEMPEST_API thread::id get_id() noexcept;
+        TEMPEST_API void yield() noexcept;
     }; // namespace this_thread
 
-    class thread::id
+    class TEMPEST_API thread::id
     {
       public:
         id() noexcept = default;

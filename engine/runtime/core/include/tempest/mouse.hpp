@@ -1,6 +1,7 @@
 #ifndef tempest_core_mouse_hpp
 #define tempest_core_mouse_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/int.hpp>
 #include <tempest/type_traits.hpp>
@@ -29,13 +30,13 @@ namespace tempest::core
         release,
     };
 
-    struct mouse_button_state
+    struct TEMPEST_API mouse_button_state
     {
         mouse_button button;
         mouse_action action;
     };
 
-    class mouse
+    class TEMPEST_API mouse
     {
       public:
         void set(mouse_button_state state)

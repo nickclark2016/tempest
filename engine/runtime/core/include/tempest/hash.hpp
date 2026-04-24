@@ -1,6 +1,7 @@
 #ifndef tempest_core_hash_hpp
 #define tempest_core_hash_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/int.hpp>
 
@@ -12,6 +13,7 @@ namespace tempest
         ///        the splitmix64 hashing mechanism.
         /// @param v Value to hash
         /// @return Hashed value
+        TEMPEST_API
         inline int64_t i64_hash(int64_t v) noexcept
         {
             v = (v ^ (v >> 30)) * 0xbf58476d1ce4e5b9;
@@ -24,6 +26,7 @@ namespace tempest
         ///        from the splitmix64 hashing mechanism.
         /// @param v Value to hash
         /// @return Hashed value
+        TEMPEST_API
         inline uint64_t u64_hash(uint64_t v) noexcept
         {
             v = (v ^ (v >> 30)) * 0xbf58476d1ce4e5b9;
@@ -32,6 +35,7 @@ namespace tempest
             return v;
         }
 
+        TEMPEST_API
         inline int64_t i8_hash(int8_t v) noexcept
         {
             auto full_hash = i64_hash(v);
@@ -41,6 +45,7 @@ namespace tempest
             return masked_hash | shifted_input;
         }
 
+        TEMPEST_API
         inline uint64_t u8_hash(uint8_t v) noexcept
         {
             auto full_hash = u64_hash(v);
@@ -50,21 +55,25 @@ namespace tempest
             return masked_hash | shifted_input;
         }
 
+        TEMPEST_API
         inline int64_t i16_hash(int16_t v) noexcept
         {
             return i64_hash(v);
         }
 
+        TEMPEST_API
         inline uint64_t u16_hash(uint16_t v) noexcept
         {
             return u64_hash(v);
         }
 
+        TEMPEST_API
         inline int64_t i32_hash(int32_t v) noexcept
         {
             return i64_hash(v);
         }
 
+        TEMPEST_API
         inline uint64_t u32_hash(uint32_t v) noexcept
         {
             return u64_hash(v);

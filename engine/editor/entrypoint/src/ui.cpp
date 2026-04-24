@@ -2,6 +2,7 @@
 
 #include <tempest/enum.hpp>
 #include <tempest/frame_graph.hpp>
+#include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
 
 #include <tempest/tuple.hpp>
@@ -11,6 +12,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <tempest/vector.hpp>
 
 namespace tempest::editor::ui
 {

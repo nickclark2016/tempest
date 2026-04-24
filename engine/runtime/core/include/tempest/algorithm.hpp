@@ -1,6 +1,7 @@
 #ifndef tempest_core_algorithm_hpp
 #define tempest_core_algorithm_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/compare.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/iterator.hpp>
@@ -91,6 +92,7 @@ namespace tempest
 
     namespace detail
     {
+        TEMPEST_API
         void copy_bytes(const void* src, void* dest, size_t count);
     }
 

@@ -1,6 +1,7 @@
 #ifndef tempest_core_material_hpp
 #define tempest_core_material_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/guid.hpp>
@@ -13,7 +14,7 @@
 
 namespace tempest::core
 {
-    class material
+    class TEMPEST_API material
     {
       public:
         static constexpr string_view base_color_factor_name = "t__base_color_factor";
@@ -67,7 +68,7 @@ namespace tempest::core
         flat_unordered_map<string, string> _strings;
     };
 
-    class material_registry
+    class TEMPEST_API material_registry
     {
       public:
         material_registry() = default;
@@ -91,7 +92,7 @@ namespace tempest::core
         flat_unordered_map<guid, material> _materials;
     };
 
-    struct material_component
+    struct TEMPEST_API material_component
     {
         guid material_id;
     };

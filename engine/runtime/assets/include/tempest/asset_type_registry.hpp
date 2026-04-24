@@ -1,6 +1,7 @@
 #ifndef tempest_assets_asset_type_registry_hpp
 #define tempest_assets_asset_type_registry_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
@@ -20,7 +21,7 @@ namespace tempest::assets
     using asset_deserializer_fn = function<bool(span<const byte>, const guid&, asset_database&)>;
     using asset_serializer_fn = function<bool(const guid&, const asset_database&, vector<byte>&)>;
 
-    struct type_entry
+    struct TEMPEST_API type_entry
     {
         asset_type_id id;
         string canonical_name;
@@ -28,7 +29,7 @@ namespace tempest::assets
         asset_serializer_fn serializer;
     };
 
-    class asset_type_registry
+    class TEMPEST_API asset_type_registry
     {
       public:
         asset_type_registry() = default;

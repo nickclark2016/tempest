@@ -1,6 +1,7 @@
 #ifndef tempest_core_functional_hpp
 #define tempest_core_functional_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/invoke.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/meta.hpp>
@@ -210,7 +211,7 @@ namespace tempest
             DESTROY_FUNCTOR,
         };
 
-        class function_base
+        class TEMPEST_API function_base
         {
           public:
             static constexpr size_t max_size = sizeof(non_copyable_types);

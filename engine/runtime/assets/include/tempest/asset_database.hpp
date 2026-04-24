@@ -1,6 +1,7 @@
 #ifndef tempest_assets_asset_database_hpp
 #define tempest_assets_asset_database_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
 #include <tempest/asset_importer.hpp>
@@ -18,27 +19,27 @@
 
 namespace tempest::assets
 {
-    struct prefab_tag_t
+    struct TEMPEST_API prefab_tag_t
     {
     };
 
     inline constexpr prefab_tag_t prefab_tag{};
 
-    struct content_hash
+    struct TEMPEST_API content_hash
     {
         static constexpr size_t hash_size = 32;
 
         array<byte, hash_size> data{};
     };
 
-    struct source_entry
+    struct TEMPEST_API source_entry
     {
         guid id;
         string source_path;
         content_hash source_hash;
     };
 
-    struct asset_entry
+    struct TEMPEST_API asset_entry
     {
         guid id;
         asset_type_id type;
@@ -49,7 +50,7 @@ namespace tempest::assets
         flat_unordered_map<string, string> user_metadata;
     };
 
-    struct import_result
+    struct TEMPEST_API import_result
     {
         ecs::archetype_entity root_entity;
         vector<guid> produced_assets;
@@ -57,7 +58,7 @@ namespace tempest::assets
 
     /// Callbacks for serializing/deserializing a single trivial ECS component
     /// to/from the entity hierarchy blob.
-    struct component_serializer
+    struct TEMPEST_API component_serializer
     {
         size_t type_hash;
         size_t component_size;
@@ -73,10 +74,10 @@ namespace tempest::assets
             deserialize;
     };
 
-    class asset_database
+    class TEMPEST_API asset_database
     {
       public:
-        struct asset_metadata
+        struct TEMPEST_API asset_metadata
         {
             string path;
             flat_unordered_map<string, string> metadata;
@@ -191,7 +192,7 @@ namespace tempest::assets
         _component_serializers.push_back(tempest::move(serializer));
     }
 
-    struct asset_metadata_component
+    struct TEMPEST_API asset_metadata_component
     {
         guid metadata_id;
     };

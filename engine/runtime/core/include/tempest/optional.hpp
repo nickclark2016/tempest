@@ -1,13 +1,14 @@
 #ifndef tempest_core_optional_hpp
 #define tempest_core_optional_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/type_traits.hpp>
 
 namespace tempest
 {
-    struct nullopt_t
+    struct TEMPEST_API nullopt_t
     {
         explicit constexpr nullopt_t() noexcept = default;
     };

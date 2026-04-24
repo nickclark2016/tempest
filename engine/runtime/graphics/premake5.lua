@@ -24,13 +24,26 @@ scoped.project('graphics', function()
 
     uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan', 'rhi-vk' }
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
     scoped.usage("PUBLIC", function()
         uses {
+            'api',
             'core',
             'ecs',
             'logger',
             'math',
             'rhi-api',
+        }
+
+        links {
+            'rhi-vk',
         }
     end)
 
@@ -142,10 +155,8 @@ scoped.group('Tests', function()
         }
 
         uses {
-            'graphics',
-            'glfw',
+            'tempest',
             'googletest',
-            'tlsf',
         }
 
         linkgroups 'On'

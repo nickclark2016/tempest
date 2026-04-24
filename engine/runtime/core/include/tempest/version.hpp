@@ -1,11 +1,12 @@
 #ifndef tempest_version_hpp
 #define tempest_version_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 
 namespace tempest::core
 {
-    struct version
+    struct TEMPEST_API version
     {
         int32_t major;
         int32_t minor;

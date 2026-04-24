@@ -17,8 +17,17 @@ scoped.group('RHI', function()
             'include',
         }
 
+        scoped.filter({
+            'options:shared-engine',
+        }, function()
+            defines {
+                'TEMPEST_API_EXPORT'
+            }
+        end)
+
         scoped.usage('PUBLIC', function()
             uses {
+                'api',
                 'core'
             }
         end)

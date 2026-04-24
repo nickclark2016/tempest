@@ -1,6 +1,7 @@
 #ifndef tempest_rhi_rhi_types_hpp
 #define tempest_rhi_rhi_types_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/int.hpp>
@@ -86,7 +87,7 @@ namespace tempest::rhi
         return id != numeric_limits<uint32_t>::max() && generation != numeric_limits<uint32_t>::max();
     }
 
-    struct null_handle_t
+    struct TEMPEST_API null_handle_t
     {
         template <rhi_handle_type T>
         constexpr operator typed_rhi_handle<T>() const noexcept
@@ -97,7 +98,7 @@ namespace tempest::rhi
 
     inline constexpr null_handle_t null_handle{};
 
-    struct rhi_device_description
+    struct TEMPEST_API rhi_device_description
     {
         uint32_t device_index;
         string device_name;
@@ -281,7 +282,7 @@ namespace tempest::rhi
         sequential,
     };
 
-    struct buffer_desc
+    struct TEMPEST_API buffer_desc
     {
         size_t size;
         memory_location location;
@@ -291,7 +292,7 @@ namespace tempest::rhi
         string name;
     };
 
-    struct image_desc
+    struct TEMPEST_API image_desc
     {
         image_format format;
         image_type type;
@@ -340,7 +341,7 @@ namespace tempest::rhi
         always,
     };
 
-    struct sampler_desc
+    struct TEMPEST_API sampler_desc
     {
         filter mag;
         filter min;
@@ -356,7 +357,7 @@ namespace tempest::rhi
         string name;
     };
 
-    struct fence_info
+    struct TEMPEST_API fence_info
     {
         bool signaled;
     };
@@ -367,7 +368,7 @@ namespace tempest::rhi
         timeline,
     };
 
-    struct semaphore_info
+    struct TEMPEST_API semaphore_info
     {
         semaphore_type type;
         uint64_t initial_value;
@@ -407,13 +408,13 @@ namespace tempest::rhi
         fifo_relaxed,
     };
 
-    struct render_surface_format
+    struct TEMPEST_API render_surface_format
     {
         color_space space;
         image_format format;
     };
 
-    struct render_surface_info
+    struct TEMPEST_API render_surface_info
     {
         vector<present_mode> present_modes;
         vector<render_surface_format> formats;
@@ -427,7 +428,7 @@ namespace tempest::rhi
         enum_mask<image_usage> supported_usages;
     };
 
-    struct render_surface_desc
+    struct TEMPEST_API render_surface_desc
     {
         const window_surface* window;
         uint32_t min_image_count;
@@ -438,7 +439,7 @@ namespace tempest::rhi
         uint32_t layers;
     };
 
-    struct window_surface_desc
+    struct TEMPEST_API window_surface_desc
     {
         uint32_t width;
         uint32_t height;
@@ -454,7 +455,7 @@ namespace tempest::rhi
         invalid_swapchain_argument,
     };
 
-    struct swapchain_image_acquire_info_result
+    struct TEMPEST_API swapchain_image_acquire_info_result
     {
         typed_rhi_handle<rhi_handle_type::semaphore> acquire_sem;
         typed_rhi_handle<rhi_handle_type::semaphore> render_complete_sem;
@@ -549,7 +550,7 @@ namespace tempest::rhi
         variable_length = 0x02,
     };
 
-    struct descriptor_binding_layout
+    struct TEMPEST_API descriptor_binding_layout
     {
         uint32_t binding_index;
         descriptor_type type;
@@ -579,14 +580,14 @@ namespace tempest::rhi
         descriptor_buffer = 0x2,
     };
 
-    struct push_constant_range
+    struct TEMPEST_API push_constant_range
     {
         uint32_t offset;
         uint32_t range;
         enum_mask<shader_stage> stages;
     };
 
-    struct pipeline_layout_desc
+    struct TEMPEST_API pipeline_layout_desc
     {
         vector<typed_rhi_handle<rhi_handle_type::descriptor_set_layout>> descriptor_set_layouts;
         vector<push_constant_range> push_constants;
@@ -624,12 +625,12 @@ namespace tempest::rhi
         uint32,
     };
 
-    struct input_assembly_desc
+    struct TEMPEST_API input_assembly_desc
     {
         primitive_topology topology;
     };
 
-    struct tessellation_desc
+    struct TEMPEST_API tessellation_desc
     {
         uint32_t patch_control_points;
     };
@@ -654,14 +655,14 @@ namespace tempest::rhi
         counter_clockwise,
     };
 
-    struct depth_bias
+    struct TEMPEST_API depth_bias
     {
         float constant_factor;
         float clamp;
         float slope_factor;
     };
 
-    struct rasterization_state
+    struct TEMPEST_API rasterization_state
     {
         bool depth_clamp_enable;
         bool rasterizer_discard_enable;
@@ -672,13 +673,13 @@ namespace tempest::rhi
         float line_width;
     };
 
-    struct sample_shading
+    struct TEMPEST_API sample_shading
     {
         float min_sample_shading;
         vector<uint32_t> sample_mask;
     };
 
-    struct multisample_state
+    struct TEMPEST_API multisample_state
     {
         image_sample_count sample_count;
         optional<sample_shading> sample_shading;
@@ -698,7 +699,7 @@ namespace tempest::rhi
         decrement_and_wrap,
     };
 
-    struct stencil_op_state
+    struct TEMPEST_API stencil_op_state
     {
         stencil_op fail_op;
         stencil_op pass_op;
@@ -709,7 +710,7 @@ namespace tempest::rhi
         uint32_t reference;
     };
 
-    struct depth_test
+    struct TEMPEST_API depth_test
     {
         bool write_enable;
         compare_op compare_op;
@@ -718,13 +719,13 @@ namespace tempest::rhi
         float max_depth_bounds;
     };
 
-    struct stencil_test
+    struct TEMPEST_API stencil_test
     {
         stencil_op_state front;
         stencil_op_state back;
     };
 
-    struct depth_stencil_state
+    struct TEMPEST_API depth_stencil_state
     {
         optional<depth_test> depth;
         optional<stencil_test> stencil;
@@ -757,7 +758,7 @@ namespace tempest::rhi
         max,
     };
 
-    struct color_blend_attachment
+    struct TEMPEST_API color_blend_attachment
     {
         bool blend_enable;
         blend_factor src_color_blend_factor;
@@ -768,7 +769,7 @@ namespace tempest::rhi
         blend_op alpha_blend_op;
     };
 
-    struct color_blend_state
+    struct TEMPEST_API color_blend_state
     {
         vector<color_blend_attachment> attachments;
         array<float, 4> blend_constants;
@@ -780,14 +781,14 @@ namespace tempest::rhi
         instance,
     };
 
-    struct vertex_binding_desc
+    struct TEMPEST_API vertex_binding_desc
     {
         uint32_t binding_index;
         uint32_t stride;
         vertex_input_rate input_rate;
     };
 
-    struct vertex_attribute_desc
+    struct TEMPEST_API vertex_attribute_desc
     {
         uint32_t binding_index;
         uint32_t location_index;
@@ -795,13 +796,13 @@ namespace tempest::rhi
         uint32_t offset;
     };
 
-    struct vertex_input_desc
+    struct TEMPEST_API vertex_input_desc
     {
         vector<vertex_binding_desc> bindings;
         vector<vertex_attribute_desc> attributes;
     };
 
-    struct graphics_pipeline_desc
+    struct TEMPEST_API graphics_pipeline_desc
     {
         vector<image_format> color_attachment_formats;
         optional<image_format> depth_attachment_format;
@@ -826,14 +827,14 @@ namespace tempest::rhi
         string name;
     };
 
-    struct compute_pipeline_desc
+    struct TEMPEST_API compute_pipeline_desc
     {
         vector<byte> compute_shader;
         typed_rhi_handle<rhi_handle_type::pipeline_layout> layout;
         string name;
     };
 
-    struct buffer_binding_descriptor
+    struct TEMPEST_API buffer_binding_descriptor
     {
         uint32_t index;
         descriptor_type type;
@@ -842,14 +843,14 @@ namespace tempest::rhi
         typed_rhi_handle<rhi_handle_type::buffer> buffer;
     };
 
-    struct image_binding_info
+    struct TEMPEST_API image_binding_info
     {
         typed_rhi_handle<rhi_handle_type::image> image;
         typed_rhi_handle<rhi_handle_type::sampler> sampler;
         image_layout layout;
     };
 
-    struct image_binding_descriptor
+    struct TEMPEST_API image_binding_descriptor
     {
         uint32_t index;
         descriptor_type type;
@@ -857,13 +858,13 @@ namespace tempest::rhi
         vector<image_binding_info> images;
     };
 
-    struct sampler_binding_descriptor
+    struct TEMPEST_API sampler_binding_descriptor
     {
         uint32_t index;
         vector<typed_rhi_handle<rhi_handle_type::sampler>> samplers;
     };
 
-    struct descriptor_set_desc
+    struct TEMPEST_API descriptor_set_desc
     {
         typed_rhi_handle<rhi_handle_type::descriptor_set_layout> layout;
         vector<buffer_binding_descriptor> buffers;

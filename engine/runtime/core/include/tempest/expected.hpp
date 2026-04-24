@@ -1,6 +1,7 @@
 #ifndef tempest_core_expected_hpp
 #define tempest_core_expected_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/type_traits.hpp>
 
@@ -12,7 +13,7 @@ namespace tempest
         T value;
     };
 
-    struct unexpect_t
+    struct TEMPEST_API unexpect_t
     {
         explicit unexpect_t() = default;
     };

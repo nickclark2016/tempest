@@ -1,6 +1,8 @@
 #ifndef tempest_math_math_utils_hpp__
 #define tempest_math_math_utils_hpp__
 
+#include <tempest/api.hpp>
+
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -90,11 +92,13 @@ namespace tempest::math
         return x + y - remainder;
     }
 
+    TEMPEST_API
     inline uint64_t pack_uint32x2(uint32_t x, uint32_t y)
     {
         return (static_cast<uint64_t>(x) << 32) | static_cast<uint64_t>(y);
     }
 
+    TEMPEST_API
     inline void unpack_uint32x2(uint64_t packed, uint32_t& x, uint32_t& y)
     {
         x = static_cast<uint32_t>(packed >> 32);

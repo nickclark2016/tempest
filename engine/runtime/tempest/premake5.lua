@@ -1,5 +1,16 @@
 scoped.project('tempest', function()
-    kind 'StaticLib'
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        kind 'SharedLib'
+    end)
+
+    scoped.filter({
+        'not options:shared-engine',
+    }, function()
+        kind 'StaticLib'
+    end)
+
     language 'C++'
     cppdialect 'C++20'
 
@@ -19,8 +30,43 @@ scoped.project('tempest', function()
         'include'
     }
 
+        scoped.filter({
+        'toolset:clang',
+        'system:windows',
+        'action:not vs*',
+        'configurations:Debug',
+        'kind:ConsoleApp or SharedLib or WindowedApp'
+    }, function()
+        linkoptions {
+            '-dll_dbg',
+            '-Xlinker /NODEFAULTLIB:libcmt'
+        }
+
+        links {
+            "libcmtd"
+        }
+    end)
+
+    scoped.filter({
+        'toolset:clang',
+        'system:windows',
+        'action:not vs*',
+        'configurations:RelWithDebugInfo or Release',
+        'kind:ConsoleApp or SharedLib or WindowedApp'
+    }, function()
+        linkoptions {
+            '-dll',
+            '-Xlinker /NODEFAULTLIB:libcmt'
+        }
+
+        links {
+            "libcmtd"
+        }
+    end)
+
     scoped.usage("PRIVATE", function()
         uses {
+            'api',
             'assets',
             'core',
             'ecs',
@@ -34,12 +80,56 @@ scoped.project('tempest', function()
         }
     end)
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_API_EXPORT'
+        }
+    end)
+
+    scoped.filter({
+        'toolset:clang',
+        'system:windows',
+    }, function()
+        linkoptions {
+            '-Wl,/implib:%{binaries}/tempest.lib'
+        }
+    end)
+
+    scoped.filter({
+        'toolset:clang*',
+    }, function()
+        linker 'lld'
+        
+        wholearchive {
+            'assets',
+            'core',
+            'ecs',
+            'event',
+            'graphics',
+            'logger',
+            'math',
+            'rhi-api',
+            'rhi-vk',
+            'serialization',
+
+            'miniz',
+            'simdjson',
+            'tinyexr',
+            'tlsf',
+            'vk-bootstrap',
+            'vma',
+        }
+    end)
+
     scoped.usage("INTERFACE", function()
         externalincludedirs {
             '%{root}/engine/runtime/tempest/include',
         }
 
         uses {
+            'api:includedirs',
             'assets:includedirs',
             'core:defines',
             'core:includedirs',
@@ -118,33 +208,6 @@ scoped.project('tempest', function()
             'options:enable-lto'
         }, function()
             linktimeoptimization 'On'
-        end)
-
-        scoped.filter({
-            'options:enable-lto',
-            'toolset:clang*',
-        }, function()
-            linker 'lld'
-            
-            wholearchive {
-                'assets',
-                'core',
-                'ecs',
-                'event',
-                'graphics',
-                'logger',
-                'math',
-                'rhi-api',
-                'rhi-vk',
-                'serialization',
-
-                'miniz',
-                'simdjson',
-                'tinyexr',
-                'tlsf',
-                'vk-bootstrap',
-                'vma',
-            }
         end)
     end)
 

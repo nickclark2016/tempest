@@ -1,6 +1,7 @@
 #ifndef tempest_rhi_rhi_hpp
 #define tempest_rhi_rhi_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/rhi_types.hpp>
 
 #include <tempest/enum.hpp>
@@ -15,7 +16,7 @@
 
 namespace tempest::rhi
 {
-    class instance
+    class TEMPEST_API instance
     {
       public:
         instance(const instance&) = delete;
@@ -32,7 +33,7 @@ namespace tempest::rhi
         instance() = default;
     };
 
-    class device
+    class TEMPEST_API device
     {
       public:
         device(const device&) = delete;
@@ -136,7 +137,7 @@ namespace tempest::rhi
         device() = default;
     };
 
-    class work_queue
+    class TEMPEST_API work_queue
     {
       public:
         struct semaphore_submit_info
@@ -188,7 +189,7 @@ namespace tempest::rhi
         virtual vector<present_result> present(const present_info& info) noexcept = 0;
 
         // Commands
-        struct image_barrier
+        struct TEMPEST_API image_barrier
         {
             typed_rhi_handle<rhi_handle_type::image> image;
             image_layout old_layout;
@@ -201,7 +202,7 @@ namespace tempest::rhi
             work_queue* dst_queue = nullptr;
         };
 
-        struct buffer_barrier
+        struct TEMPEST_API buffer_barrier
         {
             typed_rhi_handle<rhi_handle_type::buffer> buffer;
             enum_mask<pipeline_stage> src_stages;
@@ -228,7 +229,7 @@ namespace tempest::rhi
             none,
         };
 
-        struct color_attachment_info
+        struct TEMPEST_API color_attachment_info
         {
             typed_rhi_handle<rhi_handle_type::image> image;
             image_layout layout;
@@ -237,7 +238,7 @@ namespace tempest::rhi
             store_op store_op;
         };
 
-        struct depth_attachment_info
+        struct TEMPEST_API depth_attachment_info
         {
             typed_rhi_handle<rhi_handle_type::image> image;
             image_layout layout;
@@ -246,7 +247,7 @@ namespace tempest::rhi
             store_op store_op;
         };
 
-        struct stencil_attachment_info
+        struct TEMPEST_API stencil_attachment_info
         {
             typed_rhi_handle<rhi_handle_type::image> image;
             image_layout layout;
@@ -255,7 +256,7 @@ namespace tempest::rhi
             store_op store_op;
         };
 
-        struct render_pass_info
+        struct TEMPEST_API render_pass_info
         {
             vector<color_attachment_info> color_attachments;
             optional<depth_attachment_info> depth_attachment;
@@ -392,7 +393,7 @@ namespace tempest::rhi
         work_queue() = default;
     };
 
-    class window_surface
+    class TEMPEST_API window_surface
     {
       public:
         enum class cursor_shape
@@ -405,7 +406,7 @@ namespace tempest::rhi
             resize_vertical,
         };
 
-        struct video_mode
+        struct TEMPEST_API video_mode
         {
             uint32_t width;
             uint32_t height;
@@ -415,7 +416,7 @@ namespace tempest::rhi
             uint8_t blue_bits;
         };
 
-        struct monitor
+        struct TEMPEST_API monitor
         {
             int32_t work_x;
             int32_t work_y;
@@ -478,7 +479,7 @@ namespace tempest::rhi
         virtual void set_cursor_shape(cursor_shape shape) noexcept = 0;
 
         // Monitor management
-        virtual vector<monitor> get_monitors() const noexcept = 0;
+        virtual span<const monitor> get_monitors() const noexcept = 0;
 
       protected:
         window_surface() = default;

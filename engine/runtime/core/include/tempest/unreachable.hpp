@@ -1,11 +1,13 @@
 #ifndef tempest_core_unreachable_hpp
 #define tempest_core_unreachable_hpp
 
+#include <tempest/api.hpp>
+
 namespace tempest
 {
-    [[noreturn]] void abort() noexcept;
+    [[noreturn]] TEMPEST_API void abort() noexcept;
 
-    [[noreturn]] inline void unreachable()
+    [[noreturn]] TEMPEST_API inline void unreachable()
     {
 #ifdef _DEBUG
         abort();

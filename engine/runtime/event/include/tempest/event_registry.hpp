@@ -29,6 +29,7 @@
 ///
 /// Non-copyable, non-moveable: destroying the registry destroys all owned dispatchers.
 
+#include <tempest/api.hpp>
 #include <tempest/event_dispatcher.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/mutex.hpp>
@@ -37,7 +38,7 @@
 namespace tempest::event
 {
     /// @brief Owns one event_dispatcher<T> per event type, created on first access.
-    class event_registry
+    class TEMPEST_API event_registry
     {
       public:
         event_registry() noexcept = default;
