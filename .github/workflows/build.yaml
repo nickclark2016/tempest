@@ -31,7 +31,7 @@ jobs:
         with:
           ref: master
       - name: Generate Project Files
-        run: premake5 ninja --cc=clang --shell=posix
+        run: premake5 ninja --cc=clang --shell=posix --shared-engine
       - name: Fetch Dependencies
         run: premake5 fetch
       - name: Build
@@ -60,7 +60,7 @@ jobs:
         with:
           ref: master
       - name: Generate Project Files
-        run: premake5 ${{ case(matrix.os == 'windows-2022', 'vs2022', 'vs2026') }}
+        run: premake5 ${{ case(matrix.os == 'windows-2022', 'vs2022', 'vs2026') }} --shared-engine
       - name: Fetch Dependencies
         run: premake5 fetch
       - name: Build
