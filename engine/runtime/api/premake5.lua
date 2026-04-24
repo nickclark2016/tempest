@@ -14,14 +14,6 @@ scoped.project('api', function()
         'include',
     }
 
-    uses {
-        'core',
-        'ecs',
-        'logger',
-        'math',
-        'serialization',
-    }
-
     scoped.usage('api:includedirs', function()
         externalincludedirs {
             '%{root}/engine/runtime/api/include',
