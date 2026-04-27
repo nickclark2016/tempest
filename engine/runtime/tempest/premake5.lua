@@ -123,6 +123,16 @@ scoped.project('tempest', function()
         }
     end)
 
+    scoped.filter({
+        'toolset:clang',
+        'system:linux',
+    }, function()
+        -- Workaround a bug in Premake where the wholearchive option double-applies linked libraries
+        linkoptions {
+            '-Wl,--allow-multiple-definition'
+        }
+    end)
+
     scoped.usage("INTERFACE", function()
         externalincludedirs {
             '%{root}/engine/runtime/tempest/include',
