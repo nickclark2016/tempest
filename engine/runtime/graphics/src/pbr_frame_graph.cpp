@@ -5972,7 +5972,7 @@ namespace tempest::graphics
         {
             // Compute cascade split depth using logarithmic/uniform split scheme
             const auto p = static_cast<float>(cascade_index + 1) / shadow_comp.cascade_count;
-            const auto log_split = cam.near_plane * std::powf(clip_ratio, p);
+            const auto log_split = cam.near_plane * std::pow(clip_ratio, p);
             const auto uniform = cam.near_plane + clip_range * p;
             const auto depth = shadow_comp.split_lambda * (log_split - uniform) + uniform;
 

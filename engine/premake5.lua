@@ -1,4 +1,20 @@
 scoped.group('Engine', function()
+    scoped.filter({
+        'system:windows',
+    }, function()
+        defines {
+            'TEMPEST_PLATFORM_WINDOWS',
+        }
+    end)
+
+    scoped.filter({
+        'system:linux',
+    }, function()
+        defines {
+            'TEMPEST_PLATFORM_LINUX',
+        }
+    end)
+
     include 'editor/premake5.lua'
     include 'runtime/premake5.lua'
 end)
