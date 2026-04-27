@@ -63,6 +63,27 @@ namespace tempest
 
             return handle;
         }
+
+        auto load_function(HMODULE lib_handle, string_view function_name) -> expected<void*, shared_library::function_error>
+        {
+            const auto existing_error = GetLastError();
+            SetLastError(ERROR_SUCCESS);
+
+            auto* const func_handle = GetProcAddress(lib_handle, function_name.data());
+            if (func_handle == nullptr)
+            {
+                const auto load_error = GetLastError();
+                const auto error_code = load_error == ERROR_PROC_NOT_FOUND
+                                            ? shared_library::function_error::function_not_found
+                                            : shared_library::function_error::unknown_error;
+
+                SetLastError(existing_error);
+                return unexpected(error_code);
+            }
+
+            SetLastError(existing_error);
+            return func_handle;
+        }
     } // namespace
 #elif defined(TEMPEST_PLATFORM_LINUX) || defined(TEMPEST_PLATFORM_MACOS)
     struct shared_library::_impl
@@ -115,6 +136,32 @@ namespace tempest
 
             return handle;
         }
+
+        auto load_function(void* lib_handle, string_view function_name) -> expected<void*, shared_library::function_error>
+        {
+            dlerror(); // Clear any existing error
+
+            auto* const func_handle = dlsym(lib_handle, function_name.data());
+            if (func_handle == nullptr)
+            {
+                const auto* error_msg = dlerror();
+                shared_library::function_error error_code = shared_library::function_error::unknown_error;
+
+                if (error_msg != nullptr)
+                {
+                    auto error_view = string_view(error_msg);
+                    if (search(error_view, "undefined symbol") != error_view.end() ||
+                        search(error_view, "symbol not found") != error_view.end())
+                    {
+                        error_code = shared_library::function_error::function_not_found;
+                    }
+                }
+
+                return unexpected(error_code);
+            }
+
+            return func_handle;
+        }
     }
 #endif
     shared_library::~shared_library()
@@ -127,6 +174,11 @@ namespace tempest
             dlclose(_pimpl->handle);
 #endif
         }
+    }
+    
+    expected<void*, shared_library::function_error> shared_library::_get_raw_function_handle(string_view function_name) const noexcept
+    {
+        return load_function(_pimpl->handle, function_name);
     }
 
     expected<shared_library, shared_library::load_error> shared_library::load(const filesystem::path& library_path) noexcept

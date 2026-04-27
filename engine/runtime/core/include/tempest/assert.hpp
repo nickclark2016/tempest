@@ -8,7 +8,7 @@
 
 namespace tempest::assertion::detail
 {
-    inline void do_basic_assrtt(bool expr, [[maybe_unused]] const source_location& loc,
+    inline void do_basic_assert(bool expr, [[maybe_unused]] const source_location& loc,
                                 [[maybe_unused]] const char* expression)
     {
         if (!expr)
@@ -19,7 +19,7 @@ namespace tempest::assertion::detail
 } // namespace tempest::assertion::detail
 
 #define TEMPEST_ASSERT(expr)                                                                                           \
-    tempest::assertion::detail::do_basic_assrtt((expr), tempest::source_location::current(), #expr)
+    tempest::assertion::detail::do_basic_assert((expr), tempest::source_location::current(), #expr)
 
 #else
 
