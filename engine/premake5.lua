@@ -15,6 +15,12 @@ scoped.group('Engine', function()
         }
     end)
 
+    scoped.filter({
+        'kind:StaticLib or SharedLib',
+    }, function()
+       pic 'On' 
+    end)
+
     include 'editor/premake5.lua'
     include 'runtime/premake5.lua'
 end)

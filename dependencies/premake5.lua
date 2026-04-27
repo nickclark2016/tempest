@@ -12,6 +12,12 @@ scoped.group('Vendor', function()
     include 'vma'
     include 'vulkan'
 
+    scoped.filter({
+        'kind:StaticLib or SharedLib',
+    }, function()
+       pic 'On' 
+    end)
+
     if _OPTIONS['enable-aftermath'] then
         include 'aftermath-premake5.lua'
     end
