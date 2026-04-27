@@ -72,7 +72,7 @@ namespace tempest
 
     namespace
     {
-        auto load_library(const filesystem::path& lib_path) -> expected<void*, shared_library::error_code>
+        auto load_library(const filesystem::path& lib_path) -> expected<void*, shared_library::load_error>
         {
             if (!filesystem::exists(lib_path))
             {
@@ -90,21 +90,21 @@ namespace tempest
                 if (error_msg != nullptr)
                 {
                     auto error_view = string_view(error_msg);
-                    if (error_view.search("No such file") != error_view.end())
+                    if (search(error_view, "No such file") != error_view.end())
                     {
                         error_code = shared_library::load_error::file_not_found;
                     }
-                    else if (error_view.search("Permission denied") != error_view.end())
+                    else if (search(error_view, "Permission denied") != error_view.end())
                     {
                         error_code = shared_library::load_error::invalid_permissions;
                     }
-                    else if (error_view.search("invalid ELF header") != error_view.end() ||
-                             error_view.search("mach-o") != error_view.end())
+                    else if (search(error_view, "invalid ELF header") != error_view.end() ||
+                             search(error_view, "mach-o") != error_view.end())
                     {
                         error_code = shared_library::load_error::invalid_shared_library;
                     }
-                    else if (error_view.search("undefined symbol") != error_view.end() ||
-                             error_view.search("symbol not found") != error_view.end())
+                    else if (search(error_view, "undefined symbol") != error_view.end() ||
+                             search(error_view, "symbol not found") != error_view.end())
                     {
                         error_code = shared_library::load_error::missing_dependency;
                     }

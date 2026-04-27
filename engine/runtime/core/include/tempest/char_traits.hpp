@@ -401,7 +401,7 @@ namespace tempest
             for (size_t i = 0; i < size; ++i)
             {
                 auto index = Traits::to_int_type(str[i]) - Traits::to_int_type(min_val);
-                if (index >= 0 && index < table.size())
+                if (index >= 0 && index < static_cast<ptrdiff_t>(table.size()))
                 {
                     table[Traits::to_int_type(str[i]) - Traits::to_int_type(min_val)] =
                         static_cast<Traits::int_type>(i);
