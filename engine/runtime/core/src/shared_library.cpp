@@ -82,7 +82,7 @@ namespace tempest
             }
 
             SetLastError(existing_error);
-            return func_handle;
+            return reinterpret_cast<void*>(func_handle);
         }
     } // namespace
 #elif defined(TEMPEST_PLATFORM_LINUX) || defined(TEMPEST_PLATFORM_MACOS)

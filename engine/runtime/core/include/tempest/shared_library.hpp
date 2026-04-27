@@ -31,8 +31,7 @@ namespace tempest
         };
 
         [[nodiscard]]
-        TEMPEST_API static auto load(const filesystem::path& library_path) noexcept
-            -> expected<shared_library, load_error>;
+        static auto load(const filesystem::path& library_path) noexcept -> expected<shared_library, load_error>;
 
         shared_library(const shared_library&) = delete;
         shared_library(shared_library&&) noexcept = default;
@@ -42,7 +41,8 @@ namespace tempest
         shared_library& operator=(shared_library&&) noexcept = default;
 
         template <typename R, typename... Args>
-        [[nodiscard]] auto get_function_handle(string_view function_name) const noexcept -> expected<function_ref<R(Args...)>, function_error>
+        [[nodiscard]] auto get_function_handle(string_view function_name) const noexcept
+            -> expected<function_ref<R(Args...)>, function_error>
         {
             auto result = _get_raw_function_handle(function_name);
             if (!result)
@@ -50,7 +50,7 @@ namespace tempest
                 return unexpected(result.error());
             }
 
-            return function_ref<R(Args...)>(reinterpret_cast<R(*)(Args...)>(result.value()));
+            return function_ref<R(Args...)>(reinterpret_cast<R (*)(Args...)>(result.value()));
         }
 
       private:
