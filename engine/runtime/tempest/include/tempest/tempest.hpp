@@ -64,6 +64,16 @@ namespace tempest
 
         ecs::archetype_entity load_entity(ecs::archetype_entity src);
 
+        [[nodiscard]] auto get_logger() noexcept -> logger&
+        {
+            return _logger;
+        }
+
+        [[nodiscard]] auto get_logger() const noexcept -> const logger&
+        {
+            return _logger;
+        }
+
       private:
         vector<unique_ptr<log_sink>> _log_sinks;
         logger _logger;

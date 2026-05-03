@@ -29,6 +29,7 @@ scoped.project('core', function()
         'system:linux'
     }, function()
         links {
+            'dl',
             'pthread',
         }
     end)

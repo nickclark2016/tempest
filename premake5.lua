@@ -196,6 +196,7 @@ scoped.workspace('Tempest', function()
 
     include 'dependencies'
     include 'engine'
+    include 'game'
     include 'sandbox'
 end)
 

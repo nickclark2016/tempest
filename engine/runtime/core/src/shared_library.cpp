@@ -22,11 +22,6 @@ namespace tempest
     {
         auto load_library(const filesystem::path& lib_path) -> expected<HMODULE, shared_library::load_error>
         {
-            if (!filesystem::exists(lib_path))
-            {
-                return unexpected(shared_library::load_error::file_not_found);
-            }
-
             const auto existing_error = GetLastError();
             SetLastError(ERROR_SUCCESS);
 
@@ -95,11 +90,6 @@ namespace tempest
     {
         auto load_library(const filesystem::path& lib_path) -> expected<void*, shared_library::load_error>
         {
-            if (!filesystem::exists(lib_path))
-            {
-                return unexpected(shared_library::load_error::file_not_found);
-            }
-
             dlerror(); // Clear any existing error
 
             auto* const handle = dlopen(lib_path.c_str(), RTLD_NOW);

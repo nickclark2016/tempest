@@ -3,11 +3,11 @@
 
 // Utilities for loading shared libraries and retrieving function pointers.
 
-#include "tempest/int.hpp"
 #include <tempest/api.hpp>
 #include <tempest/expected.hpp>
 #include <tempest/filesystem.hpp>
 #include <tempest/functional.hpp>
+#include <tempest/int.hpp>
 
 namespace tempest
 {
@@ -60,7 +60,7 @@ namespace tempest
 
         unique_ptr<_impl> _pimpl;
 
-        auto _get_raw_function_handle(string_view function_name) const noexcept -> expected<void*, function_error>;
+        [[nodiscard]] auto _get_raw_function_handle(string_view function_name) const noexcept -> expected<void*, function_error>;
     };
 } // namespace tempest
 

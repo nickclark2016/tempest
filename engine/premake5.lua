@@ -17,6 +17,7 @@ scoped.group('Engine', function()
 
     scoped.filter({
         'kind:StaticLib or SharedLib',
+        'system:not windows',
     }, function()
        pic 'On' 
     end)

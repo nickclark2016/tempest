@@ -8,6 +8,7 @@ scoped.group('Runtime', function()
     include 'logger/premake5.lua'
     include 'math/premake5.lua'
     include 'rhi/premake5.lua'
+    include 'runner/premake5.lua'
     include 'serialization/premake5.lua'
     include 'tasks/premake5.lua'
     include 'tempest/premake5.lua'
