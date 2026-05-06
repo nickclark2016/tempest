@@ -8,7 +8,7 @@
 namespace tempest
 {
     template <typename T = void>
-    class TEMPEST_API coroutine_handle;
+    class coroutine_handle;
 
     template <>
     class TEMPEST_API coroutine_handle<void>
@@ -193,8 +193,9 @@ namespace tempest
         void* _handle = __builtin_coro_noop();
     };
 
-    TEMPEST_API using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
+    using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
 
+    TEMPEST_API
     [[nodiscard]] inline auto noop_coroutine() noexcept -> noop_coroutine_handle
     {
         return {};
