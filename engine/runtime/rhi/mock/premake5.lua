@@ -1,6 +1,6 @@
 scoped.group('RHI', function()
     scoped.project('rhi-mock', function()
-        kind 'StaticLib'
+        kind 'SharedLib'
         language 'C++'
         cppdialect 'C++20'
 
@@ -40,10 +40,6 @@ scoped.group('RHI', function()
         scoped.usage('INTERFACE', function()
             includedirs {
                 'include',
-            }
-
-            uses {
-                'rhi-api'
             }
 
             links {
