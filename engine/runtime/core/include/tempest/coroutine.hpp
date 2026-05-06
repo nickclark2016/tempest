@@ -195,7 +195,6 @@ namespace tempest
 
     using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
 
-    TEMPEST_API
     [[nodiscard]] inline auto noop_coroutine() noexcept -> noop_coroutine_handle
     {
         return {};
