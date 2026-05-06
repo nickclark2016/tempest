@@ -49,9 +49,6 @@ namespace tempest
             uint64_t memory_guard = memory_guard_value;
         };
 
-        static auto operator new(size_t size, task_memory_arena& arena) noexcept -> void*;
-        static auto operator delete(void* ptr, size_t size) noexcept -> void;
-
         [[nodiscard]] auto initial_suspend() const noexcept -> suspend_always // NOLINT
         {
             return {};
