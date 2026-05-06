@@ -1,6 +1,6 @@
 scoped.group('RHI', function()
     scoped.project('rhi-mock', function()
-        kind 'SharedLib'
+        kind 'StaticLib'
         language 'C++'
         cppdialect 'C++20'
 
@@ -72,6 +72,7 @@ scoped.group('RHI', function()
             uses {
                 'googletest',
                 'rhi-mock',
+                'tempest',
             }
 
             warnings 'Extra'

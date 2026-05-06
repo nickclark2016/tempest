@@ -20,50 +20,9 @@ namespace tempest::rhi::mock
         mock_device& operator=(const mock_device&) = delete;
         mock_device& operator=(mock_device&&) = delete;
 
-        auto create_buffer(const buffer_desc& desc) noexcept -> typed_rhi_handle<rhi_handle_type::buffer> override
-        {
-            auto result = typed_rhi_handle<rhi_handle_type::buffer>{
-                .id = _next_handle++,
-                .generation = 0,
-            };
-
-            _history.push_back(create_buffer_cmd{
-                .desc = desc,
-                .result = result,
-            });
-
-            return result;
-        }
-
-        auto create_image(const image_desc& desc) noexcept -> typed_rhi_handle<rhi_handle_type::image> override
-        {
-            auto result = typed_rhi_handle<rhi_handle_type::image>{
-                .id = _next_handle++,
-                .generation = 0,
-            };
-
-            _history.push_back(create_image_cmd{
-                .desc = desc,
-                .result = result,
-            });
-
-            return result;
-        }
-
-        auto create_fence(const fence_info& info) noexcept -> typed_rhi_handle<rhi_handle_type::fence> override
-        {
-            auto result = typed_rhi_handle<rhi_handle_type::fence>{
-                .id = _next_handle++,
-                .generation = 0,
-            };
-
-            _history.push_back(create_fence_cmd{
-                .info = info,
-                .result = result,
-            });
-
-            return result;
-        }
+        auto create_buffer(const buffer_desc& desc) noexcept -> typed_rhi_handle<rhi_handle_type::buffer> override;
+        auto create_image(const image_desc& desc) noexcept -> typed_rhi_handle<rhi_handle_type::image> override;
+        auto create_fence(const fence_info& info) noexcept -> typed_rhi_handle<rhi_handle_type::fence> override;
 
         auto create_semaphore(const semaphore_info& info) noexcept
             -> typed_rhi_handle<rhi_handle_type::semaphore> override
