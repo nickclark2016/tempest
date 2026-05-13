@@ -1,0 +1,982 @@
+#ifndef tempest_core_atomic_hpp
+#define tempest_core_atomic_hpp
+
+#include <tempest/api.hpp>
+#include <tempest/concepts.hpp>
+#include <tempest/enum.hpp>
+#include <tempest/int.hpp>
+#include <tempest/type_traits.hpp>
+
+#if defined(TEMPEST_PLATFORM_WINDOWS)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h> // Interlocked* functions
+#elif defined(TEMPEST_PLATFORM_LINUX) || defined(TEMPEST_PLATFORM_APPLE)
+// We can use gcc or clang built-in atomics
+#endif
+
+namespace tempest
+{
+    enum class memory_order : uint8_t
+    {
+        relaxed,
+        acquire,
+        release,
+        acq_rel,
+        seq_cst,
+    };
+
+    namespace detail
+    {
+        inline void validate_memory_order([[maybe_unused]] memory_order order)
+        {
+        }
+
+        inline auto find_stronger_order(memory_order lhs, memory_order rhs) -> memory_order
+        {
+            // NOLINTNEXTLINE
+            static constexpr memory_order combined[5][5] = {
+                {
+                    memory_order::relaxed,
+                    memory_order::acquire,
+                    memory_order::release,
+                    memory_order::acq_rel,
+                    memory_order::seq_cst,
+                },
+                {
+                    memory_order::acquire,
+                    memory_order::acquire,
+                    memory_order::acq_rel,
+                    memory_order::acq_rel,
+                    memory_order::seq_cst,
+                },
+                {
+                    memory_order::release,
+                    memory_order::acq_rel,
+                    memory_order::release,
+                    memory_order::acq_rel,
+                    memory_order::seq_cst,
+                },
+                {
+                    memory_order::acq_rel,
+                    memory_order::acq_rel,
+                    memory_order::acq_rel,
+                    memory_order::acq_rel,
+                    memory_order::seq_cst,
+                },
+                {
+                    memory_order::seq_cst,
+                    memory_order::seq_cst,
+                    memory_order::seq_cst,
+                    memory_order::seq_cst,
+                    memory_order::seq_cst,
+                },
+            };
+
+            return combined[to_underlying(lhs)][to_underlying(rhs)];
+        }
+
+        template <integral I, typename T>
+        [[nodiscard]] auto address_as_atomic(T& src) noexcept -> volatile I*
+        {
+            return &reinterpret_cast<volatile I&>(src);
+        }
+
+        template <integral I, typename T>
+        [[nodiscard]] auto address_as_atomic(const T& src) noexcept -> const volatile I*
+        {
+            return &reinterpret_cast<const volatile I&>(src);
+        }
+
+        template <typename T, size_t>
+        struct atomic_storage;
+
+#ifdef _WIN32
+
+        [[nodiscard]] inline auto negate(integral auto value)
+        {
+            using type = decltype(value);
+            using unsigned_type = make_unsigned_t<type>;
+            return static_cast<type>(unsigned_type{0} - static_cast<unsigned_type>(value));
+        }
+
+        auto atomic_wait_direct(const void* const storage, void* const comparand, const size_t size,
+                                const uint64_t timeout) noexcept -> int
+        {
+            const auto result = WaitOnAddress(const_cast<volatile void*>(storage), comparand, size, timeout);
+            return result;
+        }
+
+        template <typename T>
+        struct atomic_storage<T, 1>
+        {
+            using type = remove_cvref_t<T>;
+
+            void store(const type& value) noexcept
+            {
+                auto* mem = address_as_atomic<char>(storage);
+                const auto as_bytes = bit_cast<int8_t>(value);
+                _InterlockedExchange8(mem, as_bytes);
+            }
+
+            void store(const type& value, memory_order order) noexcept
+            {
+                validate_memory_order(order);
+
+                auto* const mem = address_as_atomic<char>(storage);
+                const auto as_bytes = bit_cast<int8_t>(value);
+
+                if (order == memory_order::relaxed)
+                {
+                    __iso_volatile_store8(mem, as_bytes);
+                }
+                else if (order == memory_order::release)
+                {
+                    _Compiler_barrier();
+#ifdef __clang__
+                    __atomic_store_n(reinterpret_cast<volatile uint8_t*>(mem), static_cast<uint8_t>(as_bytes),
+                                     __ATOMIC_RELEASE);
+#else
+                    __iso_volatile_store8(mem, as_bytes);
+#endif
+                }
+                else
+                {
+                    store(value);
+                }
+            }
+
+            [[nodiscard]] auto load(const memory_order order = memory_order::seq_cst) const noexcept -> type
+            {
+                validate_memory_order(order);
+
+                auto* mem = address_as_atomic<char>(storage);
+                auto as_bytes = __iso_volatile_load8(mem);
+                if (order != memory_order::relaxed)
+                {
+                    _Compiler_or_memory_barrier();
+                }
+                return reinterpret_cast<type&>(as_bytes);
+            }
+
+            [[nodiscard]] auto exchange(const type& desired, const memory_order order) noexcept -> type
+            {
+                validate_memory_order(order);
+
+                auto result = int8_t{};
+                _InterlockedExchange8(address_as_atomic<char>(storage), bit_cast<int8_t>(desired), &result);
+                return reinterpret_cast<type&>(result);
+            }
+
+            [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
+                                                       const memory_order order) noexcept -> bool
+            {
+                validate_memory_order(order);
+
+                const auto expected_bytes = bit_cast<int8_t>(expected);
+                auto prev_bytes = _InterlockedCompareExchange8(address_as_atomic<char>(storage),
+                                                               bit_cast<int8_t>(desired), expected_bytes);
+                if (prev_bytes == expected_bytes)
+                {
+                    return true;
+                }
+
+                reinterpret_cast<int8_t&>(expected) = prev_bytes;
+                return false;
+            }
+
+            auto wait(const type expected, const memory_order order = memory_order::seq_cst) noexcept -> void
+            {
+                validate_memory_order(order);
+
+                for (;;)
+                {
+                    const auto observed = load(order);
+                    if (observed != expected)
+                    {
+                        return;
+                    }
+
+                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                }
+            }
+
+            auto notify_one() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<char>(storage);
+                WakeByAddressSingle(mem);
+            }
+
+            auto notify_all() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<char>(storage);
+                WakeByAddressAll(mem);
+            }
+
+            [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int8_t{};
+                _InterlockedExchangeAdd8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                return fetch_add(negate(operand), order);
+            }
+
+            [[nodiscard]] auto fetch_and(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int8_t{};
+                _InterlockedAnd8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int8_t{};
+                _InterlockedOr8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int8_t{};
+                _InterlockedXor8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            type storage;
+        };
+
+        template <typename T>
+        struct atomic_storage<T, 2>
+        {
+            using type = remove_cvref_t<T>;
+
+            void store(const type& value) noexcept
+            {
+                auto* const mem = address_as_atomic<int16_t>(storage);
+                const auto as_bytes = bit_cast<int16_t>(value);
+                _InterlockedExchange16(mem, as_bytes);
+            }
+
+            void store(const type& value, memory_order order) noexcept
+            {
+                validate_memory_order(order);
+
+                auto* const mem = address_as_atomic<int16_t>(storage);
+                const auto as_bytes = bit_cast<int16_t>(value);
+
+                if (order == memory_order::relaxed)
+                {
+                    __iso_volatile_store16(mem, as_bytes);
+                }
+                else if (order == memory_order::release)
+                {
+                    _Compiler_barrier();
+#ifdef __clang__
+                    __atomic_store_n(reinterpret_cast<volatile uint16_t*>(mem), static_cast<uint16_t>(as_bytes),
+                                     __ATOMIC_RELEASE);
+#else
+                    __iso_volatile_store16(mem, as_bytes);
+#endif
+                }
+                else
+                {
+                    store(value);
+                }
+            }
+
+            [[nodiscard]] auto load(const memory_order order = memory_order::seq_cst) const noexcept -> type
+            {
+                validate_memory_order(order);
+
+                const auto* const mem = address_as_atomic<int16_t>(storage);
+                auto as_bytes = __iso_volatile_load16(mem);
+                if (order != memory_order::relaxed)
+                {
+                    _Compiler_or_memory_barrier();
+                }
+                return reinterpret_cast<type&>(as_bytes);
+            }
+
+            [[nodiscard]] auto exchange(const type& desired, const memory_order order) noexcept -> type
+            {
+                validate_memory_order(order);
+
+                auto result = int16_t{};
+                _InterlockedExchange16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(desired), &result);
+                return reinterpret_cast<type&>(result);
+            }
+
+            [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
+                                                       const memory_order order) noexcept -> bool
+            {
+                validate_memory_order(order);
+
+                const auto expected_bytes = bit_cast<int16_t>(expected);
+                auto prev_bytes = _InterlockedCompareExchange16(address_as_atomic<int16_t>(storage),
+                                                                bit_cast<int16_t>(desired), expected_bytes);
+                if (prev_bytes == expected_bytes)
+                {
+                    return true;
+                }
+
+                memcpy(&expected, &prev_bytes, sizeof(type));
+                return false;
+            }
+
+            auto wait(const type expected, const memory_order order = memory_order::seq_cst) noexcept -> void
+            {
+                validate_memory_order(order);
+
+                for (;;)
+                {
+                    const auto observed = load(order);
+                    if (observed != expected)
+                    {
+                        return;
+                    }
+
+                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                }
+            }
+
+            auto notify_one() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<int16_t>(storage);
+                WakeByAddressSingle(mem);
+            }
+
+            auto notify_all() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<int16_t>(storage);
+                WakeByAddressAll(mem);
+            }
+
+            [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int16_t{};
+                _InterlockedExchangeAdd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int16_t{};
+                _InterlockedExchangeSub16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            type storage;
+        };
+
+        template <typename T>
+        struct atomic_storage<T, 4>
+        {
+            using type = remove_cvref_t<T>;
+
+            void store(const type& value) noexcept
+            {
+                auto* const mem = address_as_atomic<long>(storage);
+                const auto as_bytes = bit_cast<int32_t>(value);
+                _InterlockedExchange(mem, as_bytes);
+            }
+
+            void store(const type& value, memory_order order) noexcept
+            {
+                validate_memory_order(order);
+
+                auto* const mem = address_as_atomic<int32_t>(storage);
+                const auto as_bytes = bit_cast<int32_t>(value);
+
+                if (order == memory_order::relaxed)
+                {
+                    __iso_volatile_store32(mem, as_bytes);
+                }
+                else if (order == memory_order::release)
+                {
+                    _Compiler_barrier();
+#ifdef __clang__
+                    __atomic_store_n(reinterpret_cast<volatile uint32_t*>(mem), static_cast<uint32_t>(as_bytes),
+                                     __ATOMIC_RELEASE);
+#else
+                    __iso_volatile_store32(mem, as_bytes);
+#endif
+                }
+                else
+                {
+                    store(value);
+                }
+            }
+
+            [[nodiscard]] auto load(const memory_order order = memory_order::seq_cst) const noexcept -> type
+            {
+                validate_memory_order(order);
+
+                const auto* const mem = address_as_atomic<int32_t>(storage);
+                auto as_bytes = __iso_volatile_load32(mem);
+                if (order != memory_order::relaxed)
+                {
+                    _Compiler_or_memory_barrier();
+                }
+                return reinterpret_cast<type&>(as_bytes);
+            }
+
+            [[nodiscard]] auto exchange(const type& desired, const memory_order order) noexcept -> type
+            {
+                validate_memory_order(order);
+
+                auto result = int32_t{};
+                _InterlockedExchange(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(desired), &result);
+                return reinterpret_cast<type&>(result);
+            }
+
+            [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
+                                                       const memory_order order) noexcept -> bool
+            {
+                validate_memory_order(order);
+
+                const auto expected_bytes = bit_cast<int32_t>(expected);
+                auto prev_bytes = _InterlockedCompareExchange(address_as_atomic<int32_t>(storage),
+                                                              bit_cast<int32_t>(desired), expected_bytes);
+                if (prev_bytes == expected_bytes)
+                {
+                    return true;
+                }
+
+                memcpy(&expected, &prev_bytes, sizeof(type));
+                return false;
+            }
+
+            auto wait(const type expected, const memory_order order = memory_order::seq_cst) noexcept -> void
+            {
+                validate_memory_order(order);
+
+                for (;;)
+                {
+                    const auto observed = load(order);
+                    if (observed != expected)
+                    {
+                        return;
+                    }
+
+                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                }
+            }
+
+            auto notify_one() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<int32_t>(storage);
+                WakeByAddressSingle(mem);
+            }
+
+            auto notify_all() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<int32_t>(storage);
+                WakeByAddressAll(mem);
+            }
+
+            [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int32_t{};
+                _InterlockedExchangeAdd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int32_t{};
+                _InterlockedExchangeSub(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_and(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int32_t{};
+                _InterlockedAnd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int32_t{};
+                _InterlockedOr(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int32_t{};
+                _InterlockedXor(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            type storage;
+        };
+
+        template <typename T>
+        struct atomic_storage<T, 8> // NOLINT - We are lockfree, because we only support 64-bit architectures, so 64-bit
+                                    // atomics are always lockfree
+        {
+            using type = remove_cvref_t<T>;
+
+            void store(const type& value) noexcept
+            {
+                auto* const mem = address_as_atomic<int64_t>(storage);
+                const auto as_bytes = bit_cast<int64_t>(value);
+                _InterlockedExchange64(mem, as_bytes);
+            }
+
+            void store(const type& value, memory_order order) noexcept
+            {
+                validate_memory_order(order);
+
+                auto* const mem = address_as_atomic<int64_t>(storage);
+                const auto as_bytes = bit_cast<int64_t>(value);
+
+                if (order == memory_order::relaxed)
+                {
+                    __iso_volatile_store64(mem, as_bytes);
+                }
+                else if (order == memory_order::release)
+                {
+                    _Compiler_barrier();
+#ifdef __clang__
+                    __atomic_store_n(reinterpret_cast<volatile uint64_t*>(mem), static_cast<uint64_t>(as_bytes),
+                                     __ATOMIC_RELEASE);
+#else
+                    __iso_volatile_store64(mem, as_bytes);
+#endif
+                }
+                else
+                {
+                    store(value);
+                }
+            }
+
+            [[nodiscard]] auto load(const memory_order order = memory_order::seq_cst) const noexcept -> type
+            {
+                validate_memory_order(order);
+
+                const auto* const mem = address_as_atomic<int64_t>(storage);
+                auto as_bytes = __iso_volatile_load64(mem);
+                if (order != memory_order::relaxed)
+                {
+                    _Compiler_or_memory_barrier();
+                }
+                return reinterpret_cast<type&>(as_bytes);
+            }
+
+            [[nodiscard]] auto exchange(const type& desired, const memory_order order) noexcept -> type
+            {
+                validate_memory_order(order);
+
+                auto result = int64_t{};
+                _InterlockedExchange64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(desired), &result);
+                return reinterpret_cast<type&>(result);
+            }
+
+            [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
+                                                       const memory_order order) noexcept -> bool
+            {
+                validate_memory_order(order);
+
+                const auto expected_bytes = bit_cast<int64_t>(expected);
+                auto prev_bytes = _InterlockedCompareExchange64(address_as_atomic<int64_t>(storage),
+                                                                bit_cast<int64_t>(desired), expected_bytes);
+                if (prev_bytes == expected_bytes)
+                {
+                    return true;
+                }
+
+                memcpy(&expected, &prev_bytes, sizeof(type));
+                return false;
+            }
+
+            auto wait(const type expected, const memory_order order = memory_order::seq_cst) noexcept -> void
+            {
+                validate_memory_order(order);
+
+                for (;;)
+                {
+                    const auto observed = load(order);
+                    if (observed != expected)
+                    {
+                        return;
+                    }
+
+                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                }
+            }
+
+            auto notify_one() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<int64_t>(storage);
+                WakeByAddressSingle(mem);
+            }
+
+            auto notify_all() noexcept -> void
+            {
+                auto* const mem = address_as_atomic<int64_t>(storage);
+                WakeByAddressAll(mem);
+            }
+
+            type storage;
+        };
+#endif
+    } // namespace detail
+
+    template <typename T>
+    class atomic;
+
+    template <typename T>
+        requires is_trivially_copyable_v<T> && is_copy_constructible_v<T> && is_copy_assignable_v<T> &&
+                 is_move_constructible_v<T> && is_move_assignable_v<T> && is_same_v<T, remove_cvref_t<T>>
+    class atomic<T>
+    {
+      public:
+        using value_type = T;
+        using difference_type = decltype(declval<T>() - declval<T>());
+
+        constexpr atomic() noexcept(is_nothrow_default_constructible_v<T>) : _value()
+        {
+        }
+
+        constexpr atomic(T desired) noexcept : _value(desired)
+        {
+        }
+
+        atomic(const atomic&) = delete;
+        atomic(atomic&&) = delete;
+
+        ~atomic() = default;
+
+        T& operator=(T desired) noexcept // NOLINT
+        {
+            store(desired);
+            return desired;
+        }
+
+        T& operator=(T desired) volatile noexcept // NOLINT
+        {
+            store(desired);
+            return desired;
+        }
+
+        atomic& operator=(const atomic&) = delete;
+        atomic& operator=(const atomic&) volatile = delete;
+        atomic& operator=(atomic&&) = delete;
+
+        [[nodiscard]] auto is_lock_free() const noexcept -> bool
+        {
+            return true;
+        }
+
+        [[nodiscard]] auto is_lock_free() const volatile noexcept -> bool
+        {
+            return true;
+        }
+
+        auto store(T desired, memory_order order = memory_order::seq_cst) noexcept -> void
+        {
+            _value.store(desired, order);
+        }
+
+        auto store(T desired, memory_order order = memory_order::seq_cst) volatile noexcept -> void
+        {
+            _value.store(desired, order);
+        }
+
+        [[nodiscard]] auto load(memory_order order = memory_order::seq_cst) const noexcept -> T
+        {
+            return _value.load(order);
+        }
+
+        [[nodiscard]] auto load(memory_order order = memory_order::seq_cst) const volatile noexcept -> T
+        {
+            return _value.load(order);
+        }
+
+        [[nodiscard]] operator T() const noexcept
+        {
+            return load();
+        }
+
+        [[nodiscard]] operator T() const volatile noexcept
+        {
+            return load();
+        }
+
+        [[nodiscard]] auto exchange(T desired, memory_order order = memory_order::seq_cst) noexcept -> T
+        {
+            return _value.exchange(desired, order);
+        }
+
+        [[nodiscard]] auto exchange(T desired, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        {
+            return _value.exchange(desired, order);
+        }
+
+        [[nodiscard]] auto compare_exchange_weak(T& expected, T desired, memory_order success,
+                                                 memory_order failure) noexcept -> bool
+        {
+            return compare_exchange_strong(expected, desired, success, failure);
+        }
+
+        [[nodiscard]] auto compare_exchange_weak(T& expected, T desired, memory_order success,
+                                                 memory_order failure) volatile noexcept -> bool
+        {
+            return compare_exchange_strong(expected, desired, success, failure);
+        }
+
+        [[nodiscard]] auto compare_exchange_weak(T& expected, T desired,
+                                                 memory_order order = memory_order::seq_cst) noexcept -> bool
+        {
+            return compare_exchange_strong(expected, desired, order);
+        }
+
+        [[nodiscard]] auto compare_exchange_weak(T& expected, T desired,
+                                                 memory_order order = memory_order::seq_cst) volatile noexcept -> bool
+        {
+            return compare_exchange_strong(expected, desired, order);
+        }
+
+        [[nodiscard]] auto compare_exchange_strong(T& expected, T desired, memory_order success,
+                                                   memory_order failure) noexcept -> bool
+        {
+            return _value.compare_exchange_strong(expected, desired, success,
+                                                  detail::find_stronger_order(success, failure));
+        }
+
+        [[nodiscard]] auto compare_exchange_strong(T& expected, T desired, memory_order success,
+                                                   memory_order failure) volatile noexcept -> bool
+        {
+            return _value.compare_exchange_strong(expected, desired, detail::find_stronger_order(success, failure));
+        }
+
+        [[nodiscard]] auto compare_exchange_strong(T& expected, T desired,
+                                                   memory_order order = memory_order::seq_cst) noexcept -> bool
+        {
+            return _value.compare_exchange_strong(expected, desired, order);
+        }
+
+        [[nodiscard]] auto compare_exchange_strong(T& expected, T desired,
+                                                   memory_order order = memory_order::seq_cst) volatile noexcept -> bool
+        {
+            return _value.compare_exchange_strong(expected, desired, order);
+        }
+
+        auto wait(T old, memory_order order = memory_order::seq_cst) const noexcept -> void
+        {
+            _value.wait(old, order);
+        }
+
+        auto wait(T old, memory_order order = memory_order::seq_cst) const volatile noexcept -> void
+        {
+            _value.wait(old, order);
+        }
+
+        auto notify_one() noexcept -> void
+        {
+            _value.notify_one();
+        }
+
+        auto notify_one() volatile noexcept -> void
+        {
+            _value.notify_one();
+        }
+
+        auto notify_all() noexcept -> void
+        {
+            _value.notify_all();
+        }
+
+        auto notify_all() volatile noexcept -> void
+        {
+            _value.notify_all();
+        }
+
+        [[nodiscard]] auto fetch_add(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+            requires integral<T>
+        {
+            return _value.fetch_add(arg, order);
+        }
+
+        [[nodiscard]] auto fetch_add(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        {
+            return _value.fetch_add(arg, order);
+        }
+
+        [[nodiscard]] auto operator+=(T arg) noexcept -> T
+        {
+            return fetch_add(arg);
+        }
+
+        [[nodiscard]] auto operator+=(T arg) volatile noexcept -> T
+        {
+            return fetch_add(arg);
+        }
+
+        [[nodiscard]] auto fetch_sub(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+            requires integral<T>
+        {
+            return _value.fetch_sub(arg, order);
+        }
+
+        [[nodiscard]] auto fetch_sub(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        {
+            return _value.fetch_sub(arg, order);
+        }
+
+        [[nodiscard]] auto operator-=(T arg) noexcept -> T
+        {
+            return fetch_sub(arg);
+        }
+
+        [[nodiscard]] auto operator-=(T arg) volatile noexcept -> T
+        {
+            return fetch_sub(arg);
+        }
+
+        [[nodiscard]] auto operator++() noexcept -> T
+        {
+            return fetch_add(1) + 1;
+        }
+
+        [[nodiscard]] auto operator++() volatile noexcept -> T
+        {
+            return fetch_add(1) + 1;
+        }
+
+        [[nodiscard]] auto operator++(int) noexcept -> T
+        {
+            return fetch_add(1);
+        }
+
+        [[nodiscard]] auto operator++(int) volatile noexcept -> T
+        {
+            return fetch_add(1);
+        }
+
+        [[nodiscard]] auto operator--() noexcept -> T
+        {
+            return fetch_sub(1) - 1;
+        }
+
+        [[nodiscard]] auto operator--() volatile noexcept -> T
+        {
+            return fetch_sub(1) - 1;
+        }
+
+        [[nodiscard]] auto operator--(int) noexcept -> T
+        {
+            return fetch_sub(1);
+        }
+
+        [[nodiscard]] auto operator--(int) volatile noexcept -> T
+        {
+            return fetch_sub(1);
+        }
+
+        [[nodiscard]] auto fetch_and(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+        {
+            return _value.fetch_and(arg, order);
+        }
+
+        [[nodiscard]] auto fetch_and(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        {
+            return _value.fetch_and(arg, order);
+        }
+
+        [[nodiscard]] auto fetch_or(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+        {
+            return _value.fetch_or(arg, order);
+        }
+
+        [[nodiscard]] auto fetch_or(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        {
+            return _value.fetch_or(arg, order);
+        }
+
+        [[nodiscard]] auto fetch_xor(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+        {
+            return _value.fetch_xor(arg, order);
+        }
+
+        [[nodiscard]] auto fetch_xor(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        {
+            return _value.fetch_xor(arg, order);
+        }
+
+        [[nodiscard]] auto operator&=(T arg) noexcept -> T
+        {
+            return fetch_and(arg);
+        }
+
+        [[nodiscard]] auto operator&=(T arg) volatile noexcept -> T
+        {
+            return fetch_and(arg);
+        }
+
+        [[nodiscard]] auto operator|=(T arg) noexcept -> T
+        {
+            return fetch_or(arg);
+        }
+
+        [[nodiscard]] auto operator|=(T arg) volatile noexcept -> T
+        {
+            return fetch_or(arg);
+        }
+
+        [[nodiscard]] auto operator^=(T arg) noexcept -> T
+        {
+            return fetch_xor(arg);
+        }
+
+        [[nodiscard]] auto operator^=(T arg) volatile noexcept -> T
+        {
+            return fetch_xor(arg);
+        }
+
+      private:
+        detail::atomic_storage<T, sizeof(T)> _value;
+    };
+} // namespace tempest
+
+#endif // tempest_core_atomic_hpp

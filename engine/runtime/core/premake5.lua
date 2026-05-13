@@ -56,7 +56,8 @@ scoped.project('core', function()
             }
 
             links {
-                'Advapi32.lib'
+                'Advapi32.lib',
+                'Synchronization.lib',
             }
         end)
 
@@ -98,7 +99,7 @@ scoped.project('core', function()
             'system:windows'
         }, function()
             links {
-                'Advapi32.lib'
+                'Advapi32.lib',
             }
         end)
     end)

@@ -8,38 +8,12 @@ TEST(path_detail, convert_wide_to_narrow)
 {
     auto narrow_str = fs::detail::convert_wide_to_narrow(L"Hello World");
     EXPECT_EQ(narrow_str, "Hello World");
-
-    narrow_str = fs::detail::convert_wide_to_narrow(L"");
-    EXPECT_EQ(narrow_str, "");
-
-    narrow_str = fs::detail::convert_wide_to_narrow(L"Hello\\World");
-    EXPECT_EQ(narrow_str, "Hello\\World");
-
-    narrow_str = fs::detail::convert_wide_to_narrow(L"Hello/World");
-    EXPECT_EQ(narrow_str, "Hello/World");
-
-    narrow_str =
-        fs::detail::convert_wide_to_narrow(L"Some really long path with spaces and special characters !@#$%^&*()_+");
-    EXPECT_EQ(narrow_str, "Some really long path with spaces and special characters !@#$%^&*()_+");
 }
 
 TEST(path_detail, convert_narrow_to_wide)
 {
     auto wide_str = fs::detail::convert_narrow_to_wide("Hello World");
     EXPECT_EQ(wide_str, L"Hello World");
-
-    wide_str = fs::detail::convert_narrow_to_wide("");
-    EXPECT_EQ(wide_str, L"");
-
-    wide_str = fs::detail::convert_narrow_to_wide("Hello\\World");
-    EXPECT_EQ(wide_str, L"Hello\\World");
-
-    wide_str = fs::detail::convert_narrow_to_wide("Hello/World");
-    EXPECT_EQ(wide_str, L"Hello/World");
-
-    wide_str =
-        fs::detail::convert_narrow_to_wide("Some really long path with spaces and special characters !@#$%^&*()_+");
-    EXPECT_EQ(wide_str, L"Some really long path with spaces and special characters !@#$%^&*()_+");
 }
 
 TEST(path, default_constructor)

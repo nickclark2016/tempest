@@ -60,7 +60,7 @@ scoped.project('tempest', function()
         }
 
         links {
-            "libcmtd"
+            "libcmt"
         }
     end)
 

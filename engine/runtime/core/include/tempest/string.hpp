@@ -1354,8 +1354,9 @@ namespace tempest
 
         // Do not change downgrade to small string optimization, keep capacity
         auto erase_ptr = data() + erase_pos;
-        auto end_ptr = data() + current_size;
-        Traits::move(erase_ptr, erase_ptr + erase_count, end_ptr - erase_ptr);
+        const auto char_count_to_move = current_size - (erase_pos + erase_count);
+
+        Traits::move(erase_ptr, erase_ptr + erase_count, char_count_to_move);
         data()[new_size] = value_type();
 
         if (_is_small())
