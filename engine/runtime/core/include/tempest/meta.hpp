@@ -5,8 +5,8 @@
 #include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/int.hpp>
-#include <tempest/string_view.hpp>
 #include <tempest/source_location.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/type_traits.hpp>
 
 namespace tempest::core
@@ -18,7 +18,12 @@ namespace tempest::core
         string_view here = src.function_name();
 
 #if defined(_MSC_VER) && !defined(__clang__)
+#if _MSC_VER >= 1951
+        string_view prefix = "class tempest::basic_string_view<char, class tempest::char_traits<char>> __cdecl "
+                             "tempest::core::get_type_name<";
+#else
         string_view prefix = "auto __cdecl tempest::core::get_type_name<";
+#endif
         string_view suffix = ">(void) noexcept";
 #elif defined(_MSC_VER) && defined(__clang__)
         string_view prefix = "auto __cdecl tempest::core::get_type_name(void) [T = ";

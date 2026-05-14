@@ -205,7 +205,7 @@ namespace tempest
                 return false;
             }
 
-            auto wait(const type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
+            auto wait(type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
             {
                 validate_memory_order(order);
 
@@ -217,20 +217,18 @@ namespace tempest
                         return;
                     }
 
-                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                    atomic_wait_direct(&storage, &expected, sizeof(type), INFINITE);
                 }
             }
 
             auto notify_one() noexcept -> void
             {
-                auto* const mem = address_as_atomic<char>(storage);
-                WakeByAddressSingle(mem);
+                WakeByAddressSingle(&storage);
             }
 
             auto notify_all() noexcept -> void
             {
-                auto* const mem = address_as_atomic<char>(storage);
-                WakeByAddressAll(mem);
+                WakeByAddressAll(&storage);
             }
 
             [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
@@ -355,7 +353,7 @@ namespace tempest
                 return false;
             }
 
-            auto wait(const type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
+            auto wait(type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
             {
                 validate_memory_order(order);
 
@@ -367,20 +365,18 @@ namespace tempest
                         return;
                     }
 
-                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                    atomic_wait_direct(&storage, &expected, sizeof(type), INFINITE);
                 }
             }
 
             auto notify_one() noexcept -> void
             {
-                auto* const mem = address_as_atomic<int16_t>(storage);
-                WakeByAddressSingle(mem);
+                WakeByAddressSingle(&storage);
             }
 
             auto notify_all() noexcept -> void
             {
-                auto* const mem = address_as_atomic<int16_t>(storage);
-                WakeByAddressAll(mem);
+                WakeByAddressAll(&storage);
             }
 
             [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
@@ -486,7 +482,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = _InterlockedExchange(address_as_atomic<long>(storage), bit_cast<int32_t>(desired));
+                auto result = _InterlockedExchange(address_as_atomic<long>(storage), bit_cast<long>(desired));
                 return reinterpret_cast<type&>(result);
             }
 
@@ -495,9 +491,9 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                const auto expected_bytes = bit_cast<int32_t>(expected);
-                auto prev_bytes = _InterlockedCompareExchange(address_as_atomic<int32_t>(storage),
-                                                              bit_cast<int32_t>(desired), expected_bytes);
+                const auto expected_bytes = bit_cast<long>(expected);
+                auto prev_bytes = _InterlockedCompareExchange(address_as_atomic<long>(storage), bit_cast<long>(desired),
+                                                              expected_bytes);
                 if (prev_bytes == expected_bytes)
                 {
                     return true;
@@ -507,7 +503,7 @@ namespace tempest
                 return false;
             }
 
-            auto wait(const type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
+            auto wait(type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
             {
                 validate_memory_order(order);
 
@@ -519,20 +515,18 @@ namespace tempest
                         return;
                     }
 
-                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                    atomic_wait_direct(&storage, &expected, sizeof(type), INFINITE);
                 }
             }
 
             auto notify_one() noexcept -> void
             {
-                auto* const mem = address_as_atomic<int32_t>(storage);
-                WakeByAddressSingle(mem);
+                WakeByAddressSingle(&storage);
             }
 
             auto notify_all() noexcept -> void
             {
-                auto* const mem = address_as_atomic<int32_t>(storage);
-                WakeByAddressAll(mem);
+                WakeByAddressAll(&storage);
             }
 
             [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
@@ -540,7 +534,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = _InterlockedExchangeAdd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand));
+                auto result = _InterlockedExchangeAdd(address_as_atomic<long>(storage), bit_cast<long>(operand));
                 return static_cast<type>(result);
             }
 
@@ -557,7 +551,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = _InterlockedAnd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand));
+                auto result = _InterlockedAnd(address_as_atomic<long>(storage), bit_cast<long>(operand));
                 return static_cast<type>(result);
             }
 
@@ -566,7 +560,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = _InterlockedOr(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand));
+                auto result = _InterlockedOr(address_as_atomic<long>(storage), bit_cast<long>(operand));
                 return static_cast<type>(result);
             }
 
@@ -575,7 +569,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = _InterlockedXor(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand));
+                auto result = _InterlockedXor(address_as_atomic<long>(storage), bit_cast<long>(operand));
                 return static_cast<type>(result);
             }
 
@@ -660,7 +654,7 @@ namespace tempest
                 return false;
             }
 
-            auto wait(const type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
+            auto wait(type expected, const memory_order order = memory_order::seq_cst) const noexcept -> void
             {
                 validate_memory_order(order);
 
@@ -672,20 +666,18 @@ namespace tempest
                         return;
                     }
 
-                    atomic_wait_direct(storage, &expected, sizeof(type), INFINITE);
+                    atomic_wait_direct(&storage, &expected, sizeof(type), INFINITE);
                 }
             }
 
             auto notify_one() noexcept -> void
             {
-                auto* const mem = address_as_atomic<int64_t>(storage);
-                WakeByAddressSingle(mem);
+                WakeByAddressSingle(&storage);
             }
 
             auto notify_all() noexcept -> void
             {
-                auto* const mem = address_as_atomic<int64_t>(storage);
-                WakeByAddressAll(mem);
+                WakeByAddressAll(&storage);
             }
 
             [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
