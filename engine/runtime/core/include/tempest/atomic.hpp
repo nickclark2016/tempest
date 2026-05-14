@@ -158,7 +158,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load8(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_or_memory_barrier();
+                    _Compiler_barrier();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
@@ -313,7 +313,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load16(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_or_memory_barrier();
+                    _Compiler_barrier();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
@@ -442,7 +442,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load32(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_or_memory_barrier();
+                    _Compiler_barrier();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
@@ -602,7 +602,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load64(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_or_memory_barrier();
+                    _Compiler_barrier();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
