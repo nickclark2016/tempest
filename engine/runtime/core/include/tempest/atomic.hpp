@@ -409,6 +409,36 @@ namespace tempest
                 return static_cast<type>(result);
             }
 
+            [[nodiscard]] auto fetch_and(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int16_t{};
+                _InterlockedAnd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int16_t{};
+                _InterlockedOr16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int16_t{};
+                _InterlockedXor16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
             type storage;
         };
 
@@ -676,6 +706,56 @@ namespace tempest
             {
                 auto* const mem = address_as_atomic<int64_t>(storage);
                 WakeByAddressAll(mem);
+            }
+
+            [[nodiscard]] auto fetch_add(type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int64_t{};
+                _InterlockedExchangeAdd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int64_t{};
+                _InterlockedExchangeSub64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_and(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int64_t{};
+                _InterlockedAnd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int64_t{};
+                _InterlockedOr64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
+                return static_cast<type>(result);
+            }
+
+            [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
+                requires integral<type>
+            {
+                validate_memory_order(order);
+
+                auto result = int64_t{};
+                _InterlockedXor64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
+                return static_cast<type>(result);
             }
 
             type storage;
