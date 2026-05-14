@@ -12,6 +12,23 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h> // Interlocked* functions
+
+#ifdef __clang__
+#define DISABLE_DEPRECATION_WARNINGS \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
+#define RESTORE_DEPRECATION_WARNINGS _Pragma("clang diagnostic pop")
+#else
+#define DISABLE_DEPRECATION_WARNINGS \
+    __pragma(warning(push)) \
+    __pragma(warning(disable : 4996))
+#define RESTORE_DEPRECATION_WARNINGS __pragma(warning(pop))
+#endif
+
+#define TEMPESTTEMPEST_COMPILER_BARRIER() DISABLE_DEPRECATION_WARNINGS \
+    _ReadWriteBarrier() \
+    RESTORE_DEPRECATION_WARNINGS
+
 #elif defined(TEMPEST_PLATFORM_LINUX)
 #include <linux/futex.h>
 #include <sys/syscall.h>
@@ -136,7 +153,7 @@ namespace tempest
                 }
                 else if (order == memory_order::release)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
 #ifdef __clang__
                     __atomic_store_n(reinterpret_cast<volatile uint8_t*>(mem), static_cast<uint8_t>(as_bytes),
                                      __ATOMIC_RELEASE);
@@ -158,7 +175,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load8(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
@@ -291,7 +308,7 @@ namespace tempest
                 }
                 else if (order == memory_order::release)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
 #ifdef __clang__
                     __atomic_store_n(reinterpret_cast<volatile uint16_t*>(mem), static_cast<uint16_t>(as_bytes),
                                      __ATOMIC_RELEASE);
@@ -313,7 +330,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load16(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
@@ -420,7 +437,7 @@ namespace tempest
                 }
                 else if (order == memory_order::release)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
 #ifdef __clang__
                     __atomic_store_n(reinterpret_cast<volatile uint32_t*>(mem), static_cast<uint32_t>(as_bytes),
                                      __ATOMIC_RELEASE);
@@ -442,7 +459,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load32(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
@@ -580,7 +597,7 @@ namespace tempest
                 }
                 else if (order == memory_order::release)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
 #ifdef __clang__
                     __atomic_store_n(reinterpret_cast<volatile uint64_t*>(mem), static_cast<uint64_t>(as_bytes),
                                      __ATOMIC_RELEASE);
@@ -602,7 +619,7 @@ namespace tempest
                 auto as_bytes = __iso_volatile_load64(mem);
                 if (order != memory_order::relaxed)
                 {
-                    _Compiler_barrier();
+                    TEMPEST_COMPILER_BARRIER();
                 }
                 return reinterpret_cast<type&>(as_bytes);
             }
