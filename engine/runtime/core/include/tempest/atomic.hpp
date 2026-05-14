@@ -239,9 +239,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int8_t{};
-                _InterlockedExchangeAdd8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedExchangeAdd8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
@@ -255,9 +253,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int8_t{};
-                _InterlockedAnd8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedAnd8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
@@ -265,9 +261,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int8_t{};
-                _InterlockedOr8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedOr8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
@@ -275,9 +269,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int8_t{};
-                _InterlockedXor8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedXor8(address_as_atomic<char>(storage), bit_cast<int8_t>(operand)));
             }
 
             type storage;
@@ -394,9 +386,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int16_t{};
-                _InterlockedExchangeAdd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedExchangeAdd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
@@ -404,9 +394,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int16_t{};
-                _InterlockedExchangeSub16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
-                return static_cast<type>(result);
+                return fetch_add(negate(operand), order);
             }
 
             [[nodiscard]] auto fetch_and(const type operand, const memory_order order) noexcept -> type
@@ -414,9 +402,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int16_t{};
-                _InterlockedAnd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedAnd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
@@ -424,9 +410,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int16_t{};
-                _InterlockedOr16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedOr16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
@@ -434,9 +418,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int16_t{};
-                _InterlockedXor16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedXor16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand)));
             }
 
             type storage;
@@ -553,9 +535,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int32_t{};
-                _InterlockedExchangeAdd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedExchangeAdd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
@@ -563,9 +543,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int32_t{};
-                _InterlockedExchangeSub(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
-                return static_cast<type>(result);
+                return fetch_add(negate(operand), order);
             }
 
             [[nodiscard]] auto fetch_and(const type operand, const memory_order order) noexcept -> type
@@ -573,9 +551,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int32_t{};
-                _InterlockedAnd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedAnd(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
@@ -583,9 +559,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int32_t{};
-                _InterlockedOr(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedOr(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
@@ -593,9 +567,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int32_t{};
-                _InterlockedXor(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedXor(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(operand)));
             }
 
             type storage;
@@ -713,9 +685,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int64_t{};
-                _InterlockedExchangeAdd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedExchangeAdd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_sub(const type operand, const memory_order order) noexcept -> type
@@ -723,9 +693,8 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int64_t{};
-                _InterlockedExchangeSub64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
-                return static_cast<type>(result);
+                const auto neg = negate(operand);
+                return fetch_add(neg, order);
             }
 
             [[nodiscard]] auto fetch_and(const type operand, const memory_order order) noexcept -> type
@@ -733,9 +702,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int64_t{};
-                _InterlockedAnd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedAnd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_or(const type operand, const memory_order order) noexcept -> type
@@ -743,9 +710,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int64_t{};
-                _InterlockedOr64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedOr64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand)));
             }
 
             [[nodiscard]] auto fetch_xor(const type operand, const memory_order order) noexcept -> type
@@ -753,9 +718,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int64_t{};
-                _InterlockedXor64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand), &result);
-                return static_cast<type>(result);
+                return static_cast<type>(_InterlockedXor64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand)));
             }
 
             type storage;
