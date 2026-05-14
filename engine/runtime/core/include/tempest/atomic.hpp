@@ -107,7 +107,7 @@ namespace tempest
         auto atomic_wait_direct(const void* const storage, void* const comparand, const size_t size,
                                 const uint64_t timeout) noexcept -> int
         {
-            const auto result = WaitOnAddress(const_cast<volatile void*>(storage), comparand, size, timeout);
+            const auto result = WaitOnAddress(const_cast<volatile void*>(storage), comparand, static_cast<DWORD>(size), timeout);
             return result;
         }
 
