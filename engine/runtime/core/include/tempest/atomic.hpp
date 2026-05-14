@@ -184,9 +184,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int8_t{};
-                _InterlockedExchange8(address_as_atomic<char>(storage), bit_cast<int8_t>(desired), &result);
-                return reinterpret_cast<type&>(result);
+                return reinterpret_cast<type&>(_InterlockedExchange8(address_as_atomic<char>(storage), bit_cast<int8_t>(desired)));
             }
 
             [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
@@ -331,9 +329,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int16_t{};
-                _InterlockedExchange16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(desired), &result);
-                return reinterpret_cast<type&>(result);
+                return reinterpret_cast<type&>(_InterlockedExchange16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(desired)));
             }
 
             [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
@@ -480,9 +476,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int32_t{};
-                _InterlockedExchange(address_as_atomic<int32_t>(storage), bit_cast<int32_t>(desired), &result);
-                return reinterpret_cast<type&>(result);
+                return reinterpret_cast<type&>(_InterlockedExchange(address_as_atomic<long>(storage), bit_cast<int32_t>(desired)));
             }
 
             [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
@@ -630,9 +624,7 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = int64_t{};
-                _InterlockedExchange64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(desired), &result);
-                return reinterpret_cast<type&>(result);
+                return reinterpret_cast<type&>(_InterlockedExchange64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(desired)));
             }
 
             [[nodiscard]] auto compare_exchange_strong(type& expected, const type desired,
