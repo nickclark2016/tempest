@@ -42,10 +42,6 @@ scoped.group('RHI', function()
                 'include',
             }
 
-            uses {
-                'rhi-api'
-            }
-
             links {
                 'rhi-mock',
             }
@@ -72,6 +68,7 @@ scoped.group('RHI', function()
             uses {
                 'googletest',
                 'rhi-mock',
+                'tempest',
             }
 
             warnings 'Extra'

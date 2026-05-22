@@ -60,7 +60,7 @@ scoped.project('tempest', function()
         }
 
         links {
-            "libcmtd"
+            "libcmt"
         }
     end)
 
@@ -76,7 +76,6 @@ scoped.project('tempest', function()
             'math',
             'rhi-api',
             'serialization',
-            'tasks',
         }
     end)
 
@@ -150,7 +149,6 @@ scoped.project('tempest', function()
             'math:includedirs',
             'rhi-api:includedirs',
             'serialization:includedirs',
-            'tasks:includedirs',
         }
 
         dependson {
@@ -165,7 +163,6 @@ scoped.project('tempest', function()
             'kind:StaticLib',
         }, function()
             links {
-                -- Temporary until we are a DLL and can export symbols properly
                 'assets',
                 'core',
                 'ecs',
@@ -175,8 +172,7 @@ scoped.project('tempest', function()
                 'math',
                 'rhi-api',
                 'serialization',
-                'tasks',
-                -- Dependency libraries
+
                 'glfw',
                 'miniz',
                 'simdjson',

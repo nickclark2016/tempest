@@ -78,6 +78,9 @@ project 'glfw'
 
         pic 'On'
 
+    filter { 'toolset:clang' }
+        linker 'lld'
+
     filter {}
 
     usage "PUBLIC"

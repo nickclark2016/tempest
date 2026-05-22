@@ -16,12 +16,14 @@ extern "C"
         auto& logger = ctx->get_logger();
         logger.info("Game loaded successfully!");
 
-        [[maybe_unused]] auto window = ctx->register_window({
-            .width = 1920,
-            .height = 1080,
-            .name = "Tempest Game",
-            .fullscreen = false,
-        }, true);
+        [[maybe_unused]] auto window = ctx->register_window(
+            {
+                .width = 1920,
+                .height = 1080,
+                .name = "Tempest Game",
+                .fullscreen = false,
+            },
+            true);
 
         ctx->register_on_close_callback([](auto& engine_ctx) -> void {
             auto& logger = engine_ctx.get_logger();
@@ -29,7 +31,7 @@ extern "C"
         });
 
         ctx->register_on_initialize_callback([](auto& engine_ctx) -> void {
-            // Create a sun light
+            // Create a camera
             auto& registry = engine_ctx.get_registry();
 
             auto camera = registry.create();
@@ -44,6 +46,19 @@ extern "C"
             camera_tx.rotation({0.0F, tempest::math::as_radians(90.0F), 0.0F});
             registry.assign(camera, camera_tx);
 
+            // Load Sponza
+            auto& asset_database = engine_ctx.get_asset_database();
+            asset_database.open("game.tassetdb");
+
+            const auto sponza_prefab =
+                asset_database.load("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", registry);
+
+            const auto sponza_instance = engine_ctx.load_entity(sponza_prefab);
+            auto sponza_transform = tempest::ecs::transform_component{};
+            sponza_transform.scale({0.125F});
+            registry.assign_or_replace(sponza_instance, sponza_transform);
+
+            // Load Sun
             auto sun = registry.create();
             auto sun_data = tempest::graphics::directional_light_component{
                 .color = {1.0F, 1.0F, 1.0F},
@@ -65,6 +80,8 @@ extern "C"
             registry.assign_or_replace(sun, sun_tx);
             registry.name(sun, "Sun");
         });
+
+        ctx->register_on_close_callback([](auto& engine_ctx) -> void { (void)engine_ctx.get_asset_database().save(); });
     }
 
     GAME_API void on_unload()

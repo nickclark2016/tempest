@@ -33,7 +33,7 @@ TEST(tuple, make_tuple)
     n = 7;
 
     EXPECT_EQ(tempest::get<0>(t2), 10);
-    EXPECT_EQ(tempest::get<1>(t2), "Test");
+    EXPECT_STREQ(tempest::get<1>(t2), "Test");
     EXPECT_EQ(tempest::get<2>(t2), 3.14);
     EXPECT_EQ(tempest::get<3>(t2), 7);
     EXPECT_EQ(tempest::get<4>(t2), 1);
@@ -45,7 +45,7 @@ TEST(tuple, make_tuple_const_ref)
     auto t = tempest::make_tuple(10, "Test", 3.14, tempest::cref(n));
     
     EXPECT_EQ(tempest::get<0>(t), 10);
-    EXPECT_EQ(tempest::get<1>(t), "Test");
+    EXPECT_STREQ(tempest::get<1>(t), "Test");
     EXPECT_EQ(tempest::get<2>(t), 3.14);
     EXPECT_EQ(tempest::get<3>(t), 1);
 }

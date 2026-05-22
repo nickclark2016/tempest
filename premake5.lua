@@ -145,7 +145,7 @@ scoped.workspace('Tempest', function()
         }
 
         links {
-            "libcmtd"
+            "libcmt"
         }
     end)
 
@@ -168,6 +168,13 @@ scoped.workspace('Tempest', function()
         'options:use-asan'
     }, function()
         sanitize { 'Address' }
+        
+        scoped.filter({
+            'toolset:msc*',
+            'configurations:Debug',
+        }, function()
+            editandcontinue 'Off'
+        end)
     end)
 
     scoped.filter({
