@@ -121,7 +121,7 @@ namespace tempest
             return static_cast<type>(unsigned_type{0} - static_cast<unsigned_type>(value));
         }
 
-        auto atomic_wait_direct(const void* const storage, void* const comparand, const size_t size,
+        [[nodiscard]] inline auto atomic_wait_direct(const void* const storage, void* const comparand, const size_t size,
                                 const uint32_t timeout) noexcept -> int
         {
             const auto result = WaitOnAddress(const_cast<volatile void*>(storage), comparand, size, timeout);
