@@ -128,7 +128,7 @@ scoped.workspace('Tempest', function()
         }
 
         links {
-            "libcmtd"
+            "msvcrtd"
         }
     end)
 
@@ -145,7 +145,7 @@ scoped.workspace('Tempest', function()
         }
 
         links {
-            "libcmt"
+            "msvcrt"
         }
     end)
 

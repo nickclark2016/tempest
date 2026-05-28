@@ -50,10 +50,20 @@ project 'glfw'
 
         links {
             'gdi32',
-            'user32',
-            'shell32',
+            'kernel32',
             'opengl32',
+            'shell32',
+            'user32',
         }
+
+        filter { 'system:windows', 'configurations:Debug', 'action:not vs*', 'toolset:not msc*' }
+            links {
+                'msvcrtd',
+            }
+        filter { 'system:windows', 'configurations:not Debug', 'action:not vs*', 'toolset:not msc*' }
+            links {
+                'msvcrt',
+            }
 
     filter { 'system:linux' }
         files {

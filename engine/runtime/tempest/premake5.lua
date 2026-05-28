@@ -43,7 +43,7 @@ scoped.project('tempest', function()
         }
 
         links {
-            "libcmtd"
+            "msvcrtd"
         }
     end)
 
@@ -60,7 +60,7 @@ scoped.project('tempest', function()
         }
 
         links {
-            "libcmt"
+            "msvcrt"
         }
     end)
 
