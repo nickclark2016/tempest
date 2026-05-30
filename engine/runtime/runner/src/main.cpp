@@ -5,15 +5,15 @@
 namespace
 {
 #if defined(TEMPEST_PLATFORM_WINDOWS)
-    inline constexpr auto game_library_name = L"game.dll";
+    inline constexpr auto game_library_name = L"game-runtime.dll";
 #elif defined(TEMPEST_PLATFORM_LINUX)
-    inline constexpr auto game_library_name = "libgame.so";
+    inline constexpr auto game_library_name = "libgame-runtime.so";
 #endif
 
     void run(tempest::span<tempest::string_view> args)
     {
         auto tempest_engine = tempest::engine_context();
-        
+
         auto game_shared_library_result = tempest::shared_library::load(game_library_name);
         if (!game_shared_library_result)
         {
@@ -22,7 +22,9 @@ namespace
         }
 
         const auto& game_shared_library = *game_shared_library_result;
-        const auto on_load_result = game_shared_library.get_function_handle<void, tempest::engine_context*, tempest::span<tempest::string_view>>("on_load");
+        const auto on_load_result =
+            game_shared_library
+                .get_function_handle<void, tempest::engine_context*, tempest::span<tempest::string_view>>("on_load");
         const auto on_unload_result = game_shared_library.get_function_handle<void>("on_unload");
 
         if (!on_load_result || !on_unload_result)
@@ -34,18 +36,27 @@ namespace
         auto on_load = *on_load_result;
         auto on_unload = *on_unload_result;
 
-        on_load(&tempest_engine,args);
+        [[maybe_unused]] auto window = tempest_engine.register_window(
+            {
+                .width = 1920,
+                .height = 1080,
+                .name = "Tempest Game",
+                .fullscreen = false,
+            },
+            true);
+
+        on_load(&tempest_engine, args);
         tempest_engine.run();
         on_unload();
     }
-}
+} // namespace
 
 #if defined(TEMPEST_PLATFORM_WINDOWS)
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <shellapi.h>
+#include <windows.h>
 
 auto WINAPI WinMain(HINSTANCE /*unused*/, HINSTANCE /*unused*/, LPSTR cmdline, int /*unused*/) -> int
 {

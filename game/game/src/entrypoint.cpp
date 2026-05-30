@@ -16,15 +16,6 @@ extern "C"
         auto& logger = ctx->get_logger();
         logger.info("Game loaded successfully!");
 
-        [[maybe_unused]] auto window = ctx->register_window(
-            {
-                .width = 1920,
-                .height = 1080,
-                .name = "Tempest Game",
-                .fullscreen = false,
-            },
-            true);
-
         ctx->register_on_close_callback([](auto& engine_ctx) -> void {
             auto& logger = engine_ctx.get_logger();
             logger.info("Game is closing...");
@@ -35,6 +26,7 @@ extern "C"
             auto& registry = engine_ctx.get_registry();
 
             auto camera = registry.create();
+            registry.name(camera, "Main Camera");
             tempest::graphics::camera_component camera_data = {
                 .aspect_ratio = 16.0F / 9.0F,
                 .vertical_fov = 100.0F,
@@ -57,6 +49,7 @@ extern "C"
             auto sponza_transform = tempest::ecs::transform_component{};
             sponza_transform.scale({0.125F});
             registry.assign_or_replace(sponza_instance, sponza_transform);
+            registry.name(sponza_instance, "Sponza");
 
             // Load Sun
             auto sun = registry.create();

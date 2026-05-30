@@ -1,21 +1,71 @@
 #include <tempest/archetype.hpp>
+#include <tempest/shared_library.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
 
 #include "editor.hpp"
 
-namespace tempest::editor
+namespace
 {
-    static unique_ptr<editor> setup_render_graph(engine_context& ctx, rhi::window_surface* win_surface,
-                                                 ui::ui_context* ui_ctx)
+    using namespace tempest;
+
+#if defined(TEMPEST_PLATFORM_WINDOWS)
+    inline constexpr auto game_library_name = L"game-runtime.dll";
+    inline constexpr auto game_editor_library_name = L"game-editor.dll";
+#elif defined(TEMPEST_PLATFORM_LINUX)
+    inline constexpr auto game_library_name = "libgame-runtime.so";
+    inline constexpr auto game_editor_library_name = L"libgame-editor.so";
+#endif
+
+    static unique_ptr<editor::editor> setup_render_graph(engine_context& ctx, rhi::window_surface* win_surface,
+                                                         editor::ui::ui_context* ui_ctx)
     {
-        return make_unique<editor>(ctx, win_surface, ui_ctx);
+        return make_unique<editor::editor>(ctx, win_surface, ui_ctx);
     }
 
-    static void run()
+    void run(span<string_view> args)
     {
-        auto engine = tempest::engine_context{};
-        auto window_data = engine.register_window(
+        auto tempest_engine = tempest::engine_context();
+
+        auto game_shared_library_result = tempest::shared_library::load(game_library_name);
+        if (!game_shared_library_result)
+        {
+            tempest_engine.get_logger().fatal("Failed to load game shared library.");
+            return;
+        }
+
+        auto game_editor_shared_library_result = shared_library::load(game_editor_library_name);
+        if (!game_editor_shared_library_result)
+        {
+            tempest_engine.get_logger().fatal("Failed to load game editor shared library.");
+            return;
+        }
+
+        const auto& game_shared_library = *game_shared_library_result;
+        const auto game_on_load_result =
+            game_shared_library
+                .get_function_handle<void, tempest::engine_context*, tempest::span<tempest::string_view>>("on_load");
+        const auto game_on_unload_result = game_shared_library.get_function_handle<void>("on_unload");
+
+        if (!game_on_load_result || !game_on_unload_result)
+        {
+            // Handle function loading errors
+            return;
+        }
+
+        const auto& game_editor_shared_library = *game_editor_shared_library_result;
+        const auto game_editor_on_load_result =
+            game_editor_shared_library
+                .get_function_handle<void, tempest::engine_context*, tempest::span<tempest::string_view>>("on_load");
+        const auto game_editor_on_unload_result = game_editor_shared_library.get_function_handle<void>("on_unload");
+
+        if (!game_editor_on_load_result || !game_editor_on_unload_result)
+        {
+            // Handle function loading errors
+            return;
+        }
+
+        auto window_data = tempest_engine.register_window(
             {
                 .width = 1920,
                 .height = 1080,
@@ -25,93 +75,85 @@ namespace tempest::editor
             false);
 
         auto&& [win_surface, render_surface, inputs] = window_data;
-        auto ui_ctx = ui::ui_context(win_surface, &engine.get_renderer().get_device(),
-                                     engine.get_renderer().get_frame_graph().get_tonemapped_color_format(), 3);
+        auto ui_ctx =
+            editor::ui::ui_context(win_surface, &tempest_engine.get_renderer().get_device(),
+                                   tempest_engine.get_renderer().get_frame_graph().get_tonemapped_color_format(), 3);
 
-        auto camera = static_cast<ecs::archetype_entity>(ecs::null);
-        auto ui_editor = unique_ptr<editor>();
+        auto ui_editor = unique_ptr<editor::editor>();
+        tempest_engine.register_on_initialize_callback(
+            [&](engine_context& ctx) { ui_editor = setup_render_graph(ctx, win_surface, &ui_ctx); });
 
-        engine.register_on_initialize_callback([&](engine_context& ctx) {
-            ui_editor = setup_render_graph(ctx, win_surface, &ui_ctx);
-
-            auto sponza_prefab = ctx.get_asset_database().load(
-                "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", ctx.get_registry());
-            auto sponza_instance = ctx.load_entity(sponza_prefab);
-
-            auto sponza_transform = ctx.get_registry().get<tempest::ecs::transform_component>(sponza_instance);
-            sponza_transform.scale({0.125f});
-            ctx.get_registry().replace(sponza_instance, sponza_transform);
-
-            ctx.get_registry().name(sponza_instance, "Sponza");
-
-            camera = ctx.get_registry().create();
-            ctx.get_registry().name(camera, "Main Camera");
-
-            auto camera_data = tempest::graphics::camera_component{
-                .aspect_ratio = 16.0f / 9.0f,
-                .vertical_fov = 100.0f,
-                .near_plane = 0.01f,
-            };
-
-            ctx.get_registry().assign(camera, camera_data);
-
-            auto camera_tx = tempest::ecs::transform_component::identity();
-            camera_tx.position({0.0f, 15.0f, -1.0f});
-            camera_tx.rotation({0.0f, tempest::math::as_radians(90.0f), 0.0f});
-            ctx.get_registry().assign(camera, camera_tx);
-
-            auto sun = ctx.get_registry().create();
-            auto sun_data = tempest::graphics::directional_light_component{
-                .color = {1.0f, 1.0f, 1.0f},
-                .intensity = 1.0f,
-            };
-
-            auto sun_shadows = tempest::graphics::shadow_map_component{
-                .shadow_distance = 2048.0f,
-                .split_lambda = 0.9f,
-                .blend_fraction = 0.1f,
-                .cascade_count = 4,
-            };
-
-            ctx.get_registry().assign_or_replace(sun, sun_shadows);
-            ctx.get_registry().assign_or_replace(sun, sun_data);
-            ctx.get_registry().name(sun, "Sun");
-
-            auto sun_tx = tempest::ecs::transform_component::identity();
-            sun_tx.rotation({tempest::math::as_radians(90.0f), 0.0f, 0.0f});
-            ctx.get_registry().assign_or_replace(sun, sun_tx);
-        });
-
-        engine.register_on_variable_update_callback(
-            [&camera, &win_surface, &ui_ctx, &ui_editor](engine_context& ctx, auto dt) mutable {
+        tempest_engine.register_on_variable_update_callback(
+            [&win_surface, &ui_ctx, &ui_editor](engine_context& ctx, auto dt) mutable {
                 ui_ctx.begin_ui_commands();
                 ui_editor->draw({});
                 ui_ctx.finish_ui_commands();
             });
 
-        engine.run();
-    }
-} // namespace tempest::editor
+        auto on_load = [&](auto&& engine, auto&& args) {
+            (*game_on_load_result)(engine, args);
+            (*game_editor_on_load_result)(engine, args);
+        };
 
-#if _WIN32
+        auto on_unload = [&]() {
+            (*game_editor_on_unload_result)();
+            (*game_on_unload_result)();
+        };
+
+        on_load(&tempest_engine, args);
+        tempest_engine.run();
+        on_unload();
+    }
+} // namespace
+
+#if defined(TEMPEST_PLATFORM_WINDOWS)
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
+#include <shellapi.h>
 #include <windows.h>
 
-int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine,
-                     _In_ int nCmdShow)
+auto WINAPI WinMain(HINSTANCE /*unused*/, HINSTANCE /*unused*/, LPSTR cmdline, int /*unused*/) -> int
 {
-    tempest::editor::run();
-    return 0;
+    auto arg_count = 0;
+    auto* const args = CommandLineToArgvW(GetCommandLineW(), &arg_count);
+
+    auto utf8_args = tempest::vector<tempest::string>{};
+    for (int i = 0; i < arg_count; ++i)
+    {
+        int utf8_size = WideCharToMultiByte(CP_UTF8, 0, args[i], -1, nullptr, 0, nullptr, nullptr);
+        if (utf8_size > 0)
+        {
+            auto utf8_arg = tempest::string(utf8_size - 1, '\0');
+            WideCharToMultiByte(CP_UTF8, 0, args[i], -1, utf8_arg.data(), utf8_size, nullptr, nullptr);
+            utf8_args.push_back(std::move(utf8_arg));
+        }
+        else
+        {
+            utf8_args.push_back({});
+        }
+    }
+
+    LocalFree((void*)args);
+
+    // Convert to vector of string_view for easier handling
+    auto arg_views = tempest::vector<tempest::string_view>{};
+    for (const auto& arg : utf8_args)
+    {
+        arg_views.push_back(arg);
+    }
+
+    run(arg_views);
 }
-
 #else
-
 int main(int argc, char* argv[])
 {
-    tempest::editor::run();
-    return 0;
-}
+    auto arg_views = tempest::vector<tempest::string_view>{};
+    for (int i = 0; i < argc; ++i)
+    {
+        arg_views.push_back(argv[i]);
+    }
 
+    run(arg_views);
+}
 #endif

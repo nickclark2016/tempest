@@ -1,4 +1,4 @@
-scoped.project('game', function()
+scoped.project('game-runtime', function()
     kind 'SharedLib'
     language 'C++'
     cppdialect 'C++20'

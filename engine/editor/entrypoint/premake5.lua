@@ -4,7 +4,7 @@ scoped.project('editor-entrypoint', function()
 
     targetdir '%{binaries}'
     objdir '%{intermediates}'
-    debugdir '%{root}/projects/editor/entrypoint'
+    debugdir '%{root}/engine/editor/entrypoint'
     
     scoped.filter({
         'system:not windows'
@@ -26,6 +26,11 @@ scoped.project('editor-entrypoint', function()
     uses {
         'tempest',
         'imgui',
+    }
+
+    dependson {
+        'game-editor',
+        'game-runtime',
     }
 
     scoped.filter({
