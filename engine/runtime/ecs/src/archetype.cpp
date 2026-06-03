@@ -287,7 +287,7 @@ namespace tempest::ecs
         archetype.erase(key.archetype_key);
         _entities.release(entity);
 
-        _event_registry->dispatcher<entity_destroyed_event<entity_type>>().publish(entity_destroyed_event{
+        _event_registry->dispatcher<entity_destroyed_event<basic_archetype_registry::entity_type>>().publish(entity_destroyed_event{
             .entity = entity,
         });
     }

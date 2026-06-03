@@ -32,6 +32,7 @@
 #include <tempest/api.hpp>
 #include <tempest/event_dispatcher.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/meta.hpp>
 #include <tempest/mutex.hpp>
 #include <tempest/vector.hpp>
 
@@ -64,7 +65,7 @@ namespace tempest::event
 
             for (const auto& channel_ptr : _channels)
             {
-                if (channel_ptr->type_id() == _type_id<T>())
+                if (channel_ptr->type_id() == core::type_hash<T>::value())
                 {
                     return static_cast<channel<T>*>(channel_ptr.get())->get();
                 }
@@ -78,19 +79,6 @@ namespace tempest::event
         }
 
       private:
-        /// @brief Compile-time unique ID per event type, using function pointer identity.
-        /// Avoids RTTI dependency.
-        template <event_type T>
-        static constexpr void _type_id_fn() noexcept
-        {
-        }
-
-        template <event_type T>
-        static constexpr auto _type_id() noexcept -> void (*)()
-        {
-            return &_type_id_fn<T>;
-        }
-
         /// @brief Type-erased base for per-type dispatcher storage.
         /// Virtual destructor is the sole use of runtime polymorphism in the event system.
         struct channel_base
@@ -102,7 +90,7 @@ namespace tempest::event
             auto operator=(channel_base&&) -> channel_base& = delete;
             virtual ~channel_base() = default;
 
-            [[nodiscard]] virtual auto type_id() const noexcept -> void (*)() = 0;
+            [[nodiscard]] virtual auto type_id() const noexcept -> size_t = 0;
         };
 
         /// @brief Typed channel owning an event_dispatcher<T>.
@@ -114,9 +102,9 @@ namespace tempest::event
                 return _dispatcher;
             }
 
-            [[nodiscard]] auto type_id() const noexcept -> void (*)() override
+            [[nodiscard]] auto type_id() const noexcept -> size_t override
             {
-                return _type_id<T>();
+                return core::type_hash<T>::value();
             }
 
           private:
