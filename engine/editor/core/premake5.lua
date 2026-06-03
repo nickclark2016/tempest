@@ -36,7 +36,7 @@ scoped.project('editor-core', function()
 
         scoped.filter('system:not windows', function()
             defines {
-                'TEMPEST_API',
+                'TEMPEST_EDITOR_API=',
             }
         end)
     end)
