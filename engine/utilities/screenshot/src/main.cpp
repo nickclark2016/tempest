@@ -210,7 +210,7 @@ auto main(int argc, char** argv) -> int
     asset_tx.scale({args.scale, args.scale, args.scale});
     entity_registry.assign_or_replace(asset_entity, asset_tx);
 
-    auto entities = tempest::vector<tempest::ecs::archetype_entity>{};
+    auto entities = tempest::vector<tempest::ecs::entity>{};
     entities.push_back(asset_entity);
 
     // Build the PBR frame graph — rgba8_unorm tonemapped output avoids any channel swap

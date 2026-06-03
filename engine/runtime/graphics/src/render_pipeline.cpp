@@ -200,7 +200,7 @@ namespace tempest::graphics
     //     return !_windows.empty();
     // }
 
-    // void renderer::upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+    // void renderer::upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
     //                                    const core::texture_registry& textures, const core::material_registry& materials)
     // {
     //     for (auto&& ctx : _windows)
@@ -210,7 +210,7 @@ namespace tempest::graphics
     // }
 
     void render_pipeline::upload_objects_sync([[maybe_unused]] rhi::device& dev,
-                                              [[maybe_unused]] span<const ecs::archetype_entity> entities,
+                                              [[maybe_unused]] span<const ecs::entity> entities,
                                               [[maybe_unused]] const core::mesh_registry& meshes,
                                               [[maybe_unused]] const core::texture_registry& textures,
                                               [[maybe_unused]] const core::material_registry& materials)

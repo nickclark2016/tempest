@@ -27,6 +27,8 @@
 
 namespace tempest::ecs
 {
+    class basic_archetype_registry;
+
     struct TEMPEST_API basic_archetype_type_info
     {
         string_view name;
@@ -175,8 +177,8 @@ namespace tempest::ecs
     template <size_t N>
     struct basic_archetype_types_hash
     {
-        static constexpr size_t Count = bit_ceil(N) / 8;
-        array<byte, Count> hash;
+        static constexpr size_t count = bit_ceil(N) / 8;
+        array<byte, count> hash;
     };
 
     template <size_t N>
@@ -734,6 +736,295 @@ namespace tempest::ecs
         _head = traits_type::construct(current_cap, 0);
     }
 
+    namespace detail
+    {
+        template <typename... Ts>
+        struct hash_mask_type_list_traits;
+
+        template <typename... Ts>
+        struct hash_mask_type_list_traits<core::type_list<Ts...>>
+        {
+            static basic_archetype_types_hash<256u> create()
+            {
+                return create_archetype_types_hash<256u, remove_cvref_t<Ts>...>();
+            }
+        };
+
+        template <typename... Ts>
+        struct component_view_arg_applier
+        {
+            static constexpr auto arg_count = sizeof...(Ts);
+
+            template <typename Fn, size_t... Is>
+            static void apply(Fn&& func, const array<byte*, arg_count>& args, index_sequence<Is...>)
+            {
+                tempest::forward<Fn>(func)(*reinterpret_cast<remove_cvref_t<Ts>*>(args[Is])...);
+            }
+        };
+
+        struct arch_index_iter
+        {
+            template <typename T>
+            static size_t index(size_t arch_index, auto storage_index_fetcher)
+            {
+                static const auto type_info = create_archetype_type_info<remove_cvref_t<T>>();
+                return storage_index_fetcher(arch_index, type_info.index);
+            }
+
+            template <typename Args, size_t... Is>
+            static array<size_t, sizeof...(Is)> iterate(auto arch_index, auto storage_index_fetcher,
+                                                        index_sequence<Is...>)
+            {
+                return array<size_t, sizeof...(Is)>{
+                    index<typename core::type_list_type_at<Is, Args>::type>(arch_index, storage_index_fetcher)...,
+                };
+            }
+        };
+    } // namespace detail
+
+    template <bool IsConst, typename... Ts>
+    class basic_archetype_with_components_view;
+
+    template <bool IsConst, typename... Ts>
+    class basic_archetype_with_components_iter
+    {
+      public:
+        using view_type = conditional_t < IsConst, const basic_archetype_with_components_view<true, Ts...>,
+              basic_archetype_with_components_view<false, Ts...>>;
+
+        auto operator++() -> basic_archetype_with_components_iter&
+        {
+            _parent->_acquire_next_entity(_archetype_index, _entity_index);
+            return *this;
+        }
+
+        auto operator++(int) -> basic_archetype_with_components_iter
+        {
+            auto copy = *this;
+            _parent->_acquire_next_entity(_archetype_index, _entity_index);
+            return copy;
+        }
+
+        using reference = tuple<add_lvalue_reference_t<remove_reference_t<Ts>>...>;
+        using const_reference = tuple<add_lvalue_reference_t<add_const_t<remove_cvref_t<Ts>>>...>;
+
+        [[nodiscard]] auto operator*() const -> const_reference
+        {
+            using arg_types = core::type_list<remove_cvref_t<Ts>...>;
+
+            auto& archetype = _parent->_registry->_archetypes[_archetype_index];
+            const auto argument_indices = detail::arch_index_iter::iterate<arg_types>(
+                _archetype_index,
+                [&](auto arch_idx, auto type_id) {
+                    return _parent->_registry->_index_of_component_in_archetype(arch_idx, type_id);
+                },
+                make_index_sequence<sizeof...(Ts)>{});
+
+            return _deref_const(archetype, argument_indices, make_index_sequence<sizeof...(Ts)>{});
+        }
+
+        template <typename... Ts>
+        inline friend auto operator==(const basic_archetype_with_components_iter& lhs,
+                                      const basic_archetype_with_components_iter& rhs) -> bool
+        {
+            return lhs._parent == rhs._parent && lhs._archetype_index == rhs._archetype_index &&
+                   lhs._entity_index == rhs._entity_index;
+        }
+
+        template <typename... Ts>
+        inline friend auto operator!=(const basic_archetype_with_components_iter& lhs,
+                                      const basic_archetype_with_components_iter& rhs) -> bool
+        {
+            return lhs._entity_index != rhs._entity_index || lhs._archetype_index != rhs._archetype_index ||
+                   lhs._parent != rhs._parent;
+        }
+
+      private:
+        basic_archetype_with_components_iter(view_type& view,
+                                             size_t archetype_idx, size_t entity_idx)
+            : _parent{&view}, _archetype_index{archetype_idx}, _entity_index{entity_idx}
+        {
+        }
+
+        view_type* _parent;
+        size_t _archetype_index;
+        size_t _entity_index;
+
+        template <std::size_t... Is>
+        tuple<remove_cvref_t<Ts>&...> _deref(auto& archetype, span<const size_t> argument_indices,
+                                             index_sequence<Is...>)
+        {
+            return make_tuple(
+                tempest::ref(*reinterpret_cast<Ts*>(archetype.element_at(_entity_index, argument_indices[Is])))...);
+        }
+
+        template <std::size_t... Is>
+        tuple<add_const_t<remove_cvref_t<Ts>>&...> _deref_const(const auto& archetype,
+                                                                span<const size_t> argument_indices,
+                                                                index_sequence<Is...>) const
+        {
+            return make_tuple(tempest::cref(*reinterpret_cast<add_const_t<remove_cvref_t<Ts>>*>(
+                archetype.element_at(_entity_index, argument_indices[Is])))...);
+        }
+
+        friend class basic_archetype_with_components_view<IsConst, Ts...>;
+    };
+
+    /**
+     * @brief A view into a basic archetype with a specific set of components. This type is not for exact matching of an
+     * archetype, but finding entities in archetypes that contain at least the set of components specified.
+     *
+     * @tparam Ts The types of the components in the archetype.
+     */
+    template <bool IsConst, typename... Ts>
+    class basic_archetype_with_components_view
+    {
+      public:
+        using registry_type = conditional_t<IsConst, const basic_archetype_registry, basic_archetype_registry>;
+
+        explicit basic_archetype_with_components_view(registry_type& parent) : _registry{&parent}
+        {
+        }
+
+        auto begin() -> basic_archetype_with_components_iter<IsConst, Ts...>
+        {
+            // Find the first matching archetype
+            const auto archetype_count = _registry->_archetypes.size();
+            auto archetype_idx = archetype_count;
+            for (size_t idx = 0; idx < archetype_count; ++idx)
+            {
+                const auto archetype_hash = _registry->_hashes[idx];
+
+                // Check hash match
+                auto match = true;
+                for (size_t byte = 0; byte < decltype(archetype_hash)::count / 8u; ++byte)
+                {
+                    const auto byte_match =
+                        (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
+                    if (!byte_match)
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match && !_registry->_archetypes[idx].empty())
+                {
+                    archetype_idx = idx;
+                    break;
+                }
+            }
+
+            return basic_archetype_with_components_iter<IsConst, Ts...>(*this, archetype_idx, 0);
+        }
+
+        auto begin() const -> basic_archetype_with_components_iter<true, Ts...>
+        {
+            return cbegin();
+        }
+
+        auto cbegin() const -> basic_archetype_with_components_iter<true, Ts...>
+        {
+            // Find the first matching archetype
+            const auto archetype_count = _registry->_archetypes.size();
+            auto archetype_idx = archetype_count;
+            for (size_t idx = 0; idx < archetype_count; ++idx)
+            {
+                const auto archetype_hash = _registry->_hashes[idx];
+
+                // Check hash match
+                auto match = true;
+                for (size_t byte = 0; byte < decltype(archetype_hash)::count / 8u; ++byte)
+                {
+                    const auto byte_match =
+                        (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
+                    if (!byte_match)
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match && !_registry->_archetypes[idx].empty())
+                {
+                    archetype_idx = idx;
+                    break;
+                }
+            }
+
+            return basic_archetype_with_components_iter<true, Ts...>(*this, archetype_idx, 0);
+        }
+
+        auto end() -> basic_archetype_with_components_iter<IsConst, Ts...>
+        {
+            const auto archetype_count = _registry->_archetypes.size();
+            return basic_archetype_with_components_iter<false, Ts...>(*this, archetype_count, 0);
+        }
+
+        auto end() const -> basic_archetype_with_components_iter<true, Ts...>
+        {
+            return cend();
+        }
+
+        auto cend() const -> basic_archetype_with_components_iter<true, Ts...>
+        {
+            const auto archetype_count = _registry->_archetypes.size();
+            return basic_archetype_with_components_iter<true, Ts...>(*this, archetype_count, 0);
+        }
+
+      private:
+        friend class basic_archetype_registry;
+        friend class basic_archetype_with_components_iter<IsConst, Ts...>;
+
+        registry_type* _registry;
+
+        using arg_types = core::type_list<tempest::remove_cvref_t<Ts>...>;
+
+        inline static const auto _type_hash_mask = detail::hash_mask_type_list_traits<arg_types>::create();
+        static constexpr auto argument_count = sizeof...(Ts);
+
+        auto _acquire_next_entity(/*inout*/ size_t& archetype_index, /*intout*/ size_t& entity_index) const -> void
+        {
+            const auto archetype_count = _registry->_archetypes.size();
+            // For the current archetype, get the next entity if there are more
+            const auto current_archetype_size = _registry->_archetypes[archetype_index].size();
+            if (entity_index + 1 < current_archetype_size)
+            {
+                ++entity_index;
+                return;
+            }
+
+            auto archetype_idx = archetype_count;
+            for (size_t idx = archetype_index + 1; idx < archetype_count; ++idx)
+            {
+                const auto& archetype_hash = _registry->_hashes[idx];
+
+                // Check hash match
+                auto match = true;
+                for (size_t byte = 0; byte < remove_cvref_t<decltype(archetype_hash)>::count / 8u; ++byte)
+                {
+                    const auto byte_match =
+                        (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
+                    if (!byte_match)
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match && !_registry->_archetypes[idx].empty())
+                {
+                    archetype_idx = idx;
+                    break;
+                }
+            }
+
+            // Set to the start of the next archetype, or one past the last archetype
+            archetype_index = archetype_idx;
+            entity_index = 0;
+        }
+    };
+
     class TEMPEST_API basic_archetype_registry
     {
       public:
@@ -779,8 +1070,23 @@ namespace tempest::ecs
         template <typename Fn>
         void each(Fn&& func);
 
-        optional<string_view> name(entity_type entity) const;
+        [[nodiscard]] optional<string_view> name(entity_type entity) const;
         void name(entity_type entity, string_view name);
+
+        [[nodiscard]] auto find_first_with_name(string_view name) const -> optional<entity_type>;
+        [[nodiscard]] auto find_all_with_name(string_view name) const -> vector<entity_type>;
+
+        template <typename... Ts>
+        basic_archetype_with_components_view<false, Ts...> with()
+        {
+            return basic_archetype_with_components_view<false, Ts...>(*this);
+        }
+
+        template <typename... Ts>
+        basic_archetype_with_components_view<true, Ts...> with() const
+        {
+            return basic_archetype_with_components_view<true, Ts...>(*this);
+        }
 
       private:
         vector<basic_archetype> _archetypes;
@@ -794,6 +1100,12 @@ namespace tempest::ecs
         event::event_registry* _event_registry;
 
         size_t _index_of_component_in_archetype(size_t arch_index, size_t component_id) const;
+
+        template <bool, typename... Ts>
+        friend class basic_archetype_with_components_iter;
+
+        template <bool, typename... Ts>
+        friend class basic_archetype_with_components_view;
     };
 
     struct TEMPEST_API self_component
@@ -958,8 +1270,8 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline const remove_cvref_t<T>& basic_archetype_registry::replace(typename basic_archetype_registry::entity_type entity,
-                                                                T&& value)
+    inline const remove_cvref_t<T>& basic_archetype_registry::replace(
+        typename basic_archetype_registry::entity_type entity, T&& value)
     {
         using component_type = remove_cvref_t<T>;
         static const basic_archetype_type_info type_info = create_archetype_type_info<component_type>();
@@ -1176,18 +1488,6 @@ namespace tempest::ecs
 
     namespace detail
     {
-        template <typename... Ts>
-        struct hash_mask_type_list_traits;
-
-        template <typename... Ts>
-        struct hash_mask_type_list_traits<core::type_list<Ts...>>
-        {
-            static basic_archetype_types_hash<256u> create()
-            {
-                return create_archetype_types_hash<256u, remove_cvref_t<Ts>...>();
-            }
-        };
-
         template <size_t N, typename... Ts>
         struct for_each_fn_applier;
 
@@ -1209,25 +1509,6 @@ namespace tempest::ecs
                 using arg_indices = make_index_sequence<argument_count>;
 
                 apply(tempest::forward<Fn>(fn), tempest::move(args), arg_indices{});
-            }
-        };
-
-        struct arch_index_iter
-        {
-            template <typename T>
-            static size_t index(size_t arch_index, auto storage_index_fetcher)
-            {
-                static const auto type_info = create_archetype_type_info<remove_cvref_t<T>>();
-                return storage_index_fetcher(arch_index, type_info.index);
-            }
-
-            template <size_t ArgCount, typename Args, size_t... Is>
-            static array<size_t, ArgCount> iterate(auto arch_index, auto storage_index_fetcher, index_sequence<Is...>)
-            {
-                array<size_t, ArgCount> args = {
-                    index<typename core::type_list_type_at<Is, Args>::type>(arch_index, storage_index_fetcher)...,
-                };
-                return args;
             }
         };
     } // namespace detail
@@ -1259,13 +1540,12 @@ namespace tempest::ecs
                 // This is not the same as the index of the component in the hash
                 basic_archetype& arch = _archetypes[i];
 
-                array<size_t, argument_count> argument_indices =
-                    detail::arch_index_iter::iterate<argument_count, typename fn_traits::argument_types>(
-                        i,
-                        [&](size_t arch_idx, size_t type_id) {
-                            return _index_of_component_in_archetype(arch_idx, type_id);
-                        },
-                        tempest::make_index_sequence<argument_count>());
+                auto argument_indices = detail::arch_index_iter::iterate<typename fn_traits::argument_types>(
+                    i,
+                    [&](size_t arch_idx, size_t type_id) {
+                        return _index_of_component_in_archetype(arch_idx, type_id);
+                    },
+                    tempest::make_index_sequence<argument_count>());
 
                 // TODO: Build a tuple of pointers to the first element of each component pool
                 // Use that to iterate instead
@@ -1584,8 +1864,9 @@ namespace tempest::ecs
         return {*_registry, tombstone};
     }
 
-    TEMPEST_API void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
-                                          basic_archetype_registry::entity_type child);
+    TEMPEST_API void create_parent_child_relationship(basic_archetype_registry& reg,
+                                                      basic_archetype_registry::entity_type parent,
+                                                      basic_archetype_registry::entity_type child);
 
     using archetype_entity_hierarchy_iterator = basic_archetype_entity_hierarchy_iterator;
     using archetype_entity_hierarchy_view = basic_archetype_entity_hierarchy_view;

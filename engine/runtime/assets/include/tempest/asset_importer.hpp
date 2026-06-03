@@ -24,10 +24,10 @@ namespace tempest::assets
         asset_importer& operator=(asset_importer&&) noexcept = delete; // NOLINT
 
         [[nodiscard]] virtual auto import(asset_database& asset_db, string_view path, ecs::archetype_registry& registry)
-            -> ecs::archetype_entity;
+            -> ecs::entity;
         [[nodiscard]] virtual auto import(asset_database& asset_db, span<const byte> data,
                                           ecs::archetype_registry& registry, optional<string_view> asset_path)
-            -> ecs::archetype_entity = 0;
+            -> ecs::entity = 0;
     };
 } // namespace tempest::assets
 

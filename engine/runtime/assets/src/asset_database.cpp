@@ -228,7 +228,7 @@ namespace tempest::assets
         return true;
     }
 
-    auto asset_database::load(string_view source_path, ecs::archetype_registry& registry) -> ecs::archetype_entity
+    auto asset_database::load(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity
     {
         // Check if source exists in the database
         auto path_it = _source_path_to_index.find(string(source_path));
@@ -380,7 +380,7 @@ namespace tempest::assets
     }
 
     auto asset_database::_load_from_blobs(string_view source_path, ecs::archetype_registry& registry)
-        -> ecs::archetype_entity
+        -> ecs::entity
     {
         auto src_it = _source_path_to_index.find(string(source_path));
         if (src_it == _source_path_to_index.end())
@@ -471,7 +471,7 @@ namespace tempest::assets
                             blob_archive);
 
                     // Create an entity for each record
-                    vector<ecs::archetype_entity> entities(hierarchy.records.size());
+                    vector<ecs::entity> entities(hierarchy.records.size());
                     for (size_t i = 0; i < hierarchy.records.size(); ++i)
                     {
                         entities[i] = registry.create<>();
@@ -515,7 +515,7 @@ namespace tempest::assets
         return root;
     }
 
-    ecs::archetype_entity asset_database::_load_via_import(string_view source_path, ecs::archetype_registry& registry)
+    ecs::entity asset_database::_load_via_import(string_view source_path, ecs::archetype_registry& registry)
     {
         const auto* extension_it = search_last_of(source_path, '.');
         if (extension_it == source_path.end())
@@ -558,23 +558,23 @@ namespace tempest::assets
         // from the database on subsequent runs.
         {
             // Collect all entities into a flat list via depth-first walk
-            vector<ecs::archetype_entity> all_entities;
-            flat_unordered_map<ecs::archetype_entity, size_t> entity_to_index;
+            vector<ecs::entity> all_entities;
+            flat_unordered_map<ecs::entity, size_t> entity_to_index;
 
-            function<void(ecs::archetype_entity)> collect;
-            collect = [&](ecs::archetype_entity entity) {
+            function<void(ecs::entity)> collect;
+            collect = [&](ecs::entity entity) {
                 auto idx = all_entities.size();
                 all_entities.push_back(entity);
                 entity_to_index.insert({entity, idx});
 
-                auto* rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
+                auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;
                     while (child != ecs::tombstone)
                     {
                         collect(child);
-                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
+                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
                         child = child_rel->next_sibling;
                     }
                 }
@@ -601,14 +601,14 @@ namespace tempest::assets
                 }
 
                 // Record child indices
-                auto* rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(entity);
+                auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;
                     while (child != ecs::tombstone)
                     {
                         record.child_indices.push_back(entity_to_index[child]);
-                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
+                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
                         child = child_rel->next_sibling;
                     }
                 }

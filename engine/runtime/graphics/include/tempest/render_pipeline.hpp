@@ -41,7 +41,7 @@ namespace tempest::graphics
     //         return *_rhi_device;
     //     }
 
-    //     void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+    //     void upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
     //                              const core::texture_registry& textures, const core::material_registry& materials);
 
     //   private:
@@ -112,7 +112,7 @@ namespace tempest::graphics
 
         virtual void set_viewport(uint32_t width, uint32_t height) = 0;
 
-        virtual void upload_objects_sync(rhi::device& dev, span<const ecs::archetype_entity> entities,
+        virtual void upload_objects_sync(rhi::device& dev, span<const ecs::entity> entities,
                                          const core::mesh_registry& meshes, const core::texture_registry& textures,
                                          const core::material_registry& materials);
 

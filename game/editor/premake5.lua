@@ -13,5 +13,7 @@ scoped.project('game-editor', function()
 
     uses {
         'tempest',
+        'editor-core',
+        'game-runtime',
     }
 end)

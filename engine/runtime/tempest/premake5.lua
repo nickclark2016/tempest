@@ -30,7 +30,7 @@ scoped.project('tempest', function()
         'include'
     }
 
-        scoped.filter({
+    scoped.filter({
         'toolset:clang',
         'system:windows',
         'action:not vs*',

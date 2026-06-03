@@ -62,7 +62,7 @@ namespace tempest
         void request_close(bool close = true) noexcept;
         [[nodiscard]] bool should_close() const noexcept;
 
-        ecs::archetype_entity load_entity(ecs::archetype_entity src);
+        ecs::entity load_entity(ecs::entity src);
 
         [[nodiscard]] auto get_logger() noexcept -> logger&
         {
@@ -101,7 +101,7 @@ namespace tempest
         void _update_variable(std::chrono::duration<float> delta_time);
         void _render_frame();
 
-        vector<ecs::archetype_entity> _entities_to_load;
+        vector<ecs::entity> _entities_to_load;
 
         graphics::renderer _render;
     };

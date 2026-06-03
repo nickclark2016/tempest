@@ -38,13 +38,13 @@ namespace tempest::graphics
           private:
             pbr_frame_graph_config _pbr_cfg = {};
             pbr_frame_graph_inputs _pbr_inputs = {};
-            vector<function<void(pbr_frame_graph&)>> _pbr_customization_callbacks = {};
+            vector<function<void(pbr_frame_graph&)>> _pbr_customization_callbacks;
         };
 
         tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>
         create_window(const rhi::window_surface_desc& desc, bool install_swapchain_blit = true);
 
-        void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+        void upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
                                  const core::texture_registry& textures, const core::material_registry& materials);
 
         void finalize_graph();

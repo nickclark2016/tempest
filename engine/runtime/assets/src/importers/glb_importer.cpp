@@ -39,7 +39,7 @@ namespace tempest::assets
     auto glb_importer::import([[maybe_unused]] asset_database& asset_db,
                                                [[maybe_unused]] span<const byte> bytes,
                                                [[maybe_unused]] ecs::archetype_registry& registry,
-                                               [[maybe_unused]] optional<string_view> path) -> ecs::archetype_entity
+                                               [[maybe_unused]] optional<string_view> path) -> ecs::entity
     {
         throw std::runtime_error("GLB import not implemented yet.");
     }

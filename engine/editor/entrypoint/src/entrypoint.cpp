@@ -1,9 +1,11 @@
 #include <tempest/archetype.hpp>
+#include <tempest/editor.hpp>
 #include <tempest/shared_library.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
-
-#include "editor.hpp"
+#include <tempest/windows/entity_view_window.hpp>
+#include <tempest/windows/scene_hierarchy_window.hpp>
+#include <tempest/windows/viewport_window.hpp>
 
 namespace
 {
@@ -17,10 +19,10 @@ namespace
     inline constexpr auto game_editor_library_name = L"libgame-editor.so";
 #endif
 
-    static unique_ptr<editor::editor> setup_render_graph(engine_context& ctx, rhi::window_surface* win_surface,
-                                                         editor::ui::ui_context* ui_ctx)
+    static unique_ptr<editor::editor_context> setup_render_graph(engine_context& ctx, rhi::window_surface& win_surface,
+                                                                 editor::ui_context& ui_ctx)
     {
-        return make_unique<editor::editor>(ctx, win_surface, ui_ctx);
+        return make_unique<editor::editor_context>(ctx, win_surface, ui_ctx);
     }
 
     void run(span<string_view> args)
@@ -56,7 +58,7 @@ namespace
         const auto& game_editor_shared_library = *game_editor_shared_library_result;
         const auto game_editor_on_load_result =
             game_editor_shared_library
-                .get_function_handle<void, tempest::engine_context*, tempest::span<tempest::string_view>>("on_load");
+                .get_function_handle<void, tempest::engine_context*, tempest::editor::editor_context*, tempest::span<tempest::string_view>>("on_load");
         const auto game_editor_on_unload_result = game_editor_shared_library.get_function_handle<void>("on_unload");
 
         if (!game_editor_on_load_result || !game_editor_on_unload_result)
@@ -76,23 +78,33 @@ namespace
 
         auto&& [win_surface, render_surface, inputs] = window_data;
         auto ui_ctx =
-            editor::ui::ui_context(win_surface, &tempest_engine.get_renderer().get_device(),
-                                   tempest_engine.get_renderer().get_frame_graph().get_tonemapped_color_format(), 3);
+            editor::ui_context(win_surface, &tempest_engine.get_renderer().get_device(),
+                               tempest_engine.get_renderer().get_frame_graph().get_tonemapped_color_format(), 3);
 
-        auto ui_editor = unique_ptr<editor::editor>();
-        tempest_engine.register_on_initialize_callback(
-            [&](engine_context& ctx) { ui_editor = setup_render_graph(ctx, win_surface, &ui_ctx); });
+        auto ui_editor = unique_ptr<editor::editor_context>();
+        auto viewport_win = static_cast<editor::viewport_window*>(nullptr);
+        auto scene_hierarchy_win = static_cast<editor::scene_hierarchy_window*>(nullptr);
+        auto entity_props_win = static_cast<editor::entity_view_window*>(nullptr);
 
-        tempest_engine.register_on_variable_update_callback(
-            [&win_surface, &ui_ctx, &ui_editor](engine_context& ctx, auto dt) mutable {
-                ui_ctx.begin_ui_commands();
-                ui_editor->draw({});
-                ui_ctx.finish_ui_commands();
-            });
+        tempest_engine.register_on_initialize_callback([&](engine_context& ctx) {
+            ui_editor = setup_render_graph(ctx, *win_surface, ui_ctx);
+            viewport_win = ui_editor->register_window(make_unique<editor::viewport_window>(ctx.get_renderer()));
+            scene_hierarchy_win =
+                ui_editor->register_window(make_unique<editor::scene_hierarchy_window>(ctx.get_registry()));
+            entity_props_win = ui_editor->register_window(make_unique<editor::entity_view_window>(ctx.get_registry()));
+        });
+
+        tempest_engine.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {
+            entity_props_win->target = scene_hierarchy_win->selected_entity;
+
+            ui_ctx.begin_ui_commands();
+            ui_editor->draw();
+            ui_ctx.finish_ui_commands();
+        });
 
         auto on_load = [&](auto&& engine, auto&& args) {
             (*game_on_load_result)(engine, args);
-            (*game_editor_on_load_result)(engine, args);
+            (*game_editor_on_load_result)(engine, ui_editor.get(), args);
         };
 
         auto on_unload = [&]() {
@@ -115,6 +127,14 @@ namespace
 
 auto WINAPI WinMain(HINSTANCE /*unused*/, HINSTANCE /*unused*/, LPSTR cmdline, int /*unused*/) -> int
 {
+    // Try to attach the console
+    if (AttachConsole(ATTACH_PARENT_PROCESS))
+    {
+        FILE* fp;
+        freopen_s(&fp, "CONOUT$", "w", stdout);
+        freopen_s(&fp, "CONOUT$", "w", stderr);
+    }
+
     auto arg_count = 0;
     auto* const args = CommandLineToArgvW(GetCommandLineW(), &arg_count);
 

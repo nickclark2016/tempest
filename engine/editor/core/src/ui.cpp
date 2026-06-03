@@ -1,4 +1,4 @@
-#include "ui.hpp"
+#include <tempest/ui.hpp>
 
 #include <tempest/enum.hpp>
 #include <tempest/frame_graph.hpp>
@@ -15,7 +15,7 @@
 #include <cstring>
 #include <tempest/vector.hpp>
 
-namespace tempest::editor::ui
+namespace tempest::editor
 {
     namespace
     {

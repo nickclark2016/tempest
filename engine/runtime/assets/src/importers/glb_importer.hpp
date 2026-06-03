@@ -17,7 +17,7 @@ namespace tempest::assets
                      core::material_registry* material_reg) noexcept;
 
         auto import(asset_database& asset_db, span<const byte> bytes, ecs::archetype_registry& registry,
-                    optional<string_view> path) -> ecs::archetype_entity override;
+                    optional<string_view> path) -> ecs::entity override;
 
       private:
         [[maybe_unused]] core::mesh_registry* _mesh_reg;

@@ -596,14 +596,14 @@ namespace
         tempest::guid last_registered_asset_id{};
 
         // Override the path-based overload so it doesn't try to read a file from disk.
-        [[nodiscard]] tempest::ecs::archetype_entity import(tempest::assets::asset_database& asset_db,
+        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
                                                             tempest::string_view path,
                                                             tempest::ecs::archetype_registry& registry) override
         {
             return import(asset_db, tempest::span<const tempest::byte>{}, registry, tempest::some(path));
         }
 
-        [[nodiscard]] tempest::ecs::archetype_entity import(tempest::assets::asset_database& asset_db,
+        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
                                                             tempest::span<const tempest::byte> data,
                                                             tempest::ecs::archetype_registry& registry,
                                                             tempest::optional<tempest::string_view> path) override
@@ -641,14 +641,14 @@ namespace
         tempest::vector<tempest::guid> produced_material_ids;
 
         // Override the path-based overload so it doesn't try to read a file from disk.
-        [[nodiscard]] tempest::ecs::archetype_entity import(tempest::assets::asset_database& asset_db,
+        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
                                                             tempest::string_view path,
                                                             tempest::ecs::archetype_registry& registry) override
         {
             return import(asset_db, tempest::span<const tempest::byte>{}, registry, tempest::some(path));
         }
 
-        [[nodiscard]] tempest::ecs::archetype_entity import(tempest::assets::asset_database& asset_db,
+        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
                                                             tempest::span<const tempest::byte> data,
                                                             tempest::ecs::archetype_registry& registry,
                                                             tempest::optional<tempest::string_view> path) override

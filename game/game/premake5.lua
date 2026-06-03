@@ -14,4 +14,16 @@ scoped.project('game-runtime', function()
     uses {
         'tempest',
     }
+
+    scoped.usage('PUBLIC', function()
+        externalincludedirs {
+            '%{root}/game/runtime/include',
+        }
+    end)
+
+    scoped.usage('INTERFACE', function()
+        links {
+            'game-runtime',
+        }
+    end)
 end)

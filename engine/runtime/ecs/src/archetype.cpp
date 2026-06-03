@@ -408,6 +408,31 @@ namespace tempest::ecs
         _names[entity] = name;
     }
 
+    [[nodiscard]] auto basic_archetype_registry::find_first_with_name(string_view name) const -> optional<basic_archetype_registry::entity_type>
+    {
+        for (const auto& [entity, entity_name] : _names)
+        {
+            if (entity_name == name)
+            {
+                return entity;
+            }
+        }
+        return none();
+    }
+
+    [[nodiscard]] auto basic_archetype_registry::find_all_with_name(string_view name) const -> vector<entity_type>
+    {
+        vector<entity_type> result;
+        for (const auto& [entity, entity_name] : _names)
+        {
+            if (entity_name == name)
+            {
+                result.push_back(entity);
+            }
+        }
+        return result;
+    }
+
     void create_parent_child_relationship(basic_archetype_registry& reg, basic_archetype_registry::entity_type parent,
                                           basic_archetype_registry::entity_type child)
     {

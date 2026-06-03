@@ -65,7 +65,7 @@ auto main() -> int
     sponza_transform.scale({0.125F});
     entity_registry.assign_or_replace(sponza_instance, sponza_transform);
 
-    auto entities = tempest::vector<tempest::ecs::archetype_entity>{};
+    auto entities = tempest::vector<tempest::ecs::entity>{};
     entities.push_back(sponza_instance);
 
     auto pbr_fg =

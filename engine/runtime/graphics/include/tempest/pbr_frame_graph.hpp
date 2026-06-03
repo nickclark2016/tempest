@@ -98,7 +98,7 @@ namespace tempest::graphics
 
         void execute();
 
-        void upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+        void upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
                                  const core::texture_registry& textures, const core::material_registry& materials);
 
         math::vec2<uint32_t> get_render_target_size() const noexcept
@@ -618,7 +618,7 @@ namespace tempest::graphics
         struct directional_shadow_map_atlas_slot
         {
             graph_resource_handle<rhi::rhi_handle_type::image> shadow_atlas;
-            ecs::archetype_entity light_entity = ecs::null;
+            ecs::entity light_entity = ecs::null;
             bool in_use = false;
             math::uint2 atlas_resolution;
         };
@@ -631,7 +631,7 @@ namespace tempest::graphics
         struct
         {
             directional_shadow_map_atlas_pool atlas_pool;
-            flat_unordered_map<ecs::archetype_entity, csm_shadow_data> directional_shadows;
+            flat_unordered_map<ecs::entity, csm_shadow_data> directional_shadows;
         } _directional_shadows;
 
         struct shadow_gpu_layout
@@ -665,8 +665,8 @@ namespace tempest::graphics
             math::vec3<float> ambient_scene_light;
             camera primary_camera;
             light primary_sun;
-            ecs::basic_sparse_map<ecs::archetype_entity, light> point_lights;
-            ecs::basic_sparse_map<ecs::archetype_entity, light> dir_lights;
+            ecs::basic_sparse_map<ecs::entity, light> point_lights;
+            ecs::basic_sparse_map<ecs::entity, light> dir_lights;
             rhi::typed_rhi_handle<rhi::rhi_handle_type::image> skybox_texture = rhi::null_handle;
         } _scene_data = {};
     };

@@ -115,7 +115,7 @@ namespace tempest::graphics
         _executor->execute();
     }
 
-    void pbr_frame_graph::upload_objects_sync(span<const ecs::archetype_entity> entities,
+    void pbr_frame_graph::upload_objects_sync(span<const ecs::entity> entities,
                                               const core::mesh_registry& meshes, const core::texture_registry& textures,
                                               const core::material_registry& materials)
     {
@@ -3196,7 +3196,7 @@ namespace tempest::graphics
         auto staging_bytes_written = self->_global_resources.utilization.staging_buffer_bytes_written;
 
         // Find the camera to upload
-        auto camera = ecs::archetype_entity{ecs::tombstone};
+        auto camera = ecs::entity{ecs::tombstone};
         auto camera_data = optional<camera_component>();
         auto camera_transform = optional<ecs::transform_component>();
 
@@ -3259,7 +3259,7 @@ namespace tempest::graphics
             self->_scene_data.dir_lights.insert_or_replace(self_entity.entity, gpu_light);
         });
 
-        auto sun_entity = ecs::archetype_entity{ecs::tombstone};
+        auto sun_entity = ecs::entity{ecs::tombstone};
         if (!self->_scene_data.dir_lights.empty())
         {
             sun_entity = self->_scene_data.dir_lights.begin()->first;
@@ -4059,7 +4059,7 @@ namespace tempest::graphics
         auto staging_buffer_bytes = self->_device->map_buffer(
             self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
 
-        auto camera = ecs::archetype_entity{ecs::tombstone};
+        auto camera = ecs::entity{ecs::tombstone};
         auto camera_data = optional<camera_component>();
         auto camera_transform = optional<ecs::transform_component>();
 

@@ -1058,7 +1058,7 @@ namespace tempest::assets
     {
     }
 
-    auto load_asset_metadata(const sjd::object& doc, ecs::archetype_registry& registry, ecs::archetype_entity ent,
+    auto load_asset_metadata(const sjd::object& doc, ecs::archetype_registry& registry, ecs::entity ent,
                              asset_database& asset_db) -> void
     {
         auto asset = sjd::object{};
@@ -1172,7 +1172,7 @@ namespace tempest::assets
 
     struct mesh_processing_result
     {
-        vector<ecs::archetype_entity> prim_entities;
+        vector<ecs::entity> prim_entities;
         string name;
     };
 
@@ -1190,7 +1190,7 @@ namespace tempest::assets
             auto mesh_idx = 0U;
             for (const auto& mesh : meshes)
             {
-                auto primitives = vector<ecs::archetype_entity>{};
+                auto primitives = vector<ecs::entity>{};
 
                 for (const auto& prim : mesh["primitives"])
                 {
@@ -1360,8 +1360,8 @@ namespace tempest::assets
     }
 
     auto build_entity_relationships(const sjd::array& nodes, ecs::archetype_registry& registry,
-                                    ecs::archetype_entity root,
-                                    const flat_unordered_map<uint32_t, ecs::archetype_entity>& node_entities) -> void
+                                    ecs::entity root,
+                                    const flat_unordered_map<uint32_t, ecs::entity>& node_entities) -> void
     {
         // Apply parent child relationships
         auto node_id = 0U;
@@ -1388,7 +1388,7 @@ namespace tempest::assets
         for (const auto& [id, e] : node_entities)
         {
             // Get the relationship
-            const auto* rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(e);
+            const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(e);
             if (rel == nullptr || rel->parent == ecs::tombstone)
             {
                 ecs::create_parent_child_relationship(registry, root, e);
@@ -1398,13 +1398,13 @@ namespace tempest::assets
 
     auto process_nodes(const sjd::object& doc,
                        const flat_unordered_map<uint32_t, mesh_processing_result>& mesh_primitives,
-                       ecs::archetype_registry& registry, ecs::archetype_entity root) -> void
+                       ecs::archetype_registry& registry, ecs::entity root) -> void
     {
         auto nodes = sjd::array{};
         if (auto error = doc["nodes"].get(nodes); error == simdjson::error_code::SUCCESS)
         {
             // Apply transformations to node, apply child parent relationships to mesh entities and nodes
-            auto node_entities = flat_unordered_map<uint32_t, ecs::archetype_entity>{};
+            auto node_entities = flat_unordered_map<uint32_t, ecs::entity>{};
             auto node_id = 0U;
             for (const auto& node : nodes)
             {
@@ -1416,7 +1416,7 @@ namespace tempest::assets
                     auto mesh_prims = mesh_primitives.find(static_cast<uint32_t>(mesh_id));
                     if (mesh_prims != mesh_primitives.end())
                     {
-                        span<const ecs::archetype_entity> mesh_entities = mesh_prims->second.prim_entities;
+                        span<const ecs::entity> mesh_entities = mesh_prims->second.prim_entities;
                         for (const auto& mesh_ent : mesh_entities)
                         {
                             auto dup_mesh = registry.duplicate(mesh_ent);
@@ -1454,7 +1454,7 @@ namespace tempest::assets
     }
 
     auto gltf_importer::import(asset_database& asset_db, span<const byte> bytes, ecs::archetype_registry& registry,
-                               optional<string_view> path) -> ecs::archetype_entity
+                               optional<string_view> path) -> ecs::entity
     {
         simdjson::dom::parser parser;
         simdjson::padded_string padded(reinterpret_cast<const char*>(bytes.data()), bytes.size());
@@ -1495,12 +1495,12 @@ namespace tempest::assets
         process_nodes(doc.value(), mesh_primitives, registry, ent);
 
         // If there is only one child, merge it with the root entity
-        auto* ent_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(ent);
+        auto* ent_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(ent);
         if (ent_rel != nullptr && ent_rel->first_child != ecs::tombstone)
         {
             // There exists at least one child
             const auto child = ent_rel->first_child;
-            const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::archetype_entity>>(child);
+            const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
             const auto has_siblings = child_rel->next_sibling != ecs::tombstone;
 
             // If there are no siblings, copy the components from the parent to the child and delete the parent

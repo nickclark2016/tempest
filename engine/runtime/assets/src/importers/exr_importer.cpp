@@ -11,7 +11,7 @@ namespace tempest::assets
     {
     }
 
-    ecs::archetype_entity exr_importer::import(asset_database& db, span<const byte> data,
+    ecs::entity exr_importer::import(asset_database& db, span<const byte> data,
                                                ecs::archetype_registry& registry, optional<string_view> path)
     {
         float* image_data = nullptr;

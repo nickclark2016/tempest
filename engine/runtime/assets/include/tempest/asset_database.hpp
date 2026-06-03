@@ -52,7 +52,7 @@ namespace tempest::assets
 
     struct TEMPEST_API import_result
     {
-        ecs::archetype_entity root_entity;
+        ecs::entity root_entity;
         vector<guid> produced_assets;
     };
 
@@ -65,12 +65,12 @@ namespace tempest::assets
 
         /// Try to serialize the component from `entity` into `out_bytes`.
         /// Returns true if the entity has this component and serialization succeeded.
-        function<bool(const ecs::archetype_registry& registry, ecs::archetype_entity entity, vector<byte>& out_bytes)>
+        function<bool(const ecs::archetype_registry& registry, ecs::entity entity, vector<byte>& out_bytes)>
             serialize;
 
         /// Assign the component described by `bytes` onto `entity`.
         /// Returns true on success.
-        function<bool(ecs::archetype_registry& registry, ecs::archetype_entity entity, span<const byte> bytes)>
+        function<bool(ecs::archetype_registry& registry, ecs::entity entity, span<const byte> bytes)>
             deserialize;
     };
 
@@ -88,7 +88,7 @@ namespace tempest::assets
         auto open(string_view db_path) -> void;
         [[nodiscard]] auto save() const -> bool;
 
-        [[nodiscard]] auto load(string_view source_path, ecs::archetype_registry& registry) -> ecs::archetype_entity;
+        [[nodiscard]] auto load(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity;
         [[nodiscard]] auto find_by_guid(const guid& asset_id) const -> const asset_entry*;
         [[nodiscard]] auto find_by_path(string_view path) const -> const asset_entry*;
 
@@ -139,9 +139,9 @@ namespace tempest::assets
         flat_unordered_map<size_t, size_t> _component_hash_to_index;
 
         [[nodiscard]] auto _load_from_blobs(string_view source_path, ecs::archetype_registry& registry)
-            -> ecs::archetype_entity;
+            -> ecs::entity;
         [[nodiscard]] auto _load_via_import(string_view source_path, ecs::archetype_registry& registry)
-            -> ecs::archetype_entity;
+            -> ecs::entity;
 
         auto _get_or_create_source(string_view source_path) -> source_entry&;
 
@@ -163,7 +163,7 @@ namespace tempest::assets
         auto serializer = component_serializer{
             .type_hash = hash,
             .component_size = sizeof(T),
-            .serialize = [](const ecs::archetype_registry& registry, ecs::archetype_entity entity,
+            .serialize = [](const ecs::archetype_registry& registry, ecs::entity entity,
                             vector<byte>& out_bytes) -> bool {
                 const auto* comp = registry.try_get<T>(entity);
                 if (comp == nullptr)
@@ -174,7 +174,7 @@ namespace tempest::assets
                 tempest::memcpy(out_bytes.data(), comp, sizeof(T));
                 return true;
             },
-            .deserialize = [](ecs::archetype_registry& registry, ecs::archetype_entity entity,
+            .deserialize = [](ecs::archetype_registry& registry, ecs::entity entity,
                               span<const byte> bytes) -> bool {
                 if (bytes.size() != sizeof(T))
                 {

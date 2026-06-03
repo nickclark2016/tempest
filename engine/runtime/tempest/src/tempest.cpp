@@ -160,7 +160,7 @@ namespace tempest
         return _should_close;
     }
 
-    ecs::archetype_entity engine_context::load_entity(ecs::archetype_entity src)
+    ecs::entity engine_context::load_entity(ecs::entity src)
     {
         auto ent = _entity_registry.duplicate(src);
         _entities_to_load.push_back(ent);

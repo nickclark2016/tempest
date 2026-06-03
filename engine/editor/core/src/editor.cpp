@@ -1,0 +1,166 @@
+#include <tempest/editor.hpp>
+
+#include <imgui.h>
+#include <imgui_internal.h>
+
+namespace tempest::editor
+{
+    editor_context::editor_context(engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx)
+        : _engine_ctx{&ctx}, _win_surface{&win_surface}, _ui_ctx{&ui_ctx}
+    {
+        auto& frame_graph = _engine_ctx->get_renderer().get_frame_graph();
+        auto frame_graph_builder = frame_graph.get_builder();
+
+        auto color_target = frame_graph_builder->create_render_target({
+            .format = rhi::image_format::rgba8_srgb,
+            .type = rhi::image_type::image_2d,
+            .width = _win_surface->framebuffer_width(),
+            .height = _win_surface->framebuffer_height(),
+            .depth = 1,
+            .array_layers = 1,
+            .mip_levels = 1,
+            .sample_count = rhi::image_sample_count::sample_count_1,
+            .tiling = rhi::image_tiling_type::optimal,
+            .location = rhi::memory_location::device,
+            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::transfer_src),
+            .name = "Final Render Target",
+        });
+
+        _final_color_target = color_target;
+        _win_surface->register_resize_callback(
+            [&](auto width, auto height) { frame_graph.resize_render_target(_final_color_target, width, height); });
+
+        auto surface = ctx.get_renderer().get_device().create_render_surface({
+            .window = _win_surface,
+            .min_image_count = 3,
+            .format =
+                {
+                    .space = rhi::color_space::srgb_nonlinear,
+                    .format = rhi::image_format::bgra8_srgb,
+                },
+            .present_mode = rhi::present_mode::immediate,
+            .width = _win_surface->framebuffer_width(),
+            .height = _win_surface->framebuffer_height(),
+            .layers = 1,
+        });
+
+        auto imported_swapchain_handle = frame_graph_builder->import_render_surface("Editor Render Surface", surface);
+
+        frame_graph_builder->create_graphics_pass(
+            "Editor UI Pass",
+            [&](graphics::graphics_task_builder& task_builder) {
+                task_builder.read_write(color_target, rhi::image_layout::color_attachment,
+                                        make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                                        make_enum_mask(rhi::memory_access::color_attachment_read,
+                                                       rhi::memory_access::color_attachment_write),
+                                        make_enum_mask(rhi::pipeline_stage::color_attachment_output),
+                                        make_enum_mask(rhi::memory_access::color_attachment_write,
+                                                       rhi::memory_access::color_attachment_read));
+
+                auto tonemapped_image_handle = frame_graph.get_tonemapped_color_handle();
+                task_builder.read(
+                    tonemapped_image_handle, rhi::image_layout::shader_read_only,
+                    make_enum_mask(rhi::pipeline_stage::fragment_shader),
+                    make_enum_mask(rhi::memory_access::shader_sampled_read, rhi::memory_access::shader_read));
+            },
+            [](graphics::graphics_task_execution_context& ctx, auto render_target, auto device, auto ui) {
+                const auto rt_handle = ctx.find_image(render_target);
+                const auto width = static_cast<uint32_t>(device->get_image_width(rt_handle));
+                const auto height = static_cast<uint32_t>(device->get_image_height(rt_handle));
+
+                auto rp_begin_info = rhi::work_queue::render_pass_info{};
+                rp_begin_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
+                    .image = rt_handle,
+                    .layout = rhi::image_layout::color_attachment,
+                    .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
+                    .load_op = rhi::work_queue::load_op::clear,
+                    .store_op = rhi::work_queue::store_op::store,
+                });
+                rp_begin_info.x = 0;
+                rp_begin_info.y = 0;
+                rp_begin_info.width = width;
+                rp_begin_info.height = height;
+                rp_begin_info.name = "UI Render Pass";
+
+                ctx.begin_render_pass(rp_begin_info);
+                ui->render_ui_commands(ctx);
+                ctx.end_render_pass();
+            },
+            color_target, &_engine_ctx->get_renderer().get_device(), _ui_ctx);
+
+        frame_graph_builder->create_transfer_pass(
+            "Blit to Swapchain Pass",
+            [&](graphics::transfer_task_builder& task_builder) {
+                task_builder.read(color_target, rhi::image_layout::transfer_src,
+                                  make_enum_mask(rhi::pipeline_stage::blit),
+                          make_enum_mask(rhi::memory_access::transfer_read));
+                task_builder.write(imported_swapchain_handle, rhi::image_layout::transfer_dst,
+                           make_enum_mask(rhi::pipeline_stage::blit),
+                           make_enum_mask(rhi::memory_access::transfer_write));
+            },
+            [](graphics::transfer_task_execution_context& ctx, auto color_target, auto swapchain_handle) {
+                ctx.blit(color_target, swapchain_handle);
+            },
+            color_target, imported_swapchain_handle);
+        ;
+    }
+
+    auto editor_context::draw() -> void
+    {
+        const auto dockspace_id = ImGui::GetID("Tempest Editor Dockspace");
+        const auto viewport = ImGui::GetMainViewport();
+
+        if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr)
+        {
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+
+            auto dock_id_main = dockspace_id;
+
+            auto dock_id_bottom = ImGuiID{};
+            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Down, 0.2f, &dock_id_bottom, &dock_id_main);
+
+            auto dock_id_left = ImGuiID{};
+            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Left, 0.2f, &dock_id_left, &dock_id_main);
+
+            auto dock_id_right = ImGuiID{};
+            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Right, 0.25f, &dock_id_right, &dock_id_main);
+
+            for (const auto& window : _windows)
+            {
+                const auto desired_dock_location = window->desired_initial_dock();
+                switch (desired_dock_location)
+                {
+                case editor_window::dock_location::center: {
+                    ImGui::DockBuilderDockWindow(window->window_name().data(), dock_id_main);
+                    break;
+                }
+                case editor_window::dock_location::left: {
+                    ImGui::DockBuilderDockWindow(window->window_name().data(), dock_id_left);
+                    break;
+                }
+                case editor_window::dock_location::right: {
+                    ImGui::DockBuilderDockWindow(window->window_name().data(), dock_id_right);
+                    break;
+                }
+                case editor_window::dock_location::bottom: {
+                    ImGui::DockBuilderDockWindow(window->window_name().data(), dock_id_bottom);
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+
+            ImGui::DockBuilderFinish(dockspace_id);
+        }
+
+        ImGui::DockSpaceOverViewport(dockspace_id, viewport, ImGuiDockNodeFlags_PassthruCentralNode);
+
+        for (auto& window : _windows)
+        {
+            window->draw();
+        }
+    }
+} // namespace tempest::editor

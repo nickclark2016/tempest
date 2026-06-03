@@ -81,7 +81,7 @@ namespace tempest::graphics
                           static_cast<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>(rhi::null_handle));
     }
 
-    void renderer::upload_objects_sync(span<const ecs::archetype_entity> entities, const core::mesh_registry& meshes,
+    void renderer::upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
                                        const core::texture_registry& textures, const core::material_registry& materials)
     {
         _graph->upload_objects_sync(entities, meshes, textures, materials);

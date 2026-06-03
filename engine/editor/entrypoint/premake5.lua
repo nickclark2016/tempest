@@ -16,6 +16,10 @@ scoped.project('editor-entrypoint', function()
         'system:windows'
     }, function()
         kind 'WindowedApp'
+
+        links {
+            'shell32'
+        }
     end)
 
     files {
@@ -25,7 +29,7 @@ scoped.project('editor-entrypoint', function()
 
     uses {
         'tempest',
-        'imgui',
+        'editor-core',
     }
 
     dependson {

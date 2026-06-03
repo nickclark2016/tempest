@@ -1987,6 +1987,18 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits, typename Allocator>
+    inline constexpr auto operator==(const basic_string<CharT, Traits, Allocator>& lhs, basic_string_view<CharT, Traits> rhs) noexcept -> bool
+    {
+        return lhs.size() == rhs.size() && Traits::compare(lhs.data(), rhs.data(), lhs.size()) == 0;
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
+    inline constexpr auto operator==(basic_string_view<CharT, Traits> lhs, const basic_string<CharT, Traits, Allocator>& rhs) noexcept -> bool
+    {
+        return lhs.size() == rhs.size() && Traits::compare(lhs.data(), rhs.data(), lhs.size()) == 0;
+    }
+
+    template <typename CharT, typename Traits, typename Allocator>
     inline constexpr auto operator<=>(const basic_string<CharT, Traits, Allocator>& lhs,
                                       const basic_string<CharT, Traits, Allocator>& rhs) noexcept
         -> tempest::strong_ordering
