@@ -823,7 +823,6 @@ namespace tempest::ecs
             return _deref_const(archetype, argument_indices, make_index_sequence<sizeof...(Ts)>{});
         }
 
-        template <typename... Ts>
         inline friend auto operator==(const basic_archetype_with_components_iter& lhs,
                                       const basic_archetype_with_components_iter& rhs) -> bool
         {
@@ -831,7 +830,6 @@ namespace tempest::ecs
                    lhs._entity_index == rhs._entity_index;
         }
 
-        template <typename... Ts>
         inline friend auto operator!=(const basic_archetype_with_components_iter& lhs,
                                       const basic_archetype_with_components_iter& rhs) -> bool
         {
