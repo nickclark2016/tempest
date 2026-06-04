@@ -42,4 +42,9 @@ namespace tempest::editor
 
         ImGui::End();
     }
+
+    auto viewport_window::aspect_ratio() const -> float
+    {
+        return static_cast<float>(_viewport_size.x) / _viewport_size.y;
+    }
 } // namespace tempest::editor

@@ -782,15 +782,14 @@ namespace tempest::ecs
         };
     } // namespace detail
 
-    template <bool IsConst, typename... Ts>
+    template <typename... Ts>
     class basic_archetype_with_components_view;
 
-    template <bool IsConst, typename... Ts>
+    template <typename... Ts>
     class basic_archetype_with_components_iter
     {
       public:
-        using view_type = conditional_t < IsConst, const basic_archetype_with_components_view<true, Ts...>,
-              basic_archetype_with_components_view<false, Ts...>>;
+        using view_type = const basic_archetype_with_components_view<Ts...>;
 
         auto operator++() -> basic_archetype_with_components_iter&
         {
@@ -838,8 +837,7 @@ namespace tempest::ecs
         }
 
       private:
-        basic_archetype_with_components_iter(view_type& view,
-                                             size_t archetype_idx, size_t entity_idx)
+        basic_archetype_with_components_iter(view_type& view, size_t archetype_idx, size_t entity_idx)
             : _parent{&view}, _archetype_index{archetype_idx}, _entity_index{entity_idx}
         {
         }
@@ -847,14 +845,6 @@ namespace tempest::ecs
         view_type* _parent;
         size_t _archetype_index;
         size_t _entity_index;
-
-        template <std::size_t... Is>
-        tuple<remove_cvref_t<Ts>&...> _deref(auto& archetype, span<const size_t> argument_indices,
-                                             index_sequence<Is...>)
-        {
-            return make_tuple(
-                tempest::ref(*reinterpret_cast<Ts*>(archetype.element_at(_entity_index, argument_indices[Is])))...);
-        }
 
         template <std::size_t... Is>
         tuple<add_const_t<remove_cvref_t<Ts>>&...> _deref_const(const auto& archetype,
@@ -865,7 +855,7 @@ namespace tempest::ecs
                 archetype.element_at(_entity_index, argument_indices[Is])))...);
         }
 
-        friend class basic_archetype_with_components_view<IsConst, Ts...>;
+        friend class basic_archetype_with_components_view<Ts...>;
     };
 
     /**
@@ -874,54 +864,22 @@ namespace tempest::ecs
      *
      * @tparam Ts The types of the components in the archetype.
      */
-    template <bool IsConst, typename... Ts>
+    template <typename... Ts>
     class basic_archetype_with_components_view
     {
       public:
-        using registry_type = conditional_t<IsConst, const basic_archetype_registry, basic_archetype_registry>;
+        using registry_type = const basic_archetype_registry;
 
         explicit basic_archetype_with_components_view(registry_type& parent) : _registry{&parent}
         {
         }
 
-        auto begin() -> basic_archetype_with_components_iter<IsConst, Ts...>
-        {
-            // Find the first matching archetype
-            const auto archetype_count = _registry->_archetypes.size();
-            auto archetype_idx = archetype_count;
-            for (size_t idx = 0; idx < archetype_count; ++idx)
-            {
-                const auto archetype_hash = _registry->_hashes[idx];
-
-                // Check hash match
-                auto match = true;
-                for (size_t byte = 0; byte < decltype(archetype_hash)::count / 8u; ++byte)
-                {
-                    const auto byte_match =
-                        (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
-                    if (!byte_match)
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-
-                if (match && !_registry->_archetypes[idx].empty())
-                {
-                    archetype_idx = idx;
-                    break;
-                }
-            }
-
-            return basic_archetype_with_components_iter<IsConst, Ts...>(*this, archetype_idx, 0);
-        }
-
-        auto begin() const -> basic_archetype_with_components_iter<true, Ts...>
+        auto begin() const -> basic_archetype_with_components_iter<Ts...>
         {
             return cbegin();
         }
 
-        auto cbegin() const -> basic_archetype_with_components_iter<true, Ts...>
+        auto cbegin() const -> basic_archetype_with_components_iter<Ts...>
         {
             // Find the first matching archetype
             const auto archetype_count = _registry->_archetypes.size();
@@ -950,29 +908,23 @@ namespace tempest::ecs
                 }
             }
 
-            return basic_archetype_with_components_iter<true, Ts...>(*this, archetype_idx, 0);
+            return basic_archetype_with_components_iter<Ts...>(*this, archetype_idx, 0);
         }
 
-        auto end() -> basic_archetype_with_components_iter<IsConst, Ts...>
-        {
-            const auto archetype_count = _registry->_archetypes.size();
-            return basic_archetype_with_components_iter<false, Ts...>(*this, archetype_count, 0);
-        }
-
-        auto end() const -> basic_archetype_with_components_iter<true, Ts...>
+        auto end() const -> basic_archetype_with_components_iter<Ts...>
         {
             return cend();
         }
 
-        auto cend() const -> basic_archetype_with_components_iter<true, Ts...>
+        auto cend() const -> basic_archetype_with_components_iter<Ts...>
         {
             const auto archetype_count = _registry->_archetypes.size();
-            return basic_archetype_with_components_iter<true, Ts...>(*this, archetype_count, 0);
+            return basic_archetype_with_components_iter<Ts...>(*this, archetype_count, 0);
         }
 
       private:
         friend class basic_archetype_registry;
-        friend class basic_archetype_with_components_iter<IsConst, Ts...>;
+        friend class basic_archetype_with_components_iter<Ts...>;
 
         registry_type* _registry;
 
@@ -1075,15 +1027,15 @@ namespace tempest::ecs
         [[nodiscard]] auto find_all_with_name(string_view name) const -> vector<entity_type>;
 
         template <typename... Ts>
-        basic_archetype_with_components_view<false, Ts...> with()
+        basic_archetype_with_components_view<Ts...> with()
         {
-            return basic_archetype_with_components_view<false, Ts...>(*this);
+            return basic_archetype_with_components_view<Ts...>(*this);
         }
 
         template <typename... Ts>
-        basic_archetype_with_components_view<true, Ts...> with() const
+        basic_archetype_with_components_view<Ts...> with() const
         {
-            return basic_archetype_with_components_view<true, Ts...>(*this);
+            return basic_archetype_with_components_view<Ts...>(*this);
         }
 
       private:
@@ -1099,10 +1051,10 @@ namespace tempest::ecs
 
         size_t _index_of_component_in_archetype(size_t arch_index, size_t component_id) const;
 
-        template <bool, typename... Ts>
+        template <typename... Ts>
         friend class basic_archetype_with_components_iter;
 
-        template <bool, typename... Ts>
+        template <typename... Ts>
         friend class basic_archetype_with_components_view;
     };
 

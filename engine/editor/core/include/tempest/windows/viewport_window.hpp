@@ -17,6 +17,8 @@ namespace tempest::editor
         auto window_name() const -> string_view override;
         auto draw() -> void override;
 
+        auto aspect_ratio() const -> float;
+
       private:
         graphics::renderer* _renderer;
         rhi::typed_rhi_handle<rhi::rhi_handle_type::image> _viewport_texture;

@@ -97,6 +97,13 @@ namespace
         tempest_engine.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {
             entity_props_win->target = scene_hierarchy_win->selected_entity;
 
+            for (auto&& [self, camera] : ctx.get_registry().with<ecs::self_component, graphics::camera_component>())
+            {
+                auto camera_copy = camera;
+                camera_copy.aspect_ratio = viewport_win->aspect_ratio();
+                ctx.get_registry().assign_or_replace(self.entity, camera_copy);
+            }
+
             ui_ctx.begin_ui_commands();
             ui_editor->draw();
             ui_ctx.finish_ui_commands();
