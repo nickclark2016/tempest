@@ -879,48 +879,14 @@ namespace tempest::ecs
             return cbegin();
         }
 
-        auto cbegin() const -> basic_archetype_with_components_iter<Ts...>
-        {
-            // Find the first matching archetype
-            const auto archetype_count = _registry->_archetypes.size();
-            auto archetype_idx = archetype_count;
-            for (size_t idx = 0; idx < archetype_count; ++idx)
-            {
-                const auto archetype_hash = _registry->_hashes[idx];
-
-                // Check hash match
-                auto match = true;
-                for (size_t byte = 0; byte < decltype(archetype_hash)::count / 8u; ++byte)
-                {
-                    const auto byte_match =
-                        (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
-                    if (!byte_match)
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-
-                if (match && !_registry->_archetypes[idx].empty())
-                {
-                    archetype_idx = idx;
-                    break;
-                }
-            }
-
-            return basic_archetype_with_components_iter<Ts...>(*this, archetype_idx, 0);
-        }
+        auto cbegin() const -> basic_archetype_with_components_iter<Ts...>;
 
         auto end() const -> basic_archetype_with_components_iter<Ts...>
         {
             return cend();
         }
 
-        auto cend() const -> basic_archetype_with_components_iter<Ts...>
-        {
-            const auto archetype_count = _registry->_archetypes.size();
-            return basic_archetype_with_components_iter<Ts...>(*this, archetype_count, 0);
-        }
+        auto cend() const -> basic_archetype_with_components_iter<Ts...>;
 
       private:
         friend class basic_archetype_registry;
@@ -933,46 +899,7 @@ namespace tempest::ecs
         inline static const auto _type_hash_mask = detail::hash_mask_type_list_traits<arg_types>::create();
         static constexpr auto argument_count = sizeof...(Ts);
 
-        auto _acquire_next_entity(/*inout*/ size_t& archetype_index, /*intout*/ size_t& entity_index) const -> void
-        {
-            const auto archetype_count = _registry->_archetypes.size();
-            // For the current archetype, get the next entity if there are more
-            const auto current_archetype_size = _registry->_archetypes[archetype_index].size();
-            if (entity_index + 1 < current_archetype_size)
-            {
-                ++entity_index;
-                return;
-            }
-
-            auto archetype_idx = archetype_count;
-            for (size_t idx = archetype_index + 1; idx < archetype_count; ++idx)
-            {
-                const auto& archetype_hash = _registry->_hashes[idx];
-
-                // Check hash match
-                auto match = true;
-                for (size_t byte = 0; byte < remove_cvref_t<decltype(archetype_hash)>::count / 8u; ++byte)
-                {
-                    const auto byte_match =
-                        (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
-                    if (!byte_match)
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-
-                if (match && !_registry->_archetypes[idx].empty())
-                {
-                    archetype_idx = idx;
-                    break;
-                }
-            }
-
-            // Set to the start of the next archetype, or one past the last archetype
-            archetype_index = archetype_idx;
-            entity_index = 0;
-        }
+        auto _acquire_next_entity(/*inout*/ size_t& archetype_index, /*intout*/ size_t& entity_index) const -> void;
     };
 
     class TEMPEST_API basic_archetype_registry
@@ -1817,6 +1744,91 @@ namespace tempest::ecs
     TEMPEST_API void create_parent_child_relationship(basic_archetype_registry& reg,
                                                       basic_archetype_registry::entity_type parent,
                                                       basic_archetype_registry::entity_type child);
+
+    template <typename... Ts>
+    inline auto basic_archetype_with_components_view<Ts...>::cbegin() const
+        -> basic_archetype_with_components_iter<Ts...>
+
+    {
+        // Find the first matching archetype
+        const auto archetype_count = _registry->_archetypes.size();
+        auto archetype_idx = archetype_count;
+        for (size_t idx = 0; idx < archetype_count; ++idx)
+        {
+            const auto archetype_hash = _registry->_hashes[idx];
+
+            // Check hash match
+            auto match = true;
+            for (size_t byte = 0; byte < decltype(archetype_hash)::count / 8u; ++byte)
+            {
+                const auto byte_match =
+                    (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
+                if (!byte_match)
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match && !_registry->_archetypes[idx].empty())
+            {
+                archetype_idx = idx;
+                break;
+            }
+        }
+
+        return basic_archetype_with_components_iter<Ts...>(*this, archetype_idx, 0);
+    }
+
+    template <typename... Ts>
+    inline auto basic_archetype_with_components_view<Ts...>::cend() const -> basic_archetype_with_components_iter<Ts...>
+    {
+        const auto archetype_count = _registry->_archetypes.size();
+        return basic_archetype_with_components_iter<Ts...>(*this, archetype_count, 0);
+    }
+
+    template <typename... Ts>
+    inline auto basic_archetype_with_components_view<Ts...>::_acquire_next_entity(size_t& archetype_index,
+                                                                                  size_t& entity_index) const -> void
+    {
+        const auto archetype_count = _registry->_archetypes.size();
+        // For the current archetype, get the next entity if there are more
+        const auto current_archetype_size = _registry->_archetypes[archetype_index].size();
+        if (entity_index + 1 < current_archetype_size)
+        {
+            ++entity_index;
+            return;
+        }
+
+        auto archetype_idx = archetype_count;
+        for (size_t idx = archetype_index + 1; idx < archetype_count; ++idx)
+        {
+            const auto& archetype_hash = _registry->_hashes[idx];
+
+            // Check hash match
+            auto match = true;
+            for (size_t byte = 0; byte < remove_cvref_t<decltype(archetype_hash)>::count / 8u; ++byte)
+            {
+                const auto byte_match =
+                    (_type_hash_mask.hash[byte] & archetype_hash.hash[byte]) == _type_hash_mask.hash[byte];
+                if (!byte_match)
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match && !_registry->_archetypes[idx].empty())
+            {
+                archetype_idx = idx;
+                break;
+            }
+        }
+
+        // Set to the start of the next archetype, or one past the last archetype
+        archetype_index = archetype_idx;
+        entity_index = 0;
+    }
 
     using archetype_entity_hierarchy_iterator = basic_archetype_entity_hierarchy_iterator;
     using archetype_entity_hierarchy_view = basic_archetype_entity_hierarchy_view;
