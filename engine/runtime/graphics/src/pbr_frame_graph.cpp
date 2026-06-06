@@ -6026,7 +6026,7 @@ namespace tempest::graphics
 
             // Extend Z range to capture shadow casters behind frustum
             const auto z_range = max_extents.z - min_extents.z;
-            min_extents.z -= z_range * 0.5f;
+            min_extents.z -= z_range * 1.5f;
             max_extents.z += z_range * 0.1f;
 
             // Compute texel size in light space

@@ -9,7 +9,7 @@ import "../common/scene";
 [vk_binding(4, 0)] RWStructuredBuffer<LightGridRange> light_grid;
 [vk_binding(5, 0)] RWStructuredBuffer<uint> global_index_count;
 
-groupshared Light shared_lights[16 * 9 * 4];
+groupshared uint shared_lights[16 * 9 * 4];
 
 float square_distance_point_aabb(float3 point, uint tile) {
     float sq_distance = 0.0;
@@ -31,9 +31,9 @@ float square_distance_point_aabb(float3 point, uint tile) {
 }
 
 bool test_light_in_tile(uint light_index, uint tile_index) {
-    float range = shared_lights[light_index].position_falloff.w;
+    float range = lights[shared_lights[light_index]].position_falloff.w;
     float sq_range = range * range;
-    float3 center = shared_lights[light_index].position_falloff.xyz;
+    float3 center = lights[shared_lights[light_index]].position_falloff.xyz;
     float3 view_pos = mul(scene.camera.view, float4(center, 1.0)).xyz;
 
     float sq_distance = square_distance_point_aabb(view_pos, tile_index);
@@ -61,11 +61,11 @@ void CSMain(uint invocation_id : SV_GroupIndex, uint3 group_id : SV_GroupID, uni
         light_index = min(light_index, light_count);
 
         // Build out the shared light array
-        shared_lights[invocation_id] = lights[light_index];
+        shared_lights[invocation_id] = light_index;
         GroupMemoryBarrierWithGroupSync();
 
         for (uint light = 0; light < thread_count && visible_light_count < 128; ++light) {
-            if (shared_lights[light].enabled) {
+            if (lights[shared_lights[light]].enabled) {
                 if (test_light_in_tile(light, tile_index)) {
                     visible_light_indices[visible_light_count] = batch * thread_count + light;
                     visible_light_count++;

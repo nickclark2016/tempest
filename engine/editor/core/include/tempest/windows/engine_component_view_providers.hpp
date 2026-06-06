@@ -17,4 +17,12 @@ namespace tempest::editor
 
         auto draw(ecs::archetype_registry* registry, ecs::entity target) -> void override;
     };
+
+    class TEMPEST_EDITOR_API shadow_map_component_view_provider final : public component_view_provider
+    {
+      public:
+        shadow_map_component_view_provider() = default;
+
+        auto draw(ecs::archetype_registry* registry, ecs::entity target) -> void override;
+    };
 }

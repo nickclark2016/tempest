@@ -96,6 +96,7 @@ namespace
 
             entity_props_win->providers.emplace_back(make_unique<editor::transform_component_view_provider>());
             entity_props_win->providers.emplace_back(make_unique<editor::directional_light_component_view_provider>());
+            entity_props_win->providers.emplace_back(make_unique<editor::shadow_map_component_view_provider>());
         });
 
         tempest_engine.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {

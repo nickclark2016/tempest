@@ -9,7 +9,7 @@ enum LightType : uint
 
 struct PackedU6 {
     uint4 block_0;
-    uint2 block_1;
+    uint4 block_1;
 
     // Operator[]
     __subscript(int index) -> uint {

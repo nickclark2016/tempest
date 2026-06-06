@@ -52,6 +52,9 @@ namespace tempest::editor
         TEMPEST_EDITOR_API auto scalar(string_view label, float input) -> float;
         TEMPEST_EDITOR_API auto float3(string_view label, math::float3 input) -> math::float3;
         TEMPEST_EDITOR_API auto color3(string_view label, math::float3 input) -> math::float3;
+
+        TEMPEST_EDITOR_API auto drag_integral(string_view label, int input, int minimum, int maximum) -> int;
+        TEMPEST_EDITOR_API auto drag_scalar(string_view label, float input, float minimum, float maximum) -> float;
     }
 } // namespace tempest::editor::ui
 

@@ -1236,5 +1236,17 @@ namespace tempest::editor
             ImGui::ColorEdit3(label.data(), vals);
             return math::float3(vals[0], vals[1], vals[2]);
         }
+
+        auto drag_integral(string_view label, int input, int minimum, int maximum) -> int
+        {
+            ImGui::DragInt(label.data(), &input, 1.0F, minimum, maximum);
+            return input;
+        }
+
+        auto drag_scalar(string_view label, float input, float minimum, float maximum) -> float
+        {
+            ImGui::DragFloat(label.data(), &input, 1.0F, minimum, maximum);
+            return input;
+        }
     }
 } // namespace tempest::editor::ui
