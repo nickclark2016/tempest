@@ -543,6 +543,7 @@ namespace tempest::rhi::vk
         void unmap_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept override;
         void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept override;
         size_t get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept override;
+        size_t get_required_alignment(enum_mask<rhi::buffer_usage> usage) const noexcept override;
 
         size_t get_image_width(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept override;
         size_t get_image_height(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept override;

@@ -37,7 +37,7 @@ namespace tempest::editor
             }
 
             _viewport_texture = _renderer->get_frame_graph().get_tonemapped_color_image();
-            image(_viewport_texture, _viewport_size.x, _viewport_size.y);
+            ui::image(_viewport_texture, _viewport_size.x, _viewport_size.y);
         }
 
         ImGui::End();

@@ -2,6 +2,7 @@
 #define tempest_editor_ui_ui_hpp
 
 #include <tempest/frame_graph.hpp>
+#include <tempest/vec3.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
@@ -44,7 +45,14 @@ namespace tempest::editor
                         span<graphics::graph_resource_handle<rhi::rhi_handle_type::image>> targets_to_read = {})
         -> graphics::graph_resource_handle<rhi::rhi_handle_type::image>;
 
-    auto image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height) -> void;
+    namespace ui
+    {
+        TEMPEST_EDITOR_API auto image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height) -> void;
+
+        TEMPEST_EDITOR_API auto scalar(string_view label, float input) -> float;
+        TEMPEST_EDITOR_API auto float3(string_view label, math::float3 input) -> math::float3;
+        TEMPEST_EDITOR_API auto color3(string_view label, math::float3 input) -> math::float3;
+    }
 } // namespace tempest::editor::ui
 
 #endif // tempest_editor_ui_ui_hpp

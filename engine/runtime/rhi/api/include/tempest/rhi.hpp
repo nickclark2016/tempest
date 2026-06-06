@@ -104,6 +104,7 @@ namespace tempest::rhi
         virtual void unmap_buffer(typed_rhi_handle<rhi_handle_type::buffer> handle) noexcept = 0;
         virtual void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept = 0;
         virtual size_t get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> handle) const noexcept = 0;
+        virtual size_t get_required_alignment(enum_mask<buffer_usage> usage) const noexcept = 0;
 
         // Image Management
         virtual size_t get_image_width(typed_rhi_handle<rhi_handle_type::image> handle) const noexcept = 0;

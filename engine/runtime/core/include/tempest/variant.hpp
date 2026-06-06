@@ -681,7 +681,7 @@ namespace tempest
         requires(!is_same_v<remove_cvref_t<T>, variant<Ts...>>)
     inline constexpr variant<Ts...>& variant<Ts...>::operator=(T&& value) noexcept
     {
-        constexpr auto index = detail::variant_index_selector<T, Ts...>::index;
+        constexpr auto index = detail::variant_index_selector<remove_reference_t<T>, Ts...>::index;
         static_assert(index < sizeof...(Ts), "Type not in variant.");
 
         if (_index == index)

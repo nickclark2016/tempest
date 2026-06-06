@@ -3,6 +3,7 @@
 #include <tempest/shared_library.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/windows/engine_component_view_providers.hpp>
 #include <tempest/windows/entity_view_window.hpp>
 #include <tempest/windows/scene_hierarchy_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
@@ -56,9 +57,9 @@ namespace
         }
 
         const auto& game_editor_shared_library = *game_editor_shared_library_result;
-        const auto game_editor_on_load_result =
-            game_editor_shared_library
-                .get_function_handle<void, tempest::engine_context*, tempest::editor::editor_context*, tempest::span<tempest::string_view>>("on_load");
+        const auto game_editor_on_load_result = game_editor_shared_library.get_function_handle<
+            void, tempest::engine_context*, tempest::editor::editor_context*, tempest::span<tempest::string_view>>(
+            "on_load");
         const auto game_editor_on_unload_result = game_editor_shared_library.get_function_handle<void>("on_unload");
 
         if (!game_editor_on_load_result || !game_editor_on_unload_result)
@@ -92,6 +93,9 @@ namespace
             scene_hierarchy_win =
                 ui_editor->register_window(make_unique<editor::scene_hierarchy_window>(ctx.get_registry()));
             entity_props_win = ui_editor->register_window(make_unique<editor::entity_view_window>(ctx.get_registry()));
+
+            entity_props_win->providers.emplace_back(make_unique<editor::transform_component_view_provider>());
+            entity_props_win->providers.emplace_back(make_unique<editor::directional_light_component_view_provider>());
         });
 
         tempest_engine.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {

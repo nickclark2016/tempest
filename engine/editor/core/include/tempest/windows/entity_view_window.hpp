@@ -2,6 +2,9 @@
 #define tempest_editor_core_entity_view_window_hpp
 
 #include <tempest/archetype.hpp>
+#include <tempest/concepts.hpp>
+#include <tempest/vector.hpp>
+#include <tempest/windows/component_view.hpp>
 #include <tempest/windows/editor_window.hpp>
 
 namespace tempest::editor
@@ -18,6 +21,7 @@ namespace tempest::editor
 
         ecs::archetype_registry* entity_registry = nullptr;
         ecs::entity target = ecs::null;
+        vector<unique_ptr<component_view_provider>> providers;
         bool open = true;
     };
 } // namespace tempest::editor

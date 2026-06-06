@@ -1209,9 +1209,32 @@ namespace tempest::editor
         return render_target;
     }
 
-    void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height)
+    namespace ui
     {
-        const auto id = math::pack_uint32x2(img.id, img.generation);
-        ImGui::Image(bit_cast<ImTextureID>(id), ImVec2(static_cast<float>(width), static_cast<float>(height)));
+        void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height)
+        {
+            const auto id = math::pack_uint32x2(img.id, img.generation);
+            ImGui::Image(bit_cast<ImTextureID>(id), ImVec2(static_cast<float>(width), static_cast<float>(height)));
+        }
+
+        auto scalar(string_view label, float input) -> float
+        {
+            ImGui::InputFloat(label.data(), &input);
+            return input;
+        }
+
+        auto float3(string_view label, math::float3 input) -> math::float3
+        {
+            float vals[] = {input.x, input.y, input.z};
+            ImGui::InputFloat3(label.data(), vals);
+            return math::float3(vals[0], vals[1], vals[2]);
+        }
+
+        auto color3(string_view label, math::float3 input) -> math::float3
+        {
+            float vals[] = {input.x, input.y, input.z};
+            ImGui::ColorEdit3(label.data(), vals);
+            return math::float3(vals[0], vals[1], vals[2]);
+        }
     }
 } // namespace tempest::editor::ui

@@ -24,40 +24,40 @@ void CSMain(uint3 dispatch_id : SV_DispatchThreadID, uint thread_index : SV_Grou
     output_depth_buffer[0][pixel_pos] = depth;
     group_shared_depth_buffer[thread_index % tile_size + (thread_index / tile_size) * tile_stride] = depth;
 
+    GroupMemoryBarrierWithGroupSync();
+
     // Calculate the number of levels in the output depth buffer
     uint num_levels = constants.num_levels;
 
     // Loop over each level in the output depth buffer
     for (var level = 1u; level < num_levels; ++level) {
         // Ensure that all the threads in the group have written the previous mip level
-        GroupMemoryBarrierWithGroupSync();
+        let active = dispatch_id.x % (1 << level) == 0 && dispatch_id.y % (1 << level) == 0;
+        var reduced_depth : float = 0.0f;
 
-        if (dispatch_id.x % (1 << level) == 0 && dispatch_id.y % (1 << level) == 0) {
-            // Calculate the block position in the current level
+        if (active) {
             let block_pos = pixel_pos / (1 << level);
-         
-            // Get level size of the current level (not power of 2)
-            let level_size = constants.image_size / (1 << level);
-            let prev_level_size = constants.image_size / (1 << (level - 1));
-         
-            // Get the coordinates of the 2x2 block in the previous level
+
             let block_pos_prev = pixel_pos / (1 << (level - 1));
-            let block_pos_prev_offset = block_pos_prev % tile_size;
-         
+            let offset = block_pos_prev % tile_size;
+            
             // Read the depth values of the 2x2 block from the previous level
-            let depth0 = group_shared_depth_buffer[block_pos_prev_offset.x + block_pos_prev_offset.y * tile_stride];
-            let depth1 = group_shared_depth_buffer[min(block_pos_prev_offset.x + 1, tile_size - 1) + block_pos_prev_offset.y * tile_stride];
-            let depth2 = group_shared_depth_buffer[block_pos_prev_offset.x + min(block_pos_prev_offset.y + 1, tile_size - 1) * tile_stride];
-            let depth3 = group_shared_depth_buffer[min(block_pos_prev_offset.x + 1, tile_size - 1) + min(block_pos_prev_offset.y + 1, tile_size - 1) * tile_stride];
+            let depth0 = group_shared_depth_buffer[offset.x + offset.y * tile_stride];
+            let depth1 = group_shared_depth_buffer[min(offset.x + 1, tile_size - 1) + offset.y * tile_stride];
+            let depth2 = group_shared_depth_buffer[offset.x + min(offset.y + 1, tile_size - 1) * tile_stride];
+            let depth3 = group_shared_depth_buffer[min(offset.x + 1, tile_size - 1) + min(offset.y + 1, tile_size - 1) * tile_stride];
          
             // Calculate the minimum depth value of the 2x2 block
-            let min_depth = max(max(depth0, depth1), max(depth2, depth3));
-     
-            // Write the minimum depth value to the current level of the output depth buffer
-            output_depth_buffer[level][block_pos] = min_depth;
-
-            uint2 block_local_offset = pixel_pos % tile_size;
-            group_shared_depth_buffer[block_local_offset.x + block_local_offset.y * tile_stride] = depth;
+            reduced_depth = max(max(depth0, depth1), max(depth2, depth3));
         }
+
+        GroupMemoryBarrierWithGroupSync();
+
+        if (active) {
+            let local = (pixel_pos / (1 << level)) % tile_size;
+            group_shared_depth_buffer[local.x + local.y * tile_stride] = reduced_depth;
+        }
+
+        GroupMemoryBarrierWithGroupSync();
     }
 }

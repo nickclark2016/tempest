@@ -6,6 +6,7 @@
 // TODO: Implement unordered_set + set
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/int.hpp>
+#include <tempest/math_utils.hpp>
 #include <tempest/rhi_types.hpp>
 #include <tempest/vector.hpp>
 
@@ -1267,10 +1268,8 @@ namespace tempest::graphics
         }
 
         uint64_t target_handle = handle.handle;
-        
-        auto pack = [](const base_graph_resource_handle& h) {
-            return bit_cast<uint64_t>(h);
-        };
+
+        auto pack = [](const base_graph_resource_handle& h) { return bit_cast<uint64_t>(h); };
 
         // Resolve aliases
         uint64_t current_val = pack(handle);
@@ -1297,10 +1296,8 @@ namespace tempest::graphics
     {
         uint64_t target_handle = handle.handle;
         rhi::rhi_handle_type target_type = get_resource_type(handle);
-        
-        auto pack = [](const base_graph_resource_handle& h) {
-            return bit_cast<uint64_t>(h);
-        };
+
+        auto pack = [](const base_graph_resource_handle& h) { return bit_cast<uint64_t>(h); };
 
         // Resolve aliases
         uint64_t current_val = pack(handle);
@@ -1445,6 +1442,8 @@ namespace tempest::graphics
         auto new_image = _device->create_image(new_desc);
         _owned_images[img.handle] = new_image;
         _all_images[img.handle] = new_image;
+
+        _current_resource_states.erase(img.handle);
     }
 
     rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> graph_executor::get_render_surface(
@@ -1462,7 +1461,7 @@ namespace tempest::graphics
 
     void graph_executor::_construct_owned_resources()
     {
-        for (const auto& resource : _plan->resources)
+        for (auto&& resource : _plan->resources)
         {
             if (holds_alternative<external_resource>(resource.creation_info))
             {
@@ -1480,18 +1479,23 @@ namespace tempest::graphics
                 else if (holds_alternative<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>(ext_res))
                 {
                     const auto& surface = get<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>(ext_res);
-                    _external_surfaces.push_back(make_pair(resource.handle.handle, surface));
+                    _external_surfaces.push_back({static_cast<uint64_t>(resource.handle.handle), surface});
                 }
             }
             else if (holds_alternative<rhi::buffer_desc>(resource.creation_info))
             {
                 // Intentional copy to modify size if per-frame
-                rhi::buffer_desc desc = get<rhi::buffer_desc>(resource.creation_info);
+                auto desc = get<rhi::buffer_desc>(resource.creation_info);
+                const auto required_alignment = _device->get_required_alignment(desc.usage);
+                const auto aligned_size = math::round_to_next_multiple(desc.size, required_alignment);
 
+                desc.size = aligned_size;
                 if (resource.per_frame)
                 {
                     desc.size *= _device->frames_in_flight();
                 }
+
+                get<rhi::buffer_desc>(resource.creation_info).size = aligned_size;
 
                 auto buffer = _device->create_buffer(desc);
                 _owned_buffers[resource.handle.handle] = buffer;
@@ -1833,8 +1837,8 @@ namespace tempest::graphics
                                 }
                                 else
                                 {
-                                    // If src is a host operation and there is no ownership transfer or layout transition,
-                                    // we can skip the barrier entirely
+                                    // If src is a host operation and there is no ownership transfer or layout
+                                    // transition, we can skip the barrier entirely
                                     if ((prior_usage.stages & make_enum_mask(rhi::pipeline_stage::host)) ==
                                             make_enum_mask(rhi::pipeline_stage::host) &&
                                         !cross_queue && img_usage.layout == resource.layout)
