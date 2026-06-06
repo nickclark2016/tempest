@@ -389,7 +389,12 @@ namespace tempest::rhi::mock
             flush_buffers_cmd{vector<typed_rhi_handle<rhi_handle_type::buffer>>(buffers.begin(), buffers.end())});
     }
 
-    auto mock_device::get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer>) const noexcept -> size_t
+    auto mock_device::get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> /*handle*/) const noexcept -> size_t
+    {
+        return 0;
+    }
+
+    auto mock_device::get_required_alignment(enum_mask<rhi::buffer_usage> /*usage*/) const noexcept -> size_t
     {
         return 0;
     }

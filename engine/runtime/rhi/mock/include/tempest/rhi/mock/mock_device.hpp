@@ -112,6 +112,8 @@ namespace tempest::rhi::mock
         void flush_buffers(span<const typed_rhi_handle<rhi_handle_type::buffer>> buffers) noexcept override;
         [[nodiscard]] auto get_buffer_size(typed_rhi_handle<rhi_handle_type::buffer> /*handle*/) const noexcept
             -> size_t override;
+        [[nodiscard]] auto get_required_alignment(enum_mask<rhi::buffer_usage> /*usage*/) const noexcept
+            -> size_t override;
 
         // Miscellaneous
         void release_resources() override;
