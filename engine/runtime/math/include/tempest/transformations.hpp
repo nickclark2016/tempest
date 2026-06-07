@@ -316,7 +316,7 @@ namespace tempest::math
     template <typename T>
     inline constexpr mat4<T> perspective(const T aspect, const T fov, T near)
     {
-        const T fovy = as_radians(fov);
+        const T fovy = fov;
         const T f = static_cast<T>(1) / std::tan(fovy / 2);
         return mat4<T>{f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, -1, 0, 0, near, 0};
     }
@@ -324,7 +324,7 @@ namespace tempest::math
     template <typename T>
     inline constexpr mat4<T> perspective(const T aspect, const T fov, T near, const T far)
     {
-        T fov_rad = as_radians(fov);
+        T fov_rad = fov;
         T focal_length = static_cast<T>(1) / std::tan(fov_rad / 2);
 
         T x = focal_length / aspect;

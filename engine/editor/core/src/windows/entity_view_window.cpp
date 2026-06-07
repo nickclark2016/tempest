@@ -82,7 +82,6 @@ namespace tempest::editor
 
             for (auto&& provider : providers)
             {
-                ImGui::Separator();
                 provider->draw(entity_registry, target);
             }
         }

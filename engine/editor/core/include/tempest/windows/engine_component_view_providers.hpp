@@ -10,6 +10,14 @@ namespace tempest::editor
         auto draw(ecs::archetype_registry* registry, ecs::entity target) -> void override;
     };
 
+    class TEMPEST_EDITOR_API camera_component_view_provider final : public component_view_provider
+    {
+      public:
+        camera_component_view_provider() = default;
+
+        auto draw(ecs::archetype_registry* registry, ecs::entity target) -> void override;
+    };
+
     class TEMPEST_EDITOR_API directional_light_component_view_provider final : public component_view_provider
     {
       public:

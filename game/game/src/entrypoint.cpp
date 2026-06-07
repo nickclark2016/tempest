@@ -29,7 +29,7 @@ extern "C"
             registry.name(camera, "Main Camera");
             tempest::graphics::camera_component camera_data = {
                 .aspect_ratio = 16.0F / 9.0F,
-                .vertical_fov = 100.0F,
+                .vertical_fov = tempest::math::as_radians(100.0F),
                 .near_plane = 0.01F,
             };
             registry.assign(camera, camera_data);

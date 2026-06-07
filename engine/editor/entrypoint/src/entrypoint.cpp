@@ -95,6 +95,7 @@ namespace
             entity_props_win = ui_editor->register_window(make_unique<editor::entity_view_window>(ctx.get_registry()));
 
             entity_props_win->providers.emplace_back(make_unique<editor::transform_component_view_provider>());
+            entity_props_win->providers.emplace_back(make_unique<editor::camera_component_view_provider>());
             entity_props_win->providers.emplace_back(make_unique<editor::directional_light_component_view_provider>());
             entity_props_win->providers.emplace_back(make_unique<editor::shadow_map_component_view_provider>());
         });

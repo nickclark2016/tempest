@@ -15,7 +15,7 @@ namespace tempest::editor
             return;
         }
 
-        if (ImGui::CollapsingHeader("Transform Component"))
+        if (ImGui::CollapsingHeader("Transform Component", ImGuiTreeNodeFlags_DefaultOpen))
         {
             const auto new_position = ui::float3("Position", transform->position());
             const auto new_rotation = math::as_radians(ui::float3("Rotation", math::as_degrees(transform->rotation())));
@@ -36,6 +36,37 @@ namespace tempest::editor
         }
     }
 
+    auto camera_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
+    {
+        const auto* const existing_camera = registry->try_get<graphics::camera_component>(target);
+        if (existing_camera == nullptr)
+        {
+            return;
+        }
+
+        if (ImGui::CollapsingHeader("Camera Component", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            const auto new_fov = math::as_radians(ui::drag_scalar(
+                "Field of View (Vertical)", math::as_degrees(existing_camera->vertical_fov), 0.0F, 180.0F));
+            const auto new_near_plane =
+                ui::drag_scalar("Near Plane", existing_camera->near_plane, 0.0F, numeric_limits<float>::max());
+
+            const auto changed =
+                new_fov != existing_camera->vertical_fov || new_near_plane != existing_camera->near_plane;
+            
+            if (changed)
+            {
+                const auto cam = graphics::camera_component{
+                    .aspect_ratio = existing_camera->aspect_ratio,
+                    .vertical_fov = new_fov,
+                    .near_plane = new_near_plane,
+                };
+
+                registry->replace(target, cam);
+            }
+        }
+    }
+
     auto directional_light_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
     {
         const auto* const existing_dir_light = registry->try_get<graphics::directional_light_component>(target);
@@ -44,7 +75,7 @@ namespace tempest::editor
             return;
         }
 
-        if (ImGui::CollapsingHeader("Directional Light Component"))
+        if (ImGui::CollapsingHeader("Directional Light Component", ImGuiTreeNodeFlags_DefaultOpen))
         {
             const auto new_color = ui::color3("Color", existing_dir_light->color);
             const auto new_intensity = ui::scalar("Intensity", existing_dir_light->intensity);
@@ -72,7 +103,7 @@ namespace tempest::editor
             return;
         }
 
-        if (ImGui::CollapsingHeader("Shadow Map Component"))
+        if (ImGui::CollapsingHeader("Shadow Map Component", ImGuiTreeNodeFlags_DefaultOpen))
         {
             const auto new_cascade_count =
                 ui::drag_integral("Cascades", existing_shadow_map_component->cascade_count, 1, 4);
