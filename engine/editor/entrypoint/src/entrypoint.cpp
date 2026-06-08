@@ -83,36 +83,9 @@ namespace
                                tempest_engine.get_renderer().get_frame_graph().get_tonemapped_color_format(), 3);
 
         auto ui_editor = unique_ptr<editor::editor_context>();
-        auto viewport_win = static_cast<editor::viewport_window*>(nullptr);
-        auto scene_hierarchy_win = static_cast<editor::scene_hierarchy_window*>(nullptr);
-        auto entity_props_win = static_cast<editor::entity_view_window*>(nullptr);
 
         tempest_engine.register_on_initialize_callback([&](engine_context& ctx) {
             ui_editor = setup_render_graph(ctx, *win_surface, ui_ctx);
-            viewport_win = ui_editor->register_window(make_unique<editor::viewport_window>(ctx.get_renderer()));
-            scene_hierarchy_win =
-                ui_editor->register_window(make_unique<editor::scene_hierarchy_window>(ctx.get_registry()));
-            entity_props_win = ui_editor->register_window(make_unique<editor::entity_view_window>(ctx.get_registry()));
-
-            entity_props_win->providers.emplace_back(make_unique<editor::transform_component_view_provider>());
-            entity_props_win->providers.emplace_back(make_unique<editor::camera_component_view_provider>());
-            entity_props_win->providers.emplace_back(make_unique<editor::directional_light_component_view_provider>());
-            entity_props_win->providers.emplace_back(make_unique<editor::shadow_map_component_view_provider>());
-        });
-
-        tempest_engine.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {
-            entity_props_win->target = scene_hierarchy_win->selected_entity;
-
-            for (auto&& [self, camera] : ctx.get_registry().with<ecs::self_component, graphics::camera_component>())
-            {
-                auto camera_copy = camera;
-                camera_copy.aspect_ratio = viewport_win->aspect_ratio();
-                ctx.get_registry().assign_or_replace(self.entity, camera_copy);
-            }
-
-            ui_ctx.begin_ui_commands();
-            ui_editor->draw();
-            ui_ctx.finish_ui_commands();
         });
 
         auto on_load = [&](auto&& engine, auto&& args) {

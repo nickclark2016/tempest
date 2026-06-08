@@ -33,4 +33,7 @@ namespace tempest::editor
 
         auto draw(ecs::archetype_registry* registry, ecs::entity target) -> void override;
     };
+
+    class editor_context;
+    auto register_engine_component_view_providers(editor_context& ctx) -> void;
 }

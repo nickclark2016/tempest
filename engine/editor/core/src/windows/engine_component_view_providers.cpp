@@ -1,5 +1,6 @@
 #include <tempest/windows/engine_component_view_providers.hpp>
 
+#include <tempest/editor.hpp>
 #include <tempest/graphics_components.hpp>
 #include <tempest/ui.hpp>
 
@@ -53,7 +54,7 @@ namespace tempest::editor
 
             const auto changed =
                 new_fov != existing_camera->vertical_fov || new_near_plane != existing_camera->near_plane;
-            
+
             if (changed)
             {
                 const auto cam = graphics::camera_component{
@@ -131,5 +132,13 @@ namespace tempest::editor
                 registry->replace(target, new_shadow_map);
             }
         }
+    }
+
+    auto register_engine_component_view_providers(editor_context& ctx) -> void
+    {
+        ctx.register_component_view_provider(make_unique<transform_component_view_provider>());
+        ctx.register_component_view_provider(make_unique<camera_component_view_provider>());
+        ctx.register_component_view_provider(make_unique<directional_light_component_view_provider>());
+        ctx.register_component_view_provider(make_unique<shadow_map_component_view_provider>());
     }
 } // namespace tempest::editor

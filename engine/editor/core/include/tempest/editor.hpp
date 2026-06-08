@@ -1,12 +1,16 @@
 #ifndef tempest_editor_core_editor_hpp
 #define tempest_editor_core_editor_hpp
 
-#include <tempest/windows/editor_window.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/ui.hpp>
 #include <tempest/vector.hpp>
+#include <tempest/windows/component_view.hpp>
+#include <tempest/windows/editor_window.hpp>
+#include <tempest/windows/entity_view_window.hpp>
+#include <tempest/windows/scene_hierarchy_window.hpp>
+#include <tempest/windows/viewport_window.hpp>
 
 namespace tempest::editor
 {
@@ -28,12 +32,21 @@ namespace tempest::editor
             return ptr;
         }
 
+        template <derived_from<component_view_provider> T>
+        auto register_component_view_provider(unique_ptr<T> provider) -> void
+        {
+            _entity_view->providers.push_back(tempest::move(provider));
+        }
+
       private:
         engine_context* _engine_ctx;
         rhi::window_surface* _win_surface;
         ui_context* _ui_ctx;
 
         vector<unique_ptr<editor_window>> _windows;
+        entity_view_window* _entity_view = nullptr;
+        scene_hierarchy_window* _scene_hierarchy_view = nullptr;
+        viewport_window* _viewport_view = nullptr;
 
         graphics::graph_resource_handle<rhi::rhi_handle_type::image> _final_color_target;
     };
