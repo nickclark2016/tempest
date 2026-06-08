@@ -107,7 +107,7 @@ namespace tempest::editor
         if (ImGui::CollapsingHeader("Shadow Map Component", ImGuiTreeNodeFlags_DefaultOpen))
         {
             const auto new_cascade_count =
-                ui::drag_integral("Cascades", existing_shadow_map_component->cascade_count, 1, 4);
+                ui::drag_integral("Cascades", static_cast<int>(existing_shadow_map_component->cascade_count), 1, 4);
             const auto new_split_lambda =
                 ui::drag_scalar("Split Lambda", existing_shadow_map_component->split_lambda, 0.0F, 1.0F);
             const auto new_blend_fraction =
@@ -115,7 +115,7 @@ namespace tempest::editor
             const auto new_shadow_distance =
                 ui::drag_scalar("Shadow Distance", existing_shadow_map_component->shadow_distance, 1.0F, 5000.0F);
 
-            const auto changed = new_cascade_count != existing_shadow_map_component->cascade_count ||
+            const auto changed = new_cascade_count != static_cast<int>(existing_shadow_map_component->cascade_count) ||
                                  new_split_lambda != existing_shadow_map_component->split_lambda ||
                                  new_blend_fraction != existing_shadow_map_component->blend_fraction ||
                                  new_shadow_distance != existing_shadow_map_component->shadow_distance;
@@ -126,7 +126,7 @@ namespace tempest::editor
                     .shadow_distance = new_shadow_distance,
                     .split_lambda = new_split_lambda,
                     .blend_fraction = new_blend_fraction,
-                    .cascade_count = static_cast<uint32_t>(new_cascade_count),
+                    .cascade_count = static_cast<uint32_t>(new_cascade_count),  
                 };
 
                 registry->replace(target, new_shadow_map);
