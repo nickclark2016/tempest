@@ -235,7 +235,12 @@ namespace tempest
     {
         [[nodiscard]] constexpr auto operator""_sv(const char* str, size_t len) noexcept -> string_view
         {
-            return string_view(str, len);
+            return {str, len};
+        }
+
+        [[nodiscard]] constexpr auto operator""_sv(const wchar_t* str, size_t len) noexcept -> wstring_view
+        {
+            return {str, len};
         }
     } // namespace literals
 
