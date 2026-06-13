@@ -6,9 +6,9 @@ local function ninja_test_target(wks)
     _p('')
     _p('rule run_test')
     if os.shell() == 'posix' then
-        _p('  command = sh -c \'$in --gtest_brief=1\'')
+        _p('  command = sh -c \'$in\'')
     else
-        _p('  command = cmd /c "$in --gtest_brief=1"')
+        _p('  command = cmd /c "$in"')
     end
 
     _p('')
