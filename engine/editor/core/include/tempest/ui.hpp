@@ -1,16 +1,17 @@
 #ifndef tempest_editor_ui_ui_hpp
 #define tempest_editor_ui_ui_hpp
 
+#include <tempest/cstring_view.hpp>
 #include <tempest/frame_graph.hpp>
-#include <tempest/vec3.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
 #include <tempest/slot_map.hpp>
-#include <tempest/string_view.hpp>
+#include <tempest/string.hpp>
 #include <tempest/variant.hpp>
 #include <tempest/vec2.hpp>
+#include <tempest/vec3.hpp>
 
 namespace tempest::editor
 {
@@ -32,7 +33,7 @@ namespace tempest::editor
         auto render_ui_commands(graphics::graphics_task_execution_context& exec_ctx) noexcept -> void;
 
       private:
-        struct impl;
+        struct TEMPEST_EDITOR_API impl;
         unique_ptr<impl> _impl = nullptr;
 
         auto _init_window_backend() -> void;
@@ -47,15 +48,16 @@ namespace tempest::editor
 
     namespace ui
     {
-        TEMPEST_EDITOR_API auto image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height) -> void;
+        TEMPEST_EDITOR_API auto image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width,
+                                      uint32_t height) -> void;
 
-        TEMPEST_EDITOR_API auto scalar(string_view label, float input) -> float;
-        TEMPEST_EDITOR_API auto float3(string_view label, math::float3 input) -> math::float3;
-        TEMPEST_EDITOR_API auto color3(string_view label, math::float3 input) -> math::float3;
+        TEMPEST_EDITOR_API auto scalar(cstring_view label, float input) -> float;
+        TEMPEST_EDITOR_API auto float3(cstring_view label, math::float3 input) -> math::float3;
+        TEMPEST_EDITOR_API auto color3(cstring_view label, math::float3 input) -> math::float3;
 
-        TEMPEST_EDITOR_API auto drag_integral(string_view label, int input, int minimum, int maximum) -> int;
-        TEMPEST_EDITOR_API auto drag_scalar(string_view label, float input, float minimum, float maximum) -> float;
-    }
-} // namespace tempest::editor::ui
+        TEMPEST_EDITOR_API auto drag_integral(cstring_view label, int input, int minimum, int maximum) -> int;
+        TEMPEST_EDITOR_API auto drag_scalar(cstring_view label, float input, float minimum, float maximum) -> float;
+    } // namespace ui
+} // namespace tempest::editor
 
 #endif // tempest_editor_ui_ui_hpp

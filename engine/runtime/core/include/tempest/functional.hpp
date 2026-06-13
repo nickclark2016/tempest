@@ -150,7 +150,7 @@ namespace tempest
     using unwrap_reference_decay_t = typename unwrap_reference_decay<T>::type;
 
     template <typename T>
-    class function;
+    class TEMPEST_API function;
 
     namespace detail
     {
@@ -161,14 +161,14 @@ namespace tempest
 
         class undefined_class_type;
 
-        union non_copyable_types {
+        union TEMPEST_API non_copyable_types {
             void* object_ptr;
             const void* const_object_ptr;
             void (*function_ptr)();
             void (undefined_class_type::*member_ptr)();
         };
 
-        union any_func_data {
+        union TEMPEST_API any_func_data {
             void* access() noexcept;
             const void* access() const noexcept;
 
@@ -218,46 +218,115 @@ namespace tempest
             static constexpr size_t max_alignment = alignof(non_copyable_types);
 
             template <typename Fn>
-            class manager
+            class TEMPEST_API manager
             {
               protected:
                 static constexpr bool is_stored_locally = is_location_invariant<Fn>::value && sizeof(Fn) <= max_size &&
                                                           alignof(Fn) <= max_alignment &&
                                                           max_alignment % alignof(Fn) == 0;
 
-                static Fn* get_pointer(const any_func_data& data) noexcept;
+                static Fn* get_pointer(const any_func_data& data) noexcept
+                {
+                    if constexpr (is_stored_locally)
+                    {
+                        const Fn& f = data.access<Fn>();
+                        return const_cast<Fn*>(&f); // This is safe because the object is not const
+                    }
+                    else
+                    {
+                        return data.access<Fn*>();
+                    }
+                }
 
               private:
                 template <typename F, bool Local>
-                static void _create(any_func_data& dst, F&& src);
+                static void _create(any_func_data& dst, F&& src)
+                {
+                    if constexpr (Local)
+                    {
+                        ::new (dst.access()) Fn(tempest::forward<F>(src));
+                    }
+                    else
+                    {
+                        dst.access<Fn*>() = new Fn(tempest::forward<F>(src));
+                    }
+                }
 
                 template <bool Local>
-                static void _destroy(any_func_data& tgt);
+                static void _destroy(any_func_data& tgt)
+                {
+                    if constexpr (Local)
+                    {
+                        tgt.access<Fn>().~Fn();
+                    }
+                    else
+                    {
+                        delete tgt.access<Fn*>();
+                    }
+                }
 
               public:
-                static void exec(any_func_data& tgt, const any_func_data& src, function_manager_operation op);
+                static void exec(any_func_data& dst, const any_func_data& src, function_manager_operation op)
+                {
+                    switch (op)
+                    {
+                    case function_manager_operation::GET_FUNCTOR_POINTER:
+                        dst.access<Fn*>() = get_pointer(src);
+                        break;
+                    case function_manager_operation::CLONE_FUNCTOR:
+                        init_functor(dst, forward_like<Fn>(*get_pointer(src)));
+                        break;
+                    case function_manager_operation::DESTROY_FUNCTOR:
+                        _destroy<is_stored_locally>(dst);
+                        break;
+                    }
+                }
 
                 template <typename F>
                 static void init_functor(any_func_data& tgt, F&& src) noexcept(manager<Fn>::is_stored_locally &&
-                                                                               is_nothrow_constructible_v<Fn, F>);
+                                                                               is_nothrow_constructible_v<Fn, F>)
+                {
+                    _create<F&&, is_stored_locally>(tgt, tempest::forward<F>(src));
+                }
 
                 template <typename Sig>
-                static bool non_empty_function(const function<Sig>& f) noexcept;
+                static bool non_empty_function(const function<Sig>& f) noexcept
+                {
+                    return static_cast<bool>(f);
+                }
 
                 template <typename T>
-                static bool non_empty_function(T* fp) noexcept;
+                static bool non_empty_function(T* fp) noexcept
+                {
+                    return fp != nullptr;
+                }
 
                 template <typename C, typename T>
-                static bool non_empty_function(T C::* mp) noexcept;
+                static bool non_empty_function(T C::* mp) noexcept
+                {
+                    return mp != nullptr;
+                }
 
                 template <typename F>
-                static bool non_empty_function(const F& f) noexcept;
+                static bool non_empty_function(const F& f) noexcept
+                {
+                    return true;
+                }
             };
 
             function_base() = default;
-            ~function_base();
+            ~function_base()
+            {
+                if (_manager_fn)
+                {
+                    _manager_fn(_data, _data, function_manager_operation::DESTROY_FUNCTOR);
+                }
+            }
 
-            bool empty() const;
+            bool empty() const
+            {
+                return !_manager_fn;
+            }
 
             using manager_fn_t = void (*)(any_func_data&, const any_func_data&, function_manager_operation);
 
@@ -266,178 +335,58 @@ namespace tempest
         };
 
         template <typename Sig, typename Fn>
-        class function_handler;
+        class TEMPEST_API function_handler;
 
         template <typename R, typename Fn, typename... Args>
-        class function_handler<R(Args...), Fn> : public function_base::manager<Fn>
+        class TEMPEST_API function_handler<R(Args...), Fn> : public function_base::manager<Fn>
         {
             using base = function_base::manager<Fn>;
 
           public:
             static constexpr bool is_nothrow_init = base::is_stored_locally && is_nothrow_constructible_v<Fn>;
 
-            static void exec(any_func_data& tgt, const any_func_data& src, function_manager_operation op);
-            static R invoke(const any_func_data& data, Args&&... args);
+            static void exec(any_func_data& tgt, const any_func_data& src, function_manager_operation op)
+            {
+                switch (op)
+                {
+                case function_manager_operation::GET_FUNCTOR_POINTER:
+                    tgt.access<Fn*>() = base::get_pointer(src);
+                    break;
+                default:
+                    base::exec(tgt, src, op);
+                }
+            }
+
+            static R invoke(const any_func_data& data, Args&&... args)
+            {
+                return tempest::invoke_r<R>(*base::get_pointer(data), tempest::forward<Args>(args)...);
+            }
         };
 
         template <>
-        class function_handler<void, void>
+        class TEMPEST_API function_handler<void, void>
         {
           public:
             static bool exec([[maybe_unused]] any_func_data& tgt, [[maybe_unused]] const any_func_data& src,
-                             [[maybe_unused]] function_manager_operation op);
+                             [[maybe_unused]] function_manager_operation op)
+            {
+                return false;
+            }
         };
 
         template <typename Sig, typename Fn, bool valid = is_object_v<Fn>>
-        struct function_target_handler : function_handler<Sig, remove_cv_t<Fn>>
+        struct TEMPEST_API function_target_handler : function_handler<Sig, remove_cv_t<Fn>>
         {
         };
 
         template <typename Sig, typename Fn>
-        struct function_target_handler<Sig, Fn, false> : function_handler<void, void>
+        struct TEMPEST_API function_target_handler<Sig, Fn, false> : function_handler<void, void>
         {
         };
-
-        template <typename Fn>
-        inline Fn* function_base::manager<Fn>::get_pointer(const any_func_data& data) noexcept
-        {
-            if constexpr (is_stored_locally)
-            {
-                const Fn& f = data.access<Fn>();
-                return const_cast<Fn*>(&f); // This is safe because the object is not const
-            }
-            else
-            {
-                return data.access<Fn*>();
-            }
-        }
-
-        template <typename Fn>
-        template <typename F, bool Local>
-        inline void function_base::manager<Fn>::_create(any_func_data& dst, F&& src)
-        {
-            if constexpr (Local)
-            {
-                ::new (dst.access()) Fn(tempest::forward<F>(src));
-            }
-            else
-            {
-                dst.access<Fn*>() = new Fn(tempest::forward<F>(src));
-            }
-        }
-
-        template <typename Fn>
-        template <bool Local>
-        inline void function_base::manager<Fn>::_destroy(any_func_data& tgt)
-        {
-            if constexpr (Local)
-            {
-                tgt.access<Fn>().~Fn();
-            }
-            else
-            {
-                delete tgt.access<Fn*>();
-            }
-        }
-
-        template <typename Fn>
-        inline void function_base::manager<Fn>::exec(any_func_data& dst, const any_func_data& src,
-                                                     function_manager_operation op)
-        {
-            switch (op)
-            {
-            case function_manager_operation::GET_FUNCTOR_POINTER:
-                dst.access<Fn*>() = get_pointer(src);
-                break;
-            case function_manager_operation::CLONE_FUNCTOR:
-                init_functor(dst, forward_like<Fn>(*get_pointer(src)));
-                break;
-            case function_manager_operation::DESTROY_FUNCTOR:
-                _destroy<is_stored_locally>(dst);
-                break;
-            }
-        }
-
-        template <typename Fn>
-        template <typename F>
-        inline void function_base::manager<Fn>::init_functor(any_func_data& tgt,
-                                                             F&& src) noexcept(manager<Fn>::is_stored_locally &&
-                                                                               is_nothrow_constructible_v<Fn, F>)
-        {
-            _create<F&&, is_stored_locally>(tgt, tempest::forward<F>(src));
-        }
-
-        template <typename Fn>
-        template <typename Sig>
-        inline bool function_base::manager<Fn>::non_empty_function(const function<Sig>& f) noexcept
-        {
-            return static_cast<bool>(f);
-        }
-
-        template <typename Fn>
-        template <typename T>
-        inline bool function_base::manager<Fn>::non_empty_function(T* fp) noexcept
-        {
-            return fp != nullptr;
-        }
-
-        template <typename Fn>
-        template <typename C, typename T>
-        inline bool function_base::manager<Fn>::non_empty_function(T C::* mp) noexcept
-        {
-            return mp != nullptr;
-        }
-
-        template <typename Fn>
-        template <typename F>
-        inline bool function_base::manager<Fn>::non_empty_function([[maybe_unused]] const F& f) noexcept
-        {
-            return true;
-        }
-
-        inline function_base::~function_base()
-        {
-            if (_manager_fn)
-            {
-                _manager_fn(_data, _data, function_manager_operation::DESTROY_FUNCTOR);
-            }
-        }
-
-        inline bool function_base::empty() const
-        {
-            return !_manager_fn;
-        }
-
-        template <typename R, typename Fn, typename... Args>
-        inline void function_handler<R(Args...), Fn>::exec(any_func_data& tgt, const any_func_data& src,
-                                                           function_manager_operation op)
-        {
-            switch (op)
-            {
-            case function_manager_operation::GET_FUNCTOR_POINTER:
-                tgt.access<Fn*>() = base::get_pointer(src);
-                break;
-            default:
-                base::exec(tgt, src, op);
-            }
-        }
-
-        template <typename R, typename Fn, typename... Args>
-        inline R function_handler<R(Args...), Fn>::invoke(const any_func_data& data, Args&&... args)
-        {
-            return tempest::invoke_r<R>(*base::get_pointer(data), tempest::forward<Args>(args)...);
-        }
-
-        inline bool function_handler<void, void>::exec([[maybe_unused]] any_func_data& tgt,
-                                                       [[maybe_unused]] const any_func_data& src,
-                                                       [[maybe_unused]] function_manager_operation op)
-        {
-            return false;
-        }
     } // namespace detail
 
     template <typename M, typename T>
-    constexpr auto mem_fn(M T::* pm) noexcept
+    TEMPEST_API constexpr auto mem_fn(M T::* pm) noexcept
     {
         return [pm](T& obj, auto&&... args) -> decltype(auto) {
             return tempest::invoke(pm, obj, tempest::forward<decltype(args)>(args)...);
@@ -449,7 +398,7 @@ namespace tempest
 #if defined(_WIN32) && !defined(__clang__)
         TEMPEST_API
 #endif
-            function<R(Args...)> : private detail::function_base
+        function<R(Args...)> : private detail::function_base
     {
         template <typename Fn>
         using handler = detail::function_target_handler<R(Args...), decay_t<Fn>>;

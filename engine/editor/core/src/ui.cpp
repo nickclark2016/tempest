@@ -1217,35 +1217,35 @@ namespace tempest::editor
             ImGui::Image(bit_cast<ImTextureID>(id), ImVec2(static_cast<float>(width), static_cast<float>(height)));
         }
 
-        auto scalar(string_view label, float input) -> float
+        auto scalar(cstring_view label, float input) -> float
         {
-            ImGui::InputFloat(label.data(), &input);
+            ImGui::InputFloat(label.c_str(), &input);
             return input;
         }
 
-        auto float3(string_view label, math::float3 input) -> math::float3
+        auto float3(cstring_view label, math::float3 input) -> math::float3
         {
             float vals[] = {input.x, input.y, input.z};
-            ImGui::InputFloat3(label.data(), vals);
+            ImGui::InputFloat3(label.c_str(), vals);
             return math::float3(vals[0], vals[1], vals[2]);
         }
 
-        auto color3(string_view label, math::float3 input) -> math::float3
+        auto color3(cstring_view label, math::float3 input) -> math::float3
         {
             float vals[] = {input.x, input.y, input.z};
-            ImGui::ColorEdit3(label.data(), vals);
+            ImGui::ColorEdit3(label.c_str(), vals);
             return math::float3(vals[0], vals[1], vals[2]);
         }
 
-        auto drag_integral(string_view label, int input, int minimum, int maximum) -> int
+        auto drag_integral(cstring_view label, int input, int minimum, int maximum) -> int
         {
-            ImGui::DragInt(label.data(), &input, 1.0F, minimum, maximum);
+            ImGui::DragInt(label.c_str(), &input, 1.0F, minimum, maximum);
             return input;
         }
 
-        auto drag_scalar(string_view label, float input, float minimum, float maximum) -> float
+        auto drag_scalar(cstring_view label, float input, float minimum, float maximum) -> float
         {
-            ImGui::DragFloat(label.data(), &input, 1.0F, minimum, maximum);
+            ImGui::DragFloat(label.c_str(), &input, 1.0F, minimum, maximum);
             return input;
         }
     }
