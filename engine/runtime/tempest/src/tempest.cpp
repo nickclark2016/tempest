@@ -39,7 +39,7 @@ namespace tempest
         }
     } // namespace
 
-    engine_context::engine_context()
+    standalone_engine_context::standalone_engine_context()
         : _log_sinks(make_default_log_sinks()), _logger(make_default_logger(_log_sinks)),
           _entity_registry(_event_registry), _asset_database(&_asset_type_reg),
           _render(graphics::renderer::builder()
@@ -102,8 +102,8 @@ namespace tempest
         assets::register_default_importers(_asset_database, &_mesh_reg, &_texture_reg, &_material_reg);
     }
 
-    tuple<rhi::window_surface*, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>, core::input_group>
-    engine_context::register_window(rhi::window_surface_desc desc, bool install_swapchain_blit)
+    engine_context::window_registration_info standalone_engine_context::register_window(rhi::window_surface_desc desc,
+                                                                                        bool install_swapchain_blit)
     {
         auto [window, surface] = _render.create_window(desc, install_swapchain_blit);
         auto keyboard = make_unique<core::keyboard>();
@@ -121,53 +121,57 @@ namespace tempest
             .mouse = tempest::move(mouse),
         });
 
-        return make_tuple(_windows.back().surface.get(), _windows.back().render_surface,
-                          core::input_group{
-                              .kb = _windows.back().keyboard.get(),
-                              .ms = _windows.back().mouse.get(),
-                          });
+        return window_registration_info{
+            .surface = _windows.back().surface.get(),
+            .render_surface = _windows.back().render_surface,
+            .inputs =
+                core::input_group{
+                    .kb = _windows.back().keyboard.get(),
+                    .ms = _windows.back().mouse.get(),
+                },
+        };
     }
 
-    void engine_context::register_on_initialize_callback(function<void(engine_context&)> callback)
+    void standalone_engine_context::register_on_initialize_callback(function<void(engine_context&)> callback)
     {
         _on_initialize_callbacks.push_back(tempest::move(callback));
     }
 
-    void engine_context::register_on_close_callback(function<void(engine_context&)> callback)
+    void standalone_engine_context::register_on_close_callback(function<void(engine_context&)> callback)
     {
         _on_close_callbacks.push_back(tempest::move(callback));
     }
 
-    void engine_context::register_on_fixed_update_callback(
+    void standalone_engine_context::register_on_fixed_update_callback(
         function<void(engine_context&, std::chrono::duration<float>)> callback)
     {
         _on_fixed_update_callbacks.push_back(tempest::move(callback));
     }
 
-    void engine_context::register_on_variable_update_callback(
+    void standalone_engine_context::register_on_variable_update_callback(
         function<void(engine_context&, std::chrono::duration<float>)> callback)
     {
         _on_variable_update_callbacks.push_back(tempest::move(callback));
     }
 
-    void engine_context::request_close(bool close) noexcept
+    void standalone_engine_context::request_close(bool close)
     {
         _should_close = close;
     }
 
-    bool engine_context::should_close() const noexcept
+    bool standalone_engine_context::should_close() const
     {
         return _should_close;
     }
 
-    ecs::entity engine_context::load_entity(ecs::entity src)
+    ecs::entity standalone_engine_context::load_entity(ecs::entity src)
     {
         auto ent = _entity_registry.duplicate(src);
         _entities_to_load.push_back(ent);
         return ent;
     }
 
-    void engine_context::run()
+    void standalone_engine_context::run()
     {
         _logger.trace("Starting engine");
 
@@ -180,8 +184,8 @@ namespace tempest
 
         _render.finalize_graph();
 
-        _render.upload_objects_sync(_entities_to_load, get_mesh_registry(), get_texture_registry(),
-                                    get_material_registry());
+        _render.upload_objects_sync(_entities_to_load, get_meshes(), get_textures(),
+                                    get_materials());
         _entities_to_load.clear();
 
         std::chrono::duration<double> simulated_time = std::chrono::duration<double>(0.0);
@@ -235,77 +239,77 @@ namespace tempest
         std::exit(0);
     }
 
-    auto engine_context::get_registry() noexcept -> ecs::archetype_registry&
+    auto standalone_engine_context::get_entities() -> ecs::archetype_registry&
     {
         return _entity_registry;
     }
 
-    auto engine_context::get_registry() const noexcept -> const ecs::archetype_registry&
+    auto standalone_engine_context::get_entities() const -> const ecs::archetype_registry&
     {
         return _entity_registry;
     }
 
-    auto engine_context::get_event_registry() noexcept -> event::event_registry&
+    auto standalone_engine_context::get_events() -> event::event_registry&
     {
         return _event_registry;
     }
 
-    auto engine_context::get_event_registry() const noexcept -> const event::event_registry&
+    auto standalone_engine_context::get_events() const -> const event::event_registry&
     {
         return _event_registry;
     }
 
-    auto engine_context::get_material_registry() noexcept -> core::material_registry&
+    auto standalone_engine_context::get_materials() -> core::material_registry&
     {
         return _material_reg;
     }
 
-    auto engine_context::get_material_registry() const noexcept -> const core::material_registry&
+    auto standalone_engine_context::get_materials() const -> const core::material_registry&
     {
         return _material_reg;
     }
 
-    auto engine_context::get_mesh_registry() noexcept -> core::mesh_registry&
+    auto standalone_engine_context::get_meshes() -> core::mesh_registry&
     {
         return _mesh_reg;
     }
 
-    auto engine_context::get_mesh_registry() const noexcept -> const core::mesh_registry&
+    auto standalone_engine_context::get_meshes() const -> const core::mesh_registry&
     {
         return _mesh_reg;
     }
 
-    auto engine_context::get_texture_registry() noexcept -> core::texture_registry&
+    auto standalone_engine_context::get_textures() -> core::texture_registry&
     {
         return _texture_reg;
     }
 
-    auto engine_context::get_texture_registry() const noexcept -> const core::texture_registry&
+    auto standalone_engine_context::get_textures() const -> const core::texture_registry&
     {
         return _texture_reg;
     }
 
-    auto engine_context::get_asset_database() noexcept -> assets::asset_database&
+    auto standalone_engine_context::get_assets() -> assets::asset_database&
     {
         return _asset_database;
     }
 
-    auto engine_context::get_asset_database() const noexcept -> const assets::asset_database&
+    auto standalone_engine_context::get_assets() const -> const assets::asset_database&
     {
         return _asset_database;
     }
 
-    auto engine_context::get_renderer() noexcept -> graphics::renderer&
+    auto standalone_engine_context::get_renderer() -> graphics::renderer&
     {
         return _render;
     }
 
-    auto engine_context::get_renderer() const noexcept -> const graphics::renderer&
+    auto standalone_engine_context::get_renderer() const -> const graphics::renderer&
     {
         return _render;
     }
 
-    void engine_context::_update_fixed(std::chrono::duration<float> delta_time)
+    void standalone_engine_context::_update_fixed(std::chrono::duration<float> delta_time)
     {
         for (auto& window : _windows)
         {
@@ -329,7 +333,7 @@ namespace tempest
         }
     }
 
-    void engine_context::_update_variable(std::chrono::duration<float> delta_time)
+    void standalone_engine_context::_update_variable(std::chrono::duration<float> delta_time)
     {
         for (auto&& callback : _on_variable_update_callbacks)
         {
@@ -337,7 +341,7 @@ namespace tempest
         }
     }
 
-    void engine_context::_render_frame()
+    void standalone_engine_context::_render_frame()
     {
         _render.render();
     }

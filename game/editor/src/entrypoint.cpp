@@ -16,7 +16,7 @@ extern "C"
     {
         engine->register_on_initialize_callback([](tempest::engine_context& ctx) {
             for (auto&& [self, transform] :
-                 ctx.get_registry().with<tempest::ecs::self_component, tempest::ecs::transform_component>())
+                 ctx.get_entities().with<tempest::ecs::self_component, tempest::ecs::transform_component>())
             {
             }
         });

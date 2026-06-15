@@ -28,7 +28,7 @@ namespace
 
     void run(span<string_view> args)
     {
-        auto tempest_engine = tempest::engine_context();
+        auto tempest_engine = tempest::standalone_engine_context();
 
         auto game_shared_library_result = tempest::shared_library::load(game_library_name);
         if (!game_shared_library_result)

@@ -105,8 +105,8 @@ namespace tempest::editor
             },
             color_target, imported_swapchain_handle);
         
-        _entity_view = register_window(make_unique<entity_view_window>(ctx.get_registry()));
-        _scene_hierarchy_view = register_window(make_unique<scene_hierarchy_window>(ctx.get_registry()));
+        _entity_view = register_window(make_unique<entity_view_window>(ctx.get_entities()));
+        _scene_hierarchy_view = register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()));
         _viewport_view = register_window(make_unique<viewport_window>(ctx.get_renderer()));
 
         register_engine_component_view_providers(*this);
@@ -114,11 +114,11 @@ namespace tempest::editor
         ctx.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {
             _entity_view->target = _scene_hierarchy_view->selected_entity;
 
-            for (auto&& [self, camera] : ctx.get_registry().with<ecs::self_component, graphics::camera_component>())
+            for (auto&& [self, camera] : ctx.get_entities().with<ecs::self_component, graphics::camera_component>())
             {
                 auto camera_copy = camera;
                 camera_copy.aspect_ratio = _viewport_view->aspect_ratio();
-                ctx.get_registry().assign_or_replace(self.entity, camera_copy);
+                ctx.get_entities().assign_or_replace(self.entity, camera_copy);
             }
 
             ui_ctx.begin_ui_commands();

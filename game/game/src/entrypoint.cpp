@@ -23,7 +23,7 @@ extern "C"
 
         ctx->register_on_initialize_callback([](auto& engine_ctx) -> void {
             // Create a camera
-            auto& registry = engine_ctx.get_registry();
+            auto& registry = engine_ctx.get_entities();
 
             auto camera = registry.create();
             registry.name(camera, "Main Camera");
@@ -39,7 +39,7 @@ extern "C"
             registry.assign(camera, camera_tx);
 
             // Load Sponza
-            auto& asset_database = engine_ctx.get_asset_database();
+            auto& asset_database = engine_ctx.get_assets();
             asset_database.open("game.tassetdb");
 
             const auto sponza_prefab =
@@ -74,7 +74,7 @@ extern "C"
             registry.name(sun, "Sun");
         });
 
-        ctx->register_on_close_callback([](auto& engine_ctx) -> void { (void)engine_ctx.get_asset_database().save(); });
+        ctx->register_on_close_callback([](auto& engine_ctx) -> void { (void)engine_ctx.get_assets().save(); });
     }
 
     GAME_API void on_unload()
