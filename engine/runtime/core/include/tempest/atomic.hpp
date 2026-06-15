@@ -14,20 +14,17 @@
 #include <windows.h> // Interlocked* functions
 
 #ifdef __clang__
-#define DISABLE_DEPRECATION_WARNINGS \
-    _Pragma("clang diagnostic push") \
-    _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
+#define DISABLE_DEPRECATION_WARNINGS                                                                                   \
+    _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
 #define RESTORE_DEPRECATION_WARNINGS _Pragma("clang diagnostic pop")
 #else
-#define DISABLE_DEPRECATION_WARNINGS \
-    __pragma(warning(push)) \
-    __pragma(warning(disable : 4996))
+#define DISABLE_DEPRECATION_WARNINGS __pragma(warning(push)) __pragma(warning(disable : 4996))
 #define RESTORE_DEPRECATION_WARNINGS __pragma(warning(pop))
 #endif
 
-#define TEMPEST_COMPILER_BARRIER() DISABLE_DEPRECATION_WARNINGS \
-    _ReadWriteBarrier() \
-    RESTORE_DEPRECATION_WARNINGS
+#define TEMPEST_COMPILER_BARRIER()                                                                                     \
+    DISABLE_DEPRECATION_WARNINGS                                                                                       \
+    _ReadWriteBarrier() RESTORE_DEPRECATION_WARNINGS
 
 #elif defined(TEMPEST_PLATFORM_LINUX)
 #include <linux/futex.h>
@@ -121,8 +118,8 @@ namespace tempest
             return static_cast<type>(unsigned_type{0} - static_cast<unsigned_type>(value));
         }
 
-        [[nodiscard]] inline auto atomic_wait_direct(const void* const storage, void* const comparand, const size_t size,
-                                const uint32_t timeout) noexcept -> int
+        [[nodiscard]] inline auto atomic_wait_direct(const void* const storage, void* const comparand,
+                                                     const size_t size, const uint32_t timeout) noexcept -> int
         {
             const auto result = WaitOnAddress(const_cast<volatile void*>(storage), comparand, size, timeout);
             return result;
@@ -384,7 +381,8 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = _InterlockedExchangeAdd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand));
+                auto result =
+                    _InterlockedExchangeAdd16(address_as_atomic<int16_t>(storage), bit_cast<int16_t>(operand));
                 return static_cast<type>(result);
             }
 
@@ -685,7 +683,8 @@ namespace tempest
             {
                 validate_memory_order(order);
 
-                auto result = _InterlockedExchangeAdd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand));
+                auto result =
+                    _InterlockedExchangeAdd64(address_as_atomic<int64_t>(storage), bit_cast<int64_t>(operand));
                 return reinterpret_cast<type&>(result);
             }
 
@@ -727,7 +726,7 @@ namespace tempest
 
             type storage;
         };
-#elif defined(__linux__) || defined (__APPLE__)
+#elif defined(__linux__) || defined(__APPLE__)
 
         inline auto convert_memory_order(const memory_order order) -> int
         {
@@ -751,16 +750,21 @@ namespace tempest
         auto get_proxy_futex(const void* addr) -> int32_t*;
 
         template <typename T>
-        void wait_on_address(const T* addr, T expected, memory_order order) noexcept {
-            // If T is 4 bytes, we can use futex directly on the address. Otherwise, we need to use a separate futex word.
-            if constexpr (sizeof(T) == 4) {
+        void wait_on_address(const T* addr, T expected, memory_order order) noexcept
+        {
+            // If T is 4 bytes, we can use futex directly on the address. Otherwise, we need to use a separate futex
+            // word.
+            if constexpr (sizeof(T) == 4)
+            {
                 syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, expected, nullptr, nullptr, 0);
             }
 
             auto* proxy_futex = get_proxy_futex(addr); // snag the separate futex word for this address
-            while (true) {
+            while (true)
+            {
                 auto futex_version = __atomic_load_n(proxy_futex, convert_memory_order(order));
-                if (__atomic_load_n(addr, __ATOMIC_ACQUIRE) != expected) {
+                if (__atomic_load_n(addr, __ATOMIC_ACQUIRE) != expected)
+                {
                     return;
                 }
 
@@ -769,8 +773,10 @@ namespace tempest
         }
 
         template <typename T>
-        auto wake_by_address_all(T* addr, memory_order order) -> void {
-            if constexpr (sizeof(T) == 4) {
+        auto wake_by_address_all(T* addr, memory_order order) -> void
+        {
+            if constexpr (sizeof(T) == 4)
+            {
                 syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
                 return;
             }
@@ -781,15 +787,18 @@ namespace tempest
         }
 
         template <typename T>
-        auto wake_by_address_single(T* addr, memory_order order) -> void {
-            if constexpr (sizeof(T) == 4) {
+        auto wake_by_address_single(T* addr, memory_order order) -> void
+        {
+            if constexpr (sizeof(T) == 4)
+            {
                 syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
                 return;
             }
 
             auto* proxy_futex = get_proxy_futex(addr);
             __atomic_fetch_add(proxy_futex, 1, convert_memory_order(order));
-            syscall(SYS_futex, proxy_futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0); // We still wake MAX threads, since multiple threads could be waiting on the same shadow futex
+            syscall(SYS_futex, proxy_futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr,
+                    0); // We still wake MAX threads, since multiple threads could be waiting on the same shadow futex
         }
 
         template <typename T>
@@ -807,7 +816,8 @@ namespace tempest
                 return __atomic_load_n(&storage, convert_memory_order(order));
             }
 
-            [[nodiscard]] auto exchange(const type& desired, memory_order order = memory_order::seq_cst) noexcept -> type
+            [[nodiscard]] auto exchange(const type& desired, memory_order order = memory_order::seq_cst) noexcept
+                -> type
             {
                 return __atomic_exchange_n(&storage, desired, convert_memory_order(order));
             }
@@ -816,7 +826,7 @@ namespace tempest
                                                        memory_order order = memory_order::seq_cst) noexcept -> bool
             {
                 return __atomic_compare_exchange_n(&storage, &expected, desired, false, convert_memory_order(order),
-                                                 convert_memory_order(order));
+                                                   convert_memory_order(order));
             }
 
             auto fetch_add(type operand, memory_order order = memory_order::seq_cst) noexcept -> type
@@ -1040,169 +1050,169 @@ namespace tempest
             _value.notify_all();
         }
 
-        [[nodiscard]] auto fetch_add(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto fetch_add(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return _value.fetch_add(arg, order);
         }
 
-        [[nodiscard]] auto fetch_add(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto fetch_add(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return _value.fetch_add(arg, order);
         }
 
-        [[nodiscard]] auto operator+=(T arg) noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator+=(T arg) noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_add(arg);
         }
 
-        [[nodiscard]] auto operator+=(T arg) volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator+=(T arg) volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_add(arg);
         }
 
-        [[nodiscard]] auto fetch_sub(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto fetch_sub(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return _value.fetch_sub(arg, order);
         }
 
-        [[nodiscard]] auto fetch_sub(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto fetch_sub(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return _value.fetch_sub(arg, order);
         }
 
-        [[nodiscard]] auto operator-=(T arg) noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator-=(T arg) noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_sub(arg);
         }
 
-        [[nodiscard]] auto operator-=(T arg) volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator-=(T arg) volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_sub(arg);
         }
 
-        [[nodiscard]] auto operator++() noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator++() noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_add(1) + 1;
         }
 
-        [[nodiscard]] auto operator++() volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator++() volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_add(1) + 1;
         }
 
-        [[nodiscard]] auto operator++(int) noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator++(int) noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_add(1);
         }
 
-        [[nodiscard]] auto operator++(int) volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator++(int) volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_add(1);
         }
 
-        [[nodiscard]] auto operator--() noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator--() noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_sub(1) - 1;
         }
 
-        [[nodiscard]] auto operator--() volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator--() volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_sub(1) - 1;
         }
 
-        [[nodiscard]] auto operator--(int) noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator--(int) noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_sub(1);
         }
 
-        [[nodiscard]] auto operator--(int) volatile noexcept -> T
-            requires (integral<T> && !same_as<T, bool>)
+        auto operator--(int) volatile noexcept -> T
+            requires(integral<T> && !same_as<T, bool>)
         {
             return fetch_sub(1) - 1;
         }
 
-        [[nodiscard]] auto fetch_and(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+        auto fetch_and(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
             requires integral<T>
         {
             return _value.fetch_and(arg, order);
         }
 
-        [[nodiscard]] auto fetch_and(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        auto fetch_and(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
             requires integral<T>
         {
             return _value.fetch_and(arg, order);
         }
 
-        [[nodiscard]] auto fetch_or(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+        auto fetch_or(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
             requires integral<T>
         {
             return _value.fetch_or(arg, order);
         }
 
-        [[nodiscard]] auto fetch_or(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        auto fetch_or(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
             requires integral<T>
         {
             return _value.fetch_or(arg, order);
         }
 
-        [[nodiscard]] auto fetch_xor(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
+        auto fetch_xor(T arg, memory_order order = memory_order::seq_cst) noexcept -> T
             requires integral<T>
         {
             return _value.fetch_xor(arg, order);
         }
 
-        [[nodiscard]] auto fetch_xor(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
+        auto fetch_xor(T arg, memory_order order = memory_order::seq_cst) volatile noexcept -> T
             requires integral<T>
         {
             return _value.fetch_xor(arg, order);
         }
 
-        [[nodiscard]] auto operator&=(T arg) noexcept -> T
+        auto operator&=(T arg) noexcept -> T
             requires integral<T>
         {
             return fetch_and(arg);
         }
 
-        [[nodiscard]] auto operator&=(T arg) volatile noexcept -> T
+        auto operator&=(T arg) volatile noexcept -> T
             requires integral<T>
         {
             return fetch_and(arg);
         }
 
-        [[nodiscard]] auto operator|=(T arg) noexcept -> T
+        auto operator|=(T arg) noexcept -> T
             requires integral<T>
         {
             return fetch_or(arg);
         }
 
-        [[nodiscard]] auto operator|=(T arg) volatile noexcept -> T
+        auto operator|=(T arg) volatile noexcept -> T
             requires integral<T>
         {
             return fetch_or(arg);
         }
 
-        [[nodiscard]] auto operator^=(T arg) noexcept -> T
+        auto operator^=(T arg) noexcept -> T
             requires integral<T>
         {
             return fetch_xor(arg);
         }
 
-        [[nodiscard]] auto operator^=(T arg) volatile noexcept -> T
+        auto operator^=(T arg) volatile noexcept -> T
             requires integral<T>
         {
             return fetch_xor(arg);

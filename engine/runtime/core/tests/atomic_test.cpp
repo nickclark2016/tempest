@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <tempest/atomic.hpp>
+#include <tempest/thread.hpp>
 
 #include <thread>
 
@@ -1353,7 +1354,7 @@ TEST(atomic_int64_test, fetch_or_relaxed)
         static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
     const auto old_val =
         val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::relaxed);
+                     tempest::memory_order::relaxed);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1365,7 +1366,7 @@ TEST(atomic_int64_test, fetch_or_acquire)
         static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
     const auto old_val =
         val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::acquire);
+                     tempest::memory_order::acquire);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1377,7 +1378,7 @@ TEST(atomic_int64_test, fetch_or_acq_rel)
         static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
     const auto old_val =
         val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::acq_rel);
+                     tempest::memory_order::acq_rel);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1389,7 +1390,7 @@ TEST(atomic_int64_test, fetch_or_seq_cst)
         static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
     const auto old_val =
         val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::seq_cst);
+                     tempest::memory_order::seq_cst);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1595,246 +1596,342 @@ TEST(atomic_int64_test, fetch_xor_seq_cst)
 
 TEST(atomic_int8_test, wait_notify)
 {
-    auto val = tempest::atomic<tempest::int8_t>{0};
-    auto resumed = tempest::atomic<tempest::int8_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int8_t>{1};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int8_t>(0);
+        auto ready_threads = tempest::atomic<int8_t>(0);
+        auto woken_threads = tempest::atomic<int8_t>(0);
 
-    auto thr = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        auto worker_job = [&]() {
+            ready_threads.fetch_add(1, tempest::memory_order::release);
+            target_atom.wait(0);
+            woken_threads.fetch_add(1, tempest::memory_order::relaxed);
+        };
+
+        auto thread_a = tempest::thread(worker_job);
+        auto thread_b = tempest::thread(worker_job);
+
+        while (ready_threads.load(tempest::memory_order::relaxed) < 2)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        // Sleep because of scheduling gap
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_one();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_one();
 
-    thr.join();
+        while (woken_threads.load(tempest::memory_order::relaxed) == 0)
+        {
+            tempest::this_thread::yield();
+        }
 
-    EXPECT_EQ(resumed.load(), 1);
+        // Allow the thread time to settle
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 1);
+
+        target_atom.notify_one();
+
+        thread_a.join();
+        thread_b.join();
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 2);
+    }
 }
 
 TEST(atomic_int8_test, wait_notify_all)
 {
-    auto val = tempest::atomic<tempest::int8_t>{0};
-    auto resumed = tempest::atomic<tempest::int8_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int8_t>{2};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int8_t>(0);
+        auto ready_count = tempest::atomic<int8_t>(0);
 
-    auto thr1 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        constexpr auto total_workers = 4;
+
+        auto workers = tempest::vector<tempest::thread>();
+
+        for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
+        {
+            workers.emplace_back([&]() {
+                ready_count.fetch_add(1, tempest::memory_order::release);
+                target_atom.wait(0);
+            });
         }
 
-        (void)resumed.fetch_add(1);
-    });
-
-    auto thr2 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        while (ready_count.load(tempest::memory_order::acquire) < total_workers)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_all();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_all();
 
-    thr1.join();
-    thr2.join();
+        for (auto& worker : workers)
+        {
+            worker.join();
+        }
 
-    EXPECT_EQ(resumed.load(), 2);
+        workers.clear();
+    }
 }
 
 TEST(atomic_int16_test, wait_notify)
 {
-    auto val = tempest::atomic<tempest::int16_t>{0};
-    auto resumed = tempest::atomic<tempest::int16_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int16_t>{1};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int16_t>(0);
+        auto ready_threads = tempest::atomic<int16_t>(0);
+        auto woken_threads = tempest::atomic<int16_t>(0);
 
-    auto thr = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        auto worker_job = [&]() {
+            ready_threads.fetch_add(1, tempest::memory_order::release);
+            target_atom.wait(0);
+            woken_threads.fetch_add(1, tempest::memory_order::relaxed);
+        };
+
+        auto thread_a = tempest::thread(worker_job);
+        auto thread_b = tempest::thread(worker_job);
+
+        while (ready_threads.load(tempest::memory_order::relaxed) < 2)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        // Sleep because of scheduling gap
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_one();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_one();
 
-    thr.join();
+        while (woken_threads.load(tempest::memory_order::relaxed) == 0)
+        {
+            tempest::this_thread::yield();
+        }
 
-    EXPECT_EQ(resumed.load(), 1);
+        // Allow the thread time to settle
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 1);
+
+        target_atom.notify_one();
+
+        thread_a.join();
+        thread_b.join();
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 2);
+    }
 }
 
 TEST(atomic_int16_test, wait_notify_all)
 {
-    auto val = tempest::atomic<tempest::int16_t>{0};
-    auto resumed = tempest::atomic<tempest::int16_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int16_t>{2};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int16_t>(0);
+        auto ready_count = tempest::atomic<int16_t>(0);
 
-    auto thr1 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        constexpr auto total_workers = 4;
+
+        auto workers = tempest::vector<tempest::thread>();
+
+        for (auto idx = 0; idx < total_workers; ++idx)
+        {
+            workers.emplace_back([&]() {
+                ready_count.fetch_add(1, tempest::memory_order::release);
+                target_atom.wait(0);
+            });
         }
 
-        (void)resumed.fetch_add(1);
-    });
-
-    auto thr2 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        while (ready_count.load(tempest::memory_order::acquire) < total_workers)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_all();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_all();
 
-    thr1.join();
-    thr2.join();
+        for (auto& worker : workers)
+        {
+            worker.join();
+        }
 
-    EXPECT_EQ(resumed.load(), 2);
+        workers.clear();
+    }
 }
 
 TEST(atomic_int32_test, wait_notify)
 {
-    auto val = tempest::atomic<tempest::int32_t>{0};
-    auto resumed = tempest::atomic<tempest::int32_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int32_t>{1};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int32_t>(0);
+        auto ready_threads = tempest::atomic<int32_t>(0);
+        auto woken_threads = tempest::atomic<int32_t>(0);
 
-    auto thr = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        auto worker_job = [&]() {
+            ready_threads.fetch_add(1, tempest::memory_order::release);
+            target_atom.wait(0);
+            woken_threads.fetch_add(1, tempest::memory_order::relaxed);
+        };
+
+        auto thread_a = tempest::thread(worker_job);
+        auto thread_b = tempest::thread(worker_job);
+
+        while (ready_threads.load(tempest::memory_order::relaxed) < 2)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        // Sleep because of scheduling gap
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_one();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_one();
 
-    thr.join();
+        while (woken_threads.load(tempest::memory_order::relaxed) == 0)
+        {
+            tempest::this_thread::yield();
+        }
 
-    EXPECT_EQ(resumed.load(), 1);
+        // Allow the thread time to settle
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 1);
+
+        target_atom.notify_one();
+
+        thread_a.join();
+        thread_b.join();
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 2);
+    }
 }
 
 TEST(atomic_int32_test, wait_notify_all)
 {
-    auto val = tempest::atomic<tempest::int32_t>{0};
-    auto resumed = tempest::atomic<tempest::int32_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int32_t>{2};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int32_t>(0);
+        auto ready_count = tempest::atomic<int32_t>(0);
 
-    auto thr1 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        constexpr auto total_workers = 4;
+
+        auto workers = tempest::vector<tempest::thread>();
+
+        for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
+        {
+            workers.emplace_back([&]() {
+                ready_count.fetch_add(1, tempest::memory_order::release);
+                target_atom.wait(0);
+            });
         }
 
-        (void)resumed.fetch_add(1);
-    });
-
-    auto thr2 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        while (ready_count.load(tempest::memory_order::acquire) < total_workers)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_all();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_all();
 
-    thr1.join();
-    thr2.join();
+        for (auto& worker : workers)
+        {
+            worker.join();
+        }
 
-    EXPECT_EQ(resumed.load(), 2);
+        workers.clear();
+    }
 }
 
 TEST(atomic_int64_test, wait_notify)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0};
-    auto resumed = tempest::atomic<tempest::int64_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int64_t>{1};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int64_t>(0);
+        auto ready_threads = tempest::atomic<int64_t>(0);
+        auto woken_threads = tempest::atomic<int64_t>(0);
 
-    auto thr = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        auto worker_job = [&]() {
+            ready_threads.fetch_add(1, tempest::memory_order::release);
+            target_atom.wait(0);
+            woken_threads.fetch_add(1, tempest::memory_order::relaxed);
+        };
+
+        auto thread_a = tempest::thread(worker_job);
+        auto thread_b = tempest::thread(worker_job);
+
+        while (ready_threads.load(tempest::memory_order::relaxed) < 2)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        // Sleep because of scheduling gap
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_one();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_one();
 
-    thr.join();
+        while (woken_threads.load(tempest::memory_order::relaxed) == 0)
+        {
+            tempest::this_thread::yield();
+        }
 
-    EXPECT_EQ(resumed.load(), 1);
+        // Allow the thread time to settle
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 1);
+
+        target_atom.notify_one();
+
+        thread_a.join();
+        thread_b.join();
+
+        EXPECT_EQ(woken_threads.load(tempest::memory_order::relaxed), 2);
+    }
 }
 
 TEST(atomic_int64_test, wait_notify_all)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0};
-    auto resumed = tempest::atomic<tempest::int64_t>{0};
-    auto waiting_started = tempest::atomic<tempest::int64_t>{2};
+    for (auto idx = 0; idx < 100; ++idx)
+    {
+        auto target_atom = tempest::atomic<int64_t>(0);
+        auto ready_count = tempest::atomic<int64_t>(0);
 
-    auto thr1 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        constexpr auto total_workers = 4;
+
+        auto workers = tempest::vector<tempest::thread>();
+
+        for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
+        {
+            workers.emplace_back([&]() {
+                ready_count.fetch_add(1, tempest::memory_order::release);
+                target_atom.wait(0);
+            });
         }
 
-        (void)resumed.fetch_add(1);
-    });
-
-    auto thr2 = std::thread([&]() {
-        (void)waiting_started.fetch_sub(1);
-        
-        while (val.load() == 0) {
-            val.wait(0);
+        while (ready_count.load(tempest::memory_order::acquire) < total_workers)
+        {
+            tempest::this_thread::yield();
         }
 
-        (void)resumed.fetch_add(1);
-    });
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    waiting_started.wait(0);
-    val.store(1);
-    val.notify_all();
+        target_atom.store(1, tempest::memory_order::release);
+        target_atom.notify_all();
 
-    thr1.join();
-    thr2.join();
+        for (auto& worker : workers)
+        {
+            worker.join();
+        }
 
-    EXPECT_EQ(resumed.load(), 2);
+        workers.clear();
+    }
 }
 
 TEST(atomic_bool, value_construct)
@@ -1960,8 +2057,7 @@ TEST(atomic_bool, compare_exchange_strong_relaxed)
 {
     auto val = tempest::atomic<bool>{false};
     auto expected = false;
-    const auto result =
-        val.compare_exchange_strong(expected, true, tempest::memory_order::relaxed);
+    const auto result = val.compare_exchange_strong(expected, true, tempest::memory_order::relaxed);
 
     EXPECT_EQ(result, true);
     EXPECT_EQ(expected, false);
@@ -1972,8 +2068,7 @@ TEST(atomic_bool, compare_exchange_strong_acquire)
 {
     auto val = tempest::atomic<bool>{false};
     auto expected = false;
-    const auto result =
-        val.compare_exchange_strong(expected, true, tempest::memory_order::acquire);
+    const auto result = val.compare_exchange_strong(expected, true, tempest::memory_order::acquire);
 
     EXPECT_EQ(result, true);
     EXPECT_EQ(expected, false);
@@ -1984,8 +2079,7 @@ TEST(atomic_bool, compare_exchange_strong_release)
 {
     auto val = tempest::atomic<bool>{false};
     auto expected = false;
-    const auto result =
-        val.compare_exchange_strong(expected, true, tempest::memory_order::release);
+    const auto result = val.compare_exchange_strong(expected, true, tempest::memory_order::release);
 
     EXPECT_EQ(result, true);
     EXPECT_EQ(expected, false);
@@ -1996,8 +2090,7 @@ TEST(atomic_bool, compare_exchange_strong_acq_rel)
 {
     auto val = tempest::atomic<bool>{false};
     auto expected = false;
-    const auto result =
-        val.compare_exchange_strong(expected, true, tempest::memory_order::acq_rel);
+    const auto result = val.compare_exchange_strong(expected, true, tempest::memory_order::acq_rel);
 
     EXPECT_EQ(result, true);
     EXPECT_EQ(expected, false);
@@ -2008,8 +2101,7 @@ TEST(atomic_bool, compare_exchange_strong_seq_cst)
 {
     auto val = tempest::atomic<bool>{false};
     auto expected = false;
-    const auto result =
-        val.compare_exchange_strong(expected, true, tempest::memory_order::seq_cst);
+    const auto result = val.compare_exchange_strong(expected, true, tempest::memory_order::seq_cst);
 
     EXPECT_EQ(result, true);
     EXPECT_EQ(expected, false);
