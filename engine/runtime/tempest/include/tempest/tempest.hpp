@@ -184,7 +184,7 @@ namespace tempest
         void request_close(bool close) override;
         [[nodiscard]] bool should_close() const override;
 
-        ecs::entity load_entity(ecs::entity src);
+        ecs::entity load_entity(ecs::entity src) override;
 
         [[nodiscard]] auto get_logger() -> logger& override
         {

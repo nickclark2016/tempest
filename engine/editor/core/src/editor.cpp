@@ -1,5 +1,8 @@
 #include <tempest/editor.hpp>
 
+#include <tempest/editor_engine_context.hpp>
+#include <tempest/functional.hpp>
+#include <tempest/move.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
 
 #include <imgui.h>
@@ -7,7 +10,7 @@
 
 namespace tempest::editor
 {
-    editor_context::editor_context(engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx)
+    editor_context::editor_context(editor_engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx)
         : _engine_ctx{&ctx}, _win_surface{&win_surface}, _ui_ctx{&ui_ctx}
     {
         auto& frame_graph = _engine_ctx->get_renderer().get_frame_graph();
@@ -95,23 +98,23 @@ namespace tempest::editor
             [&](graphics::transfer_task_builder& task_builder) {
                 task_builder.read(color_target, rhi::image_layout::transfer_src,
                                   make_enum_mask(rhi::pipeline_stage::blit),
-                          make_enum_mask(rhi::memory_access::transfer_read));
+                                  make_enum_mask(rhi::memory_access::transfer_read));
                 task_builder.write(imported_swapchain_handle, rhi::image_layout::transfer_dst,
-                           make_enum_mask(rhi::pipeline_stage::blit),
-                           make_enum_mask(rhi::memory_access::transfer_write));
+                                   make_enum_mask(rhi::pipeline_stage::blit),
+                                   make_enum_mask(rhi::memory_access::transfer_write));
             },
             [](graphics::transfer_task_execution_context& ctx, auto color_target, auto swapchain_handle) {
                 ctx.blit(color_target, swapchain_handle);
             },
             color_target, imported_swapchain_handle);
-        
+
         _entity_view = register_window(make_unique<entity_view_window>(ctx.get_entities()));
         _scene_hierarchy_view = register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()));
         _viewport_view = register_window(make_unique<viewport_window>(ctx.get_renderer()));
 
         register_engine_component_view_providers(*this);
 
-        ctx.register_on_variable_update_callback([&](engine_context& ctx, auto dt) mutable {
+        register_on_paint_callback([&](engine_context& ctx) {
             _entity_view->target = _scene_hierarchy_view->selected_entity;
 
             for (auto&& [self, camera] : ctx.get_entities().with<ecs::self_component, graphics::camera_component>())
@@ -184,5 +187,15 @@ namespace tempest::editor
         {
             window->draw();
         }
+    }
+
+    auto editor_context::register_on_paint_callback(function<void(engine_context&)> callback) -> void
+    {
+        _engine_ctx->register_on_editor_paint_callback(tempest::move(callback));
+    }
+
+    auto editor_context::register_on_update_callback(function<void(engine_context&)> callback) -> void
+    {
+        _engine_ctx->register_on_editor_update_callback(tempest::move(callback));
     }
 } // namespace tempest::editor

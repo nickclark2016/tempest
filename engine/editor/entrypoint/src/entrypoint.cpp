@@ -1,5 +1,6 @@
 #include <tempest/archetype.hpp>
 #include <tempest/editor.hpp>
+#include <tempest/editor_engine_context.hpp>
 #include <tempest/shared_library.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
@@ -20,7 +21,8 @@ namespace
     inline constexpr auto game_editor_library_name = L"libgame-editor.so";
 #endif
 
-    static unique_ptr<editor::editor_context> setup_render_graph(engine_context& ctx, rhi::window_surface& win_surface,
+    static unique_ptr<editor::editor_context> setup_render_graph(editor::editor_engine_context& ctx,
+                                                                 rhi::window_surface& win_surface,
                                                                  editor::ui_context& ui_ctx)
     {
         return make_unique<editor::editor_context>(ctx, win_surface, ui_ctx);
@@ -28,7 +30,7 @@ namespace
 
     void run(span<string_view> args)
     {
-        auto tempest_engine = tempest::standalone_engine_context();
+        auto tempest_engine = tempest::editor::editor_engine_context();
 
         auto game_shared_library_result = tempest::shared_library::load(game_library_name);
         if (!game_shared_library_result)
@@ -85,7 +87,7 @@ namespace
         auto ui_editor = unique_ptr<editor::editor_context>();
 
         tempest_engine.register_on_initialize_callback([&](engine_context& ctx) {
-            ui_editor = setup_render_graph(ctx, *win_surface, ui_ctx);
+            ui_editor = setup_render_graph(static_cast<editor::editor_engine_context&>(ctx), *win_surface, ui_ctx);
         });
 
         auto on_load = [&](auto&& engine, auto&& args) {

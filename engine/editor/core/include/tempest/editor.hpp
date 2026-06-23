@@ -14,10 +14,12 @@
 
 namespace tempest::editor
 {
+    class editor_engine_context;
+
     class TEMPEST_EDITOR_API editor_context
     {
       public:
-        editor_context(engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx);
+        editor_context(editor_engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx);
 
         auto draw() -> void;
 
@@ -38,8 +40,11 @@ namespace tempest::editor
             _entity_view->providers.push_back(tempest::move(provider));
         }
 
+        auto register_on_paint_callback(function<void(engine_context&)>) -> void;
+        auto register_on_update_callback(function<void(engine_context&)>) -> void;
+
       private:
-        engine_context* _engine_ctx;
+        editor_engine_context* _engine_ctx;
         rhi::window_surface* _win_surface;
         ui_context* _ui_ctx;
 
