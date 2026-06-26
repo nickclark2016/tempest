@@ -16,7 +16,7 @@ scoped.project('api', function()
 
     scoped.usage('api:includedirs', function()
         externalincludedirs {
-            '%{root}/engine/runtime/api/include',
+            'include',
         }
     end)
 

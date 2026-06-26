@@ -20,7 +20,7 @@ project 'tinyexr'
 
     usage 'INTERFACE'
         externalincludedirs {
-            '%{root}/dependencies/tinyexr/include',
+            'include',
         }
 
         dependson {

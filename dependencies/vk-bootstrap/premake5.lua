@@ -21,7 +21,7 @@ project 'vk-bootstrap'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/vk-bootstrap/include',
+            'include',
         }
 
         dependson {

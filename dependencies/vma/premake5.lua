@@ -30,7 +30,7 @@ project 'vma'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/vma/include',
+            'include',
         }
 
         dependson {

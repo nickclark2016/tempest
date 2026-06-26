@@ -4,7 +4,7 @@ scoped.project('editor-entrypoint', function()
 
     targetdir '%{binaries}'
     objdir '%{intermediates}'
-    debugdir '%{root}/engine/editor/entrypoint'
+    debugdir 'engine/editor/entrypoint'
     
     scoped.filter({
         'system:not windows'
@@ -44,11 +44,11 @@ scoped.project('editor-entrypoint', function()
     end)
 
     postbuildcommands {
-        '{RMDIR} %{!root}/engine/editor/entrypoint/assets', -- Ensure a clean assets directory before building it
-        '{MKDIR} %{!root}/engine/editor/entrypoint/assets',
-        '{LINKDIR} %{!root}/engine/editor/entrypoint/assets/glTF-Sample-Assets ../../../../vendor/glTF-Sample-Assets',
-        '{LINKDIR} %{!root}/engine/editor/entrypoint/assets/polyhaven ../../../../vendor/polyhaven',
-        '{LINKDIR} %{!root}/engine/editor/entrypoint/assets/shaders ../../../../bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}/shaders',
+        '{RMDIR} %[%{!prj.basedir}/assets]', -- Ensure a clean assets directory before building it
+        '{MKDIR} %[%{!prj.basedir}/assets]',
+        '{LINKDIR} %[%{!prj.basedir}/assets/glTF-Sample-Assets] ../../../../vendor/glTF-Sample-Assets',
+        '{LINKDIR} %[%{!prj.basedir}/assets/polyhaven] ../../../../vendor/polyhaven',
+        '{LINKDIR} %[%{!prj.basedir}/assets/shaders] ../../../../bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}/shaders',
     }
 
     if _OPTIONS['enable-aftermath'] then

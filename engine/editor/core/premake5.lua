@@ -19,7 +19,7 @@ scoped.project('editor-core', function()
         }
 
         externalincludedirs {
-            '%{root}/engine/editor/core/include',
+            'include',
         }
     end)
 

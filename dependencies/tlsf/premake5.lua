@@ -17,7 +17,7 @@ project 'tlsf'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/tlsf/include',
+            'include',
         }
 
         dependson {

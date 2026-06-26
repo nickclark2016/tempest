@@ -18,7 +18,7 @@ project 'googletest'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/googletest/include',
+            'include',
         }
 
         dependson {

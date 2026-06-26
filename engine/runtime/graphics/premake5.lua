@@ -49,7 +49,7 @@ scoped.project('graphics', function()
 
     scoped.usage("graphics:includedirs", function()
         externalincludedirs {
-            '%{root}/engine/runtime/graphics/include',
+            'include',
         }
     end)
 

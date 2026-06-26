@@ -12,5 +12,5 @@ project 'vulkan'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/vulkan/include',
+            'include',
         }

@@ -35,7 +35,7 @@ scoped.project('serialization', function(prj)
 
     scoped.usage('serialization:includedirs', function()
         externalincludedirs {
-            '%{root}/engine/runtime/serialization/include',
+            'include',
         }
     end)
 

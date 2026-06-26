@@ -5,7 +5,7 @@ scoped.project('screenshot', function()
 
     targetdir '%{binaries}'
     objdir '%{intermediates}'
-    debugdir '%{root}/screenshot'
+    debugdir 'screenshot'
 
     files {
         'src/**.cpp',

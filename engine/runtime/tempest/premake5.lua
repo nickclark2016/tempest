@@ -134,7 +134,7 @@ scoped.project('tempest', function()
 
     scoped.usage("INTERFACE", function()
         externalincludedirs {
-            '%{root}/engine/runtime/tempest/include',
+            'include',
         }
 
         uses {
@@ -184,7 +184,7 @@ scoped.project('tempest', function()
         end)
 
         if _OPTIONS['enable-aftermath'] then
-            libdirs('%{root}/dependencies/aftermath/lib/x64')
+            libdirs('dependencies/aftermath/lib/x64')
             links('GFSDK_Aftermath_Lib.x64')
         end
 

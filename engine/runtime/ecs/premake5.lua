@@ -46,7 +46,7 @@ scoped.project('ecs', function()
 
     scoped.usage("ecs:includedirs", function()
         externalincludedirs {
-            '%{root}/engine/runtime/ecs/include',
+            'include',
         }
     end)
 

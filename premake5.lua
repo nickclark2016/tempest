@@ -95,10 +95,8 @@ scoped.workspace('Tempest', function()
         staticruntime 'Off'
     end)
 
-    root = path.getdirectory(_MAIN_SCRIPT)
-
-    binaries = '%{root}/bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}'
-    intermediates = '%{root}/bin-int/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}'
+    binaries = '%{wks.basedir}/bin/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}'
+    intermediates = '%{wks.basedir}/bin-int/%{cfg.buildcfg}/%{cfg.system}-%{cfg.toolset}'
 
     scoped.filter({
         'action:vs*'

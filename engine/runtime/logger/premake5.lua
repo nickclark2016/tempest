@@ -45,7 +45,7 @@ scoped.project('logger', function()
 
     scoped.usage("logger:includedirs", function()
         externalincludedirs {
-            '%{root}/engine/runtime/logger/include',
+            'include',
         }
     end)
 

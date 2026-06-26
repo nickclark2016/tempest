@@ -12,5 +12,5 @@ project 'stb'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/stb/include',
+            'include',
         }

@@ -33,7 +33,7 @@ scoped.project('event', function()
 
     scoped.usage("event:includedirs", function()
         externalincludedirs {
-            '%{root}/engine/runtime/event/include',
+            'include',
         }
     end)
 

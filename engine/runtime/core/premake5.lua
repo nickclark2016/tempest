@@ -76,7 +76,7 @@ scoped.project('core', function()
 
     scoped.usage("core:includedirs", function()
         externalincludedirs {
-            '%{root}/engine/runtime/core/include',
+            'include',
         }
     end)
 

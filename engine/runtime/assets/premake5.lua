@@ -43,7 +43,7 @@ scoped.project('assets', function()
 
     scoped.usage("assets:includedirs", function()
         externalincludedirs {
-            '%{root}/engine/runtime/assets/include',
+            'include',
         }
     end)
 

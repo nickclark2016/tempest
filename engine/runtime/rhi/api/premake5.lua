@@ -34,7 +34,7 @@ scoped.group('RHI', function()
 
         scoped.usage("rhi-api:includedirs", function()
             externalincludedirs {
-                '%{root}/engine/runtime/rhi/api/include',
+                'include',
             }
         end)
 

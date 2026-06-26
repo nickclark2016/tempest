@@ -37,7 +37,7 @@ project 'spdlog'
     
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/spdlog/include',
+            'include',
         }
 
         dependson {

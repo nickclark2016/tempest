@@ -17,7 +17,7 @@ scoped.project('game-runtime', function()
 
     scoped.usage('PUBLIC', function()
         externalincludedirs {
-            '%{root}/game/runtime/include',
+            'include',
         }
     end)
 

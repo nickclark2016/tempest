@@ -3,17 +3,17 @@ scoped.project('aftermath', function()
     language 'C++'
     cppdialect 'C++20'
 
-    location '%{root}/dependencies/aftermath'
+    location 'aftermath'
 
     scoped.usage('INTERFACE', function()
-        externalincludedirs('%{root}/dependencies/aftermath/include')
-        libdirs('%{root}/dependencies/aftermath/lib/x64')
+        externalincludedirs('aftermath/include')
+        libdirs('aftermath/lib/x64')
         links('GFSDK_Aftermath_Lib.x64')
     end)
 
     scoped.usage('aftermath-runtime', function()
         postbuildcommands {
-            '{COPYFILE} %{root}/dependencies/aftermath/lib/x64/GFSDK_Aftermath_Lib.x64.dll %{cfg.targetdir}',
+            '{COPYFILE} aftermath/lib/x64/GFSDK_Aftermath_Lib.x64.dll %{cfg.targetdir}',
         }
     end)
 end)

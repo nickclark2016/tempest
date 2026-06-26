@@ -36,7 +36,7 @@ scoped.project('math', function()
 
     scoped.usage('math:includedirs', function()
         externalincludedirs {
-            '%{root}/engine/runtime/math/include',
+            'include',
         }
     end)
 

@@ -15,7 +15,7 @@ project 'simdjson'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/simdjson/include',
+            'include',
         }
 
         dependson {

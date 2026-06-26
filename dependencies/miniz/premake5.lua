@@ -13,7 +13,7 @@ project 'miniz'
 
     usage 'INTERFACE'
         externalincludedirs {
-            '%{root}/dependencies/miniz/include',
+            'include',
         }
 
         dependson {

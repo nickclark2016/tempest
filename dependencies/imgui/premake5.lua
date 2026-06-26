@@ -26,7 +26,7 @@ project 'imgui'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/imgui/include',
+            'include',
         }
 
         dependson {

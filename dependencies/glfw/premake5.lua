@@ -100,7 +100,7 @@ project 'glfw'
 
     usage "INTERFACE"
         externalincludedirs {
-            '%{root}/dependencies/glfw/include'
+            'include'
         }
 
         dependson {
