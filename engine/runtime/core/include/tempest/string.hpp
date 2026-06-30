@@ -6,6 +6,7 @@
 #include <tempest/assert.hpp>
 #include <tempest/char_traits.hpp>
 #include <tempest/concepts.hpp>
+#include <tempest/cstring_view.hpp>
 #include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
@@ -128,7 +129,7 @@ namespace tempest
         constexpr basic_string(basic_string&& other, const Allocator& alloc);
 
         template <typename StringLikeView>
-            requires(is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> &&
+            requires((is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> || is_convertible_v<const StringLikeView&, basic_cstring_view<CharT, Traits>>) &&
                      !is_convertible_v<const StringLikeView&, const CharT*>)
         constexpr basic_string(const StringLikeView& view, const Allocator& alloc = Allocator());
 
@@ -568,7 +569,8 @@ namespace tempest
 
     template <typename CharT, typename Traits, typename Allocator>
     template <typename StringLikeView>
-        requires(is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> &&
+        requires((is_convertible_v<const StringLikeView&, basic_string_view<CharT, Traits>> ||
+                  is_convertible_v<const StringLikeView&, basic_cstring_view<CharT, Traits>>) &&
                  !is_convertible_v<const StringLikeView&, const CharT*>)
     inline constexpr basic_string<CharT, Traits, Allocator>::basic_string(const StringLikeView& view,
                                                                           const Allocator& alloc)

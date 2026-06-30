@@ -2,7 +2,11 @@
 
 #include <tempest/editor_engine_context.hpp>
 #include <tempest/functional.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/menus/menu_item.hpp>
 #include <tempest/move.hpp>
+#include <tempest/string.hpp>
+#include <tempest/tempest.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
 
 #include <imgui.h>
@@ -10,6 +14,107 @@
 
 namespace tempest::editor
 {
+    namespace
+    {
+        class exit_menu_item final : public menu_item
+        {
+          public:
+            exit_menu_item(engine_context& ctx) : menu_item("File", "Exit"), _ctx{&ctx}
+            {
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                _ctx->request_close(true);
+            }
+
+          private:
+            engine_context* _ctx;
+
+          public:
+            exit_menu_item() = default;
+        };
+    } // namespace
+
+    editor_context::menu_hierarchy::menu_node::~menu_node() = default;
+
+    void editor_context::menu_hierarchy::draw()
+    {
+        auto draw_node = [](menu_node& node, auto&& draw) -> void {
+            const auto& title = node.name;
+            const auto enabled = node.menu ? node.menu->validate() : true;
+
+            if (node.menu)
+            {
+                const auto pressed = ImGui::MenuItem(title.c_str(), nullptr, false, enabled);
+                if (pressed)
+                {
+                    node.menu->on_press();
+                }
+            }
+            else
+            {
+                if (ImGui::BeginMenu(title.c_str(), enabled))
+                {
+                    for (auto& child : node.children)
+                    {
+                        draw(*child, draw);
+                    }
+
+                    ImGui::EndMenu();
+                }
+            }
+        };
+
+        for (auto& menu : _root_nodes)
+        {
+            draw_node(*menu, draw_node);
+        }
+    }
+
+    void editor_context::menu_hierarchy::add_menu_item(unique_ptr<menu_item> menu)
+    {
+        auto* menus_to_search = &_root_nodes;
+        auto path_begin_it = menu->get_menu_path().begin();
+
+        for (const auto& path_elem : menu->get_menu_path())
+        {
+            // Find the matching element
+            auto found = false;
+            for (auto& elem : *menus_to_search)
+            {
+                if (elem->name == path_elem)
+                {
+                    found = true;
+                    menus_to_search = &elem->children;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                break;
+            }
+
+            path_begin_it++;
+        }
+
+        // Insert the elements
+        for (auto it = path_begin_it; it != menu->get_menu_path().end(); ++it)
+        {
+            auto node = make_unique<menu_node>();
+            node->name = string(*it);
+
+            menus_to_search->push_back(tempest::move(node));
+            menus_to_search = &menus_to_search->back()->children;
+        }
+
+        auto menu_elem = make_unique<menu_node>();
+        menu_elem->name = string(menu->get_menu_item_name());
+        menu_elem->menu = tempest::move(menu);
+        menus_to_search->push_back(tempest::move(menu_elem));
+    }
+
     editor_context::editor_context(editor_engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx)
         : _engine_ctx{&ctx}, _win_surface{&win_surface}, _ui_ctx{&ui_ctx}
     {
@@ -128,10 +233,18 @@ namespace tempest::editor
             draw();
             ui_ctx.finish_ui_commands();
         });
+
+        register_menu_item(make_unique<exit_menu_item>(ctx));
     }
 
     auto editor_context::draw() -> void
     {
+        if (ImGui::BeginMainMenuBar())
+        {
+            _menus.draw();
+            ImGui::EndMainMenuBar();
+        }
+
         const auto dockspace_id = ImGui::GetID("Tempest Editor Dockspace");
         const auto viewport = ImGui::GetMainViewport();
 

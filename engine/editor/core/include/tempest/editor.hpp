@@ -2,6 +2,7 @@
 #define tempest_editor_core_editor_hpp
 
 #include <tempest/memory.hpp>
+#include <tempest/menus/menu_item.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/ui.hpp>
@@ -43,6 +44,12 @@ namespace tempest::editor
         auto register_on_paint_callback(function<void(engine_context&)>) -> void;
         auto register_on_update_callback(function<void(engine_context&)>) -> void;
 
+        template <derived_from<menu_item> T>
+        auto register_menu_item(unique_ptr<T> menu) -> void
+        {
+            _menus.add_menu_item(tempest::move(menu));
+        }
+
       private:
         editor_engine_context* _engine_ctx;
         rhi::window_surface* _win_surface;
@@ -52,6 +59,27 @@ namespace tempest::editor
         entity_view_window* _entity_view = nullptr;
         scene_hierarchy_window* _scene_hierarchy_view = nullptr;
         viewport_window* _viewport_view = nullptr;
+
+        class menu_hierarchy
+        {
+          public:
+            void draw();
+            void add_menu_item(unique_ptr<menu_item> item);
+
+          private:
+            struct menu_node
+            {
+                ~menu_node();
+
+                string name;
+                vector<unique_ptr<menu_node>> children;
+                unique_ptr<menu_item> menu;
+            };
+
+            vector<unique_ptr<menu_node>> _root_nodes;
+        };
+
+        menu_hierarchy _menus;
 
         graphics::graph_resource_handle<rhi::rhi_handle_type::image> _final_color_target;
     };
