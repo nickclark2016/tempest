@@ -76,6 +76,7 @@ scoped.project('tempest', function()
             'math',
             'rhi-api',
             'serialization',
+            'units',
         }
     end)
 
@@ -149,6 +150,7 @@ scoped.project('tempest', function()
             'math:includedirs',
             'rhi-api:includedirs',
             'serialization:includedirs',
+            'units:includedirs',
         }
 
         dependson {

@@ -1,19 +1,20 @@
 #include <tempest/ui.hpp>
 
+#include <tempest/colorspace.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/frame_graph.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/rhi_types.hpp>
-
 #include <tempest/tuple.hpp>
+#include <tempest/unit.hpp>
+#include <tempest/vector.hpp>
 
 #include <imgui.h>
 #include <imgui_internal.h>
 
 #include <chrono>
 #include <cstring>
-#include <tempest/vector.hpp>
 
 namespace tempest::editor
 {
@@ -396,6 +397,24 @@ namespace tempest::editor
         ctx->IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
         ctx->IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         ctx->IO.Fonts->AddFontDefault();
+
+        auto& style = ImGui::GetStyle();
+        for (auto idx = 0; idx < ImGuiCol_COUNT; ++idx)
+        {
+            const auto srgb_value = style.Colors[idx];
+            const auto srgb_units = units::quantity<units::color::iec_srgb, units::color_rgba_32>({
+                srgb_value.x,
+                srgb_value.y,
+                srgb_value.z,
+                srgb_value.w,
+            });
+
+            const auto linear = units::quantity_cast<units::color::linear>(srgb_units);
+            style.Colors[idx].x = linear.value().values[0];
+            style.Colors[idx].y = linear.value().values[1];
+            style.Colors[idx].z = linear.value().values[2];
+            style.Colors[idx].w = linear.value().values[3];
+        }
 
         _impl->imgui_context = ctx;
         _impl->surface = surface;
@@ -1248,5 +1267,5 @@ namespace tempest::editor
             ImGui::DragFloat(label.c_str(), &input, 1.0F, minimum, maximum);
             return input;
         }
-    }
-} // namespace tempest::editor::ui
+    } // namespace ui
+} // namespace tempest::editor

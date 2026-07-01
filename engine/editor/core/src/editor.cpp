@@ -30,9 +30,6 @@ namespace tempest::editor
 
           private:
             engine_context* _ctx;
-
-          public:
-            exit_menu_item() = default;
         };
     } // namespace
 
