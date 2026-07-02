@@ -8,6 +8,7 @@
 #include <tempest/string.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
+#include <tempest/windows/scene_hierarchy_window.hpp>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -30,6 +31,26 @@ namespace tempest::editor
 
           private:
             engine_context* _ctx;
+        };
+
+        class create_entity_menu final : public menu_item
+        {
+          public:
+            create_entity_menu(engine_context& ctx, scene_hierarchy_window& scene_hierarchy)
+                : menu_item("Entities", "Create"), _ctx{&ctx}, _hierarchy{&scene_hierarchy}
+            {
+            }
+
+            auto on_press() noexcept -> void override
+            {
+                auto& entities = _ctx->get_entities();
+                const auto created = entities.create();
+                _hierarchy->selected_entity = created;
+            }
+
+          private:
+            engine_context* _ctx;
+            scene_hierarchy_window* _hierarchy;
         };
     } // namespace
 
@@ -232,6 +253,7 @@ namespace tempest::editor
         });
 
         register_menu_item(make_unique<exit_menu_item>(ctx));
+        register_menu_item(make_unique<create_entity_menu>(ctx, *_scene_hierarchy_view));
     }
 
     auto editor_context::draw() -> void

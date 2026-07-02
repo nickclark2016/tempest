@@ -24,6 +24,7 @@
 #include <tempest/vector.hpp>
 
 #include <algorithm>
+#include <tempest/memory.hpp>
 
 namespace tempest::ecs
 {
@@ -1004,39 +1005,13 @@ namespace tempest::ecs
         requires(is_trivial_v<Ts> && ...)
     inline basic_archetype_registry::entity_type basic_archetype_registry::create()
     {
-        static const auto hash = detail::create_archetype_types_hash<256u, self_component, remove_cvref_t<Ts>...>();
-
-        // Check if the archetype already exists
-        auto it = tempest::find(_hashes.begin(), _hashes.end(), hash);
-        if (it == _hashes.end())
-        {
-            // Create a new archetype
-            array<basic_archetype_type_info, sizeof...(Ts) + 1> type_infos{
-                create_archetype_type_info<self_component>(), create_archetype_type_info<remove_cvref_t<Ts>>()...};
-            std::sort(type_infos.begin(), type_infos.end(),
-                      [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
-            _archetypes.emplace_back(type_infos);
-            _hashes.push_back(hash);
-            it = _hashes.end() - 1;
-        }
-
-        const size_t archetype_index = tempest::distance(_hashes.begin(), it);
-        basic_archetype& arch = _archetypes[archetype_index];
-
-        // Allocate an entity in an archetype
-        const auto arch_key = arch.allocate();
-
-        auto ent = basic_archetype_entity{
-            .archetype_key = arch_key,
-            .archetype_index = archetype_index,
-        };
-
         auto key = _entities.acquire();
-        _entity_archetype_mapping.insert(key, ent);
 
-        replace(key, self_component{
-                         .entity = key,
-                     });
+        assign(key, self_component{
+                        .entity = key,
+                    });
+
+        (assign(key, Ts{}), ...);
 
         _event_registry->dispatcher<entity_created_event<basic_archetype_registry::entity_type>>().publish({
             .entity = key,
@@ -1050,7 +1025,7 @@ namespace tempest::ecs
     inline basic_archetype_registry::entity_type basic_archetype_registry::create_initialized(Ts&&... components)
     {
         auto entity = create<Ts...>();
-        (assign_or_replace<Ts>(entity, tempest::forward<Ts>(components)), ...);
+        (assign<Ts>(entity, tempest::forward<Ts>(components)), ...);
         return entity;
     }
 
@@ -1058,84 +1033,101 @@ namespace tempest::ecs
     inline const remove_cvref_t<T>& basic_archetype_registry::assign(
         typename basic_archetype_registry::entity_type entity, T&& component)
     {
-        auto key = _entity_archetype_mapping[entity];
-        auto archetype_index = key.archetype_index;
-
-        // Get the archetype
-        auto* existing_arch = &_archetypes[key.archetype_index];
-
-        // Get the archetype of the entity + component
         using component_type = remove_cvref_t<T>;
-        static const auto type_index = detail::get_archetype_type_index<component_type>();
 
-        // Create a hash for the combined archetype
-        auto hash = _hashes[archetype_index];
-        hash.hash[type_index / 8] |= static_cast<byte>(1 << (type_index % 8));
-
-        // Check if the archetype already exists
-        auto it = tempest::find(_hashes.begin(), _hashes.end(), hash);
-
-        if (it == _hashes.end())
-        {
-            // Create a new archetype
-            // Get the existing archetype's info
-            auto existing_storage_view = existing_arch->storages();
-
-            vector<basic_archetype_type_info> new_types;
-
-            for (const auto& storage : existing_storage_view)
+        // Check if the entity has an archetype
+        const auto archetype_key_iter = _entity_archetype_mapping.find(entity);
+        const auto is_empty_entity = archetype_key_iter == _entity_archetype_mapping.end();
+        const auto type_hash = [&]() {
+            if (is_empty_entity)
             {
-                new_types.push_back(storage.type_info());
+                static const auto hash = detail::create_archetype_types_hash<256u, component_type>();
+                return hash;
             }
 
-            new_types.push_back(create_archetype_type_info<component_type>());
-            std::sort(new_types.begin(), new_types.end(),
-                      [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
+            const auto existing_key = archetype_key_iter->second;
+            const auto existing_archetype_index = existing_key.archetype_index;
 
-            auto capacity = existing_arch->capacity();
-            auto& new_archetype = _archetypes.emplace_back(new_types);
-            new_archetype.reserve(capacity);
+            static const auto type_index = detail::get_archetype_type_index<component_type>();
 
-            _hashes.push_back(hash);
+            auto existing_hash = _hashes[existing_archetype_index];
+            existing_hash.hash[type_index / 8] |= static_cast<byte>(1 << (type_index % 8));
 
-            it = _hashes.end() - 1;
-        }
+            return existing_hash;
+        }();
 
-        auto new_archetype_index = tempest::distance(_hashes.begin(), it);
-        basic_archetype& new_arch = _archetypes[new_archetype_index];
-
-        auto arch_key = new_arch.allocate();
-
-        existing_arch = &_archetypes[archetype_index];
-
-        // Copy the existing components
-        for (size_t i = 0; i < existing_arch->storages().size(); ++i)
+        auto hash_iter = tempest::find(_hashes.begin(), _hashes.end(), type_hash);
+        if (hash_iter == _hashes.end())
         {
-            auto ti = existing_arch->storages()[i].type_info();
-            auto storage_index = ti.index;
-            auto existing_component_index = _index_of_component_in_archetype(archetype_index, storage_index);
-            auto new_component_index = _index_of_component_in_archetype(new_archetype_index, storage_index);
+            // Create a new archetype
+            auto new_types = vector<basic_archetype_type_info>();
+            new_types.push_back(create_archetype_type_info<component_type>());
 
-            auto existing_data = existing_arch->element_at(key.archetype_key, existing_component_index);
-            auto new_data = new_arch.element_at(arch_key, new_component_index);
+            if (!is_empty_entity)
+            {
+                const auto& existing_arch = _archetypes[archetype_key_iter->second.archetype_index];
+                auto existing_storage_view = existing_arch.storages();
 
-            copy_n(existing_data, ti.size, new_data);
+                for (const auto& storage : existing_storage_view)
+                {
+                    new_types.push_back(storage.type_info());
+                }
+
+                std::sort(new_types.begin(), new_types.end(),
+                          [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
+            }
+
+            auto& new_archetype = _archetypes.emplace_back(new_types);
+            _hashes.push_back(type_hash);
+
+            hash_iter = _hashes.end() - 1;
         }
 
-        // Get the pointer to the new component
+        const auto target_archetype_index = tempest::distance(_hashes.begin(), hash_iter);
+        auto& target_arch = _archetypes[target_archetype_index];
+        const auto target_arch_key = target_arch.allocate();
+
+        if (!is_empty_entity)
+        {
+            // Copy existing components
+            const auto existing_arch_index = archetype_key_iter->second.archetype_index;
+            auto& existing_arch = _archetypes[existing_arch_index];
+
+            for (size_t i = 0; i < existing_arch.storages().size(); ++i)
+            {
+                auto ti = existing_arch.storages()[i].type_info();
+                auto storage_index = ti.index;
+                auto existing_component_index = _index_of_component_in_archetype(existing_arch_index, storage_index);
+                auto new_component_index = _index_of_component_in_archetype(target_archetype_index, storage_index);
+
+                auto existing_data =
+                    existing_arch.element_at(archetype_key_iter->second.archetype_key, existing_component_index);
+                auto new_data = target_arch.element_at(target_arch_key, new_component_index);
+
+                tempest::copy_n(existing_data, ti.size, new_data);
+            }
+
+            existing_arch.erase(archetype_key_iter->second.archetype_key);
+        }
+
         auto new_component_ti = create_archetype_type_info<component_type>();
-        auto new_component_index = _index_of_component_in_archetype(new_archetype_index, new_component_ti.index);
-        auto new_component_ptr = new_arch.element_at(arch_key, new_component_index);
-        component_type* result_ptr = construct_at(reinterpret_cast<remove_cvref_t<T>*>(new_component_ptr), component);
+        auto new_component_index = _index_of_component_in_archetype(target_archetype_index, new_component_ti.index);
+        auto new_component_ptr = target_arch.element_at(target_arch_key, new_component_index);
+        auto* result_ptr = construct_at(reinterpret_cast<remove_cvref_t<T>*>(new_component_ptr), component);
 
-        // Erase the old entity
-        existing_arch->erase(key.archetype_key);
+        auto new_key = ecs::basic_archetype_entity{
+            .archetype_key = target_arch_key,
+            .archetype_index = static_cast<uint64_t>(target_archetype_index),
+        };
 
-        // Update the entity key
-        key.archetype_key = arch_key;
-        key.archetype_index = new_archetype_index;
-
-        _entity_archetype_mapping[entity] = key;
+        if (is_empty_entity)
+        {
+            _entity_archetype_mapping.insert(entity, new_key);
+        }
+        else
+        {
+            _entity_archetype_mapping[entity] = new_key;
+        }
 
         _event_registry->dispatcher<component_added_event<basic_archetype_registry::entity_type, component_type>>()
             .publish({

@@ -143,7 +143,7 @@ namespace tempest::ecs
             .generation = trampoline.generation,
         };
 
-        _trampoline[_first_free_element].index = index;
+        _trampoline[_first_free_element].index = _element_count;
 
         _first_free_element = next_index;
 
