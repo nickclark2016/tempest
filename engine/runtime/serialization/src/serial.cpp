@@ -1,6 +1,6 @@
 #include <tempest/serial.hpp>
 
-#include <cstring>
+#include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::serialization
@@ -10,7 +10,7 @@ namespace tempest::serialization
         const auto current_size = _buffer.size();
         const auto proposed_size = current_size + data.size();
         unsafe::resize_no_init(_buffer, proposed_size);
-        std::memcpy(_buffer.data() + current_size, data.data(), data.size());
+        tempest::memcpy(_buffer.data() + current_size, data.data(), data.size());
     }
 
     auto binary_archive::write(vector<byte> data) -> void

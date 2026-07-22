@@ -15,6 +15,7 @@
 #include <tempest/optional.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string.hpp>
+#include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::assets

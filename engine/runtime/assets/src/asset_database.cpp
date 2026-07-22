@@ -129,7 +129,7 @@ namespace tempest::assets
             auto blob_span = archive.read(static_cast<size_t>(blob_size));
             const auto current_blob_size = _blob_data.size();
             unsafe::resize_no_init(_blob_data, current_blob_size + blob_span.size());
-            std::memcpy(_blob_data.data() + current_blob_size, blob_span.data(), blob_span.size());
+            tempest::memcpy(_blob_data.data() + current_blob_size, blob_span.data(), blob_span.size());
         }
     }
 
