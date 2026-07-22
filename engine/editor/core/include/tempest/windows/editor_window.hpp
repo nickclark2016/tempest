@@ -4,6 +4,8 @@
 #include <tempest/int.hpp>
 #include <tempest/string_view.hpp>
 
+#include <tempest/editor_engine_context.hpp>
+
 namespace tempest::editor
 {
     class TEMPEST_EDITOR_API editor_window
@@ -28,6 +30,11 @@ namespace tempest::editor
         [[nodiscard]] virtual auto desired_initial_dock() const -> dock_location = 0;
         [[nodiscard]] virtual auto window_name() const -> string_view = 0;
         virtual auto draw() -> void = 0;
+
+        [[nodiscard]] virtual auto is_mode_supported(simulation_state state) const noexcept -> bool
+        {
+            return state != simulation_state::play;
+        }
 
       protected:
         editor_window() = default;

@@ -37,6 +37,12 @@ namespace tempest::editor
         }
     }
 
+    auto transform_component_view_provider::create_default(ecs::archetype_registry* registry, ecs::entity target)
+        -> void
+    {
+        registry->assign(target, ecs::transform_component::identity());
+    }
+
     auto camera_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
     {
         const auto* const existing_camera = registry->try_get<graphics::camera_component>(target);
@@ -68,6 +74,11 @@ namespace tempest::editor
         }
     }
 
+    auto camera_component_view_provider::create_default(ecs::archetype_registry* registry, ecs::entity target) -> void
+    {
+        registry->assign(target, graphics::camera_component{});
+    }
+
     auto directional_light_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
     {
         const auto* const existing_dir_light = registry->try_get<graphics::directional_light_component>(target);
@@ -94,6 +105,12 @@ namespace tempest::editor
                 registry->replace(target, new_dir_light);
             }
         }
+    }
+
+    auto directional_light_component_view_provider::create_default(ecs::archetype_registry* registry,
+                                                                   ecs::entity target) -> void
+    {
+        registry->assign(target, graphics::directional_light_component{});
     }
 
     auto shadow_map_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
@@ -126,12 +143,18 @@ namespace tempest::editor
                     .shadow_distance = new_shadow_distance,
                     .split_lambda = new_split_lambda,
                     .blend_fraction = new_blend_fraction,
-                    .cascade_count = static_cast<uint32_t>(new_cascade_count),  
+                    .cascade_count = static_cast<uint32_t>(new_cascade_count),
                 };
 
                 registry->replace(target, new_shadow_map);
             }
         }
+    }
+
+    auto shadow_map_component_view_provider::create_default(ecs::archetype_registry* registry, ecs::entity target)
+        -> void
+    {
+        registry->assign(target, graphics::shadow_map_component{});
     }
 
     auto register_engine_component_view_providers(editor_context& ctx) -> void

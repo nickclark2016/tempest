@@ -23,11 +23,15 @@ namespace tempest::editor
     auto viewport_window::draw() -> void
     {
         const auto name = window_name();
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
+
         if (ImGui::Begin(name.data(), &_open))
         {
             const auto content_size = ImGui::GetContentRegionAvail();
 
-            if ((content_size.x != _viewport_size.x || content_size.y != _viewport_size.y) && content_size.x != 0 && content_size.y != 0)
+            if ((content_size.x != _viewport_size.x || content_size.y != _viewport_size.y) && content_size.x != 0 &&
+                content_size.y != 0)
             {
                 _viewport_size.x = static_cast<uint32_t>(content_size.x);
                 _viewport_size.y = static_cast<uint32_t>(content_size.y);
@@ -41,6 +45,8 @@ namespace tempest::editor
         }
 
         ImGui::End();
+
+        ImGui::PopStyleVar(1);
     }
 
     auto viewport_window::aspect_ratio() const -> float

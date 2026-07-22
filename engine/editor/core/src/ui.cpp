@@ -1267,5 +1267,21 @@ namespace tempest::editor
             ImGui::DragFloat(label.c_str(), &input, 1.0F, minimum, maximum);
             return input;
         }
+
+        auto centered_button(cstring_view label) -> bool
+        {
+            const auto text_width = ImGui::CalcTextSize(label.c_str()).x;
+            const auto button_width = text_width + ImGui::GetStyle().FramePadding.x * 2.0f;
+            const auto available_width = ImGui::GetContentRegionAvail().x;
+
+            // If the button is smaller than the available width, attempt to center
+            if (button_width < available_width)
+            {
+                const auto offset_x = (available_width - button_width) / 2.0f;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset_x);
+            }
+
+            return ImGui::Button(label.c_str());
+        }
     } // namespace ui
 } // namespace tempest::editor

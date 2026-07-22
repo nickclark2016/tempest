@@ -1,13 +1,23 @@
 #include <tempest/archetype.hpp>
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/move.hpp>
+#include <tempest/rhi.hpp>
 #include <tempest/shared_library.hpp>
+#include <tempest/span.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/ui.hpp>
+#include <tempest/vector.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
 #include <tempest/windows/entity_view_window.hpp>
 #include <tempest/windows/scene_hierarchy_window.hpp>
 #include <tempest/windows/viewport_window.hpp>
+
+#include <cstdio>
 
 namespace
 {
@@ -118,7 +128,7 @@ auto WINAPI WinMain(HINSTANCE /*unused*/, HINSTANCE /*unused*/, LPSTR cmdline, i
     // Try to attach the console
     if (AttachConsole(ATTACH_PARENT_PROCESS))
     {
-        FILE* fp;
+        auto fp = static_cast<FILE*>(nullptr);
         freopen_s(&fp, "CONOUT$", "w", stdout);
         freopen_s(&fp, "CONOUT$", "w", stderr);
     }
@@ -134,7 +144,7 @@ auto WINAPI WinMain(HINSTANCE /*unused*/, HINSTANCE /*unused*/, LPSTR cmdline, i
         {
             auto utf8_arg = tempest::string(utf8_size - 1, '\0');
             WideCharToMultiByte(CP_UTF8, 0, args[i], -1, utf8_arg.data(), utf8_size, nullptr, nullptr);
-            utf8_args.push_back(std::move(utf8_arg));
+            utf8_args.push_back(tempest::move(utf8_arg));
         }
         else
         {

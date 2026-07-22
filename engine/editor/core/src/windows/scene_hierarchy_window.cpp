@@ -99,6 +99,7 @@ namespace tempest::editor
     auto scene_hierarchy_window::draw() -> void
     {
         const auto name = window_name();
+
         if (ImGui::Begin(name.data(), &open))
         {
             for (const auto& [self] : entity_registry->with<ecs::self_component>())

@@ -19,6 +19,11 @@ namespace tempest::editor
 
         auto aspect_ratio() const -> float;
 
+        [[nodiscard]] auto is_mode_supported([[maybe_unused]] simulation_state state) const noexcept -> bool override
+        {
+            return true;
+        }
+
       private:
         graphics::renderer* _renderer;
         rhi::typed_rhi_handle<rhi::rhi_handle_type::image> _viewport_texture;

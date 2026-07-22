@@ -7,6 +7,8 @@
 #include <tempest/windows/component_view.hpp>
 #include <tempest/windows/editor_window.hpp>
 
+#include <imgui.h>
+
 namespace tempest::editor
 {
     struct TEMPEST_EDITOR_API entity_view_window final : public editor_window
@@ -23,6 +25,15 @@ namespace tempest::editor
         ecs::entity target = ecs::null;
         vector<unique_ptr<component_view_provider>> providers;
         bool open = true;
+
+        struct
+        {
+            ImGuiTextFilter text_filter;
+            vector<component_view_provider*> sorted_providers;
+            vector<int> filtered_indices;
+            int selected = -1;
+            bool focus_search = false;
+        } component_search;
     };
 } // namespace tempest::editor
 

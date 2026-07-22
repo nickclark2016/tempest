@@ -57,6 +57,8 @@ namespace tempest::editor
 
         TEMPEST_EDITOR_API auto drag_integral(cstring_view label, int input, int minimum, int maximum) -> int;
         TEMPEST_EDITOR_API auto drag_scalar(cstring_view label, float input, float minimum, float maximum) -> float;
+
+        TEMPEST_EDITOR_API auto centered_button(cstring_view label) -> bool;
     } // namespace ui
 } // namespace tempest::editor
 

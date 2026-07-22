@@ -33,11 +33,11 @@ namespace tempest::editor
             engine_context* _ctx;
         };
 
-        class create_entity_menu final : public menu_item
+        class create_empty_entity_menu final : public menu_item
         {
           public:
-            create_entity_menu(engine_context& ctx, scene_hierarchy_window& scene_hierarchy)
-                : menu_item("Entities", "Create"), _ctx{&ctx}, _hierarchy{&scene_hierarchy}
+            create_empty_entity_menu(engine_context& ctx, scene_hierarchy_window& scene_hierarchy)
+                : menu_item("Entities", "Create Empty"), _ctx{&ctx}, _hierarchy{&scene_hierarchy}
             {
             }
 
@@ -253,16 +253,23 @@ namespace tempest::editor
         });
 
         register_menu_item(make_unique<exit_menu_item>(ctx));
-        register_menu_item(make_unique<create_entity_menu>(ctx, *_scene_hierarchy_view));
+        register_menu_item(make_unique<create_empty_entity_menu>(ctx, *_scene_hierarchy_view));
     }
 
     auto editor_context::draw() -> void
     {
+        const auto sim_state = _engine_ctx->get_simulation_state();
+        const auto is_play_mode = sim_state == simulation_state::play;
+
+        ImGui::BeginDisabled(is_play_mode);
+
         if (ImGui::BeginMainMenuBar())
         {
             _menus.draw();
             ImGui::EndMainMenuBar();
         }
+
+        ImGui::EndDisabled();
 
         const auto dockspace_id = ImGui::GetID("Tempest Editor Dockspace");
         const auto viewport = ImGui::GetMainViewport();
@@ -317,7 +324,10 @@ namespace tempest::editor
 
         for (auto& window : _windows)
         {
+            const auto is_available = window->is_mode_supported(sim_state);
+            ImGui::BeginDisabled(!is_available);
             window->draw();
+            ImGui::EndDisabled();
         }
     }
 

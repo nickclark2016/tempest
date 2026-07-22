@@ -1,10 +1,16 @@
 #include <tempest/serial.hpp>
 
+#include <cstring>
+#include <tempest/vector.hpp>
+
 namespace tempest::serialization
 {
     auto binary_archive::write(span<const byte> data) -> void
     {
-        _buffer.insert(_buffer.end(), data.begin(), data.end());
+        const auto current_size = _buffer.size();
+        const auto proposed_size = current_size + data.size();
+        unsafe::resize_no_init(_buffer, proposed_size);
+        std::memcpy(_buffer.data() + current_size, data.data(), data.size());
     }
 
     auto binary_archive::write(vector<byte> data) -> void
@@ -27,7 +33,7 @@ namespace tempest::serialization
             _read_offset += count;
             return data;
         }
-        
+
         return {};
     }
 
@@ -35,4 +41,4 @@ namespace tempest::serialization
     {
         return _buffer.size();
     }
-}
+} // namespace tempest::serialization

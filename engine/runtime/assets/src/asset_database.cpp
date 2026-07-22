@@ -51,7 +51,7 @@ namespace tempest::assets
         // Read the rest of the file into a buffer
         const auto data_size = static_cast<size_t>(header.data_length);
         auto buffer = vector<byte>{};
-        buffer.resize(data_size);
+        unsafe::resize_no_init(buffer, data_size);
         file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(data_size));
         file.close();
 
@@ -127,7 +127,9 @@ namespace tempest::assets
         if (blob_size > 0)
         {
             auto blob_span = archive.read(static_cast<size_t>(blob_size));
-            _blob_data.insert(_blob_data.end(), blob_span.begin(), blob_span.end());
+            const auto current_blob_size = _blob_data.size();
+            unsafe::resize_no_init(_blob_data, current_blob_size + blob_span.size());
+            std::memcpy(_blob_data.data() + current_blob_size, blob_span.data(), blob_span.size());
         }
     }
 
@@ -379,8 +381,7 @@ namespace tempest::assets
         return none();
     }
 
-    auto asset_database::_load_from_blobs(string_view source_path, ecs::archetype_registry& registry)
-        -> ecs::entity
+    auto asset_database::_load_from_blobs(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity
     {
         auto src_it = _source_path_to_index.find(string(source_path));
         if (src_it == _source_path_to_index.end())

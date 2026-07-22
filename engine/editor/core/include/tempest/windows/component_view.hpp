@@ -2,6 +2,7 @@
 #define tempest_editor_core_component_view_hpp
 
 #include <tempest/archetype.hpp>
+#include <tempest/cstring_view.hpp>
 #include <tempest/transform_component.hpp>
 
 namespace tempest::editor
@@ -17,6 +18,8 @@ namespace tempest::editor
         component_view_provider& operator=(component_view_provider&&) noexcept = delete;
 
         virtual auto draw(ecs::archetype_registry* registry, ecs::entity target) -> void = 0;
+        virtual auto name() const -> cstring_view = 0;
+        virtual auto create_default(ecs::archetype_registry* registry, ecs::entity target) -> void = 0;
 
       protected:
         component_view_provider() = default;
