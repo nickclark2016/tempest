@@ -233,7 +233,7 @@ namespace tempest::editor
 
         _entity_view = register_window(make_unique<entity_view_window>(ctx.get_entities()));
         _scene_hierarchy_view = register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()));
-        _viewport_view = register_window(make_unique<viewport_window>(ctx.get_renderer()));
+        _viewport_view = register_window(make_unique<viewport_window>(ctx));
 
         register_engine_component_view_providers(*this);
 

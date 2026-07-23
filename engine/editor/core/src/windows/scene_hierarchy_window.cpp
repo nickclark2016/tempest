@@ -104,8 +104,8 @@ namespace tempest::editor
         {
             for (const auto& [self] : entity_registry->with<ecs::self_component>())
             {
-                const auto* rel_component = entity_registry->try_get<ecs::relationship_component<ecs::entity>>(self.entity);
-                const auto is_root = rel_component ? rel_component->parent == ecs::tombstone : true;
+                const auto* const rel_component = entity_registry->try_get<ecs::relationship_component<ecs::entity>>(self.entity);
+                const auto is_root = rel_component != nullptr ? rel_component->parent == ecs::tombstone : true;
                 
                 if (is_root)
                 {

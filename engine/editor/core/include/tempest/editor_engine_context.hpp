@@ -7,6 +7,7 @@ namespace tempest::editor
 {
     enum class simulation_state
     {
+        stopped,
         pause,
         play
     };
@@ -85,7 +86,7 @@ namespace tempest::editor
         assets::asset_type_registry _asset_type_reg;
         assets::asset_database _asset_database;
 
-        simulation_state _sim_state = simulation_state::pause;
+        simulation_state _sim_state = simulation_state::stopped;
 
         struct TEMPEST_API window_context
         {

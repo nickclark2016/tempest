@@ -8,10 +8,12 @@
 
 namespace tempest::editor
 {
+    class editor_engine_context;
+
     class TEMPEST_EDITOR_API viewport_window final : public editor_window
     {
       public:
-        explicit viewport_window(graphics::renderer& renderer);
+        explicit viewport_window(editor_engine_context& ctx);
 
         auto desired_initial_dock() const -> editor_window::dock_location override;
         auto window_name() const -> string_view override;
@@ -25,7 +27,7 @@ namespace tempest::editor
         }
 
       private:
-        graphics::renderer* _renderer;
+        editor_engine_context* _ctx;
         rhi::typed_rhi_handle<rhi::rhi_handle_type::image> _viewport_texture;
         math::uint2 _viewport_size{};
         bool _open = true;
