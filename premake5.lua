@@ -197,6 +197,12 @@ scoped.workspace('Tempest', function()
         }
     end)
 
+    scoped.filter({
+        'configurations:Debug',
+    }, function()
+        optimize 'Debug'
+    end)
+
     startproject 'editor-entrypoint'
 
     include 'dependencies'
