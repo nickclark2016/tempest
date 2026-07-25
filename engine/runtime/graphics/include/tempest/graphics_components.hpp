@@ -85,6 +85,10 @@ namespace tempest::graphics
         float near_plane;
     };
 
+    struct TEMPEST_API active_camera_component
+    {
+    };
+
     struct TEMPEST_API directional_light_component
     {
         math::vec3<float> color;

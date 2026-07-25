@@ -1,6 +1,7 @@
 #include <tempest/windows/engine_component_view_providers.hpp>
 
 #include <tempest/editor.hpp>
+#include <tempest/camera_system.hpp>
 #include <tempest/graphics_components.hpp>
 #include <tempest/ui.hpp>
 
@@ -53,6 +54,19 @@ namespace tempest::editor
 
         if (ImGui::CollapsingHeader("Camera Component", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            bool is_active = registry->has<graphics::active_camera_component>(target);
+            if (ImGui::Checkbox("Is Active Camera", &is_active))
+            {
+                if (is_active)
+                {
+                    registry->assign(target, graphics::active_camera_component{});
+                }
+                else
+                {
+                    registry->remove<graphics::active_camera_component>(target);
+                }
+            }
+
             const auto new_fov = math::as_radians(ui::drag_scalar(
                 "Field of View (Vertical)", math::as_degrees(existing_camera->vertical_fov), 0.0F, 180.0F));
             const auto new_near_plane =
@@ -77,6 +91,33 @@ namespace tempest::editor
     auto camera_component_view_provider::create_default(ecs::archetype_registry* registry, ecs::entity target) -> void
     {
         registry->assign(target, graphics::camera_component{});
+    }
+
+    auto active_camera_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
+    {
+        const auto* const active_cam = registry->try_get<graphics::active_camera_component>(target);
+        if (active_cam == nullptr)
+        {
+            return;
+        }
+
+        if (ImGui::CollapsingHeader("Active Camera Component", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            bool is_active = true;
+            if (ImGui::Checkbox("Is Active Camera##ActiveTag", &is_active))
+            {
+                if (!is_active)
+                {
+                    registry->remove<graphics::active_camera_component>(target);
+                }
+            }
+        }
+    }
+
+    auto active_camera_component_view_provider::create_default(ecs::archetype_registry* registry, ecs::entity target)
+        -> void
+    {
+        registry->assign(target, graphics::active_camera_component{});
     }
 
     auto directional_light_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
@@ -161,6 +202,7 @@ namespace tempest::editor
     {
         ctx.register_component_view_provider(make_unique<transform_component_view_provider>());
         ctx.register_component_view_provider(make_unique<camera_component_view_provider>());
+        ctx.register_component_view_provider(make_unique<active_camera_component_view_provider>());
         ctx.register_component_view_provider(make_unique<directional_light_component_view_provider>());
         ctx.register_component_view_provider(make_unique<shadow_map_component_view_provider>());
     }

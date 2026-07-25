@@ -20,6 +20,8 @@
 
 namespace tempest::graphics
 {
+    class camera_system;
+
     struct TEMPEST_API pbr_frame_graph_config
     {
         uint32_t render_target_width;
@@ -58,6 +60,7 @@ namespace tempest::graphics
     struct TEMPEST_API pbr_frame_graph_inputs
     {
         ecs::archetype_registry* entity_registry = nullptr;
+        camera_system* camera_sys = nullptr;
     };
 
     class TEMPEST_API pbr_frame_graph

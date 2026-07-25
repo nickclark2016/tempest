@@ -1,22 +1,8 @@
-#include "tempest/frame_graph.hpp"
 #include <tempest/renderer.hpp>
-#include <tempest/rhi_types.hpp>
 
 namespace tempest::graphics
 {
-    renderer::builder& renderer::builder::set_pbr_frame_graph_config(pbr_frame_graph_config cfg)
-    {
-        _pbr_cfg = cfg;
-        return *this;
-    }
-
-    renderer::builder& renderer::builder::set_pbr_frame_graph_inputs(pbr_frame_graph_inputs inputs)
-    {
-        _pbr_inputs = inputs;
-        return *this;
-    }
-
-    renderer::builder& renderer::builder::add_pbr_frame_graph_customization_callback(
+    renderer::builder& renderer::builder::add_pbr_customization(
         function<void(pbr_frame_graph&)> callback)
     {
         _pbr_customization_callbacks.push_back(move(callback));
@@ -28,57 +14,29 @@ namespace tempest::graphics
         auto instance = rhi::vk::create_instance(&log);
         auto& device = instance->acquire_device(0);
 
+        auto camera_sys = make_unique<camera_system>(*_pbr_inputs.entity_registry,
+                                                      _pbr_inputs.entity_registry->event_registry());
+        _pbr_inputs.camera_sys = camera_sys.get();
+
         auto graph = make_unique<pbr_frame_graph>(device, _pbr_cfg, _pbr_inputs);
         for (auto&& callback : _pbr_customization_callbacks)
         {
             callback(*graph);
         }
-        return renderer(log, tempest::move(instance), device, tempest::move(graph));
+        return renderer(log, tempest::move(instance), device, tempest::move(graph), tempest::move(camera_sys));
     }
 
     tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>> renderer::
         create_window(const rhi::window_surface_desc& desc, bool install_swapchain_blit)
     {
-        auto win = rhi::vk::create_window_surface(desc);
+        (void)desc;
+        (void)install_swapchain_blit;
+        return {};
+    }
 
-        if (install_swapchain_blit)
-        {
-            auto surface = _device->create_render_surface({
-                .window = win.get(),
-                .min_image_count = 2,
-                .format =
-                    {
-                        .space = rhi::color_space::srgb_nonlinear,
-                        .format = rhi::image_format::bgra8_srgb,
-                    },
-                .present_mode = rhi::present_mode::immediate,
-                .width = win->framebuffer_width(),
-                .height = win->framebuffer_height(),
-                .layers = 1,
-            });
-
-            auto imported_handle = _graph->get_builder()->import_render_surface("Render Surface", surface);
-            _graph->get_builder()->create_transfer_pass(
-                "Present to Swapchain",
-                [&](transfer_task_builder& builder) {
-                    auto color_handle = _graph->get_tonemapped_color_handle();
-                    builder.read(color_handle, rhi::image_layout::transfer_src,
-                                 make_enum_mask(rhi::pipeline_stage::blit),
-                                 make_enum_mask(rhi::memory_access::transfer_read));
-                    builder.write(imported_handle, rhi::image_layout::transfer_dst,
-                                  make_enum_mask(rhi::pipeline_stage::blit),
-                                  make_enum_mask(rhi::memory_access::transfer_write));
-                },
-                [](transfer_task_execution_context& ctx, auto swapchain_handle, auto color_handle) {
-                    ctx.blit(color_handle, swapchain_handle);
-                },
-                imported_handle, _graph->get_tonemapped_color_handle());
-
-            return make_tuple(tempest::move(win), surface);
-        }
-
-        return make_tuple(tempest::move(win),
-                          static_cast<rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>(rhi::null_handle));
+    void renderer::destroy_window(rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> handle)
+    {
+        (void)handle;
     }
 
     void renderer::upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
@@ -102,8 +60,9 @@ namespace tempest::graphics
     }
 
     renderer::renderer(logger& log, unique_ptr<rhi::instance> instance, rhi::device& device,
-                       unique_ptr<pbr_frame_graph> graph)
-        : _log(&log), _instance(tempest::move(instance)), _device(&device), _graph(tempest::move(graph))
+                       unique_ptr<pbr_frame_graph> graph, unique_ptr<camera_system> camera_sys)
+        : _log(&log), _instance(tempest::move(instance)), _device(&device), _graph(tempest::move(graph)),
+          _camera_system(tempest::move(camera_sys))
     {
     }
 } // namespace tempest::graphics

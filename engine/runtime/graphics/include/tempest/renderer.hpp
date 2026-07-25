@@ -2,19 +2,14 @@
 #define tempest_graphics_renderer_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/camera_system.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/logger.hpp>
-#include <tempest/memory.hpp>
 #include <tempest/pbr_frame_graph.hpp>
 #include <tempest/rhi.hpp>
-#include <tempest/rhi_types.hpp>
-#include <tempest/tuple.hpp>
-#include <tempest/vector.hpp>
 
 namespace tempest::graphics
 {
-    class renderer;
-
     class TEMPEST_API renderer
     {
       public:
@@ -22,27 +17,40 @@ namespace tempest::graphics
         {
           public:
             builder() = default;
-            builder(const builder&) = delete;
-            builder(builder&&) noexcept = delete;
-            ~builder() = default;
 
-            builder& operator=(const builder&) = delete;
-            builder& operator=(builder&&) noexcept = delete;
+            builder& set_pbr_frame_graph_config(const pbr_frame_graph_config& config)
+            {
+                _pbr_cfg = config;
+                return *this;
+            }
 
-            builder& set_pbr_frame_graph_config(pbr_frame_graph_config cfg);
-            builder& set_pbr_frame_graph_inputs(pbr_frame_graph_inputs inputs);
-            builder& add_pbr_frame_graph_customization_callback(function<void(pbr_frame_graph&)> callback);
+            builder& set_pbr_frame_graph_inputs(const pbr_frame_graph_inputs& inputs)
+            {
+                _pbr_inputs = inputs;
+                return *this;
+            }
 
-            renderer build(logger& log);
+            builder& add_pbr_customization(function<void(pbr_frame_graph&)> callback);
+
+            [[nodiscard]] renderer build(logger& log);
 
           private:
-            pbr_frame_graph_config _pbr_cfg = {};
-            pbr_frame_graph_inputs _pbr_inputs = {};
+            pbr_frame_graph_config _pbr_cfg;
+            pbr_frame_graph_inputs _pbr_inputs;
             vector<function<void(pbr_frame_graph&)>> _pbr_customization_callbacks;
         };
 
-        tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>>
-        create_window(const rhi::window_surface_desc& desc, bool install_swapchain_blit = true);
+        renderer(const renderer&) = delete;
+        renderer(renderer&&) noexcept = default;
+        renderer& operator=(const renderer&) = delete;
+        renderer& operator=(renderer&&) noexcept = default;
+
+        ~renderer() = default;
+
+        tuple<unique_ptr<rhi::window_surface>, rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface>> create_window(
+            const rhi::window_surface_desc& desc, bool install_swapchain_blit = true);
+
+        void destroy_window(rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> handle);
 
         void upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
                                  const core::texture_registry& textures, const core::material_registry& materials);
@@ -61,6 +69,16 @@ namespace tempest::graphics
             return *_graph;
         }
 
+        pbr_frame_graph& get_pbr_frame_graph() noexcept
+        {
+            return *_graph;
+        }
+
+        const pbr_frame_graph& get_pbr_frame_graph() const noexcept
+        {
+            return *_graph;
+        }
+
         rhi::device& get_device() noexcept
         {
             return *_device;
@@ -71,13 +89,27 @@ namespace tempest::graphics
             return *_device;
         }
 
+        /// @brief Gets the camera system associated with this renderer.
+        [[nodiscard]] camera_system& get_camera_system() noexcept
+        {
+            return *_camera_system;
+        }
+
+        /// @brief Gets the camera system associated with this renderer.
+        [[nodiscard]] const camera_system& get_camera_system() const noexcept
+        {
+            return *_camera_system;
+        }
+
       private:
-        explicit renderer(logger& log, unique_ptr<rhi::instance> instance, rhi::device& device, unique_ptr<pbr_frame_graph> graph);
+        explicit renderer(logger& log, unique_ptr<rhi::instance> instance, rhi::device& device,
+                          unique_ptr<pbr_frame_graph> graph, unique_ptr<camera_system> camera_sys);
 
         logger* _log;
         unique_ptr<rhi::instance> _instance;
         rhi::device* _device;
         unique_ptr<pbr_frame_graph> _graph;
+        unique_ptr<camera_system> _camera_system;
     };
 } // namespace tempest::graphics
 

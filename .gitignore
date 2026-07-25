@@ -21,6 +21,7 @@ Makefile
 *.ninja
 *.ninja_log
 *.ninja_deps
+*.ninja_lock
 *compile_commands.json
 *.clangd
 compile_commands.events.json
@@ -39,3 +40,7 @@ TempestCache/
 
 # Generated asset files
 **.tassetdb
+
+# Agents
+.agents/*
+!.agents/AGENTS.md

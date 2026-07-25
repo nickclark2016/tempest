@@ -7,6 +7,10 @@
 #include <tempest/move.hpp>
 #include <tempest/string.hpp>
 #include <tempest/tempest.hpp>
+#include <tempest/camera_system.hpp>
+#include <tempest/graphics_components.hpp>
+#include <tempest/math_utils.hpp>
+#include <tempest/transform_component.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
 #include <tempest/windows/scene_hierarchy_window.hpp>
 
@@ -237,14 +241,36 @@ namespace tempest::editor
 
         register_engine_component_view_providers(*this);
 
+        auto& camera_sys = ctx.get_renderer().get_camera_system();
+
+        auto active_cam_entity = camera_sys.get_active_camera_entity();
+        if (!active_cam_entity.has_value())
+        {
+            auto editor_cam = ctx.get_entities().create();
+            ctx.get_entities().name(editor_cam, "Editor Camera");
+            ctx.get_entities().assign(editor_cam, ecs::transform_component::identity());
+            ctx.get_entities().assign(editor_cam, graphics::camera_component{
+                .aspect_ratio = 16.0f / 9.0f,
+                .vertical_fov = math::as_radians(60.0f),
+                .near_plane = 0.1f,
+            });
+            camera_sys.set_active_camera(editor_cam);
+        }
+
         register_on_paint_callback([&](engine_context& ctx) {
             _entity_view->target = _scene_hierarchy_view->selected_entity;
 
-            for (auto&& [self, camera] : ctx.get_entities().with<ecs::self_component, graphics::camera_component>())
+            auto& cam_sys = ctx.get_renderer().get_camera_system();
+            auto active_cam_opt = cam_sys.get_active_camera_entity();
+            if (active_cam_opt.has_value())
             {
-                auto camera_copy = camera;
-                camera_copy.aspect_ratio = _viewport_view->aspect_ratio();
-                ctx.get_entities().assign_or_replace(self.entity, camera_copy);
+                const auto active_ent = active_cam_opt.value();
+                if (const auto* cam = ctx.get_entities().try_get<graphics::camera_component>(active_ent))
+                {
+                    auto camera_copy = *cam;
+                    camera_copy.aspect_ratio = _viewport_view->aspect_ratio();
+                    ctx.get_entities().assign_or_replace(active_ent, camera_copy);
+                }
             }
 
             ui_ctx.begin_ui_commands();

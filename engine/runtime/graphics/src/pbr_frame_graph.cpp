@@ -5,6 +5,7 @@
 
 #include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
+#include <tempest/camera_system.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/exception.hpp>
 #include <tempest/files.hpp>
@@ -3196,34 +3197,20 @@ namespace tempest::graphics
         auto staging_bytes_written = self->_global_resources.utilization.staging_buffer_bytes_written;
 
         // Find the camera to upload
-        auto camera = ecs::entity{ecs::tombstone};
-        auto camera_data = optional<camera_component>();
-        auto camera_transform = optional<ecs::transform_component>();
-
-        self->_inputs.entity_registry->each(
-            [&](ecs::self_component entity, const camera_component& cam_comp, const ecs::transform_component& tx) {
-                camera = entity.entity;
-                camera_data = cam_comp;
-                camera_transform = tx;
-            });
-
-        const auto quat_rot = math::quat(camera_transform->rotation());
-        const auto f = math::extract_forward(quat_rot);
-        const auto u = math::extract_up(quat_rot);
-
-        const auto projection =
-            math::perspective(camera_data->aspect_ratio, camera_data->vertical_fov, camera_data->near_plane);
-        const auto view = math::look_at(camera_transform->position(), camera_transform->position() + f, u);
+        auto active_cam = self->_inputs.camera_sys ? self->_inputs.camera_sys->get_active_camera() : tempest::nullopt;
 
         // Set up and upload the scene constants
         auto scene_constants_data = scene_constants{};
-        scene_constants_data.cam = {
-            .proj = projection,
-            .inv_proj = math::inverse(projection),
-            .view = view,
-            .inv_view = math::inverse(view),
-            .position = camera_transform->position(),
-        };
+        if (active_cam.has_value())
+        {
+            scene_constants_data.cam = {
+                .proj = active_cam->proj,
+                .inv_proj = active_cam->inv_proj,
+                .view = active_cam->view,
+                .inv_view = active_cam->inv_view,
+                .position = math::vec3<float>{active_cam->eye_position.x, active_cam->eye_position.y, active_cam->eye_position.z},
+            };
+        }
         scene_constants_data.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.15F;
         scene_constants_data.screen_size = math::vec2(static_cast<float>(self->_cfg.render_target_width),
                                                       static_cast<float>(self->_cfg.render_target_height));
@@ -4059,16 +4046,9 @@ namespace tempest::graphics
         auto staging_buffer_bytes = self->_device->map_buffer(
             self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
 
-        auto camera = ecs::entity{ecs::tombstone};
-        auto camera_data = optional<camera_component>();
-        auto camera_transform = optional<ecs::transform_component>();
-
-        self->_inputs.entity_registry->each(
-            [&](ecs::self_component entity, const camera_component& cam_comp, const ecs::transform_component& tx) {
-                camera = entity.entity;
-                camera_data = cam_comp;
-                camera_transform = tx;
-            });
+        auto camera = self->_inputs.camera_sys ? self->_inputs.camera_sys->get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}) : ecs::entity{ecs::tombstone};
+        const auto* const camera_data = self->_inputs.entity_registry->try_get<camera_component>(camera);
+        const auto* const camera_transform = self->_inputs.entity_registry->try_get<ecs::transform_component>(camera);
 
         self->_directional_shadows.directional_shadows.clear();
         auto gpu_shadow_data = shadow_gpu_layout{};
@@ -4085,6 +4065,11 @@ namespace tempest::graphics
                                                 ecs::self_component self_entity) {
             if (self->_directional_shadows.directional_shadows.size() >=
                 self->_directional_shadows.atlas_pool.atlas_slots.size())
+            {
+                return;
+            }
+
+            if (camera_data == nullptr || camera_transform == nullptr)
             {
                 return;
             }

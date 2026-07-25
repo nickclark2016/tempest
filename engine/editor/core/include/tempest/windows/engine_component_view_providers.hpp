@@ -32,6 +32,21 @@ namespace tempest::editor
         auto create_default(ecs::archetype_registry* registry, ecs::entity target) -> void override;
     };
 
+    class TEMPEST_EDITOR_API active_camera_component_view_provider final : public component_view_provider
+    {
+      public:
+        active_camera_component_view_provider() = default;
+
+        auto draw(ecs::archetype_registry* registry, ecs::entity target) -> void override;
+
+        auto name() const -> cstring_view override
+        {
+            return "Active Camera Component";
+        }
+
+        auto create_default(ecs::archetype_registry* registry, ecs::entity target) -> void override;
+    };
+
     class TEMPEST_EDITOR_API directional_light_component_view_provider final : public component_view_provider
     {
       public:

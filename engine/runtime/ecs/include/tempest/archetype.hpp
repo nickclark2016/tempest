@@ -966,6 +966,16 @@ namespace tempest::ecs
             return basic_archetype_with_components_view<Ts...>(*this);
         }
 
+        [[nodiscard]] auto event_registry() noexcept -> event::event_registry&
+        {
+            return *_event_registry;
+        }
+
+        [[nodiscard]] auto event_registry() const noexcept -> const event::event_registry&
+        {
+            return *_event_registry;
+        }
+
       private:
         vector<basic_archetype> _archetypes;
         vector<basic_archetype_types_hash<256u>> _hashes;
@@ -1439,6 +1449,7 @@ namespace tempest::ecs
     }
 
     using archetype_registry = basic_archetype_registry;
+    using registry = archetype_registry;
 
     class TEMPEST_API basic_archetype_entity_hierarchy_iterator
     {
