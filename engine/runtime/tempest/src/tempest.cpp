@@ -1,3 +1,5 @@
+#if 0
+
 #include <tempest/renderer.hpp>
 #include <tempest/rhi_types.hpp>
 #include <tempest/tempest.hpp>
@@ -346,3 +348,5 @@ namespace tempest
         _render.render();
     }
 } // namespace tempest
+
+#endif

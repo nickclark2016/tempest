@@ -486,7 +486,7 @@ namespace tempest
     }
 
     template <typename T>
-    struct TEMPEST_API default_delete
+    struct default_delete
     {
         constexpr default_delete() noexcept = default;
 
@@ -516,7 +516,7 @@ namespace tempest
     };
 
     template <typename T, typename Deleter = default_delete<T>>
-    class TEMPEST_API unique_ptr
+    class unique_ptr
     {
       public:
         using pointer = T*;
