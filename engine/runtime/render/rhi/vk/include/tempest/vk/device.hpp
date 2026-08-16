@@ -117,6 +117,29 @@ namespace tempest::rhi::vk
         auto destroy_event(event_handle event) -> void override;
         auto destroy_semaphore(semaphore_handle semaphore) -> void override;
 
+        [[nodiscard]] auto allocate_descriptor(descriptor_type type) -> descriptor_handle override;
+        auto free_descriptor(descriptor_type type, descriptor_handle descriptor) -> void override;
+        auto write_sampler_descriptor(descriptor_handle slot, sampler_handle sampler) -> void override;
+        auto write_sampled_image_descriptor(descriptor_handle slot, texture_view_handle view,
+                                            image_layout layout = image_layout::general) -> void override;
+        auto write_storage_image_descriptor(descriptor_handle slot, texture_view_handle view,
+                                            image_layout layout = image_layout::general) -> void override;
+
+        [[nodiscard]] auto get_sampler_descriptor_buffer_address() const noexcept -> VkDeviceAddress
+        {
+            return _sampler_descriptor_buffer_address;
+        }
+
+        [[nodiscard]] auto get_resource_descriptor_buffer_address() const noexcept -> VkDeviceAddress
+        {
+            return _resource_descriptor_buffer_address;
+        }
+
+        [[nodiscard]] auto get_storage_image_descriptor_buffer_offset() const noexcept -> VkDeviceSize
+        {
+            return _storage_image_buffer_offset;
+        }
+
         [[nodiscard]] auto get_buffer(buffer_handle handle) const -> optional<buffer>
         {
             const auto iter = _buffers.find(handle.handle);
@@ -212,29 +235,27 @@ namespace tempest::rhi::vk
             return *iter;
         }
 
-        [[nodiscard]] auto get_physical_device() const -> vkb::PhysicalDevice
+        [[nodiscard]] auto get_global_pipeline_layout() const noexcept -> VkPipelineLayout
         {
-            return _physical_device;
+            return _default_pipeline_layout;
         }
 
-        [[nodiscard]] auto get_device() const -> vkb::Device
+        auto wait_for_sync(span<const host_sync_point> wait_values, uint64_t timeout_ns = ~0ULL) const
+            -> expected<void, submit_error>;
+
+        [[nodiscard]] auto get_device() const noexcept -> const vkb::Device&
         {
             return _device;
         }
 
-        [[nodiscard]] auto get_instance_dispatch_table() const -> vkb::InstanceDispatchTable
+        [[nodiscard]] auto get_physical_device() const noexcept -> const vkb::PhysicalDevice&
         {
-            return _instance_dispatch_table;
+            return _physical_device;
         }
 
-        [[nodiscard]] auto get_dispatch_table() const -> vkb::DispatchTable
+        [[nodiscard]] auto get_dispatch_table() const noexcept -> const vkb::DispatchTable&
         {
             return _dispatch_table;
-        }
-
-        [[nodiscard]] auto get_global_pipeline_layout() const -> VkPipelineLayout
-        {
-            return _default_pipeline_layout;
         }
 
         [[nodiscard]] auto get_allocator() const noexcept -> VmaAllocator
@@ -243,6 +264,12 @@ namespace tempest::rhi::vk
         }
 
       private:
+        struct descriptor_slot_state
+        {
+            uint32_t generation = 1;
+            bool allocated = false;
+        };
+
         device(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device device, device_desc desc);
 
         vkb::PhysicalDevice _physical_device;
@@ -277,6 +304,30 @@ namespace tempest::rhi::vk
         VkDescriptorSetLayout _sampled_image_set_layout = VK_NULL_HANDLE;
         VkDescriptorSetLayout _sampler_set_layout = VK_NULL_HANDLE;
         VkPipelineLayout _default_pipeline_layout = VK_NULL_HANDLE;
+
+        // Descriptor buffer properties & memory
+        size_t _sampler_descriptor_size = 0;
+        size_t _sampled_image_descriptor_size = 0;
+        size_t _storage_image_descriptor_size = 0;
+        VkDeviceSize _descriptor_buffer_offset_alignment = 0;
+        VkDeviceSize _storage_image_buffer_offset = 0;
+
+        VkBuffer _sampler_descriptor_buffer = VK_NULL_HANDLE;
+        VmaAllocation _sampler_descriptor_allocation = VK_NULL_HANDLE;
+        byte* _sampler_descriptor_buffer_ptr = nullptr;
+        VkDeviceAddress _sampler_descriptor_buffer_address = 0;
+
+        VkBuffer _resource_descriptor_buffer = VK_NULL_HANDLE;
+        VmaAllocation _resource_descriptor_allocation = VK_NULL_HANDLE;
+        byte* _resource_descriptor_buffer_ptr = nullptr;
+        VkDeviceAddress _resource_descriptor_buffer_address = 0;
+
+        vector<descriptor_slot_state> _sampler_slots;
+        vector<uint32_t> _sampler_free_list;
+        vector<descriptor_slot_state> _sampled_image_slots;
+        vector<uint32_t> _sampled_image_free_list;
+        vector<descriptor_slot_state> _storage_image_slots;
+        vector<uint32_t> _storage_image_free_list;
     };
 } // namespace tempest::rhi::vk
 

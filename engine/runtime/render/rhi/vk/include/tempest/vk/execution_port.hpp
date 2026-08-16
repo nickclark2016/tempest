@@ -22,7 +22,7 @@ namespace tempest::rhi::vk
     {
       public:
         command_list(VkCommandBuffer command_buffer, const vkb::DispatchTable& dispatch_table,
-                     const vk::device& device) noexcept;
+                     const vk::device& device, vkb::QueueType queue_type = vkb::QueueType::graphics) noexcept;
         command_list(const command_list&) = delete;
         command_list(command_list&&) noexcept = delete;
 
@@ -110,6 +110,7 @@ namespace tempest::rhi::vk
         VkCommandBuffer _command_buffer;
         const vkb::DispatchTable* _dispatch_table;
         const vk::device* _parent_device;
+        vkb::QueueType _queue_type = vkb::QueueType::graphics;
     };
 
     /**
@@ -136,9 +137,10 @@ namespace tempest::rhi::vk
          * @param dispatch_table The dispatch table to use for Vulkan function calls.
          * @param device The Vulkan device to use for command pool and command buffer allocation.
          * @param queue_family_index The index of the queue family to use for the command pool and command buffers.
+         * @param queue_type The queue type (graphics, compute, transfer).
          */
         command_list_slab(const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                          uint32_t queue_family_index)
+                          uint32_t queue_family_index, vkb::QueueType queue_type = vkb::QueueType::graphics)
             : _dispatch_table{&dispatch_table}
         {
             auto command_pool_create_info = VkCommandPoolCreateInfo{
@@ -167,7 +169,7 @@ namespace tempest::rhi::vk
 
             for (size_t i = 0; i < max_command_lists; ++i)
             {
-                _command_buffers.emplace_back(vk_cmd_buffers[i], dispatch_table, device);
+                _command_buffers.emplace_back(vk_cmd_buffers[i], dispatch_table, device, queue_type);
             }
         }
 
@@ -288,12 +290,12 @@ namespace tempest::rhi::vk
          * @param queue_family_index The index of the queue family to use for the command list slabs.
          */
         command_list_slab_allocator(const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                                    uint32_t queue_family_index)
+                                    uint32_t queue_family_index, vkb::QueueType queue_type = vkb::QueueType::graphics)
             : _dispatch_table{&dispatch_table}
         {
             for (size_t i = 0; i < slab_count; ++i)
             {
-                slabs.emplace_back(dispatch_table, device, queue_family_index);
+                slabs.emplace_back(dispatch_table, device, queue_family_index, queue_type);
             }
         }
 
@@ -376,9 +378,9 @@ namespace tempest::rhi::vk
         command_list_slab_allocator<persistent_slab_count, persistent_command_list_count> persistent_allocator;
 
         combined_command_list_slab_allocator(const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                                             uint32_t queue_family_index)
-            : transient_allocator(dispatch_table, device, queue_family_index),
-              persistent_allocator(dispatch_table, device, queue_family_index)
+                                             uint32_t queue_family_index, vkb::QueueType queue_type = vkb::QueueType::graphics)
+            : transient_allocator(dispatch_table, device, queue_family_index, queue_type),
+              persistent_allocator(dispatch_table, device, queue_family_index, queue_type)
         {
         }
     };

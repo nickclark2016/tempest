@@ -114,6 +114,19 @@ namespace tempest::rhi
         uint32_t heap_generation;
     };
 
+    enum class descriptor_type : uint8_t
+    {
+        sampler,
+        sampled_image,
+        storage_image,
+    };
+
+    struct descriptor_handle
+    {
+        uint32_t index = ~0U;
+        uint32_t generation = 0;
+    };
+
     /// \brief A handle to the window system integration (WSI) handle for a window or display. This handle is used for
     /// creating render surfaces that are associated with that window or display. The WSI handle is platform specific
     /// and is used for creating render surfaces that are compatible with the window system.
@@ -873,6 +886,15 @@ namespace tempest::rhi
         virtual auto destroy_compute_pipeline(compute_pipeline_handle pipeline) -> void = 0;
         virtual auto destroy_event(event_handle event) -> void = 0;
         virtual auto destroy_semaphore(semaphore_handle semaphore) -> void = 0;
+
+        // Descriptor management
+        [[nodiscard]] virtual auto allocate_descriptor(descriptor_type type) -> descriptor_handle = 0;
+        virtual auto free_descriptor(descriptor_type type, descriptor_handle descriptor) -> void = 0;
+        virtual auto write_sampler_descriptor(descriptor_handle slot, sampler_handle sampler) -> void = 0;
+        virtual auto write_sampled_image_descriptor(descriptor_handle slot, texture_view_handle view,
+                                                    image_layout layout = image_layout::general) -> void = 0;
+        virtual auto write_storage_image_descriptor(descriptor_handle slot, texture_view_handle view,
+                                                    image_layout layout = image_layout::general) -> void = 0;
 
       protected:
         device() = default;

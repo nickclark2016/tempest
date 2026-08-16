@@ -99,6 +99,18 @@ scoped.group('Tests', function()
             }
         end)
 
+        scoped.filter({ 'files:tests/shaders/test_bindless.slang' }, function()
+            buildmessage 'Compiling %{file.relpath}'
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry compute_sample -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_bindless_sample_spv -o %{!cfg.objdir}/shaders/test_bindless_sample.comp.h',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry compute_storage_write -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_bindless_storage_spv -o %{!cfg.objdir}/shaders/test_bindless_storage.comp.h',
+            }
+            buildoutputs {
+                '%{!cfg.objdir}/shaders/test_bindless_sample.comp.h',
+                '%{!cfg.objdir}/shaders/test_bindless_storage.comp.h',
+            }
+        end)
+
         uses {
             'googletest',
             'rhi-vk',

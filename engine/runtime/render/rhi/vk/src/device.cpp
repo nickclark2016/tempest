@@ -447,6 +447,20 @@ namespace tempest::rhi::vk
             return VK_STENCIL_OP_KEEP;
         }
 
+        auto as_vulkan(image_layout layout) noexcept -> VkImageLayout
+        {
+            switch (layout)
+            {
+            case image_layout::undefined:
+                return VK_IMAGE_LAYOUT_UNDEFINED;
+            case image_layout::general:
+                return VK_IMAGE_LAYOUT_GENERAL;
+            case image_layout::present:
+                return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            }
+            return VK_IMAGE_LAYOUT_GENERAL;
+        }
+
         auto create_shader_module(const vkb::DispatchTable& dispatch_table, span<const byte> ir_code) -> VkShaderModule
         {
             if (ir_code.empty() || (ir_code.size() % sizeof(uint32_t) != 0))
@@ -562,6 +576,22 @@ namespace tempest::rhi::vk
         if (_storage_image_set_layout != VK_NULL_HANDLE)
         {
             _dispatch_table.destroyDescriptorSetLayout(_storage_image_set_layout, nullptr);
+        }
+
+        if (_sampler_descriptor_buffer != VK_NULL_HANDLE)
+        {
+            vmaDestroyBuffer(_allocator, _sampler_descriptor_buffer, _sampler_descriptor_allocation);
+            _sampler_descriptor_buffer = VK_NULL_HANDLE;
+            _sampler_descriptor_allocation = VK_NULL_HANDLE;
+            _sampler_descriptor_buffer_ptr = nullptr;
+        }
+
+        if (_resource_descriptor_buffer != VK_NULL_HANDLE)
+        {
+            vmaDestroyBuffer(_allocator, _resource_descriptor_buffer, _resource_descriptor_allocation);
+            _resource_descriptor_buffer = VK_NULL_HANDLE;
+            _resource_descriptor_allocation = VK_NULL_HANDLE;
+            _resource_descriptor_buffer_ptr = nullptr;
         }
 
         if (_allocator != VK_NULL_HANDLE)
@@ -1343,7 +1373,7 @@ namespace tempest::rhi::vk
         auto pipeline_ci = VkGraphicsPipelineCreateInfo{
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .pNext = &rendering_ci,
-            .flags = 0,
+            .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
             .stageCount = static_cast<uint32_t>(stages.size()),
             .pStages = stages.data(),
             .pVertexInputState = &vertex_input_ci,
@@ -1406,7 +1436,7 @@ namespace tempest::rhi::vk
         auto pipeline_ci = VkComputePipelineCreateInfo{
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
             .pNext = nullptr,
-            .flags = 0,
+            .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
             .stage = stage_ci,
             .layout = _default_pipeline_layout,
             .basePipelineHandle = VK_NULL_HANDLE,
@@ -1602,7 +1632,6 @@ namespace tempest::rhi::vk
             };
 
             auto binding_flags = VkDescriptorBindingFlags{VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
-                                                          VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                                                           VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT};
 
             auto binding_flags_create_info = VkDescriptorSetLayoutBindingFlagsCreateInfo{
@@ -1615,7 +1644,7 @@ namespace tempest::rhi::vk
             auto sampler_set_layout = VkDescriptorSetLayoutCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags_create_info,
-                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
                 .bindingCount = 1,
                 .pBindings = &sampler_binding_layout,
             };
@@ -1644,7 +1673,6 @@ namespace tempest::rhi::vk
             };
 
             auto binding_flags = VkDescriptorBindingFlags{VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
-                                                          VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                                                           VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT};
 
             auto binding_flags_create_info = VkDescriptorSetLayoutBindingFlagsCreateInfo{
@@ -1657,7 +1685,7 @@ namespace tempest::rhi::vk
             auto image_set_layout = VkDescriptorSetLayoutCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags_create_info,
-                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
                 .bindingCount = 1,
                 .pBindings = &image_binding_layout,
             };
@@ -1686,7 +1714,6 @@ namespace tempest::rhi::vk
             };
 
             auto binding_flags = VkDescriptorBindingFlags{VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
-                                                          VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                                                           VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT};
 
             auto binding_flags_create_info = VkDescriptorSetLayoutBindingFlagsCreateInfo{
@@ -1699,7 +1726,7 @@ namespace tempest::rhi::vk
             auto image_set_layout = VkDescriptorSetLayoutCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags_create_info,
-                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
                 .bindingCount = 1,
                 .pBindings = &image_binding_layout,
             };
@@ -1804,5 +1831,266 @@ namespace tempest::rhi::vk
             _async_transfer_execution_port = make_unique<execution_port>(
                 *this, transfer_queue_index.value(), vkb::QueueType::transfer, transfer_queue.value(), _dispatch_table);
         }
+
+        // Query descriptor buffer properties
+        auto descriptor_buffer_properties = VkPhysicalDeviceDescriptorBufferPropertiesEXT{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
+            .pNext = nullptr,
+        };
+        auto device_properties2 = VkPhysicalDeviceProperties2{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+            .pNext = &descriptor_buffer_properties,
+        };
+        _instance_dispatch_table.getPhysicalDeviceProperties2(_physical_device.physical_device, &device_properties2);
+
+        _sampler_descriptor_size = descriptor_buffer_properties.samplerDescriptorSize;
+        _sampled_image_descriptor_size = descriptor_buffer_properties.sampledImageDescriptorSize;
+        _storage_image_descriptor_size = descriptor_buffer_properties.storageImageDescriptorSize;
+        _descriptor_buffer_offset_alignment = descriptor_buffer_properties.descriptorBufferOffsetAlignment;
+
+        // Calculate buffer sizes
+        auto sampler_buffer_size = max_active_samplers * _sampler_descriptor_size;
+        auto sampled_images_size = max_active_textures * _sampled_image_descriptor_size;
+        _storage_image_buffer_offset = ((sampled_images_size + _descriptor_buffer_offset_alignment - 1) /
+                                        _descriptor_buffer_offset_alignment) *
+                                       _descriptor_buffer_offset_alignment;
+        auto resource_buffer_size =
+            _storage_image_buffer_offset + (max_active_storage_images * _storage_image_descriptor_size);
+
+        // Allocate Sampler Descriptor Buffer
+        auto sampler_buf_ci = VkBufferCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .size = sampler_buffer_size,
+            .usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        };
+        auto sampler_alloc_ci = VmaAllocationCreateInfo{
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_AUTO,
+        };
+        auto sampler_alloc_info = VmaAllocationInfo{};
+        [[maybe_unused]] auto s_res = vmaCreateBuffer(_allocator, &sampler_buf_ci, &sampler_alloc_ci,
+                                                      &_sampler_descriptor_buffer, &_sampler_descriptor_allocation,
+                                                      &sampler_alloc_info);
+        TEMPEST_ASSERT(s_res == VK_SUCCESS);
+        _sampler_descriptor_buffer_ptr = static_cast<byte*>(sampler_alloc_info.pMappedData);
+
+        auto sampler_bda_info = VkBufferDeviceAddressInfo{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+            .pNext = nullptr,
+            .buffer = _sampler_descriptor_buffer,
+        };
+        _sampler_descriptor_buffer_address = _dispatch_table.getBufferDeviceAddress(&sampler_bda_info);
+
+        // Allocate Resource Descriptor Buffer
+        auto resource_buf_ci = VkBufferCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .size = resource_buffer_size,
+            .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        };
+        auto resource_alloc_ci = VmaAllocationCreateInfo{
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_AUTO,
+        };
+        auto resource_alloc_info = VmaAllocationInfo{};
+        [[maybe_unused]] auto r_res = vmaCreateBuffer(_allocator, &resource_buf_ci, &resource_alloc_ci,
+                                                      &_resource_descriptor_buffer, &_resource_descriptor_allocation,
+                                                      &resource_alloc_info);
+        TEMPEST_ASSERT(r_res == VK_SUCCESS);
+        _resource_descriptor_buffer_ptr = static_cast<byte*>(resource_alloc_info.pMappedData);
+
+        auto resource_bda_info = VkBufferDeviceAddressInfo{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+            .pNext = nullptr,
+            .buffer = _resource_descriptor_buffer,
+        };
+        _resource_descriptor_buffer_address = _dispatch_table.getBufferDeviceAddress(&resource_bda_info);
+
+        // Initialize slot tracking and free lists
+        _sampler_slots.resize(max_active_samplers);
+        _sampler_free_list.reserve(max_active_samplers);
+        for (uint32_t i = max_active_samplers; i > 0; --i)
+        {
+            _sampler_free_list.push_back(i - 1);
+        }
+
+        _sampled_image_slots.resize(max_active_textures);
+        _sampled_image_free_list.reserve(max_active_textures);
+        for (uint32_t i = max_active_textures; i > 0; --i)
+        {
+            _sampled_image_free_list.push_back(i - 1);
+        }
+
+        _storage_image_slots.resize(max_active_storage_images);
+        _storage_image_free_list.reserve(max_active_storage_images);
+        for (uint32_t i = max_active_storage_images; i > 0; --i)
+        {
+            _storage_image_free_list.push_back(i - 1);
+        }
+    }
+
+    auto device::allocate_descriptor(descriptor_type type) -> descriptor_handle
+    {
+        switch (type)
+        {
+        case descriptor_type::sampler: {
+            if (_sampler_free_list.empty())
+            {
+                return {};
+            }
+            auto idx = _sampler_free_list.back();
+            _sampler_free_list.pop_back();
+            _sampler_slots[idx].allocated = true;
+            return descriptor_handle{.index = idx, .generation = _sampler_slots[idx].generation};
+        }
+        case descriptor_type::sampled_image: {
+            if (_sampled_image_free_list.empty())
+            {
+                return {};
+            }
+            auto idx = _sampled_image_free_list.back();
+            _sampled_image_free_list.pop_back();
+            _sampled_image_slots[idx].allocated = true;
+            return descriptor_handle{.index = idx, .generation = _sampled_image_slots[idx].generation};
+        }
+        case descriptor_type::storage_image: {
+            if (_storage_image_free_list.empty())
+            {
+                return {};
+            }
+            auto idx = _storage_image_free_list.back();
+            _storage_image_free_list.pop_back();
+            _storage_image_slots[idx].allocated = true;
+            return descriptor_handle{.index = idx, .generation = _storage_image_slots[idx].generation};
+        }
+        }
+        return {};
+    }
+
+    auto device::free_descriptor(descriptor_type type, descriptor_handle descriptor) -> void
+    {
+        switch (type)
+        {
+        case descriptor_type::sampler:
+            if (descriptor.index < _sampler_slots.size() && _sampler_slots[descriptor.index].allocated &&
+                _sampler_slots[descriptor.index].generation == descriptor.generation)
+            {
+                _sampler_slots[descriptor.index].allocated = false;
+                _sampler_slots[descriptor.index].generation++;
+                _sampler_free_list.push_back(descriptor.index);
+                std::memset(_sampler_descriptor_buffer_ptr + descriptor.index * _sampler_descriptor_size, 0,
+                            _sampler_descriptor_size);
+            }
+            break;
+        case descriptor_type::sampled_image:
+            if (descriptor.index < _sampled_image_slots.size() && _sampled_image_slots[descriptor.index].allocated &&
+                _sampled_image_slots[descriptor.index].generation == descriptor.generation)
+            {
+                _sampled_image_slots[descriptor.index].allocated = false;
+                _sampled_image_slots[descriptor.index].generation++;
+                _sampled_image_free_list.push_back(descriptor.index);
+                std::memset(_resource_descriptor_buffer_ptr + descriptor.index * _sampled_image_descriptor_size, 0,
+                            _sampled_image_descriptor_size);
+            }
+            break;
+        case descriptor_type::storage_image:
+            if (descriptor.index < _storage_image_slots.size() && _storage_image_slots[descriptor.index].allocated &&
+                _storage_image_slots[descriptor.index].generation == descriptor.generation)
+            {
+                _storage_image_slots[descriptor.index].allocated = false;
+                _storage_image_slots[descriptor.index].generation++;
+                _storage_image_free_list.push_back(descriptor.index);
+                std::memset(_resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
+                                descriptor.index * _storage_image_descriptor_size,
+                            0, _storage_image_descriptor_size);
+            }
+            break;
+        }
+    }
+
+    auto device::write_sampler_descriptor(descriptor_handle slot, sampler_handle sampler) -> void
+    {
+        auto samp_opt = get_sampler(sampler);
+        if (!samp_opt.has_value() || slot.index >= max_active_samplers)
+        {
+            return;
+        }
+
+        auto get_info = VkDescriptorGetInfoEXT{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+            .pNext = nullptr,
+            .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+            .data =
+                {
+                    .pSampler = &samp_opt->handle,
+                },
+        };
+
+        auto* dest_ptr = _sampler_descriptor_buffer_ptr + slot.index * _sampler_descriptor_size;
+        _dispatch_table.getDescriptorEXT(&get_info, _sampler_descriptor_size, dest_ptr);
+    }
+
+    auto device::write_sampled_image_descriptor(descriptor_handle slot, texture_view_handle view, image_layout layout)
+        -> void
+    {
+        auto view_opt = get_texture_view(view);
+        if (!view_opt.has_value() || slot.index >= max_active_textures)
+        {
+            return;
+        }
+
+        auto image_info = VkDescriptorImageInfo{
+            .sampler = VK_NULL_HANDLE,
+            .imageView = view_opt->handle,
+            .imageLayout = as_vulkan(layout),
+        };
+
+        auto get_info = VkDescriptorGetInfoEXT{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+            .pNext = nullptr,
+            .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .data =
+                {
+                    .pSampledImage = &image_info,
+                },
+        };
+
+        auto* dest_ptr = _resource_descriptor_buffer_ptr + slot.index * _sampled_image_descriptor_size;
+        _dispatch_table.getDescriptorEXT(&get_info, _sampled_image_descriptor_size, dest_ptr);
+    }
+
+    auto device::write_storage_image_descriptor(descriptor_handle slot, texture_view_handle view, image_layout layout)
+        -> void
+    {
+        auto view_opt = get_texture_view(view);
+        if (!view_opt.has_value() || slot.index >= max_active_storage_images)
+        {
+            return;
+        }
+
+        auto image_info = VkDescriptorImageInfo{
+            .sampler = VK_NULL_HANDLE,
+            .imageView = view_opt->handle,
+            .imageLayout = as_vulkan(layout),
+        };
+
+        auto get_info = VkDescriptorGetInfoEXT{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+            .pNext = nullptr,
+            .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .data =
+                {
+                    .pStorageImage = &image_info,
+                },
+        };
+
+        auto* dest_ptr =
+            _resource_descriptor_buffer_ptr + _storage_image_buffer_offset + slot.index * _storage_image_descriptor_size;
+        _dispatch_table.getDescriptorEXT(&get_info, _storage_image_descriptor_size, dest_ptr);
     }
 } // namespace tempest::rhi::vk

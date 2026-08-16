@@ -117,6 +117,11 @@ namespace tempest::rhi::vk
                                                   .setMaintenance4(VK_TRUE))
                     .add_required_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)
                     .add_required_extension(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)
+                    .add_required_extension_features(VkPhysicalDeviceDescriptorBufferFeaturesEXT{
+                        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+                        .pNext = nullptr,
+                        .descriptorBuffer = VK_TRUE,
+                    })
                     .add_required_extension(VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME)
                     .select_devices();
 

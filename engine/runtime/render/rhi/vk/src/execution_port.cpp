@@ -280,8 +280,8 @@ namespace tempest::rhi::vk
     } // namespace
 
     command_list::command_list(VkCommandBuffer command_buffer, const vkb::DispatchTable& dispatch_table,
-                               const vk::device& device) noexcept
-        : _command_buffer{command_buffer}, _dispatch_table{&dispatch_table}, _parent_device{&device}
+                               const vk::device& device, vkb::QueueType queue_type) noexcept
+        : _command_buffer{command_buffer}, _dispatch_table{&dispatch_table}, _parent_device{&device}, _queue_type{queue_type}
     {
     }
 
@@ -296,6 +296,54 @@ namespace tempest::rhi::vk
 
         [[maybe_unused]] auto result = _dispatch_table->beginCommandBuffer(_command_buffer, &begin_info);
         TEMPEST_ASSERT(result == VK_SUCCESS);
+
+        if (_queue_type == vkb::QueueType::graphics || _queue_type == vkb::QueueType::compute)
+        {
+            auto binding_infos = array<VkDescriptorBufferBindingInfoEXT, 2>{
+                VkDescriptorBufferBindingInfoEXT{
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                    .pNext = nullptr,
+                    .address = _parent_device->get_sampler_descriptor_buffer_address(),
+                    .usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
+                },
+                VkDescriptorBufferBindingInfoEXT{
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                    .pNext = nullptr,
+                    .address = _parent_device->get_resource_descriptor_buffer_address(),
+                    .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+                },
+            };
+
+            _dispatch_table->cmdBindDescriptorBuffersEXT(_command_buffer, static_cast<uint32_t>(binding_infos.size()),
+                                                         binding_infos.data());
+
+            // Buffer index 0 is Samplers (Set 0 at offset 0)
+            auto sampler_buffer_index = uint32_t{0};
+            auto sampler_offset = VkDeviceSize{0};
+            if (_queue_type == vkb::QueueType::graphics)
+            {
+                _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                                 _parent_device->get_global_pipeline_layout(), 0, 1,
+                                                                 &sampler_buffer_index, &sampler_offset);
+            }
+            _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                                             _parent_device->get_global_pipeline_layout(), 0, 1,
+                                                             &sampler_buffer_index, &sampler_offset);
+
+            // Buffer index 1 is Sampled Images (Set 1 at offset 0) and Storage Images (Set 2 at offset storage_offset)
+            auto resource_buffer_indices = array<uint32_t, 2>{1, 1};
+            auto resource_offsets =
+                array<VkDeviceSize, 2>{0, _parent_device->get_storage_image_descriptor_buffer_offset()};
+            if (_queue_type == vkb::QueueType::graphics)
+            {
+                _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                                 _parent_device->get_global_pipeline_layout(), 1, 2,
+                                                                 resource_buffer_indices.data(), resource_offsets.data());
+            }
+            _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                                             _parent_device->get_global_pipeline_layout(), 1, 2,
+                                                             resource_buffer_indices.data(), resource_offsets.data());
+        }
     }
 
     auto command_list::end() const -> void
@@ -867,7 +915,7 @@ namespace tempest::rhi::vk
                 while (_slab_allocators.size() <= thread_id)
                 {
                     _slab_allocators.push_back(make_unique<combined_command_list_slab_allocator>(
-                        _dispatch_table, *_parent_device, _queue_family_index));
+                        _dispatch_table, *_parent_device, _queue_family_index, _queue_type));
                 }
             }
         }
