@@ -12,8 +12,13 @@
 #if defined(TEMPEST_WIN_THREADS)
 
 #define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <process.h>
+
+#if defined(small)
+#undef small
+#endif
 
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
 

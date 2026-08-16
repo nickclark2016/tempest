@@ -10,6 +10,7 @@
 #include <tempest/vk/device.hpp>
 
 #include <tempest/vk/execution_port.hpp>
+#include <tempest/vk/render_surface.hpp>
 
 #include <vulkan/vulkan.hpp>
 
@@ -314,17 +315,29 @@ namespace tempest::rhi::vk
 
     device::~device()
     {
-        for (const auto& samp : _samplers)
+        wait_idle();
+
+        _graphics_execution_port.reset();
+        _async_compute_execution_port.reset();
+        _async_transfer_execution_port.reset();
+
+        for (const auto& raw_surface : _raw_surfaces)
         {
-            _dispatch_table.destroySampler(samp.handle, nullptr);
+            _instance_dispatch_table.destroySurfaceKHR(raw_surface.handle, nullptr);
         }
-        _samplers.clear();
+        _raw_surfaces.clear();
 
         for (const auto& view : _texture_views)
         {
             _dispatch_table.destroyImageView(view.handle, nullptr);
         }
         _texture_views.clear();
+
+        for (const auto& samp : _samplers)
+        {
+            _dispatch_table.destroySampler(samp.handle, nullptr);
+        }
+        _samplers.clear();
 
         for (const auto& tex : _textures)
         {
@@ -389,16 +402,19 @@ namespace tempest::rhi::vk
 
     auto device::wait_for_sync(host_sync_point sync_point) -> void
     {
-        auto* sem = get_semaphore(sync_point.semaphore);
-        auto timeline_info = VkSemaphoreWaitInfo{
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .semaphoreCount = 1,
-            .pSemaphores = &sem,
-            .pValues = &sync_point.value,
-        };
-        _dispatch_table.waitSemaphores(&timeline_info, UINT64_MAX);
+        auto sem = get_semaphore(sync_point.semaphore);
+        if (sem != VK_NULL_HANDLE)
+        {
+            auto timeline_info = VkSemaphoreWaitInfo{
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .semaphoreCount = 1,
+                .pSemaphores = &sem,
+                .pValues = &sync_point.value,
+            };
+            _dispatch_table.waitSemaphores(&timeline_info, UINT64_MAX);
+        }
     }
 
     auto device::is_ray_tracing_supported() const -> bool
@@ -518,7 +534,7 @@ namespace tempest::rhi::vk
         };
     }
 
-    auto device::create_render_surface(const render_surface_desc& desc) -> unique_ptr<render_surface>
+    auto device::create_render_surface(const render_surface_desc& desc) -> unique_ptr<rhi::render_surface>
     {
         auto* const raw_surface = get_raw_surface(desc.raw_surface)->handle;
         const auto vk_swapchain_ci = VkSwapchainCreateInfoKHR{
@@ -546,18 +562,65 @@ namespace tempest::rhi::vk
             .oldSwapchain = VK_NULL_HANDLE, // TODO: Handle swapchain recreation with old surface hint
         };
 
-        auto* vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
+        auto vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
         const auto result = _dispatch_table.createSwapchainKHR(&vk_swapchain_ci, nullptr, &vk_swapchain);
         if (result != VK_SUCCESS)
         {
             return nullptr;
         }
 
-        return nullptr;
+        auto image_count = uint32_t{0};
+        _dispatch_table.getSwapchainImagesKHR(vk_swapchain, &image_count, nullptr);
+        auto swapchain_images = vector<VkImage>{};
+        swapchain_images.resize(image_count);
+        _dispatch_table.getSwapchainImagesKHR(vk_swapchain, &image_count, swapchain_images.data());
+
+        auto attachments = vector<swapchain_attachment>{};
+        attachments.reserve(image_count);
+
+        for (auto vk_image : swapchain_images)
+        {
+            auto tex = texture{
+                .handle = vk_image,
+                .allocation = VK_NULL_HANDLE,
+                .format = as_vulkan(desc.format.format),
+                .width = desc.width,
+                .height = desc.height,
+                .depth = 1,
+                .mip_levels = 1,
+                .array_layers = 1,
+            };
+            auto tex_slot = _textures.insert(tex);
+            auto tex_h = texture_handle{.handle = tex_slot};
+
+            auto view_desc = texture_view_desc{
+                .base_mip_level = 0,
+                .mip_level_count = 1,
+                .base_array_layer = 0,
+                .array_layer_count = 1,
+            };
+            auto view_h = create_texture_view(tex_h, view_desc);
+            attachments.emplace_back(swapchain_attachment{
+                .image = tex_h,
+                .view = view_h,
+            });
+        }
+
+        return make_unique<vk::render_surface>(swapchain_create_desc{
+            .rhi_device = this,
+            .surface = raw_surface,
+            .swapchain = vk_swapchain,
+            .attachments = tempest::move(attachments),
+            .width = desc.width,
+            .height = desc.height,
+            .format = desc.format.format,
+            .present = desc.present_mode,
+        });
     }
 
-    auto device::destroy_render_surface(unique_ptr<render_surface> surface) -> void
+    auto device::destroy_render_surface(unique_ptr<rhi::render_surface> surface) -> void
     {
+        surface.reset();
     }
 
     auto device::destroy_raw_surface(raw_surface_handle surface) -> void
@@ -1057,7 +1120,7 @@ namespace tempest::rhi::vk
             auto sampler_set_layout = VkDescriptorSetLayoutCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags_create_info,
-                .flags = 0,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
                 .bindingCount = 1,
                 .pBindings = &sampler_binding_layout,
             };
@@ -1099,7 +1162,7 @@ namespace tempest::rhi::vk
             auto image_set_layout = VkDescriptorSetLayoutCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags_create_info,
-                .flags = 0,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
                 .bindingCount = 1,
                 .pBindings = &image_binding_layout,
             };
@@ -1141,7 +1204,7 @@ namespace tempest::rhi::vk
             auto image_set_layout = VkDescriptorSetLayoutCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &binding_flags_create_info,
-                .flags = 0,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
                 .bindingCount = 1,
                 .pBindings = &image_binding_layout,
             };
@@ -1216,5 +1279,29 @@ namespace tempest::rhi::vk
 
         [[maybe_unused]] auto vma_result = vmaCreateAllocator(&allocator_create_info, &_allocator);
         TEMPEST_ASSERT(vma_result == VK_SUCCESS);
+
+        auto graphics_queue = _device.get_queue(vkb::QueueType::graphics);
+        auto graphics_queue_index = _device.get_queue_index(vkb::QueueType::graphics);
+        if (graphics_queue && graphics_queue_index)
+        {
+            _graphics_execution_port = make_unique<execution_port>(
+                *this, graphics_queue_index.value(), vkb::QueueType::graphics, graphics_queue.value(), _dispatch_table);
+        }
+
+        auto compute_queue = _device.get_queue(vkb::QueueType::compute);
+        auto compute_queue_index = _device.get_queue_index(vkb::QueueType::compute);
+        if (compute_queue && compute_queue_index)
+        {
+            _async_compute_execution_port = make_unique<execution_port>(
+                *this, compute_queue_index.value(), vkb::QueueType::compute, compute_queue.value(), _dispatch_table);
+        }
+
+        auto transfer_queue = _device.get_queue(vkb::QueueType::transfer);
+        auto transfer_queue_index = _device.get_queue_index(vkb::QueueType::transfer);
+        if (transfer_queue && transfer_queue_index)
+        {
+            _async_transfer_execution_port = make_unique<execution_port>(
+                *this, transfer_queue_index.value(), vkb::QueueType::transfer, transfer_queue.value(), _dispatch_table);
+        }
     }
 } // namespace tempest::rhi::vk

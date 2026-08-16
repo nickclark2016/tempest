@@ -75,6 +75,7 @@ scoped.project('tempest', function()
             'logger',
             'math',
             'rhi-api',
+            'rhi-vk',
             'serialization',
             'units',
         }

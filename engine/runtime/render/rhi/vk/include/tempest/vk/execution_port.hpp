@@ -5,6 +5,7 @@
 #include <tempest/assert.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/limits.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/mutex.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/vector.hpp>
@@ -98,6 +99,11 @@ namespace tempest::rhi::vk
             return _command_buffer;
         }
 
+        [[nodiscard]] auto get_handle() const noexcept -> VkCommandBuffer
+        {
+            return _command_buffer;
+        }
+
       private:
         friend class execution_port;
 
@@ -146,20 +152,20 @@ namespace tempest::rhi::vk
                 dispatch_table.createCommandPool(&command_pool_create_info, nullptr, &_command_pool);
             TEMPEST_ASSERT(result == VK_SUCCESS);
 
+            auto vk_cmd_buffers = array<VkCommandBuffer, max_command_lists>{};
+
             auto command_buffer_allocate_info = VkCommandBufferAllocateInfo{
                 .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
                 .pNext = nullptr,
                 .commandPool = _command_pool,
                 .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                .commandBufferCount = static_cast<uint32_t>(_command_buffers.size()),
+                .commandBufferCount = static_cast<uint32_t>(max_command_lists),
             };
-
-            auto vk_cmd_buffers = inplace_vector<VkCommandBuffer, max_command_lists>{};
 
             result = dispatch_table.allocateCommandBuffers(&command_buffer_allocate_info, vk_cmd_buffers.data());
             TEMPEST_ASSERT(result == VK_SUCCESS);
 
-            for (size_t i = 0; i < vk_cmd_buffers.size(); ++i)
+            for (size_t i = 0; i < max_command_lists; ++i)
             {
                 _command_buffers.emplace_back(vk_cmd_buffers[i], dispatch_table, device);
             }
@@ -192,20 +198,19 @@ namespace tempest::rhi::vk
         // NOLINTNEXTLINE(modernize-use-trailing-return-type)
         command_list_slab& operator=(command_list_slab&& rhs) noexcept = delete;
 
-        /**
-         * @brief Acquires a command buffer from the slab. If the slab is full, returns VK_NULL_HANDLE.
-         *
-         * @param current_timeline_value The current timeline value of the queue.
-         * @return A command buffer from the slab, or VK_NULL_HANDLE if the slab is full.
-         * @see can_reset() to determine if the slab can be reset and reused.
-         */
-        [[nodiscard]] auto acquire_command_buffer(uint64_t current_timeline_value) -> VkCommandBuffer
+        [[nodiscard]] auto has_available() const noexcept -> bool
         {
-            if (_allocated_command_lists >= max_command_lists)
-            {
-                return VK_NULL_HANDLE;
-            }
+            return _allocated_command_lists < max_command_lists;
+        }
 
+        /**
+         * @brief Acquires a command list from the slab.
+         *
+         * @return A command list from the slab.
+         */
+        [[nodiscard]] auto acquire_command_list() -> command_list&
+        {
+            TEMPEST_ASSERT(_allocated_command_lists < max_command_lists);
             return _command_buffers[_allocated_command_lists++];
         }
 
@@ -215,9 +220,14 @@ namespace tempest::rhi::vk
          *
          * @param timeline_value The timeline value that was submitted to the queue for this slab.
          */
-        auto mark_submitted(uint64_t timeline_value) -> void
+        auto mark_submitted(uint64_t timeline_value) noexcept -> void
         {
             _submitted_timeline_value = timeline_value;
+        }
+
+        [[nodiscard]] auto get_submitted_timeline_value() const noexcept -> uint64_t
+        {
+            return _submitted_timeline_value;
         }
 
         /**
@@ -227,7 +237,7 @@ namespace tempest::rhi::vk
          * @param current_timeline_value The current timeline value of the queue.
          * @return True if the slab can be reset and reused, false otherwise.
          */
-        [[nodiscard]] auto can_reset(uint64_t current_timeline_value) const -> bool
+        [[nodiscard]] auto can_reset(uint64_t current_timeline_value) const noexcept -> bool
         {
             return _submitted_timeline_value <= current_timeline_value;
         }
@@ -235,13 +245,11 @@ namespace tempest::rhi::vk
         /**
          * @brief Resets the slab, making all command buffers available for acquisition. This should only be called when
          * the slab can be reset, as determined by can_reset().
-         *
-         * @see can_reset(uint64_t) to determine if the slab can be reset and reused.
          */
         auto reset() -> void
         {
             _allocated_command_lists = 0;
-            _dispatch_table->resetCommandPool(_command_pool, 0); // TODO: Heuristic for when to release resources?
+            _dispatch_table->resetCommandPool(_command_pool, 0);
         }
 
       private:
@@ -281,6 +289,7 @@ namespace tempest::rhi::vk
          */
         command_list_slab_allocator(const vkb::DispatchTable& dispatch_table, const vk::device& device,
                                     uint32_t queue_family_index)
+            : _dispatch_table{&dispatch_table}
         {
             for (size_t i = 0; i < slab_count; ++i)
             {
@@ -299,15 +308,59 @@ namespace tempest::rhi::vk
 
         /**
          * @brief Acquires a command list from the allocator. If all slabs are full, this will wait for a slab to become
-         * available. If no slabs are available within the specified timeout, this will return a VK_NULL_HANDLE.
+         * available.
          */
-        [[nodiscard]] auto acquire_command_list(uint64_t timeline_value, vkb::DispatchTable& dispatch, uint64_t timeout)
-            -> VkCommandBuffer&;
+        [[nodiscard]] auto acquire_command_list(uint64_t current_timeline_value, VkSemaphore timeline_sem_vk)
+            -> command_list&
+        {
+            // First check if the current slab has capacity
+            if (slabs[current_slab_index].has_available())
+            {
+                return slabs[current_slab_index].acquire_command_list();
+            }
+
+            // Otherwise search for a recyclable slab
+            for (size_t i = 0; i < slab_count; ++i)
+            {
+                auto next_index = (current_slab_index + 1 + i) % slab_count;
+                if (slabs[next_index].can_reset(current_timeline_value))
+                {
+                    current_slab_index = static_cast<uint32_t>(next_index);
+                    slabs[current_slab_index].reset();
+                    return slabs[current_slab_index].acquire_command_list();
+                }
+            }
+
+            // All slabs are currently in flight! Wait for the oldest slab to finish.
+            auto next_index = (current_slab_index + 1) % slab_count;
+            auto wait_val = slabs[next_index].get_submitted_timeline_value();
+            if (wait_val > current_timeline_value && timeline_sem_vk != VK_NULL_HANDLE)
+            {
+                auto timeline_info = VkSemaphoreWaitInfo{
+                    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .semaphoreCount = 1,
+                    .pSemaphores = &timeline_sem_vk,
+                    .pValues = &wait_val,
+                };
+                _dispatch_table->waitSemaphores(&timeline_info, UINT64_MAX);
+            }
+
+            current_slab_index = static_cast<uint32_t>(next_index);
+            slabs[current_slab_index].reset();
+            return slabs[current_slab_index].acquire_command_list();
+        }
+
+        auto mark_current_slab_submitted(uint64_t timeline_value) noexcept -> void
+        {
+            slabs[current_slab_index].mark_submitted(timeline_value);
+        }
 
       private:
         inplace_vector<command_list_slab<command_list_count>, slab_count> slabs;
         uint32_t current_slab_index = 0;
-        const vkb::DispatchTable* _dispatch_table;
+        const vkb::DispatchTable* _dispatch_table = nullptr;
     };
 
     // Not thread safe, must be externally synchronized
@@ -321,12 +374,21 @@ namespace tempest::rhi::vk
 
         command_list_slab_allocator<transient_slab_count, transient_command_list_count> transient_allocator;
         command_list_slab_allocator<persistent_slab_count, persistent_command_list_count> persistent_allocator;
+
+        combined_command_list_slab_allocator(const vkb::DispatchTable& dispatch_table, const vk::device& device,
+                                             uint32_t queue_family_index)
+            : transient_allocator(dispatch_table, device, queue_family_index),
+              persistent_allocator(dispatch_table, device, queue_family_index)
+        {
+        }
     };
 
     // Thread safe assuming that the thread_id is unique per thread
     class TEMPEST_API execution_port final : public rhi::execution_port
     {
       public:
+        execution_port(vk::device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type,
+                       VkQueue queue, vkb::DispatchTable dispatch_table);
         execution_port(const execution_port&) = delete;
         execution_port(execution_port&&) noexcept = delete;
         ~execution_port() override;
@@ -344,22 +406,38 @@ namespace tempest::rhi::vk
                                   span<const device_sync_point> signal_semaphores)
             -> expected<void, submit_error> override;
 
-        [[nodiscard]] auto get_queue_family_index() const -> uint32_t
+        [[nodiscard]] auto get_queue_family_index() const noexcept -> uint32_t
         {
             return _queue_family_index;
         }
 
-      private:
-        execution_port(vkb::Device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type,
-                       vkb::DispatchTable dispatch_table);
+        [[nodiscard]] auto get_queue() const noexcept -> VkQueue
+        {
+            return _queue;
+        }
 
+        [[nodiscard]] auto get_timeline_semaphore() const noexcept -> semaphore_handle
+        {
+            return _timeline_semaphore;
+        }
+
+        [[nodiscard]] auto get_current_timeline_value() const noexcept -> uint64_t
+        {
+            return _timeline_value;
+        }
+
+      private:
+        vk::device* _parent_device{nullptr};
         uint32_t _queue_family_index;
         vkb::QueueType _queue_type;
-        vkb::Device* _parent_device{nullptr};
+        VkQueue _queue{VK_NULL_HANDLE};
         vkb::DispatchTable _dispatch_table;
 
+        semaphore_handle _timeline_semaphore{};
+        uint64_t _timeline_value{0};
+
         // Slab allocators for command lists, one per thread
-        vector<combined_command_list_slab_allocator> _slab_allocators;
+        vector<unique_ptr<combined_command_list_slab_allocator>> _slab_allocators;
         mutex _slab_allocator_mutex;
 
         // Ensures that only one thread can submit command lists at a time, since Vulkan queues are not thread-safe

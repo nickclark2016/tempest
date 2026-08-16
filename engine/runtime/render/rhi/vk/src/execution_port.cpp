@@ -817,20 +817,165 @@ namespace tempest::rhi::vk
         _dispatch_table->cmdCopyImageToBuffer2(_command_buffer, &copy_info);
     }
 
-    execution_port::~execution_port() = default;
+    execution_port::execution_port(vk::device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type,
+                                   VkQueue queue, vkb::DispatchTable dispatch_table)
+        : _parent_device{&parent_device}, _queue_family_index{queue_family_index}, _queue_type{queue_type},
+          _queue{queue}, _dispatch_table{dispatch_table}
+    {
+        _timeline_semaphore = _parent_device->create_timeline_semaphore();
+    }
+
+    execution_port::~execution_port()
+    {
+        wait_idle();
+        if (_timeline_semaphore.handle != 0)
+        {
+            _parent_device->destroy_semaphore(_timeline_semaphore);
+            _timeline_semaphore = {};
+        }
+    }
 
     auto execution_port::wait_idle() -> void
     {
+        auto lock = lock_guard{_submit_mutex};
+        if (_queue != VK_NULL_HANDLE)
+        {
+            _dispatch_table.queueWaitIdle(_queue);
+        }
     }
 
     auto execution_port::acquire_command_list(uint32_t thread_id, command_list_lifetime lifetime) -> rhi::command_list&
     {
-        tempest::unreachable(); // Not Implemented
+        {
+            auto lock = lock_guard{_slab_allocator_mutex};
+            if (thread_id >= _slab_allocators.size())
+            {
+                while (_slab_allocators.size() <= thread_id)
+                {
+                    _slab_allocators.push_back(make_unique<combined_command_list_slab_allocator>(
+                        _dispatch_table, *_parent_device, _queue_family_index));
+                }
+            }
+        }
+
+        auto* slab_alloc = _slab_allocators[thread_id].get();
+        auto current_timeline_val = uint64_t{0};
+        auto vk_sem = _parent_device->get_semaphore(_timeline_semaphore);
+        if (vk_sem != VK_NULL_HANDLE)
+        {
+            _dispatch_table.getSemaphoreCounterValue(vk_sem, &current_timeline_val);
+        }
+
+        if (lifetime == command_list_lifetime::transient)
+        {
+            return slab_alloc->transient_allocator.acquire_command_list(current_timeline_val, vk_sem);
+        }
+
+        return slab_alloc->persistent_allocator.acquire_command_list(current_timeline_val, vk_sem);
     }
 
     auto execution_port::submit(span<const rhi::command_list*> commands, span<const device_sync_point> wait_semaphores,
                                 span<const device_sync_point> signal_semaphores) -> expected<void, submit_error>
     {
-        tempest::unreachable(); // Not Implemented
+        auto lock = lock_guard{_submit_mutex};
+
+        ++_timeline_value;
+
+        auto vk_cmd_infos = vector<VkCommandBufferSubmitInfo>{};
+        vk_cmd_infos.reserve(commands.size());
+        for (const auto* cmd : commands)
+        {
+            const auto* vk_cmd = static_cast<const command_list*>(cmd);
+            vk_cmd_infos.emplace_back(VkCommandBufferSubmitInfo{
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                .pNext = nullptr,
+                .commandBuffer = vk_cmd->get_handle(),
+                .deviceMask = 0,
+            });
+        }
+
+        auto vk_wait_infos = vector<VkSemaphoreSubmitInfo>{};
+        vk_wait_infos.reserve(wait_semaphores.size());
+        for (const auto& wait_sp : wait_semaphores)
+        {
+            auto vk_sem = _parent_device->get_semaphore(wait_sp.semaphore);
+            vk_wait_infos.emplace_back(VkSemaphoreSubmitInfo{
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = vk_sem,
+                .value = wait_sp.value,
+                .stageMask = as_vulkan(wait_sp.stages),
+                .deviceIndex = 0,
+            });
+        }
+
+        auto vk_signal_infos = vector<VkSemaphoreSubmitInfo>{};
+        vk_signal_infos.reserve(signal_semaphores.size() + 1);
+        for (const auto& sig_sp : signal_semaphores)
+        {
+            auto vk_sem = _parent_device->get_semaphore(sig_sp.semaphore);
+            vk_signal_infos.emplace_back(VkSemaphoreSubmitInfo{
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = vk_sem,
+                .value = sig_sp.value,
+                .stageMask = as_vulkan(sig_sp.stages),
+                .deviceIndex = 0,
+            });
+        }
+
+        // Always signal our internal timeline semaphore for slab tracking
+        auto internal_vk_sem = _parent_device->get_semaphore(_timeline_semaphore);
+        if (internal_vk_sem != VK_NULL_HANDLE)
+        {
+            vk_signal_infos.emplace_back(VkSemaphoreSubmitInfo{
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = internal_vk_sem,
+                .value = _timeline_value,
+                .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                .deviceIndex = 0,
+            });
+        }
+
+        auto submit_info = VkSubmitInfo2{
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .pNext = nullptr,
+            .flags = 0,
+            .waitSemaphoreInfoCount = static_cast<uint32_t>(vk_wait_infos.size()),
+            .pWaitSemaphoreInfos = vk_wait_infos.data(),
+            .commandBufferInfoCount = static_cast<uint32_t>(vk_cmd_infos.size()),
+            .pCommandBufferInfos = vk_cmd_infos.data(),
+            .signalSemaphoreInfoCount = static_cast<uint32_t>(vk_signal_infos.size()),
+            .pSignalSemaphoreInfos = vk_signal_infos.data(),
+        };
+
+        auto result = _dispatch_table.queueSubmit2(_queue, 1, &submit_info, VK_NULL_HANDLE);
+        if (result != VK_SUCCESS)
+        {
+            switch (result)
+            {
+            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+                return unexpected{.value = submit_error::out_of_device_memory};
+            case VK_ERROR_OUT_OF_HOST_MEMORY:
+                return unexpected{.value = submit_error::out_of_host_memory};
+            case VK_ERROR_DEVICE_LOST:
+                return unexpected{.value = submit_error::device_lost};
+            default:
+                return unexpected{.value = submit_error::unspecified};
+            }
+        }
+
+        // Mark active slabs with this submission timeline value
+        {
+            auto slab_lock = lock_guard{_slab_allocator_mutex};
+            for (auto& slab_alloc : _slab_allocators)
+            {
+                slab_alloc->transient_allocator.mark_current_slab_submitted(_timeline_value);
+                slab_alloc->persistent_allocator.mark_current_slab_submitted(_timeline_value);
+            }
+        }
+
+        return {};
     }
 } // namespace tempest::rhi::vk
