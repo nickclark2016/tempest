@@ -17,6 +17,7 @@ namespace tempest::rhi::vk
 {
     class execution_port;
     class device;
+    class render_surface;
 
     class TEMPEST_API command_list final : public rhi::command_list
     {
@@ -428,7 +429,14 @@ namespace tempest::rhi::vk
             return _timeline_value;
         }
 
+        [[nodiscard]] auto get_submit_mutex() noexcept -> mutex&
+        {
+            return _submit_mutex;
+        }
+
       private:
+        friend class render_surface;
+
         vk::device* _parent_device{nullptr};
         uint32_t _queue_family_index;
         vkb::QueueType _queue_type;

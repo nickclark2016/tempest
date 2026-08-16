@@ -967,9 +967,11 @@ namespace tempest::rhi
         [[nodiscard]] virtual auto get_present_mode() const -> present_mode = 0;
         [[nodiscard]] virtual auto get_width() const -> uint32_t = 0;
         [[nodiscard]] virtual auto get_height() const -> uint32_t = 0;
-        [[nodiscard]] virtual auto acquire_next_image(device_sync_point signal_values, uint64_t timeout_ns)
+        [[nodiscard]] virtual auto acquire_next_image(device_sync_point signal_values, uint64_t timeout_ns = ~0ULL)
             -> expected<swapchain_image, swapchain_error> = 0;
         [[nodiscard]] virtual auto present(device_sync_point wait_values) -> expected<void, swapchain_error> = 0;
+        [[nodiscard]] virtual auto present(execution_port& port, device_sync_point wait_values)
+            -> expected<void, swapchain_error> = 0;
 
       protected:
         render_surface() = default;

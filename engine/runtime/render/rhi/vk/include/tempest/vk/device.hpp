@@ -87,8 +87,8 @@ namespace tempest::rhi::vk
             -> expected<raw_surface_handle, raw_surface_creation_error> override;
         [[nodiscard]] auto get_surface_capabilities(raw_surface_handle surface) -> surface_capabilities override;
         [[nodiscard]] auto create_render_surface(const render_surface_desc& desc)
-            -> unique_ptr<render_surface> override;
-        auto destroy_render_surface(unique_ptr<render_surface> surface) -> void override;
+            -> unique_ptr<rhi::render_surface> override;
+        auto destroy_render_surface(unique_ptr<rhi::render_surface> surface) -> void override;
         auto destroy_raw_surface(raw_surface_handle surface) -> void override;
 
         [[nodiscard]] auto get_graphics_execution_port() -> rhi::execution_port& override;

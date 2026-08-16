@@ -744,12 +744,20 @@ namespace tempest::rhi::vk
 
     auto device::create_render_surface(const render_surface_desc& desc) -> unique_ptr<rhi::render_surface>
     {
-        auto* const raw_surface = get_raw_surface(desc.raw_surface)->handle;
+        auto vk_raw_surface = get_raw_surface(desc.raw_surface)->handle;
+
+        auto old_vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
+        if (desc.old_surface != nullptr)
+        {
+            const auto* const old_vk_surface = static_cast<const vk::render_surface*>(desc.old_surface);
+            old_vk_swapchain = old_vk_surface->get_swapchain();
+        }
+
         const auto vk_swapchain_ci = VkSwapchainCreateInfoKHR{
             .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
             .pNext = nullptr,
             .flags = 0,
-            .surface = raw_surface,
+            .surface = vk_raw_surface,
             .minImageCount = desc.preferred_image_count,
             .imageFormat = as_vulkan(desc.format.format),
             .imageColorSpace = as_vulkan(desc.format.color_space),
@@ -767,7 +775,7 @@ namespace tempest::rhi::vk
             .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
             .presentMode = as_vulkan(desc.present_mode),
             .clipped = VK_TRUE,
-            .oldSwapchain = VK_NULL_HANDLE, // TODO: Handle swapchain recreation with old surface hint
+            .oldSwapchain = old_vk_swapchain,
         };
 
         auto vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
@@ -816,7 +824,7 @@ namespace tempest::rhi::vk
 
         return make_unique<vk::render_surface>(swapchain_create_desc{
             .rhi_device = this,
-            .surface = raw_surface,
+            .surface = vk_raw_surface,
             .swapchain = vk_swapchain,
             .attachments = tempest::move(attachments),
             .width = desc.width,

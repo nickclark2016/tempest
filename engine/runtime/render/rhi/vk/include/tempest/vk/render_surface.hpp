@@ -42,12 +42,20 @@ namespace tempest::rhi::vk
         [[nodiscard]] auto get_present_mode() const -> present_mode override;
         [[nodiscard]] auto get_width() const -> uint32_t override;
         [[nodiscard]] auto get_height() const -> uint32_t override;
-        [[nodiscard]] auto acquire_next_image(device_sync_point signal_values, uint64_t timeout_ns)
+        [[nodiscard]] auto acquire_next_image(device_sync_point signal_values, uint64_t timeout_ns = ~0ULL)
             -> expected<swapchain_image, swapchain_error> override;
         [[nodiscard]] auto present(device_sync_point wait_values) -> expected<void, swapchain_error> override;
+        [[nodiscard]] auto present(rhi::execution_port& port, device_sync_point wait_values)
+            -> expected<void, swapchain_error> override;
+
+        [[nodiscard]] auto get_swapchain() const noexcept -> VkSwapchainKHR
+        {
+            return _swapchain_desc.swapchain;
+        }
 
       private:
         swapchain_create_desc _swapchain_desc;
+        uint32_t _last_acquired_index = ~0U;
     };
 } // namespace tempest::rhi::vk
 

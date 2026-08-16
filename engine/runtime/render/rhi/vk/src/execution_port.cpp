@@ -37,74 +37,88 @@ namespace tempest::rhi::vk
                 flags |= VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
             }
 
-            if (stages & pipeline_stage::copy)
+            if ((stages & pipeline_stage::all_transfer) == pipeline_stage::all_transfer)
             {
-                flags |= VK_PIPELINE_STAGE_2_COPY_BIT;
+                flags |= VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+            }
+            else
+            {
+                if (stages & pipeline_stage::copy)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_COPY_BIT;
+                }
+
+                if (stages & pipeline_stage::blit)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_BLIT_BIT;
+                }
+
+                if (stages & pipeline_stage::resolve)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_RESOLVE_BIT;
+                }
+
+                if (stages & pipeline_stage::clear)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_CLEAR_BIT;
+                }
             }
 
-            if (stages & pipeline_stage::blit)
+            if ((stages & pipeline_stage::all_graphics) == pipeline_stage::all_graphics)
             {
-                flags |= VK_PIPELINE_STAGE_2_BLIT_BIT;
+                flags |= VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
             }
-
-            if (stages & pipeline_stage::resolve)
+            else
             {
-                flags |= VK_PIPELINE_STAGE_2_RESOLVE_BIT;
-            }
+                if (stages & pipeline_stage::indirect_commands)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+                }
 
-            if (stages & pipeline_stage::clear)
-            {
-                flags |= VK_PIPELINE_STAGE_2_CLEAR_BIT;
-            }
+                if (stages & pipeline_stage::index_input)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+                }
 
-            if (stages & pipeline_stage::indirect_commands)
-            {
-                flags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-            }
+                if (stages & pipeline_stage::vertex)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+                }
 
-            if (stages & pipeline_stage::index_input)
-            {
-                flags |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
-            }
+                if (stages & pipeline_stage::tessellation_control)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT;
+                }
 
-            if (stages & pipeline_stage::vertex)
-            {
-                flags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
-            }
+                if (stages & pipeline_stage::tessellation_evaluation)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT;
+                }
 
-            if (stages & pipeline_stage::tessellation_control)
-            {
-                flags |= VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT;
-            }
+                if (stages & pipeline_stage::geometry)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT;
+                }
 
-            if (stages & pipeline_stage::tessellation_evaluation)
-            {
-                flags |= VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT;
-            }
+                if (stages & pipeline_stage::fragment)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                }
 
-            if (stages & pipeline_stage::geometry)
-            {
-                flags |= VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT;
-            }
+                if (stages & pipeline_stage::early_fragment_tests)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+                }
 
-            if (stages & pipeline_stage::fragment)
-            {
-                flags |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-            }
+                if (stages & pipeline_stage::late_fragment_tests)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+                }
 
-            if (stages & pipeline_stage::early_fragment_tests)
-            {
-                flags |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
-            }
-
-            if (stages & pipeline_stage::late_fragment_tests)
-            {
-                flags |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-            }
-
-            if (stages & pipeline_stage::attachment_output)
-            {
-                flags |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+                if (stages & pipeline_stage::attachment_output)
+                {
+                    flags |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+                }
             }
 
             if (stages & pipeline_stage::compute)
