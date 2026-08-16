@@ -12,7 +12,7 @@
 namespace tempest
 {
     template <typename CharT, typename Traits = char_traits<CharT>>
-    class TEMPEST_API basic_string_view
+    class basic_string_view
     {
       public:
         using traits_type = Traits;
@@ -30,6 +30,7 @@ namespace tempest
 
         constexpr basic_string_view() noexcept = default;
         constexpr basic_string_view(const basic_string_view&) noexcept = default;
+        constexpr basic_string_view(basic_string_view&&) noexcept = default;
         constexpr basic_string_view(const CharT* s, size_type count) noexcept;
         constexpr basic_string_view(const CharT* s) noexcept;
 
@@ -41,7 +42,10 @@ namespace tempest
 
         constexpr basic_string_view(nullptr_t) = delete;
 
+        ~basic_string_view() = default;
+
         constexpr basic_string_view& operator=(const basic_string_view&) noexcept = default;
+        constexpr basic_string_view& operator=(basic_string_view&&) noexcept = default;
 
         [[nodiscard]] constexpr const_iterator begin() const noexcept;
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept;

@@ -15,7 +15,7 @@ namespace tempest
     inline constexpr size_t dynamic_extent = static_cast<size_t>(-1);
 
     template <typename T, size_t Extent = dynamic_extent>
-    class TEMPEST_API span
+    class span
     {
       public:
         using element_type = T;

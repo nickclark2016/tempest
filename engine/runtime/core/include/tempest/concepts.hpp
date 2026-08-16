@@ -197,6 +197,9 @@ namespace tempest
     concept enumeration = is_enum_v<T>;
 
     template <typename T>
+    concept scoped_enum = enumeration<T> && !is_convertible_v<T, underlying_type_t<T>>;
+
+    template <typename T>
     concept pointer = is_pointer_v<T>;
 } // namespace tempest
 

@@ -16,7 +16,7 @@ namespace tempest
     };
 
     template <typename CharT, typename Traits = char_traits<CharT>>
-    class TEMPEST_API basic_cstring_view
+    class basic_cstring_view
     {
       public:
         using value_type = CharT;

@@ -20,50 +20,103 @@ namespace tempest::rhi
     class command_list;
     class render_surface;
 
+    /// \brief A handle to a semaphore object. Semaphores are used for synchronization between command lists and
+    /// execution ports.
     struct semaphore_handle
     {
+        /// \brief The handle to the semaphore object. This handle is unique to the device that created it and should
+        /// not be used with other devices.
         uint64_t handle;
     };
 
+    /// \brief A handle to an event object. Events are used for synchronization between commands on the same execution
+    /// port. Using events across execution ports is undefined behavior.
     struct event_handle
     {
+        /// \brief The handle to the event object. This handle is unique to the device that created it and should not be
+        /// used with other devices.
         uint64_t handle;
     };
 
+    /// \brief A handle to a buffer object. Buffers are used for storing data on the GPU, such as vertex data, index
+    /// data, uniform data, and shader storage data.
     struct buffer_handle
     {
+        /// \brief The handle to the buffer object. This handle is unique to the device that created it and should not
+        /// be used with other devices.
         uint64_t handle;
+
+        /// \brief The GPU address of the buffer object. This address can be used for shader access to the buffer, such
+        /// as for shader storage buffers or uniform buffers. This address is only valid for the device that created the
+        /// buffer and should not be used with other devices.
         uint64_t gpu_address;
+
+        /// \brief The CPU address of the buffer object. This address can be used for CPU access to the buffer, such as
+        /// for uploading data to the buffer or reading data from the buffer. This address is only valid for the device
+        /// that created the buffer and should not be used with other devices.
         void* cpu_address;
     };
 
+    /// \brief A handle to a texture object. Textures are used for storing image data on the GPU, such as render
+    /// targets, textures for sampling, or general purpose storage images.
     struct texture_handle
     {
+        /// \brief The handle to the texture object. This handle is unique to the device that created it and should not
+        /// be used with other devices.
         uint64_t handle;
     };
 
+    /// \brief A handle to a texture view object. Texture views are used for accessing a subset of a texture's data.
+    /// They can be used to view all or part of a texture's mip levels, array layers, or format. Texture views are used
+    /// for sampling textures in shaders, as well as for rendering to textures. They can also be used as views to
+    /// general purpose storage images.
     struct texture_view_handle
     {
+        /// \brief The handle to the texture view object. This handle is unique to the device that created it and should
+        /// not be used with other devices.
         uint64_t handle;
     };
 
+    /// \brief A handle to a texture view in the global descriptor heap.
+    /// \note This handle is specific to the global descriptor heap that it is associated with. The same texture view
+    /// can be associated with multiple global descriptor heaps, and each heap will have its own unique descriptor for
+    /// the same texture view.
     struct texture_view_descriptor
     {
+        /// \brief The index of the texture view in the global descriptor heap. This index is used for accessing the
+        /// texture on the global texture view heap.
         uint32_t heap_index;
+
+        /// \brief The generation of the slot in the global descriptor heap. This generation is used for validating that
+        /// the texture view is still valid and has not been destroyed or replaced with a new texture view.
         uint32_t heap_generation;
     };
 
+    /// \brief A handle to a sampler object. Samplers are used for sampling textures in shaders, and are used for
+    /// filtering, addressing, and mipmapping of textures. Samplers are used in conjunction with texture views to sample
+    /// textures in shaders.
     struct sampler_handle
     {
+        /// \brief The handle to the sampler object. This handle is unique to the device that created it and should not
+        /// be used with other devices.
         uint64_t handle;
     };
 
+    /// \brief A handle to a sampler in the global descriptor heap.
     struct sampler_descriptor
     {
+        /// \brief The index of the sampler in the global descriptor heap. This index is used for accessing the sampler
+        /// on the global sampler heap.
         uint32_t heap_index;
+
+        /// \brief The generation of the slot in the global descriptor heap. This generation is used for validating that
+        /// the sampler is still valid and has not been destroyed or replaced with a new sampler.
         uint32_t heap_generation;
     };
 
+    /// \brief A handle to the window system integration (WSI) handle for a window or display. This handle is used for
+    /// creating render surfaces that are associated with that window or display. The WSI handle is platform specific
+    /// and is used for creating render surfaces that are compatible with the window system.
     struct native_wsi_handle
     {
         void* display;
@@ -116,10 +169,35 @@ namespace tempest::rhi
         depth32_float_stencil8,
     };
 
+    enum class buffer_usage : uint8_t
+    {
+        none = 0,
+        transfer_src = 1 << 0,
+        transfer_dst = 1 << 1,
+        uniform_buffer = 1 << 2,
+        storage_buffer = 1 << 3,
+        index_buffer = 1 << 4,
+        vertex_buffer = 1 << 5,
+        indirect_buffer = 1 << 6,
+        device_address = 1 << 7,
+    };
+
+    enum class texture_usage : uint8_t
+    {
+        none = 0,
+        transfer_src = 1 << 0,
+        transfer_dst = 1 << 1,
+        sampled = 1 << 2,
+        storage = 1 << 3,
+        color_attachment = 1 << 4,
+        depth_stencil_attachment = 1 << 5,
+    };
+
     struct buffer_desc
     {
         uint64_t size;
-        memory_usage usage;
+        memory_usage memory_usage = memory_usage::device_only;
+        enum_mask<buffer_usage> usage = buffer_usage::storage_buffer | buffer_usage::device_address;
         cstring_view name;
     };
 
@@ -131,7 +209,8 @@ namespace tempest::rhi
         uint32_t mip_levels = 1;
         uint32_t array_layers = 1;
         data_format format;
-        memory_usage usage;
+        memory_usage memory_usage = memory_usage::device_only;
+        enum_mask<texture_usage> usage = texture_usage::sampled;
         cstring_view name;
     };
 
@@ -201,23 +280,24 @@ namespace tempest::rhi
         resolve = 1 << 3,
         clear = 1 << 4,
         all_transfer = copy | blit | resolve | clear,
-        vertex = 1 << 5,
-        tessellation_control = 1 << 6,
-        tessellation_evaluation = 1 << 7,
-        geometry = 1 << 8,
-        fragment = 1 << 9,
-        early_fragment_tests = 1 << 10,
-        late_fragment_tests = 1 << 11,
-        attachment_output = 1 << 12,
-        all_graphics = vertex | tessellation_control | tessellation_evaluation | geometry | fragment |
-                       early_fragment_tests | late_fragment_tests | attachment_output,
-        compute = 1 << 13,
-        build_acceleration_structure = 1 << 14,
-        copy_acceleration_structure = 1 << 15,
-        ray_tracing = 1 << 16,
+        indirect_commands = 1 << 5,
+        index_input = 1 << 6,
+        vertex = 1 << 7,
+        tessellation_control = 1 << 8,
+        tessellation_evaluation = 1 << 9,
+        geometry = 1 << 10,
+        fragment = 1 << 11,
+        early_fragment_tests = 1 << 12,
+        late_fragment_tests = 1 << 13,
+        attachment_output = 1 << 14,
+        all_graphics = indirect_commands | index_input | vertex | tessellation_control | tessellation_evaluation |
+                       geometry | fragment | early_fragment_tests | late_fragment_tests | attachment_output,
+        compute = 1 << 15,
+        build_acceleration_structure = 1 << 16,
+        copy_acceleration_structure = 1 << 17,
+        ray_tracing = 1 << 18,
         all_compute = compute | build_acceleration_structure | copy_acceleration_structure | ray_tracing,
-        bottom_of_pipe = 1 << 17,
-        all_commands = top_of_pipe | all_transfer | all_graphics | all_compute | bottom_of_pipe,
+        bottom_of_pipe = 1 << 19,
     };
 
     enum class resource_access : uint8_t
@@ -411,27 +491,42 @@ namespace tempest::rhi
         uint64_t handle;
     };
 
+    struct texture_half_barrier
+    {
+        enum_mask<pipeline_stage> stages;
+        enum_mask<resource_access> access;
+        image_layout layout;
+    };
+
     struct texture_barrier
     {
         texture_handle texture;
-        pipeline_stage src_stage;
-        resource_access src_access;
-        pipeline_stage dst_stage;
-        resource_access dst_access;
-        image_layout old_layout;
-        image_layout new_layout;
+        texture_half_barrier src;
+        texture_half_barrier dst;
+
+        uint32_t base_mip_level = 0;
+        uint32_t mip_level_count = ~0U;
+        uint32_t base_array_layer = 0;
+        uint32_t array_layer_count = ~0U;
 
         execution_port* src_queue = nullptr;
         execution_port* dst_queue = nullptr;
     };
 
+    struct buffer_half_barrier
+    {
+        enum_mask<pipeline_stage> stages;
+        enum_mask<resource_access> access;
+    };
+
     struct buffer_barrier
     {
         buffer_handle buffer;
-        pipeline_stage src_stage;
-        resource_access src_access;
-        pipeline_stage dst_stage;
-        resource_access dst_access;
+        buffer_half_barrier src;
+        buffer_half_barrier dst;
+
+        size_t offset = 0;
+        size_t size = ~0ULL;
 
         execution_port* src_queue = nullptr;
         execution_port* dst_queue = nullptr;
@@ -472,7 +567,7 @@ namespace tempest::rhi
 
     struct color_attachment
     {
-        texture_handle view;
+        texture_view_handle view;
         load_op load_op;
         store_op store_op;
         clear_color_value clear_value;
@@ -480,7 +575,7 @@ namespace tempest::rhi
 
     struct depth_stencil_attachment
     {
-        texture_handle view;
+        texture_view_handle view;
         load_op depth_load_op;
         store_op depth_store_op;
         load_op stencil_load_op;
@@ -488,43 +583,27 @@ namespace tempest::rhi
         clear_depth_stencil_value clear_value;
     };
 
-    struct copy_buffer_desc
+    struct buffer_copy_region
     {
-        buffer_handle src_buffer;
         uint64_t src_offset;
-        buffer_handle dst_buffer;
         uint64_t dst_offset;
         uint64_t size;
     };
 
-    struct copy_buffer_image_desc
+    struct buffer_texture_copy_region
     {
-        buffer_handle src_buffer;
-        uint64_t src_offset;
-        texture_handle dst_texture;
-        uint32_t dst_mip_level;
-        uint32_t dst_array_layer;
-        uint32_t dst_x;
-        uint32_t dst_y;
-        uint32_t dst_z;
-        uint32_t width;
-        uint32_t height;
-        uint32_t depth;
-    };
-
-    struct copy_image_buffer_desc
-    {
-        texture_handle src_texture;
-        uint32_t src_mip_level;
-        uint32_t src_array_layer;
-        uint32_t src_x;
-        uint32_t src_y;
-        uint32_t src_z;
-        buffer_handle dst_buffer;
-        uint64_t dst_offset;
-        uint32_t width;
-        uint32_t height;
-        uint32_t depth;
+        uint64_t buffer_offset;
+        uint32_t buffer_row_length;
+        uint32_t buffer_image_height;
+        uint32_t mip_level;
+        uint32_t base_array_layer;
+        uint32_t array_layer_count;
+        int32_t image_offset_x;
+        int32_t image_offset_y;
+        int32_t image_offset_z;
+        uint32_t image_extent_width;
+        uint32_t image_extent_height;
+        uint32_t image_extent_depth;
     };
 
     struct device_sync_point
@@ -550,22 +629,27 @@ namespace tempest::rhi
         command_list& operator=(const command_list&) = delete;     // NOLINT(modernize-use-trailing-return-type)
         command_list& operator=(command_list&&) noexcept = delete; // NOLINT(modernize-use-trailing-return-type)
 
-        virtual auto begin() -> void = 0;
-        virtual auto end() -> void = 0;
+        virtual auto begin() const -> void = 0;
+        virtual auto end() const -> void = 0;
 
         // Synchronization
         virtual auto pipeline_barrier(span<const texture_barrier> texture_barriers,
-                                      span<const buffer_barrier> buffer_barriers) -> void = 0;
-        virtual auto signal_event(event_handle event, enum_mask<pipeline_stage> stages) -> void = 0;
-        virtual auto wait_event(event_handle event, enum_mask<pipeline_stage> stages) -> void = 0;
-        virtual auto reset_event(event_handle event) -> void = 0;
+                                      span<const buffer_barrier> buffer_barriers) const -> void = 0;
+        virtual auto signal_event(event_handle event, span<const texture_barrier> texture_sources,
+                                  span<const buffer_barrier> buffer_sources) const -> void = 0;
+        virtual auto wait_event(event_handle event, span<const texture_barrier> texture_destinations,
+                                span<const buffer_barrier> buffer_destinations) const -> void = 0;
+        virtual auto reset_event(event_handle event,
+                                 enum_mask<pipeline_stage> stages = enum_mask{pipeline_stage::bottom_of_pipe}) const
+            -> void = 0;
 
         // General commands
         virtual auto push_constants(enum_mask<shader_stage> stages, uint32_t offset, span<const byte> data) -> void = 0;
 
         // Rendering
         virtual auto begin_render_pass(span<const color_attachment> color_attachments,
-                                       optional<depth_stencil_attachment> depth_stencil_attachment) -> void = 0;
+                                       optional<depth_stencil_attachment> depth_stencil_attachment, uint32_t width,
+                                       uint32_t height) -> void = 0;
         virtual auto end_render_pass() -> void = 0;
         virtual auto bind_pipeline(graphics_pipeline_handle pipeline) -> void = 0;
         virtual auto set_viewport(float x, float y, float width, float height, // NOLINT(readability-identifier-length)
@@ -595,11 +679,15 @@ namespace tempest::rhi
         // Compute
         virtual auto bind_pipeline(compute_pipeline_handle pipeline) -> void = 0;
         virtual auto dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) -> void = 0;
+        virtual auto dispatch_indirect(buffer_handle buffer, uint64_t offset) -> void = 0;
 
         // Transfer
-        virtual auto copy_buffers(span<const copy_buffer_desc> copy_descriptions) -> void = 0;
-        virtual auto copy_buffers_to_images(span<const copy_buffer_image_desc> copy_descriptions) -> void = 0;
-        virtual auto copy_images_to_buffers(span<const copy_image_buffer_desc> copy_descriptions) -> void = 0;
+        virtual auto copy_buffer(buffer_handle src, buffer_handle dst, span<const buffer_copy_region> regions)
+            -> void = 0;
+        virtual auto copy_buffer_to_texture(buffer_handle src, texture_handle dst,
+                                            span<const buffer_texture_copy_region> regions) -> void = 0;
+        virtual auto copy_texture_to_buffer(texture_handle src, buffer_handle dst,
+                                            span<const buffer_texture_copy_region> regions) -> void = 0;
 
       protected:
         command_list() = default;
@@ -626,6 +714,7 @@ namespace tempest::rhi
         amd,
         apple,
         arm,
+        imgtec,
         intel,
         khronos,
         nvidia,
@@ -702,16 +791,32 @@ namespace tempest::rhi
         uint32_t max_image_count;
         uint32_t max_image_array_layers;
         vector<surface_format> supported_formats;
+        vector<present_mode> supported_present_modes;
+    };
+
+    struct raw_surface_handle
+    {
+        uint64_t handle;
+    };
+
+    enum class raw_surface_creation_error : uint8_t
+    {
+        unsupported_wsi_handle,
+        surface_creation_failed,
+        unknown,
     };
 
     struct render_surface_desc
     {
-        native_wsi_handle native_window_handle;
+        raw_surface_handle raw_surface;
+        present_mode present_mode;
         surface_format format;
         uint32_t width;
         uint32_t height;
         uint32_t min_image_count;
         uint32_t preferred_image_count;
+
+        render_surface* old_surface = nullptr;
     };
 
     class TEMPEST_API device
@@ -733,9 +838,12 @@ namespace tempest::rhi
         [[nodiscard]] virtual auto is_ray_query_supported() const -> bool = 0;
 
         // Surface management
-        [[nodiscard]] virtual auto get_surface_capabilities(render_surface& surface) -> surface_capabilities = 0;
+        [[nodiscard]] virtual auto create_raw_surface(native_wsi_handle native_window_handle) -> expected<raw_surface_handle, raw_surface_creation_error> = 0;
+        [[nodiscard]] virtual auto get_surface_capabilities(raw_surface_handle surface) -> surface_capabilities = 0;
         [[nodiscard]] virtual auto create_render_surface(const render_surface_desc& desc)
             -> unique_ptr<render_surface> = 0;
+        virtual auto destroy_render_surface(unique_ptr<render_surface> surface) -> void = 0;
+        virtual auto destroy_raw_surface(raw_surface_handle surface) -> void = 0;
 
         // Execution ports
         [[nodiscard]] virtual auto get_graphics_execution_port() -> execution_port& = 0;
@@ -780,15 +888,7 @@ namespace tempest::rhi
 
     enum class command_list_lifetime : uint8_t
     {
-        /**
-         * Commands recorded on this command list are short-lived and should finish execution in the same frame they are
-         * submitted.
-         */
         transient,
-
-        /**
-         * Commands recorded on this command list are long-lived and may execute across multiple frames.
-         */
         long_lived,
     };
 

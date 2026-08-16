@@ -53,6 +53,7 @@ scoped.project('rhi-vk', function()
         uses {
             'rhi-api',
             'vk-bootstrap',
+            'vma',
         }
     end)
 end)
@@ -75,6 +76,7 @@ scoped.group('Tests', function()
             'googletest',
             'rhi-vk',
             'tempest',
+            'glfw',
         }
     end)
 end)

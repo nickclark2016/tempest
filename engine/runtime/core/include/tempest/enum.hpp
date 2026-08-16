@@ -8,12 +8,11 @@
 namespace tempest
 {
     template <enumeration EnumType>
-
-    class TEMPEST_API enum_mask
+    class enum_mask
     {
       public:
         constexpr enum_mask() noexcept = default;
-        constexpr explicit enum_mask(EnumType value) noexcept : _value(value)
+        constexpr enum_mask(EnumType value) noexcept : _value(value)
         {
         }
 
@@ -143,7 +142,12 @@ namespace tempest
             return _value;
         }
 
-        constexpr operator bool() const noexcept
+        constexpr explicit operator underlying_type_t<EnumType>() const noexcept
+        {
+            return to_underlying(_value);
+        }
+
+        explicit constexpr operator bool() const noexcept
         {
             return to_underlying(_value) != 0;
         }
@@ -159,6 +163,37 @@ namespace tempest
         auto v = to_underlying(value);
         ((v |= to_underlying(values)), ...);
         return enum_mask<EnumType>(static_cast<EnumType>(v));
+    }
+
+    template <scoped_enum EnumType>
+    constexpr enum_mask<EnumType> operator|(EnumType lhs, EnumType rhs) noexcept
+    {
+        auto lhs_underlying = to_underlying(lhs);
+        auto rhs_underlying = to_underlying(rhs);
+        return enum_mask<EnumType>(static_cast<EnumType>(lhs_underlying | rhs_underlying));
+    }
+
+    template <scoped_enum EnumType>
+    constexpr enum_mask<EnumType> operator&(EnumType lhs, EnumType rhs) noexcept
+    {
+        auto lhs_underlying = to_underlying(lhs);
+        auto rhs_underlying = to_underlying(rhs);
+        return enum_mask<EnumType>(static_cast<EnumType>(lhs_underlying & rhs_underlying));
+    }
+
+    template <scoped_enum EnumType>
+    constexpr enum_mask<EnumType> operator^(EnumType lhs, EnumType rhs) noexcept
+    {
+        auto lhs_underlying = to_underlying(lhs);
+        auto rhs_underlying = to_underlying(rhs);
+        return enum_mask<EnumType>(static_cast<EnumType>(lhs_underlying ^ rhs_underlying));
+    }
+
+    template <scoped_enum EnumType>
+    constexpr enum_mask<EnumType> operator~(EnumType value) noexcept
+    {
+        auto underlying = to_underlying(value);
+        return enum_mask<EnumType>(static_cast<EnumType>(~underlying));
     }
 } // namespace tempest
 

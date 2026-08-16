@@ -47,7 +47,7 @@ namespace tempest
     class char_traits;
 
     template <>
-    class TEMPEST_API char_traits<char>
+    class char_traits<char>
     {
       public:
         using char_type = char;
@@ -80,7 +80,7 @@ namespace tempest
     };
 
     template <>
-    class TEMPEST_API char_traits<wchar_t>
+    class char_traits<wchar_t>
     {
       public:
         using char_type = wchar_t;

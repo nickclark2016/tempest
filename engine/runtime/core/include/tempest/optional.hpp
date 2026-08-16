@@ -45,7 +45,7 @@ namespace tempest
     } // namespace detail
 
     template <typename T>
-    class TEMPEST_API optional
+    class optional
     {
       public:
         using value_type = T;
@@ -182,7 +182,7 @@ namespace tempest
         constexpr optional or_else(Fn&& f) &&;
 
       private:
-        union TEMPEST_API impl {
+        union impl {
             T value;
             char c;
 

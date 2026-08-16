@@ -6,16 +6,68 @@
 
 #include <VkBootstrap.h>
 #include <VkBootstrapDispatch.h>
+#include <vk_mem_alloc.h>
 
 namespace tempest::rhi::vk
 {
     class execution_port;
 
+    struct buffer
+    {
+        VkBuffer handle;
+        VmaAllocation allocation;
+        VmaAllocationInfo allocation_info;
+    };
+
+    struct texture
+    {
+        VkImage handle;
+        VmaAllocation allocation;
+        VmaAllocationInfo allocation_info;
+
+        VkFormat format;
+        VkImageUsageFlags usage_flags;
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth;
+        uint32_t mip_levels;
+        uint32_t array_layers;
+    };
+
+    struct texture_view
+    {
+        VkImageView handle;
+        VkImageViewType view_type;
+        VkFormat format;
+        VkImageSubresourceRange subresource_range;
+    };
+
+    struct sampler
+    {
+        VkSampler handle;
+    };
+
+    struct graphics_pipeline
+    {
+        VkPipeline handle;
+    };
+
+    struct compute_pipeline
+    {
+        VkPipeline handle;
+    };
+
+    struct raw_surface
+    {
+        VkSurfaceKHR handle;
+        native_wsi_handle native_surface_handles;
+    };
+
     class TEMPEST_API device final : public rhi::device
     {
       public:
-        static auto create(vkb::PhysicalDevice physical_device, vkb::Device device, device_desc desc)
-            -> unique_ptr<rhi::device>;
+        static auto create(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device device,
+                           device_desc desc) -> unique_ptr<rhi::device>;
 
         device(const device&) = delete;
         device(device&&) noexcept = delete;
@@ -31,9 +83,13 @@ namespace tempest::rhi::vk
         [[nodiscard]] auto is_mesh_shading_supported() const -> bool override;
         [[nodiscard]] auto is_ray_query_supported() const -> bool override;
 
-        [[nodiscard]] auto get_surface_capabilities(render_surface& surface) -> surface_capabilities override;
+        [[nodiscard]] auto create_raw_surface(native_wsi_handle native_window_handle)
+            -> expected<raw_surface_handle, raw_surface_creation_error> override;
+        [[nodiscard]] auto get_surface_capabilities(raw_surface_handle surface) -> surface_capabilities override;
         [[nodiscard]] auto create_render_surface(const render_surface_desc& desc)
             -> unique_ptr<render_surface> override;
+        auto destroy_render_surface(unique_ptr<render_surface> surface) -> void override;
+        auto destroy_raw_surface(raw_surface_handle surface) -> void override;
 
         [[nodiscard]] auto get_graphics_execution_port() -> rhi::execution_port& override;
         [[nodiscard]] auto get_async_compute_execution_port() -> rhi::execution_port& override;
@@ -61,57 +117,67 @@ namespace tempest::rhi::vk
         auto destroy_event(event_handle event) -> void override;
         auto destroy_semaphore(semaphore_handle semaphore) -> void override;
 
-        [[nodiscard]] auto get_buffer(buffer_handle handle) const -> VkBuffer
+        [[nodiscard]] auto get_buffer(buffer_handle handle) const -> optional<buffer>
         {
             const auto iter = _buffers.find(handle.handle);
             if (iter == _buffers.end())
             {
-                return VK_NULL_HANDLE;
+                return nullopt;
             }
             return *iter;
         }
 
-        [[nodiscard]] auto get_texture(texture_handle handle) const -> VkImage
+        [[nodiscard]] auto get_texture(texture_handle handle) const -> optional<texture>
         {
             const auto iter = _textures.find(handle.handle);
             if (iter == _textures.end())
             {
-                return VK_NULL_HANDLE;
+                return nullopt;
             }
             return *iter;
         }
 
-        [[nodiscard]] auto get_texture_view(texture_view_handle handle) const -> VkImageView
+        auto release_texture_handle(texture_handle handle) -> void
         {
-            return _texture_views.at(handle.handle);
+            _textures.erase(handle.handle);
         }
 
-        [[nodiscard]] auto get_sampler(sampler_handle handle) const -> VkSampler
+        [[nodiscard]] auto get_texture_view(texture_view_handle handle) const -> optional<texture_view>
+        {
+            const auto iter = _texture_views.find(handle.handle);
+            if (iter == _texture_views.end())
+            {
+                return nullopt;
+            }
+            return *iter;
+        }
+
+        [[nodiscard]] auto get_sampler(sampler_handle handle) const -> optional<sampler>
         {
             const auto iter = _samplers.find(handle.handle);
             if (iter == _samplers.end())
             {
-                return VK_NULL_HANDLE;
+                return nullopt;
             }
             return *iter;
         }
 
-        [[nodiscard]] auto get_graphics_pipeline(graphics_pipeline_handle handle) const -> VkPipeline
+        [[nodiscard]] auto get_graphics_pipeline(graphics_pipeline_handle handle) const -> optional<graphics_pipeline>
         {
             const auto iter = _graphics_pipelines.find(handle.handle);
             if (iter == _graphics_pipelines.end())
             {
-                return VK_NULL_HANDLE;
+                return nullopt;
             }
             return *iter;
         }
 
-        [[nodiscard]] auto get_compute_pipeline(compute_pipeline_handle handle) const -> VkPipeline
+        [[nodiscard]] auto get_compute_pipeline(compute_pipeline_handle handle) const -> optional<compute_pipeline>
         {
             const auto iter = _compute_pipelines.find(handle.handle);
             if (iter == _compute_pipelines.end())
             {
-                return VK_NULL_HANDLE;
+                return nullopt;
             }
             return *iter;
         }
@@ -136,27 +202,81 @@ namespace tempest::rhi::vk
             return *iter;
         }
 
+        [[nodiscard]] auto get_raw_surface(raw_surface_handle handle) const -> optional<raw_surface>
+        {
+            const auto iter = _raw_surfaces.find(handle.handle);
+            if (iter == _raw_surfaces.end())
+            {
+                return nullopt;
+            }
+            return *iter;
+        }
+
+        [[nodiscard]] auto get_physical_device() const -> vkb::PhysicalDevice
+        {
+            return _physical_device;
+        }
+
+        [[nodiscard]] auto get_device() const -> vkb::Device
+        {
+            return _device;
+        }
+
+        [[nodiscard]] auto get_instance_dispatch_table() const -> vkb::InstanceDispatchTable
+        {
+            return _instance_dispatch_table;
+        }
+
+        [[nodiscard]] auto get_dispatch_table() const -> vkb::DispatchTable
+        {
+            return _dispatch_table;
+        }
+
+        [[nodiscard]] auto get_global_pipeline_layout() const -> VkPipelineLayout
+        {
+            return _default_pipeline_layout;
+        }
+
+        [[nodiscard]] auto get_allocator() const noexcept -> VmaAllocator
+        {
+            return _allocator;
+        }
+
       private:
-        device(vkb::PhysicalDevice physical_device, vkb::Device device, device_desc desc);
+        device(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device device, device_desc desc);
 
         vkb::PhysicalDevice _physical_device;
         vkb::Device _device;
         device_desc _desc;
 
+        vkb::InstanceDispatchTable _instance_dispatch_table;
         vkb::DispatchTable _dispatch_table;
+        VmaAllocator _allocator = VK_NULL_HANDLE;
 
-        slot_map<VkBuffer> _buffers;
-        slot_map<VkImage> _textures;
-        slot_map<VkImageView> _texture_views;
-        slot_map<VkSampler> _samplers;
-        slot_map<VkPipeline> _graphics_pipelines;
-        slot_map<VkPipeline> _compute_pipelines;
+        slot_map<buffer> _buffers;
+        slot_map<texture> _textures;
+        slot_map<texture_view> _texture_views;
+        slot_map<sampler> _samplers;
+        slot_map<graphics_pipeline> _graphics_pipelines;
+        slot_map<compute_pipeline> _compute_pipelines;
         slot_map<VkSemaphore> _semaphores;
         slot_map<VkEvent> _events;
+        slot_map<raw_surface> _raw_surfaces;
 
         unique_ptr<execution_port> _graphics_execution_port = nullptr;
         unique_ptr<execution_port> _async_compute_execution_port = nullptr;
         unique_ptr<execution_port> _async_transfer_execution_port = nullptr;
+
+        static constexpr uint32_t max_active_samplers = 1024;
+        static constexpr uint32_t max_active_textures = 4096;
+        static constexpr uint32_t max_active_storage_images = 1024;
+
+        // All pipelines created by the device will use this pipeline layout by default.
+        // This allows us to emulate descriptor heaps.
+        VkDescriptorSetLayout _storage_image_set_layout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout _sampled_image_set_layout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout _sampler_set_layout = VK_NULL_HANDLE;
+        VkPipelineLayout _default_pipeline_layout = VK_NULL_HANDLE;
     };
 } // namespace tempest::rhi::vk
 

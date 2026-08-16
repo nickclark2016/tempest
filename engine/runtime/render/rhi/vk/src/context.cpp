@@ -1,3 +1,9 @@
+#if defined(TEMPEST_PLATFORM_WINDOWS)
+#define VK_USE_PLATFORM_WIN32_KHR
+#elif defined(TEMPEST_PLATFORM_LINUX)
+#define VK_USE_PLATFORM_XCB_KHR
+#endif
+
 #include <tempest/vk/context.hpp>
 
 #include <VkBootstrap.h>
@@ -16,6 +22,7 @@ namespace tempest::rhi::vk
         constexpr uint32_t VENDOR_ID_AMD = 0x1002;
         constexpr uint32_t VENDOR_ID_APPLE = 0x106B;
         constexpr uint32_t VENDOR_ID_ARM = 0x13B5;
+        constexpr uint32_t VENDOR_ID_IMGTEC = 0x1010;
         constexpr uint32_t VENDOR_ID_INTEL = 0x8086;
         constexpr uint32_t VENDOR_ID_KHRONOS_MIN = 0x10000;
         constexpr uint32_t VENDOR_ID_KHRONOS_MAX = 0x10006;
@@ -32,6 +39,8 @@ namespace tempest::rhi::vk
                 return rhi::device_vendor::apple;
             case VENDOR_ID_ARM:
                 return rhi::device_vendor::arm;
+            case VENDOR_ID_IMGTEC:
+                return rhi::device_vendor::imgtec;
             case VENDOR_ID_INTEL:
                 return rhi::device_vendor::intel;
             case VENDOR_ID_NVIDIA:
@@ -77,6 +86,7 @@ namespace tempest::rhi::vk
                                                   .setUniformAndStorageBuffer16BitAccess(VK_TRUE)
                                                   .setShaderDrawParameters(VK_TRUE))
                     .set_required_features_12(::vk::PhysicalDeviceVulkan12Features()
+                                                  .setDrawIndirectCount(VK_TRUE)
                                                   .setStorageBuffer8BitAccess(VK_TRUE)
                                                   .setShaderFloat16(VK_TRUE)
                                                   .setShaderUniformBufferArrayNonUniformIndexing(VK_TRUE)
@@ -185,6 +195,12 @@ namespace tempest::rhi::vk
             vkb_instance_builder.enable_validation_layers();
         }
 
+#if defined(TEMPEST_PLATFORM_WINDOWS)
+        vkb_instance_builder.enable_extension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#elif defined(TEMPEST_PLATFORM_LINUX)
+        vkb_instance_builder.enable_extension(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+#endif
+
         auto vkb_instance_result = vkb_instance_builder.build();
         if (!vkb_instance_result)
         {
@@ -261,7 +277,8 @@ namespace tempest::rhi::vk
         const auto& vkb_device = device_result.value();
         auto instance_table = _instance.make_table();
 
-        return device::create(vkb_physical_device, vkb_device, fetch_device_desc(instance_table, vkb_physical_device));
+        return device::create(_instance, vkb_physical_device, vkb_device,
+                              fetch_device_desc(instance_table, vkb_physical_device));
     }
 
     context::context(vkb::Instance instance, vector<device_desc> devices)
