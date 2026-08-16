@@ -70,7 +70,34 @@ scoped.group('Tests', function()
         files {
             'tests/**.cpp',
             'tests/**.hpp',
+            'tests/shaders/**.slang',
         }
+
+        includedirs {
+            '%{cfg.objdir}/shaders',
+        }
+
+        scoped.filter({ 'files:tests/shaders/test_compute.slang' }, function()
+            buildmessage 'Compiling %{file.relpath}'
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry CSMain -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_compute_spv -o %{!cfg.objdir}/shaders/test_compute.comp.h',
+            }
+            buildoutputs {
+                '%{!cfg.objdir}/shaders/test_compute.comp.h',
+            }
+        end)
+
+        scoped.filter({ 'files:tests/shaders/test_raster.slang' }, function()
+            buildmessage 'Compiling %{file.relpath}'
+            buildcommands {
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry VSMain -stage vertex -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_raster_vs_spv -o %{!cfg.objdir}/shaders/test_raster.vert.h',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry FSMain -stage fragment -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_raster_fs_spv -o %{!cfg.objdir}/shaders/test_raster.frag.h',
+            }
+            buildoutputs {
+                '%{!cfg.objdir}/shaders/test_raster.vert.h',
+                '%{!cfg.objdir}/shaders/test_raster.frag.h',
+            }
+        end)
 
         uses {
             'googletest',

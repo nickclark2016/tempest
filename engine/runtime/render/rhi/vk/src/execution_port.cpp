@@ -329,6 +329,20 @@ namespace tempest::rhi::vk
             };
         }
 
+        auto as_vulkan(image_layout layout) noexcept -> VkImageLayout
+        {
+            switch (layout)
+            {
+            case image_layout::undefined:
+                return VK_IMAGE_LAYOUT_UNDEFINED;
+            case image_layout::general:
+                return VK_IMAGE_LAYOUT_GENERAL;
+            case image_layout::present:
+                return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            }
+            return VK_IMAGE_LAYOUT_GENERAL;
+        }
+
         auto as_vulkan(const device& dev, texture_barrier barrier) -> VkImageMemoryBarrier2
         {
             return VkImageMemoryBarrier2{
@@ -338,8 +352,8 @@ namespace tempest::rhi::vk
                 .srcAccessMask = as_vulkan(barrier.src.access, barrier.src.stages),
                 .dstStageMask = as_vulkan(barrier.dst.stages),
                 .dstAccessMask = as_vulkan(barrier.dst.access, barrier.dst.stages),
-                .oldLayout = static_cast<VkImageLayout>(barrier.src.layout),
-                .newLayout = static_cast<VkImageLayout>(barrier.dst.layout),
+                .oldLayout = as_vulkan(barrier.src.layout),
+                .newLayout = as_vulkan(barrier.dst.layout),
                 .srcQueueFamilyIndex =
                     barrier.src_queue != nullptr
                         ? static_cast<vk::execution_port*>(barrier.src_queue)->get_queue_family_index()
@@ -473,7 +487,7 @@ namespace tempest::rhi::vk
     auto command_list::push_constants(enum_mask<shader_stage> stages, uint32_t offset, span<const byte> data) -> void
     {
         _dispatch_table->cmdPushConstants(_command_buffer, _parent_device->get_global_pipeline_layout(),
-                                          as_vulkan(stages), offset, static_cast<uint32_t>(data.size()), data.data());
+                                          VK_SHADER_STAGE_ALL, offset, static_cast<uint32_t>(data.size()), data.data());
     }
 
     auto command_list::begin_render_pass(span<const color_attachment> color_attachments,
@@ -760,7 +774,7 @@ namespace tempest::rhi::vk
             .pNext = nullptr,
             .srcBuffer = _parent_device->get_buffer(src_buffer)->handle,
             .dstImage = _parent_device->get_texture(dst_texture)->handle,
-            .dstImageLayout = static_cast<VkImageLayout>(image_layout::general),
+            .dstImageLayout = as_vulkan(image_layout::general),
             .regionCount = static_cast<uint32_t>(vk_regions.size()),
             .pRegions = vk_regions.data(),
         };
@@ -808,7 +822,7 @@ namespace tempest::rhi::vk
             .sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2,
             .pNext = nullptr,
             .srcImage = _parent_device->get_texture(src_texture)->handle,
-            .srcImageLayout = static_cast<VkImageLayout>(image_layout::general),
+            .srcImageLayout = as_vulkan(image_layout::general),
             .dstBuffer = _parent_device->get_buffer(dst_buffer)->handle,
             .regionCount = static_cast<uint32_t>(vk_regions.size()),
             .pRegions = vk_regions.data(),

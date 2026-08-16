@@ -304,6 +304,172 @@ namespace tempest::rhi::vk
             }
             return flags;
         }
+
+        auto as_vulkan(shader_stage stage) noexcept -> VkShaderStageFlagBits
+        {
+            switch (stage)
+            {
+            case shader_stage::vertex:
+                return VK_SHADER_STAGE_VERTEX_BIT;
+            case shader_stage::tessellation_control:
+                return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+            case shader_stage::tessellation_evaluation:
+                return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+            case shader_stage::geometry:
+                return VK_SHADER_STAGE_GEOMETRY_BIT;
+            case shader_stage::fragment:
+                return VK_SHADER_STAGE_FRAGMENT_BIT;
+            case shader_stage::compute:
+                return VK_SHADER_STAGE_COMPUTE_BIT;
+            case shader_stage::raygen:
+                return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            case shader_stage::any_hit:
+                return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+            case shader_stage::closest_hit:
+                return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            case shader_stage::miss:
+                return VK_SHADER_STAGE_MISS_BIT_KHR;
+            case shader_stage::intersection:
+                return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+            case shader_stage::callable:
+                return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+            }
+            return VK_SHADER_STAGE_ALL;
+        }
+
+        auto as_vulkan(primitive_topology topology) noexcept -> VkPrimitiveTopology
+        {
+            switch (topology)
+            {
+            case primitive_topology::point_list:
+                return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+            case primitive_topology::line_list:
+                return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+            case primitive_topology::line_strip:
+                return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+            case primitive_topology::triangle_list:
+                return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            case primitive_topology::triangle_strip:
+                return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+            }
+            return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        }
+
+        auto as_vulkan(polygon_mode mode) noexcept -> VkPolygonMode
+        {
+            switch (mode)
+            {
+            case polygon_mode::fill:
+                return VK_POLYGON_MODE_FILL;
+            case polygon_mode::line:
+                return VK_POLYGON_MODE_LINE;
+            case polygon_mode::point:
+                return VK_POLYGON_MODE_POINT;
+            }
+            return VK_POLYGON_MODE_FILL;
+        }
+
+        auto as_vulkan(cull_mode mode) noexcept -> VkCullModeFlags
+        {
+            switch (mode)
+            {
+            case cull_mode::none:
+                return VK_CULL_MODE_NONE;
+            case cull_mode::front:
+                return VK_CULL_MODE_FRONT_BIT;
+            case cull_mode::back:
+                return VK_CULL_MODE_BACK_BIT;
+            }
+            return VK_CULL_MODE_BACK_BIT;
+        }
+
+        auto as_vulkan(vertex_winding_order order) noexcept -> VkFrontFace
+        {
+            switch (order)
+            {
+            case vertex_winding_order::clockwise:
+                return VK_FRONT_FACE_CLOCKWISE;
+            case vertex_winding_order::counter_clockwise:
+                return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+            }
+            return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        }
+
+        auto as_vulkan(blend_factor factor) noexcept -> VkBlendFactor
+        {
+            switch (factor)
+            {
+            case blend_factor::zero:
+                return VK_BLEND_FACTOR_ZERO;
+            case blend_factor::one:
+                return VK_BLEND_FACTOR_ONE;
+            case blend_factor::src_color:
+                return VK_BLEND_FACTOR_SRC_COLOR;
+            case blend_factor::one_minus_src_color:
+                return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+            case blend_factor::dst_color:
+                return VK_BLEND_FACTOR_DST_COLOR;
+            case blend_factor::one_minus_dst_color:
+                return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+            case blend_factor::src_alpha:
+                return VK_BLEND_FACTOR_SRC_ALPHA;
+            case blend_factor::one_minus_src_alpha:
+                return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            case blend_factor::dst_alpha:
+                return VK_BLEND_FACTOR_DST_ALPHA;
+            case blend_factor::one_minus_dst_alpha:
+                return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+            }
+            return VK_BLEND_FACTOR_ZERO;
+        }
+
+        auto as_vulkan(stencil_op op) noexcept -> VkStencilOp
+        {
+            switch (op)
+            {
+            case stencil_op::keep:
+                return VK_STENCIL_OP_KEEP;
+            case stencil_op::zero:
+                return VK_STENCIL_OP_ZERO;
+            case stencil_op::replace:
+                return VK_STENCIL_OP_REPLACE;
+            case stencil_op::increment_and_clamp:
+                return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+            case stencil_op::decrement_and_clamp:
+                return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+            case stencil_op::invert:
+                return VK_STENCIL_OP_INVERT;
+            case stencil_op::increment_and_wrap:
+                return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+            case stencil_op::decrement_and_wrap:
+                return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+            }
+            return VK_STENCIL_OP_KEEP;
+        }
+
+        auto create_shader_module(const vkb::DispatchTable& dispatch_table, span<const byte> ir_code) -> VkShaderModule
+        {
+            if (ir_code.empty() || (ir_code.size() % sizeof(uint32_t) != 0))
+            {
+                return VK_NULL_HANDLE;
+            }
+
+            auto module_ci = VkShaderModuleCreateInfo{
+                .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .codeSize = ir_code.size(),
+                .pCode = reinterpret_cast<const uint32_t*>(ir_code.data()),
+            };
+
+            auto shader_module = VkShaderModule{VK_NULL_HANDLE};
+            auto result = dispatch_table.createShaderModule(&module_ci, nullptr, &shader_module);
+            if (result != VK_SUCCESS)
+            {
+                return VK_NULL_HANDLE;
+            }
+            return shader_module;
+        }
     } // namespace
 
     auto device::create(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device dev, device_desc desc)
@@ -368,6 +534,18 @@ namespace tempest::rhi::vk
             _dispatch_table.destroyEvent(event, nullptr);
         }
         _events.clear();
+
+        for (const auto& pipeline : _graphics_pipelines)
+        {
+            _dispatch_table.destroyPipeline(pipeline.handle, nullptr);
+        }
+        _graphics_pipelines.clear();
+
+        for (const auto& pipeline : _compute_pipelines)
+        {
+            _dispatch_table.destroyPipeline(pipeline.handle, nullptr);
+        }
+        _compute_pipelines.clear();
 
         if (_default_pipeline_layout != VK_NULL_HANDLE)
         {
@@ -940,12 +1118,317 @@ namespace tempest::rhi::vk
 
     auto device::create_graphics_pipeline(const graphics_pipeline_desc& desc) -> graphics_pipeline_handle
     {
-        return {};
+        auto shader_modules = vector<VkShaderModule>{};
+        shader_modules.reserve(desc.shader_modules.size());
+        auto stages = vector<VkPipelineShaderStageCreateInfo>{};
+        stages.reserve(desc.shader_modules.size());
+
+        for (const auto& sm_desc : desc.shader_modules)
+        {
+            auto sm = create_shader_module(_dispatch_table, sm_desc.ir_code);
+            if (sm == VK_NULL_HANDLE)
+            {
+                for (auto mod : shader_modules)
+                {
+                    _dispatch_table.destroyShaderModule(mod, nullptr);
+                }
+                return {};
+            }
+            shader_modules.push_back(sm);
+
+            const auto entry_name = sm_desc.entry_point.empty() ? "main" : sm_desc.entry_point.data();
+            stages.push_back(VkPipelineShaderStageCreateInfo{
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .stage = as_vulkan(sm_desc.stage),
+                .module = sm,
+                .pName = entry_name,
+                .pSpecializationInfo = nullptr,
+            });
+        }
+
+        // Dynamic rendering color and depth/stencil format configuration
+        auto color_formats = vector<VkFormat>{};
+        color_formats.reserve(desc.color_attachment_formats.size());
+        for (auto fmt : desc.color_attachment_formats)
+        {
+            color_formats.push_back(as_vulkan(fmt));
+        }
+
+        auto depth_stencil_format = desc.depth_stencil_attachment_format.has_value()
+                                        ? as_vulkan(*desc.depth_stencil_attachment_format)
+                                        : VK_FORMAT_UNDEFINED;
+
+        auto rendering_ci = VkPipelineRenderingCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .pNext = nullptr,
+            .viewMask = 0,
+            .colorAttachmentCount = static_cast<uint32_t>(color_formats.size()),
+            .pColorAttachmentFormats = color_formats.data(),
+            .depthAttachmentFormat = depth_stencil_format,
+            .stencilAttachmentFormat = depth_stencil_format,
+        };
+
+        // Programmable vertex pulling (empty vertex input state)
+        auto vertex_input_ci = VkPipelineVertexInputStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .vertexBindingDescriptionCount = 0,
+            .pVertexBindingDescriptions = nullptr,
+            .vertexAttributeDescriptionCount = 0,
+            .pVertexAttributeDescriptions = nullptr,
+        };
+
+        // Input assembly
+        auto input_assembly_ci = VkPipelineInputAssemblyStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .topology = as_vulkan(desc.primitive_topology),
+            .primitiveRestartEnable = VK_FALSE,
+        };
+
+        // Viewport state (dynamic viewport and scissor)
+        auto viewport_state_ci = VkPipelineViewportStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .viewportCount = 1,
+            .pViewports = nullptr,
+            .scissorCount = 1,
+            .pScissors = nullptr,
+        };
+
+        // Rasterization state
+        auto rasterization_ci = VkPipelineRasterizationStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .depthClampEnable = VK_FALSE,
+            .rasterizerDiscardEnable = VK_FALSE,
+            .polygonMode = as_vulkan(desc.rasterization_state.polygon_mode),
+            .cullMode = as_vulkan(desc.rasterization_state.cull_mode),
+            .frontFace = as_vulkan(desc.rasterization_state.front_face),
+            .depthBiasEnable = desc.rasterization_state.depth_bias.has_value() ? VK_TRUE : VK_FALSE,
+            .depthBiasConstantFactor =
+                desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->constant_factor : 0.0f,
+            .depthBiasClamp =
+                desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->clamp : 0.0f,
+            .depthBiasSlopeFactor =
+                desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->slope_factor : 0.0f,
+            .lineWidth = 1.0f,
+        };
+
+        // Multisample state
+        auto multisample_ci = VkPipelineMultisampleStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+            .sampleShadingEnable = VK_FALSE,
+            .minSampleShading = 1.0f,
+            .pSampleMask = nullptr,
+            .alphaToCoverageEnable = VK_FALSE,
+            .alphaToOneEnable = VK_FALSE,
+        };
+
+        // Depth Stencil State
+        auto depth_stencil_ci = VkPipelineDepthStencilStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .depthTestEnable = desc.depth_stencil_state.depth_test_enable ? VK_TRUE : VK_FALSE,
+            .depthWriteEnable = desc.depth_stencil_state.depth_write_enable ? VK_TRUE : VK_FALSE,
+            .depthCompareOp = as_vulkan(desc.depth_stencil_state.depth_compare_op),
+            .depthBoundsTestEnable = desc.depth_stencil_state.depth_bounds.has_value() ? VK_TRUE : VK_FALSE,
+            .stencilTestEnable = desc.depth_stencil_state.stencil.has_value() ? VK_TRUE : VK_FALSE,
+            .front =
+                desc.depth_stencil_state.stencil.has_value()
+                    ? VkStencilOpState{
+                          .failOp = as_vulkan(desc.depth_stencil_state.stencil->front.fail_op),
+                          .passOp = as_vulkan(desc.depth_stencil_state.stencil->front.pass_op),
+                          .depthFailOp = as_vulkan(desc.depth_stencil_state.stencil->front.depth_fail_op),
+                          .compareOp = as_vulkan(desc.depth_stencil_state.stencil->front.compare_op),
+                          .compareMask = desc.depth_stencil_state.stencil->front.compare_mask,
+                          .writeMask = desc.depth_stencil_state.stencil->front.write_mask,
+                          .reference = desc.depth_stencil_state.stencil->front.reference,
+                      }
+                    : VkStencilOpState{},
+            .back =
+                desc.depth_stencil_state.stencil.has_value()
+                    ? VkStencilOpState{
+                          .failOp = as_vulkan(desc.depth_stencil_state.stencil->back.fail_op),
+                          .passOp = as_vulkan(desc.depth_stencil_state.stencil->back.pass_op),
+                          .depthFailOp = as_vulkan(desc.depth_stencil_state.stencil->back.depth_fail_op),
+                          .compareOp = as_vulkan(desc.depth_stencil_state.stencil->back.compare_op),
+                          .compareMask = desc.depth_stencil_state.stencil->back.compare_mask,
+                          .writeMask = desc.depth_stencil_state.stencil->back.write_mask,
+                          .reference = desc.depth_stencil_state.stencil->back.reference,
+                      }
+                    : VkStencilOpState{},
+            .minDepthBounds =
+                desc.depth_stencil_state.depth_bounds.has_value() ? desc.depth_stencil_state.depth_bounds->min_depth : 0.0f,
+            .maxDepthBounds =
+                desc.depth_stencil_state.depth_bounds.has_value() ? desc.depth_stencil_state.depth_bounds->max_depth : 1.0f,
+        };
+
+        // Blend State
+        auto blend_attachments = vector<VkPipelineColorBlendAttachmentState>{};
+        blend_attachments.reserve(desc.color_attachment_blend_states.size());
+        for (const auto& blend : desc.color_attachment_blend_states)
+        {
+            blend_attachments.push_back(VkPipelineColorBlendAttachmentState{
+                .blendEnable = blend.blend_enable ? VK_TRUE : VK_FALSE,
+                .srcColorBlendFactor = as_vulkan(blend.src_color_blend_factor),
+                .dstColorBlendFactor = as_vulkan(blend.dst_color_blend_factor),
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = as_vulkan(blend.src_alpha_blend_factor),
+                .dstAlphaBlendFactor = as_vulkan(blend.dst_alpha_blend_factor),
+                .alphaBlendOp = VK_BLEND_OP_ADD,
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+                                  VK_COLOR_COMPONENT_A_BIT,
+            });
+        }
+
+        // Default blend state for color attachments without explicit blend states
+        while (blend_attachments.size() < color_formats.size())
+        {
+            blend_attachments.push_back(VkPipelineColorBlendAttachmentState{
+                .blendEnable = VK_FALSE,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .alphaBlendOp = VK_BLEND_OP_ADD,
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+                                  VK_COLOR_COMPONENT_A_BIT,
+            });
+        }
+
+        auto color_blend_ci = VkPipelineColorBlendStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .logicOpEnable = VK_FALSE,
+            .logicOp = VK_LOGIC_OP_COPY,
+            .attachmentCount = static_cast<uint32_t>(blend_attachments.size()),
+            .pAttachments = blend_attachments.data(),
+            .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
+        };
+
+        // Dynamic states
+        auto dynamic_states = array{
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_LINE_WIDTH,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
+            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+            VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+            VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+        };
+
+        auto dynamic_state_ci = VkPipelineDynamicStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()),
+            .pDynamicStates = dynamic_states.data(),
+        };
+
+        auto pipeline_ci = VkGraphicsPipelineCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &rendering_ci,
+            .flags = 0,
+            .stageCount = static_cast<uint32_t>(stages.size()),
+            .pStages = stages.data(),
+            .pVertexInputState = &vertex_input_ci,
+            .pInputAssemblyState = &input_assembly_ci,
+            .pTessellationState = nullptr,
+            .pViewportState = &viewport_state_ci,
+            .pRasterizationState = &rasterization_ci,
+            .pMultisampleState = &multisample_ci,
+            .pDepthStencilState = &depth_stencil_ci,
+            .pColorBlendState = &color_blend_ci,
+            .pDynamicState = &dynamic_state_ci,
+            .layout = _default_pipeline_layout,
+            .renderPass = VK_NULL_HANDLE,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1,
+        };
+
+        auto vk_pipeline = VkPipeline{VK_NULL_HANDLE};
+        auto result = _dispatch_table.createGraphicsPipelines(VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &vk_pipeline);
+
+        for (auto mod : shader_modules)
+        {
+            _dispatch_table.destroyShaderModule(mod, nullptr);
+        }
+
+        if (result != VK_SUCCESS)
+        {
+            return {};
+        }
+
+        auto slot_handle = _graphics_pipelines.insert(graphics_pipeline{
+            .handle = vk_pipeline,
+        });
+        return graphics_pipeline_handle{
+            .handle = slot_handle,
+        };
     }
 
     auto device::create_compute_pipeline(const compute_pipeline_desc& desc) -> compute_pipeline_handle
     {
-        return {};
+        auto shader_module = create_shader_module(_dispatch_table, desc.shader_module.ir_code);
+        if (shader_module == VK_NULL_HANDLE)
+        {
+            return {};
+        }
+
+        const auto entry_point = desc.shader_module.entry_point.empty() ? "main" : desc.shader_module.entry_point.data();
+
+        auto stage_ci = VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+            .module = shader_module,
+            .pName = entry_point,
+            .pSpecializationInfo = nullptr,
+        };
+
+        auto pipeline_ci = VkComputePipelineCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .stage = stage_ci,
+            .layout = _default_pipeline_layout,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1,
+        };
+
+        auto vk_pipeline = VkPipeline{VK_NULL_HANDLE};
+        auto result = _dispatch_table.createComputePipelines(VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &vk_pipeline);
+
+        _dispatch_table.destroyShaderModule(shader_module, nullptr);
+
+        if (result != VK_SUCCESS)
+        {
+            return {};
+        }
+
+        auto slot_handle = _compute_pipelines.insert(compute_pipeline{
+            .handle = vk_pipeline,
+        });
+        return compute_pipeline_handle{
+            .handle = slot_handle,
+        };
     }
 
     auto device::create_event() -> event_handle
@@ -1063,10 +1546,22 @@ namespace tempest::rhi::vk
 
     auto device::destroy_graphics_pipeline(graphics_pipeline_handle pipeline) -> void
     {
+        auto pipe_opt = get_graphics_pipeline(pipeline);
+        if (pipe_opt.has_value())
+        {
+            _dispatch_table.destroyPipeline(pipe_opt->handle, nullptr);
+            _graphics_pipelines.erase(pipeline.handle);
+        }
     }
 
     auto device::destroy_compute_pipeline(compute_pipeline_handle pipeline) -> void
     {
+        auto pipe_opt = get_compute_pipeline(pipeline);
+        if (pipe_opt.has_value())
+        {
+            _dispatch_table.destroyPipeline(pipe_opt->handle, nullptr);
+            _compute_pipelines.erase(pipeline.handle);
+        }
     }
 
     auto device::destroy_event(event_handle event) -> void
@@ -1226,14 +1721,20 @@ namespace tempest::rhi::vk
                 storage_image_set_layout,
             };
 
+            auto push_constant_range = VkPushConstantRange{
+                .stageFlags = VK_SHADER_STAGE_ALL,
+                .offset = 0,
+                .size = 128,
+            };
+
             auto pipeline_layout_create_info = VkPipelineLayoutCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
                 .setLayoutCount = static_cast<uint32_t>(set_layouts.size()),
                 .pSetLayouts = set_layouts.data(),
-                .pushConstantRangeCount = 0,
-                .pPushConstantRanges = nullptr,
+                .pushConstantRangeCount = 1,
+                .pPushConstantRanges = &push_constant_range,
             };
 
             auto* layout = VkPipelineLayout{VK_NULL_HANDLE};
