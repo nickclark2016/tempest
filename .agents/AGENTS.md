@@ -31,15 +31,29 @@ For RHI GPU resources that may be in-flight across frames (such as `render_surfa
 - When using `VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT`, omit `VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT` from binding flags (descriptor buffers are inherently update-after-bind).
 - Only record `vkCmdSetDescriptorBufferOffsetsEXT` for `VK_PIPELINE_BIND_POINT_GRAPHICS` on command lists associated with graphics queue families.
 
+### 7. Prefer `[[maybe_unused]]` over `(void)` Casts
+Use the standard `[[maybe_unused]]` attribute on unused parameters or variables rather than `(void)` casts in function bodies.
+- Example: `virtual auto on_resize([[maybe_unused]] rhi::device& dev) -> void {}`
+- Avoid: `(void)dev;` inside function bodies.
+
+### 8. Vulkan Swapchain Binary Semaphore Reuse
+When presenting swapchain images with binary semaphores, index render/presentation semaphores per swapchain image (or allocate per acquired image index) rather than per frame-in-flight slot to guarantee the semaphore is idle before re-signaling on submission.
+
 ## Workflow & Build Guidelines
 
 ### Build & Test Commands (Windows Clang)
 - **Premake Generation**:
   `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
-- **Build Ninja Target**:
+- **Build Tests Target**:
   `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-vk-tests`
+- **Build Examples Target**:
+  `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-examples`
 - **Run Test Binary**:
   `.\bin\Debug\windows-clang\rhi-vk-tests.exe`
+- **Run Examples Binary**:
+  `.\bin\Debug\windows-clang\rhi-examples.exe --list`
+  `.\bin\Debug\windows-clang\rhi-examples.exe --example triangle`
 
 ### Commit Messages
 - Commit message suggestions must always be a single line under 80 characters.
+
