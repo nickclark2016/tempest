@@ -132,6 +132,10 @@ namespace tempest::rhi::vk
                 return VK_FORMAT_R8G8B8A8_UNORM;
             case data_format::rgba8_srgb:
                 return VK_FORMAT_R8G8B8A8_SRGB;
+            case data_format::bgra8_unorm:
+                return VK_FORMAT_B8G8R8A8_UNORM;
+            case data_format::bgra8_srgb:
+                return VK_FORMAT_B8G8R8A8_SRGB;
             case data_format::rgba16_float:
                 return VK_FORMAT_R16G16B16A16_SFLOAT;
             case data_format::rgba32_float:

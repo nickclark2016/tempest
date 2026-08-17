@@ -16,5 +16,6 @@ scoped.group('rhi', function()
     if table.contains(supported_apis, 'vk') then
         defines { 'TEMPEST_RHI_VULKAN' }
         include 'vk'
+        include 'examples'
     end    
 end)

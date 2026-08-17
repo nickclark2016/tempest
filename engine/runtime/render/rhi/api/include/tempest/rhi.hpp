@@ -10,6 +10,7 @@
 #include <tempest/int.hpp>
 #include <tempest/optional.hpp>
 #include <tempest/span.hpp>
+#include <tempest/string.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest::rhi
@@ -173,6 +174,8 @@ namespace tempest::rhi
         // 4 channel formats
         rgba8_unorm,
         rgba8_srgb,
+        bgra8_unorm,
+        bgra8_srgb,
         rgba16_float,
         rgba32_float,
         // depth stencil formats
@@ -181,6 +184,23 @@ namespace tempest::rhi
         depth32_float,
         depth32_float_stencil8,
     };
+
+    constexpr auto to_data_format(render_surface_format format) noexcept -> data_format
+    {
+        switch (format)
+        {
+        case render_surface_format::rgba8_unorm:
+            return data_format::rgba8_unorm;
+        case render_surface_format::rgba8_srgb:
+            return data_format::rgba8_srgb;
+        case render_surface_format::bgra8_unorm:
+            return data_format::bgra8_unorm;
+        case render_surface_format::bgra8_srgb:
+            return data_format::bgra8_srgb;
+        default:
+            return data_format::unknown;
+        }
+    }
 
     enum class buffer_usage : uint8_t
     {
@@ -739,7 +759,7 @@ namespace tempest::rhi
     {
         guid device_uuid;
         device_features features;
-        cstring_view name;
+        string name;
         device_vendor vendor;
     };
 

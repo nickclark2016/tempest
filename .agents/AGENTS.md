@@ -22,3 +22,24 @@ Use template argument deduction for function calls rather than specifying explic
 Core engine components and required subsystems (e.g., `camera_system` on a `renderer`) should be represented as non-null references. Avoid defensive null pointer checks or fallback branches for ill-formed states; assume input invariants are valid.
 - Example: `get_camera_system()` returns `camera_system&` instead of `camera_system*`.
 - Omit redundant null checks like `if (pbr_inputs.camera_sys == nullptr)` when building required engine dependencies.
+
+### 5. Deferred Deletion over Mutable In-Place Recreation
+For RHI GPU resources that may be in-flight across frames (such as `render_surface` swapchains), avoid mutable in-place `recreate()` methods. Prefer explicit creation taking an `old_*` handover hint and deferred deletion of the old resource via higher-level engine frame retirement queues.
+
+### 6. Slang & Vulkan Bindless Conventions
+- In Slang shaders, decorate unbounded arrays with explicit `[[vk::binding(binding, set)]]` attributes to avoid compiler warnings when targeting Vulkan SPIR-V.
+- When using `VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT`, omit `VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT` from binding flags (descriptor buffers are inherently update-after-bind).
+- Only record `vkCmdSetDescriptorBufferOffsetsEXT` for `VK_PIPELINE_BIND_POINT_GRAPHICS` on command lists associated with graphics queue families.
+
+## Workflow & Build Guidelines
+
+### Build & Test Commands (Windows Clang)
+- **Premake Generation**:
+  `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
+- **Build Ninja Target**:
+  `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-vk-tests`
+- **Run Test Binary**:
+  `.\bin\Debug\windows-clang\rhi-vk-tests.exe`
+
+### Commit Messages
+- Commit message suggestions must always be a single line under 80 characters.

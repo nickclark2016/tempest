@@ -2,6 +2,7 @@
 #define TEMPEST_RHI_VK_CONTEXT_HPP
 
 #include <tempest/rhi.hpp>
+#include <tempest/string.hpp>
 #include <tempest/vector.hpp>
 
 #include <VkBootstrap.h>
