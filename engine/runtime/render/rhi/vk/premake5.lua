@@ -81,6 +81,7 @@ scoped.group('Tests', function()
             buildmessage 'Compiling %{file.relpath}'
             buildcommands {
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry CSMain -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_compute_spv -o %{!cfg.objdir}/shaders/test_compute.comp.h',
+                'touch %{!cfg.objdir}/shaders/test_compute.comp.h',
             }
             buildoutputs {
                 '%{!cfg.objdir}/shaders/test_compute.comp.h',
@@ -92,6 +93,8 @@ scoped.group('Tests', function()
             buildcommands {
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry VSMain -stage vertex -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_raster_vs_spv -o %{!cfg.objdir}/shaders/test_raster.vert.h',
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry FSMain -stage fragment -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_raster_fs_spv -o %{!cfg.objdir}/shaders/test_raster.frag.h',
+                'touch %{!cfg.objdir}/shaders/test_raster.vert.h',
+                'touch %{!cfg.objdir}/shaders/test_raster.frag.h',
             }
             buildoutputs {
                 '%{!cfg.objdir}/shaders/test_raster.vert.h',
@@ -104,6 +107,8 @@ scoped.group('Tests', function()
             buildcommands {
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry compute_sample -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_bindless_sample_spv -o %{!cfg.objdir}/shaders/test_bindless_sample.comp.h',
                 '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry compute_storage_write -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name test_bindless_storage_spv -o %{!cfg.objdir}/shaders/test_bindless_storage.comp.h',
+                'touch %{!cfg.objdir}/shaders/test_bindless_sample.comp.h',
+                'touch %{!cfg.objdir}/shaders/test_bindless_storage.comp.h',
             }
             buildoutputs {
                 '%{!cfg.objdir}/shaders/test_bindless_sample.comp.h',
