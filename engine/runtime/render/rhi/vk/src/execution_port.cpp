@@ -82,7 +82,7 @@ namespace tempest::rhi::vk
 
                 if (stages & pipeline_stage::vertex)
                 {
-                    flags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+                    flags |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
                 }
 
                 if (stages & pipeline_stage::tessellation_control)

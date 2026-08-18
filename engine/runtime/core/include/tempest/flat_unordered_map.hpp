@@ -58,7 +58,7 @@ namespace tempest
         static_assert(sizeof(metadata_entry) == 1, "metadata_entry must be 1 byte");
 
         template <typename K, typename V, typename Hash, typename KeyEqual, typename Allocator, bool Const>
-        struct TEMPEST_API flat_unordered_map_iterator
+        struct flat_unordered_map_iterator
         {
             using value_type = pair<K, V>;
             using pointer = conditional_t<Const, const value_type*, value_type*>;
@@ -152,7 +152,7 @@ namespace tempest
     /// @tparam Allocator Allocator type conforming to the C++17 Allocator concept.
     template <typename K, typename V, typename Hash = tempest::hash<K>, typename KeyEqual = tempest::equal_to<K>,
               typename Allocator = allocator<tempest::pair<const K, V>>>
-    class TEMPEST_API flat_unordered_map
+    class flat_unordered_map
     {
       public:
         using value_type = tempest::pair<const K, V>;

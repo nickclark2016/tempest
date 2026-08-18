@@ -95,7 +95,7 @@ namespace tempest
     };
 
     template <typename T, typename Allocator = allocator<T>>
-    class TEMPEST_API slot_map
+    class slot_map
     {
       public:
         using value_type = T;

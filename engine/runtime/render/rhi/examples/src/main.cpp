@@ -44,6 +44,7 @@ namespace
         string_view example_name = "triangle";
         uint32_t width = 1280;
         uint32_t height = 720;
+        uint32_t max_frames = 0;
         bool list_examples = false;
         bool show_help = false;
     };
@@ -57,6 +58,7 @@ namespace
                   << "  -e, --example <name>   Select an example to run (default: triangle)\n"
                   << "  -w, --width <pixels>   Window width (default: 1280)\n"
                   << "  -h, --height <pixels>  Window height (default: 720)\n"
+                  << "  -f, --frames <count>   Run for N frames and exit (0 = infinite)\n"
                   << "  --help                 Show this help message\n\n"
                   << "Available Examples:\n";
 
@@ -131,6 +133,18 @@ namespace
                 else
                 {
                     std::cerr << "Error: --height requires a numeric argument.\n";
+                    return nullopt;
+                }
+            }
+            else if (arg == "--frames" || arg == "-f")
+            {
+                if (i + 1 < argc)
+                {
+                    options.max_frames = static_cast<uint32_t>(std::atoi(argv[++i]));
+                }
+                else
+                {
+                    std::cerr << "Error: --frames requires a numeric argument.\n";
                     return nullopt;
                 }
             }
@@ -370,7 +384,7 @@ int main(int argc, char** argv)
     auto need_recreate = false;
 
     // 6. Main Render Loop
-    while (glfwWindowShouldClose(window) == GLFW_FALSE)
+    while (glfwWindowShouldClose(window) == GLFW_FALSE && (opts.max_frames == 0 || frame_index < opts.max_frames))
     {
         glfwPollEvents();
 
@@ -445,98 +459,22 @@ int main(int argc, char** argv)
 
         auto sc_img = acquire_res.value();
 
-        // Record rendering commands
-        auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
-        cmd.begin();
-
-        auto init_barrier = texture_barrier{
-            .texture = sc_img.texture,
-            .src =
-                {
-                    .stages = pipeline_stage::attachment_output,
-                    .access = resource_access::none,
-                    .layout = image_layout::undefined,
-                },
-            .dst =
-                {
-                    .stages = pipeline_stage::attachment_output,
-                    .access = resource_access::write,
-                    .layout = image_layout::general,
-                },
-        };
-        cmd.pipeline_barrier(span<const texture_barrier>{&init_barrier, 1}, {});
-
-        auto color_att = color_attachment{
-            .view = sc_img.view,
-            .load_op = load_op::clear,
-            .store_op = store_op::store,
-            .clear_value =
-                clear_color_value{
-                    .r = 0.05f,
-                    .g = 0.05f,
-                    .b = 0.05f,
-                    .a = 1.0f,
-                },
-        };
-        cmd.begin_render_pass(span<const color_attachment>{&color_att, 1}, nullopt, surface->get_width(),
-                              surface->get_height());
-        cmd.set_viewport(0.0f, 0.0f, static_cast<float>(surface->get_width()),
-                         static_cast<float>(surface->get_height()), 0.0f, 1.0f);
-        cmd.set_scissor(0, 0, surface->get_width(), surface->get_height());
-
-        example_instance->render(cmd, surface->get_width(), surface->get_height());
-
-        cmd.end_render_pass();
-
-        auto present_barrier = texture_barrier{
-            .texture = sc_img.texture,
-            .src =
-                {
-                    .stages = pipeline_stage::attachment_output,
-                    .access = resource_access::write,
-                    .layout = image_layout::general,
-                },
-            .dst =
-                {
-                    .stages = pipeline_stage::bottom_of_pipe,
-                    .access = resource_access::none,
-                    .layout = image_layout::present,
-                },
-        };
-        cmd.pipeline_barrier(span<const texture_barrier>{&present_barrier, 1}, {});
-        cmd.end();
-
-        // Submit graphics commands
         auto render_sem = get_render_semaphore(sc_img.swapchain_image_index);
-
         sync.timeline_value = frame_index + 1;
-        auto wait_point = device_sync_point{
-            .semaphore = sync.acquire_sem,
-            .value = 0,
-            .stages = pipeline_stage::attachment_output,
-        };
-        auto signal_render = device_sync_point{
-            .semaphore = render_sem,
-            .value = 0,
-            .stages = pipeline_stage::bottom_of_pipe,
-        };
-        auto signal_timeline = device_sync_point{
-            .semaphore = sync.timeline_sem,
-            .value = sync.timeline_value,
-            .stages = pipeline_stage::bottom_of_pipe,
-        };
-        auto signal_syncs = array{signal_render, signal_timeline};
 
-        const auto* cmd_ptr = &cmd;
-        auto submit_res =
-            graphics_port.submit(span<const command_list*>{&cmd_ptr, 1}, span<const device_sync_point>{&wait_point, 1},
-                                 span<const device_sync_point>{signal_syncs.data(), signal_syncs.size()});
+        const auto frame_info = frame_render_info{
+            .dev = *dev,
+            .swapchain_texture = sc_img.texture,
+            .swapchain_view = sc_img.view,
+            .width = surface->get_width(),
+            .height = surface->get_height(),
+            .acquire_semaphore = sync.acquire_sem,
+            .render_semaphore = render_sem,
+            .timeline_semaphore = sync.timeline_sem,
+            .timeline_value = sync.timeline_value,
+        };
 
-        if (!submit_res.has_value())
-        {
-            std::cerr << "Command submission failed.\n";
-            break;
-        }
+        example_instance->render(frame_info);
 
         // Present swapchain image
         auto present_res = surface->present(graphics_port, device_sync_point{

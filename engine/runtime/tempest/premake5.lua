@@ -74,6 +74,7 @@ scoped.project('tempest', function()
             -- 'graphics',
             'logger',
             'math',
+            'render-graph',
             'rhi-api',
             'rhi-vk',
             'serialization',
@@ -111,6 +112,7 @@ scoped.project('tempest', function()
             -- 'graphics',
             'logger',
             'math',
+            'render-graph',
             'rhi-api',
             'rhi-vk',
             'serialization',
@@ -149,7 +151,9 @@ scoped.project('tempest', function()
             'graphics:includedirs',
             'logger:includedirs',
             'math:includedirs',
+            'render-graph:includedirs',
             'rhi-api:includedirs',
+            'rhi-vk:includedirs',
             'serialization:includedirs',
             'units:includedirs',
         }
@@ -183,6 +187,7 @@ scoped.project('tempest', function()
                 'tlsf',
                 'vk-bootstrap',
                 'vma',
+                'rhi-vk',
            }
         end)
 
@@ -208,10 +213,6 @@ scoped.project('tempest', function()
                 'X11',
             }
         end)
-
-        links {
-            'rhi-vk',
-        }
 
         scoped.filter({
             'options:enable-lto'

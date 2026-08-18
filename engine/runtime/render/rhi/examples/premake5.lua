@@ -17,6 +17,14 @@ scoped.project('rhi-examples', function()
         '%{cfg.objdir}/shaders',
     }
 
+    scoped.filter({
+        'options:shared-engine',
+    }, function()
+        defines {
+            'TEMPEST_SHARED_LIB',
+        }
+    end)
+
     scoped.filter({ 'files:shaders/triangle.slang' }, function()
         buildmessage 'Compiling %{file.relpath}'
         buildcommands {
@@ -29,10 +37,30 @@ scoped.project('rhi-examples', function()
         }
     end)
 
+    scoped.filter({ 'files:shaders/postprocess.slang' }, function()
+        buildmessage 'Compiling %{file.relpath}'
+        buildcommands {
+            '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry PostProcessCSMain -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name postprocess_cs_spv -o %{!cfg.objdir}/shaders/postprocess.comp.h',
+        }
+        buildoutputs {
+            '%{!cfg.objdir}/shaders/postprocess.comp.h',
+        }
+    end)
+
+    scoped.filter({ 'files:shaders/animate.slang' }, function()
+        buildmessage 'Compiling %{file.relpath}'
+        buildcommands {
+            '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry AnimateCSMain -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name animate_cs_spv -o %{!cfg.objdir}/shaders/animate.comp.h',
+        }
+        buildoutputs {
+            '%{!cfg.objdir}/shaders/animate.comp.h',
+        }
+    end)
+
     uses {
-        'rhi-vk',
-        'rhi-api',
         'tempest',
+        'vk-bootstrap',
+        'vulkan',
         'glfw',
     }
 end)

@@ -9,7 +9,7 @@
 
 namespace tempest::rhi::vk
 {
-    auto create_context(const context_desc& desc) -> expected<unique_ptr<rhi::context>, context_creation_error>;
+    TEMPEST_API auto create_context(const context_desc& desc) -> expected<unique_ptr<rhi::context>, context_creation_error>;
 
     class TEMPEST_API context final : public rhi::context
     {

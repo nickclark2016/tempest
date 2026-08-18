@@ -153,13 +153,49 @@ namespace tempest::rhi::examples
         return _pipeline.handle != 0;
     }
 
-    auto triangle_example::render(rhi::command_list& cmd, [[maybe_unused]] uint32_t width,
-                                  [[maybe_unused]] uint32_t height) -> void
+    auto triangle_example::render(const frame_render_info& info) -> void
     {
+        auto& graphics_port = info.dev.get_graphics_execution_port();
+        auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
+        cmd.begin();
+
+        const auto init_barrier = texture_barrier{
+            .texture = info.swapchain_texture,
+            .src =
+                {
+                    .stages = pipeline_stage::attachment_output,
+                    .access = resource_access::none,
+                    .layout = image_layout::undefined,
+                },
+            .dst =
+                {
+                    .stages = pipeline_stage::attachment_output,
+                    .access = resource_access::write,
+                    .layout = image_layout::general,
+                },
+        };
+        cmd.pipeline_barrier(span<const texture_barrier>{&init_barrier, 1}, {});
+
+        const auto color_att = color_attachment{
+            .view = info.swapchain_view,
+            .load_op = load_op::clear,
+            .store_op = store_op::store,
+            .clear_value =
+                clear_color_value{
+                    .r = 0.05F,
+                    .g = 0.05F,
+                    .b = 0.05F,
+                    .a = 1.0F,
+                },
+        };
+        cmd.begin_render_pass(span<const color_attachment>{&color_att, 1}, nullopt, info.width, info.height);
+        cmd.set_viewport(0.0F, 0.0F, static_cast<float>(info.width), static_cast<float>(info.height), 0.0F, 1.0F);
+        cmd.set_scissor(0, 0, info.width, info.height);
+
         cmd.bind_pipeline(_pipeline);
         cmd.bind_index_buffer(_index_buffer, index_type::uint16, 0);
 
-        auto constants = triangle_push_constants{
+        const auto constants = triangle_push_constants{
             .positions_address = _positions_buffer.gpu_address,
             .colors_address = _colors_buffer.gpu_address,
         };
@@ -167,6 +203,47 @@ namespace tempest::rhi::examples
                            span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
         cmd.draw_indexed(3, 1, 0, 0, 0);
+        cmd.end_render_pass();
+
+        const auto present_barrier = texture_barrier{
+            .texture = info.swapchain_texture,
+            .src =
+                {
+                    .stages = pipeline_stage::attachment_output,
+                    .access = resource_access::write,
+                    .layout = image_layout::general,
+                },
+            .dst =
+                {
+                    .stages = pipeline_stage::bottom_of_pipe,
+                    .access = resource_access::none,
+                    .layout = image_layout::present,
+                },
+        };
+        cmd.pipeline_barrier(span<const texture_barrier>{&present_barrier, 1}, {});
+        cmd.end();
+
+        const auto wait_point = device_sync_point{
+            .semaphore = info.acquire_semaphore,
+            .value = 0,
+            .stages = pipeline_stage::attachment_output,
+        };
+        const auto signal_render = device_sync_point{
+            .semaphore = info.render_semaphore,
+            .value = 0,
+            .stages = pipeline_stage::bottom_of_pipe,
+        };
+        const auto signal_timeline = device_sync_point{
+            .semaphore = info.timeline_semaphore,
+            .value = info.timeline_value,
+            .stages = pipeline_stage::bottom_of_pipe,
+        };
+        const auto signal_syncs = array{signal_render, signal_timeline};
+
+        const auto* cmd_ptr = &cmd;
+        [[maybe_unused]] const auto submit_res = graphics_port.submit(
+            span<const command_list*>{&cmd_ptr, 1}, span<const device_sync_point>{&wait_point, 1},
+            span<const device_sync_point>{signal_syncs.data(), signal_syncs.size()});
     }
 
     auto triangle_example::on_resize(rhi::device& dev, rhi::render_surface_format surface_format,

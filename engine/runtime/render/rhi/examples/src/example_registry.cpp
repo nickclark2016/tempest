@@ -1,4 +1,6 @@
 #include "example_registry.hpp"
+#include "examples/multi_queue_example.hpp"
+#include "examples/render_graph_example.hpp"
 #include "examples/triangle_example.hpp"
 
 #include <tempest/vector.hpp>
@@ -15,6 +17,16 @@ namespace tempest::rhi::examples
                     .name = "triangle",
                     .description = "Draws an sRGB correct RGB triangle using storage buffers and an index buffer",
                     .factory = &triangle_example::create,
+                });
+                reg.push_back(example_metadata{
+                    .name = "render_graph",
+                    .description = "Multi-pass Render Graph with transient resource pooling and automatic synchronization",
+                    .factory = &render_graph_example::create,
+                });
+                reg.push_back(example_metadata{
+                    .name = "multi_queue",
+                    .description = "Multi-queue Render Graph demonstrating Transfer -> Compute -> Graphics asynchronous execution",
+                    .factory = &multi_queue_example::create,
                 });
                 return reg;
             }();

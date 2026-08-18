@@ -12,7 +12,7 @@ namespace tempest::rhi::examples
         ~triangle_example() override = default;
 
         [[nodiscard]] auto init(rhi::device& dev, rhi::render_surface_format surface_format) -> bool override;
-        auto render(rhi::command_list& cmd, uint32_t width, uint32_t height) -> void override;
+        auto render(const frame_render_info& info) -> void override;
         auto on_resize(rhi::device& dev, rhi::render_surface_format surface_format, uint32_t width,
                        uint32_t height) -> void override;
         auto shutdown(rhi::device& dev) -> void override;
