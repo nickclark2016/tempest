@@ -6,6 +6,8 @@
 Avoid using standard library types from namespace `std::` when engine-native equivalents exist in namespace `tempest::`.
 - Prefer `tempest::optional` and `tempest::nullopt` over `std::optional` and `std::nullopt`.
 - Prefer `tempest::vector`, `tempest::string_view`, `tempest::unique_ptr`, `tempest::make_unique` over `std::` counterparts.
+- Prefer `tempest::inplace_vector<T, N>` over `tempest::vector` for small fixed-capacity collections with dynamic runtime counts (e.g., history buffers, inline batches).
+- Use `tempest::min`, `tempest::max`, and `tempest::clamp` directly from namespace `tempest::` (from `<tempest/algorithm.hpp>` and `<tempest/math_utils.hpp>`).
 
 ### 2. Adhere to AAA (Almost Always Auto) Rules
 Use `auto` for local variable declarations with explicit initializations.
@@ -39,17 +41,22 @@ Use the standard `[[maybe_unused]]` attribute on unused parameters or variables 
 ### 8. Vulkan Swapchain Binary Semaphore Reuse
 When presenting swapchain images with binary semaphores, index render/presentation semaphores per swapchain image (or allocate per acquired image index) rather than per frame-in-flight slot to guarantee the semaphore is idle before re-signaling on submission.
 
+### 9. Render Graph Cross-Frame Synchronization & Layout Tracking
+- When resources undergo external or post-batch transitions (such as swapchain images transitioned to `image_layout::present` during presentation), explicitly record the new layout into the barrier solver's persistent state table (`set_texture_state`) to prevent layout mismatch validation errors on subsequent frames.
+- For cross-frame and temporal resources, evaluate both `was_written` (prior frame write access) and `is_written` when solving barriers to ensure GPU write caches are properly flushed before downstream reads.
+
 ## Workflow & Build Guidelines
 
 ### Build & Test Commands (Windows Clang)
 - **Premake Generation**:
   `premake5 ninja --cc=clang --shared-engine --shell=posix --rhi-vulkan`
 - **Build Tests Target**:
-  `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-vk-tests`
+  `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-vk-tests render-graph-tests`
 - **Build Examples Target**:
   `$env:PATH += ';C:\Program Files\Git\bin'; ninja -C build/ninja rhi-examples`
 - **Run Test Binary**:
   `.\bin\Debug\windows-clang\rhi-vk-tests.exe`
+  `.\bin\Debug\windows-clang\render-graph-tests.exe`
 - **Run Examples Binary**:
   `.\bin\Debug\windows-clang\rhi-examples.exe --list`
   `.\bin\Debug\windows-clang\rhi-examples.exe --example triangle`
