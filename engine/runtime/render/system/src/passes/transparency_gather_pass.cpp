@@ -1,25 +1,27 @@
-#include <tempest/render_system/passes/pbr_opaque_pass.hpp>
+#include <tempest/render_system/passes/transparency_gather_pass.hpp>
 
-#include <iostream>
 #include <tempest/array.hpp>
 
 namespace tempest::render_system
 {
-    auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool,
-                             shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                             render_graph::rg_texture_id depth_tex,
-                             uint32_t draw_count)
-        -> const pbr_opaque_pass_data&
+    auto add_transparency_gather_pass(render_graph::render_graph& graph, resource_pool& pool,
+                                      shader_manager& shaders,
+                                      render_graph::rg_texture_id accum_tex,
+                                      render_graph::rg_texture_id depth_tex,
+                                      optional<render_graph::rg_texture_id> ssao_tex,
+                                      uint32_t draw_count)
+        -> const transparency_gather_pass_data&
     {
-        return graph.add_graphics_pass<pbr_opaque_pass_data>(
-            "PBROpaquePass",
-            [&pool, hdr_color_tex, depth_tex, draw_count](render_graph::pass_builder& builder,
-                                                          pbr_opaque_pass_data& data) {
-                data.hdr_color = builder.set_color_attachment(
+        return graph.add_graphics_pass<transparency_gather_pass_data>(
+            "TransparencyGatherPass",
+            [&pool, accum_tex, depth_tex, ssao_tex, draw_count](render_graph::pass_builder& builder,
+                                                                transparency_gather_pass_data& data) {
+                data.accum_texture = builder.set_color_attachment(
                     0, render_graph::rg_color_attachment{
-                           .texture = hdr_color_tex,
-                           .load_op = rhi::load_op::load,
+                           .texture = accum_tex,
+                           .load_op = rhi::load_op::clear,
                            .store_op = rhi::store_op::store,
+                           .clear_value = {0.0F, 0.0F, 0.0F, 0.0F},
                        });
 
                 data.depth_texture = builder.set_depth_stencil_attachment(
@@ -28,6 +30,12 @@ namespace tempest::render_system
                         .depth_load_op = rhi::load_op::load,
                         .depth_store_op = rhi::store_op::store,
                     });
+
+                if (ssao_tex.has_value())
+                {
+                    data.ssao_texture = builder.read(*ssao_tex, rhi::pipeline_stage::fragment,
+                                                     rhi::resource_access::read, rhi::image_layout::general);
+                }
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
                 data.object_buffer = builder.import_buffer(pool.get_object_buffer());
@@ -40,16 +48,16 @@ namespace tempest::render_system
                 data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
                 data.draw_count = draw_count;
             },
-            [&pool, &shaders](const pbr_opaque_pass_data& data,
-                             [[maybe_unused]] render_graph::pass_execution_context& ctx,
+            [&pool, &shaders](const transparency_gather_pass_data& data,
+                             render_graph::pass_execution_context& ctx,
                              rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
                 }
 
-                auto vs = shaders.create_shader_module_desc("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
-                auto fs = shaders.create_shader_module_desc("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+                auto vs = shaders.create_shader_module_desc("pbr_oit_gather.vert.spv", rhi::shader_stage::vertex, "VSMain");
+                auto fs = shaders.create_shader_module_desc("pbr_oit_gather.frag.spv", rhi::shader_stage::fragment, "FSMain");
                 if (!vs.has_value() || !fs.has_value())
                 {
                     return;
@@ -57,6 +65,15 @@ namespace tempest::render_system
 
                 auto stages = array{*vs, *fs};
                 auto color_formats = array{rhi::data_format::rgba16_float};
+                auto blend_states = array{
+                    rhi::attachment_blend_state{
+                        .blend_enable = true,
+                        .src_color_blend_factor = rhi::blend_factor::one,
+                        .dst_color_blend_factor = rhi::blend_factor::one,
+                        .src_alpha_blend_factor = rhi::blend_factor::one,
+                        .dst_alpha_blend_factor = rhi::blend_factor::one,
+                    },
+                };
 
                 auto pipe_desc = rhi::graphics_pipeline_desc{
                     .shader_modules = span<const rhi::shader_module_desc>{stages.data(), stages.size()},
@@ -75,9 +92,10 @@ namespace tempest::render_system
                             .depth_write_enable = false,
                             .depth_compare_op = rhi::compare_op::greater_or_equal,
                         },
+                    .color_attachment_blend_states = span<const rhi::attachment_blend_state>{blend_states.data(), blend_states.size()},
                 };
 
-                auto pipe = shaders.get_or_create_graphics_pipeline("pbr_opaque_pipeline", pipe_desc);
+                auto pipe = shaders.get_or_create_graphics_pipeline("pbr_oit_gather_pipeline", pipe_desc);
                 if (pipe.handle == 0)
                 {
                     return;
@@ -86,11 +104,23 @@ namespace tempest::render_system
                 pass_cmd.bind_pipeline(pipe);
                 pass_cmd.bind_index_buffer(pool.get_vertex_buffer(), rhi::index_type::uint32, 0);
 
-                const auto constants = pbr_opaque_push_constants{
+                auto ssao_idx = -1;
+                if (data.ssao_texture.id != 0)
+                {
+                    const auto desc_idx = ctx.get_texture_descriptor(data.ssao_texture);
+                    if (desc_idx != ~0U)
+                    {
+                        ssao_idx = static_cast<int32_t>(desc_idx);
+                    }
+                }
+
+                const auto constants = transparency_gather_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer().gpu_address,
                     .instance_indices_address = pool.get_instance_buffer().gpu_address,
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
+                    .ssao_texture_index = ssao_idx,
+                    .point_sampler_index = static_cast<int32_t>(pool.get_point_sampler_descriptor().index),
                 };
 
                 pass_cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,

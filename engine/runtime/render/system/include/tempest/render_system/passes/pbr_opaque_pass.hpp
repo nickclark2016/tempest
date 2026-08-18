@@ -29,7 +29,8 @@ namespace tempest::render_system
 
     TEMPEST_API auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool,
                                          shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                                         render_graph::rg_texture_id depth_tex, uint32_t draw_count)
+                                         render_graph::rg_texture_id depth_tex,
+                                         uint32_t draw_count)
         -> const pbr_opaque_pass_data&;
 } // namespace tempest::render_system
 

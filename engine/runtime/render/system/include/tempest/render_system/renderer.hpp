@@ -21,6 +21,7 @@ namespace tempest::render_system
         rhi::data_format hdr_color_format{rhi::data_format::rgba16_float};
         rhi::data_format depth_format{rhi::data_format::depth32_float};
         rhi::data_format tonemapped_color_format{rhi::data_format::rgba8_srgb};
+        bool enable_ssao{false};
         resource_pool_config pool_config{};
     };
 
@@ -125,6 +126,8 @@ namespace tempest::render_system
         // Render Targets (Transient in Render Graph)
         render_graph::rg_texture_id _hdr_color_target{};
         render_graph::rg_texture_id _depth_target{};
+        render_graph::rg_texture_id _ssao_target{};
+        render_graph::rg_texture_id _ssao_blurred_target{};
         render_graph::rg_texture_id _tonemapped_color_target{};
 
         uint32_t _active_draw_count{0};

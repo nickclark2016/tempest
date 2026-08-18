@@ -6,6 +6,18 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/render_system/camera_system.hpp>
+#include <tempest/render_system/passes/depth_prepass.hpp>
+#include <tempest/render_system/passes/frame_upload_pass.hpp>
+#include <tempest/render_system/passes/light_clustering_pass.hpp>
+#include <tempest/render_system/passes/light_culling_pass.hpp>
+#include <tempest/render_system/passes/pbr_opaque_pass.hpp>
+#include <tempest/render_system/passes/shadow_map_pass.hpp>
+#include <tempest/render_system/passes/skybox_pass.hpp>
+#include <tempest/render_system/passes/ssao_blur_pass.hpp>
+#include <tempest/render_system/passes/ssao_pass.hpp>
+#include <tempest/render_system/passes/tonemapping_pass.hpp>
+#include <tempest/render_system/passes/transparency_blend_pass.hpp>
+#include <tempest/render_system/passes/transparency_gather_pass.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/render_system/resource_pool.hpp>
@@ -371,5 +383,164 @@ namespace tempest::render_system::tests
 
             dev->wait_idle();
         }
+    }
+
+    TEST(render_system_tests, cascaded_shadow_map_generation_and_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        auto graph = render_graph::render_graph{2048, 2048};
+
+        auto cam = render_camera{
+            .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
+            .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
+            .view = math::look_at(math::vec3<float>{0.0F, 2.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 2.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .eye_position = {0.0F, 2.0F, -5.0F, 1.0F},
+        };
+
+        const auto shadow_cfg = shadow_map_component{
+            .shadow_distance = 80.0F,
+            .split_lambda = 0.85F,
+            .blend_fraction = 0.1F,
+            .cascade_count = 4,
+        };
+
+        const auto light_dir = math::vec3<float>{0.5F, -1.0F, 0.3F};
+        const auto cascades = compute_csm_cascades(light_dir, cam, shadow_cfg, {2048, 2048});
+
+        EXPECT_GT(cascades[0].split_depth, 0.1F);
+        EXPECT_GT(cascades[1].split_depth, cascades[0].split_depth);
+        EXPECT_GT(cascades[2].split_depth, cascades[1].split_depth);
+        EXPECT_GT(cascades[3].split_depth, cascades[2].split_depth);
+
+        auto shadow_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(2048, 2048),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ShadowMapAtlas",
+        });
+
+        add_shadow_map_pass(graph, pool, shaders, shadow_tex, light_dir, cam, shadow_cfg, {2048, 2048}, 0);
+
+        auto res = graph.execute(*dev);
+        EXPECT_TRUE(res.has_value());
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, clustered_lighting_and_culling_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        auto graph = render_graph::render_graph{1280, 720};
+
+        auto cam = render_camera{
+            .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
+            .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .eye_position = {0.0F, 0.0F, -5.0F, 1.0F},
+        };
+
+        const auto cluster_count = 16U * 9U * 24U;
+        auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = cluster_count * sizeof(cluster_bounds),
+            .usage = rhi::buffer_usage::storage_buffer,
+            .name = "ClusterBoundsBuffer",
+        });
+
+        auto lights_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = 256 * sizeof(light_payload),
+            .usage = rhi::buffer_usage::storage_buffer,
+            .name = "LightsBuffer",
+        });
+
+        auto light_grid_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = cluster_count * sizeof(light_grid_range),
+            .usage = rhi::buffer_usage::storage_buffer,
+            .name = "LightGridBuffer",
+        });
+
+        auto light_indices_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = cluster_count * 128 * sizeof(uint32_t),
+            .usage = rhi::buffer_usage::storage_buffer,
+            .name = "LightIndicesBuffer",
+        });
+
+        auto global_count_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = sizeof(uint32_t) * 4,
+            .usage = rhi::buffer_usage::storage_buffer,
+            .name = "GlobalIndexCountBuffer",
+        });
+
+        const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam, 1280, 720);
+        add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer,
+                              lights_buf, light_grid_buf, light_indices_buf, global_count_buf,
+                              cluster_data.create_info, 0);
+
+        auto res = graph.execute(*dev);
+        EXPECT_TRUE(res.has_value());
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, transparency_gather_and_blend_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        auto graph = render_graph::render_graph{1280, 720};
+
+        auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(1280, 720),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TransparencyAccum",
+        });
+
+        auto depth_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(1280, 720),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "DepthTarget",
+        });
+
+        auto hdr_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(1280, 720),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "HDRColorTarget",
+        });
+
+        add_frame_upload_pass(graph, pool);
+        const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
+        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, accum_tex,
+                                                               depth_data.depth_texture, nullopt, 0);
+        add_transparency_blend_pass(graph, pool, shaders, gather_data.accum_texture, hdr_tex);
+
+        auto res = graph.execute(*dev);
+        EXPECT_TRUE(res.has_value());
+
+        dev->wait_idle();
     }
 } // namespace tempest::render_system::tests

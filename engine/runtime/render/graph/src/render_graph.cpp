@@ -189,7 +189,8 @@ namespace tempest::render_graph
             .texture = attachment.texture,
             .type = access_type::write,
             .stages = rhi::pipeline_stage::attachment_output,
-            .access = rhi::resource_access::write,
+            .access = (attachment.load_op == rhi::load_op::load) ? rhi::resource_access::read_write
+                                                                  : rhi::resource_access::write,
             .layout = rhi::image_layout::general,
             .subresource = attachment.subresource,
             .load_op = attachment.load_op,

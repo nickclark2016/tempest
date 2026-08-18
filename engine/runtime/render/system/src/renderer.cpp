@@ -4,6 +4,8 @@
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
+#include <tempest/render_system/passes/ssao_pass.hpp>
+#include <tempest/render_system/passes/ssao_blur_pass.hpp>
 #include <tempest/render_system/passes/tonemapping_pass.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/transform_component.hpp>
@@ -75,6 +77,8 @@ namespace tempest::render_system
           _graph{tempest::move(other._graph)},
           _hdr_color_target{other._hdr_color_target},
           _depth_target{other._depth_target},
+          _ssao_target{other._ssao_target},
+          _ssao_blurred_target{other._ssao_blurred_target},
           _tonemapped_color_target{other._tonemapped_color_target},
           _active_draw_count{other._active_draw_count}
     {
@@ -102,6 +106,8 @@ namespace tempest::render_system
             _graph = tempest::move(other._graph);
             _hdr_color_target = other._hdr_color_target;
             _depth_target = other._depth_target;
+            _ssao_target = other._ssao_target;
+            _ssao_blurred_target = other._ssao_blurred_target;
             _tonemapped_color_target = other._tonemapped_color_target;
             _active_draw_count = other._active_draw_count;
 
@@ -313,6 +319,27 @@ namespace tempest::render_system
             .name = "DepthTarget",
         });
 
+        if (_cfg.enable_ssao)
+        {
+            _ssao_target = _graph.create_texture(render_graph::rg_texture_desc{
+                .size = render_graph::rg_texture_size::absolute(width, height),
+                .format = rhi::data_format::r8_unorm,
+                .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+                .mip_levels = 1,
+                .array_layers = 1,
+                .name = "SSAORawTarget",
+            });
+
+            _ssao_blurred_target = _graph.create_texture(render_graph::rg_texture_desc{
+                .size = render_graph::rg_texture_size::absolute(width, height),
+                .format = rhi::data_format::r8_unorm,
+                .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+                .mip_levels = 1,
+                .array_layers = 1,
+                .name = "SSAOBlurredTarget",
+            });
+        }
+
         if (swapchain_tex.has_value() && swapchain_view.has_value())
         {
             _tonemapped_color_target =
@@ -333,6 +360,15 @@ namespace tempest::render_system
         // Build DAG Passes
         add_frame_upload_pass(_graph, _pool);
         const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target, _active_draw_count);
+
+        if (_cfg.enable_ssao)
+        {
+            const auto& ssao_data = add_ssao_pass(_graph, _pool, _shaders, depth_data.depth_texture, _ssao_target);
+            add_ssao_blur_pass(_graph, _pool, _shaders, ssao_data.ssao_raw,
+                               depth_data.depth_texture, _ssao_blurred_target,
+                               width, height);
+        }
+
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
         const auto& pbr_data = add_pbr_opaque_pass(_graph, _pool, _shaders, skybox_data.hdr_color,
                                                    depth_data.depth_texture, _active_draw_count);

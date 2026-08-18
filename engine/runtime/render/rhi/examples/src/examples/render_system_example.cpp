@@ -214,7 +214,7 @@ namespace tempest::rhi::examples
             return;
         }
 
-        _time += 0.016F;
+        _time += 1.0F / 240.0F;
 
         // Orbit Camera around interior of Sponza
         if (_camera_entity != ecs::tombstone)
