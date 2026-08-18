@@ -150,7 +150,7 @@ namespace tempest
     using unwrap_reference_decay_t = typename unwrap_reference_decay<T>::type;
 
     template <typename T>
-    class TEMPEST_API function;
+    class function;
 
     namespace detail
     {

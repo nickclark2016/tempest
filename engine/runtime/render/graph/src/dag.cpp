@@ -199,7 +199,7 @@ namespace tempest::render_graph
 
             for (const auto& acc : pass.texture_accesses)
             {
-                if (acc.type == access_type::read)
+                if (acc.type == access_type::read || acc.load_op == rhi::load_op::load || acc.texture.version > 0)
                 {
                     const auto resolved = resolve_texture(acc.texture);
                     auto it = texture_producer.find(resolved);
@@ -217,7 +217,7 @@ namespace tempest::render_graph
 
             for (const auto& acc : pass.buffer_accesses)
             {
-                if (acc.type == access_type::read)
+                if (acc.type == access_type::read || acc.buffer.version > 0)
                 {
                     const auto resolved = resolve_buffer(acc.buffer);
                     auto it = buffer_producer.find(resolved);
@@ -293,7 +293,7 @@ namespace tempest::render_graph
 
             for (const auto& acc : pass.texture_accesses)
             {
-                if (acc.type == access_type::read)
+                if (acc.type == access_type::read || acc.load_op == rhi::load_op::load || acc.texture.version > 0)
                 {
                     const auto resolved = resolve_texture(acc.texture);
                     auto it = texture_producer.find(resolved);
@@ -306,7 +306,7 @@ namespace tempest::render_graph
 
             for (const auto& acc : pass.buffer_accesses)
             {
-                if (acc.type == access_type::read)
+                if (acc.type == access_type::read || acc.buffer.version > 0)
                 {
                     const auto resolved = resolve_buffer(acc.buffer);
                     auto it = buffer_producer.find(resolved);

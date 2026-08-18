@@ -581,26 +581,48 @@ namespace tempest::rhi::vk
             });
         }
 
-        auto depth_stencil_attachment_description = optional<VkRenderingAttachmentInfo>{};
+        auto depth_attachment_desc = optional<VkRenderingAttachmentInfo>{};
+        auto stencil_attachment_desc = optional<VkRenderingAttachmentInfo>{};
         if (depth_stencil_attachment.has_value())
         {
             const auto& attachment = depth_stencil_attachment.value();
-            depth_stencil_attachment_description = VkRenderingAttachmentInfo{
-                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                .pNext = nullptr,
-                .imageView = _parent_device->get_texture_view(attachment.view)->handle,
-                .imageLayout = static_cast<VkImageLayout>(VK_IMAGE_LAYOUT_GENERAL),
-                .resolveMode = VK_RESOLVE_MODE_NONE,
-                .resolveImageView = VK_NULL_HANDLE,
-                .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .loadOp = static_cast<VkAttachmentLoadOp>(attachment.depth_load_op),
-                .storeOp = static_cast<VkAttachmentStoreOp>(attachment.depth_store_op),
-                .clearValue = VkClearValue{.depthStencil =
-                                               {
-                                                   .depth = attachment.clear_value.depth,
-                                                   .stencil = attachment.clear_value.stencil,
-                                               }},
-            };
+            const auto view_opt = _parent_device->get_texture_view(attachment.view);
+            if (view_opt.has_value())
+            {
+                const auto& view = *view_opt;
+                const auto fmt = view.format;
+                const auto is_depth = (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT ||
+                                       fmt == VK_FORMAT_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+                                       fmt == VK_FORMAT_X8_D24_UNORM_PACK32);
+                const auto is_stencil = (fmt == VK_FORMAT_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+                                         fmt == VK_FORMAT_S8_UINT || fmt == VK_FORMAT_D16_UNORM_S8_UINT);
+
+                auto attach_info = VkRenderingAttachmentInfo{
+                    .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                    .pNext = nullptr,
+                    .imageView = view.handle,
+                    .imageLayout = static_cast<VkImageLayout>(VK_IMAGE_LAYOUT_GENERAL),
+                    .resolveMode = VK_RESOLVE_MODE_NONE,
+                    .resolveImageView = VK_NULL_HANDLE,
+                    .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .loadOp = static_cast<VkAttachmentLoadOp>(attachment.depth_load_op),
+                    .storeOp = static_cast<VkAttachmentStoreOp>(attachment.depth_store_op),
+                    .clearValue = VkClearValue{.depthStencil =
+                                                   {
+                                                       .depth = attachment.clear_value.depth,
+                                                       .stencil = attachment.clear_value.stencil,
+                                                   }},
+                };
+
+                if (is_depth)
+                {
+                    depth_attachment_desc = attach_info;
+                }
+                if (is_stencil)
+                {
+                    stencil_attachment_desc = attach_info;
+                }
+            }
         }
 
         const auto rendering_info = VkRenderingInfo{
@@ -624,11 +646,11 @@ namespace tempest::rhi::vk
             .viewMask = 0,
             .colorAttachmentCount = static_cast<uint32_t>(color_attachment_descriptions.size()),
             .pColorAttachments = color_attachment_descriptions.data(),
-            .pDepthAttachment = depth_stencil_attachment_description.has_value()
-                                    ? &depth_stencil_attachment_description.value()
+            .pDepthAttachment = depth_attachment_desc.has_value()
+                                    ? &depth_attachment_desc.value()
                                     : nullptr,
-            .pStencilAttachment = depth_stencil_attachment_description.has_value()
-                                      ? &depth_stencil_attachment_description.value()
+            .pStencilAttachment = stencil_attachment_desc.has_value()
+                                      ? &stencil_attachment_desc.value()
                                       : nullptr,
         };
 

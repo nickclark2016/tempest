@@ -1198,9 +1198,17 @@ namespace tempest::rhi::vk
             color_formats.push_back(as_vulkan(fmt));
         }
 
-        auto depth_stencil_format = desc.depth_stencil_attachment_format.has_value()
-                                        ? as_vulkan(*desc.depth_stencil_attachment_format)
-                                        : VK_FORMAT_UNDEFINED;
+        auto depth_format = VK_FORMAT_UNDEFINED;
+        auto stencil_format = VK_FORMAT_UNDEFINED;
+        if (desc.depth_stencil_attachment_format.has_value())
+        {
+            depth_format = as_vulkan(*desc.depth_stencil_attachment_format);
+            const auto fmt = *desc.depth_stencil_attachment_format;
+            if (fmt == data_format::depth24_unorm_stencil8 || fmt == data_format::depth32_float_stencil8)
+            {
+                stencil_format = depth_format;
+            }
+        }
 
         auto rendering_ci = VkPipelineRenderingCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
@@ -1208,8 +1216,8 @@ namespace tempest::rhi::vk
             .viewMask = 0,
             .colorAttachmentCount = static_cast<uint32_t>(color_formats.size()),
             .pColorAttachmentFormats = color_formats.data(),
-            .depthAttachmentFormat = depth_stencil_format,
-            .stencilAttachmentFormat = depth_stencil_format,
+            .depthAttachmentFormat = depth_format,
+            .stencilAttachmentFormat = stencil_format,
         };
 
         // Programmable vertex pulling (empty vertex input state)

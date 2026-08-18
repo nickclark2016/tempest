@@ -318,7 +318,7 @@ namespace tempest::math
     {
         const T fovy = fov;
         const T f = static_cast<T>(1) / std::tan(fovy / 2);
-        return mat4<T>{f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, -1, 0, 0, near, 0};
+        return mat4<T>{f / aspect, 0, 0, 0, 0, -f, 0, 0, 0, 0, 0, -1, 0, 0, near, 0};
     }
 
     template <typename T>

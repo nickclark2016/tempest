@@ -1,6 +1,7 @@
 #include "example_registry.hpp"
 #include "examples/multi_queue_example.hpp"
 #include "examples/render_graph_example.hpp"
+#include "examples/render_system_example.hpp"
 #include "examples/triangle_example.hpp"
 
 #include <tempest/vector.hpp>
@@ -13,6 +14,16 @@ namespace tempest::rhi::examples
         {
             static auto registry = [] {
                 auto reg = vector<example_metadata>{};
+                reg.push_back(example_metadata{
+                    .name = "render_system",
+                    .description = "Full BDA Render System featuring OpenPBR forward lighting, dynamic sun, and tonemapping",
+                    .factory = &render_system_example::create,
+                });
+                reg.push_back(example_metadata{
+                    .name = "sponza",
+                    .description = "Loads and renders Sponza using the updated BDA Render System and Render Graph",
+                    .factory = &render_system_example::create,
+                });
                 reg.push_back(example_metadata{
                     .name = "triangle",
                     .description = "Draws an sRGB correct RGB triangle using storage buffers and an index buffer",
