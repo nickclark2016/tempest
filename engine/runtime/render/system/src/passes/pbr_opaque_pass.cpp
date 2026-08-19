@@ -11,6 +11,37 @@ namespace tempest::render_system
                              uint32_t draw_count)
         -> const pbr_opaque_pass_data&
     {
+        auto pipe_h = shaders.find_graphics_pipeline("pbr_opaque_pipeline");
+        if (!pipe_h.has_value())
+        {
+            auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto stages = array{vs, fs};
+            auto color_formats = array{rhi::data_format::rgba16_float};
+
+            auto tmpl = graphics_pipeline_template{
+                .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+                .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+                .depth_stencil_attachment_format = rhi::data_format::depth32_float,
+                .primitive_topology = rhi::primitive_topology::triangle_list,
+                .rasterization_state =
+                    {
+                        .polygon_mode = rhi::polygon_mode::fill,
+                        .cull_mode = rhi::cull_mode::none,
+                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                    },
+                .depth_stencil_state =
+                    {
+                        .depth_test_enable = true,
+                        .depth_write_enable = false,
+                        .depth_compare_op = rhi::compare_op::greater_or_equal,
+                    },
+            };
+            pipe_h = shaders.register_graphics_pipeline("pbr_opaque_pipeline", tmpl);
+        }
+
+        const auto pipe = *pipe_h;
+
         return graph.add_graphics_pass<pbr_opaque_pass_data>(
             "PBROpaquePass",
             [&pool, hdr_color_tex, depth_tex, draw_count](render_graph::pass_builder& builder,
@@ -40,50 +71,21 @@ namespace tempest::render_system
                 data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
                 data.draw_count = draw_count;
             },
-            [&pool, &shaders](const pbr_opaque_pass_data& data,
-                             [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                             rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe](const pbr_opaque_pass_data& data,
+                                   [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                                   rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
                 }
 
-                auto vs = shaders.create_shader_module_desc("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
-                auto fs = shaders.create_shader_module_desc("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
-                if (!vs.has_value() || !fs.has_value())
+                auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
+                if (rhi_pipe.handle == 0)
                 {
                     return;
                 }
 
-                auto stages = array{*vs, *fs};
-                auto color_formats = array{rhi::data_format::rgba16_float};
-
-                auto pipe_desc = rhi::graphics_pipeline_desc{
-                    .shader_modules = span<const rhi::shader_module_desc>{stages.data(), stages.size()},
-                    .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
-                    .depth_stencil_attachment_format = rhi::data_format::depth32_float,
-                    .primitive_topology = rhi::primitive_topology::triangle_list,
-                    .rasterization_state =
-                        {
-                            .polygon_mode = rhi::polygon_mode::fill,
-                            .cull_mode = rhi::cull_mode::none,
-                            .front_face = rhi::vertex_winding_order::counter_clockwise,
-                        },
-                    .depth_stencil_state =
-                        {
-                            .depth_test_enable = true,
-                            .depth_write_enable = false,
-                            .depth_compare_op = rhi::compare_op::greater_or_equal,
-                        },
-                };
-
-                auto pipe = shaders.get_or_create_graphics_pipeline("pbr_opaque_pipeline", pipe_desc);
-                if (pipe.handle == 0)
-                {
-                    return;
-                }
-
-                pass_cmd.bind_pipeline(pipe);
+                pass_cmd.bind_pipeline(rhi_pipe);
                 pass_cmd.bind_index_buffer(pool.get_vertex_buffer(), rhi::index_type::uint32, 0);
 
                 const auto constants = pbr_opaque_push_constants{

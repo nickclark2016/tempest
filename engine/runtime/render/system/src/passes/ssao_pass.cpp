@@ -10,6 +10,35 @@ namespace tempest::render_system
                        float radius, float bias, float power)
         -> const ssao_pass_data&
     {
+        auto pipe_h = shaders.find_graphics_pipeline("ssao_pipeline");
+        if (!pipe_h.has_value())
+        {
+            auto vs = shaders.register_shader_module("ssao.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto fs = shaders.register_shader_module("ssao.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto stages = array{vs, fs};
+            auto color_formats = array{rhi::data_format::r8_unorm};
+
+            auto tmpl = graphics_pipeline_template{
+                .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+                .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+                .primitive_topology = rhi::primitive_topology::triangle_list,
+                .rasterization_state =
+                    {
+                        .polygon_mode = rhi::polygon_mode::fill,
+                        .cull_mode = rhi::cull_mode::none,
+                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                    },
+                .depth_stencil_state =
+                    {
+                        .depth_test_enable = false,
+                        .depth_write_enable = false,
+                    },
+            };
+            pipe_h = shaders.register_graphics_pipeline("ssao_pipeline", tmpl);
+        }
+
+        const auto pipe = *pipe_h;
+
         return graph.add_graphics_pass<ssao_pass_data>(
             "SSAOPass",
             [depth_tex, ssao_raw_tex, &pool](render_graph::pass_builder& builder, ssao_pass_data& data) {
@@ -26,43 +55,16 @@ namespace tempest::render_system
                 data.scene_constants = builder.read(data.scene_constants, rhi::pipeline_stage::fragment,
                                                     rhi::resource_access::read);
             },
-            [&pool, &shaders, radius, bias, power](const ssao_pass_data& data,
-                                                  render_graph::pass_execution_context& ctx,
-                                                  rhi::command_list& pass_cmd) {
-                auto vs = shaders.create_shader_module_desc("ssao.vert.spv", rhi::shader_stage::vertex, "VSMain");
-                auto fs = shaders.create_shader_module_desc("ssao.frag.spv", rhi::shader_stage::fragment, "FSMain");
-                if (!vs.has_value() || !fs.has_value())
+            [&pool, &shaders, radius, bias, power, pipe](const ssao_pass_data& data,
+                                                         render_graph::pass_execution_context& ctx,
+                                                         rhi::command_list& pass_cmd) {
+                auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
+                if (rhi_pipe.handle == 0)
                 {
                     return;
                 }
 
-                auto stages = array{*vs, *fs};
-                auto color_formats = array{rhi::data_format::r8_unorm};
-
-                auto pipe_desc = rhi::graphics_pipeline_desc{
-                    .shader_modules = span<const rhi::shader_module_desc>{stages.data(), stages.size()},
-                    .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
-                    .primitive_topology = rhi::primitive_topology::triangle_list,
-                    .rasterization_state =
-                        {
-                            .polygon_mode = rhi::polygon_mode::fill,
-                            .cull_mode = rhi::cull_mode::none,
-                            .front_face = rhi::vertex_winding_order::counter_clockwise,
-                        },
-                    .depth_stencil_state =
-                        {
-                            .depth_test_enable = false,
-                            .depth_write_enable = false,
-                        },
-                };
-
-                auto pipe = shaders.get_or_create_graphics_pipeline("ssao_pipeline", pipe_desc);
-                if (pipe.handle == 0)
-                {
-                    return;
-                }
-
-                pass_cmd.bind_pipeline(pipe);
+                pass_cmd.bind_pipeline(rhi_pipe);
 
                 const auto depth_desc_idx = ctx.get_texture_descriptor(data.depth_texture);
                 const auto depth_tex_idx = (depth_desc_idx != ~0U) ? static_cast<int32_t>(depth_desc_idx) : -1;

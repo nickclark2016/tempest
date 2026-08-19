@@ -878,6 +878,9 @@ namespace tempest::rhi
         virtual auto destroy_render_surface(unique_ptr<render_surface> surface) -> void = 0;
         virtual auto destroy_raw_surface(raw_surface_handle surface) -> void = 0;
 
+        // Sync queries
+        [[nodiscard]] virtual auto get_semaphore_value(semaphore_handle semaphore) const -> uint64_t = 0;
+
         // Execution ports
         [[nodiscard]] virtual auto get_graphics_execution_port() -> execution_port& = 0;
         [[nodiscard]] virtual auto get_async_compute_execution_port() -> execution_port& = 0;
@@ -945,6 +948,9 @@ namespace tempest::rhi
         execution_port& operator=(execution_port&&) noexcept = delete; // NOLINT(modernize-use-trailing-return-type)
 
         virtual auto wait_idle() -> void = 0;
+
+        // Timeline synchronization query
+        [[nodiscard]] virtual auto get_timeline_sync_point() const noexcept -> host_sync_point = 0;
 
         // Command list management
         [[nodiscard]] virtual auto acquire_command_list(

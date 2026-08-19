@@ -629,6 +629,18 @@ namespace tempest::rhi::vk
         }
     }
 
+    auto device::get_semaphore_value(semaphore_handle semaphore) const -> uint64_t
+    {
+        auto sem = get_semaphore(semaphore);
+        if (sem == VK_NULL_HANDLE)
+        {
+            return 0;
+        }
+        auto current_val = uint64_t{0};
+        _dispatch_table.getSemaphoreCounterValue(sem, &current_val);
+        return current_val;
+    }
+
     auto device::is_ray_tracing_supported() const -> bool
     {
         return _desc.features.ray_tracing;

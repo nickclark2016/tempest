@@ -543,4 +543,205 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    TEST(render_system_tests, shader_manager_handle_registration_and_slot_lookup)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto shaders = shader_manager{*dev};
+
+        auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+        EXPECT_GT(vs.id, 0U);
+        EXPECT_GT(fs.id, 0U);
+        EXPECT_NE(vs.id, fs.id);
+
+        // Idempotent re-registration of same module returns identical handle
+        auto vs_dup = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        EXPECT_EQ(vs.id, vs_dup.id);
+
+        auto stages = array{vs, fs};
+        auto color_formats = array{rhi::data_format::rgba16_float};
+        auto tmpl = graphics_pipeline_template{
+            .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+            .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+            .depth_stencil_attachment_format = rhi::data_format::depth32_float,
+            .primitive_topology = rhi::primitive_topology::triangle_list,
+        };
+
+        auto pipe_h = shaders.register_graphics_pipeline("test_pbr_pipeline", tmpl);
+        EXPECT_GT(pipe_h.id, 0U);
+
+        // Idempotent re-registration returns identical handle
+        auto pipe_dup = shaders.register_graphics_pipeline("test_pbr_pipeline", tmpl);
+        EXPECT_EQ(pipe_h.id, pipe_dup.id);
+
+        // Find by name returns the registered handle
+        auto found_pipe = shaders.find_graphics_pipeline("test_pbr_pipeline");
+        ASSERT_TRUE(found_pipe.has_value());
+        EXPECT_EQ(found_pipe->id, pipe_h.id);
+
+        // O(1) slot lookup yields a valid RHI pipeline handle
+        auto rhi_pipe = shaders.get_rhi_pipeline(pipe_h);
+        EXPECT_NE(rhi_pipe.handle, 0ULL);
+
+        // Compute pipeline registration and lookup
+        auto cs = shaders.register_shader_module("build_cluster_grid.comp.spv", rhi::shader_stage::compute, "CSMain");
+        EXPECT_GT(cs.id, 0U);
+
+        auto comp_tmpl = compute_pipeline_template{
+            .shader_module = cs,
+        };
+        auto comp_pipe_h = shaders.register_compute_pipeline("test_comp_pipeline", comp_tmpl);
+        EXPECT_GT(comp_pipe_h.id, 0U);
+
+        auto found_comp = shaders.find_compute_pipeline("test_comp_pipeline");
+        ASSERT_TRUE(found_comp.has_value());
+        EXPECT_EQ(found_comp->id, comp_pipe_h.id);
+
+        auto rhi_comp_pipe = shaders.get_rhi_pipeline(comp_pipe_h);
+        EXPECT_NE(rhi_comp_pipe.handle, 0ULL);
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, shader_manager_memory_blob_ingestion)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto shaders = shader_manager{*dev};
+
+        // Load bytecode into memory first
+        auto vs_bytes = shaders.load_shader_bytecode("skybox.vert.spv");
+        auto fs_bytes = shaders.load_shader_bytecode("skybox.frag.spv");
+        ASSERT_FALSE(vs_bytes.empty());
+        ASSERT_FALSE(fs_bytes.empty());
+
+        // Ingest memory blob with no disk_location
+        auto vs_info = shader_module_create_info{
+            .stage = rhi::shader_stage::vertex,
+            .entry_point = "VSMain",
+            .disk_location = nullopt,
+            .initial_bytes = span<const byte>{vs_bytes.data(), vs_bytes.size()},
+        };
+        auto fs_info = shader_module_create_info{
+            .stage = rhi::shader_stage::fragment,
+            .entry_point = "FSMain",
+            .disk_location = nullopt,
+            .initial_bytes = span<const byte>{fs_bytes.data(), fs_bytes.size()},
+        };
+
+        auto vs_h = shaders.register_shader_module(vs_info);
+        auto fs_h = shaders.register_shader_module(fs_info);
+        EXPECT_GT(vs_h.id, 0U);
+        EXPECT_GT(fs_h.id, 0U);
+
+        auto stages = array{vs_h, fs_h};
+        auto color_formats = array{rhi::data_format::rgba16_float};
+        auto tmpl = graphics_pipeline_template{
+            .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+            .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+            .primitive_topology = rhi::primitive_topology::triangle_list,
+        };
+
+        auto pipe_h = shaders.register_graphics_pipeline("blob_skybox_pipeline", tmpl);
+        EXPECT_GT(pipe_h.id, 0U);
+
+        auto rhi_pipe = shaders.get_rhi_pipeline(pipe_h);
+        EXPECT_NE(rhi_pipe.handle, 0ULL);
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, shader_manager_hot_reloading_and_inverted_dependency_update)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto shaders = shader_manager{*dev};
+
+        auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+
+        auto stages = array{vs, fs};
+        auto color_formats = array{rhi::data_format::rgba16_float};
+
+        auto tmpl1 = graphics_pipeline_template{
+            .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+            .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+            .primitive_topology = rhi::primitive_topology::triangle_list,
+        };
+        auto pipe1 = shaders.register_graphics_pipeline("pipe1", tmpl1);
+
+        auto tmpl2 = graphics_pipeline_template{
+            .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+            .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+            .primitive_topology = rhi::primitive_topology::triangle_list,
+        };
+        auto pipe2 = shaders.register_graphics_pipeline("pipe2", tmpl2);
+
+        auto initial_rhi1 = shaders.get_rhi_pipeline(pipe1);
+        auto initial_rhi2 = shaders.get_rhi_pipeline(pipe2);
+        EXPECT_NE(initial_rhi1.handle, 0ULL);
+        EXPECT_NE(initial_rhi2.handle, 0ULL);
+
+        // Reload module from disk via reload_shader_module
+        auto reload_ok = shaders.reload_shader_module(fs);
+        EXPECT_TRUE(reload_ok);
+
+        auto reloaded_rhi1 = shaders.get_rhi_pipeline(pipe1);
+        auto reloaded_rhi2 = shaders.get_rhi_pipeline(pipe2);
+        EXPECT_NE(reloaded_rhi1.handle, 0ULL);
+        EXPECT_NE(reloaded_rhi2.handle, 0ULL);
+
+        // Notify file changed triggers surgical reload
+        auto notify_ok = shaders.notify_file_changed(std::filesystem::path("pbr.frag.spv"));
+        EXPECT_TRUE(notify_ok);
+
+        // Drain retired pipelines
+        shaders.process_deferred_retirements();
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, shader_manager_fail_safe_recompilation_retains_last_known_good)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto shaders = shader_manager{*dev};
+
+        auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
+        auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
+
+        auto stages = array{vs, fs};
+        auto color_formats = array{rhi::data_format::rgba16_float};
+        auto tmpl = graphics_pipeline_template{
+            .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+            .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+            .primitive_topology = rhi::primitive_topology::triangle_list,
+        };
+        auto pipe = shaders.register_graphics_pipeline("fail_safe_pipe", tmpl);
+
+        auto initial_rhi = shaders.get_rhi_pipeline(pipe);
+        EXPECT_NE(initial_rhi.handle, 0ULL);
+
+        // Corrupt / invalid bytecode update
+        auto invalid_bytes = array<byte, 8>{byte{0x01}, byte{0x02}, byte{0x03}, byte{0x04},
+                                            byte{0x05}, byte{0x06}, byte{0x07}, byte{0x08}};
+        auto update_result = shaders.update_shader_module_bytes(fs, span<const byte>{invalid_bytes.data(), invalid_bytes.size()});
+        EXPECT_FALSE(update_result);
+
+        // The pipeline MUST retain its last known good valid handle!
+        auto retained_rhi = shaders.get_rhi_pipeline(pipe);
+        EXPECT_EQ(retained_rhi.handle, initial_rhi.handle);
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests

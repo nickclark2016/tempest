@@ -91,6 +91,8 @@ namespace tempest::rhi::vk
         auto destroy_render_surface(unique_ptr<rhi::render_surface> surface) -> void override;
         auto destroy_raw_surface(raw_surface_handle surface) -> void override;
 
+        [[nodiscard]] auto get_semaphore_value(semaphore_handle semaphore) const -> uint64_t override;
+
         [[nodiscard]] auto get_graphics_execution_port() -> rhi::execution_port& override;
         [[nodiscard]] auto get_async_compute_execution_port() -> rhi::execution_port& override;
         [[nodiscard]] auto get_async_transfer_execution_port() -> rhi::execution_port& override;

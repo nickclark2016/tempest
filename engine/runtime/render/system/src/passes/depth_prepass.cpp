@@ -9,6 +9,36 @@ namespace tempest::render_system
                            shader_manager& shaders, render_graph::rg_texture_id depth_tex,
                            uint32_t draw_count) -> const depth_prepass_data&
     {
+        auto pipe_h = shaders.find_graphics_pipeline("zprepass_pipeline");
+        if (!pipe_h.has_value())
+        {
+            auto vs = shaders.register_shader_module("zprepass.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto fs = shaders.register_shader_module("zprepass.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto stages = array{vs, fs};
+
+            auto tmpl = graphics_pipeline_template{
+                .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+                .color_attachment_formats = {},
+                .depth_stencil_attachment_format = rhi::data_format::depth32_float,
+                .primitive_topology = rhi::primitive_topology::triangle_list,
+                .rasterization_state =
+                    {
+                        .polygon_mode = rhi::polygon_mode::fill,
+                        .cull_mode = rhi::cull_mode::none,
+                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                    },
+                .depth_stencil_state =
+                    {
+                        .depth_test_enable = true,
+                        .depth_write_enable = true,
+                        .depth_compare_op = rhi::compare_op::greater,
+                    },
+            };
+            pipe_h = shaders.register_graphics_pipeline("zprepass_pipeline", tmpl);
+        }
+
+        const auto pipe = *pipe_h;
+
         return graph.add_graphics_pass<depth_prepass_data>(
             "DepthPrepass",
             [&pool, depth_tex, draw_count](render_graph::pass_builder& builder, depth_prepass_data& data) {
@@ -31,48 +61,21 @@ namespace tempest::render_system
                 data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
                 data.draw_count = draw_count;
             },
-            [&pool, &shaders](const depth_prepass_data& data,
-                             [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                             rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe](const depth_prepass_data& data,
+                                   [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                                   rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
                 }
 
-                auto vs = shaders.create_shader_module_desc("zprepass.vert.spv", rhi::shader_stage::vertex, "VSMain");
-                auto fs = shaders.create_shader_module_desc("zprepass.frag.spv", rhi::shader_stage::fragment, "FSMain");
-                if (!vs.has_value() || !fs.has_value())
+                auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
+                if (rhi_pipe.handle == 0)
                 {
                     return;
                 }
 
-                auto stages = array{*vs, *fs};
-                auto pipe_desc = rhi::graphics_pipeline_desc{
-                    .shader_modules = span<const rhi::shader_module_desc>{stages.data(), stages.size()},
-                    .color_attachment_formats = {},
-                    .depth_stencil_attachment_format = rhi::data_format::depth32_float,
-                    .primitive_topology = rhi::primitive_topology::triangle_list,
-                    .rasterization_state =
-                        {
-                            .polygon_mode = rhi::polygon_mode::fill,
-                            .cull_mode = rhi::cull_mode::none,
-                            .front_face = rhi::vertex_winding_order::counter_clockwise,
-                        },
-                    .depth_stencil_state =
-                        {
-                            .depth_test_enable = true,
-                            .depth_write_enable = true,
-                            .depth_compare_op = rhi::compare_op::greater,
-                        },
-                };
-
-                auto pipe = shaders.get_or_create_graphics_pipeline("zprepass_pipeline", pipe_desc);
-                if (pipe.handle == 0)
-                {
-                    return;
-                }
-
-                pass_cmd.bind_pipeline(pipe);
+                pass_cmd.bind_pipeline(rhi_pipe);
                 pass_cmd.bind_index_buffer(pool.get_vertex_buffer(), rhi::index_type::uint32, 0);
 
                 const auto constants = depth_prepass_push_constants{

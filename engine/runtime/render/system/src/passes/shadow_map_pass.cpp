@@ -135,6 +135,36 @@ namespace tempest::render_system
         const auto cascade_count = math::clamp(shadow_cfg.cascade_count, 1U, 4U);
         const auto computed_cascades = compute_csm_cascades(light_dir, cam, shadow_cfg, atlas_size);
 
+        auto pipe_h = shaders.find_graphics_pipeline("shadow_map_pipeline");
+        if (!pipe_h.has_value())
+        {
+            auto vs = shaders.register_shader_module("directional_shadow_map.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto fs = shaders.register_shader_module("directional_shadow_map.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto stages = array{vs, fs};
+
+            auto tmpl = graphics_pipeline_template{
+                .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+                .color_attachment_formats = {},
+                .depth_stencil_attachment_format = rhi::data_format::depth32_float,
+                .primitive_topology = rhi::primitive_topology::triangle_list,
+                .rasterization_state =
+                    {
+                        .polygon_mode = rhi::polygon_mode::fill,
+                        .cull_mode = rhi::cull_mode::none,
+                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                    },
+                .depth_stencil_state =
+                    {
+                        .depth_test_enable = true,
+                        .depth_write_enable = true,
+                        .depth_compare_op = rhi::compare_op::greater,
+                    },
+            };
+            pipe_h = shaders.register_graphics_pipeline("shadow_map_pipeline", tmpl);
+        }
+
+        const auto pipe = *pipe_h;
+
         return graph.add_graphics_pass<shadow_map_pass_data>(
             "ShadowMapPass",
             [shadow_atlas_tex, &pool, computed_cascades, cascade_count, atlas_size, draw_count](
@@ -160,48 +190,21 @@ namespace tempest::render_system
                 data.cascades = computed_cascades;
                 data.atlas_size = atlas_size;
             },
-            [&pool, &shaders](const shadow_map_pass_data& data,
-                             [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                             rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe](const shadow_map_pass_data& data,
+                                   [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                                   rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0 || data.cascade_count == 0)
                 {
                     return;
                 }
 
-                auto vs = shaders.create_shader_module_desc("directional_shadow_map.vert.spv", rhi::shader_stage::vertex, "VSMain");
-                auto fs = shaders.create_shader_module_desc("directional_shadow_map.frag.spv", rhi::shader_stage::fragment, "FSMain");
-                if (!vs.has_value() || !fs.has_value())
+                auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
+                if (rhi_pipe.handle == 0)
                 {
                     return;
                 }
 
-                auto stages = array{*vs, *fs};
-                auto pipe_desc = rhi::graphics_pipeline_desc{
-                    .shader_modules = span<const rhi::shader_module_desc>{stages.data(), stages.size()},
-                    .color_attachment_formats = {},
-                    .depth_stencil_attachment_format = rhi::data_format::depth32_float,
-                    .primitive_topology = rhi::primitive_topology::triangle_list,
-                    .rasterization_state =
-                        {
-                            .polygon_mode = rhi::polygon_mode::fill,
-                            .cull_mode = rhi::cull_mode::none,
-                            .front_face = rhi::vertex_winding_order::counter_clockwise,
-                        },
-                    .depth_stencil_state =
-                        {
-                            .depth_test_enable = true,
-                            .depth_write_enable = true,
-                            .depth_compare_op = rhi::compare_op::greater,
-                        },
-                };
-
-                auto pipe = shaders.get_or_create_graphics_pipeline("shadow_map_pipeline", pipe_desc);
-                if (pipe.handle == 0)
-                {
-                    return;
-                }
-
-                pass_cmd.bind_pipeline(pipe);
+                pass_cmd.bind_pipeline(rhi_pipe);
                 pass_cmd.bind_index_buffer(pool.get_vertex_buffer(), rhi::index_type::uint32, 0);
 
                 const auto cols = (data.cascade_count > 1) ? 2U : 1U;

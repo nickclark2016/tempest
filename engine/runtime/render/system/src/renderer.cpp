@@ -253,8 +253,9 @@ namespace tempest::render_system
     }
 
     void renderer::prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex,
-                                optional<rhi::texture_view_handle> swapchain_view)
+                                 optional<rhi::texture_view_handle> swapchain_view)
     {
+        _shaders.process_deferred_retirements();
         _pool.advance_frame();
         _graph.reset();
         _graph.set_surface_size(width, height);

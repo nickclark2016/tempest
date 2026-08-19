@@ -19,6 +19,18 @@ namespace tempest::render_system
             .workgroup_count_tile_size_px = {cluster_count_x, cluster_count_y, cluster_count_z, tile_size_px},
         };
 
+        auto pipe_h = shaders.find_compute_pipeline("build_cluster_grid_pipeline");
+        if (!pipe_h.has_value())
+        {
+            auto cs = shaders.register_shader_module("build_cluster_grid.comp.spv", rhi::shader_stage::compute, "CSMain");
+            auto tmpl = compute_pipeline_template{
+                .shader_module = cs,
+            };
+            pipe_h = shaders.register_compute_pipeline("build_cluster_grid_pipeline", tmpl);
+        }
+
+        const auto pipe = *pipe_h;
+
         return graph.add_compute_pass<light_clustering_pass_data>(
             "LightClusteringPass",
             [cluster_bounds_buf, create_info](render_graph::pass_builder& builder, light_clustering_pass_data& data) {
@@ -26,27 +38,17 @@ namespace tempest::render_system
                                                            rhi::resource_access::write);
                 data.create_info = create_info;
             },
-            [&shaders, cluster_count_x, cluster_count_y, cluster_count_z](
+            [&shaders, cluster_count_x, cluster_count_y, cluster_count_z, pipe](
                 const light_clustering_pass_data& data,
                 render_graph::pass_execution_context& ctx,
                 rhi::command_list& pass_cmd) {
-                auto cs = shaders.create_shader_module_desc("build_cluster_grid.comp.spv", rhi::shader_stage::compute, "CSMain");
-                if (!cs.has_value())
+                auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
+                if (rhi_pipe.handle == 0)
                 {
                     return;
                 }
 
-                auto pipe_desc = rhi::compute_pipeline_desc{
-                    .shader_module = *cs,
-                };
-
-                auto pipe = shaders.get_or_create_compute_pipeline("build_cluster_grid_pipeline", pipe_desc);
-                if (pipe.handle == 0)
-                {
-                    return;
-                }
-
-                pass_cmd.bind_pipeline(pipe);
+                pass_cmd.bind_pipeline(rhi_pipe);
 
                 const auto cluster_buf_handle = ctx.get_buffer(data.cluster_bounds_buffer);
 

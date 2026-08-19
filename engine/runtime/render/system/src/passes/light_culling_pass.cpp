@@ -13,6 +13,18 @@ namespace tempest::render_system
                                 uint32_t light_count)
         -> const light_culling_pass_data&
     {
+        auto pipe_h = shaders.find_compute_pipeline("cull_lights_pipeline");
+        if (!pipe_h.has_value())
+        {
+            auto cs = shaders.register_shader_module("cull_lights.comp.spv", rhi::shader_stage::compute, "CSMain");
+            auto tmpl = compute_pipeline_template{
+                .shader_module = cs,
+            };
+            pipe_h = shaders.register_compute_pipeline("cull_lights_pipeline", tmpl);
+        }
+
+        const auto pipe = *pipe_h;
+
         return graph.add_compute_pass<light_culling_pass_data>(
             "LightCullingPass",
             [cluster_bounds_buf, lights_buf, light_grid_buf, light_indices_buf, global_count_buf, &pool, create_info, light_count](
@@ -27,27 +39,17 @@ namespace tempest::render_system
                 data.create_info = create_info;
                 data.light_count = light_count;
             },
-            [&pool, &shaders](
+            [&pool, &shaders, pipe](
                 const light_culling_pass_data& data,
                 render_graph::pass_execution_context& ctx,
                 rhi::command_list& pass_cmd) {
-                auto cs = shaders.create_shader_module_desc("cull_lights.comp.spv", rhi::shader_stage::compute, "CSMain");
-                if (!cs.has_value())
+                auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
+                if (rhi_pipe.handle == 0)
                 {
                     return;
                 }
 
-                auto pipe_desc = rhi::compute_pipeline_desc{
-                    .shader_module = *cs,
-                };
-
-                auto pipe = shaders.get_or_create_compute_pipeline("cull_lights_pipeline", pipe_desc);
-                if (pipe.handle == 0)
-                {
-                    return;
-                }
-
-                pass_cmd.bind_pipeline(pipe);
+                pass_cmd.bind_pipeline(rhi_pipe);
 
                 const auto cluster_buf = ctx.get_buffer(data.cluster_bounds_buffer);
                 const auto lights_buf = ctx.get_buffer(data.lights_buffer);

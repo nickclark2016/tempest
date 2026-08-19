@@ -188,6 +188,8 @@ namespace tempest::render_graph
                 }
                 return {};
             }
+
+            [[nodiscard]] auto get_timeline_sync_point() const noexcept -> rhi::host_sync_point override { return {}; }
         };
 
         class mock_temporal_device final : public rhi::device
@@ -227,6 +229,8 @@ namespace tempest::render_graph
 
             auto destroy_render_surface([[maybe_unused]] unique_ptr<rhi::render_surface> surface) -> void override {}
             auto destroy_raw_surface([[maybe_unused]] rhi::raw_surface_handle surface) -> void override {}
+
+            [[nodiscard]] auto get_semaphore_value([[maybe_unused]] rhi::semaphore_handle semaphore) const -> uint64_t override { return 0; }
 
             [[nodiscard]] auto get_graphics_execution_port() -> rhi::execution_port& override
             {

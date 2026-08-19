@@ -409,6 +409,14 @@ namespace tempest::rhi::vk
                                   span<const device_sync_point> signal_semaphores)
             -> expected<void, submit_error> override;
 
+        [[nodiscard]] auto get_timeline_sync_point() const noexcept -> host_sync_point override
+        {
+            return host_sync_point{
+                .semaphore = _timeline_semaphore,
+                .value = _timeline_value,
+            };
+        }
+
         [[nodiscard]] auto get_queue_family_index() const noexcept -> uint32_t
         {
             return _queue_family_index;
