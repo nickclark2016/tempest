@@ -519,4 +519,86 @@ namespace tempest::rhi::vk
         device->destroy_texture_view(view);
         device->destroy_texture(tex);
     }
+
+    TEST(device_test, object_debug_naming_and_markers)
+    {
+        auto ctx_desc = context_desc{};
+        ctx_desc.application_name = "Tempest Test Application";
+        ctx_desc.api = graphics_api::vulkan;
+
+        auto result = vk::create_context(ctx_desc);
+        ASSERT_TRUE(result.has_value());
+
+        auto context = tempest::move(result).value();
+        auto devices = context->enumerate_devices();
+        ASSERT_FALSE(devices.empty());
+
+        auto device = context->create_device(devices[0].device_uuid);
+        ASSERT_NE(device, nullptr);
+
+        // Test buffer with initial name and dynamic rename
+        auto buf = device->create_buffer(buffer_desc{
+            .size = 1024,
+            .memory_usage = memory_usage::upload,
+            .usage = buffer_usage::storage_buffer,
+            .name = "InitialBufferName",
+        });
+        EXPECT_NE(buf.handle, 0ULL);
+        device->set_debug_name(buf, "RenamedBuffer");
+
+        // Test texture with initial name and dynamic rename
+        auto tex = device->create_texture(texture_desc{
+            .width = 64,
+            .height = 64,
+            .format = data_format::rgba8_unorm,
+            .name = "InitialTextureName",
+        });
+        EXPECT_NE(tex.handle, 0ULL);
+        device->set_debug_name(tex, "RenamedTexture");
+
+        auto view = device->create_texture_view(tex, texture_view_desc{});
+        EXPECT_NE(view.handle, 0ULL);
+        device->set_debug_name(view, "TextureView");
+
+        auto samp = device->create_sampler(sampler_desc{
+            .min_filter = filter_mode::linear,
+            .mag_filter = filter_mode::linear,
+            .mipmap_mode = mipmap_mode::linear,
+            .address_u = address_mode::repeat,
+            .address_v = address_mode::repeat,
+            .address_w = address_mode::repeat,
+            .name = "LinearSampler",
+        });
+        EXPECT_NE(samp.handle, 0ULL);
+        device->set_debug_name(samp, "RenamedSampler");
+
+        auto evt = device->create_event();
+        EXPECT_NE(evt.handle, 0ULL);
+        device->set_debug_name(evt, "TestEvent");
+
+        auto sem = device->create_timeline_semaphore();
+        EXPECT_NE(sem.handle, 0ULL);
+        device->set_debug_name(sem, "TestSemaphore");
+
+        // Test command list and queue debug regions and markers
+        auto& port = device->get_graphics_execution_port();
+        port.begin_debug_region(debug_label{.name = "QueueTestRegion"});
+        port.insert_debug_marker(debug_label{.name = "QueueMarker"});
+        port.end_debug_region();
+
+        auto& cmd = port.acquire_command_list(0);
+        cmd.begin();
+        cmd.begin_debug_region(debug_label{.name = "CmdTestRegion", .color = {1.0F, 0.0F, 0.0F, 1.0F}});
+        cmd.insert_debug_marker(debug_label{.name = "CmdMarker", .color = {0.0F, 1.0F, 0.0F, 1.0F}});
+        cmd.end_debug_region();
+        cmd.end();
+
+        // Clean up
+        device->destroy_sampler(samp);
+        device->destroy_texture_view(view);
+        device->destroy_texture(tex);
+        device->destroy_buffer(buf);
+        device->destroy_event(evt);
+        device->destroy_semaphore(sem);
+    }
 } // namespace tempest::rhi::vk

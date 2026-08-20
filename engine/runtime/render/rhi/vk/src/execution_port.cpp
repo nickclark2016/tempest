@@ -915,12 +915,79 @@ namespace tempest::rhi::vk
         _dispatch_table->cmdCopyImageToBuffer2(_command_buffer, &copy_info);
     }
 
+    auto command_list::begin_debug_region([[maybe_unused]] const debug_label& label) -> void
+    {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        if (_dispatch_table->fp_vkCmdBeginDebugUtilsLabelEXT == nullptr || label.name.empty())
+        {
+            return;
+        }
+
+        const auto label_info = VkDebugUtilsLabelEXT{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pNext = nullptr,
+            .pLabelName = label.name.data(),
+            .color = {label.color[0], label.color[1], label.color[2], label.color[3]},
+        };
+        _dispatch_table->cmdBeginDebugUtilsLabelEXT(_command_buffer, &label_info);
+#endif
+    }
+
+    auto command_list::end_debug_region() -> void
+    {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        if (_dispatch_table->fp_vkCmdEndDebugUtilsLabelEXT == nullptr)
+        {
+            return;
+        }
+
+        _dispatch_table->cmdEndDebugUtilsLabelEXT(_command_buffer);
+#endif
+    }
+
+    auto command_list::insert_debug_marker([[maybe_unused]] const debug_label& label) -> void
+    {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        if (_dispatch_table->fp_vkCmdInsertDebugUtilsLabelEXT == nullptr || label.name.empty())
+        {
+            return;
+        }
+
+        const auto label_info = VkDebugUtilsLabelEXT{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pNext = nullptr,
+            .pLabelName = label.name.data(),
+            .color = {label.color[0], label.color[1], label.color[2], label.color[3]},
+        };
+        _dispatch_table->cmdInsertDebugUtilsLabelEXT(_command_buffer, &label_info);
+#endif
+    }
+
     execution_port::execution_port(vk::device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type,
                                    VkQueue queue, vkb::DispatchTable dispatch_table)
         : _parent_device{&parent_device}, _queue_family_index{queue_family_index}, _queue_type{queue_type},
           _queue{queue}, _dispatch_table{dispatch_table}
     {
         _timeline_semaphore = _parent_device->create_timeline_semaphore();
+
+        if (_queue != VK_NULL_HANDLE)
+        {
+            if (queue_type == vkb::QueueType::graphics)
+            {
+                _parent_device->set_object_name(reinterpret_cast<uint64_t>(_queue), VK_OBJECT_TYPE_QUEUE,
+                                                "Graphics Queue");
+            }
+            else if (queue_type == vkb::QueueType::compute)
+            {
+                _parent_device->set_object_name(reinterpret_cast<uint64_t>(_queue), VK_OBJECT_TYPE_QUEUE,
+                                                "Async Compute Queue");
+            }
+            else if (queue_type == vkb::QueueType::transfer)
+            {
+                _parent_device->set_object_name(reinterpret_cast<uint64_t>(_queue), VK_OBJECT_TYPE_QUEUE,
+                                                "Async Transfer Queue");
+            }
+        }
     }
 
     execution_port::~execution_port()
@@ -1075,5 +1142,55 @@ namespace tempest::rhi::vk
         }
 
         return {};
+    }
+
+    auto execution_port::begin_debug_region([[maybe_unused]] const debug_label& label) -> void
+    {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        if (_dispatch_table.fp_vkQueueBeginDebugUtilsLabelEXT == nullptr || _queue == VK_NULL_HANDLE ||
+            label.name.empty())
+        {
+            return;
+        }
+
+        const auto label_info = VkDebugUtilsLabelEXT{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pNext = nullptr,
+            .pLabelName = label.name.data(),
+            .color = {label.color[0], label.color[1], label.color[2], label.color[3]},
+        };
+        _dispatch_table.queueBeginDebugUtilsLabelEXT(_queue, &label_info);
+#endif
+    }
+
+    auto execution_port::end_debug_region() -> void
+    {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        if (_dispatch_table.fp_vkQueueEndDebugUtilsLabelEXT == nullptr || _queue == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        _dispatch_table.queueEndDebugUtilsLabelEXT(_queue);
+#endif
+    }
+
+    auto execution_port::insert_debug_marker([[maybe_unused]] const debug_label& label) -> void
+    {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        if (_dispatch_table.fp_vkQueueInsertDebugUtilsLabelEXT == nullptr || _queue == VK_NULL_HANDLE ||
+            label.name.empty())
+        {
+            return;
+        }
+
+        const auto label_info = VkDebugUtilsLabelEXT{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pNext = nullptr,
+            .pLabelName = label.name.data(),
+            .color = {label.color[0], label.color[1], label.color[2], label.color[3]},
+        };
+        _dispatch_table.queueInsertDebugUtilsLabelEXT(_queue, &label_info);
+#endif
     }
 } // namespace tempest::rhi::vk

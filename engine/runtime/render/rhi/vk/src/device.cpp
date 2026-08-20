@@ -952,6 +952,11 @@ namespace tempest::rhi::vk
 
         auto slot_handle = _buffers.insert(buf);
 
+        if (!desc.name.empty())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(vk_buffer), VK_OBJECT_TYPE_BUFFER, desc.name);
+        }
+
         return buffer_handle{
             .handle = slot_handle,
             .gpu_address = gpu_address,
@@ -1050,6 +1055,12 @@ namespace tempest::rhi::vk
         };
 
         auto slot_handle = _textures.insert(tex);
+
+        if (!desc.name.empty())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(vk_image), VK_OBJECT_TYPE_IMAGE, desc.name);
+        }
+
         return texture_handle{
             .handle = slot_handle,
         };
@@ -1165,6 +1176,12 @@ namespace tempest::rhi::vk
         };
 
         auto slot_handle = _samplers.insert(samp);
+
+        if (!desc.name.empty())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(vk_sampler), VK_OBJECT_TYPE_SAMPLER, desc.name);
+        }
+
         return sampler_handle{
             .handle = slot_handle,
         };
@@ -1440,6 +1457,12 @@ namespace tempest::rhi::vk
         auto slot_handle = _graphics_pipelines.insert(graphics_pipeline{
             .handle = vk_pipeline,
         });
+
+        if (!desc.name.empty())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(vk_pipeline), VK_OBJECT_TYPE_PIPELINE, desc.name);
+        }
+
         return graphics_pipeline_handle{
             .handle = slot_handle,
         };
@@ -1488,6 +1511,12 @@ namespace tempest::rhi::vk
         auto slot_handle = _compute_pipelines.insert(compute_pipeline{
             .handle = vk_pipeline,
         });
+
+        if (!desc.name.empty())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(vk_pipeline), VK_OBJECT_TYPE_PIPELINE, desc.name);
+        }
+
         return compute_pipeline_handle{
             .handle = slot_handle,
         };
@@ -1964,6 +1993,19 @@ namespace tempest::rhi::vk
         {
             _storage_image_free_list.push_back(i - 1);
         }
+
+        set_object_name(reinterpret_cast<uint64_t>(_sampler_descriptor_buffer), VK_OBJECT_TYPE_BUFFER,
+                        "Sampler Descriptor Buffer");
+        set_object_name(reinterpret_cast<uint64_t>(_resource_descriptor_buffer), VK_OBJECT_TYPE_BUFFER,
+                        "Resource Descriptor Buffer");
+        set_object_name(reinterpret_cast<uint64_t>(_default_pipeline_layout), VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+                        "Default Pipeline Layout");
+        set_object_name(reinterpret_cast<uint64_t>(_storage_image_set_layout), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                        "Storage Image Set Layout");
+        set_object_name(reinterpret_cast<uint64_t>(_sampled_image_set_layout), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                        "Sampled Image Set Layout");
+        set_object_name(reinterpret_cast<uint64_t>(_sampler_set_layout), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                        "Sampler Set Layout");
     }
 
     auto device::allocate_descriptor(descriptor_type type) -> descriptor_handle
@@ -2124,5 +2166,99 @@ namespace tempest::rhi::vk
         auto* dest_ptr =
             _resource_descriptor_buffer_ptr + _storage_image_buffer_offset + slot.index * _storage_image_descriptor_size;
         _dispatch_table.getDescriptorEXT(&get_info, _storage_image_descriptor_size, dest_ptr);
+    }
+
+    auto device::set_object_name([[maybe_unused]] uint64_t object_handle,
+                                 [[maybe_unused]] VkObjectType object_type,
+                                 [[maybe_unused]] cstring_view name) const -> void
+    {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        if (_dispatch_table.fp_vkSetDebugUtilsObjectNameEXT == nullptr || name.empty() || object_handle == 0)
+        {
+            return;
+        }
+
+        const auto name_info = VkDebugUtilsObjectNameInfoEXT{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .pNext = nullptr,
+            .objectType = object_type,
+            .objectHandle = object_handle,
+            .pObjectName = name.data(),
+        };
+
+        _dispatch_table.setDebugUtilsObjectNameEXT(&name_info);
+#endif
+    }
+
+    auto device::set_debug_name(buffer_handle handle, cstring_view name) -> void
+    {
+        const auto buf = get_buffer(handle);
+        if (buf.has_value())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(buf->handle), VK_OBJECT_TYPE_BUFFER, name);
+        }
+    }
+
+    auto device::set_debug_name(texture_handle handle, cstring_view name) -> void
+    {
+        const auto tex = get_texture(handle);
+        if (tex.has_value())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(tex->handle), VK_OBJECT_TYPE_IMAGE, name);
+        }
+    }
+
+    auto device::set_debug_name(texture_view_handle handle, cstring_view name) -> void
+    {
+        const auto view = get_texture_view(handle);
+        if (view.has_value())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(view->handle), VK_OBJECT_TYPE_IMAGE_VIEW, name);
+        }
+    }
+
+    auto device::set_debug_name(sampler_handle handle, cstring_view name) -> void
+    {
+        const auto samp = get_sampler(handle);
+        if (samp.has_value())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(samp->handle), VK_OBJECT_TYPE_SAMPLER, name);
+        }
+    }
+
+    auto device::set_debug_name(graphics_pipeline_handle handle, cstring_view name) -> void
+    {
+        const auto pipe = get_graphics_pipeline(handle);
+        if (pipe.has_value())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(pipe->handle), VK_OBJECT_TYPE_PIPELINE, name);
+        }
+    }
+
+    auto device::set_debug_name(compute_pipeline_handle handle, cstring_view name) -> void
+    {
+        const auto pipe = get_compute_pipeline(handle);
+        if (pipe.has_value())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(pipe->handle), VK_OBJECT_TYPE_PIPELINE, name);
+        }
+    }
+
+    auto device::set_debug_name(event_handle handle, cstring_view name) -> void
+    {
+        const auto evt = get_event(handle);
+        if (evt != VK_NULL_HANDLE)
+        {
+            set_object_name(reinterpret_cast<uint64_t>(evt), VK_OBJECT_TYPE_EVENT, name);
+        }
+    }
+
+    auto device::set_debug_name(semaphore_handle handle, cstring_view name) -> void
+    {
+        const auto sem = get_semaphore(handle);
+        if (sem != VK_NULL_HANDLE)
+        {
+            set_object_name(reinterpret_cast<uint64_t>(sem), VK_OBJECT_TYPE_SEMAPHORE, name);
+        }
     }
 } // namespace tempest::rhi::vk

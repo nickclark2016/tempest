@@ -2,6 +2,7 @@
 #define tempest_core_iterator_hpp
 
 #include <tempest/concepts.hpp>
+#include <tempest/move.hpp>
 
 namespace tempest
 {
@@ -620,6 +621,172 @@ namespace tempest
             { s - i } -> same_as<iter_difference_t<I>>;
             { i - s } -> same_as<iter_difference_t<I>>;
         };
+
+    template <typename Container>
+    class back_insert_iterator
+    {
+      public:
+        using value_type = void;
+        using difference_type = ptrdiff_t;
+        using pointer = void;
+        using reference = void;
+        using container_type = Container;
+
+        constexpr back_insert_iterator() noexcept = default;
+
+        constexpr explicit back_insert_iterator(Container& c) noexcept
+            : _container{__builtin_addressof(c)}
+        {
+        }
+
+        constexpr auto operator=(const typename Container::value_type& value) -> back_insert_iterator&
+        {
+            _container->push_back(value);
+            return *this;
+        }
+
+        constexpr auto operator=(typename Container::value_type&& value) -> back_insert_iterator&
+        {
+            _container->push_back(tempest::move(value));
+            return *this;
+        }
+
+        [[nodiscard]] constexpr auto operator*() noexcept -> back_insert_iterator&
+        {
+            return *this;
+        }
+
+        constexpr auto operator++() noexcept -> back_insert_iterator&
+        {
+            return *this;
+        }
+
+        constexpr auto operator++(int) noexcept -> back_insert_iterator
+        {
+            return *this;
+        }
+
+      protected:
+        Container* _container{nullptr};
+    };
+
+    template <typename Container>
+    [[nodiscard]] constexpr auto back_inserter(Container& c) noexcept -> back_insert_iterator<Container>
+    {
+        return back_insert_iterator<Container>(c);
+    }
+
+    template <typename Container>
+    class front_insert_iterator
+    {
+      public:
+        using value_type = void;
+        using difference_type = ptrdiff_t;
+        using pointer = void;
+        using reference = void;
+        using container_type = Container;
+
+        constexpr front_insert_iterator() noexcept = default;
+
+        constexpr explicit front_insert_iterator(Container& c) noexcept
+            : _container{__builtin_addressof(c)}
+        {
+        }
+
+        constexpr auto operator=(const typename Container::value_type& value) -> front_insert_iterator&
+        {
+            _container->push_front(value);
+            return *this;
+        }
+
+        constexpr auto operator=(typename Container::value_type&& value) -> front_insert_iterator&
+        {
+            _container->push_front(tempest::move(value));
+            return *this;
+        }
+
+        [[nodiscard]] constexpr auto operator*() noexcept -> front_insert_iterator&
+        {
+            return *this;
+        }
+
+        constexpr auto operator++() noexcept -> front_insert_iterator&
+        {
+            return *this;
+        }
+
+        constexpr auto operator++(int) noexcept -> front_insert_iterator
+        {
+            return *this;
+        }
+
+      protected:
+        Container* _container{nullptr};
+    };
+
+    template <typename Container>
+    [[nodiscard]] constexpr auto front_inserter(Container& c) noexcept -> front_insert_iterator<Container>
+    {
+        return front_insert_iterator<Container>(c);
+    }
+
+    template <typename Container>
+    class insert_iterator
+    {
+      public:
+        using value_type = void;
+        using difference_type = ptrdiff_t;
+        using pointer = void;
+        using reference = void;
+        using container_type = Container;
+
+        constexpr insert_iterator() noexcept = default;
+
+        constexpr insert_iterator(Container& c, typename Container::iterator i) noexcept
+            : _container{__builtin_addressof(c)}, _iter{i}
+        {
+        }
+
+        constexpr auto operator=(const typename Container::value_type& value) -> insert_iterator&
+        {
+            _iter = _container->insert(_iter, value);
+            ++_iter;
+            return *this;
+        }
+
+        constexpr auto operator=(typename Container::value_type&& value) -> insert_iterator&
+        {
+            _iter = _container->insert(_iter, tempest::move(value));
+            ++_iter;
+            return *this;
+        }
+
+        [[nodiscard]] constexpr auto operator*() noexcept -> insert_iterator&
+        {
+            return *this;
+        }
+
+        constexpr auto operator++() noexcept -> insert_iterator&
+        {
+            return *this;
+        }
+
+        constexpr auto operator++(int) noexcept -> insert_iterator
+        {
+            return *this;
+        }
+
+      protected:
+        Container* _container{nullptr};
+        typename Container::iterator _iter{};
+    };
+
+    template <typename Container>
+    [[nodiscard]] constexpr auto inserter(Container& c, typename Container::iterator i) noexcept
+        -> insert_iterator<Container>
+    {
+        return insert_iterator<Container>(c, i);
+    }
 } // namespace tempest
 
 #endif // tempest_core_iterator_hpp

@@ -209,6 +209,14 @@ namespace tempest::rhi::vk
             vkb_instance_builder.enable_validation_layers();
         }
 
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        auto sys_info_res = vkb::SystemInfo::get_system_info();
+        if (sys_info_res && sys_info_res->is_extension_available(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
+        {
+            vkb_instance_builder.enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
+#endif
+
 #if defined(TEMPEST_PLATFORM_WINDOWS)
         vkb_instance_builder.enable_extension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #elif defined(TEMPEST_PLATFORM_LINUX)

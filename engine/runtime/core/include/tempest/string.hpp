@@ -19,7 +19,7 @@
 namespace tempest
 {
     template <typename CharT, typename Traits = char_traits<CharT>, typename Allocator = ::tempest::allocator<CharT>>
-    class TEMPEST_API basic_string
+    class basic_string
     {
         static constexpr bool is_noexecpt_movable =
             allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||

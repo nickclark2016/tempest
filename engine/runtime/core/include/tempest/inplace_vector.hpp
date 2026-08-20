@@ -10,7 +10,7 @@
 namespace tempest
 {
     template <typename T, size_t N>
-    class TEMPEST_API inplace_vector
+    class inplace_vector
     {
       public:
         using value_type = T;

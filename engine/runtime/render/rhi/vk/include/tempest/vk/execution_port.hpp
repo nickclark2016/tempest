@@ -95,6 +95,11 @@ namespace tempest::rhi::vk
         auto copy_texture_to_buffer(texture_handle src, buffer_handle dst, span<const buffer_texture_copy_region> regions)
             -> void override;
 
+        // Debug markers and regions
+        auto begin_debug_region(const debug_label& label) -> void override;
+        auto end_debug_region() -> void override;
+        auto insert_debug_marker(const debug_label& label) -> void override;
+
         [[nodiscard]] operator VkCommandBuffer() const noexcept
         {
             return _command_buffer;
@@ -168,8 +173,35 @@ namespace tempest::rhi::vk
             result = dispatch_table.allocateCommandBuffers(&command_buffer_allocate_info, vk_cmd_buffers.data());
             TEMPEST_ASSERT(result == VK_SUCCESS);
 
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+            if (dispatch_table.fp_vkSetDebugUtilsObjectNameEXT != nullptr)
+            {
+                const auto pool_name_info = VkDebugUtilsObjectNameInfoEXT{
+                    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+                    .pNext = nullptr,
+                    .objectType = VK_OBJECT_TYPE_COMMAND_POOL,
+                    .objectHandle = reinterpret_cast<uint64_t>(_command_pool),
+                    .pObjectName = "Command Pool",
+                };
+                dispatch_table.setDebugUtilsObjectNameEXT(&pool_name_info);
+            }
+#endif
+
             for (size_t i = 0; i < max_command_lists; ++i)
             {
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+                if (dispatch_table.fp_vkSetDebugUtilsObjectNameEXT != nullptr)
+                {
+                    const auto buf_name_info = VkDebugUtilsObjectNameInfoEXT{
+                        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+                        .pNext = nullptr,
+                        .objectType = VK_OBJECT_TYPE_COMMAND_BUFFER,
+                        .objectHandle = reinterpret_cast<uint64_t>(vk_cmd_buffers[i]),
+                        .pObjectName = "Command Buffer",
+                    };
+                    dispatch_table.setDebugUtilsObjectNameEXT(&buf_name_info);
+                }
+#endif
                 _command_buffers.emplace_back(vk_cmd_buffers[i], dispatch_table, device, queue_type);
             }
         }
@@ -408,6 +440,11 @@ namespace tempest::rhi::vk
                                   span<const device_sync_point> wait_semaphores,
                                   span<const device_sync_point> signal_semaphores)
             -> expected<void, submit_error> override;
+
+        // Debug markers and regions
+        auto begin_debug_region(const debug_label& label) -> void override;
+        auto end_debug_region() -> void override;
+        auto insert_debug_marker(const debug_label& label) -> void override;
 
         [[nodiscard]] auto get_timeline_sync_point() const noexcept -> host_sync_point override
         {

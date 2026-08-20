@@ -2,6 +2,8 @@
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_graph/temporal_texture.hpp>
 
+#include <format>
+
 namespace tempest::render_graph
 {
     auto render_graph_executor::execute(rhi::device& dev, render_graph& graph, const frame_sync_options& frame_sync)
@@ -48,6 +50,16 @@ namespace tempest::render_graph
             const auto& batch = sync.queue_batches[batch_idx];
             auto& port = get_execution_port(dev, batch.queue);
             auto& cmd = port.acquire_command_list(0, rhi::command_list_lifetime::transient);
+
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+            auto batch_name = string{};
+            const auto* queue_name = batch.queue == queue_type::graphics       ? "Graphics"
+                                     : batch.queue == queue_type::async_compute ? "Async Compute"
+                                                                                : "Async Transfer";
+            std::format_to(tempest::back_inserter(batch_name), "Queue Batch {} ({})", batch_idx, queue_name);
+            port.begin_debug_region(rhi::debug_label{.name = batch_name.c_str()});
+#endif
+
             cmd.begin();
 
             auto active_color_attachment_handles = vector<rhi::texture_handle>{};
@@ -60,6 +72,41 @@ namespace tempest::render_graph
                 }
 
                 const auto& pass = all_passes[pass_idx];
+
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+                for (const auto& access : pass.texture_accesses)
+                {
+                    if (access.texture.id < reg_textures.size())
+                    {
+                        const auto& reg_tex = reg_textures[access.texture.id];
+                        if (!reg_tex.desc.name.empty())
+                        {
+                            const auto* alloc = allocator.get_texture(access.texture.id);
+                            if (alloc != nullptr)
+                            {
+                                dev.set_debug_name(alloc->handle, reg_tex.desc.name);
+                            }
+                        }
+                    }
+                }
+                for (const auto& access : pass.buffer_accesses)
+                {
+                    if (access.buffer.id < reg_buffers.size())
+                    {
+                        const auto& reg_buf = reg_buffers[access.buffer.id];
+                        if (!reg_buf.desc.name.empty())
+                        {
+                            const auto* alloc = allocator.get_buffer(access.buffer.id);
+                            if (alloc != nullptr)
+                            {
+                                dev.set_debug_name(alloc->handle, reg_buf.desc.name);
+                            }
+                        }
+                    }
+                }
+
+                cmd.begin_debug_region(rhi::debug_label{.name = pass.name.c_str()});
+#endif
 
                 // 1. Issue pre-pass pipeline barriers
                 const auto plan_it = plan_map.find(pass_idx);
@@ -152,6 +199,10 @@ namespace tempest::render_graph
                         pass.execute_fn(ctx, cmd);
                     }
                 }
+
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+                cmd.end_debug_region();
+#endif
             }
 
             const auto is_last_batch = (batch_idx + 1 == sync.queue_batches.size());
@@ -254,6 +305,11 @@ namespace tempest::render_graph
 
             const rhi::command_list* cmds[] = {&cmd};
             const auto submit_res = port.submit(span<const rhi::command_list*>{cmds}, wait_sync, signal_sync);
+
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+            port.end_debug_region();
+#endif
+
             if (!submit_res.has_value())
             {
                 return unexpected(execution_error::queue_submit_failed);

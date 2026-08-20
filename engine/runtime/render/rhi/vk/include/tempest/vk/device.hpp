@@ -127,6 +127,17 @@ namespace tempest::rhi::vk
         auto write_storage_image_descriptor(descriptor_handle slot, texture_view_handle view,
                                             image_layout layout = image_layout::general) -> void override;
 
+        auto set_debug_name(buffer_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(texture_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(texture_view_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(sampler_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(graphics_pipeline_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(compute_pipeline_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(event_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(semaphore_handle handle, cstring_view name) -> void override;
+
+        auto set_object_name(uint64_t object_handle, VkObjectType object_type, cstring_view name) const -> void;
+
         [[nodiscard]] auto get_sampler_descriptor_buffer_address() const noexcept -> VkDeviceAddress
         {
             return _sampler_descriptor_buffer_address;

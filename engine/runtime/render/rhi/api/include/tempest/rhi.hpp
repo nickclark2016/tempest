@@ -2,6 +2,7 @@
 #define tempest_rhi_api_rhi_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/array.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/cstring_view.hpp>
 #include <tempest/enum.hpp>
@@ -126,6 +127,12 @@ namespace tempest::rhi
     {
         uint32_t index = ~0U;
         uint32_t generation = 0;
+    };
+
+    struct debug_label
+    {
+        cstring_view name;
+        array<float, 4> color = {0.0F, 0.0F, 0.0F, 0.0F};
     };
 
     /// \brief A handle to the window system integration (WSI) handle for a window or display. This handle is used for
@@ -507,6 +514,7 @@ namespace tempest::rhi
         rasterization_state rasterization_state;
         depth_stencil_state depth_stencil_state;
         span<const attachment_blend_state> color_attachment_blend_states;
+        cstring_view name;
     };
 
     struct graphics_pipeline_handle
@@ -517,6 +525,7 @@ namespace tempest::rhi
     struct compute_pipeline_desc
     {
         shader_module_desc shader_module;
+        cstring_view name;
     };
 
     struct compute_pipeline_handle
@@ -722,6 +731,11 @@ namespace tempest::rhi
         virtual auto copy_texture_to_buffer(texture_handle src, buffer_handle dst,
                                             span<const buffer_texture_copy_region> regions) -> void = 0;
 
+        // Debug markers and regions
+        virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void {}
+        virtual auto end_debug_region() -> void {}
+        virtual auto insert_debug_marker([[maybe_unused]] const debug_label& label) -> void {}
+
       protected:
         command_list() = default;
     };
@@ -919,6 +933,25 @@ namespace tempest::rhi
         virtual auto write_storage_image_descriptor(descriptor_handle slot, texture_view_handle view,
                                                     image_layout layout = image_layout::general) -> void = 0;
 
+        // Object naming
+        virtual auto set_debug_name([[maybe_unused]] buffer_handle handle, [[maybe_unused]] cstring_view name) -> void {}
+        virtual auto set_debug_name([[maybe_unused]] texture_handle handle, [[maybe_unused]] cstring_view name) -> void {}
+        virtual auto set_debug_name([[maybe_unused]] texture_view_handle handle, [[maybe_unused]] cstring_view name)
+            -> void
+        {
+        }
+        virtual auto set_debug_name([[maybe_unused]] sampler_handle handle, [[maybe_unused]] cstring_view name) -> void {}
+        virtual auto set_debug_name([[maybe_unused]] graphics_pipeline_handle handle, [[maybe_unused]] cstring_view name)
+            -> void
+        {
+        }
+        virtual auto set_debug_name([[maybe_unused]] compute_pipeline_handle handle, [[maybe_unused]] cstring_view name)
+            -> void
+        {
+        }
+        virtual auto set_debug_name([[maybe_unused]] event_handle handle, [[maybe_unused]] cstring_view name) -> void {}
+        virtual auto set_debug_name([[maybe_unused]] semaphore_handle handle, [[maybe_unused]] cstring_view name) -> void {}
+
       protected:
         device() = default;
     };
@@ -960,6 +993,11 @@ namespace tempest::rhi
                                           span<const device_sync_point> wait_semaphores,
                                           span<const device_sync_point> signal_semaphores)
             -> expected<void, submit_error> = 0;
+
+        // Debug markers and regions
+        virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void {}
+        virtual auto end_debug_region() -> void {}
+        virtual auto insert_debug_marker([[maybe_unused]] const debug_label& label) -> void {}
 
       protected:
         execution_port() = default;

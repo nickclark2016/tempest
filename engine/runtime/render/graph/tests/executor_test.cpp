@@ -148,6 +148,29 @@ namespace tempest::render_graph
                 -> void override
             {
             }
+
+            vector<string> debug_regions;
+            vector<string> debug_markers;
+            uint32_t begin_debug_region_calls = 0;
+            uint32_t end_debug_region_calls = 0;
+            uint32_t insert_debug_marker_calls = 0;
+
+            auto begin_debug_region(const rhi::debug_label& label) -> void override
+            {
+                begin_debug_region_calls++;
+                debug_regions.push_back(string{label.name.data(), label.name.size()});
+            }
+
+            auto end_debug_region() -> void override
+            {
+                end_debug_region_calls++;
+            }
+
+            auto insert_debug_marker(const rhi::debug_label& label) -> void override
+            {
+                insert_debug_marker_calls++;
+                debug_markers.push_back(string{label.name.data(), label.name.size()});
+            }
         };
 
         class mock_execution_port final : public rhi::execution_port
@@ -157,8 +180,30 @@ namespace tempest::render_graph
             uint32_t submit_calls = 0;
             vector<rhi::device_sync_point> last_wait_sync;
             vector<rhi::device_sync_point> last_signal_sync;
+            vector<string> debug_regions;
+            vector<string> debug_markers;
+            uint32_t begin_debug_region_calls = 0;
+            uint32_t end_debug_region_calls = 0;
+            uint32_t insert_debug_marker_calls = 0;
 
             auto wait_idle() -> void override {}
+
+            auto begin_debug_region(const rhi::debug_label& label) -> void override
+            {
+                begin_debug_region_calls++;
+                debug_regions.push_back(string{label.name.data(), label.name.size()});
+            }
+
+            auto end_debug_region() -> void override
+            {
+                end_debug_region_calls++;
+            }
+
+            auto insert_debug_marker(const rhi::debug_label& label) -> void override
+            {
+                insert_debug_marker_calls++;
+                debug_markers.push_back(string{label.name.data(), label.name.size()});
+            }
 
             [[nodiscard]] auto acquire_command_list(
                 [[maybe_unused]] uint32_t thread_id = 0,
@@ -318,6 +363,41 @@ namespace tempest::render_graph
             auto write_storage_image_descriptor([[maybe_unused]] rhi::descriptor_handle slot,
                                                 [[maybe_unused]] rhi::texture_view_handle view,
                                                 [[maybe_unused]] rhi::image_layout layout) -> void override {}
+
+            flat_unordered_map<uint64_t, string> object_debug_names;
+
+            auto set_debug_name(rhi::buffer_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+            auto set_debug_name(rhi::texture_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+            auto set_debug_name(rhi::texture_view_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+            auto set_debug_name(rhi::sampler_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+            auto set_debug_name(rhi::graphics_pipeline_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+            auto set_debug_name(rhi::compute_pipeline_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+            auto set_debug_name(rhi::event_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+            auto set_debug_name(rhi::semaphore_handle handle, cstring_view name) -> void override
+            {
+                object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
         };
     } // namespace
 
@@ -534,5 +614,77 @@ namespace tempest::render_graph
 
         EXPECT_FALSE(disabled_executed);
         EXPECT_TRUE(consumer_executed);
+    }
+
+    TEST(executor_test, automatic_pass_debug_regions_and_markers)
+    {
+        auto dev = mock_device_with_ports{};
+        auto rg = render_graph{1920, 1080};
+
+        struct pass_a_data
+        {
+            rg_texture_id tex;
+        };
+
+        rg.add_graphics_pass<pass_a_data>(
+            "GeometryPass",
+            [](pass_builder& builder, pass_a_data& data) {
+                const auto t = builder.create_texture(rg_texture_desc{.name = "GBufferAlbedo"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+            },
+            [](const pass_a_data&, pass_execution_context&, rhi::command_list& cmd) {
+                cmd.insert_debug_marker(rhi::debug_label{.name = "DrawMeshes"});
+            });
+
+        struct pass_b_data
+        {
+            rg_texture_id in_tex;
+            rg_texture_id out_tex;
+        };
+
+        rg.add_compute_pass<pass_b_data>(
+            "LightingPass",
+            [](pass_builder& builder, pass_b_data& data) {
+                data.in_tex = builder.read(rg_texture_id{.id = 0, .version = 1}, rhi::pipeline_stage::compute,
+                                           rhi::resource_access::read, rhi::image_layout::general);
+                const auto out = builder.create_texture(rg_texture_desc{.name = "HDRColor"});
+                data.out_tex = builder.write(out, rhi::pipeline_stage::compute, rhi::resource_access::write,
+                                             rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [](const pass_b_data&, pass_execution_context&, rhi::command_list& cmd) {
+                cmd.insert_debug_marker(rhi::debug_label{.name = "DispatchCompute"});
+            });
+
+        const auto exec_res = rg.execute(dev);
+        ASSERT_TRUE(exec_res.has_value());
+
+#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+        // Check graphics pass regions and markers
+        EXPECT_EQ(dev.graphics_port.cmd.begin_debug_region_calls, 1U);
+        EXPECT_EQ(dev.graphics_port.cmd.end_debug_region_calls, 1U);
+        ASSERT_GE(dev.graphics_port.cmd.debug_regions.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.cmd.debug_regions[0], "GeometryPass");
+        ASSERT_GE(dev.graphics_port.cmd.debug_markers.size(), 1U);
+        EXPECT_EQ(dev.graphics_port.cmd.debug_markers[0], "DrawMeshes");
+
+        // Check compute pass regions and markers
+        EXPECT_EQ(dev.compute_port.cmd.begin_debug_region_calls, 1U);
+        EXPECT_EQ(dev.compute_port.cmd.end_debug_region_calls, 1U);
+        ASSERT_GE(dev.compute_port.cmd.debug_regions.size(), 1U);
+        EXPECT_EQ(dev.compute_port.cmd.debug_regions[0], "LightingPass");
+        ASSERT_GE(dev.compute_port.cmd.debug_markers.size(), 1U);
+        EXPECT_EQ(dev.compute_port.cmd.debug_markers[0], "DispatchCompute");
+
+        // Check queue batch regions
+        EXPECT_GE(dev.graphics_port.begin_debug_region_calls, 1U);
+        EXPECT_GE(dev.graphics_port.end_debug_region_calls, 1U);
+        EXPECT_GE(dev.compute_port.begin_debug_region_calls, 1U);
+        EXPECT_GE(dev.compute_port.end_debug_region_calls, 1U);
+
+        // Check dynamic resource naming
+        EXPECT_FALSE(dev.object_debug_names.empty());
+#endif
     }
 } // namespace tempest::render_graph

@@ -69,6 +69,8 @@ scoped.workspace('Tempest', function()
     scoped.filter({
         'configurations:Debug or RelWithDebugInfo',
     }, function()
+        defines { 'TEMPEST_ENABLE_DEBUG_MARKERS' }
+
         scoped.filter({
             'action:vs*',
         }, function()

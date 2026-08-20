@@ -161,14 +161,14 @@ namespace tempest
 
         class undefined_class_type;
 
-        union TEMPEST_API non_copyable_types {
+        union non_copyable_types {
             void* object_ptr;
             const void* const_object_ptr;
             void (*function_ptr)();
             void (undefined_class_type::*member_ptr)();
         };
 
-        union TEMPEST_API any_func_data {
+        union any_func_data {
             void* access() noexcept;
             const void* access() const noexcept;
 
@@ -211,14 +211,14 @@ namespace tempest
             DESTROY_FUNCTOR,
         };
 
-        class TEMPEST_API function_base
+        class function_base
         {
           public:
             static constexpr size_t max_size = sizeof(non_copyable_types);
             static constexpr size_t max_alignment = alignof(non_copyable_types);
 
             template <typename Fn>
-            class TEMPEST_API manager
+            class manager
             {
               protected:
                 static constexpr bool is_stored_locally = is_location_invariant<Fn>::value && sizeof(Fn) <= max_size &&
@@ -335,10 +335,10 @@ namespace tempest
         };
 
         template <typename Sig, typename Fn>
-        class TEMPEST_API function_handler;
+        class function_handler;
 
         template <typename R, typename Fn, typename... Args>
-        class TEMPEST_API function_handler<R(Args...), Fn> : public function_base::manager<Fn>
+        class function_handler<R(Args...), Fn> : public function_base::manager<Fn>
         {
             using base = function_base::manager<Fn>;
 
@@ -364,7 +364,7 @@ namespace tempest
         };
 
         template <>
-        class TEMPEST_API function_handler<void, void>
+        class function_handler<void, void>
         {
           public:
             static bool exec([[maybe_unused]] any_func_data& tgt, [[maybe_unused]] const any_func_data& src,
@@ -375,18 +375,18 @@ namespace tempest
         };
 
         template <typename Sig, typename Fn, bool valid = is_object_v<Fn>>
-        struct TEMPEST_API function_target_handler : function_handler<Sig, remove_cv_t<Fn>>
+        struct function_target_handler : function_handler<Sig, remove_cv_t<Fn>>
         {
         };
 
         template <typename Sig, typename Fn>
-        struct TEMPEST_API function_target_handler<Sig, Fn, false> : function_handler<void, void>
+        struct function_target_handler<Sig, Fn, false> : function_handler<void, void>
         {
         };
     } // namespace detail
 
     template <typename M, typename T>
-    TEMPEST_API constexpr auto mem_fn(M T::* pm) noexcept
+    constexpr auto mem_fn(M T::* pm) noexcept
     {
         return [pm](T& obj, auto&&... args) -> decltype(auto) {
             return tempest::invoke(pm, obj, tempest::forward<decltype(args)>(args)...);
@@ -394,11 +394,7 @@ namespace tempest
     }
 
     template <typename R, typename... Args>
-    class
-#if defined(_WIN32) && !defined(__clang__)
-        TEMPEST_API
-#endif
-        function<R(Args...)> : private detail::function_base
+    class function<R(Args...)> : private detail::function_base
     {
         template <typename Fn>
         using handler = detail::function_target_handler<R(Args...), decay_t<Fn>>;
