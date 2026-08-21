@@ -150,6 +150,12 @@ namespace tempest::render_graph
                 -> void override
             {
             }
+            auto blit_texture([[maybe_unused]] rhi::texture_handle src,
+                              [[maybe_unused]] rhi::texture_handle dst,
+                              [[maybe_unused]] span<const rhi::texture_blit_region> regions,
+                              [[maybe_unused]] rhi::filter_mode filter) -> void override
+            {
+            }
         };
 
         class mock_execution_port final : public rhi::execution_port

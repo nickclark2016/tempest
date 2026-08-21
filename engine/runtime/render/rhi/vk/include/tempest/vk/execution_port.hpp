@@ -94,6 +94,8 @@ namespace tempest::rhi::vk
             -> void override;
         auto copy_texture_to_buffer(texture_handle src, buffer_handle dst, span<const buffer_texture_copy_region> regions)
             -> void override;
+        auto blit_texture(texture_handle src, texture_handle dst, span<const texture_blit_region> regions,
+                          filter_mode filter = filter_mode::linear) -> void override;
 
         // Debug markers and regions
         auto begin_debug_region(const debug_label& label) -> void override;

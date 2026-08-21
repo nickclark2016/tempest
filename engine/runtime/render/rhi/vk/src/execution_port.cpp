@@ -1,5 +1,6 @@
 #include <tempest/vk/execution_port.hpp>
 
+#include <tempest/algorithm.hpp>
 #include <tempest/vk/device.hpp>
 #include <vulkan/vulkan_core.h>
 
@@ -7,6 +8,19 @@ namespace tempest::rhi::vk
 {
     namespace
     {
+        auto as_vulkan(filter_mode mode) -> VkFilter
+        {
+            switch (mode)
+            {
+            case filter_mode::nearest:
+                return VK_FILTER_NEAREST;
+            case filter_mode::linear:
+                return VK_FILTER_LINEAR;
+            default:
+                return VK_FILTER_LINEAR;
+            }
+        }
+
         auto infer_aspect_flags(VkFormat format) -> VkImageAspectFlags
         {
             switch (format)
@@ -913,6 +927,82 @@ namespace tempest::rhi::vk
         };
 
         _dispatch_table->cmdCopyImageToBuffer2(_command_buffer, &copy_info);
+    }
+
+    auto command_list::blit_texture(texture_handle src_texture, texture_handle dst_texture,
+                                    span<const texture_blit_region> regions, filter_mode filter) -> void
+    {
+        const auto src_tex = _parent_device->get_texture(src_texture);
+        const auto dst_tex = _parent_device->get_texture(dst_texture);
+        if (!src_tex.has_value() || !dst_tex.has_value())
+        {
+            return;
+        }
+
+        auto vk_regions = vector<VkImageBlit2>{};
+        vk_regions.reserve(regions.size());
+
+        for (const auto& region : regions)
+        {
+            vk_regions.emplace_back(VkImageBlit2{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+                .pNext = nullptr,
+                .srcSubresource =
+                    {
+                        .aspectMask = infer_aspect_flags(src_tex->format),
+                        .mipLevel = region.src_subresource.mip_level,
+                        .baseArrayLayer = region.src_subresource.base_array_layer,
+                        .layerCount = region.src_subresource.array_layer_count,
+                    },
+                .srcOffsets =
+                    {
+                        VkOffset3D{
+                            .x = region.src_offsets[0].x,
+                            .y = region.src_offsets[0].y,
+                            .z = region.src_offsets[0].z,
+                        },
+                        VkOffset3D{
+                            .x = region.src_offsets[1].x,
+                            .y = region.src_offsets[1].y,
+                            .z = region.src_offsets[1].z,
+                        },
+                    },
+                .dstSubresource =
+                    {
+                        .aspectMask = infer_aspect_flags(dst_tex->format),
+                        .mipLevel = region.dst_subresource.mip_level,
+                        .baseArrayLayer = region.dst_subresource.base_array_layer,
+                        .layerCount = region.dst_subresource.array_layer_count,
+                    },
+                .dstOffsets =
+                    {
+                        VkOffset3D{
+                            .x = region.dst_offsets[0].x,
+                            .y = region.dst_offsets[0].y,
+                            .z = region.dst_offsets[0].z,
+                        },
+                        VkOffset3D{
+                            .x = region.dst_offsets[1].x,
+                            .y = region.dst_offsets[1].y,
+                            .z = region.dst_offsets[1].z,
+                        },
+                    },
+            });
+        }
+
+        const auto blit_info = VkBlitImageInfo2{
+            .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+            .pNext = nullptr,
+            .srcImage = src_tex->handle,
+            .srcImageLayout = as_vulkan(image_layout::general),
+            .dstImage = dst_tex->handle,
+            .dstImageLayout = as_vulkan(image_layout::general),
+            .regionCount = static_cast<uint32_t>(vk_regions.size()),
+            .pRegions = vk_regions.data(),
+            .filter = as_vulkan(filter),
+        };
+
+        _dispatch_table->cmdBlitImage2(_command_buffer, &blit_info);
     }
 
     auto command_list::begin_debug_region([[maybe_unused]] const debug_label& label) -> void

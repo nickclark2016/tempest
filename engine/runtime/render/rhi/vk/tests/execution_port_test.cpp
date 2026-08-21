@@ -411,4 +411,181 @@ namespace tempest::rhi::vk
         dev->destroy_buffer(readback_buffer);
         dev->destroy_buffer(upload_buffer);
     }
+
+    TEST(execution_port_test, blit_texture_execution)
+    {
+        auto env = create_test_env();
+        ASSERT_NE(env.dev, nullptr);
+        auto& dev = env.dev;
+
+        constexpr uint32_t src_w = 16;
+        constexpr uint32_t src_h = 16;
+        constexpr uint32_t dst_w = 32;
+        constexpr uint32_t dst_h = 32;
+
+        auto src_tex = dev->create_texture(texture_desc{
+            .width = src_w,
+            .height = src_h,
+            .depth = 1,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .format = data_format::rgba8_unorm,
+            .memory_usage = memory_usage::device_only,
+            .usage = texture_usage::transfer_src | texture_usage::transfer_dst,
+            .name = "BlitSrcTexture",
+        });
+
+        auto dst_tex = dev->create_texture(texture_desc{
+            .width = dst_w,
+            .height = dst_h,
+            .depth = 1,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .format = data_format::rgba8_unorm,
+            .memory_usage = memory_usage::device_only,
+            .usage = texture_usage::transfer_src | texture_usage::transfer_dst,
+            .name = "BlitDstTexture",
+        });
+
+        auto upload_buf = dev->create_buffer(buffer_desc{
+            .size = src_w * src_h * 4,
+            .memory_usage = memory_usage::upload,
+            .usage = buffer_usage::transfer_src,
+            .name = "BlitUploadBuffer",
+        });
+
+        auto* upload_ptr = static_cast<uint8_t*>(upload_buf.cpu_address);
+        for (size_t i = 0; i < src_w * src_h * 4; i += 4)
+        {
+            upload_ptr[i + 0] = 200;
+            upload_ptr[i + 1] = 100;
+            upload_ptr[i + 2] = 50;
+            upload_ptr[i + 3] = 255;
+        }
+
+        auto readback_buf = dev->create_buffer(buffer_desc{
+            .size = dst_w * dst_h * 4,
+            .memory_usage = memory_usage::readback,
+            .usage = buffer_usage::transfer_dst,
+            .name = "BlitReadbackBuffer",
+        });
+
+        auto& graphics_port = dev->get_graphics_execution_port();
+        auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
+
+        cmd.begin();
+
+        auto init_barriers = array<texture_barrier, 2>{
+            texture_barrier{
+                .texture = src_tex,
+                .src = {.stages = pipeline_stage::top_of_pipe, .access = resource_access::none, .layout = image_layout::undefined},
+                .dst = {.stages = pipeline_stage::copy, .access = resource_access::write, .layout = image_layout::general},
+                .base_mip_level = 0,
+                .mip_level_count = 1,
+                .base_array_layer = 0,
+                .array_layer_count = 1,
+            },
+            texture_barrier{
+                .texture = dst_tex,
+                .src = {.stages = pipeline_stage::top_of_pipe, .access = resource_access::none, .layout = image_layout::undefined},
+                .dst = {.stages = pipeline_stage::blit, .access = resource_access::write, .layout = image_layout::general},
+                .base_mip_level = 0,
+                .mip_level_count = 1,
+                .base_array_layer = 0,
+                .array_layer_count = 1,
+            },
+        };
+        cmd.pipeline_barrier(init_barriers, {});
+
+        auto copy_to_src = buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = src_w,
+            .image_extent_height = src_h,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_buffer_to_texture(upload_buf, src_tex, span<const buffer_texture_copy_region>{&copy_to_src, 1});
+
+        auto blit_barrier = texture_barrier{
+            .texture = src_tex,
+            .src = {.stages = pipeline_stage::copy, .access = resource_access::write, .layout = image_layout::general},
+            .dst = {.stages = pipeline_stage::blit, .access = resource_access::read, .layout = image_layout::general},
+            .base_mip_level = 0,
+            .mip_level_count = 1,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+        };
+        cmd.pipeline_barrier(span<const texture_barrier>{&blit_barrier, 1}, {});
+
+        auto blit_reg = texture_blit_region{
+            .src_subresource = {.mip_level = 0, .base_array_layer = 0, .array_layer_count = 1},
+            .src_offsets = {offset_3d{0, 0, 0}, offset_3d{static_cast<int32_t>(src_w), static_cast<int32_t>(src_h), 1}},
+            .dst_subresource = {.mip_level = 0, .base_array_layer = 0, .array_layer_count = 1},
+            .dst_offsets = {offset_3d{0, 0, 0}, offset_3d{static_cast<int32_t>(dst_w), static_cast<int32_t>(dst_h), 1}},
+        };
+        cmd.blit_texture(src_tex, dst_tex, span<const texture_blit_region>{&blit_reg, 1}, filter_mode::linear);
+
+        auto readback_barrier = texture_barrier{
+            .texture = dst_tex,
+            .src = {.stages = pipeline_stage::blit, .access = resource_access::write, .layout = image_layout::general},
+            .dst = {.stages = pipeline_stage::copy, .access = resource_access::read, .layout = image_layout::general},
+            .base_mip_level = 0,
+            .mip_level_count = 1,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+        };
+        cmd.pipeline_barrier(span<const texture_barrier>{&readback_barrier, 1}, {});
+
+        auto copy_from_dst = buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = dst_w,
+            .image_extent_height = dst_h,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_texture_to_buffer(dst_tex, readback_buf, span<const buffer_texture_copy_region>{&copy_from_dst, 1});
+
+        cmd.end();
+
+        auto timeline_sem = dev->create_timeline_semaphore();
+        const auto* cmd_ptr = &cmd;
+        auto signal_sync = device_sync_point{
+            .semaphore = timeline_sem,
+            .value = 1,
+            .stages = pipeline_stage::copy,
+        };
+
+        auto submit_result = graphics_port.submit(span<const rhi::command_list*>{&cmd_ptr, 1}, {},
+                                                  span<const device_sync_point>{&signal_sync, 1});
+        ASSERT_TRUE(submit_result.has_value());
+
+        dev->wait_for_sync(host_sync_point{.semaphore = timeline_sem, .value = 1});
+
+        const auto* readback_ptr = static_cast<const uint8_t*>(readback_buf.cpu_address);
+        ASSERT_NE(readback_ptr, nullptr);
+        EXPECT_NEAR(readback_ptr[0], 200, 5);
+        EXPECT_NEAR(readback_ptr[1], 100, 5);
+        EXPECT_NEAR(readback_ptr[2], 50, 5);
+        EXPECT_EQ(readback_ptr[3], 255);
+
+        dev->destroy_semaphore(timeline_sem);
+        dev->destroy_buffer(readback_buf);
+        dev->destroy_buffer(upload_buf);
+        dev->destroy_texture(dst_tex);
+        dev->destroy_texture(src_tex);
+    }
 } // namespace tempest::rhi::vk

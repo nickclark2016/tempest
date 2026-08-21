@@ -648,6 +648,28 @@ namespace tempest::rhi
         uint32_t image_extent_depth;
     };
 
+    struct texture_subresource_layers
+    {
+        uint32_t mip_level = 0;
+        uint32_t base_array_layer = 0;
+        uint32_t array_layer_count = 1;
+    };
+
+    struct offset_3d
+    {
+        int32_t x = 0;
+        int32_t y = 0;
+        int32_t z = 0;
+    };
+
+    struct texture_blit_region
+    {
+        texture_subresource_layers src_subresource;
+        array<offset_3d, 2> src_offsets;
+        texture_subresource_layers dst_subresource;
+        array<offset_3d, 2> dst_offsets;
+    };
+
     struct device_sync_point
     {
         semaphore_handle semaphore;
@@ -730,6 +752,8 @@ namespace tempest::rhi
                                             span<const buffer_texture_copy_region> regions) -> void = 0;
         virtual auto copy_texture_to_buffer(texture_handle src, buffer_handle dst,
                                             span<const buffer_texture_copy_region> regions) -> void = 0;
+        virtual auto blit_texture(texture_handle src, texture_handle dst, span<const texture_blit_region> regions,
+                                  filter_mode filter = filter_mode::linear) -> void = 0;
 
         // Debug markers and regions
         virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void {}

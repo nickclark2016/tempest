@@ -1123,4 +1123,79 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    TEST(render_system_tests, resource_pool_texture_loading_and_mipmap_generation)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        {
+            auto pool = resource_pool{*dev};
+            auto graph = render_graph::render_graph{512, 512};
+            auto registry = core::texture_registry{};
+
+            constexpr uint32_t tex_w = 64;
+            constexpr uint32_t tex_h = 64;
+            auto mip_data = core::texture_mip_data{
+                .data = vector<byte>(tex_w * tex_h * 4),
+                .width = tex_w,
+                .height = tex_h,
+            };
+            for (size_t i = 0; i < tex_w * tex_h * 4; i += 4)
+            {
+                mip_data.data[i + 0] = static_cast<byte>(180);
+                mip_data.data[i + 1] = static_cast<byte>(90);
+                mip_data.data[i + 2] = static_cast<byte>(45);
+                mip_data.data[i + 3] = static_cast<byte>(255);
+            }
+
+            auto tex1 = core::texture{
+                .width = tex_w,
+                .height = tex_h,
+                .format = core::texture_format::rgba8_srgb,
+                .name = "TestMipmapTexture_IfMissing",
+            };
+            tex1.mips.push_back(mip_data);
+
+            auto tex2 = core::texture{
+                .width = tex_w,
+                .height = tex_h,
+                .format = core::texture_format::rgba8_srgb,
+                .name = "TestMipmapTexture_None",
+            };
+            tex2.mips.push_back(mip_data);
+
+            auto tex3 = core::texture{
+                .width = tex_w,
+                .height = tex_h,
+                .format = core::texture_format::rgba8_srgb,
+                .name = "TestMipmapTexture_Force",
+            };
+            tex3.mips.push_back(mip_data);
+
+            const auto tex_id1 = registry.register_texture(tempest::move(tex1));
+            const auto tex_id2 = registry.register_texture(tempest::move(tex2));
+            const auto tex_id3 = registry.register_texture(tempest::move(tex3));
+
+            // Load textures under different modes
+            pool.load_textures(span<const guid>{&tex_id1, 1}, registry, graph, mipmap_generation_mode::if_missing);
+            pool.load_textures(span<const guid>{&tex_id2, 1}, registry, graph, mipmap_generation_mode::none);
+            pool.load_textures(span<const guid>{&tex_id3, 1}, registry, graph, mipmap_generation_mode::force);
+
+            EXPECT_GE(pool.get_texture_descriptor_index(tex_id1), 0);
+            EXPECT_GE(pool.get_texture_descriptor_index(tex_id2), 0);
+            EXPECT_GE(pool.get_texture_descriptor_index(tex_id3), 0);
+
+            // Execute the texture upload and mip generation pass
+            const auto exec_res = graph.execute(*dev);
+            EXPECT_TRUE(exec_res.has_value());
+
+            dev->wait_idle();
+            pool.clear_staging_buffers();
+            graph.reset();
+        }
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests

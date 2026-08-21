@@ -1,9 +1,100 @@
 #include <tempest/render_system/resource_pool.hpp>
 
+#include <tempest/algorithm.hpp>
+#include <tempest/bit.hpp>
 #include <cstring>
 
 namespace tempest::render_system
 {
+    namespace
+    {
+        void generate_mip_chain_blit_fallback(rhi::command_list& cmd, rhi::texture_handle texture,
+                                              uint32_t width, uint32_t height,
+                                              uint32_t first_generated_mip, uint32_t total_texture_mips,
+                                              uint32_t array_layers = 1)
+        {
+            if (first_generated_mip >= total_texture_mips || first_generated_mip == 0)
+            {
+                return;
+            }
+
+            for (uint32_t dst_mip = first_generated_mip; dst_mip < total_texture_mips; ++dst_mip)
+            {
+                const auto src_mip = dst_mip - 1;
+                const auto src_w = tempest::max(1u, width >> src_mip);
+                const auto src_h = tempest::max(1u, height >> src_mip);
+                const auto dst_w = tempest::max(1u, width >> dst_mip);
+                const auto dst_h = tempest::max(1u, height >> dst_mip);
+
+                const auto blit_reg = rhi::texture_blit_region{
+                    .src_subresource = {
+                        .mip_level = src_mip,
+                        .base_array_layer = 0,
+                        .array_layer_count = array_layers,
+                    },
+                    .src_offsets = {
+                        rhi::offset_3d{0, 0, 0},
+                        rhi::offset_3d{static_cast<int32_t>(src_w), static_cast<int32_t>(src_h), 1},
+                    },
+                    .dst_subresource = {
+                        .mip_level = dst_mip,
+                        .base_array_layer = 0,
+                        .array_layer_count = array_layers,
+                    },
+                    .dst_offsets = {
+                        rhi::offset_3d{0, 0, 0},
+                        rhi::offset_3d{static_cast<int32_t>(dst_w), static_cast<int32_t>(dst_h), 1},
+                    },
+                };
+
+                cmd.blit_texture(texture, texture, span<const rhi::texture_blit_region>{&blit_reg, 1},
+                                 rhi::filter_mode::linear);
+
+                if (dst_mip + 1 < total_texture_mips)
+                {
+                    const auto mip_barrier = rhi::texture_barrier{
+                        .texture = texture,
+                        .src = {
+                            .stages = rhi::pipeline_stage::blit,
+                            .access = rhi::resource_access::write,
+                            .layout = rhi::image_layout::general,
+                        },
+                        .dst = {
+                            .stages = rhi::pipeline_stage::blit,
+                            .access = rhi::resource_access::read,
+                            .layout = rhi::image_layout::general,
+                        },
+                        .base_mip_level = dst_mip,
+                        .mip_level_count = 1,
+                        .base_array_layer = 0,
+                        .array_layer_count = array_layers,
+                    };
+                    cmd.pipeline_barrier(span<const rhi::texture_barrier>{&mip_barrier, 1}, {});
+                }
+            }
+
+            // Post-barrier: flush all blit writes across generated mips for subsequent shader reading
+            const auto post_barrier = rhi::texture_barrier{
+                .texture = texture,
+                .src = {
+                    .stages = rhi::pipeline_stage::blit,
+                    .access = rhi::resource_access::write,
+                    .layout = rhi::image_layout::general,
+                },
+                .dst = {
+                    .stages = rhi::pipeline_stage::all_graphics | rhi::pipeline_stage::compute,
+                    .access = rhi::resource_access::read,
+                    .layout = rhi::image_layout::general,
+                },
+                .base_mip_level = first_generated_mip,
+                .mip_level_count = total_texture_mips - first_generated_mip,
+                .base_array_layer = 0,
+                .array_layer_count = array_layers,
+            };
+            cmd.pipeline_barrier(span<const rhi::texture_barrier>{&post_barrier, 1}, {});
+        }
+    } // namespace
+
     resource_pool::resource_pool(rhi::device& dev, resource_pool_config cfg)
         : _device{&dev}, _cfg{cfg}
     {
@@ -458,7 +549,7 @@ namespace tempest::render_system
     }
 
     void resource_pool::load_textures(span<const guid> texture_ids, const core::texture_registry& registry,
-                                      render_graph::render_graph& graph)
+                                      render_graph::render_graph& graph, mipmap_generation_mode mip_mode)
     {
         if (!_device)
         {
@@ -493,22 +584,66 @@ namespace tempest::render_system
                 format = rhi::data_format::rgba32_float;
             }
 
+            const auto full_mips = (t.width > 0 && t.height > 0)
+                                       ? static_cast<uint32_t>(tempest::bit_width(tempest::min(t.width, t.height)))
+                                       : 1u;
+            const auto full_mip_count = tempest::max(1u, full_mips);
+            const auto asset_mips_count = static_cast<uint32_t>(t.mips.size());
+
+            uint32_t total_texture_mips = asset_mips_count;
+            uint32_t mips_to_upload = asset_mips_count;
+            uint32_t first_generated_mip = asset_mips_count;
+            bool generate_mips = false;
+
+            switch (mip_mode)
+            {
+            case mipmap_generation_mode::none:
+                total_texture_mips = asset_mips_count;
+                mips_to_upload = asset_mips_count;
+                generate_mips = false;
+                first_generated_mip = total_texture_mips;
+                break;
+            case mipmap_generation_mode::if_missing:
+                if (asset_mips_count < full_mip_count)
+                {
+                    total_texture_mips = full_mip_count;
+                    mips_to_upload = asset_mips_count;
+                    generate_mips = true;
+                    first_generated_mip = asset_mips_count;
+                }
+                else
+                {
+                    total_texture_mips = asset_mips_count;
+                    mips_to_upload = asset_mips_count;
+                    generate_mips = false;
+                    first_generated_mip = total_texture_mips;
+                }
+                break;
+            case mipmap_generation_mode::force:
+                total_texture_mips = full_mip_count;
+                mips_to_upload = 1;
+                generate_mips = full_mip_count > 1;
+                first_generated_mip = 1;
+                break;
+            }
+
             auto tex_handle = _device->create_texture(rhi::texture_desc{
                 .width = t.width,
                 .height = t.height,
                 .depth = 1,
-                .mip_levels = static_cast<uint32_t>(t.mips.size()),
+                .mip_levels = total_texture_mips,
                 .array_layers = 1,
                 .format = format,
                 .memory_usage = rhi::memory_usage::device_only,
-                .usage = rhi::texture_usage::sampled | rhi::texture_usage::transfer_dst,
-                .name = "BindlessTexture",
+                .usage = rhi::texture_usage::sampled | rhi::texture_usage::transfer_dst |
+                         (generate_mips ? rhi::texture_usage::transfer_src : rhi::texture_usage::none),
+                .name = t.name.empty() ? "BindlessTexture" : t.name.c_str(),
             });
 
             auto view_handle = _device->create_texture_view(tex_handle, rhi::texture_view_desc{
                 .override_format = format,
                 .base_mip_level = 0,
-                .mip_level_count = static_cast<uint32_t>(t.mips.size()),
+                .mip_level_count = total_texture_mips,
                 .base_array_layer = 0,
                 .array_layer_count = 1,
             });
@@ -522,17 +657,36 @@ namespace tempest::render_system
                 .descriptor = desc_handle,
             };
 
-            // Stage and upload top mip
-            const auto& top_mip = t.mips[0];
-            if (!top_mip.data.empty())
+            // Calculate staging size and copy existing mips to staging buffer
+            size_t total_mip_bytes = 0;
+            auto mip_sizes = vector<size_t>{};
+            mip_sizes.reserve(mips_to_upload);
+            for (uint32_t i = 0; i < mips_to_upload; ++i)
+            {
+                const auto sz = t.mips[i].data.size();
+                mip_sizes.push_back(sz);
+                total_mip_bytes += sz;
+            }
+
+            if (total_mip_bytes > 0)
             {
                 auto staging = _device->create_buffer(rhi::buffer_desc{
-                    .size = top_mip.data.size(),
+                    .size = total_mip_bytes,
                     .memory_usage = rhi::memory_usage::upload,
                     .usage = rhi::buffer_usage::transfer_src,
                     .name = "TextureStagingBuffer",
                 });
-                std::memcpy(staging.cpu_address, top_mip.data.data(), top_mip.data.size());
+
+                auto* staging_ptr = static_cast<byte*>(staging.cpu_address);
+                size_t staging_offset = 0;
+                for (uint32_t i = 0; i < mips_to_upload; ++i)
+                {
+                    if (!t.mips[i].data.empty())
+                    {
+                        std::memcpy(staging_ptr + staging_offset, t.mips[i].data.data(), t.mips[i].data.size());
+                        staging_offset += t.mips[i].data.size();
+                    }
+                }
                 _staging_buffers_to_free.push_back(staging);
 
                 struct tex_upload_pass_data
@@ -541,34 +695,57 @@ namespace tempest::render_system
                     render_graph::rg_texture_id tex;
                 };
 
-                graph.add_transfer_pass<tex_upload_pass_data>(
-                    "TextureUploadTransferPass",
-                    [staging, tex_handle, view_handle](render_graph::pass_builder& builder, tex_upload_pass_data& data) {
+                graph.add_graphics_pass<tex_upload_pass_data>(
+                    "TextureUploadPass",
+                    [staging, tex_handle, view_handle, generate_mips](render_graph::pass_builder& builder,
+                                                                      tex_upload_pass_data& data) {
                         data.staging = builder.import_buffer(staging);
                         data.tex = builder.import_texture(tex_handle, view_handle, rhi::image_layout::undefined);
                         builder.read(data.staging, rhi::pipeline_stage::copy, rhi::resource_access::read);
-                        builder.write(data.tex, rhi::pipeline_stage::copy, rhi::resource_access::write,
+                        auto write_stages = enum_mask{rhi::pipeline_stage::copy};
+                        if (generate_mips)
+                        {
+                            write_stages |= rhi::pipeline_stage::blit;
+                        }
+                        builder.write(data.tex, write_stages, rhi::resource_access::write,
                                       rhi::image_layout::general);
                     },
-                    [staging, tex_handle, w = t.width, h = t.height]([[maybe_unused]] const tex_upload_pass_data& data,
-                                                                 [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                                                                 rhi::command_list& cmd) {
-                        const auto copy_region = rhi::buffer_texture_copy_region{
-                            .buffer_offset = 0,
-                            .buffer_row_length = 0,
-                            .buffer_image_height = 0,
-                            .mip_level = 0,
-                            .base_array_layer = 0,
-                            .array_layer_count = 1,
-                            .image_offset_x = 0,
-                            .image_offset_y = 0,
-                            .image_offset_z = 0,
-                            .image_extent_width = w,
-                            .image_extent_height = h,
-                            .image_extent_depth = 1,
-                        };
-                        cmd.copy_buffer_to_texture(staging, tex_handle,
-                                                   span<const rhi::buffer_texture_copy_region>{&copy_region, 1});
+                    [staging, tex_handle, w = t.width, h = t.height, mips_to_upload, generate_mips,
+                     first_generated_mip, total_texture_mips, mip_sizes](
+                        [[maybe_unused]] const tex_upload_pass_data& data,
+                        [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                        rhi::command_list& cmd) {
+                        auto copy_regions = vector<rhi::buffer_texture_copy_region>{};
+                        copy_regions.reserve(mips_to_upload);
+                        uint64_t current_buf_offset = 0;
+                        for (uint32_t i = 0; i < mips_to_upload; ++i)
+                        {
+                            const auto mip_w = tempest::max(1u, w >> i);
+                            const auto mip_h = tempest::max(1u, h >> i);
+                            copy_regions.push_back(rhi::buffer_texture_copy_region{
+                                .buffer_offset = current_buf_offset,
+                                .buffer_row_length = 0,
+                                .buffer_image_height = 0,
+                                .mip_level = i,
+                                .base_array_layer = 0,
+                                .array_layer_count = 1,
+                                .image_offset_x = 0,
+                                .image_offset_y = 0,
+                                .image_offset_z = 0,
+                                .image_extent_width = mip_w,
+                                .image_extent_height = mip_h,
+                                .image_extent_depth = 1,
+                            });
+                            current_buf_offset += mip_sizes[i];
+                        }
+
+                        cmd.copy_buffer_to_texture(staging, tex_handle, copy_regions);
+
+                        if (generate_mips && first_generated_mip < total_texture_mips)
+                        {
+                            generate_mip_chain_blit_fallback(cmd, tex_handle, w, h, first_generated_mip,
+                                                             total_texture_mips);
+                        }
                     });
             }
         }

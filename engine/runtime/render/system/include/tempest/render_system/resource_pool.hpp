@@ -37,6 +37,13 @@ namespace tempest::render_system
         shadow_parameters_gpu shadows{};
     };
 
+    enum class mipmap_generation_mode : uint8_t
+    {
+        none,       // Do not generate mipmaps; use only mips provided by the asset (1 or more levels).
+        if_missing, // (Default) If asset provides fewer than full mips, generate the remaining chain via blit fallback.
+        force,      // Force generation of the complete mip chain from level 0 down to 1x1.
+    };
+
     struct TEMPEST_API resource_pool_config
     {
         uint32_t initial_vertex_buffer_size{128 * 1024 * 1024};
@@ -48,6 +55,7 @@ namespace tempest::render_system
         uint32_t max_lights{256};
         uint32_t staging_buffer_size{128 * 1024 * 1024};
         uint32_t frames_in_flight{2};
+        mipmap_generation_mode default_mipmap_mode{mipmap_generation_mode::if_missing};
     };
 
     struct TEMPEST_API texture_entry
@@ -74,7 +82,8 @@ namespace tempest::render_system
         void load_materials(span<const guid> material_ids, const core::material_registry& registry,
                             render_graph::render_graph& graph);
         void load_textures(span<const guid> texture_ids, const core::texture_registry& registry,
-                           render_graph::render_graph& graph);
+                           render_graph::render_graph& graph,
+                           mipmap_generation_mode mip_mode = mipmap_generation_mode::if_missing);
 
         // Address resolution for BDA
         [[nodiscard]] auto get_vertex_buffer_address() const noexcept -> uint64_t;
