@@ -17,6 +17,7 @@ struct OitGatherPushConstants {
     int32_t linear_sampler_index;
     int32_t ssao_texture_index;
     int32_t point_sampler_index;
+    int32_t shadow_map_texture_index;
 };
 
 [[vk::push_constant]]
@@ -55,7 +56,7 @@ FragmentOutput FSMain(VertexOutput input) {
 
     fetch_pixel_data(mat_state, pd);
 
-    float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position);
+    float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position, push_constants.shadow_map_texture_index);
 
     float alpha = color.a;
     if (mat.type == MaterialType::TRANSMISSIVE) {

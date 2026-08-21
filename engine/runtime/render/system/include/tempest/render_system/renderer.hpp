@@ -18,10 +18,13 @@ namespace tempest::render_system
     {
         uint32_t render_width{1920};
         uint32_t render_height{1080};
+        uint32_t shadow_atlas_width{2048};
+        uint32_t shadow_atlas_height{2048};
         rhi::data_format hdr_color_format{rhi::data_format::rgba16_float};
         rhi::data_format depth_format{rhi::data_format::depth32_float};
         rhi::data_format tonemapped_color_format{rhi::data_format::rgba8_srgb};
         bool enable_ssao{false};
+        bool enable_shadows{true};
         resource_pool_config pool_config{};
     };
 
@@ -111,6 +114,21 @@ namespace tempest::render_system
             return _tonemapped_color_target;
         }
 
+        [[nodiscard]] auto get_shadow_atlas_texture() const noexcept -> optional<render_graph::rg_texture_id>
+        {
+            return _shadow_atlas_target;
+        }
+
+        [[nodiscard]] auto get_shadow_draw_count() const noexcept -> uint32_t
+        {
+            return _shadow_draw_count;
+        }
+
+        [[nodiscard]] auto get_active_draw_count() const noexcept -> uint32_t
+        {
+            return _active_draw_count;
+        }
+
       private:
         rhi::device* _device{nullptr};
         logger* _log{nullptr};
@@ -129,7 +147,9 @@ namespace tempest::render_system
         render_graph::rg_texture_id _ssao_target{};
         render_graph::rg_texture_id _ssao_blurred_target{};
         render_graph::rg_texture_id _tonemapped_color_target{};
+        optional<render_graph::rg_texture_id> _shadow_atlas_target{nullopt};
 
+        uint32_t _shadow_draw_count{0};
         uint32_t _active_draw_count{0};
     };
 } // namespace tempest::render_system

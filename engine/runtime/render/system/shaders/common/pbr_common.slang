@@ -4,6 +4,7 @@ import "lighting";
 import "material";
 import "mesh";
 import "scene";
+import "shadows";
 import "tonemap";
 import "vertex_pull";
 import "bxdf/bxdf";
@@ -114,7 +115,8 @@ float4 evaluate_material_openpbr(
     const PixelData px,
     const MaterialState mat_state,
     SceneGlobals* scene,
-    const float3 world_pos)
+    const float3 world_pos,
+    int32_t shadow_map_texture_index = -1)
 {
     let bxdf = OpenPBRBxDF();
     BxDFParams params = build_bxdf_params(px, mat_state);
@@ -123,8 +125,10 @@ float4 evaluate_material_openpbr(
     float3 wo = normalize(scene.camera.eye.xyz - world_pos);
     float n_dot_v = max(1e-4, dot(float3(px.shading_normal), wo));
 
-    // Ambient light
-    half4 color = px.diffuse * half4(half3(scene.ambient_light.rgb), 1.0h);
+    // Ambient light with directional hemisphere response (soft sky fill)
+    float up_factor = saturate(float(px.shading_normal.y) * 0.5 + 0.5);
+    float3 sky_ambient = scene.ambient_light.rgb * (0.7 + 0.3 * up_factor);
+    half4 color = px.diffuse * half4(half3(sky_ambient), 1.0h);
 
     // Directional Sun Light
     {
@@ -133,7 +137,22 @@ float4 evaluate_material_openpbr(
 
         let bxdf_result = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
         float3 radiance = scene.sun.color_intensity.rgb * scene.sun.color_intensity.w;
-        color.rgb += half3(bxdf_result.bxdf * radiance * n_dot_l);
+
+        float visibility = 1.0;
+        if (n_dot_l > 0.0 && scene.shadows.directional_light_count > 0 && shadow_map_texture_index >= 0) {
+            float view_dist = length(world_pos - scene.camera.eye.xyz);
+            visibility = sample_directional_shadow(
+                &scene.shadows,
+                world_pos,
+                view_dist,
+                n_dot_l,
+                mat_state.linear_sampler,
+                shadow_map_texture_index,
+                0
+            );
+        }
+
+        color.rgb += half3(bxdf_result.bxdf * radiance * n_dot_l * visibility);
     }
 
     // Emissive

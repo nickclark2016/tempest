@@ -32,6 +32,9 @@ namespace tempest::render_system
         // Screen parameters
         math::vec2<float> screen_size{1920.0F, 1080.0F};
         math::vec2<float> inv_screen_size{1.0F / 1920.0F, 1.0F / 1080.0F};
+
+        // Directional Shadows (matches ShadowParameters in shadows.slang)
+        shadow_parameters_gpu shadows{};
     };
 
     struct TEMPEST_API resource_pool_config
@@ -80,6 +83,8 @@ namespace tempest::render_system
         [[nodiscard]] auto get_mesh_address(const guid& id) const noexcept -> uint64_t;
         [[nodiscard]] auto get_material_address(const guid& id) const noexcept -> uint64_t;
         [[nodiscard]] auto get_mesh_layout(const guid& id) const noexcept -> optional<mesh_layout>;
+        [[nodiscard]] auto get_material_type(const guid& id) const noexcept -> optional<material_type>;
+        [[nodiscard]] auto get_material(const guid& id) const noexcept -> optional<material_payload>;
         [[nodiscard]] auto get_texture_descriptor_index(const guid& id) const noexcept -> int16_t;
         [[nodiscard]] auto get_scene_constants_address() const noexcept -> uint64_t;
 

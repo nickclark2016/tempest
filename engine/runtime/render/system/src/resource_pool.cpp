@@ -619,6 +619,26 @@ namespace tempest::render_system
         return nullopt;
     }
 
+    auto resource_pool::get_material_type(const guid& id) const noexcept -> optional<material_type>
+    {
+        auto it = _materials.find(id);
+        if (it != _materials.end())
+        {
+            return it->second.type;
+        }
+        return nullopt;
+    }
+
+    auto resource_pool::get_material(const guid& id) const noexcept -> optional<material_payload>
+    {
+        auto it = _materials.find(id);
+        if (it != _materials.end())
+        {
+            return it->second;
+        }
+        return nullopt;
+    }
+
     auto resource_pool::get_texture_descriptor_index(const guid& id) const noexcept -> int16_t
     {
         auto it = _textures.find(id);

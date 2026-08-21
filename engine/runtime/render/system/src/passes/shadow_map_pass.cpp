@@ -9,6 +9,26 @@
 
 namespace tempest::render_system
 {
+    namespace
+    {
+        auto ortho_reversed_z(float left, float right, float bottom, float top, float z_near, float z_far)
+            -> math::mat4<float>
+        {
+            const auto sx = 2.0F / (right - left);
+            const auto sy = 2.0F / (top - bottom);
+            const auto sz = -1.0F / (z_far - z_near);
+
+            const auto tx = -(right + left) / (right - left);
+            const auto ty = -(top + bottom) / (top - bottom);
+            const auto tz = z_far / (z_far - z_near);
+
+            return math::mat4<float>{sx, 0.0F, 0.0F, 0.0F,
+                                     0.0F, sy, 0.0F, 0.0F,
+                                     0.0F, 0.0F, sz, 0.0F,
+                                     tx, ty, tz, 1.0F};
+        }
+    }
+
     auto compute_csm_cascades(const math::vec3<float>& light_dir,
                               const render_camera& cam,
                               const shadow_map_component& shadow_cfg,
@@ -21,11 +41,14 @@ namespace tempest::render_system
         const auto norm_light_dir = math::normalize(light_dir);
         const auto up = std::abs(norm_light_dir.y) > 0.99F ? math::vec3<float>{0.0F, 0.0F, 1.0F} : math::vec3<float>{0.0F, 1.0F, 0.0F};
 
+        // Fixed world-to-light rotation matrix (origin at 0, 0, 0)
+        const auto light_view_rot = math::look_at(math::vec3<float>{0.0F, 0.0F, 0.0F}, norm_light_dir, up);
+
         const auto cols = (cascade_count > 1) ? 2U : 1U;
         const auto rows = (cascade_count > 2) ? 2U : 1U;
         const auto cascade_res = math::vec2<uint32_t>{atlas_size.x / cols, atlas_size.y / rows};
 
-        const auto near_plane = 0.1F;
+        const auto near_plane = (cam.proj[3][2] > 0.001F) ? cam.proj[3][2] : 0.1F;
         const auto shadow_dist = shadow_cfg.shadow_distance > 0.0F ? shadow_cfg.shadow_distance : 100.0F;
         const auto clip_ratio = shadow_dist / near_plane;
         const auto clip_range = shadow_dist - near_plane;
@@ -40,65 +63,32 @@ namespace tempest::render_system
             const auto uniform_split = near_plane + clip_range * p;
             const auto split_depth = lambda * log_split + (1.0F - lambda) * uniform_split;
 
-            const auto z_near_ndc = 1.0F - (last_split / shadow_dist);
-            const auto z_far_ndc = 1.0F - (split_depth / shadow_dist);
+            // Radial bounding sphere centered at camera eye position
+            const auto radius = split_depth;
 
-            const auto ndc_corners = array<math::vec4<float>, 8>{
-                math::vec4<float>{-1.0F, -1.0F, z_near_ndc, 1.0F},
-                math::vec4<float>{ 1.0F, -1.0F, z_near_ndc, 1.0F},
-                math::vec4<float>{-1.0F,  1.0F, z_near_ndc, 1.0F},
-                math::vec4<float>{ 1.0F,  1.0F, z_near_ndc, 1.0F},
-                math::vec4<float>{-1.0F, -1.0F, z_far_ndc, 1.0F},
-                math::vec4<float>{ 1.0F, -1.0F, z_far_ndc, 1.0F},
-                math::vec4<float>{-1.0F,  1.0F, z_far_ndc, 1.0F},
-                math::vec4<float>{ 1.0F,  1.0F, z_far_ndc, 1.0F},
-            };
+            // Sphere center in world space is camera eye position
+            const auto center_ws = math::vec3<float>{cam.eye_position.x, cam.eye_position.y, cam.eye_position.z};
+            const auto center_ls_h = light_view_rot * math::vec4<float>{center_ws.x, center_ws.y, center_ws.z, 1.0F};
+            auto center_ls = math::vec3<float>{center_ls_h.x, center_ls_h.y, center_ls_h.z};
 
-            auto center = math::vec3<float>{0.0F, 0.0F, 0.0F};
-            auto ws_corners = array<math::vec3<float>, 8>{};
-            for (auto c = 0U; c < 8U; ++c)
-            {
-                auto ws = cam.inv_view * (cam.inv_proj * ndc_corners[c]);
-                ws_corners[c] = math::vec3<float>{ws.x, ws.y, ws.z} / tempest::max(std::abs(ws.w), 1e-6F);
-                center += ws_corners[c];
-            }
-            center /= 8.0F;
+            // Texel size in world/light space is strictly invariant to camera rotation
+            const auto world_units_per_texel = (2.0F * radius) / static_cast<float>(cascade_res.x);
 
-            auto radius = 0.0F;
-            for (const auto& corner : ws_corners)
-            {
-                radius = tempest::max(radius, math::norm(corner - center));
-            }
+            // Snap light-space center to integer multiples of texel size to eliminate swimming
+            center_ls.x = std::floor(center_ls.x / world_units_per_texel) * world_units_per_texel;
+            center_ls.y = std::floor(center_ls.y / world_units_per_texel) * world_units_per_texel;
 
-            const auto light_pos = center - norm_light_dir * (radius * 2.0F);
-            const auto light_view = math::look_at(light_pos, center, up);
+            const auto min_x = center_ls.x - radius;
+            const auto max_x = center_ls.x + radius;
+            const auto min_y = center_ls.y - radius;
+            const auto max_y = center_ls.y + radius;
 
-            auto min_ext = math::vec3<float>{numeric_limits<float>::max(), numeric_limits<float>::max(), numeric_limits<float>::max()};
-            auto max_ext = math::vec3<float>{numeric_limits<float>::lowest(), numeric_limits<float>::lowest(), numeric_limits<float>::lowest()};
+            // Generous Z range (150m) to capture all tall occluders (roofs, arches, towers)
+            const auto z_padding = 150.0F;
+            const auto min_z = center_ls.z - z_padding; // far plane (more negative)
+            const auto max_z = center_ls.z + z_padding; // near plane (less negative / closer to light)
 
-            for (const auto& corner : ws_corners)
-            {
-                const auto ls = light_view * math::vec4<float>{corner.x, corner.y, corner.z, 1.0F};
-                min_ext.x = tempest::min(min_ext.x, ls.x);
-                min_ext.y = tempest::min(min_ext.y, ls.y);
-                min_ext.z = tempest::min(min_ext.z, ls.z);
-                max_ext.x = tempest::max(max_ext.x, ls.x);
-                max_ext.y = tempest::max(max_ext.y, ls.y);
-                max_ext.z = tempest::max(max_ext.z, ls.z);
-            }
-
-            const auto z_range = max_ext.z - min_ext.z;
-            min_ext.z -= z_range * 1.5F;
-            max_ext.z += z_range * 0.1F;
-
-            const auto texel_size_x = (max_ext.x - min_ext.x) / static_cast<float>(cascade_res.x);
-            const auto texel_size_y = (max_ext.y - min_ext.y) / static_cast<float>(cascade_res.y);
-            min_ext.x = std::floor(min_ext.x / texel_size_x) * texel_size_x;
-            min_ext.y = std::floor(min_ext.y / texel_size_y) * texel_size_y;
-            max_ext.x = std::floor(max_ext.x / texel_size_x) * texel_size_x;
-            max_ext.y = std::floor(max_ext.y / texel_size_y) * texel_size_y;
-
-            const auto light_proj = math::ortho(min_ext.x, max_ext.x, min_ext.y, max_ext.y, min_ext.z, max_ext.z);
+            const auto light_proj = ortho_reversed_z(min_x, max_x, min_y, max_y, max_z, min_z);
 
             const auto col = i % cols;
             const auto row = i / cols;
@@ -107,13 +97,16 @@ namespace tempest::render_system
             const auto scale_x = static_cast<float>(cascade_res.x) / static_cast<float>(atlas_size.x);
             const auto scale_y = static_cast<float>(cascade_res.y) / static_cast<float>(atlas_size.y);
 
+            const auto blend_frac = (shadow_cfg.blend_fraction > 0.0F) ? shadow_cfg.blend_fraction : 0.1F;
+            const auto blend_start = split_depth - (split_depth - last_split) * blend_frac;
+
             cascades[i] = csm_cascade{
-                .light_view_projection = light_proj * light_view,
+                .light_view_projection = light_proj * light_view_rot,
                 .atlas_offset = {offset_x, offset_y},
                 .atlas_scale = {scale_x, scale_y},
                 .split_depth = split_depth,
-                .blend_start = 0.9F,
-                .texel_size_ws = (max_ext.x - min_ext.x) / static_cast<float>(cascade_res.x),
+                .blend_start = blend_start,
+                .texel_size_ws = world_units_per_texel,
                 .cascade_index = i,
             };
 
