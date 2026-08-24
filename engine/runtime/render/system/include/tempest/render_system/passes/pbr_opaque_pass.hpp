@@ -12,7 +12,6 @@ namespace tempest::render_system
     {
         render_graph::rg_texture_id hdr_color;
         render_graph::rg_texture_id depth_texture;
-        optional<render_graph::rg_texture_id> shadow_atlas;
         render_graph::rg_buffer_id scene_constants;
         render_graph::rg_buffer_id object_buffer;
         render_graph::rg_buffer_id instance_buffer;
@@ -26,14 +25,12 @@ namespace tempest::render_system
         uint64_t objects_address{0};
         uint64_t instance_indices_address{0};
         int32_t linear_sampler_index{0};
-        int32_t shadow_map_texture_index{-1};
     };
 
     TEMPEST_API auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool,
                                          shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
                                          render_graph::rg_texture_id depth_tex,
-                                         uint32_t draw_count,
-                                         optional<render_graph::rg_texture_id> shadow_atlas_tex = nullopt)
+                                         uint32_t draw_count)
         -> const pbr_opaque_pass_data&;
 } // namespace tempest::render_system
 

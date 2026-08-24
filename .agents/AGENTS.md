@@ -3,9 +3,10 @@
 ## Code Style & Architecture
 
 ### 1. Prefer Engine Standard Library Types (`tempest::`) over `std::`
-Avoid using standard library types from namespace `std::` when engine-native equivalents exist in namespace `tempest::`.
+Avoid using standard library types from namespace `std::` or headers like `<cstdint>` when engine-native equivalents exist in namespace `tempest::` and `<tempest/int.hpp>`.
 - Prefer `tempest::optional` and `tempest::nullopt` over `std::optional` and `std::nullopt`.
 - Prefer `tempest::vector`, `tempest::string_view`, `tempest::unique_ptr`, `tempest::make_unique` over `std::` counterparts.
+- Prefer `<tempest/int.hpp>` (`tempest::uint32_t`, `tempest::int32_t`, etc.) over `<cstdint>`.
 - Prefer `tempest::inplace_vector<T, N>` over `tempest::vector` for small fixed-capacity collections with dynamic runtime counts (e.g., history buffers, inline batches).
 - Use `tempest::min`, `tempest::max`, and `tempest::clamp` directly from namespace `tempest::` (from `<tempest/algorithm.hpp>` and `<tempest/math_utils.hpp>`).
 
@@ -44,6 +45,12 @@ When presenting swapchain images with binary semaphores, index render/presentati
 ### 9. Render Graph Cross-Frame Synchronization & Layout Tracking
 - When resources undergo external or post-batch transitions (such as swapchain images transitioned to `image_layout::present` during presentation), explicitly record the new layout into the barrier solver's persistent state table (`set_texture_state`) to prevent layout mismatch validation errors on subsequent frames.
 - For cross-frame and temporal resources, evaluate both `was_written` (prior frame write access) and `is_written` when solving barriers to ensure GPU write caches are properly flushed before downstream reads.
+ 
+### 10. `explicit` Constructor Guidelines
+Only mark constructors `explicit` when exactly one argument is required and it is not a special copy/move constructor.
+- Use `explicit` for single-parameter non-defaulted constructors (e.g., `explicit resource_pool(rhi::device& dev);`).
+- Use `explicit` for constructors where only the first parameter is required and trailing parameters have default values (e.g., `explicit camera_system(ecs::archetype_registry& registry, event::event_registry& events = default_events);`).
+- Do NOT use `explicit` on multi-parameter constructors requiring two or more arguments (e.g., `shelf_allocator(uint32_t atlas_width, uint32_t atlas_height, uint32_t padding = 4);`).
 
 ## Workflow & Build Guidelines
 

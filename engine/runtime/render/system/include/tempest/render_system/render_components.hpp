@@ -130,39 +130,15 @@ namespace tempest::render_system
         float range;
     };
 
-    struct TEMPEST_API shadow_map_component
+    struct TEMPEST_API shadow_caster_component
     {
-        float shadow_distance;
-        float split_lambda;
-        float blend_fraction;
-        uint32_t cascade_count;
-    };
-
-    struct TEMPEST_API csm_cascade
-    {
-        math::mat4<float> light_view_projection{1.0F};
-        math::vec2<float> atlas_offset{0.0F, 0.0F};
-        math::vec2<float> atlas_scale{1.0F, 1.0F};
-        float split_depth{0.0F};
-        float blend_start{0.9F};
-        float texel_size_ws{0.0F};
-        uint32_t cascade_index{0};
-    };
-
-    struct TEMPEST_API directional_shadow_gpu_data
-    {
-        uint32_t atlas_index{0};
-        uint32_t cascade_count{0};
-        math::vec2<float> inv_atlas_resolution{0.0F, 0.0F};
-        array<csm_cascade, 4> cascades{};
-    };
-
-    struct TEMPEST_API shadow_parameters_gpu
-    {
-        static constexpr size_t max_directional_lights = 4;
-        array<directional_shadow_gpu_data, max_directional_lights> directional_shadow_maps{};
-        uint32_t directional_light_count{0};
-        uint32_t padding[3]{0, 0, 0};
+        uint32_t resolution{2048};
+        uint32_t num_cascades{4};
+        float split_lambda{0.5F};
+        float max_shadow_distance{200.0F};
+        float normal_bias{0.02F};
+        float depth_bias{0.005F};
+        uint32_t priority{0}; // Lower value = higher priority (0 = directional sun)
     };
 } // namespace tempest::render_system
 

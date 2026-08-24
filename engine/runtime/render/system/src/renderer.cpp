@@ -3,7 +3,6 @@
 #include <tempest/render_system/passes/depth_prepass.hpp>
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
-#include <tempest/render_system/passes/shadow_map_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
 #include <tempest/render_system/passes/ssao_pass.hpp>
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
@@ -81,8 +80,6 @@ namespace tempest::render_system
           _ssao_target{other._ssao_target},
           _ssao_blurred_target{other._ssao_blurred_target},
           _tonemapped_color_target{other._tonemapped_color_target},
-          _shadow_atlas_target{other._shadow_atlas_target},
-          _shadow_draw_count{other._shadow_draw_count},
           _active_draw_count{other._active_draw_count}
     {
         other._device = nullptr;
@@ -112,8 +109,6 @@ namespace tempest::render_system
             _ssao_target = other._ssao_target;
             _ssao_blurred_target = other._ssao_blurred_target;
             _tonemapped_color_target = other._tonemapped_color_target;
-            _shadow_atlas_target = other._shadow_atlas_target;
-            _shadow_draw_count = other._shadow_draw_count;
             _active_draw_count = other._active_draw_count;
 
             other._device = nullptr;
@@ -182,13 +177,12 @@ namespace tempest::render_system
 
         // Build dynamic ObjectData, Instance Indices, and Indirect Draw Commands
         // Partition into:
-        // 1. Shadow contributors (opaque & mask) at [0, _shadow_draw_count)
-        // 2. Transparent / transmissive objects at [_shadow_draw_count, _active_draw_count)
-        auto opaque_objects = vector<object_payload>{};
-        auto opaque_commands = vector<indexed_indirect_command>{};
-
-        auto transparent_objects = vector<object_payload>{};
-        auto transparent_commands = vector<indexed_indirect_command>{};
+        auto objects = vector<object_payload>{};
+        objects.reserve(entities.size());
+        auto instances = vector<uint32_t>{};
+        instances.reserve(entities.size());
+        auto commands = vector<indexed_indirect_command>{};
+        commands.reserve(entities.size());
 
         for (const auto entity : entities)
         {
@@ -233,9 +227,6 @@ namespace tempest::render_system
             const auto inv_model = math::inverse(model_mat);
             const auto inv_trans = math::transpose(inv_model);
 
-            auto mat_type = _pool.get_material_type(mat_id).value_or(material_type::opaque);
-            const auto is_shadow_contributor = (mat_type == material_type::opaque || mat_type == material_type::mask);
-
             auto payload = object_payload{
                 .model = model_mat,
                 .inv_transpose_model = inv_trans,
@@ -246,55 +237,21 @@ namespace tempest::render_system
                 .padding = 0,
             };
 
+            const auto idx = static_cast<uint32_t>(objects.size());
+            objects.push_back(payload);
+            instances.push_back(idx);
+
             auto cmd = indexed_indirect_command{
                 .index_count = ml.index_count,
                 .instance_count = 1,
                 .first_index = (ml.mesh_start_offset + ml.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
                 .vertex_offset = 0,
-                .first_instance = 0,
+                .first_instance = idx,
             };
-
-            if (is_shadow_contributor)
-            {
-                opaque_objects.push_back(payload);
-                opaque_commands.push_back(cmd);
-            }
-            else
-            {
-                transparent_objects.push_back(payload);
-                transparent_commands.push_back(cmd);
-            }
-        }
-
-        _shadow_draw_count = static_cast<uint32_t>(opaque_commands.size());
-        _active_draw_count = static_cast<uint32_t>(opaque_commands.size() + transparent_commands.size());
-
-        auto objects = vector<object_payload>{};
-        objects.reserve(_active_draw_count);
-        auto instances = vector<uint32_t>{};
-        instances.reserve(_active_draw_count);
-        auto commands = vector<indexed_indirect_command>{};
-        commands.reserve(_active_draw_count);
-
-        for (size_t i = 0; i < opaque_objects.size(); ++i)
-        {
-            const auto idx = static_cast<uint32_t>(objects.size());
-            objects.push_back(opaque_objects[i]);
-            instances.push_back(idx);
-            auto cmd = opaque_commands[i];
-            cmd.first_instance = idx;
             commands.push_back(cmd);
         }
 
-        for (size_t i = 0; i < transparent_objects.size(); ++i)
-        {
-            const auto idx = static_cast<uint32_t>(objects.size());
-            objects.push_back(transparent_objects[i]);
-            instances.push_back(idx);
-            auto cmd = transparent_commands[i];
-            cmd.first_instance = idx;
-            commands.push_back(cmd);
-        }
+        _active_draw_count = static_cast<uint32_t>(commands.size());
 
         _pool.write_objects(objects);
         _pool.write_instances(instances);
@@ -321,13 +278,11 @@ namespace tempest::render_system
             .sun_direction = {0.0F, -1.0F, 0.0F, 0.0F},
             .screen_size = {static_cast<float>(width), static_cast<float>(height)},
             .inv_screen_size = {1.0F / static_cast<float>(width), 1.0F / static_cast<float>(height)},
-            .shadows = {},
         };
 
-        auto cam_opt = optional<render_camera>{nullopt};
         if (_camera_system)
         {
-            cam_opt = _camera_system->get_active_camera();
+            auto cam_opt = _camera_system->get_active_camera();
             if (cam_opt.has_value())
             {
                 const auto& cam = *cam_opt;
@@ -340,52 +295,16 @@ namespace tempest::render_system
         }
 
         // Query directional sun light
-        auto sun_shadow_cfg = optional<shadow_map_component>{nullopt};
         if (_inputs.entity_registry)
         {
-            _inputs.entity_registry->each([&scene, &sun_shadow_cfg, this](const ecs::self_component& self,
-                                                                          const directional_light_component& dl,
-                                                                          const ecs::transform_component& tx) {
+            _inputs.entity_registry->each([&scene]([[maybe_unused]] const ecs::self_component& self,
+                                                   const directional_light_component& dl,
+                                                   const ecs::transform_component& tx) {
                 const auto rot = math::quat(tx.rotation());
                 const auto forward = math::extract_forward(rot);
                 scene.sun_direction = {forward.x, forward.y, forward.z, 0.0F};
                 scene.sun_color_intensity = {dl.color.x, dl.color.y, dl.color.z, dl.intensity};
-
-                if (const auto* sc = _inputs.entity_registry->try_get<shadow_map_component>(self.entity))
-                {
-                    sun_shadow_cfg = *sc;
-                }
             });
-        }
-
-        const auto shadow_enabled = _cfg.enable_shadows && sun_shadow_cfg.has_value() && cam_opt.has_value();
-        if (shadow_enabled)
-        {
-            const auto atlas_size = math::vec2<uint32_t>{_cfg.shadow_atlas_width, _cfg.shadow_atlas_height};
-            _shadow_atlas_target = _graph.create_texture(render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::absolute(atlas_size.x, atlas_size.y),
-                .format = rhi::data_format::depth32_float,
-                .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
-                .mip_levels = 1,
-                .array_layers = 1,
-                .name = "DirectionalShadowMapAtlas",
-            });
-
-            const auto light_dir = math::vec3<float>{scene.sun_direction.x, scene.sun_direction.y, scene.sun_direction.z};
-            const auto cascades = compute_csm_cascades(light_dir, *cam_opt, *sun_shadow_cfg, atlas_size);
-
-            scene.shadows.directional_light_count = 1;
-            scene.shadows.directional_shadow_maps[0] = directional_shadow_gpu_data{
-                .atlas_index = 0,
-                .cascade_count = math::clamp(sun_shadow_cfg->cascade_count, 1U, 4U),
-                .inv_atlas_resolution = {1.0F / static_cast<float>(atlas_size.x), 1.0F / static_cast<float>(atlas_size.y)},
-                .cascades = cascades,
-            };
-        }
-        else
-        {
-            _shadow_atlas_target = nullopt;
-            scene.shadows.directional_light_count = 0;
         }
 
         _pool.write_scene_constants(scene);
@@ -450,16 +369,7 @@ namespace tempest::render_system
         // Build DAG Passes
         add_frame_upload_pass(_graph, _pool);
 
-        if (shadow_enabled && _shadow_atlas_target.has_value())
-        {
-            const auto light_dir = math::vec3<float>{scene.sun_direction.x, scene.sun_direction.y, scene.sun_direction.z};
-            const auto atlas_size = math::vec2<uint32_t>{_cfg.shadow_atlas_width, _cfg.shadow_atlas_height};
-            const auto& shadow_data = add_shadow_map_pass(_graph, _pool, _shaders, *_shadow_atlas_target, light_dir, *cam_opt,
-                                                          *sun_shadow_cfg, atlas_size, _shadow_draw_count);
-            _shadow_atlas_target = shadow_data.shadow_atlas;
-        }
-
-        const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target, _shadow_draw_count);
+        const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target, _active_draw_count);
 
         if (_cfg.enable_ssao)
         {
@@ -471,8 +381,7 @@ namespace tempest::render_system
 
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
         const auto& pbr_data = add_pbr_opaque_pass(_graph, _pool, _shaders, skybox_data.hdr_color,
-                                                   depth_data.depth_texture, _shadow_draw_count,
-                                                   _shadow_atlas_target);
+                                                   depth_data.depth_texture, _active_draw_count);
         add_tonemapping_pass(_graph, _pool, _shaders, pbr_data.hdr_color, _tonemapped_color_target,
                             _cfg.tonemapped_color_format);
     }

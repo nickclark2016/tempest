@@ -15,7 +15,6 @@ struct PBRPushConstants {
     uint64_t objects_address;
     uint64_t instance_indices_address;
     int32_t linear_sampler_index;
-    int32_t shadow_map_texture_index;
 };
 
 [[vk::push_constant]]
@@ -60,7 +59,7 @@ FragmentOutput FSMain(VertexOutput input) {
         }
     }
 
-    float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position, push_constants.shadow_map_texture_index);
+    float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position);
 
     if (mat.type == MaterialType::TRANSMISSIVE) {
         color.a = mat.transmission_factor;

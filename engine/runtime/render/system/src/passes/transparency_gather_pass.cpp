@@ -9,8 +9,7 @@ namespace tempest::render_system
                                       render_graph::rg_texture_id accum_tex,
                                       render_graph::rg_texture_id depth_tex,
                                       optional<render_graph::rg_texture_id> ssao_tex,
-                                      uint32_t draw_count,
-                                      optional<render_graph::rg_texture_id> shadow_atlas_tex)
+                                      uint32_t draw_count)
         -> const transparency_gather_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_gather_pipeline");
@@ -56,8 +55,8 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_gather_pass_data>(
             "TransparencyGatherPass",
-            [&pool, accum_tex, depth_tex, ssao_tex, shadow_atlas_tex, draw_count](render_graph::pass_builder& builder,
-                                                                                  transparency_gather_pass_data& data) {
+            [&pool, accum_tex, depth_tex, ssao_tex, draw_count](render_graph::pass_builder& builder,
+                                                                transparency_gather_pass_data& data) {
                 data.accum_texture = builder.set_color_attachment(
                     0, render_graph::rg_color_attachment{
                            .texture = accum_tex,
@@ -76,12 +75,6 @@ namespace tempest::render_system
                 if (ssao_tex.has_value())
                 {
                     data.ssao_texture = builder.read(*ssao_tex, rhi::pipeline_stage::fragment,
-                                                     rhi::resource_access::read, rhi::image_layout::general);
-                }
-
-                if (shadow_atlas_tex.has_value())
-                {
-                    data.shadow_atlas = builder.read(*shadow_atlas_tex, rhi::pipeline_stage::fragment,
                                                      rhi::resource_access::read, rhi::image_layout::general);
                 }
 
@@ -123,16 +116,6 @@ namespace tempest::render_system
                     }
                 }
 
-                auto shadow_idx = -1;
-                if (data.shadow_atlas.has_value())
-                {
-                    const auto desc_idx = ctx.get_texture_descriptor(*data.shadow_atlas);
-                    if (desc_idx != ~0U)
-                    {
-                        shadow_idx = static_cast<int32_t>(desc_idx);
-                    }
-                }
-
                 const auto constants = transparency_gather_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer().gpu_address,
@@ -140,7 +123,6 @@ namespace tempest::render_system
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
                     .ssao_texture_index = ssao_idx,
                     .point_sampler_index = static_cast<int32_t>(pool.get_point_sampler_descriptor().index),
-                    .shadow_map_texture_index = shadow_idx,
                 };
 
                 pass_cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,

@@ -126,6 +126,7 @@ namespace tempest::render_system
           _linear_sampler_descriptor{other._linear_sampler_descriptor},
           _point_sampler_descriptor{other._point_sampler_descriptor},
           _scene_constants_buffer{other._scene_constants_buffer},
+          _directional_shadow_buffer{other._directional_shadow_buffer},
           _object_buffer{other._object_buffer},
           _instance_buffer{other._instance_buffer},
           _draw_commands_buffer{other._draw_commands_buffer}
@@ -138,6 +139,7 @@ namespace tempest::render_system
         other._linear_sampler = {};
         other._point_sampler = {};
         other._scene_constants_buffer = {};
+        other._directional_shadow_buffer = {};
         other._object_buffer = {};
         other._instance_buffer = {};
         other._draw_commands_buffer = {};
@@ -167,6 +169,7 @@ namespace tempest::render_system
             _linear_sampler_descriptor = other._linear_sampler_descriptor;
             _point_sampler_descriptor = other._point_sampler_descriptor;
             _scene_constants_buffer = other._scene_constants_buffer;
+            _directional_shadow_buffer = other._directional_shadow_buffer;
             _object_buffer = other._object_buffer;
             _instance_buffer = other._instance_buffer;
             _draw_commands_buffer = other._draw_commands_buffer;
@@ -179,6 +182,7 @@ namespace tempest::render_system
             other._linear_sampler = {};
             other._point_sampler = {};
             other._scene_constants_buffer = {};
+            other._directional_shadow_buffer = {};
             other._object_buffer = {};
             other._instance_buffer = {};
             other._draw_commands_buffer = {};
@@ -228,6 +232,13 @@ namespace tempest::render_system
             .memory_usage = rhi::memory_usage::upload,
             .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
             .name = "SceneConstantsBuffer",
+        });
+
+        _directional_shadow_buffer = _device->create_buffer(rhi::buffer_desc{
+            .size = sizeof(directional_shadow_data) * _cfg.frames_in_flight,
+            .memory_usage = rhi::memory_usage::upload,
+            .usage = rhi::buffer_usage::uniform_buffer | rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_dst,
+            .name = "DirectionalShadowBuffer",
         });
 
         _object_buffer = _device->create_buffer(rhi::buffer_desc{
@@ -831,9 +842,19 @@ namespace tempest::render_system
         return _scene_constants_buffer.gpu_address + static_cast<uint64_t>(_frame_slot) * sizeof(scene_constants);
     }
 
+    auto resource_pool::get_directional_shadow_address() const noexcept -> uint64_t
+    {
+        return _directional_shadow_buffer.gpu_address + static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data);
+    }
+
     auto resource_pool::get_scene_constants_buffer() const noexcept -> rhi::buffer_handle
     {
         return _scene_constants_buffer;
+    }
+
+    auto resource_pool::get_directional_shadow_buffer() const noexcept -> rhi::buffer_handle
+    {
+        return _directional_shadow_buffer;
     }
 
     auto resource_pool::get_object_buffer() const noexcept -> rhi::buffer_handle
@@ -865,6 +886,15 @@ namespace tempest::render_system
         {
             auto* dst = static_cast<scene_constants*>(_scene_constants_buffer.cpu_address) + _frame_slot;
             std::memcpy(dst, &constants, sizeof(constants));
+        }
+    }
+
+    void resource_pool::write_directional_shadow_data(const directional_shadow_data& data)
+    {
+        if (_directional_shadow_buffer.cpu_address)
+        {
+            auto* dst = static_cast<directional_shadow_data*>(_directional_shadow_buffer.cpu_address) + _frame_slot;
+            std::memcpy(dst, &data, sizeof(data));
         }
     }
 
@@ -991,6 +1021,7 @@ namespace tempest::render_system
         destroy_buf(_material_table_buffer);
         destroy_buf(_staging_buffer);
         destroy_buf(_scene_constants_buffer);
+        destroy_buf(_directional_shadow_buffer);
         destroy_buf(_object_buffer);
         destroy_buf(_instance_buffer);
         destroy_buf(_draw_commands_buffer);

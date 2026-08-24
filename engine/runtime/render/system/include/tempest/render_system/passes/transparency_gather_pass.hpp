@@ -14,7 +14,6 @@ namespace tempest::render_system
         render_graph::rg_texture_id accum_texture;
         render_graph::rg_texture_id depth_texture;
         render_graph::rg_texture_id ssao_texture;
-        optional<render_graph::rg_texture_id> shadow_atlas;
         render_graph::rg_buffer_id scene_constants;
         render_graph::rg_buffer_id object_buffer;
         render_graph::rg_buffer_id instance_buffer;
@@ -30,7 +29,6 @@ namespace tempest::render_system
         int32_t linear_sampler_index{0};
         int32_t ssao_texture_index{-1};
         int32_t point_sampler_index{0};
-        int32_t shadow_map_texture_index{-1};
     };
 
     TEMPEST_API auto add_transparency_gather_pass(render_graph::render_graph& graph, resource_pool& pool,
@@ -38,8 +36,7 @@ namespace tempest::render_system
                                                   render_graph::rg_texture_id accum_tex,
                                                   render_graph::rg_texture_id depth_tex,
                                                   optional<render_graph::rg_texture_id> ssao_tex,
-                                                  uint32_t draw_count,
-                                                  optional<render_graph::rg_texture_id> shadow_atlas_tex = nullopt)
+                                                  uint32_t draw_count)
         -> const transparency_gather_pass_data&;
 } // namespace tempest::render_system
 

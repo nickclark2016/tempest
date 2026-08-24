@@ -1,5 +1,4 @@
 import "camera";
-import "shadows";
 
 struct DirectionalLight {
     float4 color_intensity; // xyz = color, w = intensity
@@ -12,5 +11,4 @@ struct SceneGlobals {
     DirectionalLight sun;
     float2 screen_size;
     float2 inv_screen_size;
-    ShadowParameters shadows;
 };

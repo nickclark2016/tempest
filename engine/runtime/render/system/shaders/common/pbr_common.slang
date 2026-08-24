@@ -4,7 +4,6 @@ import "lighting";
 import "material";
 import "mesh";
 import "scene";
-import "shadows";
 import "tonemap";
 import "vertex_pull";
 import "bxdf/bxdf";
@@ -115,8 +114,7 @@ float4 evaluate_material_openpbr(
     const PixelData px,
     const MaterialState mat_state,
     SceneGlobals* scene,
-    const float3 world_pos,
-    int32_t shadow_map_texture_index = -1)
+    const float3 world_pos)
 {
     let bxdf = OpenPBRBxDF();
     BxDFParams params = build_bxdf_params(px, mat_state);
@@ -138,21 +136,7 @@ float4 evaluate_material_openpbr(
         let bxdf_result = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
         float3 radiance = scene.sun.color_intensity.rgb * scene.sun.color_intensity.w;
 
-        float visibility = 1.0;
-        if (n_dot_l > 0.0 && scene.shadows.directional_light_count > 0 && shadow_map_texture_index >= 0) {
-            float view_dist = length(world_pos - scene.camera.eye.xyz);
-            visibility = sample_directional_shadow(
-                &scene.shadows,
-                world_pos,
-                view_dist,
-                n_dot_l,
-                mat_state.linear_sampler,
-                shadow_map_texture_index,
-                0
-            );
-        }
-
-        color.rgb += half3(bxdf_result.bxdf * radiance * n_dot_l * visibility);
+        color.rgb += half3(bxdf_result.bxdf * radiance * n_dot_l);
     }
 
     // Emissive

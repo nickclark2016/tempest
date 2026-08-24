@@ -11,7 +11,6 @@
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 #include <tempest/render_system/passes/light_culling_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
-#include <tempest/render_system/passes/shadow_map_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
 #include <tempest/render_system/passes/ssao_pass.hpp>
@@ -328,14 +327,8 @@ namespace tempest::render_system::tests
                 .color = {1.0F, 0.98F, 0.92F},
                 .intensity = 7.0F,
             });
-            registry.assign(sun, shadow_map_component{
-                .shadow_distance = 60.0F,
-                .split_lambda = 0.85F,
-                .blend_fraction = 0.1F,
-                .cascade_count = 4,
-            });
             auto sun_tx = ecs::transform_component::identity();
-            sun_tx.rotation({math::as_radians(84.0F), math::as_radians(8.0F), 0.0F});
+            sun_tx.rotation({math::as_radians(60.0F), math::as_radians(40.0F), 0.0F});
             registry.assign(sun, sun_tx);
 
             auto renderable_entities = vector<ecs::entity>{};
@@ -386,78 +379,11 @@ namespace tempest::render_system::tests
 
             rend->prepare_frame(1280, 720);
 
-            EXPECT_TRUE(rend->get_shadow_atlas_texture().has_value());
-
-            // Verify ShadowMapPass is present in the compiled DAG
-            auto compile_res = rend->get_render_graph().compile();
-            ASSERT_TRUE(compile_res.has_value());
-            const auto& all_passes = rend->get_render_graph().get_compiler().get_passes();
-            bool shadow_pass_executed = false;
-            for (auto pass_idx : compile_res->sorted_pass_indices)
-            {
-                if (all_passes[pass_idx].name == "ShadowMapPass")
-                {
-                    shadow_pass_executed = true;
-                    break;
-                }
-            }
-            EXPECT_TRUE(shadow_pass_executed);
-
             auto res = rend->render();
             EXPECT_TRUE(res.has_value());
 
             dev->wait_idle();
         }
-    }
-
-    TEST(render_system_tests, cascaded_shadow_map_generation_and_execution)
-    {
-        auto fixture = create_test_device();
-        auto* dev = fixture.dev.get();
-        ASSERT_NE(dev, nullptr);
-
-        auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
-        auto graph = render_graph::render_graph{2048, 2048};
-
-        auto cam = render_camera{
-            .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
-            .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 2.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 2.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
-            .eye_position = {0.0F, 2.0F, -5.0F, 1.0F},
-        };
-
-        const auto shadow_cfg = shadow_map_component{
-            .shadow_distance = 80.0F,
-            .split_lambda = 0.85F,
-            .blend_fraction = 0.1F,
-            .cascade_count = 4,
-        };
-
-        const auto light_dir = math::vec3<float>{0.5F, -1.0F, 0.3F};
-        const auto cascades = compute_csm_cascades(light_dir, cam, shadow_cfg, {2048, 2048});
-
-        EXPECT_GT(cascades[0].split_depth, 0.1F);
-        EXPECT_GT(cascades[1].split_depth, cascades[0].split_depth);
-        EXPECT_GT(cascades[2].split_depth, cascades[1].split_depth);
-        EXPECT_GT(cascades[3].split_depth, cascades[2].split_depth);
-
-        auto shadow_tex = graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(2048, 2048),
-            .format = rhi::data_format::depth32_float,
-            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
-            .mip_levels = 1,
-            .array_layers = 1,
-            .name = "ShadowMapAtlas",
-        });
-
-        add_shadow_map_pass(graph, pool, shaders, shadow_tex, light_dir, cam, shadow_cfg, {2048, 2048}, 0);
-
-        auto res = graph.execute(*dev);
-        EXPECT_TRUE(res.has_value());
-
-        dev->wait_idle();
     }
 
     TEST(render_system_tests, clustered_lighting_and_culling_execution)
@@ -858,9 +784,7 @@ namespace tempest::render_system::tests
                                       meshes, textures, materials);
 
             // Assert draw counts:
-            // 3 shadow contributors (ent0, ent2, ent4)
             // 5 total active draws
-            EXPECT_EQ(rend->get_shadow_draw_count(), 3U);
             EXPECT_EQ(rend->get_active_draw_count(), 5U);
 
             // Validate the mapped GPU buffers
@@ -879,246 +803,6 @@ namespace tempest::render_system::tests
                 EXPECT_EQ(cmds[i].instance_count, 1U);
                 EXPECT_EQ(instances[i], i);
             }
-
-            // The first 3 objects must be ent0, ent2, ent4 (OPAQUE / MASK)
-            auto shadow_contributor_entities = array<uint32_t, 3>{
-                static_cast<uint32_t>(ent0),
-                static_cast<uint32_t>(ent2),
-                static_cast<uint32_t>(ent4),
-            };
-            for (uint32_t i = 0; i < 3; ++i)
-            {
-                auto entity_id = objects[instances[i]].self_id;
-                auto is_contributor = std::find(shadow_contributor_entities.begin(), shadow_contributor_entities.end(), entity_id) != shadow_contributor_entities.end();
-                EXPECT_TRUE(is_contributor);
-            }
-
-            // The last 2 objects must be ent1, ent3 (BLEND / TRANSMISSIVE)
-            auto transparent_entities = array<uint32_t, 2>{
-                static_cast<uint32_t>(ent1),
-                static_cast<uint32_t>(ent3),
-            };
-            for (uint32_t i = 3; i < 5; ++i)
-            {
-                auto entity_id = objects[instances[i]].self_id;
-                auto is_transparent = std::find(transparent_entities.begin(), transparent_entities.end(), entity_id) != transparent_entities.end();
-                EXPECT_TRUE(is_transparent);
-            }
-        }
-
-        dev->wait_idle();
-    }
-
-    TEST(render_system_tests, renderer_shadowed_directional_light_execution)
-    {
-        auto fixture = create_test_device();
-        auto* dev = fixture.dev.get();
-        ASSERT_NE(dev, nullptr);
-
-        auto sink = stdout_log_sink{};
-        auto log = logger{sink};
-
-        auto events = event::event_registry{};
-        auto registry = ecs::archetype_registry{events};
-
-        auto builder = renderer::builder{};
-        builder.set_config(renderer_config{
-            .render_width = 256,
-            .render_height = 256,
-            .shadow_atlas_width = 512,
-            .shadow_atlas_height = 512,
-            .enable_shadows = true,
-        });
-        builder.set_inputs(renderer_inputs{
-            .entity_registry = &registry,
-        });
-
-        {
-            auto rend = builder.build(*dev, log);
-            ASSERT_NE(rend, nullptr);
-
-            // 1. Camera Entity
-            auto cam_ent = registry.create();
-            registry.assign(cam_ent, camera_component{
-                .aspect_ratio = 1.0F,
-                .vertical_fov = 1.5707963F,
-                .near_plane = 0.01F,
-            });
-            auto cam_tx = ecs::transform_component::identity();
-            cam_tx.position({0.0F, 0.0F, -5.0F});
-            registry.assign(cam_ent, cam_tx);
-            registry.assign(cam_ent, active_camera_component{});
-
-            // 2. Directional Sun Light with Shadows
-            auto sun_ent = registry.create();
-            registry.assign(sun_ent, directional_light_component{
-                .color = {1.0F, 1.0F, 1.0F},
-                .intensity = 3.0F,
-            });
-            registry.assign(sun_ent, shadow_map_component{
-                .shadow_distance = 50.0F,
-                .split_lambda = 0.85F,
-                .blend_fraction = 0.1F,
-                .cascade_count = 2,
-            });
-            registry.assign(sun_ent, ecs::transform_component::identity());
-
-            // 3. Geometry (Opaque Plane)
-            auto meshes = core::mesh_registry{};
-            auto materials = core::material_registry{};
-            auto textures = core::texture_registry{};
-
-            auto mesh_id = meshes.register_mesh(create_test_mesh());
-            auto mat = core::material{};
-            mat.set_vec4(core::material::base_color_factor_name, {0.9F, 0.9F, 0.9F, 1.0F});
-            mat.set_scalar(core::material::metallic_factor_name, 0.0F);
-            mat.set_scalar(core::material::roughness_factor_name, 0.5F);
-            auto mat_id = materials.register_material(tempest::move(mat));
-
-            auto geom_ent = registry.create();
-            registry.assign(geom_ent, renderable_component{
-                .mesh_id = mesh_id,
-                .material_id = mat_id,
-                .double_sided = true,
-            });
-            registry.assign(geom_ent, ecs::transform_component::identity());
-
-            // 4. Upload & Prepare Frame
-            auto entities = array<ecs::entity, 1>{geom_ent};
-            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
-                                      meshes, textures, materials);
-
-            rend->prepare_frame(256, 256);
-
-            // Verify shadow atlas texture is allocated
-            EXPECT_TRUE(rend->get_shadow_atlas_texture().has_value());
-
-            // Verify ShadowMapPass is active in the compiled DAG (not culled)
-            auto compile_res = rend->get_render_graph().compile();
-            ASSERT_TRUE(compile_res.has_value());
-            const auto& all_passes = rend->get_render_graph().get_compiler().get_passes();
-            bool shadow_pass_executed = false;
-            for (auto pass_idx : compile_res->sorted_pass_indices)
-            {
-                if (all_passes[pass_idx].name == "ShadowMapPass")
-                {
-                    shadow_pass_executed = true;
-                    break;
-                }
-            }
-            EXPECT_TRUE(shadow_pass_executed);
-
-            // 5. Render execution
-            auto render_res = rend->render();
-            EXPECT_TRUE(render_res.has_value());
-
-            dev->wait_idle();
-
-            // 6. Readback tonemapped color pixels
-            auto readback_buf = dev->create_buffer(rhi::buffer_desc{
-                .size = 256 * 256 * 4,
-                .memory_usage = rhi::memory_usage::readback,
-                .usage = rhi::buffer_usage::transfer_dst,
-                .name = "FrameReadbackBuffer",
-            });
-
-            const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
-            ASSERT_NE(alloc, nullptr);
-            if (alloc)
-            {
-                auto& port = dev->get_graphics_execution_port();
-                auto& cmd = port.acquire_command_list();
-                cmd.begin();
-
-                const auto region = rhi::buffer_texture_copy_region{
-                    .buffer_offset = 0,
-                    .buffer_row_length = 0,
-                    .buffer_image_height = 0,
-                    .mip_level = 0,
-                    .base_array_layer = 0,
-                    .array_layer_count = 1,
-                    .image_offset_x = 0,
-                    .image_offset_y = 0,
-                    .image_offset_z = 0,
-                    .image_extent_width = 256,
-                    .image_extent_height = 256,
-                    .image_extent_depth = 1,
-                };
-
-                cmd.copy_texture_to_buffer(alloc->handle, readback_buf, span<const rhi::buffer_texture_copy_region>{&region, 1});
-                cmd.end();
-                auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
-                dev->wait_idle();
-
-                auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
-                ASSERT_NE(pixels, nullptr);
-
-                auto non_zero_pixels = 0U;
-                for (size_t i = 0; i < 256 * 256 * 4; i += 4)
-                {
-                    if (pixels[i] > 0 || pixels[i + 1] > 0 || pixels[i + 2] > 0)
-                    {
-                        non_zero_pixels++;
-                    }
-                }
-                EXPECT_GT(non_zero_pixels, 0U);
-            }
-
-            dev->destroy_buffer(readback_buf);
-
-            // 7. Readback shadow map atlas depth pixels to verify geometry was rasterized into the shadow map
-            auto shadow_readback_buf = dev->create_buffer(rhi::buffer_desc{
-                .size = 256 * 256 * sizeof(float),
-                .memory_usage = rhi::memory_usage::readback,
-                .usage = rhi::buffer_usage::transfer_dst,
-                .name = "ShadowAtlasReadbackBuffer",
-            });
-
-            const auto* shadow_alloc = rend->get_render_graph().get_physical_texture(rend->get_shadow_atlas_texture()->id);
-            ASSERT_NE(shadow_alloc, nullptr);
-            if (shadow_alloc)
-            {
-                auto& port = dev->get_graphics_execution_port();
-                auto& cmd = port.acquire_command_list();
-                cmd.begin();
-
-                const auto region = rhi::buffer_texture_copy_region{
-                    .buffer_offset = 0,
-                    .buffer_row_length = 0,
-                    .buffer_image_height = 0,
-                    .mip_level = 0,
-                    .base_array_layer = 0,
-                    .array_layer_count = 1,
-                    .image_offset_x = 0,
-                    .image_offset_y = 0,
-                    .image_offset_z = 0,
-                    .image_extent_width = 256,
-                    .image_extent_height = 256,
-                    .image_extent_depth = 1,
-                };
-
-                cmd.copy_texture_to_buffer(shadow_alloc->handle, shadow_readback_buf, span<const rhi::buffer_texture_copy_region>{&region, 1});
-                cmd.end();
-                auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
-                dev->wait_idle();
-
-                auto* shadow_depths = static_cast<const float*>(shadow_readback_buf.cpu_address);
-                ASSERT_NE(shadow_depths, nullptr);
-
-                auto non_zero_depth_pixels = 0U;
-                for (size_t i = 0; i < 256 * 256; ++i)
-                {
-                    if (shadow_depths[i] > 0.0F)
-                    {
-                        non_zero_depth_pixels++;
-                    }
-                }
-                EXPECT_GT(non_zero_depth_pixels, 0U);
-            }
-
-            dev->destroy_buffer(shadow_readback_buf);
         }
 
         dev->wait_idle();
@@ -1194,6 +878,69 @@ namespace tempest::render_system::tests
             dev->wait_idle();
             pool.clear_staging_buffers();
             graph.reset();
+        }
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, resource_pool_directional_shadow_buffer_and_bda)
+    {
+        EXPECT_EQ(sizeof(shadow_cascade_data), 96ULL);
+        EXPECT_EQ(sizeof(directional_shadow_data), 400ULL);
+
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        {
+            auto pool = resource_pool{*dev};
+            auto buf = pool.get_directional_shadow_buffer();
+            EXPECT_NE(buf.handle, 0ULL);
+            EXPECT_NE(buf.cpu_address, nullptr);
+            EXPECT_NE(buf.gpu_address, 0ULL);
+
+            const auto addr_f0 = pool.get_directional_shadow_address();
+            EXPECT_EQ(addr_f0, buf.gpu_address);
+
+            auto shadow_data_f0 = directional_shadow_data{};
+            shadow_data_f0.cascade_count = 3;
+            shadow_data_f0.normal_bias = 0.05F;
+            shadow_data_f0.depth_bias = 0.01F;
+            shadow_data_f0.cascades[0].split_depth = 10.0F;
+            shadow_data_f0.cascades[1].split_depth = 50.0F;
+            shadow_data_f0.cascades[2].split_depth = 150.0F;
+
+            pool.write_directional_shadow_data(shadow_data_f0);
+
+            // Verify written data in slot 0
+            const auto* read_f0 = static_cast<const directional_shadow_data*>(buf.cpu_address);
+            EXPECT_EQ(read_f0[0].cascade_count, 3U);
+            EXPECT_FLOAT_EQ(read_f0[0].normal_bias, 0.05F);
+            EXPECT_FLOAT_EQ(read_f0[0].depth_bias, 0.01F);
+            EXPECT_FLOAT_EQ(read_f0[0].cascades[0].split_depth, 10.0F);
+
+            // Advance frame slot to slot 1
+            pool.advance_frame();
+            const auto addr_f1 = pool.get_directional_shadow_address();
+            EXPECT_EQ(addr_f1, buf.gpu_address + sizeof(directional_shadow_data));
+
+            auto shadow_data_f1 = directional_shadow_data{};
+            shadow_data_f1.cascade_count = 4;
+            shadow_data_f1.normal_bias = 0.02F;
+            shadow_data_f1.depth_bias = 0.005F;
+            shadow_data_f1.cascades[0].split_depth = 20.0F;
+
+            pool.write_directional_shadow_data(shadow_data_f1);
+
+            const auto* read_f1 = static_cast<const directional_shadow_data*>(buf.cpu_address) + 1;
+            EXPECT_EQ(read_f1->cascade_count, 4U);
+            EXPECT_FLOAT_EQ(read_f1->normal_bias, 0.02F);
+            EXPECT_FLOAT_EQ(read_f1->depth_bias, 0.005F);
+            EXPECT_FLOAT_EQ(read_f1->cascades[0].split_depth, 20.0F);
+
+            // Frame 0 data remains intact
+            EXPECT_EQ(read_f0[0].cascade_count, 3U);
+            EXPECT_FLOAT_EQ(read_f0[0].normal_bias, 0.05F);
         }
 
         dev->wait_idle();
