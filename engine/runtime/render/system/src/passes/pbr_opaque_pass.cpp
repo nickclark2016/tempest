@@ -1,6 +1,5 @@
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
 
-#include <iostream>
 #include <tempest/array.hpp>
 
 namespace tempest::render_system
