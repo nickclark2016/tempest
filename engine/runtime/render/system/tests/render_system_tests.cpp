@@ -16,6 +16,7 @@
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
 #include <tempest/render_system/passes/ssao_pass.hpp>
 #include <tempest/render_system/passes/tonemapping_pass.hpp>
+#include <tempest/render_system/passes/transparency_clear_pass.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/render_system/resource_pool.hpp>
@@ -1386,5 +1387,141 @@ namespace tempest::render_system::tests
 
             dev->destroy_buffer(readback_buf);
         }
+    }
+
+    TEST(render_system_tests, transparency_clear_pass_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto shaders = shader_manager{*dev};
+        constexpr uint32_t width = 64;
+        constexpr uint32_t height = 64;
+        auto graph = render_graph::render_graph{width, height};
+
+        auto moments_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .mip_levels = 1,
+            .array_layers = 2,
+            .name = "MomentsArrayTarget",
+        });
+
+        auto zeroth_moment_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::r32_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ZerothMomentTarget",
+        });
+
+        const auto& pass_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        EXPECT_TRUE(pass_data.moments_texture.is_valid());
+        EXPECT_TRUE(pass_data.zeroth_moment_texture.is_valid());
+
+        auto exec_res = graph.execute(*dev);
+        EXPECT_TRUE(exec_res.has_value());
+        dev->wait_idle();
+
+        // Readback zeroth moment texture (64 * 64 * sizeof(float))
+        auto zeroth_readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = width * height * sizeof(float),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "ZerothMomentReadbackBuffer",
+        });
+
+        // Readback moments array texture (2 layers * 64 * 64 * 4 * sizeof(uint16_t))
+        auto moments_readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = 2 * width * height * 4 * sizeof(uint16_t),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "MomentsReadbackBuffer",
+        });
+
+        const auto* zeroth_alloc = graph.get_physical_texture(pass_data.zeroth_moment_texture.id);
+        const auto* moments_alloc = graph.get_physical_texture(pass_data.moments_texture.id);
+        ASSERT_NE(zeroth_alloc, nullptr);
+        ASSERT_NE(moments_alloc, nullptr);
+
+        auto& port = dev->get_graphics_execution_port();
+        auto& cmd = port.acquire_command_list();
+        cmd.begin();
+
+        const auto zeroth_region = rhi::buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = width,
+            .image_extent_height = height,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_texture_to_buffer(zeroth_alloc->handle, zeroth_readback_buf,
+                                   span<const rhi::buffer_texture_copy_region>{&zeroth_region, 1});
+
+        const auto moments_regions = array{
+            rhi::buffer_texture_copy_region{
+                .buffer_offset = 0,
+                .buffer_row_length = 0,
+                .buffer_image_height = 0,
+                .mip_level = 0,
+                .base_array_layer = 0,
+                .array_layer_count = 1,
+                .image_offset_x = 0,
+                .image_offset_y = 0,
+                .image_offset_z = 0,
+                .image_extent_width = width,
+                .image_extent_height = height,
+                .image_extent_depth = 1,
+            },
+            rhi::buffer_texture_copy_region{
+                .buffer_offset = width * height * 4 * sizeof(uint16_t),
+                .buffer_row_length = 0,
+                .buffer_image_height = 0,
+                .mip_level = 0,
+                .base_array_layer = 1,
+                .array_layer_count = 1,
+                .image_offset_x = 0,
+                .image_offset_y = 0,
+                .image_offset_z = 0,
+                .image_extent_width = width,
+                .image_extent_height = height,
+                .image_extent_depth = 1,
+            },
+        };
+        cmd.copy_texture_to_buffer(moments_alloc->handle, moments_readback_buf,
+                                   span<const rhi::buffer_texture_copy_region>{moments_regions.data(), moments_regions.size()});
+
+        cmd.end();
+
+        auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        dev->wait_idle();
+
+        const auto* zeroth_pixels = static_cast<const float*>(zeroth_readback_buf.cpu_address);
+        ASSERT_NE(zeroth_pixels, nullptr);
+        for (size_t i = 0; i < width * height; ++i)
+        {
+            EXPECT_FLOAT_EQ(zeroth_pixels[i], 0.0F);
+        }
+
+        const auto* moments_pixels = static_cast<const uint16_t*>(moments_readback_buf.cpu_address);
+        ASSERT_NE(moments_pixels, nullptr);
+        for (size_t i = 0; i < 2 * width * height * 4; ++i)
+        {
+            EXPECT_EQ(moments_pixels[i], 0);
+        }
+
+        dev->destroy_buffer(zeroth_readback_buf);
+        dev->destroy_buffer(moments_readback_buf);
     }
 } // namespace tempest::render_system::tests
