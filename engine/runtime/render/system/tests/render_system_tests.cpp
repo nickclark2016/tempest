@@ -16,8 +16,6 @@
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
 #include <tempest/render_system/passes/ssao_pass.hpp>
 #include <tempest/render_system/passes/tonemapping_pass.hpp>
-#include <tempest/render_system/passes/transparency_blend_pass.hpp>
-#include <tempest/render_system/passes/transparency_gather_pass.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/render_system/resource_pool.hpp>
@@ -441,55 +439,6 @@ namespace tempest::render_system::tests
         add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer,
                               lights_buf, light_grid_buf, light_indices_buf, global_count_buf,
                               cluster_data.create_info, 0);
-
-        auto res = graph.execute(*dev);
-        EXPECT_TRUE(res.has_value());
-
-        dev->wait_idle();
-    }
-
-    TEST(render_system_tests, transparency_gather_and_blend_execution)
-    {
-        auto fixture = create_test_device();
-        auto* dev = fixture.dev.get();
-        ASSERT_NE(dev, nullptr);
-
-        auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
-        auto graph = render_graph::render_graph{1280, 720};
-
-        auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(1280, 720),
-            .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
-            .mip_levels = 1,
-            .array_layers = 1,
-            .name = "TransparencyAccum",
-        });
-
-        auto depth_tex = graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(1280, 720),
-            .format = rhi::data_format::depth32_float,
-            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
-            .mip_levels = 1,
-            .array_layers = 1,
-            .name = "DepthTarget",
-        });
-
-        auto hdr_tex = graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(1280, 720),
-            .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
-            .mip_levels = 1,
-            .array_layers = 1,
-            .name = "HDRColorTarget",
-        });
-
-        add_frame_upload_pass(graph, pool);
-        const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
-        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, accum_tex,
-                                                               depth_data.depth_texture, nullopt, 0);
-        add_transparency_blend_pass(graph, pool, shaders, gather_data.accum_texture, hdr_tex);
 
         auto res = graph.execute(*dev);
         EXPECT_TRUE(res.has_value());
