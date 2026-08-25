@@ -1234,4 +1234,208 @@ namespace tempest::render_system::tests
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, linear_sampler_index), 32U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 36U);
     }
+
+    TEST(render_system_tests, directional_shadow_data_debug_mode_layout)
+    {
+        EXPECT_EQ(sizeof(directional_shadow_data), 400ULL);
+        EXPECT_EQ(offsetof(directional_shadow_data, debug_mode), 396ULL);
+    }
+
+    TEST(render_system_tests, shadow_debug_mode_visualization_cascades_and_shadow_factor)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+            .shadow_debug = shadow_debug_mode::cascades,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+            EXPECT_EQ(rend->get_shadow_debug_mode(), shadow_debug_mode::cascades);
+
+            // 1. Setup Camera Entity
+            auto cam_ent = registry.create();
+            registry.assign(cam_ent, camera_component{
+                .aspect_ratio = 1280.0F / 720.0F,
+                .vertical_fov = 1.5707963F,
+                .near_plane = 0.01F,
+            });
+            auto cam_tx = ecs::transform_component::identity();
+            cam_tx.position({0.0F, 0.0F, -5.0F});
+            registry.assign(cam_ent, cam_tx);
+            registry.assign(cam_ent, active_camera_component{});
+
+            // 2. Setup Sun Light Entity
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                .color = {1.0F, 1.0F, 1.0F},
+                .intensity = 2.0F,
+            });
+            registry.assign(sun_ent, shadow_caster_component{
+                .resolution = 2048,
+                .num_cascades = 4,
+                .split_lambda = 0.5F,
+                .max_shadow_distance = 100.0F,
+                .normal_bias = 0.02F,
+                .depth_bias = 0.005F,
+                .priority = 0,
+                .debug_mode = shadow_debug_mode::cascades,
+            });
+            auto sun_tx = ecs::transform_component::identity();
+            sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+            registry.assign(sun_ent, sun_tx);
+
+            // 3. Setup Renderable Geometry Entity (Green surface material)
+            auto meshes = core::mesh_registry{};
+            auto materials = core::material_registry{};
+            auto textures = core::texture_registry{};
+
+            auto mesh_id = meshes.register_mesh(create_test_mesh());
+            auto mat = core::material{};
+            mat.set_vec4(core::material::base_color_factor_name, {0.0F, 1.0F, 0.0F, 1.0F});
+            mat.set_scalar(core::material::metallic_factor_name, 0.0F);
+            mat.set_scalar(core::material::roughness_factor_name, 0.5F);
+            auto mat_id = materials.register_material(tempest::move(mat));
+
+            auto geom_ent = registry.create();
+            registry.assign(geom_ent, renderable_component{
+                .mesh_id = mesh_id,
+                .material_id = mat_id,
+                .double_sided = false,
+            });
+            registry.assign(geom_ent, ecs::transform_component::identity());
+
+            // 4. Upload Objects and Prepare Frame with Cascades debug mode
+            auto entities = array<ecs::entity, 1>{geom_ent};
+            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
+                                      meshes, textures, materials);
+
+            rend->prepare_frame(1280, 720);
+
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+            dev->wait_idle();
+
+            // Readback and verify Cascade 0 color (Red dominant: float3(1.0, 0.25, 0.25))
+            auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+                .size = 1280 * 720 * 4,
+                .memory_usage = rhi::memory_usage::readback,
+                .usage = rhi::buffer_usage::transfer_dst,
+                .name = "CascadeDebugReadbackBuffer",
+            });
+
+            const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
+            ASSERT_NE(alloc, nullptr);
+            if (alloc)
+            {
+                auto& port = dev->get_graphics_execution_port();
+                auto& cmd = port.acquire_command_list();
+                cmd.begin();
+
+                const auto region = rhi::buffer_texture_copy_region{
+                    .buffer_offset = 0,
+                    .buffer_row_length = 0,
+                    .buffer_image_height = 0,
+                    .mip_level = 0,
+                    .base_array_layer = 0,
+                    .array_layer_count = 1,
+                    .image_offset_x = 0,
+                    .image_offset_y = 0,
+                    .image_offset_z = 0,
+                    .image_extent_width = 1280,
+                    .image_extent_height = 720,
+                    .image_extent_depth = 1,
+                };
+                cmd.copy_texture_to_buffer(alloc->handle, readback_buf,
+                                           span<const rhi::buffer_texture_copy_region>{&region, 1});
+                cmd.end();
+
+                auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                dev->wait_idle();
+
+                const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
+                ASSERT_NE(pixels, nullptr);
+                if (pixels)
+                {
+                    // Center pixel (640, 360) is in Cascade 0 -> Red channel should be significantly higher than Green
+                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto r = pixels[center_idx + 0];
+                    const auto g = pixels[center_idx + 1];
+                    const auto b = pixels[center_idx + 2];
+                    EXPECT_GT(r, 180);
+                    EXPECT_GT(r, g);
+                    EXPECT_GT(r, b);
+                }
+            }
+
+            // Test dynamic switch to Shadow Factor debug mode
+            rend->set_shadow_debug_mode(shadow_debug_mode::shadow_factor);
+            EXPECT_EQ(rend->get_shadow_debug_mode(), shadow_debug_mode::shadow_factor);
+
+            rend->prepare_frame(1280, 720);
+            auto render_res2 = rend->render();
+            EXPECT_TRUE(render_res2.has_value());
+            dev->wait_idle();
+
+            if (alloc)
+            {
+                auto& port = dev->get_graphics_execution_port();
+                auto& cmd = port.acquire_command_list();
+                cmd.begin();
+
+                const auto region = rhi::buffer_texture_copy_region{
+                    .buffer_offset = 0,
+                    .buffer_row_length = 0,
+                    .buffer_image_height = 0,
+                    .mip_level = 0,
+                    .base_array_layer = 0,
+                    .array_layer_count = 1,
+                    .image_offset_x = 0,
+                    .image_offset_y = 0,
+                    .image_offset_z = 0,
+                    .image_extent_width = 1280,
+                    .image_extent_height = 720,
+                    .image_extent_depth = 1,
+                };
+                cmd.copy_texture_to_buffer(alloc->handle, readback_buf,
+                                           span<const rhi::buffer_texture_copy_region>{&region, 1});
+                cmd.end();
+
+                auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                dev->wait_idle();
+
+                const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
+                ASSERT_NE(pixels, nullptr);
+                if (pixels)
+                {
+                    // Center pixel in shadow_factor mode must be grayscale (R == G == B within tonemapping quantization)
+                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto r = pixels[center_idx + 0];
+                    const auto g = pixels[center_idx + 1];
+                    const auto b = pixels[center_idx + 2];
+                    EXPECT_NEAR(static_cast<int>(r), static_cast<int>(g), 2);
+                    EXPECT_NEAR(static_cast<int>(g), static_cast<int>(b), 2);
+                }
+            }
+
+            dev->destroy_buffer(readback_buf);
+        }
+    }
 } // namespace tempest::render_system::tests

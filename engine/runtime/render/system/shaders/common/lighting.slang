@@ -41,6 +41,15 @@ struct Light
     bool enabled;
 };
 
+enum ShadowDebugMode : uint
+{
+    NONE = 0,
+    CASCADES = 1,
+    SHADOW_FACTOR = 2,
+    CASCADE_AND_SHADOW = 3,
+    SCENE_CASCADE_TINT = 4
+};
+
 struct ShadowCascadeData {
     float4x4 view_proj;
     float4 uv_offset_scale; // xy = offset in atlas, zw = scale in atlas
@@ -53,15 +62,24 @@ struct DirectionalShadowData {
     uint cascade_count;
     float normal_bias;
     float depth_bias;
-    float padding;
+    uint debug_mode;
+};
+
+struct ShadowSampleResult {
+    float factor;
+    int cascade_index;
 };
 
 [ForceInline]
-float sample_csm_shadow(Texture2D shadow_atlas, SamplerState linear_sampler,
-                        DirectionalShadowData* shadow_data,
-                        float3 world_pos, float3 geom_normal, float view_depth) {
+ShadowSampleResult sample_csm_shadow_info(Texture2D shadow_atlas, SamplerState linear_sampler,
+                                          DirectionalShadowData* shadow_data,
+                                          float3 world_pos, float3 geom_normal, float view_depth) {
+    ShadowSampleResult result;
+    result.factor = 1.0;
+    result.cascade_index = -1;
+
     if (shadow_data == nullptr || shadow_data.cascade_count == 0) {
-        return 1.0;
+        return result;
     }
 
     // 1. Select Cascade
@@ -74,9 +92,10 @@ float sample_csm_shadow(Texture2D shadow_atlas, SamplerState linear_sampler,
     }
 
     if (cascade_idx < 0) {
-        return 1.0; // Beyond max shadow distance
+        return result; // Beyond max shadow distance
     }
 
+    result.cascade_index = cascade_idx;
     ShadowCascadeData cascade = shadow_data.cascades[cascade_idx];
 
     // 2. Normal Offset Bias
@@ -90,7 +109,7 @@ float sample_csm_shadow(Texture2D shadow_atlas, SamplerState linear_sampler,
     if (light_ndc.x < -1.0 || light_ndc.x > 1.0 ||
         light_ndc.y < -1.0 || light_ndc.y > 1.0 ||
         light_ndc.z < 0.0  || light_ndc.z > 1.0) {
-        return 1.0;
+        return result;
     }
 
     // Convert [-1, 1] NDC to [0, 1] UV
@@ -122,5 +141,41 @@ float sample_csm_shadow(Texture2D shadow_atlas, SamplerState linear_sampler,
         }
     }
 
-    return shadow / 9.0;
+    result.factor = shadow / 9.0;
+    return result;
+}
+
+[ForceInline]
+float sample_csm_shadow(Texture2D shadow_atlas, SamplerState linear_sampler,
+                        DirectionalShadowData* shadow_data,
+                        float3 world_pos, float3 geom_normal, float view_depth) {
+    return sample_csm_shadow_info(shadow_atlas, linear_sampler, shadow_data, world_pos, geom_normal, view_depth).factor;
+}
+
+[ForceInline]
+float3 get_cascade_debug_color(int cascade_index) {
+    switch (cascade_index) {
+        case 0: return float3(1.0, 0.25, 0.25); // Red (Cascade 0: near/detailed)
+        case 1: return float3(0.25, 1.0, 0.25); // Green (Cascade 1)
+        case 2: return float3(0.25, 0.5, 1.0);  // Blue (Cascade 2)
+        case 3: return float3(1.0, 1.0, 0.25);  // Yellow (Cascade 3: far)
+        default: return float3(0.4, 0.4, 0.4); // Outside / unshadowed
+    }
+}
+
+[ForceInline]
+float3 apply_shadow_debug_visualization(float3 lit_color, float shadow_factor, int cascade_index, uint debug_mode) {
+    if (debug_mode == (uint)ShadowDebugMode.CASCADES) {
+        return get_cascade_debug_color(cascade_index);
+    } else if (debug_mode == (uint)ShadowDebugMode.SHADOW_FACTOR) {
+        return float3(shadow_factor);
+    } else if (debug_mode == (uint)ShadowDebugMode.CASCADE_AND_SHADOW) {
+        float3 cascade_col = get_cascade_debug_color(cascade_index);
+        return cascade_col * (0.25 + 0.75 * shadow_factor);
+    } else if (debug_mode == (uint)ShadowDebugMode.SCENE_CASCADE_TINT) {
+        float3 cascade_col = get_cascade_debug_color(cascade_index);
+        float3 overlay = cascade_col * (0.25 + 0.75 * shadow_factor);
+        return lerp(lit_color, overlay, 0.5);
+    }
+    return lit_color;
 }

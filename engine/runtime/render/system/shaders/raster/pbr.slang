@@ -62,14 +62,22 @@ FragmentOutput FSMain(VertexOutput input) {
     }
 
     float sun_shadow = 1.0;
+    int cascade_idx = -1;
+    DirectionalShadowData* shadow_data = nullptr;
     if (push_constants.shadow_atlas_index >= 0 && push_constants.directional_shadow_address != 0) {
-        DirectionalShadowData* shadow_data = (DirectionalShadowData*)push_constants.directional_shadow_address;
+        shadow_data = (DirectionalShadowData*)push_constants.directional_shadow_address;
         float view_depth = -input.view_position.z;
         Texture2D shadow_atlas = bindless_textures[push_constants.shadow_atlas_index];
-        sun_shadow = sample_csm_shadow(shadow_atlas, mat_state.linear_sampler, shadow_data, input.world_position, input.normal, view_depth);
+        ShadowSampleResult shadow_res = sample_csm_shadow_info(shadow_atlas, mat_state.linear_sampler, shadow_data, input.world_position, input.normal, view_depth);
+        sun_shadow = shadow_res.factor;
+        cascade_idx = shadow_res.cascade_index;
     }
 
     float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position, sun_shadow);
+
+    if (shadow_data != nullptr && shadow_data.debug_mode != 0) {
+        color.rgb = apply_shadow_debug_visualization(color.rgb, sun_shadow, cascade_idx, shadow_data.debug_mode);
+    }
 
     if (mat.type == MaterialType::TRANSMISSIVE) {
         color.a = mat.transmission_factor;

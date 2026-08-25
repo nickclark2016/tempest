@@ -116,7 +116,7 @@ namespace tempest::rhi::examples
         auto sun = _registry.create();
         _registry.assign(sun, render_system::directional_light_component{
             .color = {1.0F, 0.98F, 0.92F},
-            .intensity = 7.0F,
+            .intensity = 5.0F,
         });
         _registry.assign(sun, render_system::shadow_caster_component{
             .resolution = 2048,
@@ -125,6 +125,7 @@ namespace tempest::rhi::examples
             .max_shadow_distance = 100.0F,
             .normal_bias = 0.02F,
             .depth_bias = 0.005F,
+            .debug_mode = render_system::shadow_debug_mode::none,
         });
         auto sun_tx = ecs::transform_component::identity();
         sun_tx.rotation({math::as_radians(85.0F), math::as_radians(10.0F), 0.0F});

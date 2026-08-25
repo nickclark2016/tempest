@@ -48,7 +48,7 @@ namespace tempest::render_system
         uint32_t cascade_count{4};
         float normal_bias{0.02F};
         float depth_bias{0.005F};
-        float padding{0.0F};
+        uint32_t debug_mode{0};
     };
 
     enum class mipmap_generation_mode : uint8_t

@@ -23,6 +23,7 @@ namespace tempest::render_system
         rhi::data_format depth_format{rhi::data_format::depth32_float};
         rhi::data_format tonemapped_color_format{rhi::data_format::rgba8_srgb};
         bool enable_ssao{false};
+        shadow_debug_mode shadow_debug{shadow_debug_mode::none};
         resource_pool_config pool_config{};
     };
 
@@ -122,6 +123,16 @@ namespace tempest::render_system
             return _active_draw_count;
         }
 
+        void set_shadow_debug_mode(shadow_debug_mode mode) noexcept
+        {
+            _shadow_debug_mode = mode;
+        }
+
+        [[nodiscard]] auto get_shadow_debug_mode() const noexcept -> shadow_debug_mode
+        {
+            return _shadow_debug_mode;
+        }
+
       private:
         rhi::device* _device{nullptr};
         logger* _log{nullptr};
@@ -144,6 +155,7 @@ namespace tempest::render_system
 
         shelf_allocator _shadow_allocator{};
         uint32_t _active_draw_count{0};
+        shadow_debug_mode _shadow_debug_mode{shadow_debug_mode::none};
     };
 } // namespace tempest::render_system
 

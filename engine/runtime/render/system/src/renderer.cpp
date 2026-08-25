@@ -57,7 +57,8 @@ namespace tempest::render_system
           _camera_system{_inputs.camera_sys ? _inputs.camera_sys : _owned_camera_system.get()},
           _pool{dev, cfg.pool_config},
           _shaders{dev},
-          _graph{cfg.render_width, cfg.render_height}
+          _graph{cfg.render_width, cfg.render_height},
+          _shadow_debug_mode{cfg.shadow_debug}
     {
     }
 
@@ -83,7 +84,8 @@ namespace tempest::render_system
           _ssao_blurred_target{other._ssao_blurred_target},
           _tonemapped_color_target{other._tonemapped_color_target},
           _shadow_allocator{tempest::move(other._shadow_allocator)},
-          _active_draw_count{other._active_draw_count}
+          _active_draw_count{other._active_draw_count},
+          _shadow_debug_mode{other._shadow_debug_mode}
     {
         other._device = nullptr;
         other._camera_system = nullptr;
@@ -115,6 +117,7 @@ namespace tempest::render_system
             _tonemapped_color_target = other._tonemapped_color_target;
             _shadow_allocator = tempest::move(other._shadow_allocator);
             _active_draw_count = other._active_draw_count;
+            _shadow_debug_mode = other._shadow_debug_mode;
 
             other._device = nullptr;
             other._camera_system = nullptr;
@@ -386,7 +389,7 @@ namespace tempest::render_system
 
         if (_inputs.entity_registry && _camera_system)
         {
-            const auto shadow_res = add_shadow_pass(shadow_pass_params{
+            auto shadow_res = add_shadow_pass(shadow_pass_params{
                 .graph = _graph,
                 .pool = _pool,
                 .shaders = _shaders,
@@ -396,6 +399,11 @@ namespace tempest::render_system
                 .camera_sys = *_camera_system,
                 .draw_count = _active_draw_count,
             });
+
+            if (_shadow_debug_mode != shadow_debug_mode::none)
+            {
+                shadow_res.shadow_data.debug_mode = static_cast<uint32_t>(_shadow_debug_mode);
+            }
 
             _pool.write_directional_shadow_data(shadow_res.shadow_data);
             _shadow_atlas_target = shadow_res.shadow_atlas;

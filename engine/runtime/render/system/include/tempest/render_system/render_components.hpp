@@ -130,6 +130,15 @@ namespace tempest::render_system
         float range;
     };
 
+    enum class shadow_debug_mode : uint32_t
+    {
+        none = 0,
+        cascades = 1,
+        shadow_factor = 2,
+        cascade_and_shadow = 3,
+        scene_cascade_tint = 4,
+    };
+
     struct TEMPEST_API shadow_caster_component
     {
         uint32_t resolution{2048};
@@ -139,6 +148,7 @@ namespace tempest::render_system
         float normal_bias{0.02F};
         float depth_bias{0.005F};
         uint32_t priority{0}; // Lower value = higher priority (0 = directional sun)
+        shadow_debug_mode debug_mode{shadow_debug_mode::none};
     };
 } // namespace tempest::render_system
 

@@ -203,6 +203,7 @@ namespace tempest::render_system
         shadow_data.cascade_count = static_cast<uint32_t>(rendered_cascades.size());
         shadow_data.normal_bias = sun.caster.normal_bias;
         shadow_data.depth_bias = sun.caster.depth_bias;
+        shadow_data.debug_mode = static_cast<uint32_t>(sun.caster.debug_mode);
 
         auto pipe_h = params.shaders.find_graphics_pipeline("shadow_depth_pipeline");
         if (!pipe_h.has_value())
