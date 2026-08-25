@@ -114,7 +114,8 @@ float4 evaluate_material_openpbr(
     const PixelData px,
     const MaterialState mat_state,
     SceneGlobals* scene,
-    const float3 world_pos)
+    const float3 world_pos,
+    float shadow_factor = 1.0)
 {
     let bxdf = OpenPBRBxDF();
     BxDFParams params = build_bxdf_params(px, mat_state);
@@ -136,7 +137,7 @@ float4 evaluate_material_openpbr(
         let bxdf_result = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
         float3 radiance = scene.sun.color_intensity.rgb * scene.sun.color_intensity.w;
 
-        color.rgb += half3(bxdf_result.bxdf * radiance * n_dot_l);
+        color.rgb += half3(bxdf_result.bxdf * (radiance * shadow_factor) * n_dot_l);
     }
 
     // Emissive

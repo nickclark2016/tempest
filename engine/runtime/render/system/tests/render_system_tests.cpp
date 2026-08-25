@@ -11,6 +11,7 @@
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 #include <tempest/render_system/passes/light_culling_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
+#include <tempest/render_system/passes/shadow_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
 #include <tempest/render_system/passes/ssao_pass.hpp>
@@ -21,6 +22,7 @@
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/render_system/resource_pool.hpp>
 #include <tempest/render_system/shader_manager.hpp>
+#include <tempest/render_system/shelf_allocator.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/transform_component.hpp>
 
@@ -944,5 +946,292 @@ namespace tempest::render_system::tests
         }
 
         dev->wait_idle();
+    }
+
+    TEST(render_system_tests, csm_practical_splits_and_bounding_sphere_math)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto cam_sys = camera_system{registry, events};
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        auto graph = render_graph::render_graph{1920, 1080};
+        auto allocator = shelf_allocator{8192, 8192, 4};
+
+        auto shadow_atlas_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(8192, 8192),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ShadowAtlasTarget",
+        });
+
+        // 1. Setup Camera
+        auto cam_ent = registry.create();
+        registry.assign(cam_ent, camera_component{
+            .aspect_ratio = 16.0F / 9.0F,
+            .vertical_fov = 1.0F,
+            .near_plane = 0.1F,
+        });
+        auto cam_tx = ecs::transform_component::identity();
+        cam_tx.position({0.0F, 2.0F, -10.0F});
+        registry.assign(cam_ent, cam_tx);
+        registry.assign(cam_ent, active_camera_component{});
+
+        // 2. Setup Sun Light with shadow_caster_component
+        auto sun_ent = registry.create();
+        registry.assign(sun_ent, directional_light_component{
+            .color = {1.0F, 1.0F, 1.0F},
+            .intensity = 5.0F,
+        });
+        registry.assign(sun_ent, shadow_caster_component{
+            .resolution = 2048,
+            .num_cascades = 4,
+            .split_lambda = 0.6F,
+            .max_shadow_distance = 150.0F,
+            .normal_bias = 0.03F,
+            .depth_bias = 0.008F,
+            .priority = 0,
+        });
+        auto sun_tx = ecs::transform_component::identity();
+        sun_tx.rotation({math::as_radians(45.0F), math::as_radians(30.0F), 0.0F});
+        registry.assign(sun_ent, sun_tx);
+
+        const auto shadow_res = add_shadow_pass(shadow_pass_params{
+            .graph = graph,
+            .pool = pool,
+            .shaders = shaders,
+            .shadow_atlas = shadow_atlas_tex,
+            .allocator = allocator,
+            .registry = registry,
+            .camera_sys = cam_sys,
+            .draw_count = 0,
+        });
+        const auto& shadow_data = shadow_res.shadow_data;
+
+        EXPECT_EQ(shadow_data.cascade_count, 4U);
+        EXPECT_FLOAT_EQ(shadow_data.normal_bias, 0.03F);
+        EXPECT_FLOAT_EQ(shadow_data.depth_bias, 0.008F);
+
+        // Splits must be monotonically increasing
+        EXPECT_GT(shadow_data.cascades[0].split_depth, 0.1F);
+        EXPECT_GT(shadow_data.cascades[1].split_depth, shadow_data.cascades[0].split_depth);
+        EXPECT_GT(shadow_data.cascades[2].split_depth, shadow_data.cascades[1].split_depth);
+        EXPECT_FLOAT_EQ(shadow_data.cascades[3].split_depth, 150.0F);
+
+        // Validate UV offsets and scales in the atlas
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            const auto& uv = shadow_data.cascades[i].uv_offset_scale;
+            EXPECT_GE(uv.x, 0.0F);
+            EXPECT_GE(uv.y, 0.0F);
+            EXPECT_GT(uv.z, 0.0F);
+            EXPECT_GT(uv.w, 0.0F);
+            EXPECT_LE(uv.x + uv.z, 1.0F);
+            EXPECT_LE(uv.y + uv.w, 1.0F);
+        }
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, shadow_pass_render_graph_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto cam_sys = camera_system{registry, events};
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        auto graph = render_graph::render_graph{1280, 720};
+        auto allocator = shelf_allocator{8192, 8192, 4};
+
+        // 1. Setup Camera
+        auto cam_ent = registry.create();
+        registry.assign(cam_ent, camera_component{
+            .aspect_ratio = 16.0F / 9.0F,
+            .vertical_fov = 1.0F,
+            .near_plane = 0.1F,
+        });
+        auto cam_tx = ecs::transform_component::identity();
+        cam_tx.position({0.0F, 0.0F, -5.0F});
+        registry.assign(cam_ent, cam_tx);
+        registry.assign(cam_ent, active_camera_component{});
+
+        // 2. Setup Sun Light
+        auto sun_ent = registry.create();
+        registry.assign(sun_ent, directional_light_component{
+            .color = {1.0F, 1.0F, 1.0F},
+            .intensity = 2.0F,
+        });
+        registry.assign(sun_ent, shadow_caster_component{
+            .resolution = 2048,
+            .num_cascades = 4,
+            .split_lambda = 0.5F,
+            .max_shadow_distance = 100.0F,
+            .normal_bias = 0.02F,
+            .depth_bias = 0.005F,
+            .priority = 0,
+        });
+        auto sun_tx = ecs::transform_component::identity();
+        sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+        registry.assign(sun_ent, sun_tx);
+
+        // 3. Setup Mesh
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto mesh_id = meshes.register_mesh(create_test_mesh());
+        auto mat = core::material{};
+        mat.set_vec4(core::material::base_color_factor_name, {1.0F, 1.0F, 1.0F, 1.0F});
+        auto mat_id = materials.register_material(tempest::move(mat));
+
+        auto geom_ent = registry.create();
+        registry.assign(geom_ent, renderable_component{
+            .mesh_id = mesh_id,
+            .material_id = mat_id,
+            .double_sided = false,
+        });
+        registry.assign(geom_ent, ecs::transform_component::identity());
+
+        pool.load_materials(span<const guid>{&mat_id, 1}, materials, graph);
+        pool.load_meshes(span<const guid>{&mesh_id, 1}, meshes, graph);
+
+        const auto sync_res = graph.execute(*dev);
+        EXPECT_TRUE(sync_res.has_value());
+        dev->wait_idle();
+        pool.clear_staging_buffers();
+        graph.reset();
+
+        auto shadow_atlas_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(8192, 8192),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ShadowAtlasTarget",
+        });
+
+        const auto& ml = *pool.get_mesh_layout(mesh_id);
+        auto objects = array{
+            object_payload{
+                .model = math::mat4<float>{1.0F},
+                .inv_transpose_model = math::mat4<float>{1.0F},
+                .mesh_gpu_address = pool.get_mesh_address(mesh_id),
+                .material_gpu_address = pool.get_material_address(mat_id),
+                .parent_gpu_address = 0,
+                .self_id = static_cast<uint32_t>(geom_ent),
+                .padding = 0,
+            }
+        };
+        auto instances = array{0U};
+        auto commands = array{
+            indexed_indirect_command{
+                .index_count = ml.index_count,
+                .instance_count = 1,
+                .first_index = (ml.mesh_start_offset + ml.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+                .vertex_offset = 0,
+                .first_instance = 0,
+            }
+        };
+
+        pool.write_objects(span<const object_payload>{objects.data(), objects.size()});
+        pool.write_instances(span<const uint32_t>{instances.data(), instances.size()});
+        pool.write_draw_commands(span<const indexed_indirect_command>{commands.data(), commands.size()});
+
+        add_frame_upload_pass(graph, pool);
+        const auto shadow_res = add_shadow_pass(shadow_pass_params{
+            .graph = graph,
+            .pool = pool,
+            .shaders = shaders,
+            .shadow_atlas = shadow_atlas_tex,
+            .allocator = allocator,
+            .registry = registry,
+            .camera_sys = cam_sys,
+            .draw_count = 1,
+        });
+
+        EXPECT_EQ(shadow_res.shadow_data.cascade_count, 4U);
+        EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
+
+        auto exec_res = graph.execute(*dev);
+        EXPECT_TRUE(exec_res.has_value());
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, renderer_shadow_atlas_target_and_integration)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            auto cam_ent = registry.create();
+            registry.assign(cam_ent, camera_component{
+                .aspect_ratio = 16.0F / 9.0F,
+                .vertical_fov = 1.0F,
+                .near_plane = 0.1F,
+            });
+            registry.assign(cam_ent, ecs::transform_component::identity());
+            registry.assign(cam_ent, active_camera_component{});
+
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                .color = {1.0F, 1.0F, 1.0F},
+                .intensity = 2.0F,
+            });
+            registry.assign(sun_ent, shadow_caster_component{
+                .resolution = 2048,
+                .num_cascades = 4,
+            });
+            registry.assign(sun_ent, ecs::transform_component::identity());
+
+            rend->prepare_frame(1280, 720);
+
+            EXPECT_TRUE(rend->get_shadow_atlas_texture().is_valid());
+
+            auto res = rend->render();
+            EXPECT_TRUE(res.has_value());
+
+            dev->wait_idle();
+        }
+    }
+
+    TEST(render_system_tests, pbr_opaque_push_constants_layout)
+    {
+        EXPECT_EQ(sizeof(pbr_opaque_push_constants), 40U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, scene_constants_address), 0U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, objects_address), 8U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, instance_indices_address), 16U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, directional_shadow_address), 24U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, linear_sampler_index), 32U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 36U);
     }
 } // namespace tempest::render_system::tests

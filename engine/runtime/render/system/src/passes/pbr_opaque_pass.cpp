@@ -7,6 +7,7 @@ namespace tempest::render_system
     auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool,
                              shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
                              render_graph::rg_texture_id depth_tex,
+                             render_graph::rg_texture_id shadow_atlas,
                              uint32_t draw_count)
         -> const pbr_opaque_pass_data&
     {
@@ -43,8 +44,8 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<pbr_opaque_pass_data>(
             "PBROpaquePass",
-            [&pool, hdr_color_tex, depth_tex, draw_count](render_graph::pass_builder& builder,
-                                                          pbr_opaque_pass_data& data) {
+            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count](render_graph::pass_builder& builder,
+                                                                        pbr_opaque_pass_data& data) {
                 data.hdr_color = builder.set_color_attachment(
                     0, render_graph::rg_color_attachment{
                            .texture = hdr_color_tex,
@@ -59,6 +60,9 @@ namespace tempest::render_system
                         .depth_store_op = rhi::store_op::store,
                     });
 
+                data.shadow_atlas = builder.read(shadow_atlas, rhi::pipeline_stage::fragment,
+                                                 rhi::resource_access::read, rhi::image_layout::general);
+
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
                 data.object_buffer = builder.import_buffer(pool.get_object_buffer());
                 data.instance_buffer = builder.import_buffer(pool.get_instance_buffer());
@@ -71,7 +75,7 @@ namespace tempest::render_system
                 data.draw_count = draw_count;
             },
             [&pool, &shaders, pipe](const pbr_opaque_pass_data& data,
-                                   [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                                   render_graph::pass_execution_context& ctx,
                                    rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
@@ -87,11 +91,16 @@ namespace tempest::render_system
                 pass_cmd.bind_pipeline(rhi_pipe);
                 pass_cmd.bind_index_buffer(pool.get_vertex_buffer(), rhi::index_type::uint32, 0);
 
+                const auto shadow_desc_idx = ctx.get_texture_descriptor(data.shadow_atlas);
+                const auto shadow_atlas_idx = (shadow_desc_idx != ~0U) ? static_cast<int32_t>(shadow_desc_idx) : -1;
+
                 const auto constants = pbr_opaque_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer().gpu_address,
                     .instance_indices_address = pool.get_instance_buffer().gpu_address,
+                    .directional_shadow_address = pool.get_directional_shadow_address(),
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
+                    .shadow_atlas_index = shadow_atlas_idx,
                 };
 
                 pass_cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,

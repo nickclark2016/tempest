@@ -3,6 +3,7 @@
 #include <tempest/render_system/passes/depth_prepass.hpp>
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
+#include <tempest/render_system/passes/shadow_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
 #include <tempest/render_system/passes/ssao_pass.hpp>
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
@@ -75,11 +76,13 @@ namespace tempest::render_system
           _pool{tempest::move(other._pool)},
           _shaders{tempest::move(other._shaders)},
           _graph{tempest::move(other._graph)},
+          _shadow_atlas_target{other._shadow_atlas_target},
           _hdr_color_target{other._hdr_color_target},
           _depth_target{other._depth_target},
           _ssao_target{other._ssao_target},
           _ssao_blurred_target{other._ssao_blurred_target},
           _tonemapped_color_target{other._tonemapped_color_target},
+          _shadow_allocator{tempest::move(other._shadow_allocator)},
           _active_draw_count{other._active_draw_count}
     {
         other._device = nullptr;
@@ -104,11 +107,13 @@ namespace tempest::render_system
             _pool = tempest::move(other._pool);
             _shaders = tempest::move(other._shaders);
             _graph = tempest::move(other._graph);
+            _shadow_atlas_target = other._shadow_atlas_target;
             _hdr_color_target = other._hdr_color_target;
             _depth_target = other._depth_target;
             _ssao_target = other._ssao_target;
             _ssao_blurred_target = other._ssao_blurred_target;
             _tonemapped_color_target = other._tonemapped_color_target;
+            _shadow_allocator = tempest::move(other._shadow_allocator);
             _active_draw_count = other._active_draw_count;
 
             other._device = nullptr;
@@ -310,6 +315,16 @@ namespace tempest::render_system
         _pool.write_scene_constants(scene);
 
         // Create Transient Render Targets
+        _shadow_allocator.reset(8192, 8192, 4);
+        _shadow_atlas_target = _graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(8192, 8192),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ShadowAtlasTarget",
+        });
+
         _hdr_color_target = _graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::absolute(width, height),
             .format = _cfg.hdr_color_format,
@@ -369,6 +384,23 @@ namespace tempest::render_system
         // Build DAG Passes
         add_frame_upload_pass(_graph, _pool);
 
+        if (_inputs.entity_registry && _camera_system)
+        {
+            const auto shadow_res = add_shadow_pass(shadow_pass_params{
+                .graph = _graph,
+                .pool = _pool,
+                .shaders = _shaders,
+                .shadow_atlas = _shadow_atlas_target,
+                .allocator = _shadow_allocator,
+                .registry = *_inputs.entity_registry,
+                .camera_sys = *_camera_system,
+                .draw_count = _active_draw_count,
+            });
+
+            _pool.write_directional_shadow_data(shadow_res.shadow_data);
+            _shadow_atlas_target = shadow_res.shadow_atlas;
+        }
+
         const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target, _active_draw_count);
 
         if (_cfg.enable_ssao)
@@ -381,7 +413,8 @@ namespace tempest::render_system
 
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
         const auto& pbr_data = add_pbr_opaque_pass(_graph, _pool, _shaders, skybox_data.hdr_color,
-                                                   depth_data.depth_texture, _active_draw_count);
+                                                   depth_data.depth_texture, _shadow_atlas_target,
+                                                   _active_draw_count);
         add_tonemapping_pass(_graph, _pool, _shaders, pbr_data.hdr_color, _tonemapped_color_target,
                             _cfg.tonemapped_color_format);
     }

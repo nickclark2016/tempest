@@ -54,7 +54,7 @@ namespace tempest::ecs
     } // namespace detail
 
     template <typename T>
-        requires is_trivial_v<T>
+        requires(is_trivially_copyable_v<T> && is_trivially_destructible_v<T>)
     inline basic_archetype_type_info create_archetype_type_info()
     {
         size_t alignment = alignof(T);
@@ -911,11 +911,11 @@ namespace tempest::ecs
         using entity_type = entity;
 
         template <typename... Ts>
-            requires(is_trivial_v<Ts> && ...)
+            requires((is_trivially_copyable_v<Ts> && is_trivially_destructible_v<Ts>) && ...)
         entity_type create();
 
         template <typename... Ts>
-            requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
+            requires((is_trivially_copyable_v<Ts> && is_trivially_destructible_v<Ts>) && ...) && (sizeof...(Ts) > 0)
         entity_type create_initialized(Ts&&... components);
 
         void destroy(entity_type entity);
@@ -1012,7 +1012,7 @@ namespace tempest::ecs
     }
 
     template <typename... Ts>
-        requires(is_trivial_v<Ts> && ...)
+        requires((is_trivially_copyable_v<Ts> && is_trivially_destructible_v<Ts>) && ...)
     inline basic_archetype_registry::entity_type basic_archetype_registry::create()
     {
         auto key = _entities.acquire();
@@ -1031,7 +1031,7 @@ namespace tempest::ecs
     }
 
     template <typename... Ts>
-        requires(is_trivial_v<Ts> && ...) && (sizeof...(Ts) > 0)
+        requires((is_trivially_copyable_v<Ts> && is_trivially_destructible_v<Ts>) && ...) && (sizeof...(Ts) > 0)
     inline basic_archetype_registry::entity_type basic_archetype_registry::create_initialized(Ts&&... components)
     {
         auto entity = create<Ts...>();

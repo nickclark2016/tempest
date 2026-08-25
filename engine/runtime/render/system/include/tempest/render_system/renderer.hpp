@@ -10,6 +10,7 @@
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/resource_pool.hpp>
 #include <tempest/render_system/shader_manager.hpp>
+#include <tempest/render_system/shelf_allocator.hpp>
 #include <tempest/rhi.hpp>
 
 namespace tempest::render_system
@@ -106,6 +107,11 @@ namespace tempest::render_system
             return _graph;
         }
 
+        [[nodiscard]] auto get_shadow_atlas_texture() const noexcept -> render_graph::rg_texture_id
+        {
+            return _shadow_atlas_target;
+        }
+
         [[nodiscard]] auto get_tonemapped_color_texture() const noexcept -> render_graph::rg_texture_id
         {
             return _tonemapped_color_target;
@@ -129,12 +135,14 @@ namespace tempest::render_system
         render_graph::render_graph _graph;
 
         // Render Targets (Transient in Render Graph)
+        render_graph::rg_texture_id _shadow_atlas_target{};
         render_graph::rg_texture_id _hdr_color_target{};
         render_graph::rg_texture_id _depth_target{};
         render_graph::rg_texture_id _ssao_target{};
         render_graph::rg_texture_id _ssao_blurred_target{};
         render_graph::rg_texture_id _tonemapped_color_target{};
 
+        shelf_allocator _shadow_allocator{};
         uint32_t _active_draw_count{0};
     };
 } // namespace tempest::render_system

@@ -14,7 +14,9 @@ struct PBRPushConstants {
     uint64_t scene_constants_address;
     uint64_t objects_address;
     uint64_t instance_indices_address;
+    uint64_t directional_shadow_address;
     int32_t linear_sampler_index;
+    int32_t shadow_atlas_index;
 };
 
 [[vk::push_constant]]
@@ -59,7 +61,15 @@ FragmentOutput FSMain(VertexOutput input) {
         }
     }
 
-    float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position);
+    float sun_shadow = 1.0;
+    if (push_constants.shadow_atlas_index >= 0 && push_constants.directional_shadow_address != 0) {
+        DirectionalShadowData* shadow_data = (DirectionalShadowData*)push_constants.directional_shadow_address;
+        float view_depth = -input.view_position.z;
+        Texture2D shadow_atlas = bindless_textures[push_constants.shadow_atlas_index];
+        sun_shadow = sample_csm_shadow(shadow_atlas, mat_state.linear_sampler, shadow_data, input.world_position, input.normal, view_depth);
+    }
+
+    float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position, sun_shadow);
 
     if (mat.type == MaterialType::TRANSMISSIVE) {
         color.a = mat.transmission_factor;

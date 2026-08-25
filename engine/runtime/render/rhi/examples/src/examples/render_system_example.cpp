@@ -118,8 +118,16 @@ namespace tempest::rhi::examples
             .color = {1.0F, 0.98F, 0.92F},
             .intensity = 7.0F,
         });
+        _registry.assign(sun, render_system::shadow_caster_component{
+            .resolution = 2048,
+            .num_cascades = 4,
+            .split_lambda = 0.5F,
+            .max_shadow_distance = 100.0F,
+            .normal_bias = 0.02F,
+            .depth_bias = 0.005F,
+        });
         auto sun_tx = ecs::transform_component::identity();
-        sun_tx.rotation({math::as_radians(60.0F), math::as_radians(40.0F), 0.0F});
+        sun_tx.rotation({math::as_radians(85.0F), math::as_radians(10.0F), 0.0F});
         _registry.assign(sun, sun_tx);
 
         // 4. Asset Loading (Sponza or Procedural Scene)
