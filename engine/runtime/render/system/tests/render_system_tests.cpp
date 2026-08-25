@@ -19,6 +19,7 @@
 #include <tempest/render_system/passes/transparency_clear_pass.hpp>
 #include <tempest/render_system/passes/transparency_gather_pass.hpp>
 #include <tempest/render_system/passes/transparency_resolve_pass.hpp>
+#include <tempest/render_system/passes/transparency_blend_pass.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/render_system/resource_pool.hpp>
@@ -2492,5 +2493,311 @@ namespace tempest::render_system::tests
 
         dev->destroy_buffer(accum_readback_buf);
     }
+
+    TEST(render_system_tests, transparency_blend_push_constants_layout)
+    {
+        EXPECT_EQ(sizeof(transparency_blend_push_constants), 16U);
+        EXPECT_EQ(offsetof(transparency_blend_push_constants, accumulation_texture_index), 0U);
+        EXPECT_EQ(offsetof(transparency_blend_push_constants, zeroth_moment_storage_index), 4U);
+        EXPECT_EQ(offsetof(transparency_blend_push_constants, linear_sampler_index), 8U);
+        EXPECT_EQ(offsetof(transparency_blend_push_constants, padding), 12U);
+    }
+
+    TEST(render_system_tests, transparency_blend_pass_discard_when_zeroth_moment_empty)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        constexpr uint32_t width = 64;
+        constexpr uint32_t height = 64;
+        auto graph = render_graph::render_graph{width, height};
+
+        auto hdr_color_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "HDRColorTarget",
+        });
+
+        auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TransparencyAccumTarget",
+        });
+
+        auto moments_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 2,
+            .name = "MomentsArrayTarget",
+        });
+
+        auto zeroth_moment_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::r32_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ZerothMomentTarget",
+        });
+
+        add_frame_upload_pass(graph, pool);
+        const auto& skybox_data = add_skybox_pass(graph, pool, shaders, hdr_color_tex);
+        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        // Blend directly after clear with no gather or resolve (b0 == 0 everywhere)
+        const auto& blend_data = add_transparency_blend_pass(graph, pool, shaders, skybox_data.hdr_color,
+                                                            accum_tex, clear_data.zeroth_moment_texture);
+
+        auto exec_res = graph.execute(*dev);
+        EXPECT_TRUE(exec_res.has_value());
+        dev->wait_idle();
+
+        // Readback HDR Color texture
+        auto hdr_readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = width * height * 4 * sizeof(uint16_t),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "HDRColorReadbackBufferEmptyMoments",
+        });
+
+        const auto* hdr_alloc = graph.get_physical_texture(blend_data.hdr_color.id);
+        ASSERT_NE(hdr_alloc, nullptr);
+
+        auto& port = dev->get_graphics_execution_port();
+        auto& cmd = port.acquire_command_list();
+        cmd.begin();
+
+        const auto hdr_region = rhi::buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = width,
+            .image_extent_height = height,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_texture_to_buffer(hdr_alloc->handle, hdr_readback_buf,
+                                   span<const rhi::buffer_texture_copy_region>{&hdr_region, 1});
+        cmd.end();
+
+        auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        dev->wait_idle();
+
+        const auto* hdr_pixels = static_cast<const uint16_t*>(hdr_readback_buf.cpu_address);
+        ASSERT_NE(hdr_pixels, nullptr);
+
+        // Center pixel should be pure skybox (no alpha blending altered it)
+        const auto center_idx = (32 * width + 32) * 4;
+        EXPECT_NE(hdr_pixels[center_idx + 2], 0); // Blue channel from skybox > 0
+
+        dev->destroy_buffer(hdr_readback_buf);
+    }
+
+    TEST(render_system_tests, transparency_full_chain_clear_gather_resolve_blend_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        constexpr uint32_t width = 64;
+        constexpr uint32_t height = 64;
+        auto graph = render_graph::render_graph{width, height};
+
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+
+        auto mesh_id = meshes.register_mesh(create_test_mesh());
+
+        // Transparent Blend Material (pure red)
+        auto mat_blend = core::material{};
+        mat_blend.set_string(core::material::alpha_mode_name, "BLEND");
+        mat_blend.set_vec4(core::material::base_color_factor_name, {1.0F, 0.0F, 0.0F, 0.5F});
+        mat_blend.set_scalar(core::material::metallic_factor_name, 0.0F);
+        mat_blend.set_scalar(core::material::roughness_factor_name, 0.5F);
+        auto mat_blend_id = materials.register_material(tempest::move(mat_blend));
+
+        pool.load_meshes(span<const guid>{&mesh_id, 1}, meshes, graph);
+        pool.load_materials(span<const guid>{&mat_blend_id, 1}, materials, graph);
+
+        auto scene = scene_constants{
+            .projection = math::perspective(1.0F, 1.0F, 0.1F, 100.0F),
+            .inv_projection = math::inverse(math::perspective(1.0F, 1.0F, 0.1F, 100.0F)),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .camera_position = {0.0F, 0.0F, -5.0F, 1.0F},
+            .ambient_light = {0.28F, 0.30F, 0.36F, 1.0F},
+            .sun_color_intensity = {1.0F, 1.0F, 1.0F, 2.0F},
+            .sun_direction = {0.0F, -1.0F, 0.0F, 0.0F},
+            .screen_size = {static_cast<float>(width), static_cast<float>(height)},
+            .inv_screen_size = {1.0F / static_cast<float>(width), 1.0F / static_cast<float>(height)},
+        };
+        pool.write_scene_constants(scene);
+
+        const auto mesh_gpu_addr = pool.get_mesh_address(mesh_id);
+        const auto mat_gpu_addr = pool.get_material_address(mat_blend_id);
+        auto mesh_layout_opt = pool.get_mesh_layout(mesh_id);
+        ASSERT_TRUE(mesh_layout_opt.has_value());
+
+        auto payload = object_payload{
+            .model = math::mat4<float>{1.0F},
+            .inv_transpose_model = math::mat4<float>{1.0F},
+            .mesh_gpu_address = mesh_gpu_addr,
+            .material_gpu_address = mat_gpu_addr,
+            .parent_gpu_address = 0,
+            .self_id = 1,
+            .padding = 0,
+        };
+        auto objects = vector<object_payload>{};
+        objects.push_back(payload);
+
+        auto instances = vector<uint32_t>{};
+        instances.push_back(0);
+
+        auto commands = vector<indexed_indirect_command>{};
+        commands.push_back(indexed_indirect_command{
+            .index_count = mesh_layout_opt->index_count,
+            .instance_count = 1,
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .vertex_offset = 0,
+            .first_instance = 0,
+        });
+
+        pool.write_objects(objects);
+        pool.write_instances(instances);
+        pool.write_draw_commands(commands);
+
+        auto hdr_color_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "HDRColorTarget",
+        });
+
+        auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TransparencyAccumTarget",
+        });
+
+        auto moments_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .mip_levels = 1,
+            .array_layers = 2,
+            .name = "MomentsArrayTarget",
+        });
+
+        auto zeroth_moment_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::r32_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "ZerothMomentTarget",
+        });
+
+        auto depth_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "DepthTarget",
+        });
+
+        add_frame_upload_pass(graph, pool);
+        const auto& skybox_data = add_skybox_pass(graph, pool, shaders, hdr_color_tex);
+        const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
+        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
+                                                              clear_data.zeroth_moment_texture,
+                                                              depth_data.depth_texture, 1);
+        const auto& resolve_data = add_transparency_resolve_pass(graph, pool, shaders, accum_tex,
+                                                                gather_data.moments_texture,
+                                                                gather_data.zeroth_moment_texture,
+                                                                depth_data.depth_texture, 1);
+        const auto& blend_data = add_transparency_blend_pass(graph, pool, shaders, skybox_data.hdr_color,
+                                                            resolve_data.accum_texture,
+                                                            gather_data.zeroth_moment_texture);
+
+        auto exec_res = graph.execute(*dev);
+        EXPECT_TRUE(exec_res.has_value());
+        dev->wait_idle();
+
+        // Readback HDR Color texture
+        auto hdr_readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = width * height * 4 * sizeof(uint16_t),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "HDRColorReadbackBuffer",
+        });
+
+        const auto* hdr_alloc = graph.get_physical_texture(blend_data.hdr_color.id);
+        ASSERT_NE(hdr_alloc, nullptr);
+
+        auto& port = dev->get_graphics_execution_port();
+        auto& cmd = port.acquire_command_list();
+        cmd.begin();
+
+        const auto hdr_region = rhi::buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = width,
+            .image_extent_height = height,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_texture_to_buffer(hdr_alloc->handle, hdr_readback_buf,
+                                   span<const rhi::buffer_texture_copy_region>{&hdr_region, 1});
+        cmd.end();
+
+        auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        dev->wait_idle();
+
+        const auto* hdr_pixels = static_cast<const uint16_t*>(hdr_readback_buf.cpu_address);
+        ASSERT_NE(hdr_pixels, nullptr);
+
+        // Center pixel (32, 32) should have transparent red blended over skybox background
+        const auto center_idx = (32 * width + 32) * 4;
+        EXPECT_NE(hdr_pixels[center_idx + 0], 0); // Red channel > 0
+
+        // Corner pixel (2, 2) is outside geometry, retains skybox background
+        const auto corner_idx = (2 * width + 2) * 4;
+        EXPECT_NE(hdr_pixels[corner_idx + 2], 0); // Blue channel from skybox > 0
+
+        dev->destroy_buffer(hdr_readback_buf);
+    }
 } // namespace tempest::render_system::tests
+
 
