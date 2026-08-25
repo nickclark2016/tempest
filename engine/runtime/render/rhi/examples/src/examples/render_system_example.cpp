@@ -101,14 +101,23 @@ namespace tempest::rhi::examples
 
         // 2. Camera Setup
         _camera_entity = _registry.create();
+        const auto near_plane = (_model == scene_model::chess) ? 0.01F : 0.1F;
         _registry.assign(_camera_entity, render_system::camera_component{
             .aspect_ratio = 16.0F / 9.0F,
             .vertical_fov = 1.04719755F, // 60 degrees
-            .near_plane = 0.1F,
+            .near_plane = near_plane,
         });
         auto cam_tx = ecs::transform_component::identity();
-        cam_tx.position({0.0F, 1.8F, -4.0F});
-        cam_tx.rotation({0.0F, 0.0F, 0.0F});
+        if (_model == scene_model::chess)
+        {
+            cam_tx.position({0.0F, 0.35F, -0.55F});
+            cam_tx.rotation({math::as_radians(28.0F), 0.0F, 0.0F});
+        }
+        else
+        {
+            cam_tx.position({0.0F, 1.8F, -4.0F});
+            cam_tx.rotation({0.0F, 0.0F, 0.0F});
+        }
         _registry.assign(_camera_entity, cam_tx);
         _registry.assign(_camera_entity, render_system::active_camera_component{});
 
@@ -116,33 +125,51 @@ namespace tempest::rhi::examples
         auto sun = _registry.create();
         _registry.assign(sun, render_system::directional_light_component{
             .color = {1.0F, 0.98F, 0.92F},
-            .intensity = 5.0F,
+            .intensity = (_model == scene_model::chess) ? 4.0F : 5.0F,
         });
+        const auto max_shadow_dist = (_model == scene_model::chess) ? 2.0F : 100.0F;
+        const auto normal_bias = (_model == scene_model::chess) ? 0.005F : 0.02F;
+        const auto depth_bias = (_model == scene_model::chess) ? 0.001F : 0.005F;
         _registry.assign(sun, render_system::shadow_caster_component{
             .resolution = 2048,
             .num_cascades = 4,
             .split_lambda = 0.5F,
-            .max_shadow_distance = 100.0F,
-            .normal_bias = 0.02F,
-            .depth_bias = 0.005F,
+            .max_shadow_distance = max_shadow_dist,
+            .normal_bias = normal_bias,
+            .depth_bias = depth_bias,
             .debug_mode = render_system::shadow_debug_mode::none,
         });
         auto sun_tx = ecs::transform_component::identity();
-        sun_tx.rotation({math::as_radians(85.0F), math::as_radians(10.0F), 0.0F});
+        if (_model == scene_model::chess)
+        {
+            sun_tx.rotation({math::as_radians(65.0F), math::as_radians(25.0F), 0.0F});
+        }
+        else
+        {
+            sun_tx.rotation({math::as_radians(85.0F), math::as_radians(10.0F), 0.0F});
+        }
         _registry.assign(sun, sun_tx);
 
-        // 4. Asset Loading (Sponza or Procedural Scene)
+        // 4. Asset Loading (glTF Model or Procedural Scene)
         auto asset_type_reg = assets::asset_type_registry{};
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
 
         auto loaded_entities = vector<ecs::entity>{};
-        const auto sponza_path = "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
-        if (std::filesystem::exists(sponza_path))
+        const auto model_path = (_model == scene_model::chess)
+                                    ? "vendor/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf"
+                                    : "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+        if (std::filesystem::exists(model_path))
         {
-            auto prefab_root = asset_db.load(sponza_path, _registry);
+            auto prefab_root = asset_db.load(model_path, _registry);
             if (prefab_root != ecs::tombstone)
             {
+                _root_entity = prefab_root;
+                if (!_registry.has<ecs::transform_component>(_root_entity))
+                {
+                    _registry.assign(_root_entity, ecs::transform_component::identity());
+                }
+
                 if (_registry.try_get<core::mesh_component>(prefab_root) != nullptr)
                 {
                     loaded_entities.push_back(prefab_root);
@@ -225,17 +252,30 @@ namespace tempest::rhi::examples
 
         _time += 1.0F / 240.0F;
 
-        // Orbit Camera around interior of Sponza
-        if (_camera_entity != ecs::tombstone)
+        if (_model == scene_model::chess)
         {
-            const auto cam_x = std::sin(_time * 0.3F) * 5.0F;
-            const auto cam_z = std::cos(_time * 0.3F) * 1.8F;
-            const auto yaw = std::atan2(-cam_x, -cam_z);
+            // Rotate the chess scene while keeping the camera fixed
+            if (_root_entity != ecs::tombstone)
+            {
+                auto root_tx = _registry.get<ecs::transform_component>(_root_entity);
+                root_tx.rotation({0.0F, _time * 0.4F, 0.0F});
+                _registry.assign_or_replace(_root_entity, root_tx);
+            }
+        }
+        else
+        {
+            // Orbit Camera around Sponza interior
+            if (_camera_entity != ecs::tombstone)
+            {
+                const auto cam_x = std::sin(_time * 0.3F) * 5.0F;
+                const auto cam_z = -std::cos(_time * 0.3F) * 4.0F;
+                const auto yaw = std::atan2(-cam_x, -cam_z);
 
-            auto tx = _registry.get<ecs::transform_component>(_camera_entity);
-            tx.position({cam_x, 1.8F, cam_z});
-            tx.rotation({math::as_radians(-5.0F), yaw, 0.0F});
-            _registry.assign_or_replace(_camera_entity, tx);
+                auto tx = _registry.get<ecs::transform_component>(_camera_entity);
+                tx.position({cam_x, 1.8F, cam_z});
+                tx.rotation({0.0F, yaw, 0.0F});
+                _registry.assign_or_replace(_camera_entity, tx);
+            }
         }
 
         // 1. Prepare frame graph

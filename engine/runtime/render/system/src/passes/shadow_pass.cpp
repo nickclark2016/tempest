@@ -260,7 +260,7 @@ namespace tempest::render_system
                 builder.read(inst_buf, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 builder.read(cmd_buf, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
             },
-            [&pool = params.pool, &shaders = params.shaders, draw_count = params.draw_count, pipe, cascades_to_render = rendered_cascades](
+            [&pool = params.pool, &shaders = params.shaders, draw_count = params.draw_count, draw_offset = params.draw_offset, pipe, cascades_to_render = rendered_cascades](
                 [[maybe_unused]] const shadow_pass_data& data,
                 [[maybe_unused]] render_graph::pass_execution_context& ctx,
                 rhi::command_list& pass_cmd) {
@@ -304,7 +304,8 @@ namespace tempest::render_system
                         rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
                         span<const byte>{reinterpret_cast<const byte*>(&push_constants), sizeof(push_constants)});
 
-                    pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), 0, draw_count,
+                    const auto byte_offset = static_cast<uint64_t>(draw_offset) * sizeof(indexed_indirect_command);
+                    pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, draw_count,
                                                    sizeof(indexed_indirect_command));
                 }
             });

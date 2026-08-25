@@ -118,9 +118,44 @@ namespace tempest::render_system
             return _tonemapped_color_target;
         }
 
+        [[nodiscard]] auto get_moments_texture() const noexcept -> render_graph::rg_texture_id
+        {
+            return _moments_target;
+        }
+
+        [[nodiscard]] auto get_zeroth_moment_texture() const noexcept -> render_graph::rg_texture_id
+        {
+            return _zeroth_moment_target;
+        }
+
+        [[nodiscard]] auto get_transparency_accum_texture() const noexcept -> render_graph::rg_texture_id
+        {
+            return _transparency_accum_target;
+        }
+
         [[nodiscard]] auto get_active_draw_count() const noexcept -> uint32_t
         {
             return _active_draw_count;
+        }
+
+        [[nodiscard]] auto get_opaque_draw_count() const noexcept -> uint32_t
+        {
+            return _opaque_draw_count;
+        }
+
+        [[nodiscard]] auto get_transparent_draw_count() const noexcept -> uint32_t
+        {
+            return _transparent_draw_count;
+        }
+
+        [[nodiscard]] auto get_opaque_draw_offset() const noexcept -> uint32_t
+        {
+            return _opaque_draw_offset;
+        }
+
+        [[nodiscard]] auto get_transparent_draw_offset() const noexcept -> uint32_t
+        {
+            return _transparent_draw_offset;
         }
 
         void set_shadow_debug_mode(shadow_debug_mode mode) noexcept
@@ -151,10 +186,18 @@ namespace tempest::render_system
         render_graph::rg_texture_id _depth_target{};
         render_graph::rg_texture_id _ssao_target{};
         render_graph::rg_texture_id _ssao_blurred_target{};
+        render_graph::rg_texture_id _moments_target{};
+        render_graph::rg_texture_id _zeroth_moment_target{};
+        render_graph::rg_texture_id _transparency_accum_target{};
         render_graph::rg_texture_id _tonemapped_color_target{};
 
         shelf_allocator _shadow_allocator{};
+        vector<ecs::entity> _tracked_entities{};
         uint32_t _active_draw_count{0};
+        uint32_t _opaque_draw_count{0};
+        uint32_t _opaque_draw_offset{0};
+        uint32_t _transparent_draw_count{0};
+        uint32_t _transparent_draw_offset{0};
         shadow_debug_mode _shadow_debug_mode{shadow_debug_mode::none};
     };
 } // namespace tempest::render_system

@@ -177,7 +177,7 @@ scoped.project('tempest', function()
                 'core',
                 'ecs',
                 'event',
-                'graphics',
+                -- 'graphics',
                 'logger',
                 'math',
                 'rhi-api',

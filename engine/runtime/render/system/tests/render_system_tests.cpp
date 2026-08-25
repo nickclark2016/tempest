@@ -739,8 +739,12 @@ namespace tempest::render_system::tests
                                       meshes, textures, materials);
 
             // Assert draw counts:
-            // 5 total active draws
+            // 5 total active draws: 3 opaque (ent0, ent2, ent4), 2 transparent (ent1, ent3)
             EXPECT_EQ(rend->get_active_draw_count(), 5U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 3U);
+            EXPECT_EQ(rend->get_opaque_draw_offset(), 0U);
+            EXPECT_EQ(rend->get_transparent_draw_count(), 2U);
+            EXPECT_EQ(rend->get_transparent_draw_offset(), 3U);
 
             // Validate the mapped GPU buffers
             auto& pool = rend->get_resource_pool();
@@ -758,6 +762,15 @@ namespace tempest::render_system::tests
                 EXPECT_EQ(cmds[i].instance_count, 1U);
                 EXPECT_EQ(instances[i], i);
             }
+
+            // Opaque partition first
+            EXPECT_EQ(objects[0].self_id, static_cast<uint32_t>(ent0));
+            EXPECT_EQ(objects[1].self_id, static_cast<uint32_t>(ent2));
+            EXPECT_EQ(objects[2].self_id, static_cast<uint32_t>(ent4));
+
+            // Transparent partition second
+            EXPECT_EQ(objects[3].self_id, static_cast<uint32_t>(ent1));
+            EXPECT_EQ(objects[4].self_id, static_cast<uint32_t>(ent3));
         }
 
         dev->wait_idle();
@@ -1073,7 +1086,9 @@ namespace tempest::render_system::tests
             .name = "ShadowAtlasTarget",
         });
 
-        const auto& ml = *pool.get_mesh_layout(mesh_id);
+        const auto ml_opt = pool.get_mesh_layout(mesh_id);
+        ASSERT_TRUE(ml_opt.has_value());
+        const auto& ml = *ml_opt;
         auto objects = array{
             object_payload{
                 .model = math::mat4<float>{1.0F},
@@ -1346,7 +1361,9 @@ namespace tempest::render_system::tests
             EXPECT_TRUE(render_res2.has_value());
             dev->wait_idle();
 
-            if (alloc)
+            const auto* alloc2 = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
+            ASSERT_NE(alloc2, nullptr);
+            if (alloc2)
             {
                 auto& port = dev->get_graphics_execution_port();
                 auto& cmd = port.acquire_command_list();
@@ -1366,7 +1383,7 @@ namespace tempest::render_system::tests
                     .image_extent_height = 720,
                     .image_extent_depth = 1,
                 };
-                cmd.copy_texture_to_buffer(alloc->handle, readback_buf,
+                cmd.copy_texture_to_buffer(alloc2->handle, readback_buf,
                                            span<const rhi::buffer_texture_copy_region>{&region, 1});
                 cmd.end();
 
@@ -2797,6 +2814,352 @@ namespace tempest::render_system::tests
         EXPECT_NE(hdr_pixels[corner_idx + 2], 0); // Blue channel from skybox > 0
 
         dev->destroy_buffer(hdr_readback_buf);
+    }
+
+    TEST(render_system_tests, mboit_full_pipeline_multi_layer_transparency_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        constexpr uint32_t width = 64;
+        constexpr uint32_t height = 64;
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = width,
+            .render_height = height,
+            .tonemapped_color_format = rhi::data_format::rgba8_unorm,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        auto rend = builder.build(*dev, log);
+        ASSERT_NE(rend, nullptr);
+
+        // 1. Setup Camera Entity
+        auto cam_ent = registry.create();
+        registry.assign(cam_ent, camera_component{
+            .aspect_ratio = 1.0F,
+            .vertical_fov = 1.04719755F,
+            .near_plane = 0.01F,
+        });
+        auto cam_tx = ecs::transform_component::identity();
+        cam_tx.position({0.0F, 0.0F, -4.0F});
+        registry.assign(cam_ent, cam_tx);
+        registry.assign(cam_ent, active_camera_component{});
+
+        // 2. Setup Sun Light Entity
+        auto sun_ent = registry.create();
+        registry.assign(sun_ent, directional_light_component{
+            .color = {1.0F, 1.0F, 1.0F},
+            .intensity = 3.0F,
+        });
+        registry.assign(sun_ent, shadow_caster_component{
+            .resolution = 1024,
+            .num_cascades = 3,
+            .split_lambda = 0.5F,
+            .max_shadow_distance = 20.0F,
+        });
+        auto sun_tx = ecs::transform_component::identity();
+        sun_tx.rotation({math::as_radians(70.0F), math::as_radians(15.0F), 0.0F});
+        registry.assign(sun_ent, sun_tx);
+
+        // 3. Setup Registries and Materials for 3 Layers:
+        //    Layer 1: Opaque background (Blue) at z = 1.0
+        //    Layer 2: Transmissive middle quad (Green tint) at z = 0.5
+        //    Layer 3: Alpha-blended foreground quad (Semi-transparent Red) at z = 0.0
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto mesh_id = meshes.register_mesh(create_test_mesh());
+
+        // Opaque background material (Blue)
+        auto mat_opaque = core::material{};
+        mat_opaque.set_string(core::material::alpha_mode_name, "OPAQUE");
+        mat_opaque.set_vec4(core::material::base_color_factor_name, {0.0F, 0.0F, 1.0F, 1.0F});
+        mat_opaque.set_scalar(core::material::metallic_factor_name, 0.0F);
+        mat_opaque.set_scalar(core::material::roughness_factor_name, 0.5F);
+        auto mat_opaque_id = materials.register_material(tempest::move(mat_opaque));
+
+        // Transmissive material (Green tint)
+        auto mat_trans = core::material{};
+        mat_trans.set_string(core::material::alpha_mode_name, "TRANSMISSIVE");
+        mat_trans.set_scalar(core::material::transmissive_factor_name, 0.8F);
+        mat_trans.set_vec4(core::material::base_color_factor_name, {0.0F, 1.0F, 0.0F, 1.0F});
+        mat_trans.set_scalar(core::material::metallic_factor_name, 0.0F);
+        mat_trans.set_scalar(core::material::roughness_factor_name, 0.1F);
+        auto mat_trans_id = materials.register_material(tempest::move(mat_trans));
+
+        // Alpha-blended material (Semi-transparent Red)
+        auto mat_blend = core::material{};
+        mat_blend.set_string(core::material::alpha_mode_name, "BLEND");
+        mat_blend.set_vec4(core::material::base_color_factor_name, {1.0F, 0.0F, 0.0F, 0.5F});
+        mat_blend.set_scalar(core::material::metallic_factor_name, 0.0F);
+        mat_blend.set_scalar(core::material::roughness_factor_name, 0.5F);
+        auto mat_blend_id = materials.register_material(tempest::move(mat_blend));
+
+        // Entity 1: Opaque Background
+        auto ent_opaque = registry.create();
+        registry.assign(ent_opaque, renderable_component{
+            .mesh_id = mesh_id,
+            .material_id = mat_opaque_id,
+            .double_sided = false,
+        });
+        auto tx_opaque = ecs::transform_component::identity();
+        tx_opaque.position({0.0F, 0.0F, 1.0F});
+        registry.assign(ent_opaque, tx_opaque);
+
+        // Entity 2: Transmissive Middle Quad
+        auto ent_trans = registry.create();
+        registry.assign(ent_trans, renderable_component{
+            .mesh_id = mesh_id,
+            .material_id = mat_trans_id,
+            .double_sided = false,
+        });
+        auto tx_trans = ecs::transform_component::identity();
+        tx_trans.position({0.0F, 0.0F, 0.5F});
+        registry.assign(ent_trans, tx_trans);
+
+        // Entity 3: Alpha-blended Foreground Quad
+        auto ent_blend = registry.create();
+        registry.assign(ent_blend, renderable_component{
+            .mesh_id = mesh_id,
+            .material_id = mat_blend_id,
+            .double_sided = false,
+        });
+        auto tx_blend = ecs::transform_component::identity();
+        tx_blend.position({0.0F, 0.0F, 0.0F});
+        registry.assign(ent_blend, tx_blend);
+
+        // 4. Upload Objects and Prepare Frame
+        auto entities = array{ent_opaque, ent_trans, ent_blend};
+        rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
+                                  meshes, textures, materials);
+
+        rend->prepare_frame(width, height);
+
+        EXPECT_TRUE(rend->get_moments_texture().is_valid());
+        EXPECT_TRUE(rend->get_zeroth_moment_texture().is_valid());
+        EXPECT_TRUE(rend->get_transparency_accum_texture().is_valid());
+
+        // 5. Execute Full Renderer Pipeline
+        auto render_res = rend->render();
+        EXPECT_TRUE(render_res.has_value());
+        dev->wait_idle();
+
+        // 6. Readback Tonemapped Output Buffer
+        auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = width * height * 4,
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "MultiLayerTransparencyReadbackBuffer",
+        });
+
+        const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
+        ASSERT_NE(alloc, nullptr);
+
+        auto& port = dev->get_graphics_execution_port();
+        auto& cmd = port.acquire_command_list();
+        cmd.begin();
+
+        const auto region = rhi::buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = width,
+            .image_extent_height = height,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_texture_to_buffer(alloc->handle, readback_buf,
+                                   span<const rhi::buffer_texture_copy_region>{&region, 1});
+        cmd.end();
+
+        auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        dev->wait_idle();
+
+        const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
+        ASSERT_NE(pixels, nullptr);
+
+        // Center pixel (32, 32) should contain composite of:
+        // Red foreground blend + Green middle transmissive + Blue background opaque
+        const auto center_idx = (32 * width + 32) * 4;
+        EXPECT_GT(pixels[center_idx + 0], 0); // Red channel > 0
+        EXPECT_GT(pixels[center_idx + 3], 0); // Alpha > 0
+
+        // Corner pixel (0, 0) is outside geometry, retains skybox background
+        const auto corner_idx = 0;
+        EXPECT_GT(pixels[corner_idx + 2], 0); // Blue channel from skybox > 0
+
+        dev->destroy_buffer(readback_buf);
+    }
+
+    TEST(render_system_tests, abeautifulgame_asset_loading_and_render_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        constexpr uint32_t width = 1280;
+        constexpr uint32_t height = 720;
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = width,
+            .render_height = height,
+            .tonemapped_color_format = rhi::data_format::rgba8_unorm,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        auto rend = builder.build(*dev, log);
+        ASSERT_NE(rend, nullptr);
+
+        // 1. Setup Camera Entity pointing at Chessboard
+        auto cam_ent = registry.create();
+        registry.assign(cam_ent, camera_component{
+            .aspect_ratio = static_cast<float>(width) / static_cast<float>(height),
+            .vertical_fov = 1.04719755F,
+            .near_plane = 0.01F,
+        });
+        auto cam_tx = ecs::transform_component::identity();
+        cam_tx.position({0.0F, 0.35F, -0.55F});
+        cam_tx.rotation({math::as_radians(28.0F), 0.0F, 0.0F});
+        registry.assign(cam_ent, cam_tx);
+        registry.assign(cam_ent, active_camera_component{});
+
+        // 2. Setup Sun Light Entity
+        auto sun_ent = registry.create();
+        registry.assign(sun_ent, directional_light_component{
+            .color = {1.0F, 0.98F, 0.92F},
+            .intensity = 4.0F,
+        });
+        registry.assign(sun_ent, shadow_caster_component{
+            .resolution = 2048,
+            .num_cascades = 4,
+            .split_lambda = 0.5F,
+            .max_shadow_distance = 2.0F,
+            .normal_bias = 0.005F,
+            .depth_bias = 0.001F,
+        });
+        auto sun_tx = ecs::transform_component::identity();
+        sun_tx.rotation({math::as_radians(65.0F), math::as_radians(25.0F), 0.0F});
+        registry.assign(sun_ent, sun_tx);
+
+        // 3. Load ABeautifulGame.gltf
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto asset_type_reg = assets::asset_type_registry{};
+        auto asset_db = assets::asset_database{&asset_type_reg};
+        assets::register_default_importers(asset_db, &meshes, &textures, &materials);
+
+        const auto chess_path = "vendor/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
+        auto renderable_entities = vector<ecs::entity>{};
+
+        if (std::filesystem::exists(chess_path))
+        {
+            auto prefab_root = asset_db.load(chess_path, registry);
+            ASSERT_TRUE(prefab_root != ecs::tombstone);
+
+            if (registry.try_get<core::mesh_component>(prefab_root) != nullptr)
+            {
+                renderable_entities.push_back(prefab_root);
+            }
+            for (auto ent : ecs::archetype_entity_hierarchy_view(registry, prefab_root))
+            {
+                if (registry.try_get<core::mesh_component>(ent) != nullptr)
+                {
+                    renderable_entities.push_back(ent);
+                }
+            }
+        }
+
+        ASSERT_FALSE(renderable_entities.empty());
+
+        // 4. Upload Objects and Prepare Frame
+        rend->upload_objects_sync(span<const ecs::entity>{renderable_entities.data(), renderable_entities.size()},
+                                  meshes, textures, materials);
+
+        rend->prepare_frame(width, height);
+
+        EXPECT_TRUE(rend->get_moments_texture().is_valid());
+        EXPECT_TRUE(rend->get_zeroth_moment_texture().is_valid());
+        EXPECT_TRUE(rend->get_transparency_accum_texture().is_valid());
+
+        // 5. Execute Full Renderer Pipeline
+        auto render_res = rend->render();
+        EXPECT_TRUE(render_res.has_value());
+        dev->wait_idle();
+
+        // 6. Readback Tonemapped Output Buffer
+        auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = width * height * 4,
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "ABeautifulGameReadbackBuffer",
+        });
+
+        const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
+        ASSERT_NE(alloc, nullptr);
+
+        auto& port = dev->get_graphics_execution_port();
+        auto& cmd = port.acquire_command_list();
+        cmd.begin();
+
+        const auto region = rhi::buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = width,
+            .image_extent_height = height,
+            .image_extent_depth = 1,
+        };
+        cmd.copy_texture_to_buffer(alloc->handle, readback_buf,
+                                   span<const rhi::buffer_texture_copy_region>{&region, 1});
+        cmd.end();
+
+        auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        dev->wait_idle();
+
+        const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
+        ASSERT_NE(pixels, nullptr);
+
+        // Center pixel (640, 360) should see chessboard / chess pieces
+        const auto center_idx = (360 * width + 640) * 4;
+        EXPECT_GT(pixels[center_idx + 3], 0); // Valid alpha
+
+        dev->destroy_buffer(readback_buf);
     }
 } // namespace tempest::render_system::tests
 

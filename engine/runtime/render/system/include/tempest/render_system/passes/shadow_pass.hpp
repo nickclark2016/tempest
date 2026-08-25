@@ -32,6 +32,7 @@ namespace tempest::render_system
         const ecs::archetype_registry& registry;
         const camera_system& camera_sys;
         uint32_t draw_count{0};
+        uint32_t draw_offset{0};
     };
 
     auto TEMPEST_API add_shadow_pass(shadow_pass_params params) -> shadow_pass_result;

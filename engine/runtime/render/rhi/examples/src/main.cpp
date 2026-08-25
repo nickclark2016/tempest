@@ -1,4 +1,5 @@
 #include "example_registry.hpp"
+#include "examples/render_system_example.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -42,6 +43,7 @@ namespace
     struct cli_options
     {
         string_view example_name = "triangle";
+        string_view model_name = "";
         uint32_t width = 1280;
         uint32_t height = 720;
         uint32_t max_frames = 0;
@@ -56,6 +58,7 @@ namespace
                   << "Options:\n"
                   << "  -l, --list             List all available examples\n"
                   << "  -e, --example <name>   Select an example to run (default: triangle)\n"
+                  << "  -m, --model <name>     Select model for render_system (sponza, chess, abeautifulgame)\n"
                   << "  -w, --width <pixels>   Window width (default: 1280)\n"
                   << "  -h, --height <pixels>  Window height (default: 720)\n"
                   << "  -f, --frames <count>   Run for N frames and exit (0 = infinite)\n"
@@ -109,6 +112,18 @@ namespace
                 else
                 {
                     std::cerr << "Error: --example requires an argument.\n";
+                    return nullopt;
+                }
+            }
+            else if (arg == "--model" || arg == "-m")
+            {
+                if (i + 1 < argc)
+                {
+                    options.model_name = static_cast<const char*>(argv[++i]);
+                }
+                else
+                {
+                    std::cerr << "Error: --model requires an argument (e.g. sponza, chess, abeautifulgame).\n";
                     return nullopt;
                 }
             }
@@ -347,6 +362,18 @@ int main(int argc, char** argv)
     }
 
     // 4. Initialize Example Instance
+    if (!opts.model_name.empty())
+    {
+        if (opts.model_name == "chess" || opts.model_name == "abeautifulgame")
+        {
+            render_system_example::set_default_model(scene_model::chess);
+        }
+        else if (opts.model_name == "sponza")
+        {
+            render_system_example::set_default_model(scene_model::sponza);
+        }
+    }
+
     auto example_instance = example_meta->factory();
     if (!example_instance->init(*dev, surface->get_format()))
     {

@@ -19,6 +19,7 @@ namespace tempest::render_system
         render_graph::rg_buffer_id instance_buffer;
         render_graph::rg_buffer_id draw_commands;
         uint32_t draw_count{0};
+        uint32_t draw_offset{0};
     };
 
     struct transparency_gather_push_constants
@@ -42,7 +43,8 @@ namespace tempest::render_system
         render_graph::rg_texture_id moments_tex,
         render_graph::rg_texture_id zeroth_moment_tex,
         render_graph::rg_texture_id depth_tex,
-        uint32_t draw_count)
+        uint32_t draw_count,
+        uint32_t draw_offset = 0)
         -> const transparency_gather_pass_data&;
 } // namespace tempest::render_system
 

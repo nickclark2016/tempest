@@ -10,6 +10,7 @@ namespace tempest::render_system
                                        render_graph::rg_texture_id zeroth_moment_tex,
                                        render_graph::rg_texture_id depth_tex,
                                        uint32_t draw_count,
+                                       uint32_t draw_offset,
                                        render_graph::rg_texture_id shadow_atlas)
         -> const transparency_resolve_pass_data&
     {
@@ -57,7 +58,7 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_resolve_pass_data>(
             "TransparencyResolvePass",
-            [&pool, accum_tex, moments_tex, zeroth_moment_tex, depth_tex, shadow_atlas, draw_count](
+            [&pool, accum_tex, moments_tex, zeroth_moment_tex, depth_tex, shadow_atlas, draw_count, draw_offset](
                 render_graph::pass_builder& builder, transparency_resolve_pass_data& data) {
                 data.accum_texture = builder.set_color_attachment(
                     0, render_graph::rg_color_attachment{
@@ -100,6 +101,7 @@ namespace tempest::render_system
                 data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands,
                                                   rhi::resource_access::read);
                 data.draw_count = draw_count;
+                data.draw_offset = draw_offset;
             },
             [&pool, &shaders, pipe](const transparency_resolve_pass_data& data,
                                     render_graph::pass_execution_context& ctx,
@@ -147,7 +149,8 @@ namespace tempest::render_system
                 pass_cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
-                pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), 0, data.draw_count,
+                const auto byte_offset = static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
+                pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, data.draw_count,
                                                sizeof(indexed_indirect_command));
             });
     }

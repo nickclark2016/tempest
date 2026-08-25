@@ -8,6 +8,10 @@
 #include <tempest/render_system/passes/ssao_pass.hpp>
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
 #include <tempest/render_system/passes/tonemapping_pass.hpp>
+#include <tempest/render_system/passes/transparency_blend_pass.hpp>
+#include <tempest/render_system/passes/transparency_clear_pass.hpp>
+#include <tempest/render_system/passes/transparency_gather_pass.hpp>
+#include <tempest/render_system/passes/transparency_resolve_pass.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transformations.hpp>
@@ -82,9 +86,17 @@ namespace tempest::render_system
           _depth_target{other._depth_target},
           _ssao_target{other._ssao_target},
           _ssao_blurred_target{other._ssao_blurred_target},
+          _moments_target{other._moments_target},
+          _zeroth_moment_target{other._zeroth_moment_target},
+          _transparency_accum_target{other._transparency_accum_target},
           _tonemapped_color_target{other._tonemapped_color_target},
           _shadow_allocator{tempest::move(other._shadow_allocator)},
+          _tracked_entities{tempest::move(other._tracked_entities)},
           _active_draw_count{other._active_draw_count},
+          _opaque_draw_count{other._opaque_draw_count},
+          _opaque_draw_offset{other._opaque_draw_offset},
+          _transparent_draw_count{other._transparent_draw_count},
+          _transparent_draw_offset{other._transparent_draw_offset},
           _shadow_debug_mode{other._shadow_debug_mode}
     {
         other._device = nullptr;
@@ -114,9 +126,17 @@ namespace tempest::render_system
             _depth_target = other._depth_target;
             _ssao_target = other._ssao_target;
             _ssao_blurred_target = other._ssao_blurred_target;
+            _moments_target = other._moments_target;
+            _zeroth_moment_target = other._zeroth_moment_target;
+            _transparency_accum_target = other._transparency_accum_target;
             _tonemapped_color_target = other._tonemapped_color_target;
             _shadow_allocator = tempest::move(other._shadow_allocator);
+            _tracked_entities = tempest::move(other._tracked_entities);
             _active_draw_count = other._active_draw_count;
+            _opaque_draw_count = other._opaque_draw_count;
+            _opaque_draw_offset = other._opaque_draw_offset;
+            _transparent_draw_count = other._transparent_draw_count;
+            _transparent_draw_offset = other._transparent_draw_offset;
             _shadow_debug_mode = other._shadow_debug_mode;
 
             other._device = nullptr;
@@ -175,7 +195,7 @@ namespace tempest::render_system
         _pool.load_meshes(mesh_ids, meshes, _graph);
 
         // Execute upload graph and wait for transfers to complete
-        if (_device)
+        if (_device && !_graph.get_compiler().get_passes().empty())
         {
             [[maybe_unused]] const auto sync_res = _graph.execute(*_device);
             _device->wait_idle();
@@ -183,14 +203,11 @@ namespace tempest::render_system
             _graph.reset();
         }
 
-        // Build dynamic ObjectData, Instance Indices, and Indirect Draw Commands
-        // Partition into:
-        auto objects = vector<object_payload>{};
-        objects.reserve(entities.size());
-        auto instances = vector<uint32_t>{};
-        instances.reserve(entities.size());
-        auto commands = vector<indexed_indirect_command>{};
-        commands.reserve(entities.size());
+        // Partition entities into Opaque and Transparent batches based on material type
+        auto opaque_entities = vector<ecs::entity>{};
+        auto transparent_entities = vector<ecs::entity>{};
+        opaque_entities.reserve(entities.size());
+        transparent_entities.reserve(entities.size());
 
         for (const auto entity : entities)
         {
@@ -215,19 +232,65 @@ namespace tempest::render_system
                 continue;
             }
 
-            const auto* t = _inputs.entity_registry->try_get<ecs::transform_component>(entity);
-            if (!t)
+            if (!_inputs.entity_registry->try_get<ecs::transform_component>(entity))
             {
                 continue;
             }
 
-            auto mesh_layout_opt = _pool.get_mesh_layout(mesh_id);
-            if (!mesh_layout_opt.has_value())
+            if (!_pool.get_mesh_layout(mesh_id).has_value())
             {
                 continue;
             }
 
-            const auto& ml = *mesh_layout_opt;
+            const auto mat_type = _pool.get_material_type(mat_id).value_or(material_type::opaque);
+            if (mat_type == material_type::blend || mat_type == material_type::transmissive)
+            {
+                transparent_entities.push_back(entity);
+            }
+            else
+            {
+                opaque_entities.push_back(entity);
+            }
+        }
+
+        _tracked_entities.clear();
+        _tracked_entities.reserve(opaque_entities.size() + transparent_entities.size());
+        _tracked_entities.insert(_tracked_entities.end(), opaque_entities.begin(), opaque_entities.end());
+        _tracked_entities.insert(_tracked_entities.end(), transparent_entities.begin(), transparent_entities.end());
+
+        // Build dynamic ObjectData, Instance Indices, and Indirect Draw Commands
+        auto objects = vector<object_payload>{};
+        objects.reserve(_tracked_entities.size());
+        auto instances = vector<uint32_t>{};
+        instances.reserve(_tracked_entities.size());
+        auto commands = vector<indexed_indirect_command>{};
+        commands.reserve(_tracked_entities.size());
+
+        for (const auto entity : _tracked_entities)
+        {
+            auto mesh_id = guid{};
+            auto mat_id = guid{};
+
+            if (const auto* r = _inputs.entity_registry->try_get<renderable_component>(entity))
+            {
+                mesh_id = r->mesh_id;
+                mat_id = r->material_id;
+            }
+            else if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+            {
+                mesh_id = mc->mesh_id;
+                if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
+                {
+                    mat_id = matc->material_id;
+                }
+            }
+
+            const auto ml_opt = _pool.get_mesh_layout(mesh_id);
+            if (!ml_opt)
+            {
+                continue;
+            }
+            const auto& ml = *ml_opt;
             const auto mesh_gpu_addr = _pool.get_mesh_address(mesh_id);
             const auto mat_gpu_addr = _pool.get_material_address(mat_id);
 
@@ -259,6 +322,10 @@ namespace tempest::render_system
             commands.push_back(cmd);
         }
 
+        _opaque_draw_count = static_cast<uint32_t>(opaque_entities.size());
+        _opaque_draw_offset = 0;
+        _transparent_draw_count = static_cast<uint32_t>(transparent_entities.size());
+        _transparent_draw_offset = _opaque_draw_count;
         _active_draw_count = static_cast<uint32_t>(commands.size());
 
         _pool.write_objects(objects);
@@ -273,6 +340,64 @@ namespace tempest::render_system
         _pool.advance_frame();
         _graph.reset();
         _graph.set_surface_size(width, height);
+
+        // 1. Automatically update dynamic object transforms from entity registry
+        if (_inputs.entity_registry && !_tracked_entities.empty())
+        {
+            auto objects = vector<object_payload>{};
+            objects.reserve(_tracked_entities.size());
+
+            for (const auto entity : _tracked_entities)
+            {
+                auto mesh_id = guid{};
+                auto mat_id = guid{};
+
+                if (const auto* r = _inputs.entity_registry->try_get<renderable_component>(entity))
+                {
+                    mesh_id = r->mesh_id;
+                    mat_id = r->material_id;
+                }
+                else if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+                {
+                    mesh_id = mc->mesh_id;
+                    if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
+                    {
+                        mat_id = matc->material_id;
+                    }
+                }
+                else
+                {
+                    continue;
+                }
+
+                const auto* t = _inputs.entity_registry->try_get<ecs::transform_component>(entity);
+                if (!t)
+                {
+                    continue;
+                }
+
+                const auto mesh_gpu_addr = _pool.get_mesh_address(mesh_id);
+                const auto mat_gpu_addr = _pool.get_material_address(mat_id);
+
+                const auto model_mat = compute_world_matrix(*_inputs.entity_registry, entity);
+                const auto inv_model = math::inverse(model_mat);
+                const auto inv_trans = math::transpose(inv_model);
+
+                auto payload = object_payload{
+                    .model = model_mat,
+                    .inv_transpose_model = inv_trans,
+                    .mesh_gpu_address = mesh_gpu_addr,
+                    .material_gpu_address = mat_gpu_addr,
+                    .parent_gpu_address = 0,
+                    .self_id = static_cast<uint32_t>(entity),
+                    .padding = 0,
+                };
+
+                objects.push_back(payload);
+            }
+
+            _pool.write_objects(objects);
+        }
 
         // Update Scene Globals
         auto scene = scene_constants{
@@ -367,6 +492,33 @@ namespace tempest::render_system
             });
         }
 
+        _moments_target = _graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 2,
+            .name = "MBOITMomentsTarget",
+        });
+
+        _zeroth_moment_target = _graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::r32_float,
+            .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "MBOITZerothMomentTarget",
+        });
+
+        _transparency_accum_target = _graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(width, height),
+            .format = rhi::data_format::rgba16_float,
+            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "TransparencyAccumTarget",
+        });
+
         if (swapchain_tex.has_value() && swapchain_view.has_value())
         {
             _tonemapped_color_target =
@@ -397,7 +549,8 @@ namespace tempest::render_system
                 .allocator = _shadow_allocator,
                 .registry = *_inputs.entity_registry,
                 .camera_sys = *_camera_system,
-                .draw_count = _active_draw_count,
+                .draw_count = _opaque_draw_count,
+                .draw_offset = _opaque_draw_offset,
             });
 
             if (_shadow_debug_mode != shadow_debug_mode::none)
@@ -409,7 +562,8 @@ namespace tempest::render_system
             _shadow_atlas_target = shadow_res.shadow_atlas;
         }
 
-        const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target, _active_draw_count);
+        const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target,
+                                                   _opaque_draw_count, _opaque_draw_offset);
 
         if (_cfg.enable_ssao)
         {
@@ -422,8 +576,24 @@ namespace tempest::render_system
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
         const auto& pbr_data = add_pbr_opaque_pass(_graph, _pool, _shaders, skybox_data.hdr_color,
                                                    depth_data.depth_texture, _shadow_atlas_target,
-                                                   _active_draw_count);
-        add_tonemapping_pass(_graph, _pool, _shaders, pbr_data.hdr_color, _tonemapped_color_target,
+                                                   _opaque_draw_count, _opaque_draw_offset);
+
+        const auto& clear_data = add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target,
+                                                             width, height);
+        const auto& gather_data = add_transparency_gather_pass(_graph, _pool, _shaders, clear_data.moments_texture,
+                                                              clear_data.zeroth_moment_texture,
+                                                              depth_data.depth_texture,
+                                                              _transparent_draw_count, _transparent_draw_offset);
+        const auto& resolve_data = add_transparency_resolve_pass(_graph, _pool, _shaders, _transparency_accum_target,
+                                                                gather_data.moments_texture,
+                                                                gather_data.zeroth_moment_texture,
+                                                                depth_data.depth_texture,
+                                                                _transparent_draw_count, _transparent_draw_offset,
+                                                                _shadow_atlas_target);
+        const auto& blend_data = add_transparency_blend_pass(_graph, _pool, _shaders, pbr_data.hdr_color,
+                                                            resolve_data.accum_texture, gather_data.zeroth_moment_texture);
+
+        add_tonemapping_pass(_graph, _pool, _shaders, blend_data.hdr_color, _tonemapped_color_target,
                             _cfg.tonemapped_color_format);
     }
 

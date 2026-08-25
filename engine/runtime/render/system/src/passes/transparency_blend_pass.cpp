@@ -21,7 +21,7 @@ namespace tempest::render_system
             auto blend_states = array{
                 rhi::attachment_blend_state{
                     .blend_enable = true,
-                    .src_color_blend_factor = rhi::blend_factor::src_alpha,
+                    .src_color_blend_factor = rhi::blend_factor::one,
                     .dst_color_blend_factor = rhi::blend_factor::one_minus_src_alpha,
                     .src_alpha_blend_factor = rhi::blend_factor::one,
                     .dst_alpha_blend_factor = rhi::blend_factor::one_minus_src_alpha,

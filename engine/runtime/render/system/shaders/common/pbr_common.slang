@@ -126,8 +126,17 @@ float4 evaluate_material_openpbr(
 
     // Ambient light with directional hemisphere response (soft sky fill)
     float up_factor = saturate(float(px.shading_normal.y) * 0.5 + 0.5);
-    float3 sky_ambient = scene.ambient_light.rgb * (0.7 + 0.3 * up_factor);
+    float3 sky_ambient = scene.ambient_light.rgb * (0.7 + 0.3 * up_factor) * float(px.ambient_occlusion);
     half4 color = px.diffuse * half4(half3(sky_ambient), 1.0h);
+
+    if (mat_state.mat.type == MaterialType::TRANSMISSIVE) {
+        half dielectric_f0 = 0.16h * half(mat_state.mat.reflectance) * half(mat_state.mat.reflectance);
+        float roughness = float(px.roughness);
+        float fresnel = float(dielectric_f0) + (max(1.0 - roughness, float(dielectric_f0)) - float(dielectric_f0)) * pow(1.0 - n_dot_v, 5.0);
+        float3 diffuse_ambient = px.diffuse.rgb * sky_ambient * (1.0 - params.transmission.weight);
+        float3 specular_ambient = sky_ambient * fresnel * (1.0 - roughness);
+        color.rgb = half3(diffuse_ambient + specular_ambient);
+    }
 
     // Directional Sun Light
     {

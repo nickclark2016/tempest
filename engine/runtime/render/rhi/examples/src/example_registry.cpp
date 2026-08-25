@@ -25,6 +25,16 @@ namespace tempest::rhi::examples
                     .factory = &render_system_example::create,
                 });
                 reg.push_back(example_metadata{
+                    .name = "chess",
+                    .description = "Loads and renders 'A Beautiful Game' chess demo with glass pieces and MBOIT transparency",
+                    .factory = &render_system_example::create_chess,
+                });
+                reg.push_back(example_metadata{
+                    .name = "abeautifulgame",
+                    .description = "Loads and renders 'A Beautiful Game' chess demo with glass pieces and MBOIT transparency",
+                    .factory = &render_system_example::create_chess,
+                });
+                reg.push_back(example_metadata{
                     .name = "triangle",
                     .description = "Draws an sRGB correct RGB triangle using storage buffers and an index buffer",
                     .factory = &triangle_example::create,

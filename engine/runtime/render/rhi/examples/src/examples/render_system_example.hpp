@@ -7,19 +7,44 @@
 #include <tempest/event_registry.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/material.hpp>
+#include <tempest/render_system/camera_system.hpp>
+#include <tempest/render_system/renderer.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/vertex.hpp>
-#include <tempest/render_system/renderer.hpp>
-#include <tempest/render_system/camera_system.hpp>
 
 namespace tempest::rhi::examples
 {
+    enum class scene_model
+    {
+        sponza,
+        chess,
+    };
+
     class render_system_example final : public example
     {
       public:
         [[nodiscard]] static auto create() -> unique_ptr<example>
         {
-            return make_unique<render_system_example>();
+            auto ex = make_unique<render_system_example>();
+            ex->set_model(_s_default_model);
+            return ex;
+        }
+
+        [[nodiscard]] static auto create_chess() -> unique_ptr<example>
+        {
+            auto ex = make_unique<render_system_example>();
+            ex->set_model(scene_model::chess);
+            return ex;
+        }
+
+        static void set_default_model(scene_model model) noexcept
+        {
+            _s_default_model = model;
+        }
+
+        void set_model(scene_model model) noexcept
+        {
+            _model = model;
         }
 
         [[nodiscard]] auto init(rhi::device& dev, rhi::render_surface_format surface_format) -> bool override;
@@ -29,6 +54,8 @@ namespace tempest::rhi::examples
         auto shutdown(rhi::device& dev) -> void override;
 
       private:
+        static inline scene_model _s_default_model{scene_model::sponza};
+
         stdout_log_sink _log_sink{};
         logger _logger{_log_sink};
         event::event_registry _events{};
@@ -39,6 +66,8 @@ namespace tempest::rhi::examples
 
         unique_ptr<render_system::renderer> _renderer;
         ecs::entity _camera_entity{ecs::tombstone};
+        ecs::entity _root_entity{ecs::tombstone};
+        scene_model _model{scene_model::sponza};
         float _time{0.0F};
     };
 } // namespace tempest::rhi::examples

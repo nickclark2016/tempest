@@ -65,7 +65,10 @@ FragmentOutput FSMain(VertexOutput input) {
     float alpha = float(pd.diffuse.a);
     if (mat.type == MaterialType::TRANSMISSIVE) {
         float transmission = float(pd.transmission_factor);
-        alpha = alpha * (1.0 - transmission);
+        half dielectric_f0 = 0.16h * half(mat_state.mat.reflectance) * half(mat_state.mat.reflectance);
+        float v_dot_n = saturate(dot(view_dir, float3(pd.shading_normal)));
+        float fresnel = float(dielectric_f0) + (1.0 - float(dielectric_f0)) * pow(1.0 - v_dot_n, 5.0);
+        alpha = alpha * (1.0 - transmission * (1.0 - fresnel));
     }
 
     int2 pixel_coords = int2(input.position.xy);

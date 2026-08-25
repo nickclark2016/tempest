@@ -52,6 +52,6 @@ FragmentOutput FSMain(VSOutput input) {
         transmittance = 1e-7;
     }
     
-    float4 color = float4(accum.rgb / max(accum.a, 1e-6), 1.0 - transmittance);
+    float4 color = float4(accum.rgb, 1.0 - transmittance);
     return FragmentOutput(color);
 }

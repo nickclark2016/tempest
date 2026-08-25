@@ -7,7 +7,7 @@ namespace tempest::render_system
 {
     auto add_depth_prepass(render_graph::render_graph& graph, resource_pool& pool,
                            shader_manager& shaders, render_graph::rg_texture_id depth_tex,
-                           uint32_t draw_count) -> const depth_prepass_data&
+                           uint32_t draw_count, uint32_t draw_offset) -> const depth_prepass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("zprepass_pipeline");
         if (!pipe_h.has_value())
@@ -41,7 +41,7 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<depth_prepass_data>(
             "DepthPrepass",
-            [&pool, depth_tex, draw_count](render_graph::pass_builder& builder, depth_prepass_data& data) {
+            [&pool, depth_tex, draw_count, draw_offset](render_graph::pass_builder& builder, depth_prepass_data& data) {
                 data.depth_texture = builder.set_depth_stencil_attachment(
                     render_graph::rg_depth_stencil_attachment{
                         .texture = depth_tex,
@@ -60,6 +60,7 @@ namespace tempest::render_system
                 data.instance_buffer = builder.read(data.instance_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
                 data.draw_count = draw_count;
+                data.draw_offset = draw_offset;
             },
             [&pool, &shaders, pipe](const depth_prepass_data& data,
                                    [[maybe_unused]] render_graph::pass_execution_context& ctx,
@@ -88,7 +89,8 @@ namespace tempest::render_system
                 pass_cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
-                pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), 0, data.draw_count,
+                const auto byte_offset = static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
+                pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, data.draw_count,
                                                sizeof(indexed_indirect_command));
             });
     }
