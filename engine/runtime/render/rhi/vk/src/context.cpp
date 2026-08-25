@@ -124,6 +124,12 @@ namespace tempest::rhi::vk
                         .pNext = nullptr,
                         .descriptorBuffer = VK_TRUE,
                     })
+                    .add_required_extension(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME)
+                    .add_required_extension_features(VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT{
+                        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT,
+                        .pNext = nullptr,
+                        .fragmentShaderPixelInterlock = VK_TRUE,
+                    })
                     .add_required_extension(VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME)
                     .select_devices();
 
