@@ -137,6 +137,16 @@ namespace tempest::render_system
             return _transparency_accum_target;
         }
 
+        [[nodiscard]] auto get_cluster_bounds_buffer() const noexcept -> render_graph::rg_buffer_id
+        {
+            return _cluster_bounds_target;
+        }
+
+        [[nodiscard]] auto get_light_bitmask_buffer() const noexcept -> render_graph::rg_buffer_id
+        {
+            return _light_bitmask_target;
+        }
+
         [[nodiscard]] auto get_active_draw_count() const noexcept -> uint32_t
         {
             return _active_draw_count;
@@ -204,6 +214,8 @@ namespace tempest::render_system
         render_graph::rg_texture_id _zeroth_moment_target{};
         render_graph::rg_texture_id _transparency_accum_target{};
         render_graph::rg_texture_id _tonemapped_color_target{};
+        render_graph::rg_buffer_id _cluster_bounds_target{};
+        render_graph::rg_buffer_id _light_bitmask_target{};
 
         shelf_allocator _shadow_allocator{};
         vector<ecs::entity> _tracked_entities{};

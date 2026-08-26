@@ -14,6 +14,7 @@ struct OitResolvePushConstants {
     uint64_t objects_address;
     uint64_t instance_indices_address;
     uint64_t directional_shadow_address;
+    uint64_t light_bitmask_address;
     int32_t moments_storage_index;
     int32_t zeroth_moment_storage_index;
     int32_t linear_sampler_index;
@@ -118,7 +119,10 @@ FragmentOutput FSMain(VertexOutput input) {
         cascade_idx = shadow_res.cascade_index;
     }
 
-    float4 color = evaluate_material_openpbr(pd, mat_state, scene, input.world_position, sun_shadow);
+    float4 color = evaluate_material_openpbr(
+        pd, mat_state, scene,
+        input.world_position, input.view_position, input.position.xy,
+        sun_shadow, push_constants.light_bitmask_address);
 
     if (shadow_data != nullptr && shadow_data.debug_mode != 0) {
         color.rgb = apply_shadow_debug_visualization(color.rgb, sun_shadow, cascade_idx, shadow_data.debug_mode);

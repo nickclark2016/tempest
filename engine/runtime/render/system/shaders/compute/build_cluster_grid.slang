@@ -18,11 +18,10 @@ void CSMain(uint3 work_group_id : SV_GroupID) {
     const uint tile_size_px = create_info.workgroup_count_tile_size_px.w;
     const uint tile_index = work_group_id.x + work_group_id.y * create_info.workgroup_count_tile_size_px.x + work_group_id.z * create_info.workgroup_count_tile_size_px.x * create_info.workgroup_count_tile_size_px.y;
 
-    float4 max_point_screen_space = float4(float2(work_group_id.x + 1, work_group_id.y + 1) * tile_size_px, -1.0f, 1.0f);
-    float4 min_point_screen_space = float4(work_group_id.xy * tile_size_px, -1.0f, 1.0f);
-
-    float3 max_point_view_space = screen_to_view(max_point_screen_space, create_info);
-    float3 min_point_view_space = screen_to_view(min_point_screen_space, create_info);
+    float3 p0_view = screen_to_view(float4(float2(work_group_id.x,     work_group_id.y)     * tile_size_px, -1.0f, 1.0f), create_info);
+    float3 p1_view = screen_to_view(float4(float2(work_group_id.x + 1, work_group_id.y)     * tile_size_px, -1.0f, 1.0f), create_info);
+    float3 p2_view = screen_to_view(float4(float2(work_group_id.x,     work_group_id.y + 1) * tile_size_px, -1.0f, 1.0f), create_info);
+    float3 p3_view = screen_to_view(float4(float2(work_group_id.x + 1, work_group_id.y + 1) * tile_size_px, -1.0f, 1.0f), create_info);
 
     const float z_near = create_info.screen_bounds.z;
     const float z_far = create_info.screen_bounds.w;
@@ -32,13 +31,20 @@ void CSMain(uint3 work_group_id : SV_GroupID) {
     const float tile_near = -z_near * pow(z_far_over_near, float(work_group_id.z) / workgroup_size_z);
     const float tile_far = -z_near * pow(z_far_over_near, float(work_group_id.z + 1) / workgroup_size_z);
 
-    const float3 min_point_near = line_intersection_to_z_plane(eye_position_view, min_point_view_space, tile_near);
-    const float3 max_point_near = line_intersection_to_z_plane(eye_position_view, max_point_view_space, tile_near);
-    const float3 min_point_far = line_intersection_to_z_plane(eye_position_view, min_point_view_space, tile_far);
-    const float3 max_point_far = line_intersection_to_z_plane(eye_position_view, max_point_view_space, tile_far);
+    const float3 p0_near = line_intersection_to_z_plane(eye_position_view, p0_view, tile_near);
+    const float3 p1_near = line_intersection_to_z_plane(eye_position_view, p1_view, tile_near);
+    const float3 p2_near = line_intersection_to_z_plane(eye_position_view, p2_view, tile_near);
+    const float3 p3_near = line_intersection_to_z_plane(eye_position_view, p3_view, tile_near);
 
-    const float3 min_point_aabb = min(min(min_point_near, min_point_far), min(max_point_near, max_point_far));
-    const float3 max_point_aabb = max(max(max_point_near, max_point_far), max(min_point_near, min_point_far)); 
+    const float3 p0_far = line_intersection_to_z_plane(eye_position_view, p0_view, tile_far);
+    const float3 p1_far = line_intersection_to_z_plane(eye_position_view, p1_view, tile_far);
+    const float3 p2_far = line_intersection_to_z_plane(eye_position_view, p2_view, tile_far);
+    const float3 p3_far = line_intersection_to_z_plane(eye_position_view, p3_view, tile_far);
+
+    const float3 min_point_aabb = min(min(min(p0_near, p1_near), min(p2_near, p3_near)),
+                                      min(min(p0_far,  p1_far),  min(p2_far,  p3_far)));
+    const float3 max_point_aabb = max(max(max(p0_near, p1_near), max(p2_near, p3_near)),
+                                      max(max(p0_far,  p1_far),  max(p2_far,  p3_far)));
 
     ClusterBounds bounds;
     bounds.min_corner = float4(min_point_aabb, 0.0);

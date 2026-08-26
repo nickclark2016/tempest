@@ -390,6 +390,259 @@ namespace tempest::render_system::tests
         }
     }
 
+    TEST(render_system_tests, light_clustering_best_fit_aspect_ratios)
+    {
+        // 16:9 Standard widescreen (1920x1080, 1280x720)
+        auto dims16_9 = compute_cluster_grid_dimensions(1920, 1080);
+        EXPECT_EQ(dims16_9.x, 16U);
+        EXPECT_EQ(dims16_9.y, 9U);
+        EXPECT_EQ(dims16_9.z, 24U);
+        EXPECT_EQ(dims16_9.w, 120U);
+
+        auto dims720p = compute_cluster_grid_dimensions(1280, 720);
+        EXPECT_EQ(dims720p.x, 16U);
+        EXPECT_EQ(dims720p.y, 9U);
+        EXPECT_EQ(dims720p.z, 24U);
+        EXPECT_EQ(dims720p.w, 80U);
+
+        // 21:9 Ultrawide (2560x1080, 3440x1440)
+        auto dims21_9 = compute_cluster_grid_dimensions(2560, 1080);
+        EXPECT_EQ(dims21_9.x, 21U);
+        EXPECT_EQ(dims21_9.y, 9U);
+        EXPECT_EQ(dims21_9.z, 24U);
+        EXPECT_EQ(dims21_9.w, (2560U + 21U - 1U) / 21U);
+
+        auto dimsUWQHD = compute_cluster_grid_dimensions(3440, 1440);
+        EXPECT_EQ(dimsUWQHD.x, 21U);
+        EXPECT_EQ(dimsUWQHD.y, 9U);
+        EXPECT_EQ(dimsUWQHD.z, 24U);
+
+        // 32:9 Super-ultrawide (5120x1440)
+        auto dims32_9 = compute_cluster_grid_dimensions(5120, 1440);
+        EXPECT_EQ(dims32_9.x, 32U);
+        EXPECT_EQ(dims32_9.y, 9U);
+        EXPECT_EQ(dims32_9.z, 24U);
+        EXPECT_EQ(dims32_9.w, 160U);
+
+        // 16:10 Widescreen (1920x1200)
+        auto dims16_10 = compute_cluster_grid_dimensions(1920, 1200);
+        EXPECT_EQ(dims16_10.x, 16U);
+        EXPECT_EQ(dims16_10.y, 10U);
+        EXPECT_EQ(dims16_10.z, 24U);
+        EXPECT_EQ(dims16_10.w, 120U);
+
+        // 4:3 Standard (1024x768)
+        auto dims4_3 = compute_cluster_grid_dimensions(1024, 768);
+        EXPECT_EQ(dims4_3.x, 16U);
+        EXPECT_EQ(dims4_3.y, 12U);
+        EXPECT_EQ(dims4_3.z, 24U);
+        EXPECT_EQ(dims4_3.w, 64U);
+
+        // Portrait 9:16 (1080x1920)
+        auto dims9_16 = compute_cluster_grid_dimensions(1080, 1920);
+        EXPECT_EQ(dims9_16.x, 5U);
+        EXPECT_EQ(dims9_16.y, 9U);
+        EXPECT_EQ(dims9_16.z, 24U);
+        EXPECT_EQ(dims9_16.w, 216U);
+    }
+
+    TEST(render_system_tests, light_clustering_bitmask_culling_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev};
+        auto graph = render_graph::render_graph{1280, 720};
+
+        auto cam = render_camera{
+            .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
+            .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .eye_position = {0.0F, 0.0F, -5.0F, 1.0F},
+        };
+
+        // Write 3 test lights to pool:
+        // Light 0: Center near light (world pos 0, 0, -4 -> view pos 0, 0, -1, range 1.5)
+        // Light 1: Far corner light (world pos 5, 3, 25 -> view pos 5, 3, -30, range 10)
+        // Light 2: Behind camera (world pos 0, 0, -10 -> view pos 0, 0, +5, range 2.0)
+        auto test_lights = array<light_payload, 3>{
+            light_payload{
+                .color_intensity = {1.0F, 1.0F, 1.0F, 1.0F},
+                .position_falloff = {0.0F, 0.0F, -4.0F, 1.5F},
+                .direction_angle = {0.0F, -1.0F, 0.0F, 0.0F},
+                .type = 1,
+                .enabled = 1,
+                .padding = {0, 0},
+            },
+            light_payload{
+                .color_intensity = {1.0F, 0.0F, 0.0F, 1.0F},
+                .position_falloff = {5.0F, 3.0F, 25.0F, 10.0F},
+                .direction_angle = {0.0F, -1.0F, 0.0F, 0.0F},
+                .type = 1,
+                .enabled = 1,
+                .padding = {0, 0},
+            },
+            light_payload{
+                .color_intensity = {0.0F, 1.0F, 0.0F, 1.0F},
+                .position_falloff = {0.0F, 0.0F, -10.0F, 2.0F},
+                .direction_angle = {0.0F, -1.0F, 0.0F, 0.0F},
+                .type = 1,
+                .enabled = 1,
+                .padding = {0, 0},
+            },
+        };
+
+        pool.write_lights(span<const light_payload>{test_lights.data(), test_lights.size()});
+
+        auto scene = scene_constants{
+            .projection = cam.proj,
+            .inv_projection = cam.inv_proj,
+            .view = cam.view,
+            .inv_view = cam.inv_view,
+            .camera_position = cam.eye_position,
+            .lights_address = pool.get_lights_buffer_address(),
+            .light_count = static_cast<uint32_t>(test_lights.size()),
+            .words_per_cluster = 1,
+            .cluster_counts_tile_size = compute_cluster_grid_dimensions(1280, 720),
+            .cluster_depth_params = {0.1F, 100.0F, 0.0F, 0.0F},
+        };
+        pool.write_scene_constants(scene);
+
+        const auto total_clusters = 16U * 9U * 24U;
+        auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
+            .name = "ClusterBoundsBuffer",
+        });
+
+        auto lights_buf = graph.import_buffer(pool.get_lights_buffer());
+
+        const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam, 1280, 720);
+        const auto& culling_data = add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer,
+                                                          lights_buf, cluster_data.create_info,
+                                                          static_cast<uint32_t>(test_lights.size()));
+
+        struct sink_pass_data
+        {
+            render_graph::rg_buffer_id bitmask_buf;
+        };
+
+        graph.add_compute_pass<sink_pass_data>(
+            "BitmaskSinkPass",
+            [bitmask_id = culling_data.light_bitmask_buffer](render_graph::pass_builder& builder, sink_pass_data& data) {
+                data.bitmask_buf = builder.read(bitmask_id, rhi::pipeline_stage::compute, rhi::resource_access::read);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const sink_pass_data& data,
+               [[maybe_unused]] render_graph::pass_execution_context& ctx,
+               [[maybe_unused]] rhi::command_list& cmd) {});
+
+        auto res = graph.execute(*dev);
+        EXPECT_TRUE(res.has_value());
+        dev->wait_idle();
+
+        // Readback cluster bounds buffer
+        auto cluster_readback = dev->create_buffer(rhi::buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "ClusterReadbackBuffer",
+        });
+
+        const auto* cluster_alloc = graph.get_physical_buffer(cluster_bounds_buf.id);
+        ASSERT_NE(cluster_alloc, nullptr);
+        if (cluster_alloc)
+        {
+            auto& port = dev->get_graphics_execution_port();
+            auto& cmd = port.acquire_command_list();
+            cmd.begin();
+            const auto copy_region = rhi::buffer_copy_region{
+                .src_offset = 0,
+                .dst_offset = 0,
+                .size = total_clusters * sizeof(cluster_bounds),
+            };
+            cmd.copy_buffer(cluster_alloc->handle, cluster_readback, span<const rhi::buffer_copy_region>{&copy_region, 1});
+            cmd.end();
+            auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+            [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+            dev->wait_idle();
+
+            const auto* cb = static_cast<const cluster_bounds*>(cluster_readback.cpu_address);
+            if (cb)
+            {
+                // Verify cluster 0 depth range is near plane [tile_near, tile_far]
+                EXPECT_LT(cb[0].min_corner.z, 0.0F);
+                EXPECT_LT(cb[0].max_corner.z, 0.0F);
+            }
+        }
+        dev->destroy_buffer(cluster_readback);
+
+        // Readback bitmask buffer
+        auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+            .size = total_clusters * sizeof(uint32_t),
+            .memory_usage = rhi::memory_usage::readback,
+            .usage = rhi::buffer_usage::transfer_dst,
+            .name = "BitmaskReadbackBuffer",
+        });
+
+        const auto* bitmask_alloc = graph.get_physical_buffer(culling_data.light_bitmask_buffer.id);
+        ASSERT_NE(bitmask_alloc, nullptr);
+        if (bitmask_alloc)
+        {
+            auto& port = dev->get_graphics_execution_port();
+            auto& cmd = port.acquire_command_list();
+            cmd.begin();
+
+            const auto copy_region = rhi::buffer_copy_region{
+                .src_offset = 0,
+                .dst_offset = 0,
+                .size = total_clusters * sizeof(uint32_t),
+            };
+            cmd.copy_buffer(bitmask_alloc->handle, readback_buf, span<const rhi::buffer_copy_region>{&copy_region, 1});
+            cmd.end();
+
+            auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+            [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+            dev->wait_idle();
+
+            const auto* bitmasks = static_cast<const uint32_t*>(readback_buf.cpu_address);
+            ASSERT_NE(bitmasks, nullptr);
+
+            uint32_t count_light0 = 0;
+            uint32_t count_light1 = 0;
+            uint32_t count_light2 = 0;
+
+            for (uint32_t i = 0; i < total_clusters; ++i)
+            {
+                const auto mask = bitmasks[i];
+                if ((mask & (1U << 0)) != 0)
+                {
+                    ++count_light0;
+                }
+                if ((mask & (1U << 1)) != 0)
+                {
+                    ++count_light1;
+                }
+                if ((mask & (1U << 2)) != 0)
+                {
+                    ++count_light2;
+                }
+            }
+
+            // Light 0 (near center) should intersect some near clusters
+            EXPECT_GT(count_light0, 0U);
+            // Light 1 (far corner) should intersect some far clusters
+            EXPECT_GT(count_light1, 0U);
+            // Light 2 (behind camera) must not intersect any clusters
+            EXPECT_EQ(count_light2, 0U);
+        }
+
+        dev->destroy_buffer(readback_buf);
+    }
+
     TEST(render_system_tests, clustered_lighting_and_culling_execution)
     {
         auto fixture = create_test_device();
@@ -421,28 +674,9 @@ namespace tempest::render_system::tests
             .name = "LightsBuffer",
         });
 
-        auto light_grid_buf = graph.create_buffer(render_graph::rg_buffer_desc{
-            .size = cluster_count * sizeof(light_grid_range),
-            .usage = rhi::buffer_usage::storage_buffer,
-            .name = "LightGridBuffer",
-        });
-
-        auto light_indices_buf = graph.create_buffer(render_graph::rg_buffer_desc{
-            .size = cluster_count * 128 * sizeof(uint32_t),
-            .usage = rhi::buffer_usage::storage_buffer,
-            .name = "LightIndicesBuffer",
-        });
-
-        auto global_count_buf = graph.create_buffer(render_graph::rg_buffer_desc{
-            .size = sizeof(uint32_t) * 4,
-            .usage = rhi::buffer_usage::storage_buffer,
-            .name = "GlobalIndexCountBuffer",
-        });
-
         const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam, 1280, 720);
         add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer,
-                              lights_buf, light_grid_buf, light_indices_buf, global_count_buf,
-                              cluster_data.create_info, 0);
+                               lights_buf, cluster_data.create_info, 0);
 
         auto res = graph.execute(*dev);
         EXPECT_TRUE(res.has_value());
@@ -1247,13 +1481,14 @@ namespace tempest::render_system::tests
 
     TEST(render_system_tests, pbr_opaque_push_constants_layout)
     {
-        EXPECT_EQ(sizeof(pbr_opaque_push_constants), 40U);
+        EXPECT_EQ(sizeof(pbr_opaque_push_constants), 48U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, scene_constants_address), 0U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, objects_address), 8U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, instance_indices_address), 16U);
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, directional_shadow_address), 24U);
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, linear_sampler_index), 32U);
-        EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 36U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, light_bitmask_address), 32U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, linear_sampler_index), 40U);
+        EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 44U);
     }
 
     TEST(render_system_tests, directional_shadow_data_debug_mode_layout)
@@ -1994,17 +2229,18 @@ namespace tempest::render_system::tests
 
     TEST(render_system_tests, transparency_resolve_push_constants_layout)
     {
-        EXPECT_EQ(sizeof(transparency_resolve_push_constants), 56U);
+        EXPECT_EQ(sizeof(transparency_resolve_push_constants), 64U);
         EXPECT_EQ(offsetof(transparency_resolve_push_constants, scene_constants_address), 0U);
         EXPECT_EQ(offsetof(transparency_resolve_push_constants, objects_address), 8U);
         EXPECT_EQ(offsetof(transparency_resolve_push_constants, instance_indices_address), 16U);
         EXPECT_EQ(offsetof(transparency_resolve_push_constants, directional_shadow_address), 24U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, moments_storage_index), 32U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, zeroth_moment_storage_index), 36U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, linear_sampler_index), 40U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, point_sampler_index), 44U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, ssao_texture_index), 48U);
-        EXPECT_EQ(offsetof(transparency_resolve_push_constants, shadow_atlas_index), 52U);
+        EXPECT_EQ(offsetof(transparency_resolve_push_constants, light_bitmask_address), 32U);
+        EXPECT_EQ(offsetof(transparency_resolve_push_constants, moments_storage_index), 40U);
+        EXPECT_EQ(offsetof(transparency_resolve_push_constants, zeroth_moment_storage_index), 44U);
+        EXPECT_EQ(offsetof(transparency_resolve_push_constants, linear_sampler_index), 48U);
+        EXPECT_EQ(offsetof(transparency_resolve_push_constants, point_sampler_index), 52U);
+        EXPECT_EQ(offsetof(transparency_resolve_push_constants, ssao_texture_index), 56U);
+        EXPECT_EQ(offsetof(transparency_resolve_push_constants, shadow_atlas_index), 60U);
     }
 
     TEST(render_system_tests, transparency_resolve_pass_execution)
@@ -3381,6 +3617,283 @@ namespace tempest::render_system::tests
             cached = rend->get_cached_lights();
             ASSERT_EQ(cached.size(), 1U);
             EXPECT_FLOAT_EQ(cached[0].color_intensity.z, 1.0F); // Remaining light is light2
+        }
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, clustered_forward_opaque_point_lighting)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Setup Camera Entity at (0, 0, -5) looking towards +Z
+            auto cam_ent = registry.create();
+            registry.assign(cam_ent, camera_component{
+                .aspect_ratio = 1280.0F / 720.0F,
+                .vertical_fov = 1.5707963F,
+                .near_plane = 0.01F,
+            });
+            auto cam_tx = ecs::transform_component::identity();
+            cam_tx.position({0.0F, 0.0F, -5.0F});
+            registry.assign(cam_ent, cam_tx);
+            registry.assign(cam_ent, active_camera_component{});
+
+            // 2. Setup Point Light Entity (between camera and quad, at (0, 0, -2))
+            auto light_ent = registry.create();
+            registry.assign(light_ent, point_light_component{
+                .color = {1.0F, 0.2F, 0.2F},
+                .intensity = 20.0F,
+                .range = 10.0F,
+            });
+            auto light_tx = ecs::transform_component::identity();
+            light_tx.position({0.0F, 0.0F, -2.0F});
+            registry.assign(light_ent, light_tx);
+
+            // 3. Setup Renderable Geometry Entity (Quad at z=0)
+            auto meshes = core::mesh_registry{};
+            auto materials = core::material_registry{};
+            auto textures = core::texture_registry{};
+
+            auto mesh_id = meshes.register_mesh(create_test_mesh());
+            auto mat = core::material{};
+            mat.set_vec4(core::material::base_color_factor_name, {0.9F, 0.9F, 0.9F, 1.0F});
+            mat.set_scalar(core::material::metallic_factor_name, 0.0F);
+            mat.set_scalar(core::material::roughness_factor_name, 0.5F);
+            auto mat_id = materials.register_material(tempest::move(mat));
+
+            auto geom_ent = registry.create();
+            registry.assign(geom_ent, renderable_component{
+                .mesh_id = mesh_id,
+                .material_id = mat_id,
+                .double_sided = false,
+            });
+            registry.assign(geom_ent, ecs::transform_component::identity());
+
+            // 4. Upload Objects and Prepare Frame
+            auto entities = array<ecs::entity, 1>{geom_ent};
+            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
+                                      meshes, textures, materials);
+
+            rend->prepare_frame(1280, 720);
+
+            // 5. Render execution
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+
+            dev->wait_idle();
+
+            // 6. Readback the rendered frame
+            auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+                .size = 1280 * 720 * 4,
+                .memory_usage = rhi::memory_usage::readback,
+                .usage = rhi::buffer_usage::transfer_dst,
+                .name = "OpaquePointLightReadbackBuffer",
+            });
+
+            const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
+            ASSERT_NE(alloc, nullptr);
+            if (alloc)
+            {
+                auto& port = dev->get_graphics_execution_port();
+                auto& cmd = port.acquire_command_list();
+                cmd.begin();
+
+                const auto region = rhi::buffer_texture_copy_region{
+                    .buffer_offset = 0,
+                    .buffer_row_length = 0,
+                    .buffer_image_height = 0,
+                    .mip_level = 0,
+                    .base_array_layer = 0,
+                    .array_layer_count = 1,
+                    .image_offset_x = 0,
+                    .image_offset_y = 0,
+                    .image_offset_z = 0,
+                    .image_extent_width = 1280,
+                    .image_extent_height = 720,
+                    .image_extent_depth = 1,
+                };
+                cmd.copy_texture_to_buffer(alloc->handle, readback_buf,
+                                           span<const rhi::buffer_texture_copy_region>{&region, 1});
+                cmd.end();
+
+                auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                dev->wait_idle();
+
+                const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
+                if (pixels)
+                {
+                    // Sample center pixel (640, 360) (Rendered point-lit PBR geometry)
+                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto r = pixels[center_idx + 0];
+                    const auto a = pixels[center_idx + 3];
+                    // Strong red illumination from the point light
+                    EXPECT_GT(r, 100);
+                    EXPECT_EQ(a, 255);
+                }
+            }
+
+            dev->destroy_buffer(readback_buf);
+        }
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, clustered_forward_transparency_point_lighting)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Setup Camera Entity at (0, 0, -5) looking towards +Z
+            auto cam_ent = registry.create();
+            registry.assign(cam_ent, camera_component{
+                .aspect_ratio = 1280.0F / 720.0F,
+                .vertical_fov = 1.5707963F,
+                .near_plane = 0.01F,
+            });
+            auto cam_tx = ecs::transform_component::identity();
+            cam_tx.position({0.0F, 0.0F, -5.0F});
+            registry.assign(cam_ent, cam_tx);
+            registry.assign(cam_ent, active_camera_component{});
+
+            // 2. Setup Point Light Entity with green color
+            auto light_ent = registry.create();
+            registry.assign(light_ent, point_light_component{
+                .color = {0.1F, 1.0F, 0.1F},
+                .intensity = 25.0F,
+                .range = 10.0F,
+            });
+            auto light_tx = ecs::transform_component::identity();
+            light_tx.position({0.0F, 0.0F, -2.0F});
+            registry.assign(light_ent, light_tx);
+
+            // 3. Setup Transparent Renderable Geometry Entity (Blend quad at z=0)
+            auto meshes = core::mesh_registry{};
+            auto materials = core::material_registry{};
+            auto textures = core::texture_registry{};
+
+            auto mesh_id = meshes.register_mesh(create_test_mesh());
+            auto mat = core::material{};
+            mat.set_vec4(core::material::base_color_factor_name, {0.1F, 0.9F, 0.1F, 0.8F});
+            mat.set_string(core::material::alpha_mode_name, "BLEND");
+            mat.set_scalar(core::material::metallic_factor_name, 0.0F);
+            mat.set_scalar(core::material::roughness_factor_name, 0.5F);
+            auto mat_id = materials.register_material(tempest::move(mat));
+
+            auto geom_ent = registry.create();
+            registry.assign(geom_ent, renderable_component{
+                .mesh_id = mesh_id,
+                .material_id = mat_id,
+                .double_sided = false,
+            });
+            registry.assign(geom_ent, ecs::transform_component::identity());
+
+            // 4. Upload Objects and Prepare Frame
+            auto entities = array<ecs::entity, 1>{geom_ent};
+            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
+                                      meshes, textures, materials);
+
+            rend->prepare_frame(1280, 720);
+
+            // 5. Render execution
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+
+            dev->wait_idle();
+
+            // 6. Readback the rendered frame
+            auto readback_buf = dev->create_buffer(rhi::buffer_desc{
+                .size = 1280 * 720 * 4,
+                .memory_usage = rhi::memory_usage::readback,
+                .usage = rhi::buffer_usage::transfer_dst,
+                .name = "TranspPointLightReadbackBuffer",
+            });
+
+            const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
+            ASSERT_NE(alloc, nullptr);
+            if (alloc)
+            {
+                auto& port = dev->get_graphics_execution_port();
+                auto& cmd = port.acquire_command_list();
+                cmd.begin();
+
+                const auto region = rhi::buffer_texture_copy_region{
+                    .buffer_offset = 0,
+                    .buffer_row_length = 0,
+                    .buffer_image_height = 0,
+                    .mip_level = 0,
+                    .base_array_layer = 0,
+                    .array_layer_count = 1,
+                    .image_offset_x = 0,
+                    .image_offset_y = 0,
+                    .image_offset_z = 0,
+                    .image_extent_width = 1280,
+                    .image_extent_height = 720,
+                    .image_extent_depth = 1,
+                };
+                cmd.copy_texture_to_buffer(alloc->handle, readback_buf,
+                                           span<const rhi::buffer_texture_copy_region>{&region, 1});
+                cmd.end();
+
+                auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
+                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                dev->wait_idle();
+
+                const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
+                if (pixels)
+                {
+                    // Sample center pixel (640, 360) (Rendered transparent point-lit PBR geometry)
+                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto g = pixels[center_idx + 1];
+                    const auto a = pixels[center_idx + 3];
+                    // Strong green accumulation from the point light through MBOIT resolve and blend
+                    EXPECT_GT(g, 50);
+                    EXPECT_EQ(a, 255);
+                }
+            }
+
+            dev->destroy_buffer(readback_buf);
         }
 
         dev->wait_idle();

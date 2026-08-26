@@ -8,7 +8,8 @@ namespace tempest::render_system
                              shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
                              render_graph::rg_texture_id depth_tex,
                              render_graph::rg_texture_id shadow_atlas,
-                             uint32_t draw_count, uint32_t draw_offset)
+                             uint32_t draw_count, uint32_t draw_offset,
+                             render_graph::rg_buffer_id light_bitmask_buf)
         -> const pbr_opaque_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_opaque_pipeline");
@@ -44,8 +45,8 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<pbr_opaque_pass_data>(
             "PBROpaquePass",
-            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset](render_graph::pass_builder& builder,
-                                                                                      pbr_opaque_pass_data& data) {
+            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset, light_bitmask_buf](
+                render_graph::pass_builder& builder, pbr_opaque_pass_data& data) {
                 data.hdr_color = builder.set_color_attachment(
                     0, render_graph::rg_color_attachment{
                            .texture = hdr_color_tex,
@@ -72,6 +73,12 @@ namespace tempest::render_system
                 data.object_buffer = builder.read(data.object_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 data.instance_buffer = builder.read(data.instance_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
+
+                if (light_bitmask_buf.is_valid())
+                {
+                    data.light_bitmask_buffer = builder.read(light_bitmask_buf, rhi::pipeline_stage::fragment, rhi::resource_access::read);
+                }
+
                 data.draw_count = draw_count;
                 data.draw_offset = draw_offset;
             },
@@ -95,11 +102,18 @@ namespace tempest::render_system
                 const auto shadow_desc_idx = ctx.get_texture_descriptor(data.shadow_atlas);
                 const auto shadow_atlas_idx = (shadow_desc_idx != ~0U) ? static_cast<int32_t>(shadow_desc_idx) : -1;
 
+                auto bitmask_gpu_addr = uint64_t{0};
+                if (data.light_bitmask_buffer.is_valid())
+                {
+                    bitmask_gpu_addr = ctx.get_buffer(data.light_bitmask_buffer).gpu_address;
+                }
+
                 const auto constants = pbr_opaque_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer_address(),
                     .instance_indices_address = pool.get_instance_buffer_address(),
                     .directional_shadow_address = pool.get_directional_shadow_address(),
+                    .light_bitmask_address = bitmask_gpu_addr,
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
                     .shadow_atlas_index = shadow_atlas_idx,
                 };

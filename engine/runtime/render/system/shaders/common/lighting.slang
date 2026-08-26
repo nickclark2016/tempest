@@ -41,6 +41,16 @@ struct Light
     bool enabled;
 };
 
+struct LightPayload
+{
+    float4 color_intensity;
+    float4 position_falloff;
+    float4 direction_angle;
+    uint32_t type;
+    uint32_t enabled;
+    uint32_t padding[2];
+};
+
 enum ShadowDebugMode : uint
 {
     NONE = 0,

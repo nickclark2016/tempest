@@ -3,6 +3,8 @@
 #include <cmath>
 #include <tempest/render_system/passes/depth_prepass.hpp>
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
+#include <tempest/render_system/passes/light_clustering_pass.hpp>
+#include <tempest/render_system/passes/light_culling_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
 #include <tempest/render_system/passes/shadow_pass.hpp>
 #include <tempest/render_system/passes/skybox_pass.hpp>
@@ -99,6 +101,8 @@ namespace tempest::render_system
           _zeroth_moment_target{other._zeroth_moment_target},
           _transparency_accum_target{other._transparency_accum_target},
           _tonemapped_color_target{other._tonemapped_color_target},
+          _cluster_bounds_target{other._cluster_bounds_target},
+          _light_bitmask_target{other._light_bitmask_target},
           _shadow_allocator{tempest::move(other._shadow_allocator)},
           _tracked_entities{tempest::move(other._tracked_entities)},
           _active_draw_count{other._active_draw_count},
@@ -151,6 +155,8 @@ namespace tempest::render_system
             _zeroth_moment_target = other._zeroth_moment_target;
             _transparency_accum_target = other._transparency_accum_target;
             _tonemapped_color_target = other._tonemapped_color_target;
+            _cluster_bounds_target = other._cluster_bounds_target;
+            _light_bitmask_target = other._light_bitmask_target;
             _shadow_allocator = tempest::move(other._shadow_allocator);
             _tracked_entities = tempest::move(other._tracked_entities);
             _active_draw_count = other._active_draw_count;
@@ -512,11 +518,15 @@ namespace tempest::render_system
         const auto valid_near = near_plane > 0.0F ? near_plane : 0.1F;
         const auto log_far_near = std::log(far_plane / valid_near);
 
+        const auto grid_dims = compute_cluster_grid_dimensions(width, height);
+        const auto total_clusters = grid_dims.x * grid_dims.y * grid_dims.z;
+        const auto words_per_cluster = (static_cast<uint32_t>(_cached_lights.size()) + 31U) / 32U;
+
         scene.lights_address = _pool.get_lights_buffer_address();
         scene.light_bitmask_address = 0;
         scene.light_count = static_cast<uint32_t>(_cached_lights.size());
-        scene.words_per_cluster = (scene.light_count + 31) / 32;
-        scene.cluster_counts_tile_size = {16, 9, 24, 64};
+        scene.words_per_cluster = words_per_cluster;
+        scene.cluster_counts_tile_size = grid_dims;
         scene.cluster_depth_params = {valid_near, far_plane, log_far_near, 0.0F};
 
         // Query directional sun light
@@ -628,8 +638,38 @@ namespace tempest::render_system
             });
         }
 
+        _cluster_bounds_target = _graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = total_clusters * sizeof(cluster_bounds),
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
+            .name = "ClusterBoundsBuffer",
+        });
+
+        const auto bitmask_buffer_size = tempest::max(1U, total_clusters * words_per_cluster) * sizeof(uint32_t);
+        _light_bitmask_target = _graph.create_buffer(render_graph::rg_buffer_desc{
+            .size = bitmask_buffer_size,
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
+            .name = "LightBitmaskBuffer",
+        });
+
         // Build DAG Passes
         add_frame_upload_pass(_graph, _pool);
+
+        // Clustered Lighting Passes
+        const auto active_cam = render_camera{
+            .proj = scene.projection,
+            .inv_proj = scene.inv_projection,
+            .view = scene.view,
+            .inv_view = scene.inv_view,
+            .eye_position = scene.camera_position,
+        };
+        const auto& cluster_data = add_light_clustering_pass(_graph, _pool, _shaders, _cluster_bounds_target,
+                                                             active_cam, width, height,
+                                                             grid_dims.x, grid_dims.y, grid_dims.z);
+
+        auto lights_buf = _graph.import_buffer(_pool.get_lights_buffer());
+        const auto& culling_data = add_light_culling_pass(_graph, _pool, _shaders, cluster_data.cluster_bounds_buffer,
+                                                          lights_buf, cluster_data.create_info,
+                                                          scene.light_count, _light_bitmask_target);
 
         if (_inputs.entity_registry && _camera_system)
         {
@@ -668,7 +708,8 @@ namespace tempest::render_system
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
         const auto& pbr_data = add_pbr_opaque_pass(_graph, _pool, _shaders, skybox_data.hdr_color,
                                                    depth_data.depth_texture, _shadow_atlas_target,
-                                                   _opaque_draw_count, _opaque_draw_offset);
+                                                   _opaque_draw_count, _opaque_draw_offset,
+                                                   culling_data.light_bitmask_buffer);
 
         const auto& clear_data = add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target,
                                                              width, height);
@@ -681,7 +722,8 @@ namespace tempest::render_system
                                                                 gather_data.zeroth_moment_texture,
                                                                 depth_data.depth_texture,
                                                                 _transparent_draw_count, _transparent_draw_offset,
-                                                                _shadow_atlas_target);
+                                                                _shadow_atlas_target,
+                                                                culling_data.light_bitmask_buffer);
         const auto& blend_data = add_transparency_blend_pass(_graph, _pool, _shaders, pbr_data.hdr_color,
                                                             resolve_data.accum_texture, gather_data.zeroth_moment_texture);
 

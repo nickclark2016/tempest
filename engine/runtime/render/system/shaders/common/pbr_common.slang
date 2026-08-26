@@ -1,4 +1,5 @@
 import "camera";
+import "clusters";
 import "consts";
 import "lighting";
 import "material";
@@ -110,12 +111,78 @@ BxDFGeometry build_bxdf_geometry(const PixelData px) {
     return g;
 }
 
+float compute_smooth_distance_attenuation(float3 pos_to_light, float radius) {
+    float distance_squared = dot(pos_to_light, pos_to_light);
+    float factor = distance_squared / max(radius * radius, 1e-4);
+    float smooth = saturate(1.0 - factor * factor);
+    return (smooth * smooth) / max(distance_squared, 1e-4);
+}
+
+void evaluate_clustered_point_lights(
+    const PixelData px,
+    const BxDFParams params,
+    const BxDFGeometry geometry,
+    const float3 world_pos,
+    const float3 view_pos,
+    const float2 screen_coord,
+    float3 wo,
+    float n_dot_v,
+    SceneGlobals* scene,
+    uint64_t light_bitmask_address,
+    inout half4 color)
+{
+    uint64_t bitmask_addr = light_bitmask_address != 0 ? light_bitmask_address : scene.light_bitmask_address;
+    if (scene.light_count == 0 || bitmask_addr == 0 || scene.lights_address == 0) {
+        return;
+    }
+
+    var cluster_idx_opt = get_cluster_index(view_pos, screen_coord, scene);
+    if (!cluster_idx_opt.hasValue) {
+        return;
+    }
+
+    uint cluster_idx = cluster_idx_opt.value;
+    uint* bitmasks = (uint*)bitmask_addr;
+    LightPayload* lights = (LightPayload*)scene.lights_address;
+    uint words_per_cluster = scene.words_per_cluster;
+    uint base_mask_idx = cluster_idx * words_per_cluster;
+
+    let bxdf = OpenPBRBxDF();
+
+    for (uint w = 0; w < words_per_cluster; ++w) {
+        uint mask = bitmasks[base_mask_idx + w];
+        uint base_light_idx = w * 32;
+
+        while (mask != 0) {
+            uint bit = firstbitlow(mask);
+            uint light_idx = base_light_idx + bit;
+            LightPayload light = lights[light_idx];
+
+            float3 pos_to_light = light.position_falloff.xyz - world_pos;
+            float3 wi = normalize(pos_to_light);
+            float n_dot_l = saturate(dot(float3(px.shading_normal), wi));
+
+            if (n_dot_l > 0.0) {
+                let bxdf_res = bxdf.evaluate(params, geometry, wi, wo, n_dot_v, n_dot_l);
+                float attenuation = compute_smooth_distance_attenuation(pos_to_light, light.position_falloff.w);
+                float3 radiance = light.color_intensity.rgb * light.color_intensity.w * attenuation;
+                color.rgb += half3(bxdf_res.bxdf * radiance * n_dot_l);
+            }
+
+            mask &= ~(1u << bit);
+        }
+    }
+}
+
 float4 evaluate_material_openpbr(
     const PixelData px,
     const MaterialState mat_state,
     SceneGlobals* scene,
     const float3 world_pos,
-    float shadow_factor = 1.0)
+    const float3 view_pos,
+    const float2 screen_coord,
+    float shadow_factor = 1.0,
+    uint64_t light_bitmask_address = 0)
 {
     let bxdf = OpenPBRBxDF();
     BxDFParams params = build_bxdf_params(px, mat_state);
@@ -148,6 +215,12 @@ float4 evaluate_material_openpbr(
 
         color.rgb += half3(bxdf_result.bxdf * (radiance * shadow_factor) * n_dot_l);
     }
+
+    // Clustered Point Lights
+    evaluate_clustered_point_lights(
+        px, params, geometry,
+        world_pos, view_pos, screen_coord,
+        wo, n_dot_v, scene, light_bitmask_address, color);
 
     // Emissive
     apply_emissive(mat_state, color, px.uv);

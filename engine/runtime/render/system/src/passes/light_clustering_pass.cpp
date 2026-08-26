@@ -1,7 +1,59 @@
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 
+#include <cmath>
+#include <tempest/algorithm.hpp>
+
 namespace tempest::render_system
 {
+    auto compute_cluster_grid_dimensions(uint32_t width, uint32_t height) -> math::vec4<uint32_t>
+    {
+        if (width == 0 || height == 0)
+        {
+            return {16, 9, 24, 64};
+        }
+
+        const auto aspect = static_cast<float>(width) / static_cast<float>(height);
+        auto cx = 16U;
+        auto cy = 9U;
+        const auto cz = 24U;
+
+        if (aspect >= 3.0F)
+        {
+            cx = 32U;
+            cy = 9U;
+        }
+        else if (aspect >= 2.1F)
+        {
+            cx = 21U;
+            cy = 9U;
+        }
+        else if (aspect >= 1.7F)
+        {
+            cx = 16U;
+            cy = 9U;
+        }
+        else if (aspect >= 1.5F)
+        {
+            cx = 16U;
+            cy = 10U;
+        }
+        else if (aspect >= 1.2F)
+        {
+            cx = 16U;
+            cy = 12U;
+        }
+        else
+        {
+            const auto target_ratio = 16.0F / 9.0F;
+            const auto scaled_x = std::round(16.0F * (aspect / target_ratio));
+            cx = tempest::max(1U, static_cast<uint32_t>(scaled_x));
+            cy = 9U;
+        }
+
+        const auto tile_size_px = (width + cx - 1) / cx;
+        return {cx, cy, cz, tile_size_px};
+    }
+
     auto add_light_clustering_pass(render_graph::render_graph& graph, [[maybe_unused]] resource_pool& pool,
                                    shader_manager& shaders,
                                    render_graph::rg_buffer_id cluster_bounds_buf,
@@ -12,11 +64,24 @@ namespace tempest::render_system
                                    uint32_t cluster_count_z)
         -> const light_clustering_pass_data&
     {
-        const auto tile_size_px = (screen_width + cluster_count_x - 1) / cluster_count_x;
+        auto grid_dims = math::vec4<uint32_t>{cluster_count_x, cluster_count_y, cluster_count_z, 0};
+        if (cluster_count_x == 0 || cluster_count_y == 0 || cluster_count_z == 0)
+        {
+            grid_dims = compute_cluster_grid_dimensions(screen_width, screen_height);
+        }
+        else
+        {
+            grid_dims.w = (screen_width + cluster_count_x - 1) / cluster_count_x;
+        }
+
+        const auto actual_cx = grid_dims.x;
+        const auto actual_cy = grid_dims.y;
+        const auto actual_cz = grid_dims.z;
+
         const auto create_info = cluster_grid_create_info{
             .inv_projection = cam.inv_proj,
             .screen_bounds = {static_cast<float>(screen_width), static_cast<float>(screen_height), 0.1F, 1000.0F},
-            .workgroup_count_tile_size_px = {cluster_count_x, cluster_count_y, cluster_count_z, tile_size_px},
+            .workgroup_count_tile_size_px = grid_dims,
         };
 
         auto pipe_h = shaders.find_compute_pipeline("build_cluster_grid_pipeline");
@@ -38,7 +103,7 @@ namespace tempest::render_system
                                                            rhi::resource_access::write);
                 data.create_info = create_info;
             },
-            [&shaders, cluster_count_x, cluster_count_y, cluster_count_z, pipe](
+            [&shaders, actual_cx, actual_cy, actual_cz, pipe](
                 const light_clustering_pass_data& data,
                 render_graph::pass_execution_context& ctx,
                 rhi::command_list& pass_cmd) {
@@ -60,7 +125,7 @@ namespace tempest::render_system
                 pass_cmd.push_constants(rhi::shader_stage::compute, 0,
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
-                pass_cmd.dispatch(cluster_count_x, cluster_count_y, cluster_count_z);
+                pass_cmd.dispatch(actual_cx, actual_cy, actual_cz);
             });
     }
 } // namespace tempest::render_system
