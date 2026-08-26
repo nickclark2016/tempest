@@ -2,6 +2,8 @@
 #define tempest_render_system_renderer_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/ecs_events.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
@@ -12,6 +14,7 @@
 #include <tempest/render_system/shader_manager.hpp>
 #include <tempest/render_system/shelf_allocator.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/transform_component.hpp>
 
 namespace tempest::render_system
 {
@@ -24,6 +27,7 @@ namespace tempest::render_system
         rhi::data_format tonemapped_color_format{rhi::data_format::rgba8_srgb};
         bool enable_ssao{false};
         shadow_debug_mode shadow_debug{shadow_debug_mode::none};
+        float cluster_far_plane{1000.0F};
         resource_pool_config pool_config{};
     };
 
@@ -168,6 +172,16 @@ namespace tempest::render_system
             return _shadow_debug_mode;
         }
 
+        [[nodiscard]] auto get_tracked_point_light_count() const noexcept -> size_t
+        {
+            return _point_light_entities.size();
+        }
+
+        [[nodiscard]] auto get_cached_lights() const noexcept -> span<const light_payload>
+        {
+            return _cached_lights;
+        }
+
       private:
         rhi::device* _device{nullptr};
         logger* _log{nullptr};
@@ -199,6 +213,26 @@ namespace tempest::render_system
         uint32_t _transparent_draw_count{0};
         uint32_t _transparent_draw_offset{0};
         shadow_debug_mode _shadow_debug_mode{shadow_debug_mode::none};
+
+        // Light Tracking & ECS Subscriptions
+        flat_unordered_map<ecs::entity, size_t> _point_light_indices{};
+        vector<ecs::entity> _point_light_entities{};
+        vector<light_payload> _cached_lights{};
+        uint32_t _lights_dirty_count{0};
+
+        event::event_registry* _events{nullptr};
+        event::subscription_handle<ecs::component_added_event<ecs::entity, point_light_component>> _point_light_added_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, point_light_component>> _point_light_replaced_sub{};
+        event::subscription_handle<ecs::component_removed_event<ecs::entity, point_light_component>> _point_light_removed_sub{};
+        event::subscription_handle<ecs::component_added_event<ecs::entity, directional_light_component>> _dir_light_added_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, directional_light_component>> _dir_light_replaced_sub{};
+        event::subscription_handle<ecs::component_removed_event<ecs::entity, directional_light_component>> _dir_light_removed_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, ecs::transform_component>> _transform_replaced_sub{};
+        event::subscription_handle<ecs::entity_destroyed_event<ecs::entity>> _entity_destroyed_sub{};
+
+        void _subscribe_light_events();
+        void _unsubscribe_light_events();
+        void _init_lights_from_registry();
     };
 } // namespace tempest::render_system
 

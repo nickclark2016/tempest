@@ -1,5 +1,6 @@
 #include <tempest/render_system/renderer.hpp>
 
+#include <cmath>
 #include <tempest/render_system/passes/depth_prepass.hpp>
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
 #include <tempest/render_system/passes/pbr_opaque_pass.hpp>
@@ -65,10 +66,17 @@ namespace tempest::render_system
           _shadow_debug_mode{cfg.shadow_debug}
     {
         _graph.get_allocator().set_frames_in_flight(_cfg.pool_config.frames_in_flight);
+        if (_inputs.entity_registry != nullptr)
+        {
+            _events = &_inputs.entity_registry->event_registry();
+            _subscribe_light_events();
+            _init_lights_from_registry();
+        }
     }
 
     renderer::~renderer()
     {
+        _unsubscribe_light_events();
         if (_device)
         {
             _graph.get_allocator().release_all(*_device);
@@ -98,20 +106,32 @@ namespace tempest::render_system
           _opaque_draw_offset{other._opaque_draw_offset},
           _transparent_draw_count{other._transparent_draw_count},
           _transparent_draw_offset{other._transparent_draw_offset},
-          _shadow_debug_mode{other._shadow_debug_mode}
+          _shadow_debug_mode{other._shadow_debug_mode},
+          _point_light_indices{tempest::move(other._point_light_indices)},
+          _point_light_entities{tempest::move(other._point_light_entities)},
+          _cached_lights{tempest::move(other._cached_lights)},
+          _lights_dirty_count{other._lights_dirty_count},
+          _events{other._events}
     {
+        other._unsubscribe_light_events();
         other._device = nullptr;
         other._camera_system = nullptr;
+        other._events = nullptr;
+
+        _subscribe_light_events();
     }
 
     renderer& renderer::operator=(renderer&& other) noexcept
     {
         if (this != &other)
         {
+            _unsubscribe_light_events();
             if (_device)
             {
                 _graph.get_allocator().release_all(*_device);
             }
+
+            other._unsubscribe_light_events();
 
             _device = other._device;
             _log = other._log;
@@ -139,9 +159,17 @@ namespace tempest::render_system
             _transparent_draw_count = other._transparent_draw_count;
             _transparent_draw_offset = other._transparent_draw_offset;
             _shadow_debug_mode = other._shadow_debug_mode;
+            _point_light_indices = tempest::move(other._point_light_indices);
+            _point_light_entities = tempest::move(other._point_light_entities);
+            _cached_lights = tempest::move(other._cached_lights);
+            _lights_dirty_count = other._lights_dirty_count;
+            _events = other._events;
 
             other._device = nullptr;
             other._camera_system = nullptr;
+            other._events = nullptr;
+
+            _subscribe_light_events();
         }
         return *this;
     }
@@ -406,6 +434,42 @@ namespace tempest::render_system
             _pool.write_objects(objects);
         }
 
+        // 2. Automatically update dynamic lights from entity registry
+        if (_lights_dirty_count > 0 && _inputs.entity_registry != nullptr)
+        {
+            _cached_lights.clear();
+            _cached_lights.reserve(_point_light_entities.size());
+
+            for (const auto entity : _point_light_entities)
+            {
+                const auto* const pl = _inputs.entity_registry->try_get<point_light_component>(entity);
+                if (!pl)
+                {
+                    continue;
+                }
+
+                auto world_pos = math::vec3<float>{0.0F, 0.0F, 0.0F};
+                if (_inputs.entity_registry->try_get<ecs::transform_component>(entity))
+                {
+                    const auto world_mat = compute_world_matrix(*_inputs.entity_registry, entity);
+                    world_pos = math::vec3<float>{world_mat[3][0], world_mat[3][1], world_mat[3][2]};
+                }
+
+                auto payload = light_payload{
+                    .color_intensity = {pl->color.x, pl->color.y, pl->color.z, pl->intensity},
+                    .position_falloff = {world_pos.x, world_pos.y, world_pos.z, pl->range},
+                    .direction_angle = {0.0F, -1.0F, 0.0F, 0.0F},
+                    .type = 1,
+                    .enabled = 1,
+                    .padding = {0, 0},
+                };
+                _cached_lights.push_back(payload);
+            }
+
+            _pool.write_lights(_cached_lights);
+            --_lights_dirty_count;
+        }
+
         // Update Scene Globals
         auto scene = scene_constants{
             .projection = math::mat4<float>{1.0F},
@@ -420,6 +484,7 @@ namespace tempest::render_system
             .inv_screen_size = {1.0F / static_cast<float>(width), 1.0F / static_cast<float>(height)},
         };
 
+        auto near_plane = 0.1F;
         if (_camera_system)
         {
             auto cam_opt = _camera_system->get_active_camera();
@@ -432,7 +497,27 @@ namespace tempest::render_system
                 scene.inv_projection = cam.inv_proj;
                 scene.camera_position = cam.eye_position;
             }
+
+            auto cam_ent_opt = _camera_system->get_active_camera_entity();
+            if (cam_ent_opt.has_value() && _inputs.entity_registry)
+            {
+                if (const auto* c = _inputs.entity_registry->try_get<camera_component>(*cam_ent_opt))
+                {
+                    near_plane = c->near_plane;
+                }
+            }
         }
+
+        const auto far_plane = _cfg.cluster_far_plane;
+        const auto valid_near = near_plane > 0.0F ? near_plane : 0.1F;
+        const auto log_far_near = std::log(far_plane / valid_near);
+
+        scene.lights_address = _pool.get_lights_buffer_address();
+        scene.light_bitmask_address = 0;
+        scene.light_count = static_cast<uint32_t>(_cached_lights.size());
+        scene.words_per_cluster = (scene.light_count + 31) / 32;
+        scene.cluster_counts_tile_size = {16, 9, 24, 64};
+        scene.cluster_depth_params = {valid_near, far_plane, log_far_near, 0.0F};
 
         // Query directional sun light
         if (_inputs.entity_registry)
@@ -623,6 +708,169 @@ namespace tempest::render_system
         if (_device)
         {
             _graph.get_allocator().on_surface_resize(*_device);
+        }
+    }
+
+    void renderer::_subscribe_light_events()
+    {
+        if (_events == nullptr)
+        {
+            return;
+        }
+
+        // Point Light Added
+        _point_light_added_sub = _events->dispatcher<ecs::component_added_event<ecs::entity, point_light_component>>().subscribe(
+            [this](const ecs::component_added_event<ecs::entity, point_light_component>& evt) {
+                if (!_point_light_indices.contains(evt.entity))
+                {
+                    const auto idx = _point_light_entities.size();
+                    _point_light_indices[evt.entity] = idx;
+                    _point_light_entities.push_back(evt.entity);
+                    _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                }
+            });
+
+        // Point Light Replaced
+        _point_light_replaced_sub = _events->dispatcher<ecs::component_replaced_event<ecs::entity, point_light_component>>().subscribe(
+            [this](const ecs::component_replaced_event<ecs::entity, point_light_component>& evt) {
+                if (_point_light_indices.contains(evt.entity))
+                {
+                    _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                }
+            });
+
+        // Point Light Removed
+        _point_light_removed_sub = _events->dispatcher<ecs::component_removed_event<ecs::entity, point_light_component>>().subscribe(
+            [this](const ecs::component_removed_event<ecs::entity, point_light_component>& evt) {
+                auto it = _point_light_indices.find(evt.entity);
+                if (it != _point_light_indices.end())
+                {
+                    const auto remove_idx = it->second;
+                    const auto last_idx = _point_light_entities.size() - 1;
+                    if (remove_idx != last_idx)
+                    {
+                        const auto last_entity = _point_light_entities[last_idx];
+                        _point_light_entities[remove_idx] = last_entity;
+                        _point_light_indices[last_entity] = remove_idx;
+                    }
+                    _point_light_entities.pop_back();
+                    _point_light_indices.erase(it);
+                    _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                }
+            });
+
+        // Directional Light Added / Replaced / Removed
+        _dir_light_added_sub = _events->dispatcher<ecs::component_added_event<ecs::entity, directional_light_component>>().subscribe(
+            [this]([[maybe_unused]] const ecs::component_added_event<ecs::entity, directional_light_component>& evt) {
+                _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+            });
+
+        _dir_light_replaced_sub = _events->dispatcher<ecs::component_replaced_event<ecs::entity, directional_light_component>>().subscribe(
+            [this]([[maybe_unused]] const ecs::component_replaced_event<ecs::entity, directional_light_component>& evt) {
+                _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+            });
+
+        _dir_light_removed_sub = _events->dispatcher<ecs::component_removed_event<ecs::entity, directional_light_component>>().subscribe(
+            [this]([[maybe_unused]] const ecs::component_removed_event<ecs::entity, directional_light_component>& evt) {
+                _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+            });
+
+        // Transform Replaced (filter for tracked light entities or directional lights)
+        _transform_replaced_sub = _events->dispatcher<ecs::component_replaced_event<ecs::entity, ecs::transform_component>>().subscribe(
+            [this](const ecs::component_replaced_event<ecs::entity, ecs::transform_component>& evt) {
+                if (_point_light_indices.contains(evt.entity))
+                {
+                    _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                }
+                else if (_inputs.entity_registry && _inputs.entity_registry->has<directional_light_component>(evt.entity))
+                {
+                    _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                }
+            });
+
+        // Entity Destroyed
+        _entity_destroyed_sub = _events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().subscribe(
+            [this](const ecs::entity_destroyed_event<ecs::entity>& evt) {
+                auto it = _point_light_indices.find(evt.entity);
+                if (it != _point_light_indices.end())
+                {
+                    const auto remove_idx = it->second;
+                    const auto last_idx = _point_light_entities.size() - 1;
+                    if (remove_idx != last_idx)
+                    {
+                        const auto last_entity = _point_light_entities[last_idx];
+                        _point_light_entities[remove_idx] = last_entity;
+                        _point_light_indices[last_entity] = remove_idx;
+                    }
+                    _point_light_entities.pop_back();
+                    _point_light_indices.erase(it);
+                    _lights_dirty_count = _cfg.pool_config.frames_in_flight;
+                }
+            });
+    }
+
+    void renderer::_unsubscribe_light_events()
+    {
+        if (_events == nullptr)
+        {
+            return;
+        }
+
+        if (_point_light_added_sub != event::null_subscription<ecs::component_added_event<ecs::entity, point_light_component>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::component_added_event<ecs::entity, point_light_component>>().unsubscribe(_point_light_added_sub));
+            _point_light_added_sub = {};
+        }
+        if (_point_light_replaced_sub != event::null_subscription<ecs::component_replaced_event<ecs::entity, point_light_component>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::component_replaced_event<ecs::entity, point_light_component>>().unsubscribe(_point_light_replaced_sub));
+            _point_light_replaced_sub = {};
+        }
+        if (_point_light_removed_sub != event::null_subscription<ecs::component_removed_event<ecs::entity, point_light_component>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::component_removed_event<ecs::entity, point_light_component>>().unsubscribe(_point_light_removed_sub));
+            _point_light_removed_sub = {};
+        }
+        if (_dir_light_added_sub != event::null_subscription<ecs::component_added_event<ecs::entity, directional_light_component>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::component_added_event<ecs::entity, directional_light_component>>().unsubscribe(_dir_light_added_sub));
+            _dir_light_added_sub = {};
+        }
+        if (_dir_light_replaced_sub != event::null_subscription<ecs::component_replaced_event<ecs::entity, directional_light_component>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::component_replaced_event<ecs::entity, directional_light_component>>().unsubscribe(_dir_light_replaced_sub));
+            _dir_light_replaced_sub = {};
+        }
+        if (_dir_light_removed_sub != event::null_subscription<ecs::component_removed_event<ecs::entity, directional_light_component>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::component_removed_event<ecs::entity, directional_light_component>>().unsubscribe(_dir_light_removed_sub));
+            _dir_light_removed_sub = {};
+        }
+        if (_transform_replaced_sub != event::null_subscription<ecs::component_replaced_event<ecs::entity, ecs::transform_component>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::component_replaced_event<ecs::entity, ecs::transform_component>>().unsubscribe(_transform_replaced_sub));
+            _transform_replaced_sub = {};
+        }
+        if (_entity_destroyed_sub != event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>)
+        {
+            static_cast<void>(_events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().unsubscribe(_entity_destroyed_sub));
+            _entity_destroyed_sub = {};
+        }
+    }
+
+    void renderer::_init_lights_from_registry()
+    {
+        _point_light_indices.clear();
+        _point_light_entities.clear();
+
+        if (_inputs.entity_registry != nullptr)
+        {
+            _inputs.entity_registry->each([this](const ecs::self_component& self, const point_light_component&) {
+                const auto idx = _point_light_entities.size();
+                _point_light_indices[self.entity] = idx;
+                _point_light_entities.push_back(self.entity);
+            });
+            _lights_dirty_count = _cfg.pool_config.frames_in_flight;
         }
     }
 } // namespace tempest::render_system

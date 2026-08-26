@@ -32,6 +32,14 @@ namespace tempest::render_system
         // Screen parameters
         math::vec2<float> screen_size{1920.0F, 1080.0F};
         math::vec2<float> inv_screen_size{1.0F / 1920.0F, 1.0F / 1080.0F};
+
+        // Clustered Lighting BDA & Bitmask Configuration
+        uint64_t lights_address{0};
+        uint64_t light_bitmask_address{0};
+        uint32_t light_count{0};
+        uint32_t words_per_cluster{0}; // ceil(light_count / 32)
+        math::vec4<uint32_t> cluster_counts_tile_size{16, 9, 24, 64}; // x, y, z, tile_size_px
+        math::vec4<float> cluster_depth_params{0.1F, 1000.0F, 0.0F, 0.0F}; // near, far, log(far/near), pad
     };
 
     struct TEMPEST_API shadow_cascade_data
@@ -111,6 +119,7 @@ namespace tempest::render_system
         [[nodiscard]] auto get_texture_descriptor_index(const guid& id) const noexcept -> int16_t;
         [[nodiscard]] auto get_scene_constants_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_directional_shadow_address() const noexcept -> uint64_t;
+        [[nodiscard]] auto get_lights_buffer_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_object_buffer_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_instance_buffer_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_draw_commands_buffer_offset() const noexcept -> uint64_t;
@@ -119,6 +128,7 @@ namespace tempest::render_system
         // Dynamic per-frame buffer access
         [[nodiscard]] auto get_scene_constants_buffer() const noexcept -> rhi::buffer_handle;
         [[nodiscard]] auto get_directional_shadow_buffer() const noexcept -> rhi::buffer_handle;
+        [[nodiscard]] auto get_lights_buffer() const noexcept -> rhi::buffer_handle;
         [[nodiscard]] auto get_object_buffer() const noexcept -> rhi::buffer_handle;
         [[nodiscard]] auto get_instance_buffer() const noexcept -> rhi::buffer_handle;
         [[nodiscard]] auto get_draw_commands_buffer() const noexcept -> rhi::buffer_handle;
@@ -127,6 +137,7 @@ namespace tempest::render_system
         void advance_frame() noexcept;
         void write_scene_constants(const scene_constants& constants);
         void write_directional_shadow_data(const directional_shadow_data& data);
+        void write_lights(span<const light_payload> lights);
         void write_objects(span<const object_payload> objects);
         void write_instances(span<const uint32_t> instances);
         void write_draw_commands(span<const indexed_indirect_command> commands);
@@ -176,6 +187,7 @@ namespace tempest::render_system
         // Dynamic Upload Buffers
         rhi::buffer_handle _scene_constants_buffer{};
         rhi::buffer_handle _directional_shadow_buffer{};
+        rhi::buffer_handle _lights_buffer{};
         rhi::buffer_handle _object_buffer{};
         rhi::buffer_handle _instance_buffer{};
         rhi::buffer_handle _draw_commands_buffer{};

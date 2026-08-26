@@ -4,22 +4,13 @@
 #include <tempest/api.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
+#include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/resource_pool.hpp>
 #include <tempest/render_system/shader_manager.hpp>
 #include <tempest/vec4.hpp>
 
 namespace tempest::render_system
 {
-    struct TEMPEST_API light_payload
-    {
-        math::vec4<float> color_intensity{1.0F, 1.0F, 1.0F, 1.0F};
-        math::vec4<float> position_falloff{0.0F, 0.0F, 0.0F, 10.0F};
-        math::vec4<float> direction_angle{0.0F, -1.0F, 0.0F, 0.0F};
-        uint32_t type{0};
-        uint32_t enabled{1};
-        uint32_t padding[2]{0, 0};
-    };
-
     struct TEMPEST_API light_grid_range
     {
         uint32_t offset{0};

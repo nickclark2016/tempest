@@ -127,6 +127,7 @@ namespace tempest::render_system
           _point_sampler_descriptor{other._point_sampler_descriptor},
           _scene_constants_buffer{other._scene_constants_buffer},
           _directional_shadow_buffer{other._directional_shadow_buffer},
+          _lights_buffer{other._lights_buffer},
           _object_buffer{other._object_buffer},
           _instance_buffer{other._instance_buffer},
           _draw_commands_buffer{other._draw_commands_buffer}
@@ -140,6 +141,7 @@ namespace tempest::render_system
         other._point_sampler = {};
         other._scene_constants_buffer = {};
         other._directional_shadow_buffer = {};
+        other._lights_buffer = {};
         other._object_buffer = {};
         other._instance_buffer = {};
         other._draw_commands_buffer = {};
@@ -170,6 +172,7 @@ namespace tempest::render_system
             _point_sampler_descriptor = other._point_sampler_descriptor;
             _scene_constants_buffer = other._scene_constants_buffer;
             _directional_shadow_buffer = other._directional_shadow_buffer;
+            _lights_buffer = other._lights_buffer;
             _object_buffer = other._object_buffer;
             _instance_buffer = other._instance_buffer;
             _draw_commands_buffer = other._draw_commands_buffer;
@@ -183,6 +186,7 @@ namespace tempest::render_system
             other._point_sampler = {};
             other._scene_constants_buffer = {};
             other._directional_shadow_buffer = {};
+            other._lights_buffer = {};
             other._object_buffer = {};
             other._instance_buffer = {};
             other._draw_commands_buffer = {};
@@ -239,6 +243,13 @@ namespace tempest::render_system
             .memory_usage = rhi::memory_usage::upload,
             .usage = rhi::buffer_usage::uniform_buffer | rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_dst,
             .name = "DirectionalShadowBuffer",
+        });
+
+        _lights_buffer = _device->create_buffer(rhi::buffer_desc{
+            .size = sizeof(light_payload) * _cfg.max_lights * _cfg.frames_in_flight,
+            .memory_usage = rhi::memory_usage::upload,
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
+            .name = "LightsPayloadBuffer",
         });
 
         _object_buffer = _device->create_buffer(rhi::buffer_desc{
@@ -847,6 +858,12 @@ namespace tempest::render_system
         return _directional_shadow_buffer.gpu_address + static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data);
     }
 
+    auto resource_pool::get_lights_buffer_address() const noexcept -> uint64_t
+    {
+        return _lights_buffer.gpu_address +
+               static_cast<uint64_t>(_frame_slot) * sizeof(light_payload) * _cfg.max_lights;
+    }
+
     auto resource_pool::get_object_buffer_address() const noexcept -> uint64_t
     {
         return _object_buffer.gpu_address +
@@ -872,6 +889,11 @@ namespace tempest::render_system
     auto resource_pool::get_directional_shadow_buffer() const noexcept -> rhi::buffer_handle
     {
         return _directional_shadow_buffer;
+    }
+
+    auto resource_pool::get_lights_buffer() const noexcept -> rhi::buffer_handle
+    {
+        return _lights_buffer;
     }
 
     auto resource_pool::get_object_buffer() const noexcept -> rhi::buffer_handle
@@ -912,6 +934,17 @@ namespace tempest::render_system
         {
             auto* dst = static_cast<directional_shadow_data*>(_directional_shadow_buffer.cpu_address) + _frame_slot;
             std::memcpy(dst, &data, sizeof(data));
+        }
+    }
+
+    void resource_pool::write_lights(span<const light_payload> lights)
+    {
+        if (_lights_buffer.cpu_address && !lights.empty())
+        {
+            const auto count = tempest::min(lights.size(), static_cast<size_t>(_cfg.max_lights));
+            auto* dst = static_cast<light_payload*>(_lights_buffer.cpu_address) +
+                        static_cast<size_t>(_frame_slot) * _cfg.max_lights;
+            std::memcpy(dst, lights.data(), count * sizeof(light_payload));
         }
     }
 
@@ -1045,6 +1078,7 @@ namespace tempest::render_system
         destroy_buf(_staging_buffer);
         destroy_buf(_scene_constants_buffer);
         destroy_buf(_directional_shadow_buffer);
+        destroy_buf(_lights_buffer);
         destroy_buf(_object_buffer);
         destroy_buf(_instance_buffer);
         destroy_buf(_draw_commands_buffer);

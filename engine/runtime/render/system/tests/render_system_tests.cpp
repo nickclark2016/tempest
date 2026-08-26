@@ -3214,6 +3214,177 @@ namespace tempest::render_system::tests
 
         dev->destroy_buffer(readback_buf);
     }
+
+    TEST(render_system_tests, resource_pool_lights_buffer_slicing_and_bda)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        {
+            auto cfg = resource_pool_config{
+                .max_lights = 16,
+                .frames_in_flight = 2,
+            };
+            auto pool = resource_pool{*dev, cfg};
+
+            EXPECT_NE(pool.get_lights_buffer().handle, 0ULL);
+            EXPECT_NE(pool.get_lights_buffer_address(), 0ULL);
+
+            // Slot 0 write
+            auto light0 = light_payload{
+                .color_intensity = {1.0F, 0.0F, 0.0F, 5.0F},
+                .position_falloff = {10.0F, 20.0F, 30.0F, 15.0F},
+                .direction_angle = {0.0F, -1.0F, 0.0F, 0.0F},
+                .type = 1,
+                .enabled = 1,
+                .padding = {0, 0},
+            };
+            pool.write_lights(span<const light_payload>{&light0, 1});
+
+            const auto lights_addr0 = pool.get_lights_buffer_address();
+
+            // Advance to Slot 1
+            pool.advance_frame();
+            EXPECT_EQ(pool.get_frame_slot(), 1U);
+
+            auto light1 = light_payload{
+                .color_intensity = {0.0F, 1.0F, 0.0F, 10.0F},
+                .position_falloff = {-5.0F, 0.0F, 5.0F, 25.0F},
+                .direction_angle = {0.0F, 0.0F, 1.0F, 0.0F},
+                .type = 1,
+                .enabled = 1,
+                .padding = {0, 0},
+            };
+            pool.write_lights(span<const light_payload>{&light1, 1});
+
+            const auto lights_addr1 = pool.get_lights_buffer_address();
+
+            // Verify BDA slicing separation
+            EXPECT_NE(lights_addr0, lights_addr1);
+            EXPECT_EQ(lights_addr1 - lights_addr0, sizeof(light_payload) * 16);
+
+            // Readback from mapped CPU pointer to verify frame isolation
+            const auto* cpu_lights = static_cast<const light_payload*>(pool.get_lights_buffer().cpu_address);
+            ASSERT_NE(cpu_lights, nullptr);
+            EXPECT_FLOAT_EQ(cpu_lights[0].color_intensity.x, 1.0F);
+            EXPECT_FLOAT_EQ(cpu_lights[0].position_falloff.x, 10.0F);
+            EXPECT_FLOAT_EQ(cpu_lights[16].color_intensity.y, 1.0F);
+            EXPECT_FLOAT_EQ(cpu_lights[16].position_falloff.x, -5.0F);
+        }
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, renderer_event_driven_point_light_registration)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        // Create pre-existing light before renderer construction to test discovery
+        auto pre_light = registry.create();
+        registry.assign(pre_light, point_light_component{
+            .color = {1.0F, 0.5F, 0.2F},
+            .intensity = 4.0F,
+            .range = 10.0F,
+        });
+        auto pre_tx = ecs::transform_component::identity();
+        pre_tx.position({1.0F, 2.0F, 3.0F});
+        registry.assign(pre_light, pre_tx);
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Verify pre-existing light discovered
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 1U);
+
+            rend->prepare_frame(1280, 720);
+            auto cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.x, 1.0F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.y, 0.5F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.z, 0.2F);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.w, 4.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.x, 1.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.y, 2.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.z, 3.0F);
+            EXPECT_FLOAT_EQ(cached[0].position_falloff.w, 10.0F);
+            EXPECT_EQ(cached[0].type, 1U);
+            EXPECT_EQ(cached[0].enabled, 1U);
+
+            // 2. Add second point light dynamically
+            auto light2 = registry.create();
+            registry.assign(light2, point_light_component{
+                .color = {0.0F, 1.0F, 0.0F},
+                .intensity = 8.0F,
+                .range = 20.0F,
+            });
+            auto tx2 = ecs::transform_component::identity();
+            tx2.position({-5.0F, 0.0F, 10.0F});
+            registry.assign(light2, tx2);
+
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 2U);
+
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 2U);
+            EXPECT_FLOAT_EQ(cached[1].color_intensity.y, 1.0F);
+            EXPECT_FLOAT_EQ(cached[1].position_falloff.x, -5.0F);
+
+            // 3. Mutate transform of light2
+            tx2.position({15.0F, 25.0F, 35.0F});
+            registry.replace(light2, tx2);
+
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 2U);
+            EXPECT_FLOAT_EQ(cached[1].position_falloff.x, 15.0F);
+            EXPECT_FLOAT_EQ(cached[1].position_falloff.y, 25.0F);
+            EXPECT_FLOAT_EQ(cached[1].position_falloff.z, 35.0F);
+
+            // 4. Mutate point light component
+            registry.replace(light2, point_light_component{
+                .color = {0.0F, 0.0F, 1.0F},
+                .intensity = 12.0F,
+                .range = 30.0F,
+            });
+
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 2U);
+            EXPECT_FLOAT_EQ(cached[1].color_intensity.z, 1.0F);
+            EXPECT_FLOAT_EQ(cached[1].color_intensity.w, 12.0F);
+            EXPECT_FLOAT_EQ(cached[1].position_falloff.w, 30.0F);
+
+            // 5. Remove component or destroy entity
+            registry.destroy(pre_light);
+            EXPECT_EQ(rend->get_tracked_point_light_count(), 1U);
+
+            rend->prepare_frame(1280, 720);
+            cached = rend->get_cached_lights();
+            ASSERT_EQ(cached.size(), 1U);
+            EXPECT_FLOAT_EQ(cached[0].color_intensity.z, 1.0F); // Remaining light is light2
+        }
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests
 
 

@@ -130,6 +130,16 @@ namespace tempest::render_system
         float range;
     };
 
+    struct TEMPEST_API light_payload
+    {
+        math::vec4<float> color_intensity{1.0F, 1.0F, 1.0F, 1.0F}; // rgb = color, w = intensity
+        math::vec4<float> position_falloff{0.0F, 0.0F, 0.0F, 10.0F}; // xyz = world position, w = range/radius
+        math::vec4<float> direction_angle{0.0F, -1.0F, 0.0F, 0.0F}; // xyz = forward direction, w = spot angle
+        uint32_t type{1}; // 0 = Directional, 1 = Point, 2 = Spot
+        uint32_t enabled{1};
+        uint32_t padding[2]{0, 0};
+    };
+
     enum class shadow_debug_mode : uint32_t
     {
         none = 0,
