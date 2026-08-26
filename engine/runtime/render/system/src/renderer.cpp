@@ -64,6 +64,7 @@ namespace tempest::render_system
           _graph{cfg.render_width, cfg.render_height},
           _shadow_debug_mode{cfg.shadow_debug}
     {
+        _graph.get_allocator().set_frames_in_flight(_cfg.pool_config.frames_in_flight);
     }
 
     renderer::~renderer()
@@ -328,9 +329,13 @@ namespace tempest::render_system
         _transparent_draw_offset = _opaque_draw_count;
         _active_draw_count = static_cast<uint32_t>(commands.size());
 
-        _pool.write_objects(objects);
-        _pool.write_instances(instances);
-        _pool.write_draw_commands(commands);
+        for (uint32_t slot = 0; slot < _cfg.pool_config.frames_in_flight; ++slot)
+        {
+            _pool.write_objects(objects);
+            _pool.write_instances(instances);
+            _pool.write_draw_commands(commands);
+            _pool.advance_frame();
+        }
     }
 
     void renderer::prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex,
@@ -338,6 +343,8 @@ namespace tempest::render_system
     {
         _shaders.process_deferred_retirements();
         _pool.advance_frame();
+        _graph.get_allocator().set_frames_in_flight(_cfg.pool_config.frames_in_flight);
+        _graph.get_allocator().set_frame_slot(_pool.get_frame_slot());
         _graph.reset();
         _graph.set_surface_size(width, height);
 

@@ -29,6 +29,7 @@ namespace tempest::render_graph
         rhi::pipeline_stage signal_stages{rhi::pipeline_stage::bottom_of_pipe};
         optional<rhi::semaphore_handle> timeline_semaphore{nullopt};
         uint64_t timeline_value{0};
+        optional<rhi::texture_handle> presented_texture{nullopt};
     };
 
     /// \brief Executes compiled render graphs onto GPU execution ports with automatic barrier insertion,

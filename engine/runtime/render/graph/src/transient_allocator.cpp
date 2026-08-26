@@ -9,17 +9,23 @@ namespace tempest::render_graph
         _active_textures.clear();
         _active_buffers.clear();
 
-        // Reset last_pass_used for the new frame across all pool items
+        // Reset last_pass_used for the new frame across pool items in the active flight slot
         for (auto& pool_tex : _texture_pool)
         {
-            pool_tex.in_use_this_frame = false;
-            pool_tex.last_pass_used = 0;
+            if (pool_tex.flight_slot == _frame_slot)
+            {
+                pool_tex.in_use_this_frame = false;
+                pool_tex.last_pass_used = 0;
+            }
         }
 
         for (auto& pool_buf : _buffer_pool)
         {
-            pool_buf.in_use_this_frame = false;
-            pool_buf.last_pass_used = 0;
+            if (pool_buf.flight_slot == _frame_slot)
+            {
+                pool_buf.in_use_this_frame = false;
+                pool_buf.last_pass_used = 0;
+            }
         }
 
         // 1. Allocate / Recycle Textures
@@ -110,7 +116,8 @@ namespace tempest::render_graph
             for (size_t i = 0; i < _texture_pool.size(); ++i)
             {
                 auto& p = _texture_pool[i];
-                if (p.desc.width == req_desc.width && p.desc.height == req_desc.height &&
+                if (p.flight_slot == _frame_slot &&
+                    p.desc.width == req_desc.width && p.desc.height == req_desc.height &&
                     p.desc.depth == req_desc.depth && p.desc.format == req_desc.format &&
                     p.desc.usage == req_desc.usage && p.desc.memory_usage == req_desc.memory_usage &&
                     p.desc.mip_levels == req_desc.mip_levels && p.desc.array_layers == req_desc.array_layers)
@@ -174,6 +181,7 @@ namespace tempest::render_graph
                     .is_surface_relative = (reg_tex.desc.size.mode == size_mode::surface_relative),
                     .in_use_this_frame = true,
                     .last_pass_used = lifetime.last_pass,
+                    .flight_slot = _frame_slot,
                 });
 
                 _active_textures[tex_id] = physical_texture_allocation{
@@ -247,7 +255,8 @@ namespace tempest::render_graph
             for (size_t i = 0; i < _buffer_pool.size(); ++i)
             {
                 auto& p = _buffer_pool[i];
-                if (p.desc.size >= req_desc.size && p.desc.usage == req_desc.usage &&
+                if (p.flight_slot == _frame_slot &&
+                    p.desc.size >= req_desc.size && p.desc.usage == req_desc.usage &&
                     p.desc.memory_usage == req_desc.memory_usage)
                 {
                     if (!p.in_use_this_frame || p.last_pass_used < lifetime.first_pass)
@@ -280,6 +289,7 @@ namespace tempest::render_graph
                     .desc = req_desc,
                     .in_use_this_frame = true,
                     .last_pass_used = lifetime.last_pass,
+                    .flight_slot = _frame_slot,
                 });
 
                 _active_buffers[buf_id] = physical_buffer_allocation{

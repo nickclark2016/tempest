@@ -97,8 +97,8 @@ namespace tempest::render_system
 
                 const auto constants = transparency_gather_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
-                    .objects_address = pool.get_object_buffer().gpu_address,
-                    .instance_indices_address = pool.get_instance_buffer().gpu_address,
+                    .objects_address = pool.get_object_buffer_address(),
+                    .instance_indices_address = pool.get_instance_buffer_address(),
                     .directional_shadow_address = pool.get_directional_shadow_address(),
                     .moments_storage_index = moments_idx,
                     .zeroth_moment_storage_index = zeroth_idx,
@@ -111,7 +111,8 @@ namespace tempest::render_system
                 pass_cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
-                const auto byte_offset = static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
+                const auto byte_offset = pool.get_draw_commands_buffer_offset() +
+                                         static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
                 pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, data.draw_count,
                                                sizeof(indexed_indirect_command));
             });

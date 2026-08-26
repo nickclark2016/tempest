@@ -242,21 +242,21 @@ namespace tempest::render_system
         });
 
         _object_buffer = _device->create_buffer(rhi::buffer_desc{
-            .size = sizeof(object_payload) * _cfg.max_object_count,
+            .size = sizeof(object_payload) * _cfg.max_object_count * _cfg.frames_in_flight,
             .memory_usage = rhi::memory_usage::upload,
             .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
             .name = "ObjectPayloadBuffer",
         });
 
         _instance_buffer = _device->create_buffer(rhi::buffer_desc{
-            .size = sizeof(uint32_t) * _cfg.max_instance_count,
+            .size = sizeof(uint32_t) * _cfg.max_instance_count * _cfg.frames_in_flight,
             .memory_usage = rhi::memory_usage::upload,
             .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
             .name = "InstanceBuffer",
         });
 
         _draw_commands_buffer = _device->create_buffer(rhi::buffer_desc{
-            .size = sizeof(indexed_indirect_command) * _cfg.max_draw_command_count,
+            .size = sizeof(indexed_indirect_command) * _cfg.max_draw_command_count * _cfg.frames_in_flight,
             .memory_usage = rhi::memory_usage::upload,
             .usage = rhi::buffer_usage::indirect_buffer | rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
             .name = "DrawCommandsBuffer",
@@ -847,6 +847,23 @@ namespace tempest::render_system
         return _directional_shadow_buffer.gpu_address + static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data);
     }
 
+    auto resource_pool::get_object_buffer_address() const noexcept -> uint64_t
+    {
+        return _object_buffer.gpu_address +
+               static_cast<uint64_t>(_frame_slot) * sizeof(object_payload) * _cfg.max_object_count;
+    }
+
+    auto resource_pool::get_instance_buffer_address() const noexcept -> uint64_t
+    {
+        return _instance_buffer.gpu_address +
+               static_cast<uint64_t>(_frame_slot) * sizeof(uint32_t) * _cfg.max_instance_count;
+    }
+
+    auto resource_pool::get_draw_commands_buffer_offset() const noexcept -> uint64_t
+    {
+        return static_cast<uint64_t>(_frame_slot) * sizeof(indexed_indirect_command) * _cfg.max_draw_command_count;
+    }
+
     auto resource_pool::get_scene_constants_buffer() const noexcept -> rhi::buffer_handle
     {
         return _scene_constants_buffer;
@@ -903,7 +920,9 @@ namespace tempest::render_system
         if (_object_buffer.cpu_address && !objects.empty())
         {
             const auto count = tempest::min(objects.size(), static_cast<size_t>(_cfg.max_object_count));
-            std::memcpy(_object_buffer.cpu_address, objects.data(), count * sizeof(object_payload));
+            auto* dst = static_cast<object_payload*>(_object_buffer.cpu_address) +
+                        static_cast<size_t>(_frame_slot) * _cfg.max_object_count;
+            std::memcpy(dst, objects.data(), count * sizeof(object_payload));
         }
     }
 
@@ -912,7 +931,9 @@ namespace tempest::render_system
         if (_instance_buffer.cpu_address && !instances.empty())
         {
             const auto count = tempest::min(instances.size(), static_cast<size_t>(_cfg.max_instance_count));
-            std::memcpy(_instance_buffer.cpu_address, instances.data(), count * sizeof(uint32_t));
+            auto* dst = static_cast<uint32_t*>(_instance_buffer.cpu_address) +
+                        static_cast<size_t>(_frame_slot) * _cfg.max_instance_count;
+            std::memcpy(dst, instances.data(), count * sizeof(uint32_t));
         }
     }
 
@@ -921,7 +942,9 @@ namespace tempest::render_system
         if (_draw_commands_buffer.cpu_address && !commands.empty())
         {
             const auto count = tempest::min(commands.size(), static_cast<size_t>(_cfg.max_draw_command_count));
-            std::memcpy(_draw_commands_buffer.cpu_address, commands.data(), count * sizeof(indexed_indirect_command));
+            auto* dst = static_cast<indexed_indirect_command*>(_draw_commands_buffer.cpu_address) +
+                        static_cast<size_t>(_frame_slot) * _cfg.max_draw_command_count;
+            std::memcpy(dst, commands.data(), count * sizeof(indexed_indirect_command));
         }
     }
 

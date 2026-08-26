@@ -351,6 +351,7 @@ namespace tempest::rhi::examples
             .signal_stages = rhi::pipeline_stage::bottom_of_pipe,
             .timeline_semaphore = info.timeline_semaphore,
             .timeline_value = info.timeline_value,
+            .presented_texture = info.swapchain_texture,
         };
         [[maybe_unused]] const auto exec_res = _render_graph->execute(info.dev, sync);
     }

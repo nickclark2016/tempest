@@ -62,8 +62,6 @@ namespace tempest::render_graph
 
             cmd.begin();
 
-            auto active_color_attachment_handles = vector<rhi::texture_handle>{};
-
             for (const auto pass_idx : batch.pass_indices)
             {
                 if (pass_idx >= all_passes.size())
@@ -138,19 +136,6 @@ namespace tempest::render_graph
                                 .store_op = access.store_op,
                                 .clear_value = access.clear_color,
                             });
-                            bool already_added = false;
-                            for (const auto h : active_color_attachment_handles)
-                            {
-                                if (h.handle == alloc->handle.handle)
-                                {
-                                    already_added = true;
-                                    break;
-                                }
-                            }
-                            if (!already_added)
-                            {
-                                active_color_attachment_handles.push_back(alloc->handle);
-                            }
                             render_width = alloc->size.width;
                             render_height = alloc->size.height;
                         }
@@ -207,31 +192,29 @@ namespace tempest::render_graph
 
             const auto is_last_batch = (batch_idx + 1 == sync.queue_batches.size());
 
-            // 3. If this is the final presenting batch, transition written color attachments to present layout
-            if (is_last_batch && frame_sync.signal_semaphore.has_value())
+            // 3. If this is the final presenting batch and an explicitly presented texture is provided, transition it to present layout
+            if (is_last_batch && frame_sync.signal_semaphore.has_value() && frame_sync.presented_texture.has_value())
             {
-                for (const auto tex_handle : active_color_attachment_handles)
-                {
-                    const auto present_barrier = rhi::texture_barrier{
-                        .texture = tex_handle,
-                        .src =
-                            {
-                                .stages = rhi::pipeline_stage::attachment_output,
-                                .access = rhi::resource_access::write,
-                                .layout = rhi::image_layout::general,
-                            },
-                        .dst =
-                            {
-                                .stages = rhi::pipeline_stage::bottom_of_pipe,
-                                .access = rhi::resource_access::none,
-                                .layout = rhi::image_layout::present,
-                            },
-                    };
-                    cmd.pipeline_barrier(span<const rhi::texture_barrier>{&present_barrier, 1}, {});
-                    _barrier_solver.set_texture_state(tex_handle.handle, rhi::pipeline_stage::bottom_of_pipe,
-                                                      rhi::resource_access::none, rhi::image_layout::present,
-                                                      queue_type::graphics);
-                }
+                const auto tex_handle = *frame_sync.presented_texture;
+                const auto present_barrier = rhi::texture_barrier{
+                    .texture = tex_handle,
+                    .src =
+                        {
+                            .stages = rhi::pipeline_stage::attachment_output,
+                            .access = rhi::resource_access::write,
+                            .layout = rhi::image_layout::general,
+                        },
+                    .dst =
+                        {
+                            .stages = rhi::pipeline_stage::bottom_of_pipe,
+                            .access = rhi::resource_access::none,
+                            .layout = rhi::image_layout::present,
+                        },
+                };
+                cmd.pipeline_barrier(span<const rhi::texture_barrier>{&present_barrier, 1}, {});
+                _barrier_solver.set_texture_state(tex_handle.handle, rhi::pipeline_stage::bottom_of_pipe,
+                                                  rhi::resource_access::none, rhi::image_layout::present,
+                                                  queue_type::graphics);
             }
 
             cmd.end();

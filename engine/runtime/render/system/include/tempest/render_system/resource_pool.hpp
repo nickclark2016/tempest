@@ -111,6 +111,10 @@ namespace tempest::render_system
         [[nodiscard]] auto get_texture_descriptor_index(const guid& id) const noexcept -> int16_t;
         [[nodiscard]] auto get_scene_constants_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_directional_shadow_address() const noexcept -> uint64_t;
+        [[nodiscard]] auto get_object_buffer_address() const noexcept -> uint64_t;
+        [[nodiscard]] auto get_instance_buffer_address() const noexcept -> uint64_t;
+        [[nodiscard]] auto get_draw_commands_buffer_offset() const noexcept -> uint64_t;
+        [[nodiscard]] auto get_frame_slot() const noexcept -> uint32_t { return _frame_slot; }
 
         // Dynamic per-frame buffer access
         [[nodiscard]] auto get_scene_constants_buffer() const noexcept -> rhi::buffer_handle;

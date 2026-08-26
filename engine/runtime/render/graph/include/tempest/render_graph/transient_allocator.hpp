@@ -21,6 +21,7 @@ namespace tempest::render_graph
         bool is_surface_relative = false;
         bool in_use_this_frame = false;
         uint32_t last_pass_used = 0;
+        uint32_t flight_slot = 0;
     };
 
     struct pooled_buffer
@@ -30,6 +31,7 @@ namespace tempest::render_graph
         rhi::buffer_desc desc{};
         bool in_use_this_frame = false;
         uint32_t last_pass_used = 0;
+        uint32_t flight_slot = 0;
     };
 
     struct physical_texture_allocation
@@ -61,6 +63,34 @@ namespace tempest::render_graph
         transient_allocator(transient_allocator&&) noexcept = default;
         transient_allocator& operator=(transient_allocator&&) noexcept = default;
 
+        void set_frames_in_flight(uint32_t count) noexcept
+        {
+            _frames_in_flight = (count > 0) ? count : 1;
+        }
+
+        void set_frame_slot(uint32_t slot) noexcept
+        {
+            _frame_slot = (_frames_in_flight > 0) ? (slot % _frames_in_flight) : 0;
+        }
+
+        void advance_frame() noexcept
+        {
+            if (_frames_in_flight > 0)
+            {
+                _frame_slot = (_frame_slot + 1) % _frames_in_flight;
+            }
+        }
+
+        [[nodiscard]] auto get_frame_slot() const noexcept -> uint32_t
+        {
+            return _frame_slot;
+        }
+
+        [[nodiscard]] auto get_frames_in_flight() const noexcept -> uint32_t
+        {
+            return _frames_in_flight;
+        }
+
         /// \brief Allocate and recycle physical resources based on compiled DAG lifetime intervals.
         void allocate(rhi::device& dev, const compiled_dag& dag, span<const registered_texture> textures,
                       span<const registered_buffer> buffers, uint32_t surface_width, uint32_t surface_height);
@@ -85,6 +115,9 @@ namespace tempest::render_graph
         }
 
       private:
+        uint32_t _frames_in_flight{1};
+        uint32_t _frame_slot{0};
+
         vector<pooled_texture> _texture_pool;
         vector<pooled_buffer> _buffer_pool;
 

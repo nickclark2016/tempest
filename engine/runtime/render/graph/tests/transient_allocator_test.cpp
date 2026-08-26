@@ -397,4 +397,70 @@ namespace tempest::render_graph
         EXPECT_EQ(dev.destroyed_buffers, 1U);
         EXPECT_EQ(allocator.get_buffer_pool_count(), 0U);
     }
+
+    TEST(transient_allocator_test, multi_frame_in_flight_pool_isolation)
+    {
+        auto dev = mock_device{};
+        auto allocator = transient_allocator{};
+        allocator.set_frames_in_flight(2);
+
+        const auto textures = vector<registered_texture>{
+            init_list,
+            registered_texture{
+                .id = 0,
+                .desc = rg_texture_desc{
+                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                    .format = rhi::data_format::rgba8_unorm,
+                    .name = "ColorTarget",
+                },
+            },
+        };
+
+        auto lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = lifetimes,
+            .buffer_lifetimes = {},
+        };
+
+        // Frame 0 (slot 0)
+        allocator.set_frame_slot(0);
+        allocator.allocate(dev, dag, textures, {}, 1920, 1080);
+        EXPECT_EQ(dev.created_textures, 1U);
+        const auto* tex_slot0 = allocator.get_texture(0);
+        ASSERT_NE(tex_slot0, nullptr);
+        const auto handle_slot0 = tex_slot0->handle.handle;
+
+        // Frame 1 (slot 1) - running concurrently, must not recycle slot 0's active texture
+        allocator.set_frame_slot(1);
+        allocator.allocate(dev, dag, textures, {}, 1920, 1080);
+        EXPECT_EQ(dev.created_textures, 2U);
+        const auto* tex_slot1 = allocator.get_texture(0);
+        ASSERT_NE(tex_slot1, nullptr);
+        const auto handle_slot1 = tex_slot1->handle.handle;
+        EXPECT_NE(handle_slot0, handle_slot1);
+
+        // Frame 2 (slot 0) - previous frame 0 has retired, so slot 0 can recycle its own texture
+        allocator.set_frame_slot(0);
+        allocator.allocate(dev, dag, textures, {}, 1920, 1080);
+        EXPECT_EQ(dev.created_textures, 2U); // No new texture created
+        const auto* tex_slot0_reused = allocator.get_texture(0);
+        ASSERT_NE(tex_slot0_reused, nullptr);
+        EXPECT_EQ(tex_slot0_reused->handle.handle, handle_slot0);
+
+        // Frame 3 (slot 1) - slot 1 recycles its texture
+        allocator.set_frame_slot(1);
+        allocator.allocate(dev, dag, textures, {}, 1920, 1080);
+        EXPECT_EQ(dev.created_textures, 2U); // No new texture created
+        const auto* tex_slot1_reused = allocator.get_texture(0);
+        ASSERT_NE(tex_slot1_reused, nullptr);
+        EXPECT_EQ(tex_slot1_reused->handle.handle, handle_slot1);
+
+        allocator.release_all(dev);
+        EXPECT_EQ(dev.destroyed_textures, 2U);
+    }
 } // namespace tempest::render_graph

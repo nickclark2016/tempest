@@ -776,6 +776,59 @@ namespace tempest::render_system::tests
         dev->wait_idle();
     }
 
+    TEST(render_system_tests, resource_pool_multi_frame_in_flight_buffer_slicing)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        {
+            auto cfg = resource_pool_config{
+                .max_object_count = 10,
+                .max_instance_count = 10,
+                .max_draw_command_count = 10,
+                .frames_in_flight = 2,
+            };
+            auto pool = resource_pool{*dev, cfg};
+
+            // Slot 0
+            auto obj_slot0 = object_payload{.self_id = 42};
+            pool.write_objects(span<const object_payload>{&obj_slot0, 1});
+
+            const auto obj_addr0 = pool.get_object_buffer_address();
+            const auto inst_addr0 = pool.get_instance_buffer_address();
+            const auto draw_offset0 = pool.get_draw_commands_buffer_offset();
+
+            EXPECT_EQ(draw_offset0, 0U);
+
+            // Advance to Slot 1
+            pool.advance_frame();
+            EXPECT_EQ(pool.get_frame_slot(), 1U);
+
+            auto obj_slot1 = object_payload{.self_id = 99};
+            pool.write_objects(span<const object_payload>{&obj_slot1, 1});
+
+            const auto obj_addr1 = pool.get_object_buffer_address();
+            const auto inst_addr1 = pool.get_instance_buffer_address();
+            const auto draw_offset1 = pool.get_draw_commands_buffer_offset();
+
+            // Slot 1 must have distinct GPU addresses/offsets from Slot 0
+            EXPECT_NE(obj_addr0, obj_addr1);
+            EXPECT_NE(inst_addr0, inst_addr1);
+            EXPECT_EQ(draw_offset1, sizeof(indexed_indirect_command) * 10);
+            EXPECT_EQ(obj_addr1 - obj_addr0, sizeof(object_payload) * 10);
+            EXPECT_EQ(inst_addr1 - inst_addr0, sizeof(uint32_t) * 10);
+
+            // Readback from mapped CPU pointers: Slot 0's data must remain intact and isolated from Slot 1
+            const auto* cpu_objs = static_cast<const object_payload*>(pool.get_object_buffer().cpu_address);
+            ASSERT_NE(cpu_objs, nullptr);
+            EXPECT_EQ(cpu_objs[0].self_id, 42U);
+            EXPECT_EQ(cpu_objs[10].self_id, 99U);
+        }
+
+        dev->wait_idle();
+    }
+
     TEST(render_system_tests, resource_pool_texture_loading_and_mipmap_generation)
     {
         auto fixture = create_test_device();

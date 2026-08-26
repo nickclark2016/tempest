@@ -280,8 +280,8 @@ namespace tempest::render_system
                 pass_cmd.set_depth_bias(1.25F, 0.0F, 1.75F);
 
                 const auto linear_sampler_idx = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index);
-                const auto objects_addr = pool.get_object_buffer().gpu_address;
-                const auto instances_addr = pool.get_instance_buffer().gpu_address;
+                const auto objects_addr = pool.get_object_buffer_address();
+                const auto instances_addr = pool.get_instance_buffer_address();
 
                 for (const auto& cascade : cascades_to_render)
                 {
@@ -304,7 +304,8 @@ namespace tempest::render_system
                         rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
                         span<const byte>{reinterpret_cast<const byte*>(&push_constants), sizeof(push_constants)});
 
-                    const auto byte_offset = static_cast<uint64_t>(draw_offset) * sizeof(indexed_indirect_command);
+                    const auto byte_offset = pool.get_draw_commands_buffer_offset() +
+                                             static_cast<uint64_t>(draw_offset) * sizeof(indexed_indirect_command);
                     pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, draw_count,
                                                    sizeof(indexed_indirect_command));
                 }
