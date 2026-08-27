@@ -1,6 +1,7 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
+#include <tempest/relationship_component.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/tempest.hpp>
@@ -171,7 +172,8 @@ namespace tempest
         for (const auto& fmt : caps.supported_formats)
         {
             if (fmt.color_space == rhi::surface_color_space::srgb_nonlinear &&
-                (fmt.format == rhi::render_surface_format::bgra8_srgb || fmt.format == rhi::render_surface_format::rgba8_srgb))
+                (fmt.format == rhi::render_surface_format::bgra8_srgb ||
+                 fmt.format == rhi::render_surface_format::rgba8_srgb))
             {
                 selected_surface_format = fmt;
                 break;
@@ -221,16 +223,17 @@ namespace tempest
         auto acquire_sem = _device->create_binary_semaphore();
         auto timeline_sem = _device->create_timeline_semaphore();
 
-        _window_manager.register_resize_callback(handle, [this, handle]([[maybe_unused]] uint32_t w, [[maybe_unused]] uint32_t h) {
-            for (auto& win : _windows)
-            {
-                if (win.handle == handle)
+        _window_manager.register_resize_callback(
+            handle, [this, handle]([[maybe_unused]] uint32_t w, [[maybe_unused]] uint32_t h) {
+                for (auto& win : _windows)
                 {
-                    win.need_recreate = true;
-                    break;
+                    if (win.handle == handle)
+                    {
+                        win.need_recreate = true;
+                        break;
+                    }
                 }
-            }
-        });
+            });
 
         _windows.push_back(window_context{
             .handle = handle,
@@ -286,7 +289,29 @@ namespace tempest
     auto standalone_engine_context::load_entity(ecs::entity src) -> ecs::entity
     {
         auto ent = _entity_registry.duplicate(src);
-        _entities_to_load.push_back(ent);
+
+        auto collect_hierarchy = [this](ecs::entity e, auto&& self) -> void {
+            _entities_to_load.push_back(e);
+            if (const auto* rel = _entity_registry.try_get<ecs::relationship_component<ecs::entity>>(e))
+            {
+                auto child = rel->first_child;
+                while (child != ecs::tombstone)
+                {
+                    self(child, self);
+                    if (const auto* child_rel =
+                            _entity_registry.try_get<ecs::relationship_component<ecs::entity>>(child))
+                    {
+                        child = child_rel->next_sibling;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+        };
+
+        collect_hierarchy(ent, collect_hierarchy);
         return ent;
     }
 
@@ -654,9 +679,9 @@ namespace tempest
 
         auto& graphics_port = _device->get_graphics_execution_port();
         auto present_res = win.render_surface->present(graphics_port, rhi::device_sync_point{
-            .semaphore = render_sem,
-            .value = 0,
-        });
+                                                                          .semaphore = render_sem,
+                                                                          .value = 0,
+                                                                      });
 
         if (!present_res.has_value() && (present_res.error() == rhi::swapchain_error::out_of_date ||
                                          present_res.error() == rhi::swapchain_error::suboptimal))

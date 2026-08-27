@@ -30,17 +30,21 @@ struct VSOutput
 [shader("vertex")]
 VSOutput VSMain(uint vertex_id : SV_VertexID)
 {
-    ImDrawVert* vertices = (ImDrawVert*)pc.vertex_buffer;
-    ImDrawVert v = vertices[vertex_id];
+    uint* src = (uint*)pc.vertex_buffer;
+    uint base = vertex_id * 5;
+
+    float2 pos = { reinterpret<float>(src[base + 0]), reinterpret<float>(src[base + 1]) };
+    float2 uv  = { reinterpret<float>(src[base + 2]), reinterpret<float>(src[base + 3]) };
+    uint col   = src[base + 4];
 
     VSOutput output;
-    output.position = float4(v.pos * pc.scale + pc.translate, 0.0, 1.0);
-    output.uv = v.uv;
+    output.position = float4(pos * pc.scale + pc.translate, 0.0, 1.0);
+    output.uv = uv;
     output.color = float4(
-        float(v.col & 0xFF),
-        float((v.col >> 8) & 0xFF),
-        float((v.col >> 16) & 0xFF),
-        float((v.col >> 24) & 0xFF)
+        float(col & 0xFF),
+        float((col >> 8) & 0xFF),
+        float((col >> 16) & 0xFF),
+        float((col >> 24) & 0xFF)
     ) / 255.0;
 
     return output;

@@ -31,6 +31,6 @@ scoped.project('runner', function()
     }
 
     dependson {
-        'game'
+        'game-runtime'
     }
 end)

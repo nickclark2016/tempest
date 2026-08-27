@@ -210,7 +210,7 @@ namespace tempest::editor
         {
             ImGui::DockBuilderRemoveNode(dockspace_id);
             ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
             auto dock_id_main = dockspace_id;
 
@@ -271,5 +271,10 @@ namespace tempest::editor
     auto editor_context::register_on_update_callback(function<void(engine_context&)> callback) -> void
     {
         _engine_ctx->register_on_editor_update_callback(tempest::move(callback));
+    }
+
+    auto editor_context::register_menu_item(unique_ptr<menu_item> menu) -> void
+    {
+        _menus.add_menu_item(tempest::move(menu));
     }
 } // namespace tempest::editor

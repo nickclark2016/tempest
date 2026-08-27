@@ -52,6 +52,22 @@ Only mark constructors `explicit` when exactly one argument is required and it i
 - Use `explicit` for constructors where only the first parameter is required and trailing parameters have default values (e.g., `explicit camera_system(ecs::archetype_registry& registry, event::event_registry& events = default_events);`).
 - Do NOT use `explicit` on multi-parameter constructors requiring two or more arguments (e.g., `shelf_allocator(uint32_t atlas_width, uint32_t atlas_height, uint32_t padding = 4);`).
 
+### 11. Dynamic Shared Library Lifetime & Destruction Order
+When dynamically loading shared libraries (`shared_library::load`) that register callbacks, event listeners, polymorphic objects, or ECS components into engine subsystems, always ensure the engine context, UI context, and registries are destructed **before** the shared library handles unload.
+- Encapsulate the engine context and its subsystems in an explicit nested scope (`{ ... }`) within the entrypoint before the shared library handles fall out of scope.
+- Never unload a dynamic library while function pointers, lambdas, or vtables originating from that library remain active or registered in engine collections.
+
+### 12. Slang Vertex Pulling & Multi-Batch Draw Offsets
+When implementing programmable vertex pulling shaders with Slang and Vulkan Buffer Device Address (BDA):
+- Recognize that Slang maps `SV_VertexID` to `gl_VertexIndex - BaseVertex` (0-based per draw). When drawing concatenated draw lists or batches with distinct vertex offsets, do NOT rely on `cmd.draw_indexed`'s `vertex_offset` parameter.
+- Instead, pass the exact byte-offset GPU device address directly via push constants or uniforms (`buffer_gpu_address + vertex_offset * sizeof(Vertex)`) and pass `0` for `vertex_offset` in `cmd.draw_indexed`.
+- For packed C++ vertex structures (such as `ImDrawVert` 20-byte stride), avoid high-level struct pointer arithmetic in Slang (which aligns structs to 8 or 16 bytes); use explicit byte/scalar arithmetic (`vertex_id * 5` for 5 uints) to prevent stride mismatch.
+
+### 13. ECS Hierarchy Traversal for Scene & Prefab Loading
+When ingesting, instantiating, or uploading entity hierarchies (such as glTF models or composite prefabs) to GPU memory:
+- Do not assume renderable components (`mesh_component`, `material_component`, `renderable_component`) reside on root entities.
+- Always recursively traverse `ecs::relationship_component<ecs::entity>` (`first_child`, `next_sibling`) to discover and upload all child entities, submeshes, and material references.
+
 ## Workflow & Build Guidelines
 
 ### Build & Test Commands (Windows Clang)

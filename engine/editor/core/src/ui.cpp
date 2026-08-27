@@ -270,6 +270,8 @@ namespace tempest::editor
         auto load_shader_bytecode(string_view filename) -> vector<byte>
         {
             const auto search_paths = {
+                std::filesystem::path("assets/shaders/editor") / filename.data(),
+                std::filesystem::path("assets/shaders") / filename.data(),
                 std::filesystem::path("shaders/editor") / filename.data(),
                 std::filesystem::path("shaders") / filename.data(),
                 std::filesystem::path("bin/Debug/windows-clang/shaders/editor") / filename.data(),
@@ -281,6 +283,8 @@ namespace tempest::editor
                 std::filesystem::path("bin/Release/windows-clang/shaders/editor") / filename.data(),
                 std::filesystem::path("bin/Release/windows-msc-v145/shaders/editor") / filename.data(),
                 std::filesystem::path("../shaders/editor") / filename.data(),
+                std::filesystem::path("../../../../bin/Debug/windows-clang/shaders/editor") / filename.data(),
+                std::filesystem::path("../../../../bin/Debug/windows-msc-v145/shaders/editor") / filename.data(),
                 std::filesystem::path("engine/editor/core/shaders") / filename.data(),
             };
 
@@ -750,7 +754,7 @@ namespace tempest::editor
     {
         ImGui::SetCurrentContext(_impl->imgui_context);
         auto* draw_data = ImGui::GetDrawData();
-        if (!draw_data || draw_data->TotalVtxCount <= 0 || width == 0 || height == 0)
+        if (!draw_data || draw_data->TotalVtxCount <= 0 || width == 0 || height == 0 || _impl->pipeline.handle == 0)
         {
             return;
         }
@@ -867,7 +871,8 @@ namespace tempest::editor
                         .scale = math::float2(2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y),
                         .translate = math::float2(-1.0f - draw_data->DisplayPos.x * (2.0f / draw_data->DisplaySize.x),
                                                   -1.0f - draw_data->DisplayPos.y * (2.0f / draw_data->DisplaySize.y)),
-                        .vertex_buffer = fb.vertex_buffer.gpu_address,
+                        .vertex_buffer = fb.vertex_buffer.gpu_address +
+                                         static_cast<uint64_t>(pcmd.VtxOffset + global_vtx_offset) * sizeof(ImDrawVert),
                         .texture_id = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pcmd.GetTexID())),
                         .sampler_id = _impl->linear_sampler_descriptor.index,
                     };
@@ -875,8 +880,7 @@ namespace tempest::editor
                     cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
                                        span<const byte>{reinterpret_cast<const byte*>(&pc), sizeof(pc)});
 
-                    cmd.draw_indexed(pcmd.ElemCount, 1, pcmd.IdxOffset + global_idx_offset,
-                                     static_cast<int32_t>(pcmd.VtxOffset + global_vtx_offset), 0);
+                    cmd.draw_indexed(pcmd.ElemCount, 1, pcmd.IdxOffset + global_idx_offset, 0, 0);
                 }
             }
             global_idx_offset += static_cast<uint32_t>(cmd_list->IdxBuffer.Size);

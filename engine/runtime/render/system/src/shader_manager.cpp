@@ -21,8 +21,7 @@ namespace tempest::render_system
 
     shader_manager::shader_manager(shader_manager&& other) noexcept
         : _device{other._device}, _shader_dir{tempest::move(other._shader_dir)},
-          _modules{tempest::move(other._modules)},
-          _graphics_pipelines{tempest::move(other._graphics_pipelines)},
+          _modules{tempest::move(other._modules)}, _graphics_pipelines{tempest::move(other._graphics_pipelines)},
           _compute_pipelines{tempest::move(other._compute_pipelines)},
           _module_paths_to_handle{tempest::move(other._module_paths_to_handle)},
           _named_graphics_pipelines{tempest::move(other._named_graphics_pipelines)},
@@ -65,13 +64,21 @@ namespace tempest::render_system
         const auto search_paths = {
             std::filesystem::path(_shader_dir.c_str()) / input_path,
             std::filesystem::path(_shader_dir.c_str()) / "rs" / input_path,
+            std::filesystem::path(_shader_dir.c_str()) / "editor" / input_path,
+            std::filesystem::path("assets/shaders/rs") / input_path,
+            std::filesystem::path("assets/shaders/editor") / input_path,
+            std::filesystem::path("assets/shaders") / input_path,
             std::filesystem::path("shaders/rs") / input_path,
+            std::filesystem::path("shaders/editor") / input_path,
             std::filesystem::path("shaders") / input_path,
             std::filesystem::path("bin/Debug/windows-clang/shaders/rs") / input_path,
+            std::filesystem::path("bin/Debug/windows-clang/shaders/editor") / input_path,
             std::filesystem::path("bin/Debug/windows-clang/shaders") / input_path,
             std::filesystem::path("bin/Debug/windows-msc-v145/shaders/rs") / input_path,
+            std::filesystem::path("bin/Debug/windows-msc-v145/shaders/editor") / input_path,
             std::filesystem::path("bin/Debug/windows-msc-v145/shaders") / input_path,
-            std::filesystem::path("assets/shaders") / input_path,
+            std::filesystem::path("../../../../bin/Debug/windows-clang/shaders/rs") / input_path,
+            std::filesystem::path("../../../../bin/Debug/windows-clang/shaders") / input_path,
             std::filesystem::path("engine/runtime/render/system/shaders") / input_path,
         };
 
@@ -166,8 +173,8 @@ namespace tempest::render_system
         {
             const auto loc_str = string{info.disk_location->string().c_str(), info.disk_location->string().size()};
             _module_paths_to_handle[loc_str] = handle;
-            const auto filename_str = string{info.disk_location->filename().string().c_str(),
-                                             info.disk_location->filename().string().size()};
+            const auto filename_str =
+                string{info.disk_location->filename().string().c_str(), info.disk_location->filename().string().size()};
             _module_paths_to_handle[filename_str] = handle;
 
             if (canonical.has_value())
@@ -180,8 +187,8 @@ namespace tempest::render_system
         return handle;
     }
 
-    auto shader_manager::register_shader_module(string_view filename, rhi::shader_stage stage,
-                                               string_view entry_point) -> shader_module_handle
+    auto shader_manager::register_shader_module(string_view filename, rhi::shader_stage stage, string_view entry_point)
+        -> shader_module_handle
     {
         return register_shader_module(shader_module_create_info{
             .stage = stage,
@@ -191,8 +198,7 @@ namespace tempest::render_system
         });
     }
 
-    auto shader_manager::compile_graphics_pipeline(const graphics_pipeline_record& rec,
-                                                   span<const byte> override_bytes,
+    auto shader_manager::compile_graphics_pipeline(const graphics_pipeline_record& rec, span<const byte> override_bytes,
                                                    shader_module_handle override_handle)
         -> rhi::graphics_pipeline_handle
     {
@@ -242,21 +248,21 @@ namespace tempest::render_system
 
         auto desc = rhi::graphics_pipeline_desc{
             .shader_modules = span<const rhi::shader_module_desc>{shader_descs.data(), shader_descs.size()},
-            .color_attachment_formats = span<const rhi::data_format>{rec.color_attachment_formats.data(),
-                                                                     rec.color_attachment_formats.size()},
+            .color_attachment_formats =
+                span<const rhi::data_format>{rec.color_attachment_formats.data(), rec.color_attachment_formats.size()},
             .depth_stencil_attachment_format = rec.depth_stencil_attachment_format,
             .primitive_topology = rec.primitive_topology,
             .rasterization_state = rec.rasterization_state,
             .depth_stencil_state = rec.depth_stencil_state,
-            .color_attachment_blend_states = span<const rhi::attachment_blend_state>{
-                rec.color_attachment_blend_states.data(), rec.color_attachment_blend_states.size()},
+            .color_attachment_blend_states =
+                span<const rhi::attachment_blend_state>{rec.color_attachment_blend_states.data(),
+                                                        rec.color_attachment_blend_states.size()},
         };
 
         return _device->create_graphics_pipeline(desc);
     }
 
-    auto shader_manager::compile_compute_pipeline(const compute_pipeline_record& rec,
-                                                  span<const byte> override_bytes)
+    auto shader_manager::compile_compute_pipeline(const compute_pipeline_record& rec, span<const byte> override_bytes)
         -> rhi::compute_pipeline_handle
     {
         if (!_device || rec.module.id == 0 || rec.module.id >= _modules.size())
@@ -309,14 +315,15 @@ namespace tempest::render_system
             .name = name_str,
             .rhi_pipeline = {},
             .modules = vector<shader_module_handle>{tmpl.shader_modules.begin(), tmpl.shader_modules.end()},
-            .color_attachment_formats = vector<rhi::data_format>{tmpl.color_attachment_formats.begin(),
-                                                                 tmpl.color_attachment_formats.end()},
+            .color_attachment_formats =
+                vector<rhi::data_format>{tmpl.color_attachment_formats.begin(), tmpl.color_attachment_formats.end()},
             .depth_stencil_attachment_format = tmpl.depth_stencil_attachment_format,
             .primitive_topology = tmpl.primitive_topology,
             .rasterization_state = tmpl.rasterization_state,
             .depth_stencil_state = tmpl.depth_stencil_state,
-            .color_attachment_blend_states = vector<rhi::attachment_blend_state>{
-                tmpl.color_attachment_blend_states.begin(), tmpl.color_attachment_blend_states.end()},
+            .color_attachment_blend_states =
+                vector<rhi::attachment_blend_state>{tmpl.color_attachment_blend_states.begin(),
+                                                    tmpl.color_attachment_blend_states.end()},
         };
 
         auto rhi_h = compile_graphics_pipeline(rec);
@@ -376,8 +383,7 @@ namespace tempest::render_system
         return _graphics_pipelines[handle.id].rhi_pipeline;
     }
 
-    auto shader_manager::get_rhi_pipeline(compute_pipeline_handle handle) const noexcept
-        -> rhi::compute_pipeline_handle
+    auto shader_manager::get_rhi_pipeline(compute_pipeline_handle handle) const noexcept -> rhi::compute_pipeline_handle
     {
         if (handle.id == 0 || handle.id >= _compute_pipelines.size())
         {
@@ -386,8 +392,7 @@ namespace tempest::render_system
         return _compute_pipelines[handle.id].rhi_pipeline;
     }
 
-    auto shader_manager::find_graphics_pipeline(string_view name) const noexcept
-        -> optional<graphics_pipeline_handle>
+    auto shader_manager::find_graphics_pipeline(string_view name) const noexcept -> optional<graphics_pipeline_handle>
     {
         const auto name_str = string{name.data(), name.size()};
         auto it = _named_graphics_pipelines.find(name_str);
@@ -398,8 +403,7 @@ namespace tempest::render_system
         return nullopt;
     }
 
-    auto shader_manager::find_compute_pipeline(string_view name) const noexcept
-        -> optional<compute_pipeline_handle>
+    auto shader_manager::find_compute_pipeline(string_view name) const noexcept -> optional<compute_pipeline_handle>
     {
         const auto name_str = string{name.data(), name.size()};
         auto it = _named_compute_pipelines.find(name_str);
@@ -524,7 +528,9 @@ namespace tempest::render_system
     auto shader_manager::notify_file_changed(const std::filesystem::path& path) -> bool
     {
         const auto filename = path.filename().string();
-        const auto canonical = std::filesystem::exists(path) ? optional<std::filesystem::path>{std::filesystem::weakly_canonical(path)} : nullopt;
+        const auto canonical = std::filesystem::exists(path)
+                                   ? optional<std::filesystem::path>{std::filesystem::weakly_canonical(path)}
+                                   : nullopt;
 
         bool any_reloaded = false;
         for (uint32_t i = 1; i < _modules.size(); ++i)
@@ -656,7 +662,8 @@ namespace tempest::render_system
             return it->second;
         }
 
-        auto resolved = resolve_path(std::filesystem::path(std::string(shader_filename.data(), shader_filename.size())));
+        auto resolved =
+            resolve_path(std::filesystem::path(std::string(shader_filename.data(), shader_filename.size())));
         if (resolved.has_value())
         {
             auto path_str = resolved->string();
@@ -756,4 +763,3 @@ namespace tempest::render_system
         return handle;
     }
 } // namespace tempest::render_system
-

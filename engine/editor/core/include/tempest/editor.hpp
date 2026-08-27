@@ -49,10 +49,12 @@ namespace tempest::editor
         auto register_on_paint_callback(function<void(engine_context&)>) -> void;
         auto register_on_update_callback(function<void(engine_context&)>) -> void;
 
+        auto register_menu_item(unique_ptr<menu_item> menu) -> void;
+
         template <derived_from<menu_item> T>
         auto register_menu_item(unique_ptr<T> menu) -> void
         {
-            _menus.add_menu_item(tempest::move(menu));
+            register_menu_item(unique_ptr<menu_item>(menu.release()));
         }
 
       private:

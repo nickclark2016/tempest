@@ -1,5 +1,7 @@
-#include <tempest/graphics_components.hpp>
+#include <tempest/math_utils.hpp>
+#include <tempest/render_system/render_components.hpp>
 #include <tempest/tempest.hpp>
+#include <tempest/transform_component.hpp>
 
 #if defined(TEMPEST_PLATFORM_WINDOWS)
 #define GAME_API __declspec(dllexport)
@@ -11,14 +13,15 @@
 
 extern "C"
 {
-    GAME_API void on_load(tempest::engine_context* ctx, tempest::span<tempest::string_view> /*args*/)
+    GAME_API void on_load(tempest::engine_context* ctx, [[maybe_unused]] tempest::span<tempest::string_view> args)
     {
         auto& logger = ctx->get_logger();
         logger.info("Game loaded successfully!");
 
         ctx->register_on_close_callback([](auto& engine_ctx) -> void {
-            auto& logger = engine_ctx.get_logger();
-            logger.info("Game is closing...");
+            auto& log = engine_ctx.get_logger();
+            log.info("Game is closing...");
+            [[maybe_unused]] auto saved = engine_ctx.get_assets().save();
         });
 
         ctx->register_on_initialize_callback([](auto& engine_ctx) -> void {
@@ -27,12 +30,14 @@ extern "C"
 
             auto camera = registry.create();
             registry.name(camera, "Main Camera");
-            tempest::graphics::camera_component camera_data = {
+            auto camera_data = tempest::render_system::camera_component{
                 .aspect_ratio = 16.0F / 9.0F,
                 .vertical_fov = tempest::math::as_radians(100.0F),
                 .near_plane = 0.01F,
             };
             registry.assign(camera, camera_data);
+            auto camera_active = tempest::render_system::active_camera_component{};
+            registry.assign(camera, camera_active);
             auto camera_tx = tempest::ecs::transform_component::identity();
             camera_tx.position({0.0F, 15.0F, -1.0F});
             camera_tx.rotation({0.0F, tempest::math::as_radians(90.0F), 0.0F});
@@ -46,23 +51,23 @@ extern "C"
                 asset_database.load("assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", registry);
 
             const auto sponza_instance = engine_ctx.load_entity(sponza_prefab);
-            auto sponza_transform = tempest::ecs::transform_component{};
+            auto sponza_transform = tempest::ecs::transform_component::identity();
             sponza_transform.scale({0.125F});
             registry.assign_or_replace(sponza_instance, sponza_transform);
             registry.name(sponza_instance, "Sponza");
 
             // Load Sun
             auto sun = registry.create();
-            auto sun_data = tempest::graphics::directional_light_component{
+            auto sun_data = tempest::render_system::directional_light_component{
                 .color = {1.0F, 1.0F, 1.0F},
                 .intensity = 1.0F,
             };
 
-            auto sun_shadows = tempest::graphics::shadow_map_component{
-                .shadow_distance = 2048.0F,
+            auto sun_shadows = tempest::render_system::shadow_caster_component{
+                .resolution = 2048,
+                .num_cascades = 4,
                 .split_lambda = 0.9F,
-                .blend_fraction = 0.1F,
-                .cascade_count = 4,
+                .max_shadow_distance = 2048.0F,
             };
 
             auto sun_tx = tempest::ecs::transform_component::identity();
@@ -73,8 +78,6 @@ extern "C"
             registry.assign_or_replace(sun, sun_tx);
             registry.name(sun, "Sun");
         });
-
-        ctx->register_on_close_callback([](auto& engine_ctx) -> void { (void)engine_ctx.get_assets().save(); });
     }
 
     GAME_API void on_unload()
