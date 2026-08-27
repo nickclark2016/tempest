@@ -1,8 +1,13 @@
 #include <tempest/windows/scene_hierarchy_window.hpp>
 
 #include <tempest/asset_database.hpp>
+#include <tempest/bit.hpp>
+#include <tempest/iterator.hpp>
+#include <tempest/string.hpp>
 
 #include <imgui.h>
+
+#include <format>
 
 namespace tempest::editor
 {
@@ -46,30 +51,25 @@ namespace tempest::editor
             const auto is_selected = select == entity;
             const auto node_flags = is_selected ? ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_None;
 
-            auto node_open = false;
-
-            if (name)
+            auto label = string{};
+            if (name.has_value())
             {
-                if (has_children)
-                {
-                    node_open = ImGui::TreeNodeEx(eid, node_flags, "%s", name->data());
-                }
-                else
-                {
-                    node_open = ImGui::TreeNodeEx(eid, node_flags | ImGuiTreeNodeFlags_Leaf, "%s", name->data());
-                }
+                const auto& n = name.value();
+                std::format_to(tempest::back_inserter(label), "{:.{}}", n.data(), n.size());
             }
             else
             {
-                if (has_children)
-                {
-                    node_open = ImGui::TreeNodeEx(eid, node_flags, "<Unnamed:%zu>", static_cast<size_t>(entity));
-                }
-                else
-                {
-                    node_open = ImGui::TreeNodeEx(eid, node_flags | ImGuiTreeNodeFlags_Leaf, "<Unnamed:%zu>",
-                                                  static_cast<size_t>(entity));
-                }
+                std::format_to(tempest::back_inserter(label), "<Unnamed:{}>", static_cast<size_t>(entity));
+            }
+
+            auto node_open = false;
+            if (has_children)
+            {
+                node_open = ImGui::TreeNodeEx(eid, node_flags, "%s", label.c_str());
+            }
+            else
+            {
+                node_open = ImGui::TreeNodeEx(eid, node_flags | ImGuiTreeNodeFlags_Leaf, "%s", label.c_str());
             }
 
             if (node_open)
@@ -104,9 +104,10 @@ namespace tempest::editor
         {
             for (const auto& [self] : entity_registry->with<ecs::self_component>())
             {
-                const auto* const rel_component = entity_registry->try_get<ecs::relationship_component<ecs::entity>>(self.entity);
+                const auto* const rel_component =
+                    entity_registry->try_get<ecs::relationship_component<ecs::entity>>(self.entity);
                 const auto is_root = rel_component != nullptr ? rel_component->parent == ecs::tombstone : true;
-                
+
                 if (is_root)
                 {
                     auto selected = selected_entity;

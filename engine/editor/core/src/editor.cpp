@@ -139,6 +139,8 @@ namespace tempest::editor
     editor_context::editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx)
         : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx}
     {
+        ctx.set_ui_context(&ui_ctx);
+
         _entity_view = register_window(make_unique<entity_view_window>(ctx.get_entities()));
         _scene_hierarchy_view = register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()));
         _viewport_view = register_window(make_unique<viewport_window>(ctx));
@@ -154,10 +156,10 @@ namespace tempest::editor
             ctx.get_entities().name(editor_cam, "Editor Camera");
             ctx.get_entities().assign(editor_cam, ecs::transform_component::identity());
             ctx.get_entities().assign(editor_cam, render_system::camera_component{
-                .aspect_ratio = 16.0f / 9.0f,
-                .vertical_fov = math::as_radians(60.0f),
-                .near_plane = 0.1f,
-            });
+                                                      .aspect_ratio = 16.0f / 9.0f,
+                                                      .vertical_fov = math::as_radians(60.0f),
+                                                      .near_plane = 0.1f,
+                                                  });
             camera_sys.set_active_camera(editor_cam);
         }
 

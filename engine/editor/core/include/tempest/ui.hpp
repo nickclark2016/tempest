@@ -6,6 +6,7 @@
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/string.hpp>
 #include <tempest/vec3.hpp>
 #include <tempest/window_manager.hpp>
 
@@ -47,6 +48,9 @@ namespace tempest::editor
 
         TEMPEST_EDITOR_API auto drag_integral(cstring_view label, int input, int minimum, int maximum) -> int;
         TEMPEST_EDITOR_API auto drag_scalar(cstring_view label, float input, float minimum, float maximum) -> float;
+
+        TEMPEST_EDITOR_API auto input_text(cstring_view label, string& input) -> bool;
+        TEMPEST_EDITOR_API auto input_text_with_hint(cstring_view label, cstring_view hint, string& input) -> bool;
 
         TEMPEST_EDITOR_API auto centered_button(cstring_view label) -> bool;
     } // namespace ui

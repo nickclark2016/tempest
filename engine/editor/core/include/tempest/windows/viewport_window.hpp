@@ -19,7 +19,7 @@ namespace tempest::editor
         auto window_name() const -> string_view override;
         auto draw() -> void override;
 
-        auto aspect_ratio() const -> float;
+        [[nodiscard]] auto aspect_ratio() const -> float;
 
         [[nodiscard]] auto is_mode_supported([[maybe_unused]] simulation_state state) const noexcept -> bool override
         {
@@ -28,7 +28,6 @@ namespace tempest::editor
 
       private:
         editor_engine_context* _ctx;
-        rhi::descriptor_handle _viewport_texture{};
         math::uint2 _viewport_size{};
         bool _open = true;
     };

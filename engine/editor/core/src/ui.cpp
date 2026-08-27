@@ -28,124 +28,242 @@ namespace tempest::editor
         {
             switch (key_state.k)
             {
-            case core::key::tab: return ImGuiKey_Tab;
-            case core::key::dpad_left: return ImGuiKey_LeftArrow;
-            case core::key::dpad_right: return ImGuiKey_RightArrow;
-            case core::key::dpad_up: return ImGuiKey_UpArrow;
-            case core::key::dpad_down: return ImGuiKey_DownArrow;
-            case core::key::page_up: return ImGuiKey_PageUp;
-            case core::key::page_down: return ImGuiKey_PageDown;
-            case core::key::home: return ImGuiKey_Home;
-            case core::key::end: return ImGuiKey_End;
-            case core::key::insert: return ImGuiKey_Insert;
-            case core::key::deletion: return ImGuiKey_Delete;
-            case core::key::backspace: return ImGuiKey_Backspace;
-            case core::key::space: return ImGuiKey_Space;
-            case core::key::enter: return ImGuiKey_Enter;
-            case core::key::escape: return ImGuiKey_Escape;
-            case core::key::apostrophe: return ImGuiKey_Apostrophe;
-            case core::key::comma: return ImGuiKey_Comma;
-            case core::key::minus: return ImGuiKey_Minus;
-            case core::key::period: return ImGuiKey_Period;
-            case core::key::slash: return ImGuiKey_Slash;
-            case core::key::semicolon: return ImGuiKey_Semicolon;
-            case core::key::equal: return ImGuiKey_Equal;
-            case core::key::left_bracket: return ImGuiKey_LeftBracket;
-            case core::key::backslash: return ImGuiKey_Backslash;
-            case core::key::right_bracket: return ImGuiKey_RightBracket;
-            case core::key::grave_accent: return ImGuiKey_GraveAccent;
-            case core::key::caps_lock: return ImGuiKey_CapsLock;
-            case core::key::scroll_lock: return ImGuiKey_ScrollLock;
-            case core::key::num_lock: return ImGuiKey_NumLock;
-            case core::key::print_screen: return ImGuiKey_PrintScreen;
-            case core::key::pause: return ImGuiKey_Pause;
-            case core::key::tw_0: return ImGuiKey_0;
-            case core::key::tw_1: return ImGuiKey_1;
-            case core::key::tw_2: return ImGuiKey_2;
-            case core::key::tw_3: return ImGuiKey_3;
-            case core::key::tw_4: return ImGuiKey_4;
-            case core::key::tw_5: return ImGuiKey_5;
-            case core::key::tw_6: return ImGuiKey_6;
-            case core::key::tw_7: return ImGuiKey_7;
-            case core::key::tw_8: return ImGuiKey_8;
-            case core::key::tw_9: return ImGuiKey_9;
-            case core::key::a: return ImGuiKey_A;
-            case core::key::b: return ImGuiKey_B;
-            case core::key::c: return ImGuiKey_C;
-            case core::key::d: return ImGuiKey_D;
-            case core::key::e: return ImGuiKey_E;
-            case core::key::f: return ImGuiKey_F;
-            case core::key::g: return ImGuiKey_G;
-            case core::key::h: return ImGuiKey_H;
-            case core::key::i: return ImGuiKey_I;
-            case core::key::j: return ImGuiKey_J;
-            case core::key::k: return ImGuiKey_K;
-            case core::key::l: return ImGuiKey_L;
-            case core::key::m: return ImGuiKey_M;
-            case core::key::n: return ImGuiKey_N;
-            case core::key::o: return ImGuiKey_O;
-            case core::key::p: return ImGuiKey_P;
-            case core::key::q: return ImGuiKey_Q;
-            case core::key::r: return ImGuiKey_R;
-            case core::key::s: return ImGuiKey_S;
-            case core::key::t: return ImGuiKey_T;
-            case core::key::u: return ImGuiKey_U;
-            case core::key::v: return ImGuiKey_V;
-            case core::key::w: return ImGuiKey_W;
-            case core::key::x: return ImGuiKey_X;
-            case core::key::y: return ImGuiKey_Y;
-            case core::key::z: return ImGuiKey_Z;
-            case core::key::fn_1: return ImGuiKey_F1;
-            case core::key::fn_2: return ImGuiKey_F2;
-            case core::key::fn_3: return ImGuiKey_F3;
-            case core::key::fn_4: return ImGuiKey_F4;
-            case core::key::fn_5: return ImGuiKey_F5;
-            case core::key::fn_6: return ImGuiKey_F6;
-            case core::key::fn_7: return ImGuiKey_F7;
-            case core::key::fn_8: return ImGuiKey_F8;
-            case core::key::fn_9: return ImGuiKey_F9;
-            case core::key::fn_10: return ImGuiKey_F10;
-            case core::key::fn_11: return ImGuiKey_F11;
-            case core::key::fn_12: return ImGuiKey_F12;
-            case core::key::fn_13: return ImGuiKey_F13;
-            case core::key::fn_14: return ImGuiKey_F14;
-            case core::key::fn_15: return ImGuiKey_F15;
-            case core::key::fn_16: return ImGuiKey_F16;
-            case core::key::fn_17: return ImGuiKey_F17;
-            case core::key::fn_18: return ImGuiKey_F18;
-            case core::key::fn_19: return ImGuiKey_F19;
-            case core::key::fn_20: return ImGuiKey_F20;
-            case core::key::fn_21: return ImGuiKey_F21;
-            case core::key::fn_22: return ImGuiKey_F22;
-            case core::key::fn_23: return ImGuiKey_F23;
-            case core::key::fn_24: return ImGuiKey_F24;
-            case core::key::kp_0: return ImGuiKey_Keypad0;
-            case core::key::kp_1: return ImGuiKey_Keypad1;
-            case core::key::kp_2: return ImGuiKey_Keypad2;
-            case core::key::kp_3: return ImGuiKey_Keypad3;
-            case core::key::kp_4: return ImGuiKey_Keypad4;
-            case core::key::kp_5: return ImGuiKey_Keypad5;
-            case core::key::kp_6: return ImGuiKey_Keypad6;
-            case core::key::kp_7: return ImGuiKey_Keypad7;
-            case core::key::kp_8: return ImGuiKey_Keypad8;
-            case core::key::kp_9: return ImGuiKey_Keypad9;
-            case core::key::kp_decimal: return ImGuiKey_KeypadDecimal;
-            case core::key::kp_divide: return ImGuiKey_KeypadDivide;
-            case core::key::kp_multiply: return ImGuiKey_KeypadMultiply;
-            case core::key::kp_subtract: return ImGuiKey_KeypadSubtract;
-            case core::key::kp_add: return ImGuiKey_KeypadAdd;
-            case core::key::kp_enter: return ImGuiKey_KeypadEnter;
-            case core::key::kp_equal: return ImGuiKey_KeypadEqual;
-            case core::key::left_shift: return ImGuiKey_LeftShift;
-            case core::key::left_control: return ImGuiKey_LeftCtrl;
-            case core::key::left_alt: return ImGuiKey_LeftAlt;
-            case core::key::left_super: return ImGuiKey_LeftSuper;
-            case core::key::right_shift: return ImGuiKey_RightShift;
-            case core::key::right_control: return ImGuiKey_RightCtrl;
-            case core::key::right_alt: return ImGuiKey_RightAlt;
-            case core::key::right_super: return ImGuiKey_RightSuper;
-            case core::key::menu: return ImGuiKey_Menu;
-            default: return ImGuiKey_None;
+            case core::key::tab:
+                return ImGuiKey_Tab;
+            case core::key::dpad_left:
+                return ImGuiKey_LeftArrow;
+            case core::key::dpad_right:
+                return ImGuiKey_RightArrow;
+            case core::key::dpad_up:
+                return ImGuiKey_UpArrow;
+            case core::key::dpad_down:
+                return ImGuiKey_DownArrow;
+            case core::key::page_up:
+                return ImGuiKey_PageUp;
+            case core::key::page_down:
+                return ImGuiKey_PageDown;
+            case core::key::home:
+                return ImGuiKey_Home;
+            case core::key::end:
+                return ImGuiKey_End;
+            case core::key::insert:
+                return ImGuiKey_Insert;
+            case core::key::deletion:
+                return ImGuiKey_Delete;
+            case core::key::backspace:
+                return ImGuiKey_Backspace;
+            case core::key::space:
+                return ImGuiKey_Space;
+            case core::key::enter:
+                return ImGuiKey_Enter;
+            case core::key::escape:
+                return ImGuiKey_Escape;
+            case core::key::apostrophe:
+                return ImGuiKey_Apostrophe;
+            case core::key::comma:
+                return ImGuiKey_Comma;
+            case core::key::minus:
+                return ImGuiKey_Minus;
+            case core::key::period:
+                return ImGuiKey_Period;
+            case core::key::slash:
+                return ImGuiKey_Slash;
+            case core::key::semicolon:
+                return ImGuiKey_Semicolon;
+            case core::key::equal:
+                return ImGuiKey_Equal;
+            case core::key::left_bracket:
+                return ImGuiKey_LeftBracket;
+            case core::key::backslash:
+                return ImGuiKey_Backslash;
+            case core::key::right_bracket:
+                return ImGuiKey_RightBracket;
+            case core::key::grave_accent:
+                return ImGuiKey_GraveAccent;
+            case core::key::caps_lock:
+                return ImGuiKey_CapsLock;
+            case core::key::scroll_lock:
+                return ImGuiKey_ScrollLock;
+            case core::key::num_lock:
+                return ImGuiKey_NumLock;
+            case core::key::print_screen:
+                return ImGuiKey_PrintScreen;
+            case core::key::pause:
+                return ImGuiKey_Pause;
+            case core::key::tw_0:
+                return ImGuiKey_0;
+            case core::key::tw_1:
+                return ImGuiKey_1;
+            case core::key::tw_2:
+                return ImGuiKey_2;
+            case core::key::tw_3:
+                return ImGuiKey_3;
+            case core::key::tw_4:
+                return ImGuiKey_4;
+            case core::key::tw_5:
+                return ImGuiKey_5;
+            case core::key::tw_6:
+                return ImGuiKey_6;
+            case core::key::tw_7:
+                return ImGuiKey_7;
+            case core::key::tw_8:
+                return ImGuiKey_8;
+            case core::key::tw_9:
+                return ImGuiKey_9;
+            case core::key::a:
+                return ImGuiKey_A;
+            case core::key::b:
+                return ImGuiKey_B;
+            case core::key::c:
+                return ImGuiKey_C;
+            case core::key::d:
+                return ImGuiKey_D;
+            case core::key::e:
+                return ImGuiKey_E;
+            case core::key::f:
+                return ImGuiKey_F;
+            case core::key::g:
+                return ImGuiKey_G;
+            case core::key::h:
+                return ImGuiKey_H;
+            case core::key::i:
+                return ImGuiKey_I;
+            case core::key::j:
+                return ImGuiKey_J;
+            case core::key::k:
+                return ImGuiKey_K;
+            case core::key::l:
+                return ImGuiKey_L;
+            case core::key::m:
+                return ImGuiKey_M;
+            case core::key::n:
+                return ImGuiKey_N;
+            case core::key::o:
+                return ImGuiKey_O;
+            case core::key::p:
+                return ImGuiKey_P;
+            case core::key::q:
+                return ImGuiKey_Q;
+            case core::key::r:
+                return ImGuiKey_R;
+            case core::key::s:
+                return ImGuiKey_S;
+            case core::key::t:
+                return ImGuiKey_T;
+            case core::key::u:
+                return ImGuiKey_U;
+            case core::key::v:
+                return ImGuiKey_V;
+            case core::key::w:
+                return ImGuiKey_W;
+            case core::key::x:
+                return ImGuiKey_X;
+            case core::key::y:
+                return ImGuiKey_Y;
+            case core::key::z:
+                return ImGuiKey_Z;
+            case core::key::fn_1:
+                return ImGuiKey_F1;
+            case core::key::fn_2:
+                return ImGuiKey_F2;
+            case core::key::fn_3:
+                return ImGuiKey_F3;
+            case core::key::fn_4:
+                return ImGuiKey_F4;
+            case core::key::fn_5:
+                return ImGuiKey_F5;
+            case core::key::fn_6:
+                return ImGuiKey_F6;
+            case core::key::fn_7:
+                return ImGuiKey_F7;
+            case core::key::fn_8:
+                return ImGuiKey_F8;
+            case core::key::fn_9:
+                return ImGuiKey_F9;
+            case core::key::fn_10:
+                return ImGuiKey_F10;
+            case core::key::fn_11:
+                return ImGuiKey_F11;
+            case core::key::fn_12:
+                return ImGuiKey_F12;
+            case core::key::fn_13:
+                return ImGuiKey_F13;
+            case core::key::fn_14:
+                return ImGuiKey_F14;
+            case core::key::fn_15:
+                return ImGuiKey_F15;
+            case core::key::fn_16:
+                return ImGuiKey_F16;
+            case core::key::fn_17:
+                return ImGuiKey_F17;
+            case core::key::fn_18:
+                return ImGuiKey_F18;
+            case core::key::fn_19:
+                return ImGuiKey_F19;
+            case core::key::fn_20:
+                return ImGuiKey_F20;
+            case core::key::fn_21:
+                return ImGuiKey_F21;
+            case core::key::fn_22:
+                return ImGuiKey_F22;
+            case core::key::fn_23:
+                return ImGuiKey_F23;
+            case core::key::fn_24:
+                return ImGuiKey_F24;
+            case core::key::kp_0:
+                return ImGuiKey_Keypad0;
+            case core::key::kp_1:
+                return ImGuiKey_Keypad1;
+            case core::key::kp_2:
+                return ImGuiKey_Keypad2;
+            case core::key::kp_3:
+                return ImGuiKey_Keypad3;
+            case core::key::kp_4:
+                return ImGuiKey_Keypad4;
+            case core::key::kp_5:
+                return ImGuiKey_Keypad5;
+            case core::key::kp_6:
+                return ImGuiKey_Keypad6;
+            case core::key::kp_7:
+                return ImGuiKey_Keypad7;
+            case core::key::kp_8:
+                return ImGuiKey_Keypad8;
+            case core::key::kp_9:
+                return ImGuiKey_Keypad9;
+            case core::key::kp_decimal:
+                return ImGuiKey_KeypadDecimal;
+            case core::key::kp_divide:
+                return ImGuiKey_KeypadDivide;
+            case core::key::kp_multiply:
+                return ImGuiKey_KeypadMultiply;
+            case core::key::kp_subtract:
+                return ImGuiKey_KeypadSubtract;
+            case core::key::kp_add:
+                return ImGuiKey_KeypadAdd;
+            case core::key::kp_enter:
+                return ImGuiKey_KeypadEnter;
+            case core::key::kp_equal:
+                return ImGuiKey_KeypadEqual;
+            case core::key::left_shift:
+                return ImGuiKey_LeftShift;
+            case core::key::left_control:
+                return ImGuiKey_LeftCtrl;
+            case core::key::left_alt:
+                return ImGuiKey_LeftAlt;
+            case core::key::left_super:
+                return ImGuiKey_LeftSuper;
+            case core::key::right_shift:
+                return ImGuiKey_RightShift;
+            case core::key::right_control:
+                return ImGuiKey_RightCtrl;
+            case core::key::right_alt:
+                return ImGuiKey_RightAlt;
+            case core::key::right_super:
+                return ImGuiKey_RightSuper;
+            case core::key::menu:
+                return ImGuiKey_Menu;
+            default:
+                return ImGuiKey_None;
             }
         }
 
@@ -268,10 +386,17 @@ namespace tempest::editor
             auto button = -1;
             switch (mouse_state.button)
             {
-            case core::mouse_button::mb_1: button = ImGuiMouseButton_Left; break;
-            case core::mouse_button::mb_2: button = ImGuiMouseButton_Right; break;
-            case core::mouse_button::mb_3: button = ImGuiMouseButton_Middle; break;
-            default: return;
+            case core::mouse_button::mb_1:
+                button = ImGuiMouseButton_Left;
+                break;
+            case core::mouse_button::mb_2:
+                button = ImGuiMouseButton_Right;
+                break;
+            case core::mouse_button::mb_3:
+                button = ImGuiMouseButton_Middle;
+                break;
+            default:
+                return;
             }
             if (button >= 0 && button < ImGuiMouseButton_COUNT)
             {
@@ -374,7 +499,8 @@ namespace tempest::editor
             .image_extent_height = static_cast<uint32_t>(height),
             .image_extent_depth = 1,
         };
-        cmd.copy_buffer_to_texture(upload_buf, font_texture, span<const rhi::buffer_texture_copy_region>{&copy_region, 1});
+        cmd.copy_buffer_to_texture(upload_buf, font_texture,
+                                   span<const rhi::buffer_texture_copy_region>{&copy_region, 1});
 
         auto post_barrier = rhi::texture_barrier{
             .texture = font_texture,
@@ -703,8 +829,8 @@ namespace tempest::editor
                     {
                         cmd.bind_pipeline(_impl->pipeline);
                         cmd.bind_index_buffer(
-                            fb.index_buffer,
-                            sizeof(ImDrawIdx) == 2 ? rhi::index_type::uint16 : rhi::index_type::uint32, 0);
+                            fb.index_buffer, sizeof(ImDrawIdx) == 2 ? rhi::index_type::uint16 : rhi::index_type::uint32,
+                            0);
                         cmd.set_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
                     }
                     else
@@ -715,14 +841,18 @@ namespace tempest::editor
                 else
                 {
                     auto clip_min = math::float2((pcmd.ClipRect.x - clip_off.x) * clip_scale.x,
-                                                (pcmd.ClipRect.y - clip_off.y) * clip_scale.y);
+                                                 (pcmd.ClipRect.y - clip_off.y) * clip_scale.y);
                     auto clip_max = math::float2((pcmd.ClipRect.z - clip_off.x) * clip_scale.x,
-                                                (pcmd.ClipRect.w - clip_off.y) * clip_scale.y);
+                                                 (pcmd.ClipRect.w - clip_off.y) * clip_scale.y);
 
-                    if (clip_min.x < 0.0f) clip_min.x = 0.0f;
-                    if (clip_min.y < 0.0f) clip_min.y = 0.0f;
-                    if (clip_max.x > static_cast<float>(width)) clip_max.x = static_cast<float>(width);
-                    if (clip_max.y > static_cast<float>(height)) clip_max.y = static_cast<float>(height);
+                    if (clip_min.x < 0.0f)
+                        clip_min.x = 0.0f;
+                    if (clip_min.y < 0.0f)
+                        clip_min.y = 0.0f;
+                    if (clip_max.x > static_cast<float>(width))
+                        clip_max.x = static_cast<float>(width);
+                    if (clip_max.y > static_cast<float>(height))
+                        clip_max.y = static_cast<float>(height);
 
                     if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
                     {
@@ -792,6 +922,57 @@ namespace tempest::editor
         {
             ImGui::DragFloat(label.c_str(), &input, 1.0f, minimum, maximum);
             return input;
+        }
+
+        namespace
+        {
+            struct input_text_callback_user_data
+            {
+                string* str;
+            };
+
+            auto input_text_callback(ImGuiInputTextCallbackData* data) -> int
+            {
+                auto* user_data = static_cast<input_text_callback_user_data*>(data->UserData);
+                if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+                {
+                    auto* str = user_data->str;
+                    TEMPEST_ASSERT(data->Buf == str->c_str());
+                    str->resize(static_cast<size_t>(data->BufTextLen));
+                    data->Buf = str->data();
+                }
+                return 0;
+            }
+        } // namespace
+
+        auto input_text(cstring_view label, string& input) -> bool
+        {
+            auto cb_user_data = input_text_callback_user_data{
+                .str = &input,
+            };
+            const auto modified =
+                ImGui::InputText(label.c_str(), input.data(), input.capacity() + 1, ImGuiInputTextFlags_CallbackResize,
+                                 input_text_callback, &cb_user_data);
+            if (modified)
+            {
+                input.resize(std::strlen(input.data()));
+            }
+            return modified;
+        }
+
+        auto input_text_with_hint(cstring_view label, cstring_view hint, string& input) -> bool
+        {
+            auto cb_user_data = input_text_callback_user_data{
+                .str = &input,
+            };
+            const auto modified =
+                ImGui::InputTextWithHint(label.c_str(), hint.c_str(), input.data(), input.capacity() + 1,
+                                         ImGuiInputTextFlags_CallbackResize, input_text_callback, &cb_user_data);
+            if (modified)
+            {
+                input.resize(std::strlen(input.data()));
+            }
+            return modified;
         }
 
         auto centered_button(cstring_view label) -> bool

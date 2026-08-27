@@ -165,4 +165,33 @@ namespace tempest::editor::tests
         env.dev->destroy_texture(tex);
         env.win_mgr.destroy_window(env.win);
     }
+
+    TEST(ui_context_test, input_text_helpers)
+    {
+        auto env = create_test_env();
+        ASSERT_NE(env.dev, nullptr);
+        ASSERT_TRUE(env.win.is_valid());
+
+        {
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
+
+            auto str1 = string{"Initial String"};
+            auto str2 = string{};
+
+            ui_ctx.begin_ui_commands();
+            ImGui::Begin("Input Text Test");
+            EXPECT_NO_THROW({
+                ui::input_text("Label 1", str1);
+                ui::input_text_with_hint("Label 2", "Hint", str2);
+            });
+            ImGui::End();
+            ui_ctx.finish_ui_commands();
+
+            EXPECT_EQ(str1, "Initial String");
+            EXPECT_TRUE(str2.empty());
+        }
+
+        env.win_mgr.destroy_window(env.win);
+    }
 } // namespace tempest::editor::tests

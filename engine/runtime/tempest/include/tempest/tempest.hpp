@@ -19,7 +19,8 @@
 namespace tempest
 {
     /// \brief The engine context is the main interface for interacting with the engine.
-    /// It provides access to the core systems of the engine and allows for registration of windows and execution callbacks.
+    /// It provides access to the core systems of the engine and allows for registration of windows and execution
+    /// callbacks.
     class TEMPEST_API engine_context
     {
       public:
@@ -117,12 +118,11 @@ namespace tempest
         standalone_engine_context();
         ~standalone_engine_context() override;
 
-        auto register_window(window_desc desc, bool install_swapchain_blit = true)
-            -> window_registration_info override;
+        auto register_window(window_desc desc, bool install_swapchain_blit = true) -> window_registration_info override;
         auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void override;
         auto register_on_close_callback(function<void(engine_context&)> callback) -> void override;
-        auto register_on_fixed_update_callback(
-            function<void(engine_context&, std::chrono::duration<float>)> callback) -> void override;
+        auto register_on_fixed_update_callback(function<void(engine_context&, std::chrono::duration<float>)> callback)
+            -> void override;
         auto register_on_variable_update_callback(
             function<void(engine_context&, std::chrono::duration<float>)> callback) -> void override;
 
@@ -171,7 +171,7 @@ namespace tempest
             return _logger;
         }
 
-      private:
+      protected:
         vector<unique_ptr<log_sink>> _log_sinks;
         logger _logger;
 
@@ -199,9 +199,9 @@ namespace tempest
 
         bool _should_close{false};
 
-        auto _update_fixed(std::chrono::duration<float> delta_time) -> void;
-        auto _update_variable(std::chrono::duration<float> delta_time) -> void;
-        auto _render_frame() -> void;
+        virtual auto _update_fixed(std::chrono::duration<float> delta_time) -> void;
+        virtual auto _update_variable(std::chrono::duration<float> delta_time) -> void;
+        virtual auto _render_frame() -> void;
 
         vector<ecs::entity> _entities_to_load;
     };

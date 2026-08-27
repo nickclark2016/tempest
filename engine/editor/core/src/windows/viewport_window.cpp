@@ -1,5 +1,6 @@
 #include <tempest/windows/viewport_window.hpp>
 
+#include <tempest/algorithm.hpp>
 #include <tempest/editor_engine_context.hpp>
 #include <tempest/ui.hpp>
 
@@ -7,7 +8,7 @@
 
 namespace tempest::editor
 {
-    viewport_window::viewport_window(editor_engine_context& ctx) : _ctx{&ctx}, _viewport_texture{}
+    viewport_window::viewport_window(editor_engine_context& ctx) : _ctx{&ctx}, _viewport_size{0, 0}
     {
     }
 
@@ -31,13 +32,10 @@ namespace tempest::editor
 
         if (ImGui::Begin(name.data(), &_open))
         {
-            // Set up a bar to put the play/pause buttons in
-            // |              | Play | Pause | Stop |          Quick Stats (Render Time, FPS, etc.) |
-
             const auto current_state = _ctx->get_simulation_state();
 
             auto draw_sim_button = [&](const char* label, simulation_state state) {
-                const bool is_active = (current_state == state);
+                const auto is_active = (current_state == state);
                 if (is_active)
                 {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
@@ -64,26 +62,27 @@ namespace tempest::editor
 
             ImGui::Separator();
 
-            const auto content_size = ImGui::GetContentRegionAvail();
-
             auto& renderer = _ctx->get_renderer();
 
             ImGui::BeginChild("ViewportChild", ImVec2(0, 0), 0,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-            if ((content_size.x != static_cast<float>(_viewport_size.x) ||
-                 content_size.y != static_cast<float>(_viewport_size.y)) &&
-                content_size.x > 0.0F && content_size.y > 0.0F)
-            {
-                _viewport_size.x = static_cast<uint32_t>(content_size.x);
-                _viewport_size.y = static_cast<uint32_t>(content_size.y);
+            const auto content_size = ImGui::GetContentRegionAvail();
+            const auto new_width = static_cast<uint32_t>(tempest::max(0.0F, content_size.x));
+            const auto new_height = static_cast<uint32_t>(tempest::max(0.0F, content_size.y));
 
-                renderer.resize(_viewport_size.x, _viewport_size.y);
+            if ((new_width != _viewport_size.x || new_height != _viewport_size.y) && new_width > 0 && new_height > 0)
+            {
+                _viewport_size.x = new_width;
+                _viewport_size.y = new_height;
+                renderer.resize(new_width, new_height);
             }
 
-            if (_viewport_texture.index != ~0U)
+            auto rg_tex_id = renderer.get_tonemapped_color_texture();
+            const auto* alloc = renderer.get_render_graph().get_allocator().get_texture(rg_tex_id.id);
+            if (alloc && alloc->sampled_descriptor.index != ~0U && _viewport_size.x > 0 && _viewport_size.y > 0)
             {
-                ui::image(_viewport_texture, _viewport_size.x, _viewport_size.y);
+                ui::image(alloc->sampled_descriptor, _viewport_size.x, _viewport_size.y);
             }
 
             ImGui::EndChild();
@@ -96,6 +95,7 @@ namespace tempest::editor
 
     auto viewport_window::aspect_ratio() const -> float
     {
-        return _viewport_size.y > 0 ? static_cast<float>(_viewport_size.x) / _viewport_size.y : 1.0f;
+        return _viewport_size.y > 0 ? static_cast<float>(_viewport_size.x) / static_cast<float>(_viewport_size.y)
+                                    : 1.0F;
     }
 } // namespace tempest::editor
