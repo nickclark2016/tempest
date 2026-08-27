@@ -81,10 +81,12 @@ namespace tempest
         [[nodiscard]] auto get_input_group(window_handle win) -> core::input_group;
 
         auto register_key_callback(window_handle win, function<void(core::key_state)> cb) -> void;
+        auto register_char_callback(window_handle win, function<void(uint32_t)> cb) -> void;
         auto register_mouse_button_callback(window_handle win, function<void(core::mouse_button_state)> cb) -> void;
         auto register_cursor_pos_callback(window_handle win, function<void(float, float)> cb) -> void;
         auto register_scroll_callback(window_handle win, function<void(float, float)> cb) -> void;
         auto register_resize_callback(window_handle win, function<void(uint32_t, uint32_t)> cb) -> void;
+        auto register_focus_callback(window_handle win, function<void(bool)> cb) -> void;
         auto register_close_callback(window_handle win, function<void()> cb) -> void;
 
       private:

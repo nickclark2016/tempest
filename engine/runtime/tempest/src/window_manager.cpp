@@ -229,10 +229,12 @@ namespace tempest
         cursor_mode current_cursor_mode{cursor_mode::normal};
 
         function<void(core::key_state)> key_callback;
+        function<void(uint32_t)> char_callback;
         function<void(core::mouse_button_state)> mouse_button_callback;
         function<void(float, float)> cursor_pos_callback;
         function<void(float, float)> scroll_callback;
         function<void(uint32_t, uint32_t)> resize_callback;
+        function<void(bool)> focus_callback;
         function<void()> close_callback;
     };
 
@@ -386,6 +388,28 @@ namespace tempest
             if (win_data->resize_callback)
             {
                 win_data->resize_callback(win_data->width, win_data->height);
+            }
+        });
+
+        // Character input callback
+        glfwSetCharCallback(native_win, [](GLFWwindow* win, unsigned int codepoint) {
+            auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
+            if (!win_data) return;
+
+            if (win_data->char_callback)
+            {
+                win_data->char_callback(static_cast<uint32_t>(codepoint));
+            }
+        });
+
+        // Window focus callback
+        glfwSetWindowFocusCallback(native_win, [](GLFWwindow* win, int focused) {
+            auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
+            if (!win_data) return;
+
+            if (win_data->focus_callback)
+            {
+                win_data->focus_callback(focused == GLFW_TRUE);
             }
         });
 
@@ -606,6 +630,15 @@ namespace tempest
         }
     }
 
+    auto window_manager::register_char_callback(window_handle win, function<void(uint32_t)> cb) -> void
+    {
+        auto* data = _impl->find_window(win);
+        if (data)
+        {
+            data->char_callback = tempest::move(cb);
+        }
+    }
+
     auto window_manager::register_mouse_button_callback(window_handle win, function<void(core::mouse_button_state)> cb)
         -> void
     {
@@ -640,6 +673,15 @@ namespace tempest
         if (data)
         {
             data->resize_callback = tempest::move(cb);
+        }
+    }
+
+    auto window_manager::register_focus_callback(window_handle win, function<void(bool)> cb) -> void
+    {
+        auto* data = _impl->find_window(win);
+        if (data)
+        {
+            data->focus_callback = tempest::move(cb);
         }
     }
 

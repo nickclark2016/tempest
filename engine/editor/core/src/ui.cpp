@@ -1,13 +1,16 @@
 #include <tempest/ui.hpp>
 
-#include <tempest/colorspace.hpp>
+#include <tempest/array.hpp>
 #include <tempest/enum.hpp>
-#include <tempest/frame_graph.hpp>
+#include <tempest/files.hpp>
+#include <tempest/int.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/memory.hpp>
 #include <tempest/rhi.hpp>
-#include <tempest/rhi_types.hpp>
-#include <tempest/tuple.hpp>
-#include <tempest/unit.hpp>
+#include <tempest/span.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
+#include <tempest/vec2.hpp>
 #include <tempest/vector.hpp>
 
 #include <imgui.h>
@@ -15,1225 +18,748 @@
 
 #include <chrono>
 #include <cstring>
+#include <filesystem>
 
 namespace tempest::editor
 {
     namespace
     {
-        constexpr array imgui_vertex_shader_spv = {
-            0x07230203, 0x00010000, 0x00080001, 0x0000002e, 0x00000000, 0x00020011, 0x00000001, 0x0006000b, 0x00000001,
-            0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x000a000f, 0x00000000,
-            0x00000004, 0x6e69616d, 0x00000000, 0x0000000b, 0x0000000f, 0x00000015, 0x0000001b, 0x0000001c, 0x00030003,
-            0x00000002, 0x000001c2, 0x00040005, 0x00000004, 0x6e69616d, 0x00000000, 0x00030005, 0x00000009, 0x00000000,
-            0x00050006, 0x00000009, 0x00000000, 0x6f6c6f43, 0x00000072, 0x00040006, 0x00000009, 0x00000001, 0x00005655,
-            0x00030005, 0x0000000b, 0x0074754f, 0x00040005, 0x0000000f, 0x6c6f4361, 0x0000726f, 0x00030005, 0x00000015,
-            0x00565561, 0x00060005, 0x00000019, 0x505f6c67, 0x65567265, 0x78657472, 0x00000000, 0x00060006, 0x00000019,
-            0x00000000, 0x505f6c67, 0x7469736f, 0x006e6f69, 0x00030005, 0x0000001b, 0x00000000, 0x00040005, 0x0000001c,
-            0x736f5061, 0x00000000, 0x00060005, 0x0000001e, 0x73755075, 0x6e6f4368, 0x6e617473, 0x00000074, 0x00050006,
-            0x0000001e, 0x00000000, 0x61635375, 0x0000656c, 0x00060006, 0x0000001e, 0x00000001, 0x61725475, 0x616c736e,
-            0x00006574, 0x00030005, 0x00000020, 0x00006370, 0x00040047, 0x0000000b, 0x0000001e, 0x00000000, 0x00040047,
-            0x0000000f, 0x0000001e, 0x00000002, 0x00040047, 0x00000015, 0x0000001e, 0x00000001, 0x00050048, 0x00000019,
-            0x00000000, 0x0000000b, 0x00000000, 0x00030047, 0x00000019, 0x00000002, 0x00040047, 0x0000001c, 0x0000001e,
-            0x00000000, 0x00050048, 0x0000001e, 0x00000000, 0x00000023, 0x00000000, 0x00050048, 0x0000001e, 0x00000001,
-            0x00000023, 0x00000008, 0x00030047, 0x0000001e, 0x00000002, 0x00020013, 0x00000002, 0x00030021, 0x00000003,
-            0x00000002, 0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006, 0x00000004, 0x00040017,
-            0x00000008, 0x00000006, 0x00000002, 0x0004001e, 0x00000009, 0x00000007, 0x00000008, 0x00040020, 0x0000000a,
-            0x00000003, 0x00000009, 0x0004003b, 0x0000000a, 0x0000000b, 0x00000003, 0x00040015, 0x0000000c, 0x00000020,
-            0x00000001, 0x0004002b, 0x0000000c, 0x0000000d, 0x00000000, 0x00040020, 0x0000000e, 0x00000001, 0x00000007,
-            0x0004003b, 0x0000000e, 0x0000000f, 0x00000001, 0x00040020, 0x00000011, 0x00000003, 0x00000007, 0x0004002b,
-            0x0000000c, 0x00000013, 0x00000001, 0x00040020, 0x00000014, 0x00000001, 0x00000008, 0x0004003b, 0x00000014,
-            0x00000015, 0x00000001, 0x00040020, 0x00000017, 0x00000003, 0x00000008, 0x0003001e, 0x00000019, 0x00000007,
-            0x00040020, 0x0000001a, 0x00000003, 0x00000019, 0x0004003b, 0x0000001a, 0x0000001b, 0x00000003, 0x0004003b,
-            0x00000014, 0x0000001c, 0x00000001, 0x0004001e, 0x0000001e, 0x00000008, 0x00000008, 0x00040020, 0x0000001f,
-            0x00000009, 0x0000001e, 0x0004003b, 0x0000001f, 0x00000020, 0x00000009, 0x00040020, 0x00000021, 0x00000009,
-            0x00000008, 0x0004002b, 0x00000006, 0x00000028, 0x00000000, 0x0004002b, 0x00000006, 0x00000029, 0x3f800000,
-            0x00050036, 0x00000002, 0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005, 0x0004003d, 0x00000007,
-            0x00000010, 0x0000000f, 0x00050041, 0x00000011, 0x00000012, 0x0000000b, 0x0000000d, 0x0003003e, 0x00000012,
-            0x00000010, 0x0004003d, 0x00000008, 0x00000016, 0x00000015, 0x00050041, 0x00000017, 0x00000018, 0x0000000b,
-            0x00000013, 0x0003003e, 0x00000018, 0x00000016, 0x0004003d, 0x00000008, 0x0000001d, 0x0000001c, 0x00050041,
-            0x00000021, 0x00000022, 0x00000020, 0x0000000d, 0x0004003d, 0x00000008, 0x00000023, 0x00000022, 0x00050085,
-            0x00000008, 0x00000024, 0x0000001d, 0x00000023, 0x00050041, 0x00000021, 0x00000025, 0x00000020, 0x00000013,
-            0x0004003d, 0x00000008, 0x00000026, 0x00000025, 0x00050081, 0x00000008, 0x00000027, 0x00000024, 0x00000026,
-            0x00050051, 0x00000006, 0x0000002a, 0x00000027, 0x00000000, 0x00050051, 0x00000006, 0x0000002b, 0x00000027,
-            0x00000001, 0x00070050, 0x00000007, 0x0000002c, 0x0000002a, 0x0000002b, 0x00000028, 0x00000029, 0x00050041,
-            0x00000011, 0x0000002d, 0x0000001b, 0x0000000d, 0x0003003e, 0x0000002d, 0x0000002c, 0x000100fd, 0x00010038,
-        };
-
-        constexpr array imgui_fragment_shader_spv = {
-            0x07230203, 0x00010000, 0x00080001, 0x0000001e, 0x00000000, 0x00020011, 0x00000001, 0x0006000b, 0x00000001,
-            0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x0007000f, 0x00000004,
-            0x00000004, 0x6e69616d, 0x00000000, 0x00000009, 0x0000000d, 0x00030010, 0x00000004, 0x00000007, 0x00030003,
-            0x00000002, 0x000001c2, 0x00040005, 0x00000004, 0x6e69616d, 0x00000000, 0x00040005, 0x00000009, 0x6c6f4366,
-            0x0000726f, 0x00030005, 0x0000000b, 0x00000000, 0x00050006, 0x0000000b, 0x00000000, 0x6f6c6f43, 0x00000072,
-            0x00040006, 0x0000000b, 0x00000001, 0x00005655, 0x00030005, 0x0000000d, 0x00006e49, 0x00050005, 0x00000016,
-            0x78655473, 0x65727574, 0x00000000, 0x00040047, 0x00000009, 0x0000001e, 0x00000000, 0x00040047, 0x0000000d,
-            0x0000001e, 0x00000000, 0x00040047, 0x00000016, 0x00000022, 0x00000000, 0x00040047, 0x00000016, 0x00000021,
-            0x00000000, 0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002, 0x00030016, 0x00000006, 0x00000020,
-            0x00040017, 0x00000007, 0x00000006, 0x00000004, 0x00040020, 0x00000008, 0x00000003, 0x00000007, 0x0004003b,
-            0x00000008, 0x00000009, 0x00000003, 0x00040017, 0x0000000a, 0x00000006, 0x00000002, 0x0004001e, 0x0000000b,
-            0x00000007, 0x0000000a, 0x00040020, 0x0000000c, 0x00000001, 0x0000000b, 0x0004003b, 0x0000000c, 0x0000000d,
-            0x00000001, 0x00040015, 0x0000000e, 0x00000020, 0x00000001, 0x0004002b, 0x0000000e, 0x0000000f, 0x00000000,
-            0x00040020, 0x00000010, 0x00000001, 0x00000007, 0x00090019, 0x00000013, 0x00000006, 0x00000001, 0x00000000,
-            0x00000000, 0x00000000, 0x00000001, 0x00000000, 0x0003001b, 0x00000014, 0x00000013, 0x00040020, 0x00000015,
-            0x00000000, 0x00000014, 0x0004003b, 0x00000015, 0x00000016, 0x00000000, 0x0004002b, 0x0000000e, 0x00000018,
-            0x00000001, 0x00040020, 0x00000019, 0x00000001, 0x0000000a, 0x00050036, 0x00000002, 0x00000004, 0x00000000,
-            0x00000003, 0x000200f8, 0x00000005, 0x00050041, 0x00000010, 0x00000011, 0x0000000d, 0x0000000f, 0x0004003d,
-            0x00000007, 0x00000012, 0x00000011, 0x0004003d, 0x00000014, 0x00000017, 0x00000016, 0x00050041, 0x00000019,
-            0x0000001a, 0x0000000d, 0x00000018, 0x0004003d, 0x0000000a, 0x0000001b, 0x0000001a, 0x00050057, 0x00000007,
-            0x0000001c, 0x00000017, 0x0000001b, 0x00050085, 0x00000007, 0x0000001d, 0x00000012, 0x0000001c, 0x0003003e,
-            0x00000009, 0x0000001d, 0x000100fd, 0x00010038,
-        };
-
-        ImGuiKey convert_key(const core::key_state& key_state) noexcept
+        auto convert_key(const core::key_state& key_state) noexcept -> ImGuiKey
         {
             switch (key_state.k)
             {
-            case core::key::tab:
-                return ImGuiKey_Tab;
-            case core::key::dpad_left:
-                return ImGuiKey_LeftArrow;
-            case core::key::dpad_right:
-                return ImGuiKey_RightArrow;
-            case core::key::dpad_up:
-                return ImGuiKey_UpArrow;
-            case core::key::dpad_down:
-                return ImGuiKey_DownArrow;
-            case core::key::page_up:
-                return ImGuiKey_PageUp;
-            case core::key::page_down:
-                return ImGuiKey_PageDown;
-            case core::key::home:
-                return ImGuiKey_Home;
-            case core::key::end:
-                return ImGuiKey_End;
-            case core::key::insert:
-                return ImGuiKey_Insert;
-            case core::key::deletion:
-                return ImGuiKey_Delete;
-            case core::key::backspace:
-                return ImGuiKey_Backspace;
-            case core::key::space:
-                return ImGuiKey_Space;
-            case core::key::enter:
-                return ImGuiKey_Enter;
-            case core::key::escape:
-                return ImGuiKey_Escape;
-            case core::key::apostrophe:
-                return ImGuiKey_Apostrophe;
-            case core::key::comma:
-                return ImGuiKey_Comma;
-            case core::key::minus:
-                return ImGuiKey_Minus;
-            case core::key::period:
-                return ImGuiKey_Period;
-            case core::key::slash:
-                return ImGuiKey_Slash;
-            case core::key::semicolon:
-                return ImGuiKey_Semicolon;
-            case core::key::equal:
-                return ImGuiKey_Equal;
-            case core::key::left_bracket:
-                return ImGuiKey_LeftBracket;
-            case core::key::backslash:
-                return ImGuiKey_Backslash;
-            case core::key::right_bracket:
-                return ImGuiKey_RightBracket;
-            case core::key::grave_accent:
-                return ImGuiKey_GraveAccent;
-            case core::key::caps_lock:
-                return ImGuiKey_CapsLock;
-            case core::key::scroll_lock:
-                return ImGuiKey_ScrollLock;
-            case core::key::num_lock:
-                return ImGuiKey_NumLock;
-            case core::key::print_screen:
-                return ImGuiKey_PrintScreen;
-            case core::key::pause:
-                return ImGuiKey_Pause;
-            case core::key::kp_0:
-                return ImGuiKey_Keypad0;
-            case core::key::kp_1:
-                return ImGuiKey_Keypad1;
-            case core::key::kp_2:
-                return ImGuiKey_Keypad2;
-            case core::key::kp_3:
-                return ImGuiKey_Keypad3;
-            case core::key::kp_4:
-                return ImGuiKey_Keypad4;
-            case core::key::kp_5:
-                return ImGuiKey_Keypad5;
-            case core::key::kp_6:
-                return ImGuiKey_Keypad6;
-            case core::key::kp_7:
-                return ImGuiKey_Keypad7;
-            case core::key::kp_8:
-                return ImGuiKey_Keypad8;
-            case core::key::kp_9:
-                return ImGuiKey_Keypad9;
-            case core::key::kp_decimal:
-                return ImGuiKey_KeypadDecimal;
-            case core::key::kp_divide:
-                return ImGuiKey_KeypadDivide;
-            case core::key::kp_multiply:
-                return ImGuiKey_KeypadMultiply;
-            case core::key::kp_subtract:
-                return ImGuiKey_KeypadSubtract;
-            case core::key::kp_add:
-                return ImGuiKey_KeypadAdd;
-            case core::key::kp_enter:
-                return ImGuiKey_KeypadEnter;
-            case core::key::kp_equal:
-                return ImGuiKey_KeypadEqual;
-            case core::key::left_shift:
-                return ImGuiKey_LeftShift;
-            case core::key::left_control:
-                return ImGuiKey_LeftCtrl;
-            case core::key::left_alt:
-                return ImGuiKey_LeftAlt;
-            case core::key::left_super:
-                return ImGuiKey_LeftSuper;
-            case core::key::right_shift:
-                return ImGuiKey_RightShift;
-            case core::key::right_control:
-                return ImGuiKey_RightCtrl;
-            case core::key::right_alt:
-                return ImGuiKey_RightAlt;
-            case core::key::right_super:
-                return ImGuiKey_RightSuper;
-            case core::key::menu:
-                return ImGuiKey_Menu;
-            case core::key::a:
-                return ImGuiKey_A;
-            case core::key::b:
-                return ImGuiKey_B;
-            case core::key::c:
-                return ImGuiKey_C;
-            case core::key::d:
-                return ImGuiKey_D;
-            case core::key::e:
-                return ImGuiKey_E;
-            case core::key::f:
-                return ImGuiKey_F;
-            case core::key::g:
-                return ImGuiKey_G;
-            case core::key::h:
-                return ImGuiKey_H;
-            case core::key::i:
-                return ImGuiKey_I;
-            case core::key::j:
-                return ImGuiKey_J;
-            case core::key::k:
-                return ImGuiKey_K;
-            case core::key::l:
-                return ImGuiKey_L;
-            case core::key::m:
-                return ImGuiKey_M;
-            case core::key::n:
-                return ImGuiKey_N;
-            case core::key::o:
-                return ImGuiKey_O;
-            case core::key::p:
-                return ImGuiKey_P;
-            case core::key::q:
-                return ImGuiKey_Q;
-            case core::key::r:
-                return ImGuiKey_R;
-            case core::key::s:
-                return ImGuiKey_S;
-            case core::key::t:
-                return ImGuiKey_T;
-            case core::key::u:
-                return ImGuiKey_U;
-            case core::key::v:
-                return ImGuiKey_V;
-            case core::key::w:
-                return ImGuiKey_W;
-            case core::key::x:
-                return ImGuiKey_X;
-            case core::key::y:
-                return ImGuiKey_Y;
-            case core::key::z:
-                return ImGuiKey_Z;
-            case core::key::fn_1:
-                return ImGuiKey_F1;
-            case core::key::fn_2:
-                return ImGuiKey_F2;
-            case core::key::fn_3:
-                return ImGuiKey_F3;
-            case core::key::fn_4:
-                return ImGuiKey_F4;
-            case core::key::fn_5:
-                return ImGuiKey_F5;
-            case core::key::fn_6:
-                return ImGuiKey_F6;
-            case core::key::fn_7:
-                return ImGuiKey_F7;
-            case core::key::fn_8:
-                return ImGuiKey_F8;
-            case core::key::fn_9:
-                return ImGuiKey_F9;
-            case core::key::fn_10:
-                return ImGuiKey_F10;
-            case core::key::fn_11:
-                return ImGuiKey_F11;
-            case core::key::fn_12:
-                return ImGuiKey_F12;
-            case core::key::fn_13:
-                return ImGuiKey_F13;
-            case core::key::fn_14:
-                return ImGuiKey_F14;
-            case core::key::fn_15:
-                return ImGuiKey_F15;
-            case core::key::fn_16:
-                return ImGuiKey_F16;
-            case core::key::fn_17:
-                return ImGuiKey_F17;
-            case core::key::fn_18:
-                return ImGuiKey_F18;
-            case core::key::fn_19:
-                return ImGuiKey_F19;
-            case core::key::fn_20:
-                return ImGuiKey_F20;
-            case core::key::fn_21:
-                return ImGuiKey_F21;
-            case core::key::fn_22:
-                return ImGuiKey_F22;
-            case core::key::fn_23:
-                return ImGuiKey_F23;
-            case core::key::fn_24:
-                return ImGuiKey_F24;
-            default:
-                return ImGuiKey_None;
+            case core::key::tab: return ImGuiKey_Tab;
+            case core::key::dpad_left: return ImGuiKey_LeftArrow;
+            case core::key::dpad_right: return ImGuiKey_RightArrow;
+            case core::key::dpad_up: return ImGuiKey_UpArrow;
+            case core::key::dpad_down: return ImGuiKey_DownArrow;
+            case core::key::page_up: return ImGuiKey_PageUp;
+            case core::key::page_down: return ImGuiKey_PageDown;
+            case core::key::home: return ImGuiKey_Home;
+            case core::key::end: return ImGuiKey_End;
+            case core::key::insert: return ImGuiKey_Insert;
+            case core::key::deletion: return ImGuiKey_Delete;
+            case core::key::backspace: return ImGuiKey_Backspace;
+            case core::key::space: return ImGuiKey_Space;
+            case core::key::enter: return ImGuiKey_Enter;
+            case core::key::escape: return ImGuiKey_Escape;
+            case core::key::apostrophe: return ImGuiKey_Apostrophe;
+            case core::key::comma: return ImGuiKey_Comma;
+            case core::key::minus: return ImGuiKey_Minus;
+            case core::key::period: return ImGuiKey_Period;
+            case core::key::slash: return ImGuiKey_Slash;
+            case core::key::semicolon: return ImGuiKey_Semicolon;
+            case core::key::equal: return ImGuiKey_Equal;
+            case core::key::left_bracket: return ImGuiKey_LeftBracket;
+            case core::key::backslash: return ImGuiKey_Backslash;
+            case core::key::right_bracket: return ImGuiKey_RightBracket;
+            case core::key::grave_accent: return ImGuiKey_GraveAccent;
+            case core::key::caps_lock: return ImGuiKey_CapsLock;
+            case core::key::scroll_lock: return ImGuiKey_ScrollLock;
+            case core::key::num_lock: return ImGuiKey_NumLock;
+            case core::key::print_screen: return ImGuiKey_PrintScreen;
+            case core::key::pause: return ImGuiKey_Pause;
+            case core::key::tw_0: return ImGuiKey_0;
+            case core::key::tw_1: return ImGuiKey_1;
+            case core::key::tw_2: return ImGuiKey_2;
+            case core::key::tw_3: return ImGuiKey_3;
+            case core::key::tw_4: return ImGuiKey_4;
+            case core::key::tw_5: return ImGuiKey_5;
+            case core::key::tw_6: return ImGuiKey_6;
+            case core::key::tw_7: return ImGuiKey_7;
+            case core::key::tw_8: return ImGuiKey_8;
+            case core::key::tw_9: return ImGuiKey_9;
+            case core::key::a: return ImGuiKey_A;
+            case core::key::b: return ImGuiKey_B;
+            case core::key::c: return ImGuiKey_C;
+            case core::key::d: return ImGuiKey_D;
+            case core::key::e: return ImGuiKey_E;
+            case core::key::f: return ImGuiKey_F;
+            case core::key::g: return ImGuiKey_G;
+            case core::key::h: return ImGuiKey_H;
+            case core::key::i: return ImGuiKey_I;
+            case core::key::j: return ImGuiKey_J;
+            case core::key::k: return ImGuiKey_K;
+            case core::key::l: return ImGuiKey_L;
+            case core::key::m: return ImGuiKey_M;
+            case core::key::n: return ImGuiKey_N;
+            case core::key::o: return ImGuiKey_O;
+            case core::key::p: return ImGuiKey_P;
+            case core::key::q: return ImGuiKey_Q;
+            case core::key::r: return ImGuiKey_R;
+            case core::key::s: return ImGuiKey_S;
+            case core::key::t: return ImGuiKey_T;
+            case core::key::u: return ImGuiKey_U;
+            case core::key::v: return ImGuiKey_V;
+            case core::key::w: return ImGuiKey_W;
+            case core::key::x: return ImGuiKey_X;
+            case core::key::y: return ImGuiKey_Y;
+            case core::key::z: return ImGuiKey_Z;
+            case core::key::fn_1: return ImGuiKey_F1;
+            case core::key::fn_2: return ImGuiKey_F2;
+            case core::key::fn_3: return ImGuiKey_F3;
+            case core::key::fn_4: return ImGuiKey_F4;
+            case core::key::fn_5: return ImGuiKey_F5;
+            case core::key::fn_6: return ImGuiKey_F6;
+            case core::key::fn_7: return ImGuiKey_F7;
+            case core::key::fn_8: return ImGuiKey_F8;
+            case core::key::fn_9: return ImGuiKey_F9;
+            case core::key::fn_10: return ImGuiKey_F10;
+            case core::key::fn_11: return ImGuiKey_F11;
+            case core::key::fn_12: return ImGuiKey_F12;
+            case core::key::fn_13: return ImGuiKey_F13;
+            case core::key::fn_14: return ImGuiKey_F14;
+            case core::key::fn_15: return ImGuiKey_F15;
+            case core::key::fn_16: return ImGuiKey_F16;
+            case core::key::fn_17: return ImGuiKey_F17;
+            case core::key::fn_18: return ImGuiKey_F18;
+            case core::key::fn_19: return ImGuiKey_F19;
+            case core::key::fn_20: return ImGuiKey_F20;
+            case core::key::fn_21: return ImGuiKey_F21;
+            case core::key::fn_22: return ImGuiKey_F22;
+            case core::key::fn_23: return ImGuiKey_F23;
+            case core::key::fn_24: return ImGuiKey_F24;
+            case core::key::kp_0: return ImGuiKey_Keypad0;
+            case core::key::kp_1: return ImGuiKey_Keypad1;
+            case core::key::kp_2: return ImGuiKey_Keypad2;
+            case core::key::kp_3: return ImGuiKey_Keypad3;
+            case core::key::kp_4: return ImGuiKey_Keypad4;
+            case core::key::kp_5: return ImGuiKey_Keypad5;
+            case core::key::kp_6: return ImGuiKey_Keypad6;
+            case core::key::kp_7: return ImGuiKey_Keypad7;
+            case core::key::kp_8: return ImGuiKey_Keypad8;
+            case core::key::kp_9: return ImGuiKey_Keypad9;
+            case core::key::kp_decimal: return ImGuiKey_KeypadDecimal;
+            case core::key::kp_divide: return ImGuiKey_KeypadDivide;
+            case core::key::kp_multiply: return ImGuiKey_KeypadMultiply;
+            case core::key::kp_subtract: return ImGuiKey_KeypadSubtract;
+            case core::key::kp_add: return ImGuiKey_KeypadAdd;
+            case core::key::kp_enter: return ImGuiKey_KeypadEnter;
+            case core::key::kp_equal: return ImGuiKey_KeypadEqual;
+            case core::key::left_shift: return ImGuiKey_LeftShift;
+            case core::key::left_control: return ImGuiKey_LeftCtrl;
+            case core::key::left_alt: return ImGuiKey_LeftAlt;
+            case core::key::left_super: return ImGuiKey_LeftSuper;
+            case core::key::right_shift: return ImGuiKey_RightShift;
+            case core::key::right_control: return ImGuiKey_RightCtrl;
+            case core::key::right_alt: return ImGuiKey_RightAlt;
+            case core::key::right_super: return ImGuiKey_RightSuper;
+            case core::key::menu: return ImGuiKey_Menu;
+            default: return ImGuiKey_None;
             }
         }
 
-        struct per_frame_buffer_data
+        auto load_shader_bytecode(string_view filename) -> vector<byte>
         {
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> vertex_buffer =
-                rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> index_buffer =
-                rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer>::null_handle;
+            const auto search_paths = {
+                std::filesystem::path("shaders/editor") / filename.data(),
+                std::filesystem::path("shaders") / filename.data(),
+                std::filesystem::path("bin/Debug/windows-clang/shaders/editor") / filename.data(),
+                std::filesystem::path("bin/Debug/windows-clang/shaders") / filename.data(),
+                std::filesystem::path("bin/Debug/windows-msc-v145/shaders/editor") / filename.data(),
+                std::filesystem::path("bin/Debug/windows-msc-v145/shaders") / filename.data(),
+                std::filesystem::path("bin/RelWithDebugInfo/windows-clang/shaders/editor") / filename.data(),
+                std::filesystem::path("bin/RelWithDebugInfo/windows-msc-v145/shaders/editor") / filename.data(),
+                std::filesystem::path("bin/Release/windows-clang/shaders/editor") / filename.data(),
+                std::filesystem::path("bin/Release/windows-msc-v145/shaders/editor") / filename.data(),
+                std::filesystem::path("../shaders/editor") / filename.data(),
+                std::filesystem::path("engine/editor/core/shaders") / filename.data(),
+            };
 
-            uint64_t vertex_buffer_size = 0;
-            uint64_t index_buffer_size = 0;
-        };
+            for (const auto& sp : search_paths)
+            {
+                if (std::filesystem::exists(sp))
+                {
+                    auto path_str = sp.string();
+                    auto bytes = core::read_bytes(string_view{path_str.c_str(), path_str.size()});
+                    if (!bytes.empty())
+                    {
+                        return bytes;
+                    }
+                }
+            }
 
-        struct window_render_buffer_data
+            return {};
+        }
+
+        struct push_constants
         {
-            uint32_t index;
-            uint32_t count;
-            vector<per_frame_buffer_data> frame_render_buffers;
-        };
-
-        struct render_viewport_data
-        {
-            rhi::window_surface* surface = nullptr;
-            window_render_buffer_data render_buffers = {};
-            bool window_owned = false;
-        };
-
-        struct render_state
-        {
-            graphics::graphics_task_execution_context* exec_context;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout;
-        };
-
-        struct render_data
-        {
-            rhi::device* device = nullptr;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout> pipeline_layout =
-                rhi::typed_rhi_handle<rhi::rhi_handle_type::pipeline_layout>::null_handle;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline =
-                rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline>::null_handle;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> viewport_pipeline =
-                rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline>::null_handle;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler> texture_sampler =
-                rhi::typed_rhi_handle<rhi::rhi_handle_type::sampler>::null_handle;
-
-            size_t buffer_memory_alignment = 256;
-
-            window_render_buffer_data main_window_render_buffers;
-
-            rhi::image_format color_target_fmt;
-            uint32_t frames_in_flight;
-
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::image> font_texture =
-                rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+            math::float2 scale;
+            math::float2 translate;
+            uint64_t vertex_buffer;
+            uint32_t texture_id;
+            uint32_t sampler_id;
         };
     } // namespace
 
-    struct ui_context::impl
+    struct per_frame_buffer
     {
-        rhi::window_surface* surface = nullptr;
-        rhi::window_surface* mouse_surface = nullptr;
-        rhi::device* device = nullptr;
-
-        render_data render_backend_data = {};
-
-        ImGuiContext* imgui_context = nullptr;
-        ImVec2 window_size;
-        ImVec2 framebuffer_scale;
-
-        ImVec2 last_mouse_pos = {0.0f, 0.0f};
-
-        std::chrono::steady_clock::time_point time;
-
-        bool mouse_ignore_button_up;
+        rhi::buffer_handle vertex_buffer{};
+        rhi::buffer_handle index_buffer{};
+        size_t vertex_count{0};
+        size_t index_count{0};
     };
 
-    ui_context::ui_context(rhi::window_surface* surface, rhi::device* device, rhi::image_format target_fmt,
-                           uint32_t frames_in_flight) noexcept
+    struct ui_context::impl
     {
-        _impl = make_unique<ui_context::impl>();
-        _impl->render_backend_data.color_target_fmt = target_fmt;
-        _impl->render_backend_data.frames_in_flight = frames_in_flight;
+        window_manager* win_mgr{nullptr};
+        window_handle win{null_window_handle};
+        rhi::device* dev{nullptr};
+        rhi::data_format target_format{rhi::data_format::unknown};
+        uint32_t frames_in_flight{1};
 
-        IMGUI_CHECKVERSION();
+        ImGuiContext* imgui_context{nullptr};
 
-        auto ctx = ImGui::CreateContext();
-        ctx->IO = ImGui::GetIO();
-        ctx->IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        ctx->IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-        ctx->IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        ctx->IO.Fonts->AddFontDefault();
+        rhi::texture_handle font_texture{};
+        rhi::texture_view_handle font_view{};
+        rhi::descriptor_handle font_descriptor{};
 
-        auto& style = ImGui::GetStyle();
-        for (auto idx = 0; idx < ImGuiCol_COUNT; ++idx)
-        {
-            const auto srgb_value = style.Colors[idx];
-            const auto srgb_units = units::quantity<units::color::iec_srgb, units::color_rgba_32>({
-                srgb_value.x,
-                srgb_value.y,
-                srgb_value.z,
-                srgb_value.w,
-            });
+        rhi::sampler_handle linear_sampler{};
+        rhi::descriptor_handle linear_sampler_descriptor{};
 
-            const auto linear = units::quantity_cast<units::color::linear>(srgb_units);
-            style.Colors[idx].x = linear.value().values[0];
-            style.Colors[idx].y = linear.value().values[1];
-            style.Colors[idx].z = linear.value().values[2];
-            style.Colors[idx].w = linear.value().values[3];
-        }
+        rhi::graphics_pipeline_handle pipeline{};
 
-        _impl->imgui_context = ctx;
-        _impl->surface = surface;
-        _impl->device = device;
+        vector<per_frame_buffer> frame_buffers;
+        uint32_t current_frame_index{0};
 
-        _init_window_backend();
-        _init_render_backend();
-    }
+        std::chrono::steady_clock::time_point last_time;
+        ImVec2 last_mouse_pos{0.0f, 0.0f};
 
-    ui_context::~ui_context()
+        auto init_input_callbacks() -> void;
+        auto init_render_backend() -> void;
+        auto setup_font_texture() -> void;
+    };
+
+    auto ui_context::impl::init_input_callbacks() -> void
     {
-        auto viewport_render_data =
-            static_cast<render_viewport_data*>(_impl->imgui_context->Viewports[0]->RendererUserData);
-        delete viewport_render_data;
-
-        _impl->device->destroy_sampler(_impl->render_backend_data.texture_sampler);
-        _impl->device->destroy_graphics_pipeline(_impl->render_backend_data.pipeline);
-        _impl->device->destroy_pipeline_layout(_impl->render_backend_data.pipeline_layout);
-        ImGui::DestroyContext(static_cast<ImGuiContext*>(_impl->imgui_context));
-    }
-
-    void ui_context::begin_ui_commands()
-    {
-        auto context = static_cast<ImGuiContext*>(_impl->imgui_context);
-        ImGui::SetCurrentContext(context);
-        auto& io = context->IO;
-
-        // Renderer-specific new frame setup
-        {
-            if (!_impl->render_backend_data.font_texture)
-            {
-                _setup_font_textures();
-            }
-        }
-
-        // Windowing specific new frame setup
-        {
-            // Handle window size and framebuffer scale
-            uint32_t width = _impl->surface->width();
-            uint32_t height = _impl->surface->height();
-            uint32_t fb_width = _impl->surface->framebuffer_width();
-            uint32_t fb_height = _impl->surface->framebuffer_height();
-
-            _impl->window_size = ImVec2(static_cast<float>(width), static_cast<float>(height));
-            _impl->framebuffer_scale = (width > 0 && height > 0)
-                                           ? ImVec2(static_cast<float>(fb_width) / static_cast<float>(width),
-                                                    static_cast<float>(fb_height) / static_cast<float>(height))
-                                           : ImVec2(1.0f, 1.0f);
-
-            io.DisplaySize = _impl->window_size;
-            io.DisplayFramebufferScale = _impl->framebuffer_scale;
-
-            // Handle monitors
-            auto& platform_io = context->PlatformIO;
-            auto monitors = _impl->surface->get_monitors();
-
-            platform_io.Monitors.clear();
-
-            for (const auto& monitor : monitors)
-            {
-                ImGuiPlatformMonitor platform_monitor;
-                platform_monitor.MainPos = ImVec2(static_cast<float>(monitor.x), static_cast<float>(monitor.y));
-                platform_monitor.MainSize = ImVec2(static_cast<float>(monitor.current_video_mode.width),
-                                                   static_cast<float>(monitor.current_video_mode.height));
-                platform_monitor.WorkPos =
-                    ImVec2(static_cast<float>(monitor.work_x), static_cast<float>(monitor.work_y));
-                platform_monitor.WorkSize =
-                    ImVec2(static_cast<float>(monitor.work_width), static_cast<float>(monitor.work_height));
-                platform_monitor.DpiScale = monitor.content_scale_x;
-                platform_io.Monitors.push_back(platform_monitor);
-            }
-
-            auto current_time = std::chrono::steady_clock::now();
-            if (current_time <= _impl->time)
-            {
-                current_time = _impl->time + std::chrono::microseconds(100);
-            }
-            io.DeltaTime = std::chrono::duration<float>(current_time - _impl->time).count();
-            _impl->time = current_time;
-
-            // Handle mouse data
-            _impl->mouse_ignore_button_up = false;
-
-            [&]() {
-                if ((io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) || _impl->surface->is_cursor_disabled())
-                {
-                    return;
-                }
-
-                ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
-                for (int n = 0; n < platform_io.Viewports.Size; ++n)
-                {
-                    auto surface = static_cast<rhi::window_surface*>(platform_io.Viewports[n]->PlatformHandle);
-                    if (cursor == ImGuiMouseCursor_None)
-                    {
-                        surface->hide_cursor();
-                    }
-                    else
-                    {
-                        auto cursor_shape = [cursor]() {
-                            switch (cursor)
-                            {
-                            case ImGuiMouseCursor_Arrow:
-                                return rhi::window_surface::cursor_shape::arrow;
-                            case ImGuiMouseCursor_TextInput:
-                                return rhi::window_surface::cursor_shape::ibeam;
-                            case ImGuiMouseCursor_ResizeAll:
-                                return rhi::window_surface::cursor_shape::crosshair;
-                            case ImGuiMouseCursor_ResizeNS:
-                                return rhi::window_surface::cursor_shape::resize_vertical;
-                            case ImGuiMouseCursor_ResizeEW:
-                                return rhi::window_surface::cursor_shape::resize_horizontal;
-                            case ImGuiMouseCursor_ResizeNESW:
-                                return rhi::window_surface::cursor_shape::resize_horizontal;
-                            case ImGuiMouseCursor_ResizeNWSE:
-                                return rhi::window_surface::cursor_shape::resize_vertical;
-                            case ImGuiMouseCursor_Hand:
-                                return rhi::window_surface::cursor_shape::hand;
-                            default:
-                                return rhi::window_surface::cursor_shape::arrow;
-                            }
-                        }();
-
-                        surface->set_cursor_shape(cursor_shape);
-                        surface->show_cursor();
-                    }
-                }
-            }();
-        }
-
-        // Start new imgui frame
-        ImGui::NewFrame();
-    }
-
-    void ui_context::finish_ui_commands()
-    {
-        ImGui::Render();
-    }
-
-    void ui_context::render_ui_commands(graphics::graphics_task_execution_context& exec) noexcept
-    {
-        auto& draw_data = _impl->imgui_context->Viewports[0]->DrawDataP;
-        if (!draw_data.Valid)
+        if (!win_mgr || !win.is_valid())
         {
             return;
         }
 
-        auto fb_width = static_cast<int>(draw_data.DisplaySize.x * draw_data.FramebufferScale.x);
-        auto fb_height = static_cast<int>(draw_data.DisplaySize.y * draw_data.FramebufferScale.y);
-
-        // Early return if the framebuffer is 0 sized
-        if (fb_width <= 0 || fb_height <= 0)
-        {
-            return;
-        }
-
-        auto owner_vp = draw_data.OwnerViewport;
-        auto viewport_render_data = static_cast<render_viewport_data*>(owner_vp->RendererUserData);
-        assert(viewport_render_data != nullptr);
-
-        auto wrb = &viewport_render_data->render_buffers;
-        if (wrb->frame_render_buffers.empty())
-        {
-            wrb->index = 0;
-            wrb->count = _impl->render_backend_data.frames_in_flight;
-            wrb->frame_render_buffers.resize(wrb->count);
-        }
-
-        assert(wrb->frame_render_buffers.size() == wrb->count);
-        assert(wrb->count == _impl->render_backend_data.frames_in_flight);
-
-        auto& rb = wrb->frame_render_buffers[wrb->index];
-
-        if (draw_data.TotalVtxCount > 0)
-        {
-            // Set up the vertex and index buffers
-            // Map the buffers
-            // Copy the vertex data
-            // Unmap and flush the buffers
-
-            auto resize_buffers = [device = _impl->device,
-                                   alignment = _impl->render_backend_data.buffer_memory_alignment](
-                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::buffer> buf, size_t requested_size,
-                                      enum_mask<rhi::buffer_usage> usage, string name) {
-                if (buf)
-                {
-                    device->destroy_buffer(buf);
-                }
-
-                const auto aligned_size = math::round_to_next_multiple(requested_size, alignment);
-
-                auto buffer_desc = rhi::buffer_desc{
-                    .size = aligned_size,
-                    .location = rhi::memory_location::automatic,
-                    .usage = usage,
-                    .access_type = rhi::host_access_type::incoherent,
-                    .access_pattern = rhi::host_access_pattern::sequential,
-                    .name = tempest::move(name),
-                };
-
-                return make_tuple(device->create_buffer(buffer_desc), aligned_size);
-            };
-
-            const auto vertex_size = math::round_to_next_multiple(draw_data.TotalVtxCount * sizeof(ImDrawVert),
-                                                                  _impl->render_backend_data.buffer_memory_alignment);
-            const auto index_size = math::round_to_next_multiple(draw_data.TotalIdxCount * sizeof(ImDrawIdx),
-                                                                 _impl->render_backend_data.buffer_memory_alignment);
-
-            if (!rb.vertex_buffer || rb.vertex_buffer_size < vertex_size)
-            {
-                auto [buf, size] = resize_buffers(rb.vertex_buffer, vertex_size,
-                                                  make_enum_mask(rhi::buffer_usage::vertex), "ImGUI Vertex Buffer");
-                rb.vertex_buffer = buf;
-                rb.vertex_buffer_size = size;
-            }
-
-            if (!rb.index_buffer || rb.index_buffer_size < index_size)
-            {
-                auto [buf, size] = resize_buffers(rb.index_buffer, index_size, make_enum_mask(rhi::buffer_usage::index),
-                                                  "ImGUI Index Buffer");
-                rb.index_buffer = buf;
-                rb.index_buffer_size = size;
-            }
-
-            auto vertex_buffer_data = _impl->device->map_buffer(rb.vertex_buffer);
-            auto index_buffer_data = _impl->device->map_buffer(rb.index_buffer);
-
-            auto vtx_dst = reinterpret_cast<ImDrawVert*>(vertex_buffer_data);
-            auto idx_dst = reinterpret_cast<ImDrawIdx*>(index_buffer_data);
-
-            for (int n = 0; n < draw_data.CmdListsCount; ++n)
-            {
-                const auto draw_list = draw_data.CmdLists[n];
-                std::memcpy(vtx_dst, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
-                std::memcpy(idx_dst, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-                vtx_dst += draw_list->VtxBuffer.Size;
-                idx_dst += draw_list->IdxBuffer.Size;
-            }
-
-            const array buffers = {
-                rb.vertex_buffer,
-                rb.index_buffer,
-            };
-
-            _impl->device->flush_buffers(buffers);
-
-            _impl->device->unmap_buffer(rb.vertex_buffer);
-            _impl->device->unmap_buffer(rb.index_buffer);
-        }
-
-        // Setup the render state for tempest::rhi
-        auto setup_render_state = [&bd = _impl->render_backend_data](
-                                      ImDrawData& draw_data,
-                                      rhi::typed_rhi_handle<rhi::rhi_handle_type::graphics_pipeline> pipeline,
-                                      per_frame_buffer_data* rb, int fb_width, int fb_height,
-                                      graphics::graphics_task_execution_context& exec) {
-            exec.bind_pipeline(pipeline);
-            exec.set_cull_mode(make_enum_mask(rhi::cull_mode::none));
-
-            if (draw_data.TotalVtxCount > 0)
-            {
-                const array vertex_buffers = {
-                    rb->vertex_buffer,
-                };
-
-                const array vertex_buffer_offsets = {
-                    size_t(0),
-                };
-
-                exec.bind_vertex_buffers(0, vertex_buffers, vertex_buffer_offsets);
-                exec.bind_index_buffer(rb->index_buffer,
-                                       sizeof(ImDrawIdx) == 2 ? rhi::index_format::uint16 : rhi::index_format::uint32,
-                                       0);
-            }
-
-            exec.set_viewport(0, 0, static_cast<float>(fb_width), static_cast<float>(fb_height), 0, 1, false);
-
-            const array scale = {
-                2.0f / draw_data.DisplaySize.x,
-                2.0f / draw_data.DisplaySize.y,
-            };
-
-            const array translate = {
-                -1.0f - draw_data.DisplayPos.x * scale[0],
-                -1.0f - draw_data.DisplayPos.y * scale[1],
-            };
-
-            exec.push_constants(bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 0, scale);
-            exec.push_constants(bd.pipeline_layout, make_enum_mask(rhi::shader_stage::vertex), 8, translate);
-        };
-
-        setup_render_state(draw_data, _impl->render_backend_data.pipeline, &rb, fb_width, fb_height, exec);
-
-        // Set up the render state for imgui
-        ImGuiPlatformIO& platform_io = _impl->imgui_context->PlatformIO;
-        render_state state = {
-            .exec_context = &exec,
-            .pipeline = _impl->render_backend_data.pipeline,
-            .pipeline_layout = _impl->render_backend_data.pipeline_layout,
-        };
-        platform_io.Renderer_RenderState = &state;
-
-        auto clip_offset = draw_data.DisplayPos;
-        auto clip_scale = draw_data.FramebufferScale;
-
-        auto global_vtx_offset = 0u;
-        auto global_idx_offset = 0u;
-
-        for (int n = 0; n < draw_data.CmdListsCount; ++n)
-        {
-            const auto draw_list = draw_data.CmdLists[n];
-            for (int cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size; ++cmd_i)
-            {
-                const auto& cmd = draw_list->CmdBuffer[cmd_i];
-                if (cmd.UserCallback)
-                {
-                    if (cmd.UserCallback != ImDrawCallback_ResetRenderState)
-                    {
-                        setup_render_state(draw_data, _impl->render_backend_data.viewport_pipeline, &rb, fb_width,
-                                           fb_height, exec);
-                    }
-                    else
-                    {
-                        cmd.UserCallback(draw_list, &cmd);
-                    }
-                }
-                else
-                {
-                    auto clip_min = ImVec2((cmd.ClipRect.x - clip_offset.x) * clip_scale.x,
-                                           (cmd.ClipRect.y - clip_offset.y) * clip_scale.y);
-                    auto clip_max = ImVec2((cmd.ClipRect.z - clip_offset.x) * clip_scale.x,
-                                           (cmd.ClipRect.w - clip_offset.y) * clip_scale.y);
-
-                    if (clip_min.x < 0.0f)
-                    {
-                        clip_min.x = 0.0f;
-                    }
-
-                    if (clip_min.y < 0.0f)
-                    {
-                        clip_min.y = 0.0f;
-                    }
-
-                    if (clip_max.x > static_cast<float>(fb_width))
-                    {
-                        clip_max.x = static_cast<float>(fb_width);
-                    }
-
-                    if (clip_max.y > static_cast<float>(fb_height))
-                    {
-                        clip_max.y = static_cast<float>(fb_height);
-                    }
-
-                    if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
-                    {
-                        continue; // Clipped out
-                    }
-
-                    // Apply the scissor test
-                    exec.set_scissor(static_cast<uint32_t>(clip_min.x), static_cast<uint32_t>(clip_min.y),
-                                     static_cast<uint32_t>(clip_max.x - clip_min.x),
-                                     static_cast<uint32_t>(clip_max.y - clip_min.y));
-
-                    // Push the descriptor set for the texture
-                    auto packed_texture_id = cmd.GetTexID();
-                    uint32_t generation = 0, id = 0;
-                    math::unpack_uint32x2(packed_texture_id, id, generation);
-                    auto texture_handle = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>{
-                        .id = id,
-                        .generation = generation,
-                    };
-
-                    rhi::image_binding_descriptor image_desc = {
-                        .index = 0,
-                        .type = rhi::descriptor_type::combined_image_sampler,
-                        .array_offset = 0,
-                        .images = {},
-                    };
-                    image_desc.images.push_back({
-                        .image = texture_handle,
-                        .sampler = _impl->render_backend_data.texture_sampler,
-                        .layout = rhi::image_layout::shader_read_only,
-                    });
-
-                    exec.push_descriptors(_impl->render_backend_data.pipeline_layout, rhi::bind_point::graphics, 0, {},
-                                          {&image_desc, 1}, {});
-                    exec.draw_indexed(cmd.ElemCount, 1u, cmd.IdxOffset + global_idx_offset,
-                                      static_cast<int32_t>(cmd.VtxOffset + global_vtx_offset), 0);
-                }
-            }
-
-            global_idx_offset += static_cast<uint32_t>(draw_list->IdxBuffer.Size);
-            global_vtx_offset += static_cast<uint32_t>(draw_list->VtxBuffer.Size);
-        }
-
-        platform_io.Renderer_RenderState = nullptr;
-        exec.set_scissor(0, 0, static_cast<uint32_t>(fb_width), static_cast<uint32_t>(fb_height));
-    }
-
-    void ui_context::_init_window_backend()
-    {
-        auto& ctx = _impl->imgui_context;
-        auto surface = _impl->surface;
-
-        ctx->IO.BackendPlatformUserData = static_cast<void*>(_impl.get());
-        ctx->IO.BackendPlatformName = "tempest_editor_ui";
-        ctx->IO.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
-        ctx->IO.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;
-
-        auto main_viewport = ctx->Viewports[0];
-        main_viewport->PlatformHandle = static_cast<void*>(surface);
-
-        surface->register_focus_callback([ctx](bool focused) { ctx->IO.AddFocusEvent(focused); });
-
-        surface->register_keyboard_callback([ctx](const core::key_state& key_state) {
+        win_mgr->register_key_callback(win, [this](const core::key_state& key_state) {
             if (key_state.action != core::key_action::press && key_state.action != core::key_action::release)
             {
                 return;
             }
-
-            auto& io = ctx->IO;
-
-            ImGuiKey key = convert_key(key_state);
+            ImGui::SetCurrentContext(imgui_context);
+            auto& io = ImGui::GetIO();
+            auto key = convert_key(key_state);
             io.AddKeyEvent(key, key_state.action == core::key_action::press);
+            io.AddKeyEvent(ImGuiKey_ModShift, core::test_modifier(key_state, core::key_modifier::shift));
+            io.AddKeyEvent(ImGuiKey_ModCtrl, core::test_modifier(key_state, core::key_modifier::control));
+            io.AddKeyEvent(ImGuiKey_ModAlt, core::test_modifier(key_state, core::key_modifier::alt));
+            io.AddKeyEvent(ImGuiKey_ModSuper, core::test_modifier(key_state, core::key_modifier::super));
         });
 
-        surface->register_cursor_callback([ctx](float x, float y) {
-            auto& io = ctx->IO;
-            io.AddMousePosEvent(x, y);
-            static_cast<ui_context::impl*>(io.BackendPlatformUserData)->last_mouse_pos = ImVec2(x, y);
-        });
-
-        surface->register_cursor_enter_callback([ctx, surface](bool entered) {
-            auto& io = ctx->IO;
-            auto bd = static_cast<ui_context::impl*>(io.BackendPlatformUserData);
-            if (entered)
-            {
-                io.AddMousePosEvent(bd->last_mouse_pos.x, bd->last_mouse_pos.y);
-                bd->mouse_surface = surface;
-            }
-            else
-            {
-                bd->last_mouse_pos = io.MousePos;
-                bd->mouse_surface = nullptr;
-                io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
-            }
-        });
-
-        surface->register_character_input_callback([ctx](uint32_t codepoint) {
-            auto& io = ctx->IO;
+        win_mgr->register_char_callback(win, [this](uint32_t codepoint) {
+            ImGui::SetCurrentContext(imgui_context);
+            auto& io = ImGui::GetIO();
             io.AddInputCharacter(codepoint);
         });
 
-        surface->register_mouse_callback([ctx](const core::mouse_button_state& mouse_state) {
+        win_mgr->register_mouse_button_callback(win, [this](const core::mouse_button_state& mouse_state) {
             if (mouse_state.action != core::mouse_action::press && mouse_state.action != core::mouse_action::release)
             {
                 return;
             }
-
-            auto& io = ctx->IO;
-
-            ImGuiMouseButton button = -1;
+            ImGui::SetCurrentContext(imgui_context);
+            auto& io = ImGui::GetIO();
+            auto button = -1;
             switch (mouse_state.button)
             {
-            case core::mouse_button::left:
-                button = ImGuiMouseButton_Left;
-                break;
-            case core::mouse_button::right:
-                button = ImGuiMouseButton_Right;
-                break;
-            case core::mouse_button::middle:
-                button = ImGuiMouseButton_Middle;
-                break;
-            default:
-                return; // Unsupported mouse button
+            case core::mouse_button::mb_1: button = ImGuiMouseButton_Left; break;
+            case core::mouse_button::mb_2: button = ImGuiMouseButton_Right; break;
+            case core::mouse_button::mb_3: button = ImGuiMouseButton_Middle; break;
+            default: return;
             }
-
             if (button >= 0 && button < ImGuiMouseButton_COUNT)
             {
                 io.AddMouseButtonEvent(button, mouse_state.action == core::mouse_action::press);
             }
         });
 
-        surface->register_scroll_callback([ctx](float x_offset, float y_offset) {
-            auto& io = ctx->IO;
+        win_mgr->register_cursor_pos_callback(win, [this](float x, float y) {
+            ImGui::SetCurrentContext(imgui_context);
+            auto& io = ImGui::GetIO();
+            io.AddMousePosEvent(x, y);
+            last_mouse_pos = ImVec2(x, y);
+        });
+
+        win_mgr->register_scroll_callback(win, [this](float x_offset, float y_offset) {
+            ImGui::SetCurrentContext(imgui_context);
+            auto& io = ImGui::GetIO();
             io.AddMouseWheelEvent(x_offset, y_offset);
         });
 
-        auto& platform_io = ctx->PlatformIO;
-        auto monitors = _impl->surface->get_monitors();
-
-        platform_io.Monitors.clear();
-
-        for (const auto& monitor : monitors)
-        {
-            ImGuiPlatformMonitor platform_monitor;
-            platform_monitor.MainPos = ImVec2(static_cast<float>(monitor.x), static_cast<float>(monitor.y));
-            platform_monitor.MainSize = ImVec2(static_cast<float>(monitor.current_video_mode.width),
-                                               static_cast<float>(monitor.current_video_mode.height));
-            platform_monitor.WorkPos = ImVec2(static_cast<float>(monitor.work_x), static_cast<float>(monitor.work_y));
-            platform_monitor.WorkSize =
-                ImVec2(static_cast<float>(monitor.work_width), static_cast<float>(monitor.work_height));
-            platform_monitor.DpiScale = monitor.content_scale_x;
-            platform_io.Monitors.push_back(platform_monitor);
-        }
-
-        _impl->time = std::chrono::steady_clock::now();
+        win_mgr->register_focus_callback(win, [this](bool focused) {
+            ImGui::SetCurrentContext(imgui_context);
+            auto& io = ImGui::GetIO();
+            io.AddFocusEvent(focused);
+        });
     }
 
-    void ui_context::_init_render_backend()
+    auto ui_context::impl::setup_font_texture() -> void
     {
-        auto& ctx = _impl->imgui_context;
-        ctx->IO.BackendRendererUserData = &_impl->render_backend_data;
-
-        auto& render_data = _impl->render_backend_data;
-
-        // Set up the pipeline layout
-        auto desc_set_0_binding_0 = rhi::descriptor_binding_layout{
-            .binding_index = 0,
-            .type = rhi::descriptor_type::combined_image_sampler,
-            .count = 1,
-            .stages = make_enum_mask(rhi::shader_stage::fragment),
-            .flags = make_enum_mask(rhi::descriptor_binding_flags::none),
-        };
-        auto set_0_bindings = vector<rhi::descriptor_binding_layout>();
-        set_0_bindings.push_back(desc_set_0_binding_0);
-
-        auto set_0_layout = _impl->device->create_descriptor_set_layout(
-            set_0_bindings, make_enum_mask(rhi::descriptor_set_layout_flags::push));
-
-        auto pipeline_layout_desc = rhi::pipeline_layout_desc{};
-        pipeline_layout_desc.descriptor_set_layouts.push_back(set_0_layout);
-        pipeline_layout_desc.push_constants.push_back(rhi::push_constant_range{
-            .offset = 0,
-            .range = static_cast<uint32_t>(sizeof(float) * 4),
-            .stages = make_enum_mask(rhi::shader_stage::vertex),
-        });
-
-        auto pipeline_layout = _impl->device->create_pipeline_layout(pipeline_layout_desc);
-        render_data.pipeline_layout = pipeline_layout;
-
-        // Set up the pipeline
-
-        const auto vertex_shader_bytes = reinterpret_cast<const byte* const>(imgui_vertex_shader_spv.data());
-        const auto vertex_shader_size =
-            sizeof(decltype(imgui_vertex_shader_spv)::value_type) * imgui_vertex_shader_spv.size();
-
-        const auto fragment_shader_bytes = reinterpret_cast<const byte* const>(imgui_fragment_shader_spv.data());
-        const auto fragment_shader_size =
-            sizeof(decltype(imgui_fragment_shader_spv)::value_type) * imgui_fragment_shader_spv.size();
-
-        auto vertex_attributes = vector<rhi::vertex_attribute_desc>();
-        auto vertex_bindings = vector<rhi::vertex_binding_desc>();
-
-        vertex_bindings.push_back({
-            .binding_index = 0,
-            .stride = static_cast<uint32_t>(sizeof(ImDrawVert)),
-            .input_rate = rhi::vertex_input_rate::vertex,
-        });
-
-        vertex_attributes.push_back({
-            .binding_index = 0,
-            .location_index = 0,
-            .format = rhi::buffer_format::rg32_float,
-            .offset = offsetof(ImDrawVert, pos),
-        });
-
-        vertex_attributes.push_back({
-            .binding_index = 0,
-            .location_index = 1,
-            .format = rhi::buffer_format::rg32_float,
-            .offset = offsetof(ImDrawVert, uv),
-        });
-
-        vertex_attributes.push_back({
-            .binding_index = 0,
-            .location_index = 2,
-            .format = rhi::buffer_format::rgba8_unorm,
-            .offset = offsetof(ImDrawVert, col),
-        });
-
-        auto vertex_input_desc = rhi::vertex_input_desc{
-            .bindings = tempest::move(vertex_bindings),
-            .attributes = tempest::move(vertex_attributes),
-        };
-
-        const auto color_attachment_blend = rhi::color_blend_attachment{
-            .blend_enable = true,
-            .src_color_blend_factor = rhi::blend_factor::src_alpha,
-            .dst_color_blend_factor = rhi::blend_factor::one_minus_src_alpha,
-            .color_blend_op = rhi::blend_op::add,
-            .src_alpha_blend_factor = rhi::blend_factor::one,
-            .dst_alpha_blend_factor = rhi::blend_factor::one_minus_src_alpha,
-        };
-
-        auto color_blend_state = rhi::color_blend_state{};
-        color_blend_state.attachments.push_back(color_attachment_blend);
-
-        auto pipeline_desc = rhi::graphics_pipeline_desc{
-            .color_attachment_formats = {},
-            .depth_attachment_format = none(),
-            .stencil_attachment_format = none(),
-            .vertex_shader = {vertex_shader_bytes, vertex_shader_bytes + vertex_shader_size},
-            .tessellation_control_shader = {},
-            .tessellation_evaluation_shader = {},
-            .geometry_shader = {},
-            .fragment_shader = {fragment_shader_bytes, fragment_shader_bytes + fragment_shader_size},
-            .input_assembly =
-                {
-                    .topology = rhi::primitive_topology::triangle_list,
-                },
-            .vertex_input = tempest::move(vertex_input_desc),
-            .tessellation = none(),
-            .multisample =
-                {
-                    .sample_count = rhi::image_sample_count::sample_count_1,
-                    .sample_shading = none(),
-                    .alpha_to_coverage = false,
-                    .alpha_to_one = false,
-                },
-            .rasterization =
-                {
-                    .depth_clamp_enable = false,
-                    .rasterizer_discard_enable = false,
-                    .polygon_mode = rhi::polygon_mode::fill,
-                    .cull_mode = make_enum_mask(rhi::cull_mode::none),
-                    .vertex_winding = rhi::vertex_winding::counter_clockwise,
-                    .depth_bias = none(),
-                    .line_width = 1.0f,
-                },
-            .depth_stencil =
-                {
-                    .depth = none(),
-                    .stencil = none(),
-                },
-            .color_blend = color_blend_state,
-            .layout = pipeline_layout,
-            .name = "ImGUI Pipeline",
-        };
-        pipeline_desc.color_attachment_formats.push_back(_impl->render_backend_data.color_target_fmt);
-
-        render_data.pipeline = _impl->device->create_graphics_pipeline(pipeline_desc);
-
-        // Texture sampler state
-        auto texture_sampler = rhi::sampler_desc{
-            .mag = rhi::filter::linear,
-            .min = rhi::filter::linear,
-            .mipmap = rhi::mipmap_mode::linear,
-            .address_u = rhi::address_mode::clamp_to_edge,
-            .address_v = rhi::address_mode::clamp_to_edge,
-            .address_w = rhi::address_mode::clamp_to_edge,
-            .mip_lod_bias = 0.0f,
-            .min_lod = -1000.0f,
-            .max_lod = 1000.0f,
-            .max_anisotropy = 1.0f,
-            .compare = none(),
-            .name = "ImGUI Texture Sampler",
-        };
-
-        render_data.texture_sampler = _impl->device->create_sampler(texture_sampler);
-
-        // set up viewport data
-        auto main_vp = _impl->imgui_context->Viewports[0];
-        main_vp->RendererUserData = new render_viewport_data();
-    }
-
-    void ui_context::_setup_font_textures()
-    {
-        if (_impl->render_backend_data.font_texture)
+        if (!dev)
         {
-            _impl->device->destroy_image(_impl->render_backend_data.font_texture);
-            _impl->render_backend_data.font_texture = rhi::typed_rhi_handle<rhi::rhi_handle_type::image>::null_handle;
+            return;
         }
 
-        auto& io = _impl->imgui_context->IO;
+        ImGui::SetCurrentContext(imgui_context);
+        auto& io = ImGui::GetIO();
 
-        auto& wq = _impl->device->get_primary_work_queue();
-        auto cmds = wq.get_next_command_list();
-
-        unsigned char* pixels;
-        int width, height;
+        unsigned char* pixels = nullptr;
+        int width = 0;
+        int height = 0;
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-        const auto upload_size = width * height * 4 * sizeof(char);
 
-        auto font_tex_create_info = rhi::image_desc{
-            .format = rhi::image_format::rgba8_unorm,
-            .type = rhi::image_type::image_2d,
+        const auto upload_size = static_cast<uint64_t>(width) * static_cast<uint64_t>(height) * 4;
+
+        auto tex_desc = rhi::texture_desc{
             .width = static_cast<uint32_t>(width),
             .height = static_cast<uint32_t>(height),
             .depth = 1,
-            .array_layers = 1,
             .mip_levels = 1,
-            .sample_count = rhi::image_sample_count::sample_count_1,
-            .tiling = rhi::image_tiling_type::optimal,
-            .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::image_usage::sampled, rhi::image_usage::transfer_dst),
-            .name = "ImGUI Font Texture",
+            .array_layers = 1,
+            .format = rhi::data_format::rgba8_unorm,
+            .memory_usage = rhi::memory_usage::device_only,
+            .usage = rhi::texture_usage::sampled | rhi::texture_usage::transfer_dst,
+            .name = "ImGui Font Texture",
         };
+        font_texture = dev->create_texture(tex_desc);
 
-        auto font_tex = _impl->device->create_image(font_tex_create_info);
-        _impl->render_backend_data.font_texture = font_tex;
-
-        // Set up the upload buffer
-        auto upload_buffer_desc = rhi::buffer_desc{
+        auto upload_desc = rhi::buffer_desc{
             .size = upload_size,
-            .location = rhi::memory_location::host,
-            .usage = make_enum_mask(rhi::buffer_usage::transfer_src),
-            .access_type = rhi::host_access_type::coherent,
-            .access_pattern = rhi::host_access_pattern::sequential,
-            .name = "ImGUI Font Upload Buffer",
+            .memory_usage = rhi::memory_usage::upload,
+            .usage = rhi::buffer_usage::transfer_src,
+            .name = "ImGui Font Upload Buffer",
+        };
+        auto upload_buf = dev->create_buffer(upload_desc);
+        std::memcpy(upload_buf.cpu_address, pixels, upload_size);
+
+        auto& graphics_port = dev->get_graphics_execution_port();
+        auto& cmd = graphics_port.acquire_command_list(0, rhi::command_list_lifetime::transient);
+
+        cmd.begin();
+
+        auto pre_barrier = rhi::texture_barrier{
+            .texture = font_texture,
+            .src =
+                {
+                    .stages = rhi::pipeline_stage::top_of_pipe,
+                    .access = rhi::resource_access::none,
+                    .layout = rhi::image_layout::undefined,
+                },
+            .dst =
+                {
+                    .stages = rhi::pipeline_stage::all_transfer,
+                    .access = rhi::resource_access::write,
+                    .layout = rhi::image_layout::general,
+                },
+        };
+        cmd.pipeline_barrier(span<const rhi::texture_barrier>{&pre_barrier, 1}, {});
+
+        auto copy_region = rhi::buffer_texture_copy_region{
+            .buffer_offset = 0,
+            .buffer_row_length = static_cast<uint32_t>(width),
+            .buffer_image_height = static_cast<uint32_t>(height),
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .array_layer_count = 1,
+            .image_offset_x = 0,
+            .image_offset_y = 0,
+            .image_offset_z = 0,
+            .image_extent_width = static_cast<uint32_t>(width),
+            .image_extent_height = static_cast<uint32_t>(height),
+            .image_extent_depth = 1,
+        };
+        cmd.copy_buffer_to_texture(upload_buf, font_texture, span<const rhi::buffer_texture_copy_region>{&copy_region, 1});
+
+        auto post_barrier = rhi::texture_barrier{
+            .texture = font_texture,
+            .src =
+                {
+                    .stages = rhi::pipeline_stage::all_transfer,
+                    .access = rhi::resource_access::write,
+                    .layout = rhi::image_layout::general,
+                },
+            .dst =
+                {
+                    .stages = rhi::pipeline_stage::fragment,
+                    .access = rhi::resource_access::read,
+                    .layout = rhi::image_layout::general,
+                },
+        };
+        cmd.pipeline_barrier(span<const rhi::texture_barrier>{&post_barrier, 1}, {});
+
+        cmd.end();
+
+        auto timeline_sem = dev->create_timeline_semaphore();
+        auto signal_point = rhi::device_sync_point{
+            .semaphore = timeline_sem,
+            .value = 1,
+            .stages = rhi::pipeline_stage::all_transfer,
         };
 
-        auto upload_buffer = _impl->device->create_buffer(upload_buffer_desc);
-        auto upload_buffer_data = _impl->device->map_buffer(upload_buffer);
-        std::memcpy(upload_buffer_data, pixels, upload_size);
-        _impl->device->unmap_buffer(upload_buffer);
+        const auto* cmd_ptr = &cmd;
+        auto submit_res = graphics_port.submit(span<const rhi::command_list*>{&cmd_ptr, 1}, {},
+                                               span<const rhi::device_sync_point>{&signal_point, 1});
+        if (submit_res.has_value())
+        {
+            dev->wait_for_sync(rhi::host_sync_point{.semaphore = timeline_sem, .value = 1});
+        }
 
-        wq.begin_command_list(cmds, true);
+        dev->destroy_semaphore(timeline_sem);
+        dev->destroy_buffer(upload_buf);
 
-        // Transition the font texture to transfer destination layout
-        const array pre_barriers = {
-            rhi::work_queue::image_barrier{
-                .image = _impl->render_backend_data.font_texture,
-                .old_layout = rhi::image_layout::undefined,
-                .new_layout = rhi::image_layout::transfer_dst,
-                .src_stages = make_enum_mask(rhi::pipeline_stage::bottom),
-                .src_access = make_enum_mask(rhi::memory_access::none),
-                .dst_stages = make_enum_mask(rhi::pipeline_stage::copy),
-                .dst_access = make_enum_mask(rhi::memory_access::transfer_write),
-            },
-        };
+        font_view = dev->create_texture_view(font_texture, rhi::texture_view_desc{});
+        font_descriptor = dev->allocate_descriptor(rhi::descriptor_type::sampled_image);
+        dev->write_sampled_image_descriptor(font_descriptor, font_view, rhi::image_layout::general);
 
-        wq.transition_image(cmds, pre_barriers);
-        wq.copy(cmds, upload_buffer, _impl->render_backend_data.font_texture, rhi::image_layout::transfer_dst, 0, 0);
-
-        const array post_barriers = {
-            rhi::work_queue::image_barrier{
-                .image = _impl->render_backend_data.font_texture,
-                .old_layout = rhi::image_layout::transfer_dst,
-                .new_layout = rhi::image_layout::shader_read_only,
-                .src_stages = make_enum_mask(rhi::pipeline_stage::copy),
-                .src_access = make_enum_mask(rhi::memory_access::transfer_write),
-                .dst_stages = make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                .dst_access = make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::shader_sampled_read),
-            },
-        };
-
-        wq.transition_image(cmds, post_barriers);
-
-        wq.end_command_list(cmds);
-
-        rhi::work_queue::submit_info submit_info;
-        submit_info.command_lists.push_back(cmds);
-
-        wq.submit(tempest::span(&submit_info, 1));
-        _impl->device->destroy_buffer(upload_buffer);
-
-        auto packed_handle = math::pack_uint32x2(font_tex.id, font_tex.generation);
-        io.Fonts->SetTexID(static_cast<ImTextureID>(packed_handle));
+        io.Fonts->SetTexID(static_cast<ImTextureID>(static_cast<uintptr_t>(font_descriptor.index)));
     }
 
-    graphics::graph_resource_handle<rhi::rhi_handle_type::image> create_ui_pass(
-        string name, ui_context& ui_ctx, graphics::graph_builder& builder, rhi::device& dev,
-        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target,
-        span<graphics::graph_resource_handle<rhi::rhi_handle_type::image>> targets_to_read)
+    auto ui_context::impl::init_render_backend() -> void
     {
-        builder.create_graphics_pass(
-            tempest::move(name),
-            [&](graphics::graphics_task_builder& task) {
-                task.read_write(
-                    render_target, rhi::image_layout::color_attachment,
-                    make_enum_mask(rhi::pipeline_stage::color_attachment_output),
-                    make_enum_mask(rhi::memory_access::color_attachment_write),
-                    make_enum_mask(rhi::pipeline_stage::color_attachment_output, rhi::pipeline_stage::fragment_shader),
-                    make_enum_mask(rhi::memory_access::color_attachment_write,
-                                   rhi::memory_access::color_attachment_read));
+        if (!dev)
+        {
+            return;
+        }
 
-                for (auto& target : targets_to_read)
+        // Create linear clamp sampler and its descriptor
+        auto samp_desc = rhi::sampler_desc{
+            .min_filter = rhi::filter_mode::linear,
+            .mag_filter = rhi::filter_mode::linear,
+            .mipmap_mode = rhi::mipmap_mode::linear,
+            .address_u = rhi::address_mode::clamp_to_edge,
+            .address_v = rhi::address_mode::clamp_to_edge,
+            .address_w = rhi::address_mode::clamp_to_edge,
+            .name = "ImGui Linear Sampler",
+        };
+        linear_sampler = dev->create_sampler(samp_desc);
+        linear_sampler_descriptor = dev->allocate_descriptor(rhi::descriptor_type::sampler);
+        dev->write_sampler_descriptor(linear_sampler_descriptor, linear_sampler);
+
+        // Load Slang-compiled shaders
+        auto vs_bytes = load_shader_bytecode("imgui.vert.spv");
+        auto fs_bytes = load_shader_bytecode("imgui.frag.spv");
+
+        if (!vs_bytes.empty() && !fs_bytes.empty())
+        {
+            auto vs_desc = rhi::shader_module_desc{
+                .stage = rhi::shader_stage::vertex,
+                .ir_code = span<const byte>{vs_bytes.data(), vs_bytes.size()},
+                .entry_point = "VSMain",
+            };
+            auto fs_desc = rhi::shader_module_desc{
+                .stage = rhi::shader_stage::fragment,
+                .ir_code = span<const byte>{fs_bytes.data(), fs_bytes.size()},
+                .entry_point = "FSMain",
+            };
+
+            auto stages = array{vs_desc, fs_desc};
+            auto color_formats = array{target_format};
+            auto blend_state = rhi::attachment_blend_state{
+                .blend_enable = true,
+                .src_color_blend_factor = rhi::blend_factor::src_alpha,
+                .dst_color_blend_factor = rhi::blend_factor::one_minus_src_alpha,
+                .src_alpha_blend_factor = rhi::blend_factor::one,
+                .dst_alpha_blend_factor = rhi::blend_factor::one_minus_src_alpha,
+            };
+            auto blend_states = array{blend_state};
+
+            auto pipe_desc = rhi::graphics_pipeline_desc{
+                .shader_modules = span<const rhi::shader_module_desc>{stages.data(), stages.size()},
+                .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+                .depth_stencil_attachment_format = nullopt,
+                .primitive_topology = rhi::primitive_topology::triangle_list,
+                .rasterization_state =
+                    {
+                        .polygon_mode = rhi::polygon_mode::fill,
+                        .cull_mode = rhi::cull_mode::none,
+                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                    },
+                .depth_stencil_state =
+                    {
+                        .depth_test_enable = false,
+                        .depth_write_enable = false,
+                    },
+                .color_attachment_blend_states =
+                    span<const rhi::attachment_blend_state>{blend_states.data(), blend_states.size()},
+                .name = "ImGui Graphics Pipeline",
+            };
+
+            pipeline = dev->create_graphics_pipeline(pipe_desc);
+        }
+
+        // Initialize font texture
+        setup_font_texture();
+
+        // Allocate per-frame buffers
+        frame_buffers.resize(frames_in_flight);
+    }
+
+    ui_context::ui_context(window_manager& win_mgr, window_handle win, rhi::device& device,
+                           rhi::data_format target_format, uint32_t frames_in_flight)
+        : _impl(make_unique<impl>())
+    {
+        _impl->win_mgr = &win_mgr;
+        _impl->win = win;
+        _impl->dev = &device;
+        _impl->target_format = target_format;
+        _impl->frames_in_flight = tempest::max(1u, frames_in_flight);
+
+        IMGUI_CHECKVERSION();
+        _impl->imgui_context = ImGui::CreateContext();
+        ImGui::SetCurrentContext(_impl->imgui_context);
+
+        auto& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.BackendPlatformName = "tempest_window_manager";
+        io.BackendRendererName = "tempest_rhi_vk_slang";
+
+        _impl->last_time = std::chrono::steady_clock::now();
+
+        _impl->init_input_callbacks();
+        _impl->init_render_backend();
+    }
+
+    ui_context::~ui_context()
+    {
+        if (_impl)
+        {
+            if (_impl->dev)
+            {
+                if (_impl->font_descriptor.index != ~0U)
                 {
-                    task.read(target, rhi::image_layout::shader_read_only,
-                              make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                              make_enum_mask(rhi::memory_access::shader_read, rhi::memory_access::shader_sampled_read));
+                    _impl->dev->free_descriptor(rhi::descriptor_type::sampled_image, _impl->font_descriptor);
                 }
-            },
-            [](graphics::graphics_task_execution_context& ctx,
-               graphics::graph_resource_handle<rhi::rhi_handle_type::image> rt, ui_context* ui, rhi::device* device) {
-                const auto rt_handle = ctx.find_image(rt);
-                const auto width = static_cast<uint32_t>(device->get_image_width(rt_handle));
-                const auto height = static_cast<uint32_t>(device->get_image_height(rt_handle));
+                if (_impl->linear_sampler_descriptor.index != ~0U)
+                {
+                    _impl->dev->free_descriptor(rhi::descriptor_type::sampler, _impl->linear_sampler_descriptor);
+                }
+                if (_impl->font_view.handle != 0)
+                {
+                    _impl->dev->destroy_texture_view(_impl->font_view);
+                }
+                if (_impl->font_texture.handle != 0)
+                {
+                    _impl->dev->destroy_texture(_impl->font_texture);
+                }
+                if (_impl->linear_sampler.handle != 0)
+                {
+                    _impl->dev->destroy_sampler(_impl->linear_sampler);
+                }
+                if (_impl->pipeline.handle != 0)
+                {
+                    _impl->dev->destroy_graphics_pipeline(_impl->pipeline);
+                }
+                for (auto& fb : _impl->frame_buffers)
+                {
+                    if (fb.vertex_buffer.handle != 0)
+                    {
+                        _impl->dev->destroy_buffer(fb.vertex_buffer);
+                    }
+                    if (fb.index_buffer.handle != 0)
+                    {
+                        _impl->dev->destroy_buffer(fb.index_buffer);
+                    }
+                }
+            }
 
-                auto rp_begin_info = rhi::work_queue::render_pass_info{};
-                rp_begin_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
-                    .image = rt_handle,
-                    .layout = rhi::image_layout::color_attachment,
-                    .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
-                    .load_op = rhi::work_queue::load_op::load,
-                    .store_op = rhi::work_queue::store_op::store,
-                });
-                rp_begin_info.x = 0;
-                rp_begin_info.y = 0;
-                rp_begin_info.width = width;
-                rp_begin_info.height = height;
-                rp_begin_info.name = "UI Render Pass";
+            if (_impl->imgui_context)
+            {
+                ImGui::DestroyContext(_impl->imgui_context);
+                _impl->imgui_context = nullptr;
+            }
+        }
+    }
 
-                ctx.begin_render_pass(rp_begin_info);
-                ui->render_ui_commands(ctx);
-                ctx.end_render_pass();
-            },
-            render_target, &ui_ctx, &dev);
+    auto ui_context::begin_ui_commands() -> void
+    {
+        ImGui::SetCurrentContext(_impl->imgui_context);
+        auto& io = ImGui::GetIO();
 
-        return render_target;
+        if (_impl->win_mgr && _impl->win.is_valid())
+        {
+            auto width = _impl->win_mgr->get_width(_impl->win);
+            auto height = _impl->win_mgr->get_height(_impl->win);
+            auto fb_width = _impl->win_mgr->get_framebuffer_width(_impl->win);
+            auto fb_height = _impl->win_mgr->get_framebuffer_height(_impl->win);
+
+            io.DisplaySize = ImVec2(static_cast<float>(width), static_cast<float>(height));
+            if (width > 0 && height > 0)
+            {
+                io.DisplayFramebufferScale = ImVec2(static_cast<float>(fb_width) / static_cast<float>(width),
+                                                    static_cast<float>(fb_height) / static_cast<float>(height));
+            }
+            else
+            {
+                io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+            }
+        }
+
+        auto current_time = std::chrono::steady_clock::now();
+        auto dt = std::chrono::duration<float>(current_time - _impl->last_time).count();
+        io.DeltaTime = dt > 0.0f ? dt : (1.0f / 60.0f);
+        _impl->last_time = current_time;
+
+        ImGui::NewFrame();
+    }
+
+    auto ui_context::finish_ui_commands() -> void
+    {
+        ImGui::SetCurrentContext(_impl->imgui_context);
+        ImGui::Render();
+    }
+
+    auto ui_context::get_imgui_context() const noexcept -> ImGuiContext*
+    {
+        return _impl ? _impl->imgui_context : nullptr;
+    }
+
+    auto ui_context::render_ui_commands(rhi::command_list& cmd, uint32_t width, uint32_t height) -> void
+    {
+        ImGui::SetCurrentContext(_impl->imgui_context);
+        auto* draw_data = ImGui::GetDrawData();
+        if (!draw_data || draw_data->TotalVtxCount <= 0 || width == 0 || height == 0)
+        {
+            return;
+        }
+
+        _impl->current_frame_index = (_impl->current_frame_index + 1) % _impl->frames_in_flight;
+        auto& fb = _impl->frame_buffers[_impl->current_frame_index];
+
+        const auto required_vtx_count = static_cast<size_t>(draw_data->TotalVtxCount);
+        const auto required_idx_count = static_cast<size_t>(draw_data->TotalIdxCount);
+
+        if (fb.vertex_count < required_vtx_count || fb.vertex_buffer.handle == 0)
+        {
+            if (fb.vertex_buffer.handle != 0)
+            {
+                _impl->dev->destroy_buffer(fb.vertex_buffer);
+            }
+            fb.vertex_count = required_vtx_count + 1024;
+            auto vtx_desc = rhi::buffer_desc{
+                .size = fb.vertex_count * sizeof(ImDrawVert),
+                .memory_usage = rhi::memory_usage::upload,
+                .usage = rhi::buffer_usage::vertex_buffer | rhi::buffer_usage::storage_buffer |
+                         rhi::buffer_usage::device_address,
+                .name = "ImGui Vertex Buffer",
+            };
+            fb.vertex_buffer = _impl->dev->create_buffer(vtx_desc);
+        }
+
+        if (fb.index_count < required_idx_count || fb.index_buffer.handle == 0)
+        {
+            if (fb.index_buffer.handle != 0)
+            {
+                _impl->dev->destroy_buffer(fb.index_buffer);
+            }
+            fb.index_count = required_idx_count + 2048;
+            auto idx_desc = rhi::buffer_desc{
+                .size = fb.index_count * sizeof(ImDrawIdx),
+                .memory_usage = rhi::memory_usage::upload,
+                .usage = rhi::buffer_usage::index_buffer | rhi::buffer_usage::storage_buffer |
+                         rhi::buffer_usage::device_address,
+                .name = "ImGui Index Buffer",
+            };
+            fb.index_buffer = _impl->dev->create_buffer(idx_desc);
+        }
+
+        auto* vtx_dst = static_cast<ImDrawVert*>(fb.vertex_buffer.cpu_address);
+        auto* idx_dst = static_cast<ImDrawIdx*>(fb.index_buffer.cpu_address);
+
+        for (int n = 0; n < draw_data->CmdListsCount; ++n)
+        {
+            const auto* cmd_list = draw_data->CmdLists[n];
+            std::memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+            std::memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+            vtx_dst += cmd_list->VtxBuffer.Size;
+            idx_dst += cmd_list->IdxBuffer.Size;
+        }
+
+        cmd.bind_pipeline(_impl->pipeline);
+        cmd.bind_index_buffer(fb.index_buffer,
+                              sizeof(ImDrawIdx) == 2 ? rhi::index_type::uint16 : rhi::index_type::uint32, 0);
+        cmd.set_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
+
+        const auto clip_off = draw_data->DisplayPos;
+        const auto clip_scale = draw_data->FramebufferScale;
+        auto global_vtx_offset = 0u;
+        auto global_idx_offset = 0u;
+
+        for (int n = 0; n < draw_data->CmdListsCount; ++n)
+        {
+            const auto* cmd_list = draw_data->CmdLists[n];
+            for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; ++cmd_i)
+            {
+                const auto& pcmd = cmd_list->CmdBuffer[cmd_i];
+                if (pcmd.UserCallback != nullptr)
+                {
+                    if (pcmd.UserCallback == ImDrawCallback_ResetRenderState)
+                    {
+                        cmd.bind_pipeline(_impl->pipeline);
+                        cmd.bind_index_buffer(
+                            fb.index_buffer,
+                            sizeof(ImDrawIdx) == 2 ? rhi::index_type::uint16 : rhi::index_type::uint32, 0);
+                        cmd.set_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
+                    }
+                    else
+                    {
+                        pcmd.UserCallback(cmd_list, &pcmd);
+                    }
+                }
+                else
+                {
+                    auto clip_min = math::float2((pcmd.ClipRect.x - clip_off.x) * clip_scale.x,
+                                                (pcmd.ClipRect.y - clip_off.y) * clip_scale.y);
+                    auto clip_max = math::float2((pcmd.ClipRect.z - clip_off.x) * clip_scale.x,
+                                                (pcmd.ClipRect.w - clip_off.y) * clip_scale.y);
+
+                    if (clip_min.x < 0.0f) clip_min.x = 0.0f;
+                    if (clip_min.y < 0.0f) clip_min.y = 0.0f;
+                    if (clip_max.x > static_cast<float>(width)) clip_max.x = static_cast<float>(width);
+                    if (clip_max.y > static_cast<float>(height)) clip_max.y = static_cast<float>(height);
+
+                    if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
+                    {
+                        continue;
+                    }
+
+                    cmd.set_scissor(static_cast<int32_t>(clip_min.x), static_cast<int32_t>(clip_min.y),
+                                    static_cast<uint32_t>(clip_max.x - clip_min.x),
+                                    static_cast<uint32_t>(clip_max.y - clip_min.y));
+
+                    const auto pc = push_constants{
+                        .scale = math::float2(2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y),
+                        .translate = math::float2(-1.0f - draw_data->DisplayPos.x * (2.0f / draw_data->DisplaySize.x),
+                                                  -1.0f - draw_data->DisplayPos.y * (2.0f / draw_data->DisplaySize.y)),
+                        .vertex_buffer = fb.vertex_buffer.gpu_address,
+                        .texture_id = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pcmd.GetTexID())),
+                        .sampler_id = _impl->linear_sampler_descriptor.index,
+                    };
+
+                    cmd.push_constants(rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
+                                       span<const byte>{reinterpret_cast<const byte*>(&pc), sizeof(pc)});
+
+                    cmd.draw_indexed(pcmd.ElemCount, 1, pcmd.IdxOffset + global_idx_offset,
+                                     static_cast<int32_t>(pcmd.VtxOffset + global_vtx_offset), 0);
+                }
+            }
+            global_idx_offset += static_cast<uint32_t>(cmd_list->IdxBuffer.Size);
+            global_vtx_offset += static_cast<uint32_t>(cmd_list->VtxBuffer.Size);
+        }
     }
 
     namespace ui
     {
-        void image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width, uint32_t height)
+        auto image(rhi::descriptor_handle descriptor, uint32_t width, uint32_t height) -> void
         {
-            const auto id = math::pack_uint32x2(img.id, img.generation);
-            ImGui::Image(bit_cast<ImTextureID>(id), ImVec2(static_cast<float>(width), static_cast<float>(height)));
+            ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(descriptor.index)),
+                         ImVec2(static_cast<float>(width), static_cast<float>(height)));
         }
 
         auto scalar(cstring_view label, float input) -> float
@@ -1258,13 +784,13 @@ namespace tempest::editor
 
         auto drag_integral(cstring_view label, int input, int minimum, int maximum) -> int
         {
-            ImGui::DragInt(label.c_str(), &input, 1.0F, minimum, maximum);
+            ImGui::DragInt(label.c_str(), &input, 1.0f, minimum, maximum);
             return input;
         }
 
         auto drag_scalar(cstring_view label, float input, float minimum, float maximum) -> float
         {
-            ImGui::DragFloat(label.c_str(), &input, 1.0F, minimum, maximum);
+            ImGui::DragFloat(label.c_str(), &input, 1.0f, minimum, maximum);
             return input;
         }
 
@@ -1274,7 +800,6 @@ namespace tempest::editor
             const auto button_width = text_width + ImGui::GetStyle().FramePadding.x * 2.0f;
             const auto available_width = ImGui::GetContentRegionAvail().x;
 
-            // If the button is smaller than the available width, attempt to center
             if (button_width < available_width)
             {
                 const auto offset_x = (available_width - button_width) / 2.0f;

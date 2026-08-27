@@ -61,14 +61,15 @@ namespace tempest::editor
             draw_sim_button("Pause", simulation_state::pause);
             ImGui::SameLine();
             draw_sim_button("Stop", simulation_state::stopped);
-            
+
             ImGui::Separator();
 
             const auto content_size = ImGui::GetContentRegionAvail();
-            
+
             auto& renderer = _ctx->get_renderer();
 
-            ImGui::BeginChild("ViewportChild", ImVec2(0, 0), 0, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            ImGui::BeginChild("ViewportChild", ImVec2(0, 0), 0,
+                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
             if ((content_size.x != static_cast<float>(_viewport_size.x) ||
                  content_size.y != static_cast<float>(_viewport_size.y)) &&
@@ -77,12 +78,13 @@ namespace tempest::editor
                 _viewport_size.x = static_cast<uint32_t>(content_size.x);
                 _viewport_size.y = static_cast<uint32_t>(content_size.y);
 
-                renderer.get_frame_graph().resize_render_targets(_viewport_size.x, _viewport_size.y);
-                _viewport_texture = renderer.get_frame_graph().get_tonemapped_color_image();
+                renderer.resize(_viewport_size.x, _viewport_size.y);
             }
 
-            _viewport_texture = renderer.get_frame_graph().get_tonemapped_color_image();
-            ui::image(_viewport_texture, _viewport_size.x, _viewport_size.y);
+            if (_viewport_texture.index != ~0U)
+            {
+                ui::image(_viewport_texture, _viewport_size.x, _viewport_size.y);
+            }
 
             ImGui::EndChild();
         }
@@ -94,6 +96,6 @@ namespace tempest::editor
 
     auto viewport_window::aspect_ratio() const -> float
     {
-        return static_cast<float>(_viewport_size.x) / _viewport_size.y;
+        return _viewport_size.y > 0 ? static_cast<float>(_viewport_size.x) / _viewport_size.y : 1.0f;
     }
 } // namespace tempest::editor

@@ -1,55 +1,45 @@
 #ifndef tempest_editor_ui_ui_hpp
 #define tempest_editor_ui_ui_hpp
 
+#include <tempest/api.hpp>
 #include <tempest/cstring_view.hpp>
-#include <tempest/frame_graph.hpp>
+#include <tempest/int.hpp>
 #include <tempest/memory.hpp>
-#include <tempest/optional.hpp>
 #include <tempest/rhi.hpp>
-#include <tempest/rhi_types.hpp>
-#include <tempest/slot_map.hpp>
-#include <tempest/string.hpp>
-#include <tempest/variant.hpp>
-#include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
+#include <tempest/window_manager.hpp>
+
+struct ImGuiContext;
 
 namespace tempest::editor
 {
     class TEMPEST_EDITOR_API ui_context
     {
       public:
-        ui_context(rhi::window_surface* surface, rhi::device* device, rhi::image_format target_fmt,
-                   uint32_t frames_in_flight) noexcept;
+        ui_context(window_manager& win_mgr, window_handle win, rhi::device& device, rhi::data_format target_format,
+                   uint32_t frames_in_flight);
         ui_context(const ui_context&) = delete;
         ui_context(ui_context&&) noexcept = delete;
         ~ui_context();
 
-        ui_context& operator=(const ui_context&) = delete;
-        ui_context& operator=(ui_context&&) noexcept = delete;
+        auto operator=(const ui_context&) -> ui_context& = delete;
+        auto operator=(ui_context&&) noexcept -> ui_context& = delete;
 
         auto begin_ui_commands() -> void;
         auto finish_ui_commands() -> void;
 
-        auto render_ui_commands(graphics::graphics_task_execution_context& exec_ctx) noexcept -> void;
+        auto render_ui_commands(rhi::command_list& cmd, uint32_t width, uint32_t height) -> void;
+
+        [[nodiscard]] auto get_imgui_context() const noexcept -> ImGuiContext*;
 
       private:
-        struct TEMPEST_EDITOR_API impl;
-        unique_ptr<impl> _impl = nullptr;
-
-        auto _init_window_backend() -> void;
-        auto _init_render_backend() -> void;
-        auto _setup_font_textures() -> void;
+        struct impl;
+        unique_ptr<impl> _impl;
     };
-
-    auto create_ui_pass(string name, ui_context& ui_ctx, graphics::graph_builder& builder, rhi::device& dev,
-                        graphics::graph_resource_handle<rhi::rhi_handle_type::image> render_target,
-                        span<graphics::graph_resource_handle<rhi::rhi_handle_type::image>> targets_to_read = {})
-        -> graphics::graph_resource_handle<rhi::rhi_handle_type::image>;
 
     namespace ui
     {
-        TEMPEST_EDITOR_API auto image(rhi::typed_rhi_handle<rhi::rhi_handle_type::image> img, uint32_t width,
-                                      uint32_t height) -> void;
+        TEMPEST_EDITOR_API auto image(rhi::descriptor_handle descriptor, uint32_t width, uint32_t height) -> void;
 
         TEMPEST_EDITOR_API auto scalar(cstring_view label, float input) -> float;
         TEMPEST_EDITOR_API auto float3(cstring_view label, math::float3 input) -> math::float3;

@@ -5,11 +5,10 @@
 #include <tempest/memory.hpp>
 #include <tempest/menus/menu_item.hpp>
 #include <tempest/move.hpp>
+#include <tempest/render_system/camera_system.hpp>
+#include <tempest/render_system/render_components.hpp>
 #include <tempest/string.hpp>
 #include <tempest/tempest.hpp>
-#include <tempest/camera_system.hpp>
-#include <tempest/graphics_components.hpp>
-#include <tempest/math_utils.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/windows/engine_component_view_providers.hpp>
 #include <tempest/windows/scene_hierarchy_window.hpp>
@@ -137,104 +136,9 @@ namespace tempest::editor
         menus_to_search->push_back(tempest::move(menu_elem));
     }
 
-    editor_context::editor_context(editor_engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx)
-        : _engine_ctx{&ctx}, _win_surface{&win_surface}, _ui_ctx{&ui_ctx}
+    editor_context::editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx)
+        : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx}
     {
-        auto& frame_graph = _engine_ctx->get_renderer().get_frame_graph();
-        auto frame_graph_builder = frame_graph.get_builder();
-
-        auto color_target = frame_graph_builder->create_render_target({
-            .format = rhi::image_format::rgba8_srgb,
-            .type = rhi::image_type::image_2d,
-            .width = _win_surface->framebuffer_width(),
-            .height = _win_surface->framebuffer_height(),
-            .depth = 1,
-            .array_layers = 1,
-            .mip_levels = 1,
-            .sample_count = rhi::image_sample_count::sample_count_1,
-            .tiling = rhi::image_tiling_type::optimal,
-            .location = rhi::memory_location::device,
-            .usage = make_enum_mask(rhi::image_usage::color_attachment, rhi::image_usage::transfer_src),
-            .name = "Final Render Target",
-        });
-
-        _final_color_target = color_target;
-        _win_surface->register_resize_callback(
-            [&](auto width, auto height) { frame_graph.resize_render_target(_final_color_target, width, height); });
-
-        auto surface = ctx.get_renderer().get_device().create_render_surface({
-            .window = _win_surface,
-            .min_image_count = 3,
-            .format =
-                {
-                    .space = rhi::color_space::srgb_nonlinear,
-                    .format = rhi::image_format::bgra8_srgb,
-                },
-            .present_mode = rhi::present_mode::immediate,
-            .width = _win_surface->framebuffer_width(),
-            .height = _win_surface->framebuffer_height(),
-            .layers = 1,
-        });
-
-        auto imported_swapchain_handle = frame_graph_builder->import_render_surface("Editor Render Surface", surface);
-
-        frame_graph_builder->create_graphics_pass(
-            "Editor UI Pass",
-            [&](graphics::graphics_task_builder& task_builder) {
-                task_builder.read_write(color_target, rhi::image_layout::color_attachment,
-                                        make_enum_mask(rhi::pipeline_stage::color_attachment_output),
-                                        make_enum_mask(rhi::memory_access::color_attachment_read,
-                                                       rhi::memory_access::color_attachment_write),
-                                        make_enum_mask(rhi::pipeline_stage::color_attachment_output),
-                                        make_enum_mask(rhi::memory_access::color_attachment_write,
-                                                       rhi::memory_access::color_attachment_read));
-
-                auto tonemapped_image_handle = frame_graph.get_tonemapped_color_handle();
-                task_builder.read(
-                    tonemapped_image_handle, rhi::image_layout::shader_read_only,
-                    make_enum_mask(rhi::pipeline_stage::fragment_shader),
-                    make_enum_mask(rhi::memory_access::shader_sampled_read, rhi::memory_access::shader_read));
-            },
-            [](graphics::graphics_task_execution_context& ctx, auto render_target, auto device, auto ui) {
-                const auto rt_handle = ctx.find_image(render_target);
-                const auto width = static_cast<uint32_t>(device->get_image_width(rt_handle));
-                const auto height = static_cast<uint32_t>(device->get_image_height(rt_handle));
-
-                auto rp_begin_info = rhi::work_queue::render_pass_info{};
-                rp_begin_info.color_attachments.push_back(rhi::work_queue::color_attachment_info{
-                    .image = rt_handle,
-                    .layout = rhi::image_layout::color_attachment,
-                    .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
-                    .load_op = rhi::work_queue::load_op::clear,
-                    .store_op = rhi::work_queue::store_op::store,
-                });
-                rp_begin_info.x = 0;
-                rp_begin_info.y = 0;
-                rp_begin_info.width = width;
-                rp_begin_info.height = height;
-                rp_begin_info.name = "UI Render Pass";
-
-                ctx.begin_render_pass(rp_begin_info);
-                ui->render_ui_commands(ctx);
-                ctx.end_render_pass();
-            },
-            color_target, &_engine_ctx->get_renderer().get_device(), _ui_ctx);
-
-        frame_graph_builder->create_transfer_pass(
-            "Blit to Swapchain Pass",
-            [&](graphics::transfer_task_builder& task_builder) {
-                task_builder.read(color_target, rhi::image_layout::transfer_src,
-                                  make_enum_mask(rhi::pipeline_stage::blit),
-                                  make_enum_mask(rhi::memory_access::transfer_read));
-                task_builder.write(imported_swapchain_handle, rhi::image_layout::transfer_dst,
-                                   make_enum_mask(rhi::pipeline_stage::blit),
-                                   make_enum_mask(rhi::memory_access::transfer_write));
-            },
-            [](graphics::transfer_task_execution_context& ctx, auto color_target, auto swapchain_handle) {
-                ctx.blit(color_target, swapchain_handle);
-            },
-            color_target, imported_swapchain_handle);
-
         _entity_view = register_window(make_unique<entity_view_window>(ctx.get_entities()));
         _scene_hierarchy_view = register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()));
         _viewport_view = register_window(make_unique<viewport_window>(ctx));
@@ -249,7 +153,7 @@ namespace tempest::editor
             auto editor_cam = ctx.get_entities().create();
             ctx.get_entities().name(editor_cam, "Editor Camera");
             ctx.get_entities().assign(editor_cam, ecs::transform_component::identity());
-            ctx.get_entities().assign(editor_cam, graphics::camera_component{
+            ctx.get_entities().assign(editor_cam, render_system::camera_component{
                 .aspect_ratio = 16.0f / 9.0f,
                 .vertical_fov = math::as_radians(60.0f),
                 .near_plane = 0.1f,
@@ -257,25 +161,25 @@ namespace tempest::editor
             camera_sys.set_active_camera(editor_cam);
         }
 
-        register_on_paint_callback([&](engine_context& ctx) {
+        register_on_paint_callback([&, this](engine_context& engine_ctx) {
             _entity_view->target = _scene_hierarchy_view->selected_entity;
 
-            auto& cam_sys = ctx.get_renderer().get_camera_system();
+            auto& cam_sys = engine_ctx.get_renderer().get_camera_system();
             auto active_cam_opt = cam_sys.get_active_camera_entity();
             if (active_cam_opt.has_value())
             {
                 const auto active_ent = active_cam_opt.value();
-                if (const auto* cam = ctx.get_entities().try_get<graphics::camera_component>(active_ent))
+                if (const auto* cam = engine_ctx.get_entities().try_get<render_system::camera_component>(active_ent))
                 {
                     auto camera_copy = *cam;
                     camera_copy.aspect_ratio = _viewport_view->aspect_ratio();
-                    ctx.get_entities().assign_or_replace(active_ent, camera_copy);
+                    engine_ctx.get_entities().assign_or_replace(active_ent, camera_copy);
                 }
             }
 
-            ui_ctx.begin_ui_commands();
+            _ui_ctx->begin_ui_commands();
             draw();
-            ui_ctx.finish_ui_commands();
+            _ui_ctx->finish_ui_commands();
         });
 
         register_menu_item(make_unique<exit_menu_item>(ctx));

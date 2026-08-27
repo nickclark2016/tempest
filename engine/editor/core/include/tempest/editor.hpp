@@ -1,8 +1,12 @@
 #ifndef tempest_editor_core_editor_hpp
 #define tempest_editor_core_editor_hpp
 
+#include <tempest/api.hpp>
+#include <tempest/concepts.hpp>
+#include <tempest/functional.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/menus/menu_item.hpp>
+#include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/ui.hpp>
@@ -20,12 +24,13 @@ namespace tempest::editor
     class TEMPEST_EDITOR_API editor_context
     {
       public:
-        editor_context(editor_engine_context& ctx, rhi::window_surface& win_surface, ui_context& ui_ctx);
+        editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx);
+        editor_context(const editor_context&) = delete;
+        editor_context(editor_context&&) noexcept = delete;
+        auto operator=(const editor_context&) -> editor_context& = delete;
+        auto operator=(editor_context&&) noexcept -> editor_context& = delete;
 
         auto draw() -> void;
-
-        [[nodiscard]] auto get_color_output() const noexcept
-            -> graphics::graph_resource_handle<rhi::rhi_handle_type::image>;
 
         template <derived_from<editor_window> T>
         auto register_window(unique_ptr<T> window) -> T*
@@ -52,7 +57,7 @@ namespace tempest::editor
 
       private:
         editor_engine_context* _engine_ctx;
-        rhi::window_surface* _win_surface;
+        window_handle _win;
         ui_context* _ui_ctx;
 
         vector<unique_ptr<editor_window>> _windows;
@@ -63,6 +68,12 @@ namespace tempest::editor
         class menu_hierarchy
         {
           public:
+            menu_hierarchy() = default;
+            menu_hierarchy(const menu_hierarchy&) = delete;
+            menu_hierarchy(menu_hierarchy&&) noexcept = default;
+            auto operator=(const menu_hierarchy&) -> menu_hierarchy& = delete;
+            auto operator=(menu_hierarchy&&) noexcept -> menu_hierarchy& = default;
+
             void draw();
             void add_menu_item(unique_ptr<menu_item> item);
 
@@ -80,8 +91,6 @@ namespace tempest::editor
         };
 
         menu_hierarchy _menus;
-
-        graphics::graph_resource_handle<rhi::rhi_handle_type::image> _final_color_target;
     };
 } // namespace tempest::editor
 

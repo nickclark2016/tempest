@@ -1,7 +1,7 @@
 #ifndef tempest_editor_core_viewport_window_hpp
 #define tempest_editor_core_viewport_window_hpp
 
-#include <tempest/renderer.hpp>
+#include <tempest/render_system/renderer.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/windows/editor_window.hpp>
@@ -28,7 +28,7 @@ namespace tempest::editor
 
       private:
         editor_engine_context* _ctx;
-        rhi::typed_rhi_handle<rhi::rhi_handle_type::image> _viewport_texture;
+        rhi::descriptor_handle _viewport_texture{};
         math::uint2 _viewport_size{};
         bool _open = true;
     };
