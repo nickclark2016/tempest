@@ -16,6 +16,7 @@ struct SceneGlobals {
     uint64_t light_bitmask_address;
     uint32_t light_count;
     uint32_t words_per_cluster;
+    uint32_t padding[2];
     uint4 cluster_counts_tile_size;
     float4 cluster_depth_params;
 };

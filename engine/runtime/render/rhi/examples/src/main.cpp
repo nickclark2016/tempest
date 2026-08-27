@@ -44,8 +44,8 @@ namespace
     {
         string_view example_name = "triangle";
         string_view model_name = "";
-        uint32_t width = 1280;
-        uint32_t height = 720;
+        uint32_t width = 1920;
+        uint32_t height = 1080;
         uint32_t max_frames = 0;
         bool list_examples = false;
         bool show_help = false;

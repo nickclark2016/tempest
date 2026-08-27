@@ -109,6 +109,7 @@ namespace tempest::rhi::vk
                                                   .setUniformBufferStandardLayout(VK_TRUE)
                                                   .setTimelineSemaphore(VK_TRUE)
                                                   .setBufferDeviceAddress(VK_TRUE)
+                                                  .setBufferDeviceAddressCaptureReplay(VK_TRUE)
                                                   .setVulkanMemoryModel(VK_TRUE)
                                                   .setVulkanMemoryModelDeviceScope(VK_TRUE)
                                                   .setVulkanMemoryModelAvailabilityVisibilityChains(VK_TRUE))

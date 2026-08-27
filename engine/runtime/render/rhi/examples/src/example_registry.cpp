@@ -1,4 +1,5 @@
 #include "example_registry.hpp"
+#include "examples/clustered_forward_example.hpp"
 #include "examples/multi_queue_example.hpp"
 #include "examples/render_graph_example.hpp"
 #include "examples/render_system_example.hpp"
@@ -18,6 +19,11 @@ namespace tempest::rhi::examples
                     .name = "render_system",
                     .description = "Full BDA Render System featuring OpenPBR forward lighting, dynamic sun, and tonemapping",
                     .factory = &render_system_example::create,
+                });
+                reg.push_back(example_metadata{
+                    .name = "clustered_forward",
+                    .description = "Sponza palace illuminated by 128 dynamic point lights with clustered forward rendering",
+                    .factory = &clustered_forward_example::create,
                 });
                 reg.push_back(example_metadata{
                     .name = "sponza",

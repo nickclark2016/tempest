@@ -1491,6 +1491,25 @@ namespace tempest::render_system::tests
         EXPECT_EQ(offsetof(pbr_opaque_push_constants, shadow_atlas_index), 44U);
     }
 
+    TEST(render_system_tests, scene_constants_layout)
+    {
+        EXPECT_EQ(sizeof(scene_constants), 400U);
+        EXPECT_EQ(offsetof(scene_constants, projection), 0U);
+        EXPECT_EQ(offsetof(scene_constants, camera_position), 256U);
+        EXPECT_EQ(offsetof(scene_constants, ambient_light), 272U);
+        EXPECT_EQ(offsetof(scene_constants, sun_color_intensity), 288U);
+        EXPECT_EQ(offsetof(scene_constants, sun_direction), 304U);
+        EXPECT_EQ(offsetof(scene_constants, screen_size), 320U);
+        EXPECT_EQ(offsetof(scene_constants, inv_screen_size), 328U);
+        EXPECT_EQ(offsetof(scene_constants, lights_address), 336U);
+        EXPECT_EQ(offsetof(scene_constants, light_bitmask_address), 344U);
+        EXPECT_EQ(offsetof(scene_constants, light_count), 352U);
+        EXPECT_EQ(offsetof(scene_constants, words_per_cluster), 356U);
+        EXPECT_EQ(offsetof(scene_constants, padding), 360U);
+        EXPECT_EQ(offsetof(scene_constants, cluster_counts_tile_size), 368U);
+        EXPECT_EQ(offsetof(scene_constants, cluster_depth_params), 384U);
+    }
+
     TEST(render_system_tests, directional_shadow_data_debug_mode_layout)
     {
         EXPECT_EQ(sizeof(directional_shadow_data), 400ULL);

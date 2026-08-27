@@ -38,6 +38,7 @@ namespace tempest::render_system
         uint64_t light_bitmask_address{0};
         uint32_t light_count{0};
         uint32_t words_per_cluster{0}; // ceil(light_count / 32)
+        uint32_t padding[2]{0, 0};
         math::vec4<uint32_t> cluster_counts_tile_size{16, 9, 24, 64}; // x, y, z, tile_size_px
         math::vec4<float> cluster_depth_params{0.1F, 1000.0F, 0.0F, 0.0F}; // near, far, log(far/near), pad
     };
