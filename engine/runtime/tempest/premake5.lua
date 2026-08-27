@@ -71,7 +71,7 @@ scoped.project('tempest', function()
             'core',
             'ecs',
             'event',
-            -- 'graphics',
+            'glfw',
             'logger',
             'math',
             'render-graph',
@@ -110,7 +110,6 @@ scoped.project('tempest', function()
             'core',
             'ecs',
             'event',
-            -- 'graphics',
             'logger',
             'math',
             'render-graph',
@@ -150,7 +149,6 @@ scoped.project('tempest', function()
             'core:includedirs',
             'ecs:includedirs',
             'event:includedirs',
-            'graphics:includedirs',
             'logger:includedirs',
             'math:includedirs',
             'render-graph:includedirs',
@@ -177,7 +175,6 @@ scoped.project('tempest', function()
                 'core',
                 'ecs',
                 'event',
-                -- 'graphics',
                 'logger',
                 'math',
                 'rhi-api',
@@ -230,6 +227,36 @@ scoped.project('tempest', function()
         buildoptions {
             '/wd4324', -- 'structure was padded due to alignment specifier'
         }
+    end)
+end)
+
+scoped.group('Tests', function()
+    scoped.project('tempest-tests', function()
+        kind 'ConsoleApp'
+        language 'C++'
+        cppdialect 'C++20'
+
+        targetdir '%{binaries}'
+        objdir '%{intermediates}'
+
+        files {
+            'tests/**.cpp',
+            'tests/**.hpp',
+        }
+
+        includedirs {
+            'include',
+        }
+
+        uses {
+            'tempest',
+            'googletest',
+        }
+
+        linkgroups 'On'
+
+        externalwarnings 'Off'
+        warnings 'Extra'
     end)
 end)
 

@@ -1,0 +1,6 @@
+# Cross-platform startup hooks
+settings set target.inline-breakpoint-strategy always
+settings set stop-disassembly-display never
+
+# Start MCP protocol discovery backend automatically if running interactive lldb
+protocol start MCP

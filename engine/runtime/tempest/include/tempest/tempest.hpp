@@ -9,43 +9,25 @@
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
-#include <tempest/renderer.hpp>
+#include <tempest/render_system/renderer.hpp>
 #include <tempest/rhi.hpp>
-#include <tempest/rhi_types.hpp>
-#include <tempest/tuple.hpp>
 #include <tempest/vector.hpp>
+#include <tempest/window_manager.hpp>
 
 #include <chrono>
 
 namespace tempest
 {
-    /// <summary>
-    /// The engine context is the main interface for interacting with the engine. It provides access to the core systems
-    /// of the engine and allows for registration of windows and execution callbacks.
-    /// </summary>
+    /// \brief The engine context is the main interface for interacting with the engine.
+    /// It provides access to the core systems of the engine and allows for registration of windows and execution callbacks.
     class TEMPEST_API engine_context
     {
       public:
-        /// <summary>
-        /// Information about a registered window, including the window surface, the render surface, and the input
-        /// group.
-        /// </summary>
+        /// \brief Information about a registered window, containing its handle and input group.
         struct TEMPEST_API window_registration_info
         {
-            /// <summary>
-            /// The window surface associated with the registered window.
-            /// </summary>
-            rhi::window_surface* surface = nullptr;
-
-            /// <summary>
-            /// The render surface associated with the registered window.
-            /// </summary>
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface = rhi::null_handle;
-
-            /// <summary>
-            /// The input group associated with the registered window.
-            /// </summary>
-            core::input_group inputs;
+            window_handle handle{null_window_handle};
+            core::input_group inputs{};
         };
 
         engine_context() = default;
@@ -56,60 +38,26 @@ namespace tempest
         engine_context& operator=(const engine_context&) = delete;
         engine_context& operator=(engine_context&&) noexcept = delete;
 
-        /// <summary>
-        /// Registers a window with the engine, creating the necessary render surface and input group for the window.
-        /// </summary>
-        /// <param name="desc">The description of the window to register.</param>
-        /// <param name="install_swapchain_blit">Whether to install a swapchain blit callback for the window. This is
-        /// used to automatically blit the swapchain to the render surface after rendering.</param> <returns>Information
-        /// about the registered window, including the window surface, render surface, and input group.</returns>
-        virtual auto register_window(rhi::window_surface_desc desc, bool install_swapchain_blit = true)
+        /// \brief Registers a window with the engine, creating the necessary render surface and input routing.
+        virtual auto register_window(window_desc desc, bool install_swapchain_blit = true)
             -> window_registration_info = 0;
 
-        /// <summary>
-        /// Registers a callback to be executed when the engine is initialized.
-        /// </summary>
-        /// <param name="callback">
-        // The callback function to execute on engine initialization. The callback receives a
-        /// reference to the engine context as a parameter.
-        // </param>
+        /// \brief Registers a callback to be executed when the engine is initialized.
         virtual auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void = 0;
 
-        /// <summary>
-        /// Registers a callback to be executed when the engine is closed.
-        /// </summary>
-        /// <param name="callback">
-        /// The callback function to execute on engine close. The callback receives a reference to the engine context
-        /// as a parameter.
-        /// </param>
+        /// \brief Registers a callback to be executed when the engine is closed.
         virtual auto register_on_close_callback(function<void(engine_context&)> callback) -> void = 0;
 
-        /// <summary>
-        /// Registers a callback to be executed on fixed update. Fixed updates are executed at a fixed time step, and
-        /// are typically used for physics updates and other time-sensitive logic.
-        /// </summary>
-        /// <param name="callback">
-        /// The callback function to execute on fixed update. The callback receives a reference to the engine context
-        /// and the fixed delta time as parameters.
-        /// </param>
+        /// \brief Registers a callback to be executed on fixed update.
         virtual auto register_on_fixed_update_callback(
             function<void(engine_context&, std::chrono::duration<float>)> callback) -> void = 0;
 
-        /// <summary>
-        /// Registers a callback to be executed on variable update. Variable updates are executed once per frame, and
-        /// are typically used for rendering and other non-time-sensitive logic.
-        /// </summary> <param name="callback">
-        /// The callback function to execute on variable update. The callback receives a reference to the engine context
-        /// and the variable delta time as parameters.
-        /// </param>
+        /// \brief Registers a callback to be executed on variable update.
         virtual auto register_on_variable_update_callback(
             function<void(engine_context&, std::chrono::duration<float>)> callback) -> void = 0;
 
-        /// <summary>
-        /// Runs the engine, executing the main loop and processing events. This function will block until the engine
-        /// is closed.
-        /// </summary>
-        [[noreturn]] virtual auto run() -> void = 0;
+        /// \brief Runs the engine, executing the main loop and processing events.
+        virtual auto run() -> void = 0;
 
         [[nodiscard]] virtual auto get_entities() -> ecs::archetype_registry& = 0;
         [[nodiscard]] virtual auto get_entities() const -> const ecs::archetype_registry& = 0;
@@ -127,8 +75,18 @@ namespace tempest
         [[nodiscard]] virtual auto get_assets() -> assets::asset_database& = 0;
         [[nodiscard]] virtual auto get_assets() const -> const assets::asset_database& = 0;
 
-        [[nodiscard]] virtual auto get_renderer() -> graphics::renderer& = 0;
-        [[nodiscard]] virtual auto get_renderer() const -> const graphics::renderer& = 0;
+        [[nodiscard]] virtual auto get_renderer() -> render_system::renderer& = 0;
+        [[nodiscard]] virtual auto get_renderer() const -> const render_system::renderer& = 0;
+
+        [[nodiscard]] virtual auto get_device() -> rhi::device& = 0;
+        [[nodiscard]] virtual auto get_device() const -> const rhi::device& = 0;
+
+        [[nodiscard]] virtual auto get_window_manager() -> window_manager& = 0;
+        [[nodiscard]] virtual auto get_window_manager() const -> const window_manager& = 0;
+
+        [[nodiscard]] virtual auto get_render_surface(window_handle win) -> rhi::render_surface* = 0;
+        [[nodiscard]] virtual auto get_render_surface(window_handle win) const -> const rhi::render_surface* = 0;
+        [[nodiscard]] virtual auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle = 0;
 
         virtual auto request_close(bool close = true) -> void = 0;
         [[nodiscard]] virtual auto should_close() const -> bool = 0;
@@ -141,50 +99,67 @@ namespace tempest
 
     class TEMPEST_API standalone_engine_context : public engine_context
     {
+      public:
         struct TEMPEST_API window_context
         {
-            unique_ptr<rhi::window_surface> surface;
-            rhi::typed_rhi_handle<rhi::rhi_handle_type::render_surface> render_surface = rhi::null_handle;
-            unique_ptr<core::keyboard> keyboard;
-            unique_ptr<core::mouse> mouse;
+            window_handle handle{null_window_handle};
+            rhi::raw_surface_handle raw_surface{};
+            unique_ptr<rhi::render_surface> render_surface;
+            rhi::surface_format surface_format{};
+            rhi::present_mode present_mode{rhi::present_mode::vsync};
+            rhi::semaphore_handle acquire_sem{};
+            rhi::semaphore_handle timeline_sem{};
+            uint64_t timeline_value{0};
+            vector<rhi::semaphore_handle> render_semaphores;
+            bool need_recreate{false};
         };
 
-      public:
         standalone_engine_context();
+        ~standalone_engine_context() override;
 
-        engine_context::window_registration_info register_window(rhi::window_surface_desc desc,
-                                                                 bool install_swapchain_blit = true) override;
-        void register_on_initialize_callback(function<void(engine_context&)> callback) override;
-        void register_on_close_callback(function<void(engine_context&)> callback) override;
-        void register_on_fixed_update_callback(
-            function<void(engine_context&, std::chrono::duration<float>)> callback) override;
-        void register_on_variable_update_callback(
-            function<void(engine_context&, std::chrono::duration<float>)> callback) override;
+        auto register_window(window_desc desc, bool install_swapchain_blit = true)
+            -> window_registration_info override;
+        auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void override;
+        auto register_on_close_callback(function<void(engine_context&)> callback) -> void override;
+        auto register_on_fixed_update_callback(
+            function<void(engine_context&, std::chrono::duration<float>)> callback) -> void override;
+        auto register_on_variable_update_callback(
+            function<void(engine_context&, std::chrono::duration<float>)> callback) -> void override;
 
-        [[noreturn]] void run() override;
+        auto run() -> void override;
 
-        [[nodiscard]] ecs::archetype_registry& get_entities() override;
-        [[nodiscard]] const ecs::archetype_registry& get_entities() const override;
+        [[nodiscard]] auto get_entities() -> ecs::archetype_registry& override;
+        [[nodiscard]] auto get_entities() const -> const ecs::archetype_registry& override;
 
-        [[nodiscard]] event::event_registry& get_events() override;
-        [[nodiscard]] const event::event_registry& get_events() const override;
+        [[nodiscard]] auto get_events() -> event::event_registry& override;
+        [[nodiscard]] auto get_events() const -> const event::event_registry& override;
 
-        [[nodiscard]] core::material_registry& get_materials() override;
-        [[nodiscard]] const core::material_registry& get_materials() const override;
-        [[nodiscard]] core::mesh_registry& get_meshes() override;
-        [[nodiscard]] const core::mesh_registry& get_meshes() const override;
-        [[nodiscard]] core::texture_registry& get_textures() override;
-        [[nodiscard]] const core::texture_registry& get_textures() const override;
-        [[nodiscard]] assets::asset_database& get_assets() override;
-        [[nodiscard]] const assets::asset_database& get_assets() const override;
+        [[nodiscard]] auto get_materials() -> core::material_registry& override;
+        [[nodiscard]] auto get_materials() const -> const core::material_registry& override;
+        [[nodiscard]] auto get_meshes() -> core::mesh_registry& override;
+        [[nodiscard]] auto get_meshes() const -> const core::mesh_registry& override;
+        [[nodiscard]] auto get_textures() -> core::texture_registry& override;
+        [[nodiscard]] auto get_textures() const -> const core::texture_registry& override;
+        [[nodiscard]] auto get_assets() -> assets::asset_database& override;
+        [[nodiscard]] auto get_assets() const -> const assets::asset_database& override;
 
-        [[nodiscard]] graphics::renderer& get_renderer() override;
-        [[nodiscard]] const graphics::renderer& get_renderer() const override;
+        [[nodiscard]] auto get_renderer() -> render_system::renderer& override;
+        [[nodiscard]] auto get_renderer() const -> const render_system::renderer& override;
 
-        void request_close(bool close) override;
-        [[nodiscard]] bool should_close() const override;
+        [[nodiscard]] auto get_device() -> rhi::device& override;
+        [[nodiscard]] auto get_device() const -> const rhi::device& override;
 
-        ecs::entity load_entity(ecs::entity src) override;
+        [[nodiscard]] auto get_window_manager() -> window_manager& override;
+        [[nodiscard]] auto get_window_manager() const -> const window_manager& override;
+
+        [[nodiscard]] auto get_render_surface(window_handle win) -> rhi::render_surface* override;
+        [[nodiscard]] auto get_render_surface(window_handle win) const -> const rhi::render_surface* override;
+        [[nodiscard]] auto get_raw_surface(window_handle win) const -> rhi::raw_surface_handle override;
+
+        auto request_close(bool close = true) -> void override;
+        [[nodiscard]] auto should_close() const -> bool override;
+
+        auto load_entity(ecs::entity src) -> ecs::entity override;
 
         [[nodiscard]] auto get_logger() -> logger& override
         {
@@ -208,6 +183,11 @@ namespace tempest
         assets::asset_type_registry _asset_type_reg;
         assets::asset_database _asset_database;
 
+        window_manager _window_manager;
+        unique_ptr<rhi::context> _rhi_context;
+        unique_ptr<rhi::device> _device;
+        unique_ptr<render_system::renderer> _renderer;
+
         vector<window_context> _windows;
         vector<function<void(engine_context&)>> _on_initialize_callbacks;
         vector<function<void(engine_context&)>> _on_close_callbacks;
@@ -215,17 +195,15 @@ namespace tempest
         vector<function<void(engine_context&, std::chrono::duration<float>)>> _on_variable_update_callbacks;
 
         std::chrono::steady_clock::time_point _last_frame_time;
-        std::chrono::duration<float> _delta_frame_time;
+        std::chrono::duration<float> _delta_frame_time{0.0F};
 
         bool _should_close{false};
 
-        void _update_fixed(std::chrono::duration<float> delta_time);
-        void _update_variable(std::chrono::duration<float> delta_time);
-        void _render_frame();
+        auto _update_fixed(std::chrono::duration<float> delta_time) -> void;
+        auto _update_variable(std::chrono::duration<float> delta_time) -> void;
+        auto _render_frame() -> void;
 
         vector<ecs::entity> _entities_to_load;
-
-        graphics::renderer _render;
     };
 } // namespace tempest
 
