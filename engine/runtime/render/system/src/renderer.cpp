@@ -1,6 +1,9 @@
 #include <tempest/render_system/renderer.hpp>
 
+#include <bit>
 #include <cmath>
+#include <tempest/algorithm.hpp>
+#include <tempest/limits.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/render_system/passes/depth_prepass.hpp>
 #include <tempest/render_system/passes/frame_upload_pass.hpp>
@@ -43,6 +46,54 @@ namespace tempest::render_system
                 }
             }
             return world;
+        }
+
+        auto calculate_shadow_atlas_dimensions(const ecs::archetype_registry* registry) -> math::vec2<uint32_t>
+        {
+            auto shadow_atlas_width = 8192U;
+            auto shadow_atlas_height = 8192U;
+            constexpr auto shadow_padding = 4U;
+
+            if (registry != nullptr)
+            {
+                auto best_priority = numeric_limits<uint32_t>::max();
+                auto has_caster = false;
+                auto cascade_res = 2048U;
+                auto cascade_count = 4U;
+
+                for (const auto [self, dl, tx] :
+                     registry->with<ecs::self_component, directional_light_component, ecs::transform_component>())
+                {
+                    const auto* sc = registry->try_get<shadow_caster_component>(self.entity);
+                    const auto priority = sc ? sc->priority : 0U;
+
+                    if (!has_caster || priority < best_priority)
+                    {
+                        has_caster = true;
+                        best_priority = priority;
+                        if (sc != nullptr)
+                        {
+                            cascade_res = sc->resolution;
+                            cascade_count = math::clamp(sc->num_cascades, 1U, 4U);
+                        }
+                    }
+                }
+
+                if (has_caster && cascade_res > 0 && cascade_count > 0)
+                {
+                    const auto padded_tile = cascade_res + shadow_padding * 2;
+                    const auto cols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(cascade_count))));
+                    const auto rows =
+                        static_cast<uint32_t>(std::ceil(static_cast<float>(cascade_count) / static_cast<float>(cols)));
+                    const auto req_w = cols * padded_tile;
+                    const auto req_h = rows * padded_tile;
+
+                    shadow_atlas_width = std::bit_ceil(tempest::max(512U, req_w));
+                    shadow_atlas_height = std::bit_ceil(tempest::max(512U, req_h));
+                }
+            }
+
+            return math::vec2<uint32_t>{shadow_atlas_width, shadow_atlas_height};
         }
     } // namespace
     auto renderer::builder::build(rhi::device& dev, logger& log) -> unique_ptr<renderer>
@@ -526,9 +577,10 @@ namespace tempest::render_system
         _pool.write_scene_constants(scene);
 
         // Create Transient Render Targets
-        _shadow_allocator.reset(8192, 8192, 4);
+        const auto shadow_atlas_dims = calculate_shadow_atlas_dimensions(_inputs.entity_registry);
+        _shadow_allocator.reset(shadow_atlas_dims.x, shadow_atlas_dims.y, 4);
         _shadow_atlas_target = _graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(8192, 8192),
+            .size = render_graph::rg_texture_size::absolute(shadow_atlas_dims.x, shadow_atlas_dims.y),
             .format = rhi::data_format::depth32_float,
             .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
             .mip_levels = 1,

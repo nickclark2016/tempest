@@ -1487,6 +1487,86 @@ namespace tempest::render_system::tests
         }
     }
 
+    TEST(render_system_tests, renderer_shadow_atlas_4k_cascades_allocation_and_render)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            auto cam_ent = registry.create();
+            registry.assign(cam_ent, camera_component{
+                                         .aspect_ratio = 16.0F / 9.0F,
+                                         .vertical_fov = 1.0F,
+                                         .near_plane = 0.1F,
+                                     });
+            registry.assign(cam_ent, ecs::transform_component::identity());
+            registry.assign(cam_ent, active_camera_component{});
+
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
+            registry.assign(sun_ent, shadow_caster_component{
+                                         .resolution = 4096,
+                                         .num_cascades = 4,
+                                     });
+            registry.assign(sun_ent, ecs::transform_component::identity());
+
+            rend->prepare_frame(1280, 720);
+
+            EXPECT_TRUE(rend->get_shadow_atlas_texture().is_valid());
+
+            auto res = rend->render();
+            EXPECT_TRUE(res.has_value());
+
+            const auto* const alloc =
+                rend->get_render_graph().get_allocator().get_texture(rend->get_shadow_atlas_texture().id);
+            ASSERT_NE(alloc, nullptr);
+            EXPECT_EQ(alloc->size.width, 16384U);
+            EXPECT_EQ(alloc->size.height, 16384U);
+
+            const auto slot = rend->get_resource_pool().get_frame_slot();
+            const auto* shadow_data = static_cast<const directional_shadow_data*>(
+                                          rend->get_resource_pool().get_directional_shadow_buffer().cpu_address) +
+                                      slot;
+            ASSERT_NE(shadow_data, nullptr);
+            EXPECT_EQ(shadow_data->cascade_count, 4U);
+
+            for (auto i = 0U; i < 4U; ++i)
+            {
+                const auto& uv = shadow_data->cascades[i].uv_offset_scale;
+                EXPECT_GE(uv.x, 0.0F);
+                EXPECT_GE(uv.y, 0.0F);
+                EXPECT_GT(uv.z, 0.0F);
+                EXPECT_GT(uv.w, 0.0F);
+                EXPECT_LE(uv.x + uv.z, 1.0F);
+                EXPECT_LE(uv.y + uv.w, 1.0F);
+            }
+
+            dev->wait_idle();
+        }
+    }
+
     TEST(render_system_tests, pbr_opaque_push_constants_layout)
     {
         EXPECT_EQ(sizeof(pbr_opaque_push_constants), 48U);
