@@ -1,17 +1,16 @@
 #include <tempest/render_system/resource_pool.hpp>
 
+#include <cstring>
 #include <tempest/algorithm.hpp>
 #include <tempest/bit.hpp>
-#include <cstring>
 
 namespace tempest::render_system
 {
     namespace
     {
-        void generate_mip_chain_blit_fallback(rhi::command_list& cmd, rhi::texture_handle texture,
-                                              uint32_t width, uint32_t height,
-                                              uint32_t first_generated_mip, uint32_t total_texture_mips,
-                                              uint32_t array_layers = 1)
+        void generate_mip_chain_blit_fallback(rhi::command_list& cmd, rhi::texture_handle texture, uint32_t width,
+                                              uint32_t height, uint32_t first_generated_mip,
+                                              uint32_t total_texture_mips, uint32_t array_layers = 1)
         {
             if (first_generated_mip >= total_texture_mips || first_generated_mip == 0)
             {
@@ -27,24 +26,28 @@ namespace tempest::render_system
                 const auto dst_h = tempest::max(1u, height >> dst_mip);
 
                 const auto blit_reg = rhi::texture_blit_region{
-                    .src_subresource = {
-                        .mip_level = src_mip,
-                        .base_array_layer = 0,
-                        .array_layer_count = array_layers,
-                    },
-                    .src_offsets = {
-                        rhi::offset_3d{0, 0, 0},
-                        rhi::offset_3d{static_cast<int32_t>(src_w), static_cast<int32_t>(src_h), 1},
-                    },
-                    .dst_subresource = {
-                        .mip_level = dst_mip,
-                        .base_array_layer = 0,
-                        .array_layer_count = array_layers,
-                    },
-                    .dst_offsets = {
-                        rhi::offset_3d{0, 0, 0},
-                        rhi::offset_3d{static_cast<int32_t>(dst_w), static_cast<int32_t>(dst_h), 1},
-                    },
+                    .src_subresource =
+                        {
+                            .mip_level = src_mip,
+                            .base_array_layer = 0,
+                            .array_layer_count = array_layers,
+                        },
+                    .src_offsets =
+                        {
+                            rhi::offset_3d{0, 0, 0},
+                            rhi::offset_3d{static_cast<int32_t>(src_w), static_cast<int32_t>(src_h), 1},
+                        },
+                    .dst_subresource =
+                        {
+                            .mip_level = dst_mip,
+                            .base_array_layer = 0,
+                            .array_layer_count = array_layers,
+                        },
+                    .dst_offsets =
+                        {
+                            rhi::offset_3d{0, 0, 0},
+                            rhi::offset_3d{static_cast<int32_t>(dst_w), static_cast<int32_t>(dst_h), 1},
+                        },
                 };
 
                 cmd.blit_texture(texture, texture, span<const rhi::texture_blit_region>{&blit_reg, 1},
@@ -54,16 +57,18 @@ namespace tempest::render_system
                 {
                     const auto mip_barrier = rhi::texture_barrier{
                         .texture = texture,
-                        .src = {
-                            .stages = rhi::pipeline_stage::blit,
-                            .access = rhi::resource_access::write,
-                            .layout = rhi::image_layout::general,
-                        },
-                        .dst = {
-                            .stages = rhi::pipeline_stage::blit,
-                            .access = rhi::resource_access::read,
-                            .layout = rhi::image_layout::general,
-                        },
+                        .src =
+                            {
+                                .stages = rhi::pipeline_stage::blit,
+                                .access = rhi::resource_access::write,
+                                .layout = rhi::image_layout::general,
+                            },
+                        .dst =
+                            {
+                                .stages = rhi::pipeline_stage::blit,
+                                .access = rhi::resource_access::read,
+                                .layout = rhi::image_layout::general,
+                            },
                         .base_mip_level = dst_mip,
                         .mip_level_count = 1,
                         .base_array_layer = 0,
@@ -76,16 +81,18 @@ namespace tempest::render_system
             // Post-barrier: flush all blit writes across generated mips for subsequent shader reading
             const auto post_barrier = rhi::texture_barrier{
                 .texture = texture,
-                .src = {
-                    .stages = rhi::pipeline_stage::blit,
-                    .access = rhi::resource_access::write,
-                    .layout = rhi::image_layout::general,
-                },
-                .dst = {
-                    .stages = rhi::pipeline_stage::all_graphics | rhi::pipeline_stage::compute,
-                    .access = rhi::resource_access::read,
-                    .layout = rhi::image_layout::general,
-                },
+                .src =
+                    {
+                        .stages = rhi::pipeline_stage::blit,
+                        .access = rhi::resource_access::write,
+                        .layout = rhi::image_layout::general,
+                    },
+                .dst =
+                    {
+                        .stages = rhi::pipeline_stage::all_graphics | rhi::pipeline_stage::compute,
+                        .access = rhi::resource_access::read,
+                        .layout = rhi::image_layout::general,
+                    },
                 .base_mip_level = first_generated_mip,
                 .mip_level_count = total_texture_mips - first_generated_mip,
                 .base_array_layer = 0,
@@ -95,8 +102,7 @@ namespace tempest::render_system
         }
     } // namespace
 
-    resource_pool::resource_pool(rhi::device& dev, resource_pool_config cfg)
-        : _device{&dev}, _cfg{cfg}
+    resource_pool::resource_pool(rhi::device& dev, resource_pool_config cfg) : _device{&dev}, _cfg{cfg}
     {
         _init_buffers();
         _init_samplers();
@@ -108,28 +114,18 @@ namespace tempest::render_system
     }
 
     resource_pool::resource_pool(resource_pool&& other) noexcept
-        : _device{other._device}, _cfg{other._cfg},
-          _vertex_buffer{other._vertex_buffer},
-          _mesh_table_buffer{other._mesh_table_buffer},
-          _material_table_buffer{other._material_table_buffer},
-          _staging_buffer{other._staging_buffer},
-          _vertex_bytes_allocated{other._vertex_bytes_allocated},
-          _mesh_count{other._mesh_count},
-          _material_count{other._material_count},
-          _mesh_indices{tempest::move(other._mesh_indices)},
-          _mesh_layouts{tempest::move(other._mesh_layouts)},
-          _material_indices{tempest::move(other._material_indices)},
-          _materials{tempest::move(other._materials)},
-          _textures{tempest::move(other._textures)},
-          _linear_sampler{other._linear_sampler},
-          _point_sampler{other._point_sampler},
-          _linear_sampler_descriptor{other._linear_sampler_descriptor},
+        : _device{other._device}, _cfg{other._cfg}, _vertex_buffer{other._vertex_buffer},
+          _mesh_table_buffer{other._mesh_table_buffer}, _material_table_buffer{other._material_table_buffer},
+          _staging_buffer{other._staging_buffer}, _vertex_bytes_allocated{other._vertex_bytes_allocated},
+          _mesh_count{other._mesh_count}, _material_count{other._material_count},
+          _mesh_indices{tempest::move(other._mesh_indices)}, _mesh_layouts{tempest::move(other._mesh_layouts)},
+          _material_indices{tempest::move(other._material_indices)}, _materials{tempest::move(other._materials)},
+          _textures{tempest::move(other._textures)}, _linear_sampler{other._linear_sampler},
+          _point_sampler{other._point_sampler}, _linear_sampler_descriptor{other._linear_sampler_descriptor},
           _point_sampler_descriptor{other._point_sampler_descriptor},
           _scene_constants_buffer{other._scene_constants_buffer},
-          _directional_shadow_buffer{other._directional_shadow_buffer},
-          _lights_buffer{other._lights_buffer},
-          _object_buffer{other._object_buffer},
-          _instance_buffer{other._instance_buffer},
+          _directional_shadow_buffer{other._directional_shadow_buffer}, _lights_buffer{other._lights_buffer},
+          _object_buffer{other._object_buffer}, _instance_buffer{other._instance_buffer},
           _draw_commands_buffer{other._draw_commands_buffer}
     {
         other._device = nullptr;
@@ -205,7 +201,8 @@ namespace tempest::render_system
         _vertex_buffer = _device->create_buffer(rhi::buffer_desc{
             .size = _cfg.initial_vertex_buffer_size,
             .memory_usage = rhi::memory_usage::device_only,
-            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::index_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_dst,
+            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::index_buffer |
+                     rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_dst,
             .name = "VertexPullBuffer",
         });
 
@@ -241,7 +238,8 @@ namespace tempest::render_system
         _directional_shadow_buffer = _device->create_buffer(rhi::buffer_desc{
             .size = sizeof(directional_shadow_data) * _cfg.frames_in_flight,
             .memory_usage = rhi::memory_usage::upload,
-            .usage = rhi::buffer_usage::uniform_buffer | rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_dst,
+            .usage = rhi::buffer_usage::uniform_buffer | rhi::buffer_usage::storage_buffer |
+                     rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_dst,
             .name = "DirectionalShadowBuffer",
         });
 
@@ -269,7 +267,8 @@ namespace tempest::render_system
         _draw_commands_buffer = _device->create_buffer(rhi::buffer_desc{
             .size = sizeof(indexed_indirect_command) * _cfg.max_draw_command_count * _cfg.frames_in_flight,
             .memory_usage = rhi::memory_usage::upload,
-            .usage = rhi::buffer_usage::indirect_buffer | rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
+            .usage = rhi::buffer_usage::indirect_buffer | rhi::buffer_usage::storage_buffer |
+                     rhi::buffer_usage::device_address,
             .name = "DrawCommandsBuffer",
         });
     }
@@ -437,6 +436,7 @@ namespace tempest::render_system
                     data.vtx_buf = builder.import_buffer(_vertex_buffer);
                     builder.read(data.staging, rhi::pipeline_stage::copy, rhi::resource_access::read);
                     builder.write(data.vtx_buf, rhi::pipeline_stage::copy, rhi::resource_access::write);
+                    builder.mark_sink();
                 },
                 [this, staging_byte_offset]([[maybe_unused]] const mesh_upload_pass_data& data,
                                             [[maybe_unused]] render_graph::pass_execution_context& ctx,
@@ -663,12 +663,12 @@ namespace tempest::render_system
             });
 
             auto view_handle = _device->create_texture_view(tex_handle, rhi::texture_view_desc{
-                .override_format = format,
-                .base_mip_level = 0,
-                .mip_level_count = total_texture_mips,
-                .base_array_layer = 0,
-                .array_layer_count = 1,
-            });
+                                                                            .override_format = format,
+                                                                            .base_mip_level = 0,
+                                                                            .mip_level_count = total_texture_mips,
+                                                                            .base_array_layer = 0,
+                                                                            .array_layer_count = 1,
+                                                                        });
 
             auto desc_handle = _device->allocate_descriptor(rhi::descriptor_type::sampled_image);
             _device->write_sampled_image_descriptor(desc_handle, view_handle, rhi::image_layout::general);
@@ -729,14 +729,13 @@ namespace tempest::render_system
                         {
                             write_stages |= rhi::pipeline_stage::blit;
                         }
-                        builder.write(data.tex, write_stages, rhi::resource_access::write,
-                                      rhi::image_layout::general);
+                        builder.write(data.tex, write_stages, rhi::resource_access::write, rhi::image_layout::general);
+                        builder.mark_sink();
                     },
-                    [staging, tex_handle, w = t.width, h = t.height, mips_to_upload, generate_mips,
-                     first_generated_mip, total_texture_mips, mip_sizes](
-                        [[maybe_unused]] const tex_upload_pass_data& data,
-                        [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                        rhi::command_list& cmd) {
+                    [staging, tex_handle, w = t.width, h = t.height, mips_to_upload, generate_mips, first_generated_mip,
+                     total_texture_mips, mip_sizes]([[maybe_unused]] const tex_upload_pass_data& data,
+                                                    [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                                                    rhi::command_list& cmd) {
                         auto copy_regions = vector<rhi::buffer_texture_copy_region>{};
                         copy_regions.reserve(mips_to_upload);
                         uint64_t current_buf_offset = 0;
@@ -855,7 +854,8 @@ namespace tempest::render_system
 
     auto resource_pool::get_directional_shadow_address() const noexcept -> uint64_t
     {
-        return _directional_shadow_buffer.gpu_address + static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data);
+        return _directional_shadow_buffer.gpu_address +
+               static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data);
     }
 
     auto resource_pool::get_lights_buffer_address() const noexcept -> uint64_t

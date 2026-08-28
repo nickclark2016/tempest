@@ -14,15 +14,31 @@ namespace tempest::rhi::examples
         auto create_cube_mesh() -> core::mesh
         {
             auto m = core::mesh{};
-            
-            auto add_face = [&](math::vec3<float> normal, math::vec3<float> tangent,
-                                math::vec3<float> v0, math::vec3<float> v1, math::vec3<float> v2, math::vec3<float> v3,
+
+            auto add_face = [&](math::vec3<float> normal, math::vec3<float> tangent, math::vec3<float> v0,
+                                math::vec3<float> v1, math::vec3<float> v2, math::vec3<float> v3,
                                 math::vec4<float> color) {
                 const auto base_idx = static_cast<uint32_t>(m.vertices.size());
-                m.vertices.push_back(core::vertex{.position = v0, .uv = {0.0F, 0.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
-                m.vertices.push_back(core::vertex{.position = v1, .uv = {1.0F, 0.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
-                m.vertices.push_back(core::vertex{.position = v2, .uv = {1.0F, 1.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
-                m.vertices.push_back(core::vertex{.position = v3, .uv = {0.0F, 1.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
+                m.vertices.push_back(core::vertex{.position = v0,
+                                                  .uv = {0.0F, 0.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
+                m.vertices.push_back(core::vertex{.position = v1,
+                                                  .uv = {1.0F, 0.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
+                m.vertices.push_back(core::vertex{.position = v2,
+                                                  .uv = {1.0F, 1.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
+                m.vertices.push_back(core::vertex{.position = v3,
+                                                  .uv = {0.0F, 1.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
 
                 m.indices.push_back(base_idx + 0);
                 m.indices.push_back(base_idx + 1);
@@ -52,10 +68,26 @@ namespace tempest::rhi::examples
         {
             auto m = core::mesh{};
             const auto s = 20.0F;
-            m.vertices.push_back(core::vertex{.position = {-s, 0.0F, -s}, .uv = {0.0F, 0.0F}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {0.8F, 0.8F, 0.8F, 1.0F}});
-            m.vertices.push_back(core::vertex{.position = { s, 0.0F, -s}, .uv = {10.0F, 0.0F}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {0.8F, 0.8F, 0.8F, 1.0F}});
-            m.vertices.push_back(core::vertex{.position = { s, 0.0F,  s}, .uv = {10.0F, 10.0F}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {0.8F, 0.8F, 0.8F, 1.0F}});
-            m.vertices.push_back(core::vertex{.position = {-s, 0.0F,  s}, .uv = {0.0F, 10.0F}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {0.8F, 0.8F, 0.8F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {-s, 0.0F, -s},
+                                              .uv = {0.0F, 0.0F},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {0.8F, 0.8F, 0.8F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {s, 0.0F, -s},
+                                              .uv = {10.0F, 0.0F},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {0.8F, 0.8F, 0.8F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {s, 0.0F, s},
+                                              .uv = {10.0F, 10.0F},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {0.8F, 0.8F, 0.8F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {-s, 0.0F, s},
+                                              .uv = {0.0F, 10.0F},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {0.8F, 0.8F, 0.8F, 1.0F}});
             m.indices.push_back(0);
             m.indices.push_back(1);
             m.indices.push_back(2);
@@ -91,6 +123,9 @@ namespace tempest::rhi::examples
         });
         builder.set_inputs(render_system::renderer_inputs{
             .entity_registry = &_registry,
+            .meshes = &_meshes,
+            .textures = &_textures,
+            .materials = &_materials,
         });
 
         _renderer = builder.build(dev, _logger);
@@ -103,10 +138,10 @@ namespace tempest::rhi::examples
         _camera_entity = _registry.create();
         const auto near_plane = (_model == scene_model::chess) ? 0.01F : 0.1F;
         _registry.assign(_camera_entity, render_system::camera_component{
-            .aspect_ratio = 16.0F / 9.0F,
-            .vertical_fov = 1.04719755F, // 60 degrees
-            .near_plane = near_plane,
-        });
+                                             .aspect_ratio = 16.0F / 9.0F,
+                                             .vertical_fov = 1.04719755F, // 60 degrees
+                                             .near_plane = near_plane,
+                                         });
         auto cam_tx = ecs::transform_component::identity();
         if (_model == scene_model::chess)
         {
@@ -124,21 +159,21 @@ namespace tempest::rhi::examples
         // 3. Sun Light Setup
         auto sun = _registry.create();
         _registry.assign(sun, render_system::directional_light_component{
-            .color = {1.0F, 0.98F, 0.92F},
-            .intensity = (_model == scene_model::chess) ? 4.0F : 5.0F,
-        });
+                                  .color = {1.0F, 0.98F, 0.92F},
+                                  .intensity = (_model == scene_model::chess) ? 4.0F : 5.0F,
+                              });
         const auto max_shadow_dist = (_model == scene_model::chess) ? 2.0F : 100.0F;
         const auto normal_bias = (_model == scene_model::chess) ? 0.005F : 0.02F;
         const auto depth_bias = (_model == scene_model::chess) ? 0.001F : 0.005F;
         _registry.assign(sun, render_system::shadow_caster_component{
-            .resolution = 2048,
-            .num_cascades = 4,
-            .split_lambda = 0.5F,
-            .max_shadow_distance = max_shadow_dist,
-            .normal_bias = normal_bias,
-            .depth_bias = depth_bias,
-            .debug_mode = render_system::shadow_debug_mode::none,
-        });
+                                  .resolution = 2048,
+                                  .num_cascades = 4,
+                                  .split_lambda = 0.5F,
+                                  .max_shadow_distance = max_shadow_dist,
+                                  .normal_bias = normal_bias,
+                                  .depth_bias = depth_bias,
+                                  .debug_mode = render_system::shadow_debug_mode::none,
+                              });
         auto sun_tx = ecs::transform_component::identity();
         if (_model == scene_model::chess)
         {
@@ -155,7 +190,6 @@ namespace tempest::rhi::examples
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
 
-        auto loaded_entities = vector<ecs::entity>{};
         const auto model_path = (_model == scene_model::chess)
                                     ? "vendor/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf"
                                     : "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
@@ -169,22 +203,9 @@ namespace tempest::rhi::examples
                 {
                     _registry.assign(_root_entity, ecs::transform_component::identity());
                 }
-
-                if (_registry.try_get<core::mesh_component>(prefab_root) != nullptr)
-                {
-                    loaded_entities.push_back(prefab_root);
-                }
-                for (auto ent : ecs::archetype_entity_hierarchy_view(_registry, prefab_root))
-                {
-                    if (_registry.try_get<core::mesh_component>(ent) != nullptr)
-                    {
-                        loaded_entities.push_back(ent);
-                    }
-                }
             }
         }
-
-        if (loaded_entities.empty())
+        else
         {
             // Create Ground Floor
             auto ground_mesh_id = _meshes.register_mesh(create_plane_mesh());
@@ -195,13 +216,9 @@ namespace tempest::rhi::examples
             auto ground_mat_id = _materials.register_material(tempest::move(ground_mat));
 
             auto ground_ent = _registry.create();
-            _registry.assign(ground_ent, render_system::renderable_component{
-                .mesh_id = ground_mesh_id,
-                .material_id = ground_mat_id,
-                .double_sided = false,
-            });
+            _registry.assign(ground_ent, core::mesh_component{.mesh_id = ground_mesh_id});
+            _registry.assign(ground_ent, core::material_component{.material_id = ground_mat_id});
             _registry.assign(ground_ent, ecs::transform_component::identity());
-            loaded_entities.push_back(ground_ent);
 
             // Create Array of Multi-Material Cubes
             auto cube_mesh_id = _meshes.register_mesh(create_cube_mesh());
@@ -221,24 +238,16 @@ namespace tempest::rhi::examples
                     auto cube_mat_id = _materials.register_material(tempest::move(cube_mat));
 
                     auto cube_ent = _registry.create();
-                    _registry.assign(cube_ent, render_system::renderable_component{
-                        .mesh_id = cube_mesh_id,
-                        .material_id = cube_mat_id,
-                        .double_sided = false,
-                    });
+                    _registry.assign(cube_ent, core::mesh_component{.mesh_id = cube_mesh_id});
+                    _registry.assign(cube_ent, core::material_component{.material_id = cube_mat_id});
 
                     auto tx = ecs::transform_component::identity();
                     tx.position({static_cast<float>(i) * 2.5F, 1.0F, static_cast<float>(j) * 2.5F});
                     tx.scale({0.8F, 0.8F, 0.8F});
                     _registry.assign(cube_ent, tx);
-                    loaded_entities.push_back(cube_ent);
                 }
             }
         }
-
-        // 5. Upload scene geometries & build indirect buffers
-        _renderer->upload_objects_sync(span<const ecs::entity>{loaded_entities.data(), loaded_entities.size()},
-                                      _meshes, _textures, _materials);
 
         return true;
     }
@@ -296,8 +305,8 @@ namespace tempest::rhi::examples
     }
 
     auto render_system_example::on_resize([[maybe_unused]] rhi::device& dev,
-                                          [[maybe_unused]] rhi::render_surface_format surface_format,
-                                          uint32_t width, uint32_t height) -> void
+                                          [[maybe_unused]] rhi::render_surface_format surface_format, uint32_t width,
+                                          uint32_t height) -> void
     {
         if (_renderer)
         {

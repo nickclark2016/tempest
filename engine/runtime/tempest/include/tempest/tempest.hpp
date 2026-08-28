@@ -202,8 +202,6 @@ namespace tempest
         virtual auto _update_fixed(std::chrono::duration<float> delta_time) -> void;
         virtual auto _update_variable(std::chrono::duration<float> delta_time) -> void;
         virtual auto _render_frame() -> void;
-
-        vector<ecs::entity> _entities_to_load;
     };
 } // namespace tempest
 

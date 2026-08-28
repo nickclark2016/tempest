@@ -14,6 +14,7 @@
 #include <tempest/render_system/shader_manager.hpp>
 #include <tempest/render_system/shelf_allocator.hpp>
 #include <tempest/rhi.hpp>
+#include <tempest/texture.hpp>
 #include <tempest/transform_component.hpp>
 
 namespace tempest::render_system
@@ -35,6 +36,9 @@ namespace tempest::render_system
     {
         ecs::registry* entity_registry{nullptr};
         camera_system* camera_sys{nullptr};
+        const core::mesh_registry* meshes{nullptr};
+        const core::texture_registry* textures{nullptr};
+        const core::material_registry* materials{nullptr};
     };
 
     class TEMPEST_API renderer
@@ -73,19 +77,20 @@ namespace tempest::render_system
         renderer(renderer&&) noexcept;
         renderer& operator=(renderer&&) noexcept;
 
-        /// @brief Loads mesh, texture, and material assets and extracts object instances from the given entities.
-        void upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
-                                 const core::texture_registry& textures, const core::material_registry& materials);
-
         /// @brief Builds the complete Render Graph DAG for the frame.
         void prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex = nullopt,
-                            optional<rhi::texture_view_handle> swapchain_view = nullopt);
+                           optional<rhi::texture_view_handle> swapchain_view = nullopt);
 
         /// @brief Executes the compiled Render Graph DAG on the GPU.
         auto render(const render_graph::frame_sync_options& sync = {}) -> expected<void, render_graph::execution_error>;
 
         /// @brief Resizes render targets and surface.
         void resize(uint32_t width, uint32_t height);
+
+        [[nodiscard]] auto get_tracked_renderable_count() const noexcept -> size_t
+        {
+            return _tracked_entities.size();
+        }
 
         [[nodiscard]] auto get_device() noexcept -> rhi::device&
         {
@@ -226,25 +231,50 @@ namespace tempest::render_system
         uint32_t _transparent_draw_offset{0};
         shadow_debug_mode _shadow_debug_mode{shadow_debug_mode::none};
 
+        // Renderable Tracking & ECS Subscriptions
+        flat_unordered_map<ecs::entity, size_t> _renderable_indices{};
+        uint32_t _renderables_dirty_count{0};
+
+        event::event_registry* _events{nullptr};
+        event::subscription_handle<ecs::component_added_event<ecs::entity, core::mesh_component>> _mesh_added_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, core::mesh_component>>
+            _mesh_replaced_sub{};
+        event::subscription_handle<ecs::component_removed_event<ecs::entity, core::mesh_component>> _mesh_removed_sub{};
+        event::subscription_handle<ecs::component_added_event<ecs::entity, core::material_component>>
+            _material_added_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, core::material_component>>
+            _material_replaced_sub{};
+        event::subscription_handle<ecs::component_removed_event<ecs::entity, core::material_component>>
+            _material_removed_sub{};
+
         // Light Tracking & ECS Subscriptions
         flat_unordered_map<ecs::entity, size_t> _point_light_indices{};
         vector<ecs::entity> _point_light_entities{};
         vector<light_payload> _cached_lights{};
         uint32_t _lights_dirty_count{0};
 
-        event::event_registry* _events{nullptr};
-        event::subscription_handle<ecs::component_added_event<ecs::entity, point_light_component>> _point_light_added_sub{};
-        event::subscription_handle<ecs::component_replaced_event<ecs::entity, point_light_component>> _point_light_replaced_sub{};
-        event::subscription_handle<ecs::component_removed_event<ecs::entity, point_light_component>> _point_light_removed_sub{};
-        event::subscription_handle<ecs::component_added_event<ecs::entity, directional_light_component>> _dir_light_added_sub{};
-        event::subscription_handle<ecs::component_replaced_event<ecs::entity, directional_light_component>> _dir_light_replaced_sub{};
-        event::subscription_handle<ecs::component_removed_event<ecs::entity, directional_light_component>> _dir_light_removed_sub{};
-        event::subscription_handle<ecs::component_replaced_event<ecs::entity, ecs::transform_component>> _transform_replaced_sub{};
+        event::subscription_handle<ecs::component_added_event<ecs::entity, point_light_component>>
+            _point_light_added_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, point_light_component>>
+            _point_light_replaced_sub{};
+        event::subscription_handle<ecs::component_removed_event<ecs::entity, point_light_component>>
+            _point_light_removed_sub{};
+        event::subscription_handle<ecs::component_added_event<ecs::entity, directional_light_component>>
+            _dir_light_added_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, directional_light_component>>
+            _dir_light_replaced_sub{};
+        event::subscription_handle<ecs::component_removed_event<ecs::entity, directional_light_component>>
+            _dir_light_removed_sub{};
+        event::subscription_handle<ecs::component_replaced_event<ecs::entity, ecs::transform_component>>
+            _transform_replaced_sub{};
         event::subscription_handle<ecs::entity_destroyed_event<ecs::entity>> _entity_destroyed_sub{};
 
-        void _subscribe_light_events();
-        void _unsubscribe_light_events();
+        void _subscribe_events();
+        void _unsubscribe_events();
+        void _init_renderables_from_registry();
         void _init_lights_from_registry();
+        void _ensure_assets_loaded();
+        void _update_renderable_commands();
     };
 } // namespace tempest::render_system
 

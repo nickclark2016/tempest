@@ -18,13 +18,29 @@ namespace tempest::rhi::examples
             const auto hy = half_extents.y;
             const auto hz = half_extents.z;
 
-            auto add_face = [&](math::vec3<float> normal, math::vec3<float> tangent,
-                                math::vec3<float> v0, math::vec3<float> v1, math::vec3<float> v2, math::vec3<float> v3) {
+            auto add_face = [&](math::vec3<float> normal, math::vec3<float> tangent, math::vec3<float> v0,
+                                math::vec3<float> v1, math::vec3<float> v2, math::vec3<float> v3) {
                 const auto base_idx = static_cast<uint32_t>(m.vertices.size());
-                m.vertices.push_back(core::vertex{.position = v0, .uv = {0.0F, 0.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
-                m.vertices.push_back(core::vertex{.position = v1, .uv = {1.0F, 0.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
-                m.vertices.push_back(core::vertex{.position = v2, .uv = {1.0F, 1.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
-                m.vertices.push_back(core::vertex{.position = v3, .uv = {0.0F, 1.0F}, .normal = normal, .tangent = {tangent.x, tangent.y, tangent.z, 1.0F}, .color = color});
+                m.vertices.push_back(core::vertex{.position = v0,
+                                                  .uv = {0.0F, 0.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
+                m.vertices.push_back(core::vertex{.position = v1,
+                                                  .uv = {1.0F, 0.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
+                m.vertices.push_back(core::vertex{.position = v2,
+                                                  .uv = {1.0F, 1.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
+                m.vertices.push_back(core::vertex{.position = v3,
+                                                  .uv = {0.0F, 1.0F},
+                                                  .normal = normal,
+                                                  .tangent = {tangent.x, tangent.y, tangent.z, 1.0F},
+                                                  .color = color});
 
                 m.indices.push_back(base_idx + 0);
                 m.indices.push_back(base_idx + 1);
@@ -50,16 +66,33 @@ namespace tempest::rhi::examples
             return m;
         }
 
-        auto create_plane_mesh(float width, float depth, float uv_scale = 1.0F, math::vec4<float> color = {1.0F, 1.0F, 1.0F, 1.0F}) -> core::mesh
+        auto create_plane_mesh(float width, float depth, float uv_scale = 1.0F,
+                               math::vec4<float> color = {1.0F, 1.0F, 1.0F, 1.0F}) -> core::mesh
         {
             auto m = core::mesh{};
             const auto hw = width * 0.5F;
             const auto hd = depth * 0.5F;
 
-            m.vertices.push_back(core::vertex{.position = {-hw, 0.0F, -hd}, .uv = {0.0F, 0.0F}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = color});
-            m.vertices.push_back(core::vertex{.position = { hw, 0.0F, -hd}, .uv = {uv_scale, 0.0F}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = color});
-            m.vertices.push_back(core::vertex{.position = { hw, 0.0F,  hd}, .uv = {uv_scale, uv_scale}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = color});
-            m.vertices.push_back(core::vertex{.position = {-hw, 0.0F,  hd}, .uv = {0.0F, uv_scale}, .normal = {0.0F, 1.0F, 0.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = color});
+            m.vertices.push_back(core::vertex{.position = {-hw, 0.0F, -hd},
+                                              .uv = {0.0F, 0.0F},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = color});
+            m.vertices.push_back(core::vertex{.position = {hw, 0.0F, -hd},
+                                              .uv = {uv_scale, 0.0F},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = color});
+            m.vertices.push_back(core::vertex{.position = {hw, 0.0F, hd},
+                                              .uv = {uv_scale, uv_scale},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = color});
+            m.vertices.push_back(core::vertex{.position = {-hw, 0.0F, hd},
+                                              .uv = {0.0F, uv_scale},
+                                              .normal = {0.0F, 1.0F, 0.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = color});
 
             m.indices.push_back(0);
             m.indices.push_back(1);
@@ -97,6 +130,9 @@ namespace tempest::rhi::examples
         });
         builder.set_inputs(render_system::renderer_inputs{
             .entity_registry = &_registry,
+            .meshes = &_meshes,
+            .textures = &_textures,
+            .materials = &_materials,
         });
 
         _renderer = builder.build(dev, _logger);
@@ -108,10 +144,10 @@ namespace tempest::rhi::examples
         // 2. Camera Setup
         _camera_entity = _registry.create();
         _registry.assign(_camera_entity, render_system::camera_component{
-            .aspect_ratio = 16.0F / 9.0F,
-            .vertical_fov = 1.04719755F, // 60 degrees
-            .near_plane = 0.1F,
-        });
+                                             .aspect_ratio = 16.0F / 9.0F,
+                                             .vertical_fov = 1.04719755F, // 60 degrees
+                                             .near_plane = 0.1F,
+                                         });
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 1.8F, -4.0F});
         cam_tx.rotation({0.0F, 0.0F, 0.0F});
@@ -121,18 +157,18 @@ namespace tempest::rhi::examples
         // 3. Directional Sun Light Setup (Twilight / Sunset ambience)
         auto sun = _registry.create();
         _registry.assign(sun, render_system::directional_light_component{
-            .color = {1.0F, 0.92F, 0.82F},
-            .intensity = 2.5F,
-        });
+                                  .color = {1.0F, 0.92F, 0.82F},
+                                  .intensity = 2.5F,
+                              });
         _registry.assign(sun, render_system::shadow_caster_component{
-            .resolution = 2048,
-            .num_cascades = 4,
-            .split_lambda = 0.5F,
-            .max_shadow_distance = 100.0F,
-            .normal_bias = 0.02F,
-            .depth_bias = 0.005F,
-            .debug_mode = render_system::shadow_debug_mode::none,
-        });
+                                  .resolution = 2048,
+                                  .num_cascades = 4,
+                                  .split_lambda = 0.5F,
+                                  .max_shadow_distance = 100.0F,
+                                  .normal_bias = 0.02F,
+                                  .depth_bias = 0.005F,
+                                  .debug_mode = render_system::shadow_debug_mode::none,
+                              });
         auto sun_tx = ecs::transform_component::identity();
         sun_tx.rotation({math::as_radians(70.0F), math::as_radians(25.0F), 0.0F});
         _registry.assign(sun, sun_tx);
@@ -142,7 +178,6 @@ namespace tempest::rhi::examples
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
 
-        auto loaded_entities = vector<ecs::entity>{};
         const auto model_path = "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
         if (std::filesystem::exists(model_path))
         {
@@ -154,27 +189,15 @@ namespace tempest::rhi::examples
                 {
                     _registry.assign(_root_entity, ecs::transform_component::identity());
                 }
-
-                if (_registry.try_get<core::mesh_component>(prefab_root) != nullptr)
-                {
-                    loaded_entities.push_back(prefab_root);
-                }
-                for (auto ent : ecs::archetype_entity_hierarchy_view(_registry, prefab_root))
-                {
-                    if (_registry.try_get<core::mesh_component>(ent) != nullptr)
-                    {
-                        loaded_entities.push_back(ent);
-                    }
-                }
             }
         }
-
-        if (loaded_entities.empty())
+        else
         {
             // Procedural Multi-Tier Architectural Hall Fallback (X = length 24m, Z = width 10m, Y = height 10m)
 
             // Floor Material & Mesh
-            auto ground_mesh_id = _meshes.register_mesh(create_plane_mesh(24.0F, 48.0F, 12.0F, {0.85F, 0.85F, 0.88F, 1.0F}));
+            auto ground_mesh_id =
+                _meshes.register_mesh(create_plane_mesh(24.0F, 48.0F, 12.0F, {0.85F, 0.85F, 0.88F, 1.0F}));
             auto ground_mat = core::material{};
             ground_mat.set_vec4(core::material::base_color_factor_name, {0.35F, 0.35F, 0.38F, 1.0F});
             ground_mat.set_scalar(core::material::metallic_factor_name, 0.05F);
@@ -182,13 +205,9 @@ namespace tempest::rhi::examples
             auto ground_mat_id = _materials.register_material(tempest::move(ground_mat));
 
             auto ground_ent = _registry.create();
-            _registry.assign(ground_ent, render_system::renderable_component{
-                .mesh_id = ground_mesh_id,
-                .material_id = ground_mat_id,
-                .double_sided = false,
-            });
+            _registry.assign(ground_ent, core::mesh_component{.mesh_id = ground_mesh_id});
+            _registry.assign(ground_ent, core::material_component{.material_id = ground_mat_id});
             _registry.assign(ground_ent, ecs::transform_component::identity());
-            loaded_entities.push_back(ground_ent);
 
             // Ceiling Plane
             auto ceiling_mat = core::material{};
@@ -198,19 +217,16 @@ namespace tempest::rhi::examples
             auto ceiling_mat_id = _materials.register_material(tempest::move(ceiling_mat));
 
             auto ceiling_ent = _registry.create();
-            _registry.assign(ceiling_ent, render_system::renderable_component{
-                .mesh_id = ground_mesh_id,
-                .material_id = ceiling_mat_id,
-                .double_sided = true,
-            });
+            _registry.assign(ceiling_ent, core::mesh_component{.mesh_id = ground_mesh_id});
+            _registry.assign(ceiling_ent, core::material_component{.material_id = ceiling_mat_id});
             auto ceiling_tx = ecs::transform_component::identity();
             ceiling_tx.position({0.0F, 8.5F, 0.0F});
             ceiling_tx.rotation({math::as_radians(180.0F), 0.0F, 0.0F});
             _registry.assign(ceiling_ent, ceiling_tx);
-            loaded_entities.push_back(ceiling_ent);
 
             // Pillar Material & Mesh
-            auto pillar_mesh_id = _meshes.register_mesh(create_box_mesh({0.25F, 2.1F, 0.25F}, {0.95F, 0.92F, 0.88F, 1.0F}));
+            auto pillar_mesh_id =
+                _meshes.register_mesh(create_box_mesh({0.25F, 2.1F, 0.25F}, {0.95F, 0.92F, 0.88F, 1.0F}));
             auto pillar_mat = core::material{};
             pillar_mat.set_vec4(core::material::base_color_factor_name, {0.85F, 0.82F, 0.78F, 1.0F});
             pillar_mat.set_scalar(core::material::metallic_factor_name, 0.0F);
@@ -218,10 +234,12 @@ namespace tempest::rhi::examples
             auto pillar_mat_id = _materials.register_material(tempest::move(pillar_mat));
 
             // Upper Pillar Mesh
-            auto upper_pillar_mesh_id = _meshes.register_mesh(create_box_mesh({0.2F, 1.9F, 0.2F}, {0.90F, 0.88F, 0.85F, 1.0F}));
+            auto upper_pillar_mesh_id =
+                _meshes.register_mesh(create_box_mesh({0.2F, 1.9F, 0.2F}, {0.90F, 0.88F, 0.85F, 1.0F}));
 
             // Mezzanine Walkway Material & Mesh (longitudinal along X)
-            auto mez_mesh_id = _meshes.register_mesh(create_box_mesh({12.0F, 0.12F, 1.2F}, {0.75F, 0.70F, 0.65F, 1.0F}));
+            auto mez_mesh_id =
+                _meshes.register_mesh(create_box_mesh({12.0F, 0.12F, 1.2F}, {0.75F, 0.70F, 0.65F, 1.0F}));
             auto mez_mat = core::material{};
             mez_mat.set_vec4(core::material::base_color_factor_name, {0.65F, 0.60F, 0.55F, 1.0F});
             mez_mat.set_scalar(core::material::metallic_factor_name, 0.0F);
@@ -230,29 +248,22 @@ namespace tempest::rhi::examples
 
             // Front / Back Mezzanine Walkways (along Z = +/- 3.2m)
             auto left_mez = _registry.create();
-            _registry.assign(left_mez, render_system::renderable_component{
-                .mesh_id = mez_mesh_id,
-                .material_id = mez_mat_id,
-                .double_sided = false,
-            });
+            _registry.assign(left_mez, core::mesh_component{.mesh_id = mez_mesh_id});
+            _registry.assign(left_mez, core::material_component{.material_id = mez_mat_id});
             auto left_mez_tx = ecs::transform_component::identity();
             left_mez_tx.position({0.0F, 4.2F, -3.2F});
             _registry.assign(left_mez, left_mez_tx);
-            loaded_entities.push_back(left_mez);
 
             auto right_mez = _registry.create();
-            _registry.assign(right_mez, render_system::renderable_component{
-                .mesh_id = mez_mesh_id,
-                .material_id = mez_mat_id,
-                .double_sided = false,
-            });
+            _registry.assign(right_mez, core::mesh_component{.mesh_id = mez_mesh_id});
+            _registry.assign(right_mez, core::material_component{.material_id = mez_mat_id});
             auto right_mez_tx = ecs::transform_component::identity();
             right_mez_tx.position({0.0F, 4.2F, 3.2F});
             _registry.assign(right_mez, right_mez_tx);
-            loaded_entities.push_back(right_mez);
 
             // Arch / Lintel Mesh
-            auto arch_mesh_id = _meshes.register_mesh(create_box_mesh({1.4F, 0.2F, 0.25F}, {0.80F, 0.75F, 0.70F, 1.0F}));
+            auto arch_mesh_id =
+                _meshes.register_mesh(create_box_mesh({1.4F, 0.2F, 0.25F}, {0.80F, 0.75F, 0.70F, 1.0F}));
 
             // Instantiate Colonnade Columns along longitudinal sides
             for (float side_z : {-2.2F, 2.2F})
@@ -263,59 +274,44 @@ namespace tempest::rhi::examples
 
                     // Ground-tier pillar (y = 0 to 4.2)
                     auto p_ent = _registry.create();
-                    _registry.assign(p_ent, render_system::renderable_component{
-                        .mesh_id = pillar_mesh_id,
-                        .material_id = pillar_mat_id,
-                        .double_sided = false,
-                    });
+                    _registry.assign(p_ent, core::mesh_component{.mesh_id = pillar_mesh_id});
+                    _registry.assign(p_ent, core::material_component{.material_id = pillar_mat_id});
                     auto p_tx = ecs::transform_component::identity();
                     p_tx.position({x_pos, 2.1F, side_z});
                     _registry.assign(p_ent, p_tx);
-                    loaded_entities.push_back(p_ent);
 
                     // Upper-tier pillar (y = 4.2 to 8.0)
                     auto up_ent = _registry.create();
-                    _registry.assign(up_ent, render_system::renderable_component{
-                        .mesh_id = upper_pillar_mesh_id,
-                        .material_id = pillar_mat_id,
-                        .double_sided = false,
-                    });
+                    _registry.assign(up_ent, core::mesh_component{.mesh_id = upper_pillar_mesh_id});
+                    _registry.assign(up_ent, core::material_component{.material_id = pillar_mat_id});
                     auto up_tx = ecs::transform_component::identity();
                     up_tx.position({x_pos, 6.1F, side_z});
                     _registry.assign(up_ent, up_tx);
-                    loaded_entities.push_back(up_ent);
 
                     // Longitudinal Arch Beam
                     if (x_idx < 6)
                     {
                         auto arch_ent = _registry.create();
-                        _registry.assign(arch_ent, render_system::renderable_component{
-                            .mesh_id = arch_mesh_id,
-                            .material_id = mez_mat_id,
-                            .double_sided = false,
-                        });
+                        _registry.assign(arch_ent, core::mesh_component{.mesh_id = arch_mesh_id});
+                        _registry.assign(arch_ent, core::material_component{.material_id = mez_mat_id});
                         auto arch_tx = ecs::transform_component::identity();
                         arch_tx.position({x_pos + 0.9F, 4.2F, side_z});
                         _registry.assign(arch_ent, arch_tx);
-                        loaded_entities.push_back(arch_ent);
                     }
                 }
             }
 
             // End Walls (along X = +/- 12.0m)
-            auto wall_mesh_id = _meshes.register_mesh(create_box_mesh({0.5F, 4.25F, 5.0F}, {0.70F, 0.68F, 0.65F, 1.0F}));
+            auto wall_mesh_id =
+                _meshes.register_mesh(create_box_mesh({0.5F, 4.25F, 5.0F}, {0.70F, 0.68F, 0.65F, 1.0F}));
             for (float x_wall : {-12.0F, 12.0F})
             {
                 auto wall_ent = _registry.create();
-                _registry.assign(wall_ent, render_system::renderable_component{
-                    .mesh_id = wall_mesh_id,
-                    .material_id = mez_mat_id,
-                    .double_sided = false,
-                });
+                _registry.assign(wall_ent, core::mesh_component{.mesh_id = wall_mesh_id});
+                _registry.assign(wall_ent, core::material_component{.material_id = mez_mat_id});
                 auto wall_tx = ecs::transform_component::identity();
                 wall_tx.position({x_wall, 4.25F, 0.0F});
                 _registry.assign(wall_ent, wall_tx);
-                loaded_entities.push_back(wall_ent);
             }
         }
 
@@ -372,10 +368,10 @@ namespace tempest::rhi::examples
             }
 
             _registry.assign(light_ent, render_system::point_light_component{
-                .color = color,
-                .intensity = intensity,
-                .range = range,
-            });
+                                            .color = color,
+                                            .intensity = intensity,
+                                            .range = range,
+                                        });
 
             auto tx = ecs::transform_component::identity();
             tx.position({0.0F, 1.8F, 0.0F});
@@ -383,10 +379,6 @@ namespace tempest::rhi::examples
 
             _light_entities.push_back(light_ent);
         }
-
-        // 6. Upload scene geometries & build indirect buffers
-        _renderer->upload_objects_sync(span<const ecs::entity>{loaded_entities.data(), loaded_entities.size()},
-                                      _meshes, _textures, _materials);
 
         return true;
     }
@@ -415,9 +407,8 @@ namespace tempest::rhi::examples
                 const auto is_side_aisle = (i % 2 == 1);
                 const auto side_sign = ((i / 2) % 2 == 0) ? 1.0F : -1.0F;
 
-                const auto z_val = is_side_aisle
-                    ? side_sign * (3.0F + std::sin(t * 0.9F) * 0.8F)
-                    : std::sin(t * 0.8F) * 1.5F;
+                const auto z_val =
+                    is_side_aisle ? side_sign * (3.0F + std::sin(t * 0.9F) * 0.8F) : std::sin(t * 0.8F) * 1.5F;
 
                 pos = math::vec3<float>{
                     std::sin(t * 0.5F + fi * 0.12F) * 9.5F,

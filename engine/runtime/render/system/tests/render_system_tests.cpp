@@ -16,10 +16,10 @@
 #include <tempest/render_system/passes/ssao_blur_pass.hpp>
 #include <tempest/render_system/passes/ssao_pass.hpp>
 #include <tempest/render_system/passes/tonemapping_pass.hpp>
+#include <tempest/render_system/passes/transparency_blend_pass.hpp>
 #include <tempest/render_system/passes/transparency_clear_pass.hpp>
 #include <tempest/render_system/passes/transparency_gather_pass.hpp>
 #include <tempest/render_system/passes/transparency_resolve_pass.hpp>
-#include <tempest/render_system/passes/transparency_blend_pass.hpp>
 #include <tempest/render_system/render_components.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/render_system/resource_pool.hpp>
@@ -72,10 +72,26 @@ namespace tempest::render_system::tests
         auto create_test_mesh() -> core::mesh
         {
             auto m = core::mesh{};
-            m.vertices.push_back(core::vertex{.position = {-1.0F, -1.0F, 0.0F}, .uv = {0.0F, 0.0F}, .normal = {0.0F, 0.0F, 1.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {1.0F, 1.0F, 1.0F, 1.0F}});
-            m.vertices.push_back(core::vertex{.position = { 1.0F, -1.0F, 0.0F}, .uv = {1.0F, 0.0F}, .normal = {0.0F, 0.0F, 1.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {1.0F, 1.0F, 1.0F, 1.0F}});
-            m.vertices.push_back(core::vertex{.position = { 1.0F,  1.0F, 0.0F}, .uv = {1.0F, 1.0F}, .normal = {0.0F, 0.0F, 1.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {1.0F, 1.0F, 1.0F, 1.0F}});
-            m.vertices.push_back(core::vertex{.position = {-1.0F,  1.0F, 0.0F}, .uv = {0.0F, 1.0F}, .normal = {0.0F, 0.0F, 1.0F}, .tangent = {1.0F, 0.0F, 0.0F, 1.0F}, .color = {1.0F, 1.0F, 1.0F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {-1.0F, -1.0F, 0.0F},
+                                              .uv = {0.0F, 0.0F},
+                                              .normal = {0.0F, 0.0F, 1.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {1.0F, 1.0F, 1.0F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {1.0F, -1.0F, 0.0F},
+                                              .uv = {1.0F, 0.0F},
+                                              .normal = {0.0F, 0.0F, 1.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {1.0F, 1.0F, 1.0F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {1.0F, 1.0F, 0.0F},
+                                              .uv = {1.0F, 1.0F},
+                                              .normal = {0.0F, 0.0F, 1.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {1.0F, 1.0F, 1.0F, 1.0F}});
+            m.vertices.push_back(core::vertex{.position = {-1.0F, 1.0F, 0.0F},
+                                              .uv = {0.0F, 1.0F},
+                                              .normal = {0.0F, 0.0F, 1.0F},
+                                              .tangent = {1.0F, 0.0F, 0.0F, 1.0F},
+                                              .color = {1.0F, 1.0F, 1.0F, 1.0F}});
             m.indices.push_back(0);
             m.indices.push_back(1);
             m.indices.push_back(2);
@@ -160,6 +176,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -168,6 +187,9 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         {
@@ -177,10 +199,10 @@ namespace tempest::render_system::tests
             // 1. Setup Camera Entity
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
-                .aspect_ratio = 1280.0F / 720.0F,
-                .vertical_fov = 1.5707963F,
-                .near_plane = 0.01F,
-            });
+                                         .aspect_ratio = 1280.0F / 720.0F,
+                                         .vertical_fov = 1.5707963F,
+                                         .near_plane = 0.01F,
+                                     });
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
@@ -189,16 +211,12 @@ namespace tempest::render_system::tests
             // 2. Setup Sun Light Entity
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
-                .color = {1.0F, 1.0F, 1.0F},
-                .intensity = 2.0F,
-            });
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
             registry.assign(sun_ent, ecs::transform_component::identity());
 
             // 3. Setup Renderable Geometry Entity
-            auto meshes = core::mesh_registry{};
-            auto materials = core::material_registry{};
-            auto textures = core::texture_registry{};
-
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.8F, 0.2F, 0.2F, 1.0F});
@@ -207,18 +225,11 @@ namespace tempest::render_system::tests
             auto mat_id = materials.register_material(tempest::move(mat));
 
             auto geom_ent = registry.create();
-            registry.assign(geom_ent, renderable_component{
-                .mesh_id = mesh_id,
-                .material_id = mat_id,
-                .double_sided = false,
-            });
+            registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component::identity());
 
-            // 4. Upload Objects and Prepare Frame
-            auto entities = array<ecs::entity, 1>{geom_ent};
-            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
-                                      meshes, textures, materials);
-
+            // 4. Prepare Frame
             rend->prepare_frame(1280, 720);
 
             // 5. Render execution
@@ -262,7 +273,8 @@ namespace tempest::render_system::tests
                 cmd.end();
 
                 auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                [[maybe_unused]] auto submit_res =
+                    port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
@@ -299,6 +311,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -307,6 +322,9 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         {
@@ -316,10 +334,10 @@ namespace tempest::render_system::tests
             // Setup Camera
             auto cam = registry.create();
             registry.assign(cam, camera_component{
-                .aspect_ratio = 16.0F / 9.0F,
-                .vertical_fov = 1.2F,
-                .near_plane = 0.01F,
-            });
+                                     .aspect_ratio = 16.0F / 9.0F,
+                                     .vertical_fov = 1.2F,
+                                     .near_plane = 0.01F,
+                                 });
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 5.0F, -2.0F});
             registry.assign(cam, cam_tx);
@@ -328,17 +346,12 @@ namespace tempest::render_system::tests
             // Setup Sun Light
             auto sun = registry.create();
             registry.assign(sun, directional_light_component{
-                .color = {1.0F, 0.98F, 0.92F},
-                .intensity = 7.0F,
-            });
+                                     .color = {1.0F, 0.98F, 0.92F},
+                                     .intensity = 7.0F,
+                                 });
             auto sun_tx = ecs::transform_component::identity();
             sun_tx.rotation({math::as_radians(60.0F), math::as_radians(40.0F), 0.0F});
             registry.assign(sun, sun_tx);
-
-            auto renderable_entities = vector<ecs::entity>{};
-            auto meshes = core::mesh_registry{};
-            auto materials = core::material_registry{};
-            auto textures = core::texture_registry{};
 
             auto asset_type_reg = assets::asset_type_registry{};
             auto asset_db = assets::asset_database{&asset_type_reg};
@@ -347,39 +360,21 @@ namespace tempest::render_system::tests
             const auto sponza_path = "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
             if (std::filesystem::exists(sponza_path))
             {
-                auto prefab_root = asset_db.load(sponza_path, registry);
-                if (prefab_root != ecs::tombstone)
-                {
-                    if (registry.try_get<core::mesh_component>(prefab_root) != nullptr)
-                    {
-                        renderable_entities.push_back(prefab_root);
-                    }
-                    for (auto ent : ecs::archetype_entity_hierarchy_view(registry, prefab_root))
-                    {
-                        if (registry.try_get<core::mesh_component>(ent) != nullptr)
-                        {
-                            renderable_entities.push_back(ent);
-                        }
-                    }
-                }
+                [[maybe_unused]] auto prefab_root = asset_db.load(sponza_path, registry);
             }
-
-            // If no Sponza entities loaded, fall back to procedural quad entities
-            if (renderable_entities.empty())
+            else
             {
+                // If no Sponza entities loaded, fall back to procedural quad entities
                 auto mesh_id = meshes.register_mesh(create_test_mesh());
                 auto mat = core::material{};
                 mat.set_vec4(core::material::base_color_factor_name, {0.7F, 0.7F, 0.7F, 1.0F});
                 auto mat_id = materials.register_material(tempest::move(mat));
 
                 auto ent = registry.create();
-                registry.assign(ent, renderable_component{.mesh_id = mesh_id, .material_id = mat_id, .double_sided = false});
+                registry.assign(ent, core::mesh_component{.mesh_id = mesh_id});
+                registry.assign(ent, core::material_component{.material_id = mat_id});
                 registry.assign(ent, ecs::transform_component::identity());
-                renderable_entities.push_back(ent);
             }
-
-            rend->upload_objects_sync(span<const ecs::entity>{renderable_entities.data(), renderable_entities.size()},
-                                      meshes, textures, materials);
 
             rend->prepare_frame(1280, 720);
 
@@ -459,8 +454,11 @@ namespace tempest::render_system::tests
         auto cam = render_camera{
             .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
             .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .eye_position = {0.0F, 0.0F, -5.0F, 1.0F},
         };
 
@@ -514,16 +512,17 @@ namespace tempest::render_system::tests
         const auto total_clusters = 16U * 9U * 24U;
         auto cluster_bounds_buf = graph.create_buffer(render_graph::rg_buffer_desc{
             .size = total_clusters * sizeof(cluster_bounds),
-            .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
+            .usage =
+                rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
             .name = "ClusterBoundsBuffer",
         });
 
         auto lights_buf = graph.import_buffer(pool.get_lights_buffer());
 
         const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam, 1280, 720);
-        const auto& culling_data = add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer,
-                                                          lights_buf, cluster_data.create_info,
-                                                          static_cast<uint32_t>(test_lights.size()));
+        const auto& culling_data =
+            add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer, lights_buf,
+                                   cluster_data.create_info, static_cast<uint32_t>(test_lights.size()));
 
         struct sink_pass_data
         {
@@ -532,12 +531,12 @@ namespace tempest::render_system::tests
 
         graph.add_compute_pass<sink_pass_data>(
             "BitmaskSinkPass",
-            [bitmask_id = culling_data.light_bitmask_buffer](render_graph::pass_builder& builder, sink_pass_data& data) {
+            [bitmask_id = culling_data.light_bitmask_buffer](render_graph::pass_builder& builder,
+                                                             sink_pass_data& data) {
                 data.bitmask_buf = builder.read(bitmask_id, rhi::pipeline_stage::compute, rhi::resource_access::read);
                 builder.mark_sink();
             },
-            []([[maybe_unused]] const sink_pass_data& data,
-               [[maybe_unused]] render_graph::pass_execution_context& ctx,
+            []([[maybe_unused]] const sink_pass_data& data, [[maybe_unused]] render_graph::pass_execution_context& ctx,
                [[maybe_unused]] rhi::command_list& cmd) {});
 
         auto res = graph.execute(*dev);
@@ -564,10 +563,12 @@ namespace tempest::render_system::tests
                 .dst_offset = 0,
                 .size = total_clusters * sizeof(cluster_bounds),
             };
-            cmd.copy_buffer(cluster_alloc->handle, cluster_readback, span<const rhi::buffer_copy_region>{&copy_region, 1});
+            cmd.copy_buffer(cluster_alloc->handle, cluster_readback,
+                            span<const rhi::buffer_copy_region>{&copy_region, 1});
             cmd.end();
             auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-            [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+            [[maybe_unused]] auto submit_res =
+                port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
             dev->wait_idle();
 
             const auto* cb = static_cast<const cluster_bounds*>(cluster_readback.cpu_address);
@@ -605,7 +606,8 @@ namespace tempest::render_system::tests
             cmd.end();
 
             auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-            [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+            [[maybe_unused]] auto submit_res =
+                port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
             dev->wait_idle();
 
             const auto* bitmasks = static_cast<const uint32_t*>(readback_buf.cpu_address);
@@ -656,8 +658,11 @@ namespace tempest::render_system::tests
         auto cam = render_camera{
             .proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F),
             .inv_proj = math::inverse(math::perspective(16.0F / 9.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .eye_position = {0.0F, 0.0F, -5.0F, 1.0F},
         };
 
@@ -675,8 +680,8 @@ namespace tempest::render_system::tests
         });
 
         const auto& cluster_data = add_light_clustering_pass(graph, pool, shaders, cluster_bounds_buf, cam, 1280, 720);
-        add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer,
-                               lights_buf, cluster_data.create_info, 0);
+        add_light_culling_pass(graph, pool, shaders, cluster_data.cluster_bounds_buffer, lights_buf,
+                               cluster_data.create_info, 0);
 
         auto res = graph.execute(*dev);
         EXPECT_TRUE(res.has_value());
@@ -875,7 +880,8 @@ namespace tempest::render_system::tests
         // Corrupt / invalid bytecode update
         auto invalid_bytes = array<byte, 8>{byte{0x01}, byte{0x02}, byte{0x03}, byte{0x04},
                                             byte{0x05}, byte{0x06}, byte{0x07}, byte{0x08}};
-        auto update_result = shaders.update_shader_module_bytes(fs, span<const byte>{invalid_bytes.data(), invalid_bytes.size()});
+        auto update_result =
+            shaders.update_shader_module_bytes(fs, span<const byte>{invalid_bytes.data(), invalid_bytes.size()});
         EXPECT_FALSE(update_result);
 
         // The pipeline MUST retain its last known good valid handle!
@@ -896,6 +902,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -904,15 +913,14 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         {
             auto rend = builder.build(*dev, log);
             ASSERT_NE(rend, nullptr);
-
-            auto meshes = core::mesh_registry{};
-            auto materials = core::material_registry{};
-            auto textures = core::texture_registry{};
 
             auto mesh_id = meshes.register_mesh(create_test_mesh());
 
@@ -945,32 +953,35 @@ namespace tempest::render_system::tests
             // Create 5 entities in interleaved order:
             // ent0: OPAQUE (shadow contributor)
             auto ent0 = registry.create();
-            registry.assign(ent0, renderable_component{.mesh_id = mesh_id, .material_id = mat_opaque_1_id, .double_sided = false});
+            registry.assign(ent0, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(ent0, core::material_component{.material_id = mat_opaque_1_id});
             registry.assign(ent0, ecs::transform_component::identity());
 
             // ent1: BLEND (transparent)
             auto ent1 = registry.create();
-            registry.assign(ent1, renderable_component{.mesh_id = mesh_id, .material_id = mat_blend_id, .double_sided = false});
+            registry.assign(ent1, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(ent1, core::material_component{.material_id = mat_blend_id});
             registry.assign(ent1, ecs::transform_component::identity());
 
             // ent2: MASK (shadow contributor)
             auto ent2 = registry.create();
-            registry.assign(ent2, renderable_component{.mesh_id = mesh_id, .material_id = mat_mask_id, .double_sided = false});
+            registry.assign(ent2, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(ent2, core::material_component{.material_id = mat_mask_id});
             registry.assign(ent2, ecs::transform_component::identity());
 
             // ent3: TRANSMISSIVE (transparent)
             auto ent3 = registry.create();
-            registry.assign(ent3, renderable_component{.mesh_id = mesh_id, .material_id = mat_trans_id, .double_sided = false});
+            registry.assign(ent3, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(ent3, core::material_component{.material_id = mat_trans_id});
             registry.assign(ent3, ecs::transform_component::identity());
 
             // ent4: OPAQUE (shadow contributor)
             auto ent4 = registry.create();
-            registry.assign(ent4, renderable_component{.mesh_id = mesh_id, .material_id = mat_opaque_2_id, .double_sided = false});
+            registry.assign(ent4, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(ent4, core::material_component{.material_id = mat_opaque_2_id});
             registry.assign(ent4, ecs::transform_component::identity());
 
-            auto entities = array<ecs::entity, 5>{ent0, ent1, ent2, ent3, ent4};
-            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
-                                      meshes, textures, materials);
+            rend->prepare_frame(1280, 720);
 
             // Assert draw counts:
             // 5 total active draws: 3 opaque (ent0, ent2, ent4), 2 transparent (ent1, ent3)
@@ -980,11 +991,15 @@ namespace tempest::render_system::tests
             EXPECT_EQ(rend->get_transparent_draw_count(), 2U);
             EXPECT_EQ(rend->get_transparent_draw_offset(), 3U);
 
-            // Validate the mapped GPU buffers
+            // Validate the mapped GPU buffers for the active frame slot
             auto& pool = rend->get_resource_pool();
-            auto* cmds = static_cast<const indexed_indirect_command*>(pool.get_draw_commands_buffer().cpu_address);
-            auto* instances = static_cast<const uint32_t*>(pool.get_instance_buffer().cpu_address);
-            auto* objects = static_cast<const object_payload*>(pool.get_object_buffer().cpu_address);
+            const auto slot = pool.get_frame_slot();
+            auto* cmds = static_cast<const indexed_indirect_command*>(pool.get_draw_commands_buffer().cpu_address) +
+                         slot * pool.get_config().max_draw_command_count;
+            auto* instances = static_cast<const uint32_t*>(pool.get_instance_buffer().cpu_address) +
+                              slot * pool.get_config().max_instance_count;
+            auto* objects = static_cast<const object_payload*>(pool.get_object_buffer().cpu_address) +
+                            slot * pool.get_config().max_object_count;
 
             ASSERT_NE(cmds, nullptr);
             ASSERT_NE(instances, nullptr);
@@ -1227,10 +1242,10 @@ namespace tempest::render_system::tests
         // 1. Setup Camera
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
-            .aspect_ratio = 16.0F / 9.0F,
-            .vertical_fov = 1.0F,
-            .near_plane = 0.1F,
-        });
+                                     .aspect_ratio = 16.0F / 9.0F,
+                                     .vertical_fov = 1.0F,
+                                     .near_plane = 0.1F,
+                                 });
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 2.0F, -10.0F});
         registry.assign(cam_ent, cam_tx);
@@ -1239,18 +1254,18 @@ namespace tempest::render_system::tests
         // 2. Setup Sun Light with shadow_caster_component
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
-            .color = {1.0F, 1.0F, 1.0F},
-            .intensity = 5.0F,
-        });
+                                     .color = {1.0F, 1.0F, 1.0F},
+                                     .intensity = 5.0F,
+                                 });
         registry.assign(sun_ent, shadow_caster_component{
-            .resolution = 2048,
-            .num_cascades = 4,
-            .split_lambda = 0.6F,
-            .max_shadow_distance = 150.0F,
-            .normal_bias = 0.03F,
-            .depth_bias = 0.008F,
-            .priority = 0,
-        });
+                                     .resolution = 2048,
+                                     .num_cascades = 4,
+                                     .split_lambda = 0.6F,
+                                     .max_shadow_distance = 150.0F,
+                                     .normal_bias = 0.03F,
+                                     .depth_bias = 0.008F,
+                                     .priority = 0,
+                                 });
         auto sun_tx = ecs::transform_component::identity();
         sun_tx.rotation({math::as_radians(45.0F), math::as_radians(30.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
@@ -1309,10 +1324,10 @@ namespace tempest::render_system::tests
         // 1. Setup Camera
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
-            .aspect_ratio = 16.0F / 9.0F,
-            .vertical_fov = 1.0F,
-            .near_plane = 0.1F,
-        });
+                                     .aspect_ratio = 16.0F / 9.0F,
+                                     .vertical_fov = 1.0F,
+                                     .near_plane = 0.1F,
+                                 });
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 0.0F, -5.0F});
         registry.assign(cam_ent, cam_tx);
@@ -1321,18 +1336,18 @@ namespace tempest::render_system::tests
         // 2. Setup Sun Light
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
-            .color = {1.0F, 1.0F, 1.0F},
-            .intensity = 2.0F,
-        });
+                                     .color = {1.0F, 1.0F, 1.0F},
+                                     .intensity = 2.0F,
+                                 });
         registry.assign(sun_ent, shadow_caster_component{
-            .resolution = 2048,
-            .num_cascades = 4,
-            .split_lambda = 0.5F,
-            .max_shadow_distance = 100.0F,
-            .normal_bias = 0.02F,
-            .depth_bias = 0.005F,
-            .priority = 0,
-        });
+                                     .resolution = 2048,
+                                     .num_cascades = 4,
+                                     .split_lambda = 0.5F,
+                                     .max_shadow_distance = 100.0F,
+                                     .normal_bias = 0.02F,
+                                     .depth_bias = 0.005F,
+                                     .priority = 0,
+                                 });
         auto sun_tx = ecs::transform_component::identity();
         sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
         registry.assign(sun_ent, sun_tx);
@@ -1348,11 +1363,8 @@ namespace tempest::render_system::tests
         auto mat_id = materials.register_material(tempest::move(mat));
 
         auto geom_ent = registry.create();
-        registry.assign(geom_ent, renderable_component{
-            .mesh_id = mesh_id,
-            .material_id = mat_id,
-            .double_sided = false,
-        });
+        registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(geom_ent, core::material_component{.material_id = mat_id});
         registry.assign(geom_ent, ecs::transform_component::identity());
 
         pool.load_materials(span<const guid>{&mat_id, 1}, materials, graph);
@@ -1376,27 +1388,23 @@ namespace tempest::render_system::tests
         const auto ml_opt = pool.get_mesh_layout(mesh_id);
         ASSERT_TRUE(ml_opt.has_value());
         const auto& ml = *ml_opt;
-        auto objects = array{
-            object_payload{
-                .model = math::mat4<float>{1.0F},
-                .inv_transpose_model = math::mat4<float>{1.0F},
-                .mesh_gpu_address = pool.get_mesh_address(mesh_id),
-                .material_gpu_address = pool.get_material_address(mat_id),
-                .parent_gpu_address = 0,
-                .self_id = static_cast<uint32_t>(geom_ent),
-                .padding = 0,
-            }
-        };
+        auto objects = array{object_payload{
+            .model = math::mat4<float>{1.0F},
+            .inv_transpose_model = math::mat4<float>{1.0F},
+            .mesh_gpu_address = pool.get_mesh_address(mesh_id),
+            .material_gpu_address = pool.get_material_address(mat_id),
+            .parent_gpu_address = 0,
+            .self_id = static_cast<uint32_t>(geom_ent),
+            .padding = 0,
+        }};
         auto instances = array{0U};
-        auto commands = array{
-            indexed_indirect_command{
-                .index_count = ml.index_count,
-                .instance_count = 1,
-                .first_index = (ml.mesh_start_offset + ml.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
-                .vertex_offset = 0,
-                .first_instance = 0,
-            }
-        };
+        auto commands = array{indexed_indirect_command{
+            .index_count = ml.index_count,
+            .instance_count = 1,
+            .first_index = (ml.mesh_start_offset + ml.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .vertex_offset = 0,
+            .first_instance = 0,
+        }};
 
         pool.write_objects(span<const object_payload>{objects.data(), objects.size()});
         pool.write_instances(span<const uint32_t>{instances.data(), instances.size()});
@@ -1450,22 +1458,22 @@ namespace tempest::render_system::tests
 
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
-                .aspect_ratio = 16.0F / 9.0F,
-                .vertical_fov = 1.0F,
-                .near_plane = 0.1F,
-            });
+                                         .aspect_ratio = 16.0F / 9.0F,
+                                         .vertical_fov = 1.0F,
+                                         .near_plane = 0.1F,
+                                     });
             registry.assign(cam_ent, ecs::transform_component::identity());
             registry.assign(cam_ent, active_camera_component{});
 
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
-                .color = {1.0F, 1.0F, 1.0F},
-                .intensity = 2.0F,
-            });
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
             registry.assign(sun_ent, shadow_caster_component{
-                .resolution = 2048,
-                .num_cascades = 4,
-            });
+                                         .resolution = 2048,
+                                         .num_cascades = 4,
+                                     });
             registry.assign(sun_ent, ecs::transform_component::identity());
 
             rend->prepare_frame(1280, 720);
@@ -1527,6 +1535,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -1536,6 +1547,9 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         {
@@ -1546,10 +1560,10 @@ namespace tempest::render_system::tests
             // 1. Setup Camera Entity
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
-                .aspect_ratio = 1280.0F / 720.0F,
-                .vertical_fov = 1.5707963F,
-                .near_plane = 0.01F,
-            });
+                                         .aspect_ratio = 1280.0F / 720.0F,
+                                         .vertical_fov = 1.5707963F,
+                                         .near_plane = 0.01F,
+                                     });
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
@@ -1558,28 +1572,24 @@ namespace tempest::render_system::tests
             // 2. Setup Sun Light Entity
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
-                .color = {1.0F, 1.0F, 1.0F},
-                .intensity = 2.0F,
-            });
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
             registry.assign(sun_ent, shadow_caster_component{
-                .resolution = 2048,
-                .num_cascades = 4,
-                .split_lambda = 0.5F,
-                .max_shadow_distance = 100.0F,
-                .normal_bias = 0.02F,
-                .depth_bias = 0.005F,
-                .priority = 0,
-                .debug_mode = shadow_debug_mode::cascades,
-            });
+                                         .resolution = 2048,
+                                         .num_cascades = 4,
+                                         .split_lambda = 0.5F,
+                                         .max_shadow_distance = 100.0F,
+                                         .normal_bias = 0.02F,
+                                         .depth_bias = 0.005F,
+                                         .priority = 0,
+                                         .debug_mode = shadow_debug_mode::cascades,
+                                     });
             auto sun_tx = ecs::transform_component::identity();
             sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
             registry.assign(sun_ent, sun_tx);
 
             // 3. Setup Renderable Geometry Entity (Green surface material)
-            auto meshes = core::mesh_registry{};
-            auto materials = core::material_registry{};
-            auto textures = core::texture_registry{};
-
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.0F, 1.0F, 0.0F, 1.0F});
@@ -1588,18 +1598,11 @@ namespace tempest::render_system::tests
             auto mat_id = materials.register_material(tempest::move(mat));
 
             auto geom_ent = registry.create();
-            registry.assign(geom_ent, renderable_component{
-                .mesh_id = mesh_id,
-                .material_id = mat_id,
-                .double_sided = false,
-            });
+            registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component::identity());
 
-            // 4. Upload Objects and Prepare Frame with Cascades debug mode
-            auto entities = array<ecs::entity, 1>{geom_ent};
-            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
-                                      meshes, textures, materials);
-
+            // 4. Prepare Frame with Cascades debug mode
             rend->prepare_frame(1280, 720);
 
             auto render_res = rend->render();
@@ -1641,7 +1644,8 @@ namespace tempest::render_system::tests
                 cmd.end();
 
                 auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                [[maybe_unused]] auto submit_res =
+                    port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
@@ -1695,14 +1699,16 @@ namespace tempest::render_system::tests
                 cmd.end();
 
                 auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                [[maybe_unused]] auto submit_res =
+                    port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
                 ASSERT_NE(pixels, nullptr);
                 if (pixels)
                 {
-                    // Center pixel in shadow_factor mode must be grayscale (R == G == B within tonemapping quantization)
+                    // Center pixel in shadow_factor mode must be grayscale (R == G == B within tonemapping
+                    // quantization)
                     const auto center_idx = (360 * 1280 + 640) * 4;
                     const auto r = pixels[center_idx + 0];
                     const auto g = pixels[center_idx + 1];
@@ -1745,7 +1751,8 @@ namespace tempest::render_system::tests
             .name = "ZerothMomentTarget",
         });
 
-        const auto& pass_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& pass_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         EXPECT_TRUE(pass_data.moments_texture.is_valid());
         EXPECT_TRUE(pass_data.zeroth_moment_texture.is_valid());
 
@@ -1825,13 +1832,15 @@ namespace tempest::render_system::tests
                 .image_extent_depth = 1,
             },
         };
-        cmd.copy_texture_to_buffer(moments_alloc->handle, moments_readback_buf,
-                                   span<const rhi::buffer_texture_copy_region>{moments_regions.data(), moments_regions.size()});
+        cmd.copy_texture_to_buffer(
+            moments_alloc->handle, moments_readback_buf,
+            span<const rhi::buffer_texture_copy_region>{moments_regions.data(), moments_regions.size()});
 
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* zeroth_pixels = static_cast<const float*>(zeroth_readback_buf.cpu_address);
@@ -1897,8 +1906,11 @@ namespace tempest::render_system::tests
         auto scene = scene_constants{
             .projection = math::perspective(1.0F, 1.0F, 0.1F, 100.0F),
             .inv_projection = math::inverse(math::perspective(1.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .camera_position = {0.0F, 0.0F, -5.0F, 1.0F},
             .ambient_light = {0.28F, 0.30F, 0.36F, 1.0F},
             .sun_color_intensity = {1.0F, 1.0F, 1.0F, 2.0F},
@@ -1932,7 +1944,8 @@ namespace tempest::render_system::tests
         commands.push_back(indexed_indirect_command{
             .index_count = mesh_layout_opt->index_count,
             .instance_count = 1,
-            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) /
+                           static_cast<uint32_t>(sizeof(uint32_t)),
             .vertex_offset = 0,
             .first_instance = 0,
         });
@@ -1970,14 +1983,34 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
         const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
-        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
-        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                                              clear_data.zeroth_moment_texture,
-                                                              depth_data.depth_texture, 1);
+        const auto& clear_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& gather_data =
+            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
+                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
 
         EXPECT_TRUE(gather_data.moments_texture.is_valid());
         EXPECT_TRUE(gather_data.zeroth_moment_texture.is_valid());
         EXPECT_TRUE(gather_data.depth_texture.is_valid());
+
+        struct gather_sink_data
+        {
+            render_graph::rg_texture_id moments;
+            render_graph::rg_texture_id zeroth;
+        };
+
+        graph.add_graphics_pass<gather_sink_data>(
+            "GatherSinkPass",
+            [m = gather_data.moments_texture,
+             z = gather_data.zeroth_moment_texture](render_graph::pass_builder& builder, gather_sink_data& data) {
+                data.moments = builder.read(m, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                            rhi::image_layout::general);
+                data.zeroth = builder.read(z, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                           rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const gather_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2055,13 +2088,15 @@ namespace tempest::render_system::tests
                 .image_extent_depth = 1,
             },
         };
-        cmd.copy_texture_to_buffer(moments_alloc->handle, moments_readback_buf,
-                                   span<const rhi::buffer_texture_copy_region>{moments_regions.data(), moments_regions.size()});
+        cmd.copy_texture_to_buffer(
+            moments_alloc->handle, moments_readback_buf,
+            span<const rhi::buffer_texture_copy_region>{moments_regions.data(), moments_regions.size()});
 
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* zeroth_pixels = static_cast<const float*>(zeroth_readback_buf.cpu_address);
@@ -2118,8 +2153,11 @@ namespace tempest::render_system::tests
         auto scene = scene_constants{
             .projection = math::perspective(1.0F, 1.0F, 0.1F, 100.0F),
             .inv_projection = math::inverse(math::perspective(1.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .camera_position = {0.0F, 0.0F, -5.0F, 1.0F},
             .ambient_light = {0.28F, 0.30F, 0.36F, 1.0F},
             .sun_color_intensity = {1.0F, 1.0F, 1.0F, 2.0F},
@@ -2153,7 +2191,8 @@ namespace tempest::render_system::tests
         commands.push_back(indexed_indirect_command{
             .index_count = mesh_layout_opt->index_count,
             .instance_count = 1,
-            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) /
+                           static_cast<uint32_t>(sizeof(uint32_t)),
             .vertex_offset = 0,
             .first_instance = 0,
         });
@@ -2191,10 +2230,30 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
         const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
-        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
-        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                                              clear_data.zeroth_moment_texture,
-                                                              depth_data.depth_texture, 1);
+        const auto& clear_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& gather_data =
+            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
+                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+
+        struct gather_sink_data
+        {
+            render_graph::rg_texture_id moments;
+            render_graph::rg_texture_id zeroth;
+        };
+
+        graph.add_graphics_pass<gather_sink_data>(
+            "GatherSinkPass",
+            [m = gather_data.moments_texture,
+             z = gather_data.zeroth_moment_texture](render_graph::pass_builder& builder, gather_sink_data& data) {
+                data.moments = builder.read(m, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                            rhi::image_layout::general);
+                data.zeroth = builder.read(z, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                           rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const gather_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2234,7 +2293,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* zeroth_pixels = static_cast<const float*>(zeroth_readback_buf.cpu_address);
@@ -2293,8 +2353,11 @@ namespace tempest::render_system::tests
         auto scene = scene_constants{
             .projection = math::perspective(1.0F, 1.0F, 0.1F, 100.0F),
             .inv_projection = math::inverse(math::perspective(1.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .camera_position = {0.0F, 0.0F, -5.0F, 1.0F},
             .ambient_light = {0.28F, 0.30F, 0.36F, 1.0F},
             .sun_color_intensity = {1.0F, 1.0F, 1.0F, 2.0F},
@@ -2328,7 +2391,8 @@ namespace tempest::render_system::tests
         commands.push_back(indexed_indirect_command{
             .index_count = mesh_layout_opt->index_count,
             .instance_count = 1,
-            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) /
+                           static_cast<uint32_t>(sizeof(uint32_t)),
             .vertex_offset = 0,
             .first_instance = 0,
         });
@@ -2340,7 +2404,8 @@ namespace tempest::render_system::tests
         auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::absolute(width, height),
             .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .usage =
+                rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
             .mip_levels = 1,
             .array_layers = 1,
             .name = "TransparencyAccumTarget",
@@ -2375,19 +2440,34 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
         const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
-        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
-        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                                              clear_data.zeroth_moment_texture,
-                                                              depth_data.depth_texture, 1);
-        const auto& resolve_data = add_transparency_resolve_pass(graph, pool, shaders, accum_tex,
-                                                                gather_data.moments_texture,
-                                                                gather_data.zeroth_moment_texture,
-                                                                depth_data.depth_texture, 1);
+        const auto& clear_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& gather_data =
+            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
+                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+        const auto& resolve_data =
+            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
+                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 1);
 
         EXPECT_TRUE(resolve_data.accum_texture.is_valid());
         EXPECT_TRUE(resolve_data.moments_texture.is_valid());
         EXPECT_TRUE(resolve_data.zeroth_moment_texture.is_valid());
         EXPECT_TRUE(resolve_data.depth_texture.is_valid());
+
+        struct resolve_sink_data
+        {
+            render_graph::rg_texture_id accum;
+        };
+
+        graph.add_graphics_pass<resolve_sink_data>(
+            "ResolveSinkPass",
+            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) {
+                data.accum = builder.read(acc, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                          rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2427,7 +2507,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* accum_pixels = static_cast<const uint16_t*>(accum_readback_buf.cpu_address);
@@ -2478,8 +2559,11 @@ namespace tempest::render_system::tests
         auto scene = scene_constants{
             .projection = math::perspective(1.0F, 1.0F, 0.1F, 100.0F),
             .inv_projection = math::inverse(math::perspective(1.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .camera_position = {0.0F, 0.0F, -5.0F, 1.0F},
             .ambient_light = {0.28F, 0.30F, 0.36F, 1.0F},
             .sun_color_intensity = {1.0F, 1.0F, 1.0F, 2.0F},
@@ -2513,7 +2597,8 @@ namespace tempest::render_system::tests
         commands.push_back(indexed_indirect_command{
             .index_count = mesh_layout_opt->index_count,
             .instance_count = 1,
-            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) /
+                           static_cast<uint32_t>(sizeof(uint32_t)),
             .vertex_offset = 0,
             .first_instance = 0,
         });
@@ -2525,7 +2610,8 @@ namespace tempest::render_system::tests
         auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::absolute(width, height),
             .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .usage =
+                rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
             .mip_levels = 1,
             .array_layers = 1,
             .name = "TransparencyAccumTarget",
@@ -2560,14 +2646,29 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
         const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
-        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
-        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                                              clear_data.zeroth_moment_texture,
-                                                              depth_data.depth_texture, 1);
-        const auto& resolve_data = add_transparency_resolve_pass(graph, pool, shaders, accum_tex,
-                                                                gather_data.moments_texture,
-                                                                gather_data.zeroth_moment_texture,
-                                                                depth_data.depth_texture, 1);
+        const auto& clear_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& gather_data =
+            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
+                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+        const auto& resolve_data =
+            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
+                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+
+        struct resolve_sink_data
+        {
+            render_graph::rg_texture_id accum;
+        };
+
+        graph.add_graphics_pass<resolve_sink_data>(
+            "ResolveSinkPass",
+            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) {
+                data.accum = builder.read(acc, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                          rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2607,7 +2708,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* accum_pixels = static_cast<const uint16_t*>(accum_readback_buf.cpu_address);
@@ -2656,8 +2758,11 @@ namespace tempest::render_system::tests
         auto scene = scene_constants{
             .projection = math::perspective(1.0F, 1.0F, 0.1F, 100.0F),
             .inv_projection = math::inverse(math::perspective(1.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .camera_position = {0.0F, 0.0F, -5.0F, 1.0F},
             .ambient_light = {0.28F, 0.30F, 0.36F, 1.0F},
             .sun_color_intensity = {1.0F, 1.0F, 1.0F, 2.0F},
@@ -2703,14 +2808,16 @@ namespace tempest::render_system::tests
         commands.push_back(indexed_indirect_command{
             .index_count = mesh_layout_opt->index_count,
             .instance_count = 1,
-            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) /
+                           static_cast<uint32_t>(sizeof(uint32_t)),
             .vertex_offset = 0,
             .first_instance = 0,
         });
         commands.push_back(indexed_indirect_command{
             .index_count = mesh_layout_opt->index_count,
             .instance_count = 1,
-            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) /
+                           static_cast<uint32_t>(sizeof(uint32_t)),
             .vertex_offset = 0,
             .first_instance = 1,
         });
@@ -2722,7 +2829,8 @@ namespace tempest::render_system::tests
         auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::absolute(width, height),
             .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .usage =
+                rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
             .mip_levels = 1,
             .array_layers = 1,
             .name = "TransparencyAccumTarget",
@@ -2757,14 +2865,29 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
         const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
-        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
-        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                                              clear_data.zeroth_moment_texture,
-                                                              depth_data.depth_texture, 2);
-        const auto& resolve_data = add_transparency_resolve_pass(graph, pool, shaders, accum_tex,
-                                                                gather_data.moments_texture,
-                                                                gather_data.zeroth_moment_texture,
-                                                                depth_data.depth_texture, 2);
+        const auto& clear_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& gather_data =
+            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
+                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 2);
+        const auto& resolve_data =
+            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
+                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 2);
+
+        struct resolve_sink_data
+        {
+            render_graph::rg_texture_id accum;
+        };
+
+        graph.add_graphics_pass<resolve_sink_data>(
+            "ResolveSinkPass",
+            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) {
+                data.accum = builder.read(acc, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                          rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2804,7 +2927,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* accum_pixels = static_cast<const uint16_t*>(accum_readback_buf.cpu_address);
@@ -2843,7 +2967,8 @@ namespace tempest::render_system::tests
         auto hdr_color_tex = graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::absolute(width, height),
             .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .usage =
+                rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
             .mip_levels = 1,
             .array_layers = 1,
             .name = "HDRColorTarget",
@@ -2878,10 +3003,11 @@ namespace tempest::render_system::tests
 
         add_frame_upload_pass(graph, pool);
         const auto& skybox_data = add_skybox_pass(graph, pool, shaders, hdr_color_tex);
-        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& clear_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
         // Blend directly after clear with no gather or resolve (b0 == 0 everywhere)
-        const auto& blend_data = add_transparency_blend_pass(graph, pool, shaders, skybox_data.hdr_color,
-                                                            accum_tex, clear_data.zeroth_moment_texture);
+        const auto& blend_data = add_transparency_blend_pass(graph, pool, shaders, skybox_data.hdr_color, accum_tex,
+                                                             clear_data.zeroth_moment_texture);
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2921,7 +3047,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* hdr_pixels = static_cast<const uint16_t*>(hdr_readback_buf.cpu_address);
@@ -2965,8 +3092,11 @@ namespace tempest::render_system::tests
         auto scene = scene_constants{
             .projection = math::perspective(1.0F, 1.0F, 0.1F, 100.0F),
             .inv_projection = math::inverse(math::perspective(1.0F, 1.0F, 0.1F, 100.0F)),
-            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F}),
-            .inv_view = math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F})),
+            .view = math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                  math::vec3<float>{0.0F, 1.0F, 0.0F}),
+            .inv_view =
+                math::inverse(math::look_at(math::vec3<float>{0.0F, 0.0F, -5.0F}, math::vec3<float>{0.0F, 0.0F, 0.0F},
+                                            math::vec3<float>{0.0F, 1.0F, 0.0F})),
             .camera_position = {0.0F, 0.0F, -5.0F, 1.0F},
             .ambient_light = {0.28F, 0.30F, 0.36F, 1.0F},
             .sun_color_intensity = {1.0F, 1.0F, 1.0F, 2.0F},
@@ -3000,7 +3130,8 @@ namespace tempest::render_system::tests
         commands.push_back(indexed_indirect_command{
             .index_count = mesh_layout_opt->index_count,
             .instance_count = 1,
-            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+            .first_index = (mesh_layout_opt->mesh_start_offset + mesh_layout_opt->index_offset) /
+                           static_cast<uint32_t>(sizeof(uint32_t)),
             .vertex_offset = 0,
             .first_instance = 0,
         });
@@ -3012,7 +3143,8 @@ namespace tempest::render_system::tests
         auto hdr_color_tex = graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::absolute(width, height),
             .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .usage =
+                rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
             .mip_levels = 1,
             .array_layers = 1,
             .name = "HDRColorTarget",
@@ -3021,7 +3153,8 @@ namespace tempest::render_system::tests
         auto accum_tex = graph.create_texture(render_graph::rg_texture_desc{
             .size = render_graph::rg_texture_size::absolute(width, height),
             .format = rhi::data_format::rgba16_float,
-            .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
+            .usage =
+                rhi::texture_usage::color_attachment | rhi::texture_usage::sampled | rhi::texture_usage::transfer_src,
             .mip_levels = 1,
             .array_layers = 1,
             .name = "TransparencyAccumTarget",
@@ -3057,17 +3190,31 @@ namespace tempest::render_system::tests
         add_frame_upload_pass(graph, pool);
         const auto& skybox_data = add_skybox_pass(graph, pool, shaders, hdr_color_tex);
         const auto& depth_data = add_depth_prepass(graph, pool, shaders, depth_tex, 0);
-        const auto& clear_data = add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
-        const auto& gather_data = add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
-                                                              clear_data.zeroth_moment_texture,
-                                                              depth_data.depth_texture, 1);
-        const auto& resolve_data = add_transparency_resolve_pass(graph, pool, shaders, accum_tex,
-                                                                gather_data.moments_texture,
-                                                                gather_data.zeroth_moment_texture,
-                                                                depth_data.depth_texture, 1);
-        const auto& blend_data = add_transparency_blend_pass(graph, pool, shaders, skybox_data.hdr_color,
-                                                            resolve_data.accum_texture,
-                                                            gather_data.zeroth_moment_texture);
+        const auto& clear_data =
+            add_transparency_clear_pass(graph, shaders, moments_tex, zeroth_moment_tex, width, height);
+        const auto& gather_data =
+            add_transparency_gather_pass(graph, pool, shaders, clear_data.moments_texture,
+                                         clear_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+        const auto& resolve_data =
+            add_transparency_resolve_pass(graph, pool, shaders, accum_tex, gather_data.moments_texture,
+                                          gather_data.zeroth_moment_texture, depth_data.depth_texture, 1);
+        const auto& blend_data = add_transparency_blend_pass(
+            graph, pool, shaders, skybox_data.hdr_color, resolve_data.accum_texture, gather_data.zeroth_moment_texture);
+
+        struct blend_sink_data
+        {
+            render_graph::rg_texture_id hdr;
+        };
+
+        graph.add_graphics_pass<blend_sink_data>(
+            "BlendSinkPass",
+            [h = blend_data.hdr_color](render_graph::pass_builder& builder, blend_sink_data& data) {
+                data.hdr = builder.read(h, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                        rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            []([[maybe_unused]] const blend_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
+               [[maybe_unused]] rhi::command_list&) {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -3107,7 +3254,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* hdr_pixels = static_cast<const uint16_t*>(hdr_readback_buf.cpu_address);
@@ -3135,6 +3283,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
@@ -3147,6 +3298,9 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         auto rend = builder.build(*dev, log);
@@ -3155,10 +3309,10 @@ namespace tempest::render_system::tests
         // 1. Setup Camera Entity
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
-            .aspect_ratio = 1.0F,
-            .vertical_fov = 1.04719755F,
-            .near_plane = 0.01F,
-        });
+                                     .aspect_ratio = 1.0F,
+                                     .vertical_fov = 1.04719755F,
+                                     .near_plane = 0.01F,
+                                 });
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 0.0F, -4.0F});
         registry.assign(cam_ent, cam_tx);
@@ -3167,15 +3321,15 @@ namespace tempest::render_system::tests
         // 2. Setup Sun Light Entity
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
-            .color = {1.0F, 1.0F, 1.0F},
-            .intensity = 3.0F,
-        });
+                                     .color = {1.0F, 1.0F, 1.0F},
+                                     .intensity = 3.0F,
+                                 });
         registry.assign(sun_ent, shadow_caster_component{
-            .resolution = 1024,
-            .num_cascades = 3,
-            .split_lambda = 0.5F,
-            .max_shadow_distance = 20.0F,
-        });
+                                     .resolution = 1024,
+                                     .num_cascades = 3,
+                                     .split_lambda = 0.5F,
+                                     .max_shadow_distance = 20.0F,
+                                 });
         auto sun_tx = ecs::transform_component::identity();
         sun_tx.rotation({math::as_radians(70.0F), math::as_radians(15.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
@@ -3184,10 +3338,6 @@ namespace tempest::render_system::tests
         //    Layer 1: Opaque background (Blue) at z = 1.0
         //    Layer 2: Transmissive middle quad (Green tint) at z = 0.5
         //    Layer 3: Alpha-blended foreground quad (Semi-transparent Red) at z = 0.0
-        auto meshes = core::mesh_registry{};
-        auto materials = core::material_registry{};
-        auto textures = core::texture_registry{};
-
         auto mesh_id = meshes.register_mesh(create_test_mesh());
 
         // Opaque background material (Blue)
@@ -3217,42 +3367,29 @@ namespace tempest::render_system::tests
 
         // Entity 1: Opaque Background
         auto ent_opaque = registry.create();
-        registry.assign(ent_opaque, renderable_component{
-            .mesh_id = mesh_id,
-            .material_id = mat_opaque_id,
-            .double_sided = false,
-        });
+        registry.assign(ent_opaque, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(ent_opaque, core::material_component{.material_id = mat_opaque_id});
         auto tx_opaque = ecs::transform_component::identity();
         tx_opaque.position({0.0F, 0.0F, 1.0F});
         registry.assign(ent_opaque, tx_opaque);
 
         // Entity 2: Transmissive Middle Quad
         auto ent_trans = registry.create();
-        registry.assign(ent_trans, renderable_component{
-            .mesh_id = mesh_id,
-            .material_id = mat_trans_id,
-            .double_sided = false,
-        });
+        registry.assign(ent_trans, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(ent_trans, core::material_component{.material_id = mat_trans_id});
         auto tx_trans = ecs::transform_component::identity();
         tx_trans.position({0.0F, 0.0F, 0.5F});
         registry.assign(ent_trans, tx_trans);
 
         // Entity 3: Alpha-blended Foreground Quad
         auto ent_blend = registry.create();
-        registry.assign(ent_blend, renderable_component{
-            .mesh_id = mesh_id,
-            .material_id = mat_blend_id,
-            .double_sided = false,
-        });
+        registry.assign(ent_blend, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(ent_blend, core::material_component{.material_id = mat_blend_id});
         auto tx_blend = ecs::transform_component::identity();
         tx_blend.position({0.0F, 0.0F, 0.0F});
         registry.assign(ent_blend, tx_blend);
 
-        // 4. Upload Objects and Prepare Frame
-        auto entities = array{ent_opaque, ent_trans, ent_blend};
-        rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
-                                  meshes, textures, materials);
-
+        // 4. Prepare Frame
         rend->prepare_frame(width, height);
 
         EXPECT_TRUE(rend->get_moments_texture().is_valid());
@@ -3298,7 +3435,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
@@ -3328,6 +3466,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         constexpr uint32_t width = 1280;
         constexpr uint32_t height = 720;
@@ -3340,6 +3481,9 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         auto rend = builder.build(*dev, log);
@@ -3348,10 +3492,10 @@ namespace tempest::render_system::tests
         // 1. Setup Camera Entity pointing at Chessboard
         auto cam_ent = registry.create();
         registry.assign(cam_ent, camera_component{
-            .aspect_ratio = static_cast<float>(width) / static_cast<float>(height),
-            .vertical_fov = 1.04719755F,
-            .near_plane = 0.01F,
-        });
+                                     .aspect_ratio = static_cast<float>(width) / static_cast<float>(height),
+                                     .vertical_fov = 1.04719755F,
+                                     .near_plane = 0.01F,
+                                 });
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 0.35F, -0.55F});
         cam_tx.rotation({math::as_radians(28.0F), 0.0F, 0.0F});
@@ -3361,57 +3505,35 @@ namespace tempest::render_system::tests
         // 2. Setup Sun Light Entity
         auto sun_ent = registry.create();
         registry.assign(sun_ent, directional_light_component{
-            .color = {1.0F, 0.98F, 0.92F},
-            .intensity = 4.0F,
-        });
+                                     .color = {1.0F, 0.98F, 0.92F},
+                                     .intensity = 4.0F,
+                                 });
         registry.assign(sun_ent, shadow_caster_component{
-            .resolution = 2048,
-            .num_cascades = 4,
-            .split_lambda = 0.5F,
-            .max_shadow_distance = 2.0F,
-            .normal_bias = 0.005F,
-            .depth_bias = 0.001F,
-        });
+                                     .resolution = 2048,
+                                     .num_cascades = 4,
+                                     .split_lambda = 0.5F,
+                                     .max_shadow_distance = 2.0F,
+                                     .normal_bias = 0.005F,
+                                     .depth_bias = 0.001F,
+                                 });
         auto sun_tx = ecs::transform_component::identity();
         sun_tx.rotation({math::as_radians(65.0F), math::as_radians(25.0F), 0.0F});
         registry.assign(sun_ent, sun_tx);
 
         // 3. Load ABeautifulGame.gltf
-        auto meshes = core::mesh_registry{};
-        auto materials = core::material_registry{};
-        auto textures = core::texture_registry{};
-
         auto asset_type_reg = assets::asset_type_registry{};
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &meshes, &textures, &materials);
 
         const auto chess_path = "vendor/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
-        auto renderable_entities = vector<ecs::entity>{};
 
         if (std::filesystem::exists(chess_path))
         {
             auto prefab_root = asset_db.load(chess_path, registry);
             ASSERT_TRUE(prefab_root != ecs::tombstone);
-
-            if (registry.try_get<core::mesh_component>(prefab_root) != nullptr)
-            {
-                renderable_entities.push_back(prefab_root);
-            }
-            for (auto ent : ecs::archetype_entity_hierarchy_view(registry, prefab_root))
-            {
-                if (registry.try_get<core::mesh_component>(ent) != nullptr)
-                {
-                    renderable_entities.push_back(ent);
-                }
-            }
         }
 
-        ASSERT_FALSE(renderable_entities.empty());
-
-        // 4. Upload Objects and Prepare Frame
-        rend->upload_objects_sync(span<const ecs::entity>{renderable_entities.data(), renderable_entities.size()},
-                                  meshes, textures, materials);
-
+        // 4. Prepare Frame
         rend->prepare_frame(width, height);
 
         EXPECT_TRUE(rend->get_moments_texture().is_valid());
@@ -3457,7 +3579,8 @@ namespace tempest::render_system::tests
         cmd.end();
 
         auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-        [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+        [[maybe_unused]] auto submit_res =
+            port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
         dev->wait_idle();
 
         const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
@@ -3546,10 +3669,10 @@ namespace tempest::render_system::tests
         // Create pre-existing light before renderer construction to test discovery
         auto pre_light = registry.create();
         registry.assign(pre_light, point_light_component{
-            .color = {1.0F, 0.5F, 0.2F},
-            .intensity = 4.0F,
-            .range = 10.0F,
-        });
+                                       .color = {1.0F, 0.5F, 0.2F},
+                                       .intensity = 4.0F,
+                                       .range = 10.0F,
+                                   });
         auto pre_tx = ecs::transform_component::identity();
         pre_tx.position({1.0F, 2.0F, 3.0F});
         registry.assign(pre_light, pre_tx);
@@ -3587,10 +3710,10 @@ namespace tempest::render_system::tests
             // 2. Add second point light dynamically
             auto light2 = registry.create();
             registry.assign(light2, point_light_component{
-                .color = {0.0F, 1.0F, 0.0F},
-                .intensity = 8.0F,
-                .range = 20.0F,
-            });
+                                        .color = {0.0F, 1.0F, 0.0F},
+                                        .intensity = 8.0F,
+                                        .range = 20.0F,
+                                    });
             auto tx2 = ecs::transform_component::identity();
             tx2.position({-5.0F, 0.0F, 10.0F});
             registry.assign(light2, tx2);
@@ -3616,10 +3739,10 @@ namespace tempest::render_system::tests
 
             // 4. Mutate point light component
             registry.replace(light2, point_light_component{
-                .color = {0.0F, 0.0F, 1.0F},
-                .intensity = 12.0F,
-                .range = 30.0F,
-            });
+                                         .color = {0.0F, 0.0F, 1.0F},
+                                         .intensity = 12.0F,
+                                         .range = 30.0F,
+                                     });
 
             rend->prepare_frame(1280, 720);
             cached = rend->get_cached_lights();
@@ -3652,6 +3775,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -3660,6 +3786,9 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         {
@@ -3669,10 +3798,10 @@ namespace tempest::render_system::tests
             // 1. Setup Camera Entity at (0, 0, -5) looking towards +Z
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
-                .aspect_ratio = 1280.0F / 720.0F,
-                .vertical_fov = 1.5707963F,
-                .near_plane = 0.01F,
-            });
+                                         .aspect_ratio = 1280.0F / 720.0F,
+                                         .vertical_fov = 1.5707963F,
+                                         .near_plane = 0.01F,
+                                     });
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
@@ -3681,19 +3810,15 @@ namespace tempest::render_system::tests
             // 2. Setup Point Light Entity (between camera and quad, at (0, 0, -2))
             auto light_ent = registry.create();
             registry.assign(light_ent, point_light_component{
-                .color = {1.0F, 0.2F, 0.2F},
-                .intensity = 20.0F,
-                .range = 10.0F,
-            });
+                                           .color = {1.0F, 0.2F, 0.2F},
+                                           .intensity = 20.0F,
+                                           .range = 10.0F,
+                                       });
             auto light_tx = ecs::transform_component::identity();
             light_tx.position({0.0F, 0.0F, -2.0F});
             registry.assign(light_ent, light_tx);
 
             // 3. Setup Renderable Geometry Entity (Quad at z=0)
-            auto meshes = core::mesh_registry{};
-            auto materials = core::material_registry{};
-            auto textures = core::texture_registry{};
-
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.9F, 0.9F, 0.9F, 1.0F});
@@ -3702,18 +3827,11 @@ namespace tempest::render_system::tests
             auto mat_id = materials.register_material(tempest::move(mat));
 
             auto geom_ent = registry.create();
-            registry.assign(geom_ent, renderable_component{
-                .mesh_id = mesh_id,
-                .material_id = mat_id,
-                .double_sided = false,
-            });
+            registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component::identity());
 
-            // 4. Upload Objects and Prepare Frame
-            auto entities = array<ecs::entity, 1>{geom_ent};
-            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
-                                      meshes, textures, materials);
-
+            // 4. Prepare Frame
             rend->prepare_frame(1280, 720);
 
             // 5. Render execution
@@ -3757,7 +3875,8 @@ namespace tempest::render_system::tests
                 cmd.end();
 
                 auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                [[maybe_unused]] auto submit_res =
+                    port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
@@ -3790,6 +3909,9 @@ namespace tempest::render_system::tests
 
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
 
         auto builder = renderer::builder{};
         builder.set_config(renderer_config{
@@ -3798,6 +3920,9 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
         });
 
         {
@@ -3807,10 +3932,10 @@ namespace tempest::render_system::tests
             // 1. Setup Camera Entity at (0, 0, -5) looking towards +Z
             auto cam_ent = registry.create();
             registry.assign(cam_ent, camera_component{
-                .aspect_ratio = 1280.0F / 720.0F,
-                .vertical_fov = 1.5707963F,
-                .near_plane = 0.01F,
-            });
+                                         .aspect_ratio = 1280.0F / 720.0F,
+                                         .vertical_fov = 1.5707963F,
+                                         .near_plane = 0.01F,
+                                     });
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
@@ -3819,19 +3944,15 @@ namespace tempest::render_system::tests
             // 2. Setup Point Light Entity with green color
             auto light_ent = registry.create();
             registry.assign(light_ent, point_light_component{
-                .color = {0.1F, 1.0F, 0.1F},
-                .intensity = 25.0F,
-                .range = 10.0F,
-            });
+                                           .color = {0.1F, 1.0F, 0.1F},
+                                           .intensity = 25.0F,
+                                           .range = 10.0F,
+                                       });
             auto light_tx = ecs::transform_component::identity();
             light_tx.position({0.0F, 0.0F, -2.0F});
             registry.assign(light_ent, light_tx);
 
             // 3. Setup Transparent Renderable Geometry Entity (Blend quad at z=0)
-            auto meshes = core::mesh_registry{};
-            auto materials = core::material_registry{};
-            auto textures = core::texture_registry{};
-
             auto mesh_id = meshes.register_mesh(create_test_mesh());
             auto mat = core::material{};
             mat.set_vec4(core::material::base_color_factor_name, {0.1F, 0.9F, 0.1F, 0.8F});
@@ -3841,18 +3962,11 @@ namespace tempest::render_system::tests
             auto mat_id = materials.register_material(tempest::move(mat));
 
             auto geom_ent = registry.create();
-            registry.assign(geom_ent, renderable_component{
-                .mesh_id = mesh_id,
-                .material_id = mat_id,
-                .double_sided = false,
-            });
+            registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(geom_ent, core::material_component{.material_id = mat_id});
             registry.assign(geom_ent, ecs::transform_component::identity());
 
-            // 4. Upload Objects and Prepare Frame
-            auto entities = array<ecs::entity, 1>{geom_ent};
-            rend->upload_objects_sync(span<const ecs::entity>{entities.data(), entities.size()},
-                                      meshes, textures, materials);
-
+            // 4. Prepare Frame
             rend->prepare_frame(1280, 720);
 
             // 5. Render execution
@@ -3896,7 +4010,8 @@ namespace tempest::render_system::tests
                 cmd.end();
 
                 auto cmd_ptrs = array<const rhi::command_list*, 1>{&cmd};
-                [[maybe_unused]] auto submit_res = port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
+                [[maybe_unused]] auto submit_res =
+                    port.submit(span<const rhi::command_list*>{cmd_ptrs.data(), cmd_ptrs.size()}, {}, {});
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
@@ -3917,6 +4032,158 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    TEST(render_system_tests, renderer_automatic_renderable_tracking_lifecycle)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto mesh_id = meshes.register_mesh(create_test_mesh());
+
+        auto mat_opaque = core::material{};
+        mat_opaque.set_string(core::material::alpha_mode_name, "OPAQUE");
+        auto mat_opaque_id = materials.register_material(tempest::move(mat_opaque));
+
+        auto mat_blend = core::material{};
+        mat_blend.set_string(core::material::alpha_mode_name, "BLEND");
+        auto mat_blend_id = materials.register_material(tempest::move(mat_blend));
+
+        // 1. Create pre-existing entity before renderer initialization
+        auto pre_ent = registry.create();
+        registry.assign(pre_ent, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(pre_ent, core::material_component{.material_id = mat_opaque_id});
+        registry.assign(pre_ent, ecs::transform_component::identity());
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Verify pre-existing entity is automatically discovered on startup
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_active_draw_count(), 1U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 1U);
+            EXPECT_EQ(rend->get_transparent_draw_count(), 0U);
+
+            // 2. Add second entity dynamically
+            auto ent2 = registry.create();
+            registry.assign(ent2, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(ent2, core::material_component{.material_id = mat_blend_id});
+            registry.assign(ent2, ecs::transform_component::identity());
+
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 2U);
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_active_draw_count(), 2U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 1U);
+            EXPECT_EQ(rend->get_transparent_draw_count(), 1U);
+
+            // 3. Mutate material on pre_ent from opaque to blend
+            registry.replace(pre_ent, core::material_component{.material_id = mat_blend_id});
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_active_draw_count(), 2U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 0U);
+            EXPECT_EQ(rend->get_transparent_draw_count(), 2U);
+
+            // 4. Remove mesh_component from pre_ent
+            registry.remove<core::mesh_component>(pre_ent);
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 1U);
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_active_draw_count(), 1U);
+            EXPECT_EQ(rend->get_transparent_draw_count(), 1U);
+
+            // 5. Destroy ent2
+            registry.destroy(ent2);
+            EXPECT_EQ(rend->get_tracked_renderable_count(), 0U);
+
+            rend->prepare_frame(1280, 720);
+            EXPECT_EQ(rend->get_active_draw_count(), 0U);
+        }
+
+        dev->wait_idle();
+    }
+
+    TEST(render_system_tests, renderer_automatic_renderable_asset_loading)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto mesh_id = meshes.register_mesh(create_test_mesh());
+        auto mat = core::material{};
+        mat.set_vec4(core::material::base_color_factor_name, {0.7F, 0.7F, 0.7F, 1.0F});
+        auto mat_id = materials.register_material(tempest::move(mat));
+
+        auto ent = registry.create();
+        registry.assign(ent, core::mesh_component{.mesh_id = mesh_id});
+        registry.assign(ent, core::material_component{.material_id = mat_id});
+        registry.assign(ent, ecs::transform_component::identity());
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // Verify assets are NOT loaded in pool before prepare_frame
+            EXPECT_FALSE(rend->get_resource_pool().get_mesh_layout(mesh_id).has_value());
+            EXPECT_FALSE(rend->get_resource_pool().get_material(mat_id).has_value());
+
+            // Calling prepare_frame should automatically detect and load missing assets
+            rend->prepare_frame(1280, 720);
+
+            EXPECT_TRUE(rend->get_resource_pool().get_mesh_layout(mesh_id).has_value());
+            EXPECT_TRUE(rend->get_resource_pool().get_material(mat_id).has_value());
+            EXPECT_EQ(rend->get_active_draw_count(), 1U);
+
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+        }
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests
-
-

@@ -7,9 +7,11 @@
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/mat4.hpp>
+#include <tempest/material.hpp>
 #include <tempest/vec2.hpp>
 #include <tempest/vec3.hpp>
 #include <tempest/vec4.hpp>
+#include <tempest/vertex.hpp>
 
 namespace tempest::render_system
 {
@@ -75,9 +77,9 @@ namespace tempest::render_system
     {
         math::mat4<float> model{1.0F};
         math::mat4<float> inv_transpose_model{1.0F};
-        uint64_t mesh_gpu_address{0};      // 64-bit BDA pointer to mesh_layout
-        uint64_t material_gpu_address{0};  // 64-bit BDA pointer to material_payload
-        uint64_t parent_gpu_address{0};    // 64-bit BDA pointer to parent object_payload (0 if root)
+        uint64_t mesh_gpu_address{0};     // 64-bit BDA pointer to mesh_layout
+        uint64_t material_gpu_address{0}; // 64-bit BDA pointer to material_payload
+        uint64_t parent_gpu_address{0};   // 64-bit BDA pointer to parent object_payload (0 if root)
         uint32_t self_id{numeric_limits<uint32_t>::max()};
         uint32_t padding{0};
     };
@@ -97,13 +99,6 @@ namespace tempest::render_system
         uint32_t first_index{0};
         int32_t vertex_offset{0};
         uint32_t first_instance{0};
-    };
-
-    struct TEMPEST_API renderable_component
-    {
-        guid mesh_id;
-        guid material_id;
-        bool double_sided;
     };
 
     struct TEMPEST_API camera_component
@@ -132,10 +127,10 @@ namespace tempest::render_system
 
     struct TEMPEST_API light_payload
     {
-        math::vec4<float> color_intensity{1.0F, 1.0F, 1.0F, 1.0F}; // rgb = color, w = intensity
+        math::vec4<float> color_intensity{1.0F, 1.0F, 1.0F, 1.0F};   // rgb = color, w = intensity
         math::vec4<float> position_falloff{0.0F, 0.0F, 0.0F, 10.0F}; // xyz = world position, w = range/radius
-        math::vec4<float> direction_angle{0.0F, -1.0F, 0.0F, 0.0F}; // xyz = forward direction, w = spot angle
-        uint32_t type{1}; // 0 = Directional, 1 = Point, 2 = Spot
+        math::vec4<float> direction_angle{0.0F, -1.0F, 0.0F, 0.0F};  // xyz = forward direction, w = spot angle
+        uint32_t type{1};                                            // 0 = Directional, 1 = Point, 2 = Spot
         uint32_t enabled{1};
         uint32_t padding[2]{0, 0};
     };

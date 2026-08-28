@@ -4,12 +4,10 @@
 
 namespace tempest::render_system
 {
-    auto add_transparency_gather_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                      shader_manager& shaders, render_graph::rg_texture_id moments_tex,
+    auto add_transparency_gather_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                                      render_graph::rg_texture_id moments_tex,
                                       render_graph::rg_texture_id zeroth_moment_tex,
-                                      render_graph::rg_texture_id depth_tex,
-                                      uint32_t draw_count,
-                                      uint32_t draw_offset)
+                                      render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset)
         -> const transparency_gather_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_gather_pipeline");
@@ -44,37 +42,43 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_gather_pass_data>(
             "TransparencyGatherPass",
-            [&pool, moments_tex, zeroth_moment_tex, depth_tex, draw_count, draw_offset](render_graph::pass_builder& builder,
-                                                                                         transparency_gather_pass_data& data) {
-                data.depth_texture = builder.set_depth_stencil_attachment(
-                    render_graph::rg_depth_stencil_attachment{
-                        .texture = depth_tex,
-                        .depth_load_op = rhi::load_op::load,
-                        .depth_store_op = rhi::store_op::store,
-                    });
+            [&pool, moments_tex, zeroth_moment_tex, depth_tex, draw_count,
+             draw_offset](render_graph::pass_builder& builder, transparency_gather_pass_data& data) {
+                data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
+                    .texture = depth_tex,
+                    .depth_load_op = rhi::load_op::load,
+                    .depth_store_op = rhi::store_op::store,
+                });
 
                 data.moments_texture = builder.read_write(moments_tex, rhi::pipeline_stage::fragment,
                                                           rhi::resource_access::read | rhi::resource_access::write,
                                                           rhi::image_layout::general);
-                data.zeroth_moment_texture = builder.read_write(zeroth_moment_tex, rhi::pipeline_stage::fragment,
-                                                                rhi::resource_access::read | rhi::resource_access::write,
-                                                                rhi::image_layout::general);
+                data.zeroth_moment_texture = builder.read_write(
+                    zeroth_moment_tex, rhi::pipeline_stage::fragment,
+                    rhi::resource_access::read | rhi::resource_access::write, rhi::image_layout::general);
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
                 data.object_buffer = builder.import_buffer(pool.get_object_buffer());
                 data.instance_buffer = builder.import_buffer(pool.get_instance_buffer());
                 data.draw_commands = builder.import_buffer(pool.get_draw_commands_buffer());
+                data.vertex_buffer = builder.import_buffer(pool.get_vertex_buffer());
 
-                data.scene_constants = builder.read(data.scene_constants, rhi::pipeline_stage::vertex | rhi::pipeline_stage::fragment, rhi::resource_access::read);
-                data.object_buffer = builder.read(data.object_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
-                data.instance_buffer = builder.read(data.instance_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
-                data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
+                data.scene_constants =
+                    builder.read(data.scene_constants, rhi::pipeline_stage::vertex | rhi::pipeline_stage::fragment,
+                                 rhi::resource_access::read);
+                data.object_buffer =
+                    builder.read(data.object_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.instance_buffer =
+                    builder.read(data.instance_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands,
+                                                  rhi::resource_access::read);
+                data.vertex_buffer =
+                    builder.read(data.vertex_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 data.draw_count = draw_count;
                 data.draw_offset = draw_offset;
             },
             [&pool, &shaders, pipe](const transparency_gather_pass_data& data,
-                                    render_graph::pass_execution_context& ctx,
-                                    rhi::command_list& pass_cmd) {
+                                    render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;

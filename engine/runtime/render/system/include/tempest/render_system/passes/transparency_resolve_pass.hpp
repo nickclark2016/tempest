@@ -20,6 +20,7 @@ namespace tempest::render_system
         render_graph::rg_buffer_id object_buffer;
         render_graph::rg_buffer_id instance_buffer;
         render_graph::rg_buffer_id draw_commands;
+        render_graph::rg_buffer_id vertex_buffer;
         render_graph::rg_buffer_id light_bitmask_buffer;
         uint32_t draw_count{0};
         uint32_t draw_offset{0};
@@ -41,18 +42,11 @@ namespace tempest::render_system
     };
 
     TEMPEST_API auto add_transparency_resolve_pass(
-        render_graph::render_graph& graph,
-        resource_pool& pool,
-        shader_manager& shaders,
-        render_graph::rg_texture_id accum_tex,
-        render_graph::rg_texture_id moments_tex,
-        render_graph::rg_texture_id zeroth_moment_tex,
-        render_graph::rg_texture_id depth_tex,
-        uint32_t draw_count,
-        uint32_t draw_offset = 0,
-        render_graph::rg_texture_id shadow_atlas = {},
-        render_graph::rg_buffer_id light_bitmask_buf = {})
-        -> const transparency_resolve_pass_data&;
+        render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+        render_graph::rg_texture_id accum_tex, render_graph::rg_texture_id moments_tex,
+        render_graph::rg_texture_id zeroth_moment_tex, render_graph::rg_texture_id depth_tex, uint32_t draw_count,
+        uint32_t draw_offset = 0, render_graph::rg_texture_id shadow_atlas = {},
+        render_graph::rg_buffer_id light_bitmask_buf = {}) -> const transparency_resolve_pass_data&;
 } // namespace tempest::render_system
 
 #endif // tempest_render_system_transparency_resolve_pass_hpp

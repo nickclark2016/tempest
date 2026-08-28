@@ -68,14 +68,15 @@ namespace tempest::render_system
         if (_inputs.entity_registry != nullptr)
         {
             _events = &_inputs.entity_registry->event_registry();
-            _subscribe_light_events();
+            _subscribe_events();
+            _init_renderables_from_registry();
             _init_lights_from_registry();
         }
     }
 
     renderer::~renderer()
     {
-        _unsubscribe_light_events();
+        _unsubscribe_events();
         if (_device)
         {
             _graph.get_allocator().release_all(*_device);
@@ -98,30 +99,31 @@ namespace tempest::render_system
           _opaque_draw_count{other._opaque_draw_count}, _opaque_draw_offset{other._opaque_draw_offset},
           _transparent_draw_count{other._transparent_draw_count},
           _transparent_draw_offset{other._transparent_draw_offset}, _shadow_debug_mode{other._shadow_debug_mode},
+          _renderable_indices{tempest::move(other._renderable_indices)},
+          _renderables_dirty_count{other._renderables_dirty_count}, _events{other._events},
           _point_light_indices{tempest::move(other._point_light_indices)},
           _point_light_entities{tempest::move(other._point_light_entities)},
-          _cached_lights{tempest::move(other._cached_lights)}, _lights_dirty_count{other._lights_dirty_count},
-          _events{other._events}
+          _cached_lights{tempest::move(other._cached_lights)}, _lights_dirty_count{other._lights_dirty_count}
     {
-        other._unsubscribe_light_events();
+        other._unsubscribe_events();
         other._device = nullptr;
         other._camera_system = nullptr;
         other._events = nullptr;
 
-        _subscribe_light_events();
+        _subscribe_events();
     }
 
     renderer& renderer::operator=(renderer&& other) noexcept
     {
         if (this != &other)
         {
-            _unsubscribe_light_events();
+            _unsubscribe_events();
             if (_device)
             {
                 _graph.get_allocator().release_all(*_device);
             }
 
-            other._unsubscribe_light_events();
+            other._unsubscribe_events();
 
             _device = other._device;
             _log = other._log;
@@ -151,6 +153,8 @@ namespace tempest::render_system
             _transparent_draw_count = other._transparent_draw_count;
             _transparent_draw_offset = other._transparent_draw_offset;
             _shadow_debug_mode = other._shadow_debug_mode;
+            _renderable_indices = tempest::move(other._renderable_indices);
+            _renderables_dirty_count = other._renderables_dirty_count;
             _point_light_indices = tempest::move(other._point_light_indices);
             _point_light_entities = tempest::move(other._point_light_entities);
             _cached_lights = tempest::move(other._cached_lights);
@@ -161,60 +165,34 @@ namespace tempest::render_system
             other._camera_system = nullptr;
             other._events = nullptr;
 
-            _subscribe_light_events();
+            _subscribe_events();
         }
         return *this;
     }
 
-    void renderer::upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
-                                       const core::texture_registry& textures, const core::material_registry& materials)
+    void renderer::_ensure_assets_loaded()
     {
         if (_inputs.entity_registry == nullptr)
         {
             return;
         }
 
-        auto all_entities = vector<ecs::entity>{};
-        auto collect_all = [this, &all_entities](ecs::entity e, auto&& self) -> void {
-            all_entities.push_back(e);
-            if (const auto* rel = _inputs.entity_registry->try_get<ecs::relationship_component<ecs::entity>>(e))
-            {
-                auto child = rel->first_child;
-                while (child != ecs::tombstone)
-                {
-                    self(child, self);
-                    if (const auto* child_rel =
-                            _inputs.entity_registry->try_get<ecs::relationship_component<ecs::entity>>(child))
-                    {
-                        child = child_rel->next_sibling;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-        };
-
-        for (const auto entity : entities)
-        {
-            collect_all(entity, collect_all);
-        }
-
         auto mesh_ids = vector<guid>{};
         auto mat_ids = vector<guid>{};
 
-        for (const auto entity : all_entities)
+        for (const auto entity : _tracked_entities)
         {
-            if (const auto* r = _inputs.entity_registry->try_get<renderable_component>(entity))
+            if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
             {
-                mesh_ids.push_back(r->mesh_id);
-                mat_ids.push_back(r->material_id);
+                if (!_pool.get_mesh_layout(mc->mesh_id).has_value())
+                {
+                    mesh_ids.push_back(mc->mesh_id);
+                }
             }
-            else if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+
+            if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
             {
-                mesh_ids.push_back(mc->mesh_id);
-                if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
+                if (!_pool.get_material(matc->material_id).has_value())
                 {
                     mat_ids.push_back(matc->material_id);
                 }
@@ -222,59 +200,66 @@ namespace tempest::render_system
         }
 
         auto tex_ids = vector<guid>{};
-        for (const auto& mat_id : mat_ids)
+        if (_inputs.materials)
         {
-            if (auto mat_opt = materials.find(mat_id))
+            for (const auto& mat_id : mat_ids)
             {
-                const auto& m = *mat_opt;
-                if (auto t = m.get_texture(core::material::base_color_texture_name))
-                    tex_ids.push_back(*t);
-                if (auto t = m.get_texture(core::material::normal_texture_name))
-                    tex_ids.push_back(*t);
-                if (auto t = m.get_texture(core::material::metallic_roughness_texture_name))
-                    tex_ids.push_back(*t);
-                if (auto t = m.get_texture(core::material::emissive_texture_name))
-                    tex_ids.push_back(*t);
-                if (auto t = m.get_texture(core::material::occlusion_texture_name))
-                    tex_ids.push_back(*t);
-                if (auto t = m.get_texture(core::material::transmissive_texture_name))
-                    tex_ids.push_back(*t);
-                if (auto t = m.get_texture(core::material::volume_thickness_texture_name))
-                    tex_ids.push_back(*t);
+                if (auto mat_opt = _inputs.materials->find(mat_id))
+                {
+                    const auto& m = *mat_opt;
+                    auto check_tex = [&](const string& tex_name) {
+                        if (auto t = m.get_texture(tex_name))
+                        {
+                            if (_pool.get_texture_descriptor_index(*t) == -1)
+                            {
+                                tex_ids.push_back(*t);
+                            }
+                        }
+                    };
+                    check_tex(core::material::base_color_texture_name);
+                    check_tex(core::material::normal_texture_name);
+                    check_tex(core::material::metallic_roughness_texture_name);
+                    check_tex(core::material::emissive_texture_name);
+                    check_tex(core::material::occlusion_texture_name);
+                    check_tex(core::material::transmissive_texture_name);
+                    check_tex(core::material::volume_thickness_texture_name);
+                }
             }
         }
 
-        // Upload static mesh, texture & material data via staging transfer pass
-        _pool.load_textures(tex_ids, textures, _graph);
-        _pool.load_materials(mat_ids, materials, _graph);
-        _pool.load_meshes(mesh_ids, meshes, _graph);
-
-        // Execute upload graph and wait for transfers to complete
-        if (_device && !_graph.get_compiler().get_passes().empty())
+        if (!tex_ids.empty() && _inputs.textures)
         {
-            [[maybe_unused]] const auto sync_res = _graph.execute(*_device);
-            _device->wait_idle();
-            _pool.clear_staging_buffers();
-            _graph.reset();
+            _pool.load_textures(tex_ids, *_inputs.textures, _graph);
+        }
+        if (!mat_ids.empty() && _inputs.materials)
+        {
+            _pool.load_materials(mat_ids, *_inputs.materials, _graph);
+        }
+        if (!mesh_ids.empty() && _inputs.meshes)
+        {
+            _pool.load_meshes(mesh_ids, *_inputs.meshes, _graph);
+        }
+    }
+
+    void renderer::_update_renderable_commands()
+    {
+        if (_inputs.entity_registry == nullptr)
+        {
+            return;
         }
 
         // Partition entities into Opaque and Transparent batches based on material type
         auto opaque_entities = vector<ecs::entity>{};
         auto transparent_entities = vector<ecs::entity>{};
-        opaque_entities.reserve(all_entities.size());
-        transparent_entities.reserve(all_entities.size());
+        opaque_entities.reserve(_tracked_entities.size());
+        transparent_entities.reserve(_tracked_entities.size());
 
-        for (const auto entity : all_entities)
+        for (const auto entity : _tracked_entities)
         {
             auto mesh_id = guid{};
             auto mat_id = guid{};
 
-            if (const auto* r = _inputs.entity_registry->try_get<renderable_component>(entity))
-            {
-                mesh_id = r->mesh_id;
-                mat_id = r->material_id;
-            }
-            else if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+            if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
             {
                 mesh_id = mc->mesh_id;
                 if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
@@ -313,9 +298,13 @@ namespace tempest::render_system
         _tracked_entities.insert(_tracked_entities.end(), opaque_entities.begin(), opaque_entities.end());
         _tracked_entities.insert(_tracked_entities.end(), transparent_entities.begin(), transparent_entities.end());
 
-        // Build dynamic ObjectData, Instance Indices, and Indirect Draw Commands
-        auto objects = vector<object_payload>{};
-        objects.reserve(_tracked_entities.size());
+        _renderable_indices.clear();
+        for (size_t i = 0; i < _tracked_entities.size(); ++i)
+        {
+            _renderable_indices[_tracked_entities[i]] = i;
+        }
+
+        // Build dynamic Instance Indices and Indirect Draw Commands
         auto instances = vector<uint32_t>{};
         instances.reserve(_tracked_entities.size());
         auto commands = vector<indexed_indirect_command>{};
@@ -324,20 +313,9 @@ namespace tempest::render_system
         for (const auto entity : _tracked_entities)
         {
             auto mesh_id = guid{};
-            auto mat_id = guid{};
-
-            if (const auto* r = _inputs.entity_registry->try_get<renderable_component>(entity))
-            {
-                mesh_id = r->mesh_id;
-                mat_id = r->material_id;
-            }
-            else if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+            if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
             {
                 mesh_id = mc->mesh_id;
-                if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
-                {
-                    mat_id = matc->material_id;
-                }
             }
 
             const auto ml_opt = _pool.get_mesh_layout(mesh_id);
@@ -346,25 +324,8 @@ namespace tempest::render_system
                 continue;
             }
             const auto& ml = *ml_opt;
-            const auto mesh_gpu_addr = _pool.get_mesh_address(mesh_id);
-            const auto mat_gpu_addr = _pool.get_material_address(mat_id);
 
-            const auto model_mat = compute_world_matrix(*_inputs.entity_registry, entity);
-            const auto inv_model = math::inverse(model_mat);
-            const auto inv_trans = math::transpose(inv_model);
-
-            auto payload = object_payload{
-                .model = model_mat,
-                .inv_transpose_model = inv_trans,
-                .mesh_gpu_address = mesh_gpu_addr,
-                .material_gpu_address = mat_gpu_addr,
-                .parent_gpu_address = 0,
-                .self_id = static_cast<uint32_t>(entity),
-                .padding = 0,
-            };
-
-            const auto idx = static_cast<uint32_t>(objects.size());
-            objects.push_back(payload);
+            const auto idx = static_cast<uint32_t>(instances.size());
             instances.push_back(idx);
 
             auto cmd = indexed_indirect_command{
@@ -383,13 +344,9 @@ namespace tempest::render_system
         _transparent_draw_offset = _opaque_draw_count;
         _active_draw_count = static_cast<uint32_t>(commands.size());
 
-        for (uint32_t slot = 0; slot < _cfg.pool_config.frames_in_flight; ++slot)
-        {
-            _pool.write_objects(objects);
-            _pool.write_instances(instances);
-            _pool.write_draw_commands(commands);
-            _pool.advance_frame();
-        }
+        _pool.write_instances(instances);
+        _pool.write_draw_commands(commands);
+        --_renderables_dirty_count;
     }
 
     void renderer::prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex,
@@ -402,7 +359,16 @@ namespace tempest::render_system
         _graph.reset();
         _graph.set_surface_size(width, height);
 
-        // 1. Automatically update dynamic object transforms from entity registry
+        // 1. Automatically load any missing mesh/material/texture assets needed by tracked renderables
+        _ensure_assets_loaded();
+
+        // 2. Automatically update draw commands and instance buffer if renderables changed
+        if (_renderables_dirty_count > 0 && _inputs.entity_registry != nullptr)
+        {
+            _update_renderable_commands();
+        }
+
+        // 3. Automatically update dynamic object transforms from entity registry
         if (_inputs.entity_registry && !_tracked_entities.empty())
         {
             auto objects = vector<object_payload>{};
@@ -413,12 +379,7 @@ namespace tempest::render_system
                 auto mesh_id = guid{};
                 auto mat_id = guid{};
 
-                if (const auto* r = _inputs.entity_registry->try_get<renderable_component>(entity))
-                {
-                    mesh_id = r->mesh_id;
-                    mat_id = r->material_id;
-                }
-                else if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
+                if (const auto* mc = _inputs.entity_registry->try_get<core::mesh_component>(entity))
                 {
                     mesh_id = mc->mesh_id;
                     if (const auto* matc = _inputs.entity_registry->try_get<core::material_component>(entity))
@@ -769,12 +730,74 @@ namespace tempest::render_system
         }
     }
 
-    void renderer::_subscribe_light_events()
+    void renderer::_subscribe_events()
     {
         if (_events == nullptr)
         {
             return;
         }
+
+        // Mesh Component Added
+        _mesh_added_sub =
+            _events->dispatcher<ecs::component_added_event<ecs::entity, core::mesh_component>>().subscribe(
+                [this](const ecs::component_added_event<ecs::entity, core::mesh_component>& evt) {
+                    if (!_renderable_indices.contains(evt.entity))
+                    {
+                        const auto idx = _tracked_entities.size();
+                        _renderable_indices[evt.entity] = idx;
+                        _tracked_entities.push_back(evt.entity);
+                        _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
+                    }
+                });
+
+        // Mesh Component Replaced
+        _mesh_replaced_sub =
+            _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::mesh_component>>().subscribe(
+                [this]([[maybe_unused]] const ecs::component_replaced_event<ecs::entity, core::mesh_component>& evt) {
+                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
+                });
+
+        // Mesh Component Removed
+        _mesh_removed_sub =
+            _events->dispatcher<ecs::component_removed_event<ecs::entity, core::mesh_component>>().subscribe(
+                [this](const ecs::component_removed_event<ecs::entity, core::mesh_component>& evt) {
+                    auto it = _renderable_indices.find(evt.entity);
+                    if (it != _renderable_indices.end())
+                    {
+                        const auto remove_idx = it->second;
+                        const auto last_idx = _tracked_entities.size() - 1;
+                        if (remove_idx != last_idx)
+                        {
+                            const auto last_entity = _tracked_entities[last_idx];
+                            _tracked_entities[remove_idx] = last_entity;
+                            _renderable_indices[last_entity] = remove_idx;
+                        }
+                        _tracked_entities.pop_back();
+                        _renderable_indices.erase(it);
+                        _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
+                    }
+                });
+
+        // Material Component Added / Replaced / Removed
+        _material_added_sub =
+            _events->dispatcher<ecs::component_added_event<ecs::entity, core::material_component>>().subscribe(
+                [this]([[maybe_unused]] const ecs::component_added_event<ecs::entity, core::material_component>& evt) {
+                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
+                });
+
+        _material_replaced_sub =
+            _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::material_component>>().subscribe(
+                [this](
+                    [[maybe_unused]] const ecs::component_replaced_event<ecs::entity, core::material_component>& evt) {
+                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
+                });
+
+        _material_removed_sub =
+            _events->dispatcher<ecs::component_removed_event<ecs::entity, core::material_component>>().subscribe(
+                [this](
+                    [[maybe_unused]] const ecs::component_removed_event<ecs::entity, core::material_component>& evt) {
+                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
+                });
 
         // Point Light Added
         _point_light_added_sub =
@@ -856,8 +879,24 @@ namespace tempest::render_system
         // Entity Destroyed
         _entity_destroyed_sub = _events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().subscribe(
             [this](const ecs::entity_destroyed_event<ecs::entity>& evt) {
-                auto it = _point_light_indices.find(evt.entity);
-                if (it != _point_light_indices.end())
+                // Check renderables
+                if (auto it = _renderable_indices.find(evt.entity); it != _renderable_indices.end())
+                {
+                    const auto remove_idx = it->second;
+                    const auto last_idx = _tracked_entities.size() - 1;
+                    if (remove_idx != last_idx)
+                    {
+                        const auto last_entity = _tracked_entities[last_idx];
+                        _tracked_entities[remove_idx] = last_entity;
+                        _renderable_indices[last_entity] = remove_idx;
+                    }
+                    _tracked_entities.pop_back();
+                    _renderable_indices.erase(it);
+                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
+                }
+
+                // Check point lights
+                if (auto it = _point_light_indices.find(evt.entity); it != _point_light_indices.end())
                 {
                     const auto remove_idx = it->second;
                     const auto last_idx = _point_light_entities.size() - 1;
@@ -874,13 +913,60 @@ namespace tempest::render_system
             });
     }
 
-    void renderer::_unsubscribe_light_events()
+    void renderer::_unsubscribe_events()
     {
         if (_events == nullptr)
         {
             return;
         }
 
+        if (_mesh_added_sub != event::null_subscription<ecs::component_added_event<ecs::entity, core::mesh_component>>)
+        {
+            static_cast<void>(
+                _events->dispatcher<ecs::component_added_event<ecs::entity, core::mesh_component>>().unsubscribe(
+                    _mesh_added_sub));
+            _mesh_added_sub = {};
+        }
+        if (_mesh_replaced_sub !=
+            event::null_subscription<ecs::component_replaced_event<ecs::entity, core::mesh_component>>)
+        {
+            static_cast<void>(
+                _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::mesh_component>>().unsubscribe(
+                    _mesh_replaced_sub));
+            _mesh_replaced_sub = {};
+        }
+        if (_mesh_removed_sub !=
+            event::null_subscription<ecs::component_removed_event<ecs::entity, core::mesh_component>>)
+        {
+            static_cast<void>(
+                _events->dispatcher<ecs::component_removed_event<ecs::entity, core::mesh_component>>().unsubscribe(
+                    _mesh_removed_sub));
+            _mesh_removed_sub = {};
+        }
+        if (_material_added_sub !=
+            event::null_subscription<ecs::component_added_event<ecs::entity, core::material_component>>)
+        {
+            static_cast<void>(
+                _events->dispatcher<ecs::component_added_event<ecs::entity, core::material_component>>().unsubscribe(
+                    _material_added_sub));
+            _material_added_sub = {};
+        }
+        if (_material_replaced_sub !=
+            event::null_subscription<ecs::component_replaced_event<ecs::entity, core::material_component>>)
+        {
+            static_cast<void>(
+                _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::material_component>>().unsubscribe(
+                    _material_replaced_sub));
+            _material_replaced_sub = {};
+        }
+        if (_material_removed_sub !=
+            event::null_subscription<ecs::component_removed_event<ecs::entity, core::material_component>>)
+        {
+            static_cast<void>(
+                _events->dispatcher<ecs::component_removed_event<ecs::entity, core::material_component>>().unsubscribe(
+                    _material_removed_sub));
+            _material_removed_sub = {};
+        }
         if (_point_light_added_sub !=
             event::null_subscription<ecs::component_added_event<ecs::entity, point_light_component>>)
         {
@@ -942,6 +1028,22 @@ namespace tempest::render_system
             static_cast<void>(
                 _events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().unsubscribe(_entity_destroyed_sub));
             _entity_destroyed_sub = {};
+        }
+    }
+
+    void renderer::_init_renderables_from_registry()
+    {
+        _renderable_indices.clear();
+        _tracked_entities.clear();
+
+        if (_inputs.entity_registry != nullptr)
+        {
+            _inputs.entity_registry->each([this](const ecs::self_component& self, const core::mesh_component&) {
+                const auto idx = _tracked_entities.size();
+                _renderable_indices[self.entity] = idx;
+                _tracked_entities.push_back(self.entity);
+            });
+            _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
         }
     }
 

@@ -145,8 +145,8 @@ namespace tempest::render_system
 
             const auto light_view_zero =
                 math::look_at(-sun_dir * (radius * 2.0F), math::vec3<float>{0.0F, 0.0F, 0.0F}, light_up);
-            const auto center_light =
-                light_view_zero * math::vec4<float>{sphere_center_world.x, sphere_center_world.y, sphere_center_world.z, 1.0F};
+            const auto center_light = light_view_zero * math::vec4<float>{sphere_center_world.x, sphere_center_world.y,
+                                                                          sphere_center_world.z, 1.0F};
 
             const auto cascade_res = sun.caster.resolution;
             const auto world_units_per_texel = (2.0F * radius) / static_cast<float>(cascade_res);
@@ -163,12 +163,10 @@ namespace tempest::render_system
             const auto inv_r = 1.0F / radius;
             const auto inv_zfar = 1.0F / z_far_light;
 
-            const auto ortho_proj = math::mat4<float>{
-                inv_r, 0.0F, 0.0F, 0.0F,
-                0.0F, -inv_r, 0.0F, 0.0F,
-                0.0F, 0.0F, inv_zfar, 0.0F,
-                -delta_x * inv_r, delta_y * inv_r, 1.0F, 1.0F
-            };
+            const auto ortho_proj =
+                math::mat4<float>{inv_r, 0.0F, 0.0F, 0.0F,     0.0F, -inv_r,           0.0F,
+                                  0.0F,  0.0F, 0.0F, inv_zfar, 0.0F, -delta_x * inv_r, delta_y * inv_r,
+                                  1.0F,  1.0F};
 
             const auto light_view_proj = ortho_proj * light_view;
 
@@ -184,12 +182,13 @@ namespace tempest::render_system
 
             shadow_data.cascades[i] = shadow_cascade_data{
                 .view_proj = light_view_proj,
-                .uv_offset_scale = math::vec4<float>{
-                    static_cast<float>(rect.x) / atlas_w,
-                    static_cast<float>(rect.y) / atlas_h,
-                    static_cast<float>(rect.width) / atlas_w,
-                    static_cast<float>(rect.height) / atlas_h,
-                },
+                .uv_offset_scale =
+                    math::vec4<float>{
+                        static_cast<float>(rect.x) / atlas_w,
+                        static_cast<float>(rect.y) / atlas_h,
+                        static_cast<float>(rect.width) / atlas_w,
+                        static_cast<float>(rect.height) / atlas_h,
+                    },
                 .split_depth = z1,
                 .padding = {0.0F, 0.0F, 0.0F},
             };
@@ -208,8 +207,10 @@ namespace tempest::render_system
         auto pipe_h = params.shaders.find_graphics_pipeline("shadow_depth_pipeline");
         if (!pipe_h.has_value())
         {
-            auto vs = params.shaders.register_shader_module("shadow_depth.vert.spv", rhi::shader_stage::vertex, "VSMain");
-            auto fs = params.shaders.register_shader_module("shadow_depth.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto vs =
+                params.shaders.register_shader_module("shadow_depth.vert.spv", rhi::shader_stage::vertex, "VSMain");
+            auto fs =
+                params.shaders.register_shader_module("shadow_depth.frag.spv", rhi::shader_stage::fragment, "FSMain");
             auto stages = array{vs, fs};
 
             auto tmpl = graphics_pipeline_template{
@@ -243,27 +244,29 @@ namespace tempest::render_system
 
         const auto& pass_data = params.graph.add_graphics_pass<shadow_pass_data>(
             "ShadowPass",
-            [&pool = params.pool, shadow_atlas_tex = params.shadow_atlas](render_graph::pass_builder& builder, shadow_pass_data& data) {
-                data.shadow_atlas = builder.set_depth_stencil_attachment(
-                    render_graph::rg_depth_stencil_attachment{
-                        .texture = shadow_atlas_tex,
-                        .depth_load_op = rhi::load_op::clear,
-                        .depth_store_op = rhi::store_op::store,
-                        .clear_value = {.depth = 0.0F, .stencil = 0},
-                    });
+            [&pool = params.pool, shadow_atlas_tex = params.shadow_atlas](render_graph::pass_builder& builder,
+                                                                          shadow_pass_data& data) {
+                data.shadow_atlas = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
+                    .texture = shadow_atlas_tex,
+                    .depth_load_op = rhi::load_op::clear,
+                    .depth_store_op = rhi::store_op::store,
+                    .clear_value = {.depth = 0.0F, .stencil = 0},
+                });
 
                 auto obj_buf = builder.import_buffer(pool.get_object_buffer());
                 auto inst_buf = builder.import_buffer(pool.get_instance_buffer());
                 auto cmd_buf = builder.import_buffer(pool.get_draw_commands_buffer());
+                auto vtx_buf = builder.import_buffer(pool.get_vertex_buffer());
 
                 builder.read(obj_buf, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 builder.read(inst_buf, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 builder.read(cmd_buf, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
+                builder.read(vtx_buf, rhi::pipeline_stage::vertex, rhi::resource_access::read);
             },
-            [&pool = params.pool, &shaders = params.shaders, draw_count = params.draw_count, draw_offset = params.draw_offset, pipe, cascades_to_render = rendered_cascades](
+            [&pool = params.pool, &shaders = params.shaders, draw_count = params.draw_count,
+             draw_offset = params.draw_offset, pipe, cascades_to_render = rendered_cascades](
                 [[maybe_unused]] const shadow_pass_data& data,
-                [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                rhi::command_list& pass_cmd) {
+                [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
                 if (draw_count == 0 || cascades_to_render.empty())
                 {
                     return;
@@ -286,8 +289,8 @@ namespace tempest::render_system
                 for (const auto& cascade : cascades_to_render)
                 {
                     pass_cmd.set_viewport(static_cast<float>(cascade.rect.x), static_cast<float>(cascade.rect.y),
-                                          static_cast<float>(cascade.rect.width), static_cast<float>(cascade.rect.height),
-                                          0.0F, 1.0F);
+                                          static_cast<float>(cascade.rect.width),
+                                          static_cast<float>(cascade.rect.height), 0.0F, 1.0F);
 
                     pass_cmd.set_scissor(static_cast<int32_t>(cascade.rect.x), static_cast<int32_t>(cascade.rect.y),
                                          cascade.rect.width, cascade.rect.height);

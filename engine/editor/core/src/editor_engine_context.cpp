@@ -32,12 +32,6 @@ namespace tempest::editor
         }
         _logger.trace("Finished initialization callbacks");
 
-        if (_renderer && !_entities_to_load.empty())
-        {
-            _renderer->upload_objects_sync(_entities_to_load, get_meshes(), get_textures(), get_materials());
-            _entities_to_load.clear();
-        }
-
         auto simulated_time = std::chrono::duration<double>(0.0);
         auto delta_time = std::chrono::duration<double>(1.0 / 60.0);
 

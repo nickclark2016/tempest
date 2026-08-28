@@ -97,6 +97,9 @@ namespace tempest
             });
             builder.set_inputs(render_system::renderer_inputs{
                 .entity_registry = &_entity_registry,
+                .meshes = &_mesh_reg,
+                .textures = &_texture_reg,
+                .materials = &_material_reg,
             });
             _renderer = builder.build(*_device, _logger);
         }
@@ -288,31 +291,7 @@ namespace tempest
 
     auto standalone_engine_context::load_entity(ecs::entity src) -> ecs::entity
     {
-        auto ent = _entity_registry.duplicate(src);
-
-        auto collect_hierarchy = [this](ecs::entity e, auto&& self) -> void {
-            _entities_to_load.push_back(e);
-            if (const auto* rel = _entity_registry.try_get<ecs::relationship_component<ecs::entity>>(e))
-            {
-                auto child = rel->first_child;
-                while (child != ecs::tombstone)
-                {
-                    self(child, self);
-                    if (const auto* child_rel =
-                            _entity_registry.try_get<ecs::relationship_component<ecs::entity>>(child))
-                    {
-                        child = child_rel->next_sibling;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-        };
-
-        collect_hierarchy(ent, collect_hierarchy);
-        return ent;
+        return _entity_registry.duplicate(src);
     }
 
     auto standalone_engine_context::run() -> void
@@ -325,12 +304,6 @@ namespace tempest
             init_cb(*this);
         }
         _logger.trace("Finished initialization callbacks");
-
-        if (_renderer && !_entities_to_load.empty())
-        {
-            _renderer->upload_objects_sync(_entities_to_load, get_meshes(), get_textures(), get_materials());
-            _entities_to_load.clear();
-        }
 
         auto simulated_time = std::chrono::duration<double>(0.0);
         auto delta_time = std::chrono::duration<double>(1.0 / 60.0);

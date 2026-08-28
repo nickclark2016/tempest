@@ -18,6 +18,7 @@ namespace tempest::render_system
         render_graph::rg_buffer_id object_buffer;
         render_graph::rg_buffer_id instance_buffer;
         render_graph::rg_buffer_id draw_commands;
+        render_graph::rg_buffer_id vertex_buffer;
         uint32_t draw_count{0};
         uint32_t draw_offset{0};
     };
@@ -36,16 +37,11 @@ namespace tempest::render_system
         int32_t shadow_atlas_index{-1};
     };
 
-    TEMPEST_API auto add_transparency_gather_pass(
-        render_graph::render_graph& graph,
-        resource_pool& pool,
-        shader_manager& shaders,
-        render_graph::rg_texture_id moments_tex,
-        render_graph::rg_texture_id zeroth_moment_tex,
-        render_graph::rg_texture_id depth_tex,
-        uint32_t draw_count,
-        uint32_t draw_offset = 0)
-        -> const transparency_gather_pass_data&;
+    TEMPEST_API auto add_transparency_gather_pass(render_graph::render_graph& graph, resource_pool& pool,
+                                                  shader_manager& shaders, render_graph::rg_texture_id moments_tex,
+                                                  render_graph::rg_texture_id zeroth_moment_tex,
+                                                  render_graph::rg_texture_id depth_tex, uint32_t draw_count,
+                                                  uint32_t draw_offset = 0) -> const transparency_gather_pass_data&;
 } // namespace tempest::render_system
 
 #endif // tempest_render_system_transparency_gather_pass_hpp

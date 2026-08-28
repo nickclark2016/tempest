@@ -4,13 +4,10 @@
 
 namespace tempest::render_system
 {
-    auto add_transparency_resolve_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                       shader_manager& shaders, render_graph::rg_texture_id accum_tex,
-                                       render_graph::rg_texture_id moments_tex,
+    auto add_transparency_resolve_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                                       render_graph::rg_texture_id accum_tex, render_graph::rg_texture_id moments_tex,
                                        render_graph::rg_texture_id zeroth_moment_tex,
-                                       render_graph::rg_texture_id depth_tex,
-                                       uint32_t draw_count,
-                                       uint32_t draw_offset,
+                                       render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset,
                                        render_graph::rg_texture_id shadow_atlas,
                                        render_graph::rg_buffer_id light_bitmask_buf)
         -> const transparency_resolve_pass_data&
@@ -59,22 +56,20 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_resolve_pass_data>(
             "TransparencyResolvePass",
-            [&pool, accum_tex, moments_tex, zeroth_moment_tex, depth_tex, shadow_atlas, draw_count, draw_offset, light_bitmask_buf](
-                render_graph::pass_builder& builder, transparency_resolve_pass_data& data) {
-                data.accum_texture = builder.set_color_attachment(
-                    0, render_graph::rg_color_attachment{
-                           .texture = accum_tex,
-                           .load_op = rhi::load_op::clear,
-                           .store_op = rhi::store_op::store,
-                           .clear_value = {0.0F, 0.0F, 0.0F, 0.0F},
-                       });
+            [&pool, accum_tex, moments_tex, zeroth_moment_tex, depth_tex, shadow_atlas, draw_count, draw_offset,
+             light_bitmask_buf](render_graph::pass_builder& builder, transparency_resolve_pass_data& data) {
+                data.accum_texture = builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                                         .texture = accum_tex,
+                                                                         .load_op = rhi::load_op::clear,
+                                                                         .store_op = rhi::store_op::store,
+                                                                         .clear_value = {0.0F, 0.0F, 0.0F, 0.0F},
+                                                                     });
 
-                data.depth_texture = builder.set_depth_stencil_attachment(
-                    render_graph::rg_depth_stencil_attachment{
-                        .texture = depth_tex,
-                        .depth_load_op = rhi::load_op::load,
-                        .depth_store_op = rhi::store_op::store,
-                    });
+                data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
+                    .texture = depth_tex,
+                    .depth_load_op = rhi::load_op::load,
+                    .depth_store_op = rhi::store_op::store,
+                });
 
                 data.moments_texture = builder.read(moments_tex, rhi::pipeline_stage::fragment,
                                                     rhi::resource_access::read, rhi::image_layout::general);
@@ -91,28 +86,31 @@ namespace tempest::render_system
                 data.object_buffer = builder.import_buffer(pool.get_object_buffer());
                 data.instance_buffer = builder.import_buffer(pool.get_instance_buffer());
                 data.draw_commands = builder.import_buffer(pool.get_draw_commands_buffer());
+                data.vertex_buffer = builder.import_buffer(pool.get_vertex_buffer());
 
-                data.scene_constants = builder.read(data.scene_constants,
-                                                    rhi::pipeline_stage::vertex | rhi::pipeline_stage::fragment,
-                                                    rhi::resource_access::read);
-                data.object_buffer = builder.read(data.object_buffer, rhi::pipeline_stage::vertex,
-                                                  rhi::resource_access::read);
-                data.instance_buffer = builder.read(data.instance_buffer, rhi::pipeline_stage::vertex,
-                                                    rhi::resource_access::read);
+                data.scene_constants =
+                    builder.read(data.scene_constants, rhi::pipeline_stage::vertex | rhi::pipeline_stage::fragment,
+                                 rhi::resource_access::read);
+                data.object_buffer =
+                    builder.read(data.object_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.instance_buffer =
+                    builder.read(data.instance_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands,
                                                   rhi::resource_access::read);
+                data.vertex_buffer =
+                    builder.read(data.vertex_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
 
                 if (light_bitmask_buf.is_valid())
                 {
-                    data.light_bitmask_buffer = builder.read(light_bitmask_buf, rhi::pipeline_stage::fragment, rhi::resource_access::read);
+                    data.light_bitmask_buffer =
+                        builder.read(light_bitmask_buf, rhi::pipeline_stage::fragment, rhi::resource_access::read);
                 }
 
                 data.draw_count = draw_count;
                 data.draw_offset = draw_offset;
             },
             [&pool, &shaders, pipe](const transparency_resolve_pass_data& data,
-                                    render_graph::pass_execution_context& ctx,
-                                    rhi::command_list& pass_cmd) {
+                                    render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;

@@ -4,13 +4,10 @@
 
 namespace tempest::render_system
 {
-    auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool,
-                             shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                             render_graph::rg_texture_id depth_tex,
-                             render_graph::rg_texture_id shadow_atlas,
-                             uint32_t draw_count, uint32_t draw_offset,
-                             render_graph::rg_buffer_id light_bitmask_buf)
-        -> const pbr_opaque_pass_data&
+    auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                             render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id depth_tex,
+                             render_graph::rg_texture_id shadow_atlas, uint32_t draw_count, uint32_t draw_offset,
+                             render_graph::rg_buffer_id light_bitmask_buf) -> const pbr_opaque_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_opaque_pipeline");
         if (!pipe_h.has_value())
@@ -45,21 +42,19 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<pbr_opaque_pass_data>(
             "PBROpaquePass",
-            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset, light_bitmask_buf](
-                render_graph::pass_builder& builder, pbr_opaque_pass_data& data) {
-                data.hdr_color = builder.set_color_attachment(
-                    0, render_graph::rg_color_attachment{
-                           .texture = hdr_color_tex,
-                           .load_op = rhi::load_op::load,
-                           .store_op = rhi::store_op::store,
-                       });
+            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset,
+             light_bitmask_buf](render_graph::pass_builder& builder, pbr_opaque_pass_data& data) {
+                data.hdr_color = builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                                     .texture = hdr_color_tex,
+                                                                     .load_op = rhi::load_op::load,
+                                                                     .store_op = rhi::store_op::store,
+                                                                 });
 
-                data.depth_texture = builder.set_depth_stencil_attachment(
-                    render_graph::rg_depth_stencil_attachment{
-                        .texture = depth_tex,
-                        .depth_load_op = rhi::load_op::load,
-                        .depth_store_op = rhi::store_op::store,
-                    });
+                data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
+                    .texture = depth_tex,
+                    .depth_load_op = rhi::load_op::load,
+                    .depth_store_op = rhi::store_op::store,
+                });
 
                 data.shadow_atlas = builder.read(shadow_atlas, rhi::pipeline_stage::fragment,
                                                  rhi::resource_access::read, rhi::image_layout::general);
@@ -68,23 +63,31 @@ namespace tempest::render_system
                 data.object_buffer = builder.import_buffer(pool.get_object_buffer());
                 data.instance_buffer = builder.import_buffer(pool.get_instance_buffer());
                 data.draw_commands = builder.import_buffer(pool.get_draw_commands_buffer());
+                data.vertex_buffer = builder.import_buffer(pool.get_vertex_buffer());
 
-                data.scene_constants = builder.read(data.scene_constants, rhi::pipeline_stage::vertex | rhi::pipeline_stage::fragment, rhi::resource_access::read);
-                data.object_buffer = builder.read(data.object_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
-                data.instance_buffer = builder.read(data.instance_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
-                data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
+                data.scene_constants =
+                    builder.read(data.scene_constants, rhi::pipeline_stage::vertex | rhi::pipeline_stage::fragment,
+                                 rhi::resource_access::read);
+                data.object_buffer =
+                    builder.read(data.object_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.instance_buffer =
+                    builder.read(data.instance_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.draw_commands = builder.read(data.draw_commands, rhi::pipeline_stage::indirect_commands,
+                                                  rhi::resource_access::read);
+                data.vertex_buffer =
+                    builder.read(data.vertex_buffer, rhi::pipeline_stage::vertex, rhi::resource_access::read);
 
                 if (light_bitmask_buf.is_valid())
                 {
-                    data.light_bitmask_buffer = builder.read(light_bitmask_buf, rhi::pipeline_stage::fragment, rhi::resource_access::read);
+                    data.light_bitmask_buffer =
+                        builder.read(light_bitmask_buf, rhi::pipeline_stage::fragment, rhi::resource_access::read);
                 }
 
                 data.draw_count = draw_count;
                 data.draw_offset = draw_offset;
             },
-            [&pool, &shaders, pipe](const pbr_opaque_pass_data& data,
-                                   render_graph::pass_execution_context& ctx,
-                                   rhi::command_list& pass_cmd) {
+            [&pool, &shaders, pipe](const pbr_opaque_pass_data& data, render_graph::pass_execution_context& ctx,
+                                    rhi::command_list& pass_cmd) {
                 if (data.draw_count == 0)
                 {
                     return;
@@ -102,18 +105,12 @@ namespace tempest::render_system
                 const auto shadow_desc_idx = ctx.get_texture_descriptor(data.shadow_atlas);
                 const auto shadow_atlas_idx = (shadow_desc_idx != ~0U) ? static_cast<int32_t>(shadow_desc_idx) : -1;
 
-                auto bitmask_gpu_addr = uint64_t{0};
-                if (data.light_bitmask_buffer.is_valid())
-                {
-                    bitmask_gpu_addr = ctx.get_buffer(data.light_bitmask_buffer).gpu_address;
-                }
-
                 const auto constants = pbr_opaque_push_constants{
                     .scene_constants_address = pool.get_scene_constants_address(),
                     .objects_address = pool.get_object_buffer_address(),
                     .instance_indices_address = pool.get_instance_buffer_address(),
                     .directional_shadow_address = pool.get_directional_shadow_address(),
-                    .light_bitmask_address = bitmask_gpu_addr,
+                    .light_bitmask_address = ctx.get_buffer_device_address(data.light_bitmask_buffer),
                     .linear_sampler_index = static_cast<int32_t>(pool.get_linear_sampler_descriptor().index),
                     .shadow_atlas_index = shadow_atlas_idx,
                 };

@@ -39,7 +39,7 @@ namespace tempest::render_system
         uint32_t light_count{0};
         uint32_t words_per_cluster{0}; // ceil(light_count / 32)
         uint32_t padding[2]{0, 0};
-        math::vec4<uint32_t> cluster_counts_tile_size{16, 9, 24, 64}; // x, y, z, tile_size_px
+        math::vec4<uint32_t> cluster_counts_tile_size{16, 9, 24, 64};      // x, y, z, tile_size_px
         math::vec4<float> cluster_depth_params{0.1F, 1000.0F, 0.0F, 0.0F}; // near, far, log(far/near), pad
     };
 
@@ -124,7 +124,14 @@ namespace tempest::render_system
         [[nodiscard]] auto get_object_buffer_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_instance_buffer_address() const noexcept -> uint64_t;
         [[nodiscard]] auto get_draw_commands_buffer_offset() const noexcept -> uint64_t;
-        [[nodiscard]] auto get_frame_slot() const noexcept -> uint32_t { return _frame_slot; }
+        [[nodiscard]] auto get_frame_slot() const noexcept -> uint32_t
+        {
+            return _frame_slot;
+        }
+        [[nodiscard]] auto get_config() const noexcept -> const resource_pool_config&
+        {
+            return _cfg;
+        }
 
         // Dynamic per-frame buffer access
         [[nodiscard]] auto get_scene_constants_buffer() const noexcept -> rhi::buffer_handle;
@@ -144,9 +151,18 @@ namespace tempest::render_system
         void write_draw_commands(span<const indexed_indirect_command> commands);
 
         // Static buffer access
-        [[nodiscard]] auto get_vertex_buffer() const noexcept -> rhi::buffer_handle { return _vertex_buffer; }
-        [[nodiscard]] auto get_mesh_table_buffer() const noexcept -> rhi::buffer_handle { return _mesh_table_buffer; }
-        [[nodiscard]] auto get_material_table_buffer() const noexcept -> rhi::buffer_handle { return _material_table_buffer; }
+        [[nodiscard]] auto get_vertex_buffer() const noexcept -> rhi::buffer_handle
+        {
+            return _vertex_buffer;
+        }
+        [[nodiscard]] auto get_mesh_table_buffer() const noexcept -> rhi::buffer_handle
+        {
+            return _mesh_table_buffer;
+        }
+        [[nodiscard]] auto get_material_table_buffer() const noexcept -> rhi::buffer_handle
+        {
+            return _material_table_buffer;
+        }
 
         // Samplers
         [[nodiscard]] auto get_linear_sampler() const noexcept -> rhi::sampler_handle;
