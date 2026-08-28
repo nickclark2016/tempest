@@ -10,143 +10,29 @@
 
 namespace tempest::graphics::tests
 {
-    TEST(camera_system, single_active_camera_enforcement_via_events)
+    // =========================================================================
+    // Camera System Discovery & Fallback Tests
+    // =========================================================================
+
+    /// @brief Verifies that camera_system automatically discovers and resolves the single
+    /// active viewport camera present in the scene when no explicit possession is set.
+    TEST(camera_system, single_camera_fallback)
     {
+        // 1. Setup Registry & Camera System
         auto events = event::event_registry();
         auto registry = ecs::registry(events);
-
         camera_system sys(registry, events);
 
+        // 2. Create Single Scene Camera
         const auto cam1 = registry.create();
         registry.assign(cam1, ecs::transform_component::identity());
-        registry.assign(cam1, camera_component{.aspect_ratio = 16.0f / 9.0f, .vertical_fov = math::as_radians(60.0f), .near_plane = 0.1f});
+        registry.assign(cam1, camera_component{
+                                  .aspect_ratio = 16.0F / 9.0F,
+                                  .vertical_fov = math::as_radians(60.0F),
+                                  .near_plane = 0.1F,
+                              });
 
-        const auto cam2 = registry.create();
-        registry.assign(cam2, ecs::transform_component::identity());
-        registry.assign(cam2, camera_component{.aspect_ratio = 16.0f / 9.0f, .vertical_fov = math::as_radians(60.0f), .near_plane = 0.1f});
-
-        // Assign active tag to cam1
-        registry.assign(cam1, active_camera_component{});
-        EXPECT_TRUE(registry.has<active_camera_component>(cam1));
-        EXPECT_FALSE(registry.has<active_camera_component>(cam2));
-        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam1);
-
-        // Assign active tag to cam2 -> event listener should strip active_camera_component from cam1
-        registry.assign(cam2, active_camera_component{});
-        EXPECT_TRUE(registry.has<active_camera_component>(cam2));
-        EXPECT_FALSE(registry.has<active_camera_component>(cam1));
-        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam2);
-    }
-
-    TEST(camera_system, camera_switching_via_set_active_camera)
-    {
-        auto events = event::event_registry();
-        auto registry = ecs::registry(events);
-
-        camera_system sys(registry, events);
-
-        const auto cam1 = registry.create();
-        registry.assign(cam1, ecs::transform_component::identity());
-        registry.assign(cam1, camera_component{.aspect_ratio = 1.0f, .vertical_fov = math::as_radians(45.0f), .near_plane = 0.1f});
-
-        const auto cam2 = registry.create();
-        registry.assign(cam2, ecs::transform_component::identity());
-        registry.assign(cam2, camera_component{.aspect_ratio = 16.0f / 9.0f, .vertical_fov = math::as_radians(60.0f), .near_plane = 0.1f});
-
-        const auto cam3 = registry.create();
-        registry.assign(cam3, ecs::transform_component::identity());
-        registry.assign(cam3, camera_component{.aspect_ratio = 4.0f / 3.0f, .vertical_fov = math::as_radians(90.0f), .near_plane = 0.5f});
-
-        // Set active camera to cam1
-        sys.set_active_camera(cam1);
-        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam1);
-        EXPECT_TRUE(registry.has<active_camera_component>(cam1));
-        EXPECT_FALSE(registry.has<active_camera_component>(cam2));
-        EXPECT_FALSE(registry.has<active_camera_component>(cam3));
-
-        // Switch active camera to cam3
-        sys.set_active_camera(cam3);
-        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam3);
-        EXPECT_FALSE(registry.has<active_camera_component>(cam1));
-        EXPECT_FALSE(registry.has<active_camera_component>(cam2));
-        EXPECT_TRUE(registry.has<active_camera_component>(cam3));
-    }
-
-    TEST(camera_system, render_camera_matrix_computation)
-    {
-        auto events = event::event_registry();
-        auto registry = ecs::registry(events);
-
-        camera_system sys(registry, events);
-
-        const auto cam_entity = registry.create();
-        auto transform = ecs::transform_component::identity();
-        transform.position(math::vec3<float>(0.0f, 5.0f, -10.0f));
-        transform.rotation(math::vec3<float>(0.0f, 0.0f, 0.0f));
-
-        registry.assign(cam_entity, transform);
-        registry.assign(cam_entity, camera_component{
-            .aspect_ratio = 16.0f / 9.0f,
-            .vertical_fov = math::as_radians(60.0f),
-            .near_plane = 0.1f,
-        });
-
-        sys.set_active_camera(cam_entity);
-
-        const auto render_cam_opt = sys.get_active_camera();
-        ASSERT_TRUE(render_cam_opt.has_value());
-
-        const auto& render_cam = render_cam_opt.value();
-
-        // Eye position should match transform position with w = 1.0f
-        EXPECT_FLOAT_EQ(render_cam.eye_position.x, 0.0f);
-        EXPECT_FLOAT_EQ(render_cam.eye_position.y, 5.0f);
-        EXPECT_FLOAT_EQ(render_cam.eye_position.z, -10.0f);
-        EXPECT_FLOAT_EQ(render_cam.eye_position.w, 1.0f);
-
-        // Verify proj * inv_proj is identity matrix (within epsilon)
-        const auto proj_identity = render_cam.proj * render_cam.inv_proj;
-        for (std::size_t i = 0; i < 4; ++i)
-        {
-            for (std::size_t j = 0; j < 4; ++j)
-            {
-                const float expected = (i == j) ? 1.0f : 0.0f;
-                EXPECT_NEAR(proj_identity[i][j], expected, 1e-4f);
-            }
-        }
-
-        // Verify view * inv_view is identity matrix (within epsilon)
-        const auto view_identity = render_cam.view * render_cam.inv_view;
-        for (std::size_t i = 0; i < 4; ++i)
-        {
-            for (std::size_t j = 0; j < 4; ++j)
-            {
-                const float expected = (i == j) ? 1.0f : 0.0f;
-                EXPECT_NEAR(view_identity[i][j], expected, 1e-4f);
-            }
-        }
-    }
-
-    TEST(camera_system, fallback_to_first_camera_when_no_active_tag)
-    {
-        auto events = event::event_registry();
-        auto registry = ecs::registry(events);
-
-        camera_system sys(registry, events);
-
-        const auto cam1 = registry.create();
-        registry.assign(cam1, ecs::transform_component::identity());
-        registry.assign(cam1, camera_component{.aspect_ratio = 16.0f / 9.0f, .vertical_fov = math::as_radians(60.0f), .near_plane = 0.1f});
-
-        const auto cam2 = registry.create();
-        registry.assign(cam2, ecs::transform_component::identity());
-        registry.assign(cam2, camera_component{.aspect_ratio = 4.0f / 3.0f, .vertical_fov = math::as_radians(45.0f), .near_plane = 0.1f});
-
-        // Neither camera has active_camera_component tag
-        EXPECT_FALSE(registry.has<active_camera_component>(cam1));
-        EXPECT_FALSE(registry.has<active_camera_component>(cam2));
-
-        // get_active_camera_entity and get_active_camera should return the first camera entity (cam1)
+        // 3. Assert Discovery
         const auto active_entity = sys.get_active_camera_entity();
         ASSERT_TRUE(active_entity.has_value());
         EXPECT_EQ(active_entity.value(), cam1);
@@ -155,54 +41,291 @@ namespace tempest::graphics::tests
         ASSERT_TRUE(render_cam_opt.has_value());
     }
 
-    TEST(camera_system, fallback_when_active_entity_lacks_camera_component)
+    /// @brief Verifies that camera_system switches active camera targets via explicit
+    /// possession (set_active_camera) without archetype migration churn and reverts
+    /// cleanly to fallback upon clear_active_camera().
+    TEST(camera_system, camera_switching_via_set_active_camera)
     {
+        // 1. Setup Registry & Three Cameras
         auto events = event::event_registry();
         auto registry = ecs::registry(events);
-
         camera_system sys(registry, events);
-
-        // Create an entity tagged with active_camera_component but missing camera_component
-        const auto dummy_entity = registry.create();
-        registry.assign(dummy_entity, ecs::transform_component::identity());
-        registry.assign(dummy_entity, active_camera_component{});
-
-        // Create a valid camera entity (untagged)
-        const auto valid_cam = registry.create();
-        registry.assign(valid_cam, ecs::transform_component::identity());
-        registry.assign(valid_cam, camera_component{.aspect_ratio = 16.0f / 9.0f, .vertical_fov = math::as_radians(60.0f), .near_plane = 0.1f});
-
-        // get_active_camera_entity and get_active_camera should fall back to valid_cam
-        const auto active_entity = sys.get_active_camera_entity();
-        ASSERT_TRUE(active_entity.has_value());
-        EXPECT_EQ(active_entity.value(), valid_cam);
-
-        const auto render_cam_opt = sys.get_active_camera();
-        ASSERT_TRUE(render_cam_opt.has_value());
-    }
-
-    TEST(camera_system, unregister_on_destruction)
-    {
-        auto events = event::event_registry();
-        auto registry = ecs::registry(events);
 
         const auto cam1 = registry.create();
         registry.assign(cam1, ecs::transform_component::identity());
-        registry.assign(cam1, camera_component{.aspect_ratio = 16.0f / 9.0f, .vertical_fov = math::as_radians(60.0f), .near_plane = 0.1f});
+        registry.assign(cam1, camera_component{
+                                  .aspect_ratio = 1.0F,
+                                  .vertical_fov = math::as_radians(45.0F),
+                                  .near_plane = 0.1F,
+                              });
 
         const auto cam2 = registry.create();
         registry.assign(cam2, ecs::transform_component::identity());
-        registry.assign(cam2, camera_component{.aspect_ratio = 16.0f / 9.0f, .vertical_fov = math::as_radians(60.0f), .near_plane = 0.1f});
+        registry.assign(cam2, camera_component{
+                                  .aspect_ratio = 16.0F / 9.0F,
+                                  .vertical_fov = math::as_radians(60.0F),
+                                  .near_plane = 0.1F,
+                              });
 
+        const auto cam3 = registry.create();
+        registry.assign(cam3, ecs::transform_component::identity());
+        registry.assign(cam3, camera_component{
+                                  .aspect_ratio = 4.0F / 3.0F,
+                                  .vertical_fov = math::as_radians(90.0F),
+                                  .near_plane = 0.5F,
+                              });
+
+        // 2. Default Fallback Resolves First Camera
+        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam1);
+
+        // 3. Explicitly Possess Camera 2
+        sys.set_active_camera(cam2);
+        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam2);
+
+        // 4. Switch Possession to Camera 3
+        sys.set_active_camera(cam3);
+        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam3);
+
+        // 5. Clear Possession -> Reverts to Fallback (Camera 1)
+        sys.clear_active_camera();
+        EXPECT_EQ(sys.get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}), cam1);
+    }
+
+    /// @brief Verifies that inactive cameras (is_active = false) and offscreen render-to-texture
+    /// cameras (target = render_texture) are excluded from viewport fallback resolution.
+    TEST(camera_system, inactive_and_render_texture_cameras_ignored_in_fallback)
+    {
+        // 1. Setup Registry
+        auto events = event::event_registry();
+        auto registry = ecs::registry(events);
+        camera_system sys(registry, events);
+
+        // 2. Create Inactive Camera
+        const auto cam_inactive = registry.create();
+        registry.assign(cam_inactive, ecs::transform_component::identity());
+        registry.assign(cam_inactive, camera_component{
+                                          .aspect_ratio = 16.0F / 9.0F,
+                                          .vertical_fov = math::as_radians(60.0F),
+                                          .near_plane = 0.1F,
+                                          .is_active = false,
+                                      });
+
+        // 3. Create Offscreen Render Texture Camera
+        const auto cam_tex = registry.create();
+        registry.assign(cam_tex, ecs::transform_component::identity());
+        registry.assign(cam_tex, camera_component{
+                                     .aspect_ratio = 1.0F,
+                                     .vertical_fov = math::as_radians(90.0F),
+                                     .near_plane = 0.1F,
+                                     .target = camera_target_type::render_texture,
+                                     .is_active = true,
+                                 });
+
+        // 4. Create Active Viewport Camera
+        const auto cam_viewport = registry.create();
+        registry.assign(cam_viewport, ecs::transform_component::identity());
+        registry.assign(cam_viewport, camera_component{
+                                          .aspect_ratio = 16.0F / 9.0F,
+                                          .vertical_fov = math::as_radians(60.0F),
+                                          .near_plane = 0.1F,
+                                          .target = camera_target_type::viewport,
+                                          .is_active = true,
+                                      });
+
+        // 5. Assert Viewport Fallback Correctly Selects the Active Viewport Camera
+        const auto active_entity = sys.get_active_camera_entity();
+        ASSERT_TRUE(active_entity.has_value());
+        EXPECT_EQ(active_entity.value(), cam_viewport);
+    }
+
+    // =========================================================================
+    // Matrix Computation Tests
+    // =========================================================================
+
+    /// @brief Verifies that camera_system generates valid perspective and view matrices
+    /// reflecting the entity's transform_component position and rotation.
+    TEST(camera_system, render_camera_matrix_computation)
+    {
+        // 1. Setup Camera Entity with Offset Position
+        auto events = event::event_registry();
+        auto registry = ecs::registry(events);
+        camera_system sys(registry, events);
+
+        const auto cam_entity = registry.create();
+        auto transform = ecs::transform_component::identity();
+        transform.position(math::vec3<float>(0.0F, 5.0F, -10.0F));
+        transform.rotation(math::vec3<float>(0.0F, 0.0F, 0.0F));
+
+        registry.assign(cam_entity, transform);
+        registry.assign(cam_entity, camera_component{
+                                        .aspect_ratio = 16.0F / 9.0F,
+                                        .vertical_fov = math::as_radians(60.0F),
+                                        .near_plane = 0.1F,
+                                    });
+
+        sys.set_active_camera(cam_entity);
+
+        // 2. Query Render Camera Output
+        const auto render_cam_opt = sys.get_active_camera();
+        ASSERT_TRUE(render_cam_opt.has_value());
+
+        const auto& render_cam = render_cam_opt.value();
+
+        // 3. Eye Position Matches Transform Position
+        EXPECT_FLOAT_EQ(render_cam.eye_position.x, 0.0F);
+        EXPECT_FLOAT_EQ(render_cam.eye_position.y, 5.0F);
+        EXPECT_FLOAT_EQ(render_cam.eye_position.z, -10.0F);
+        EXPECT_FLOAT_EQ(render_cam.eye_position.w, 1.0F);
+
+        // 4. Assert P * P^-1 == I
+        const auto proj_identity = render_cam.proj * render_cam.inv_proj;
+        for (std::size_t i = 0; i < 4; ++i)
         {
-            camera_system sys(registry, events);
-            registry.assign(cam1, active_camera_component{});
-            EXPECT_TRUE(registry.has<active_camera_component>(cam1));
+            for (std::size_t j = 0; j < 4; ++j)
+            {
+                const float expected = (i == j) ? 1.0F : 0.0F;
+                EXPECT_NEAR(proj_identity[i][j], expected, 1e-4F);
+            }
         }
 
-        // After sys destruction, assigning active tag to cam2 should NOT strip active tag from cam1
-        registry.assign(cam2, active_camera_component{});
-        EXPECT_TRUE(registry.has<active_camera_component>(cam1));
-        EXPECT_TRUE(registry.has<active_camera_component>(cam2));
+        // 5. Assert V * V^-1 == I
+        const auto view_identity = render_cam.view * render_cam.inv_view;
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            for (std::size_t j = 0; j < 4; ++j)
+            {
+                const float expected = (i == j) ? 1.0F : 0.0F;
+                EXPECT_NEAR(view_identity[i][j], expected, 1e-4F);
+            }
+        }
+    }
+
+    // =========================================================================
+    // Edge Cases: Entity Destruction & Dynamic Mutation
+    // =========================================================================
+
+    /// @brief Verifies that destroying the currently possessed active camera entity
+    /// is handled safely, falling back to remaining cameras without dangling pointer crashes.
+    TEST(camera_system, camera_entity_destruction_fallback)
+    {
+        // 1. Setup Two Cameras
+        auto events = event::event_registry();
+        auto registry = ecs::registry(events);
+        camera_system sys(registry, events);
+
+        const auto cam1 = registry.create();
+        registry.assign(cam1, ecs::transform_component::identity());
+        registry.assign(cam1, camera_component{
+                                  .aspect_ratio = 16.0F / 9.0F,
+                                  .vertical_fov = math::as_radians(60.0F),
+                                  .near_plane = 0.1F,
+                              });
+
+        const auto cam2 = registry.create();
+        registry.assign(cam2, ecs::transform_component::identity());
+        registry.assign(cam2, camera_component{
+                                  .aspect_ratio = 4.0F / 3.0F,
+                                  .vertical_fov = math::as_radians(45.0F),
+                                  .near_plane = 0.1F,
+                              });
+
+        // 2. Possess Camera 2
+        sys.set_active_camera(cam2);
+        EXPECT_EQ(sys.get_active_camera_entity().value(), cam2);
+
+        // 3. Destroy Possessed Entity (Camera 2)
+        registry.destroy(cam2);
+
+        // 4. Assert Fallback to Camera 1
+        const auto active_opt = sys.get_active_camera_entity();
+        ASSERT_TRUE(active_opt.has_value());
+        EXPECT_EQ(active_opt.value(), cam1);
+
+        // 5. Destroy Remaining Camera -> Safely Returns Nullopt
+        registry.destroy(cam1);
+        EXPECT_FALSE(sys.get_active_camera_entity().has_value());
+        EXPECT_FALSE(sys.get_active_camera().has_value());
+    }
+
+    /// @brief Verifies that modifying camera is_active at runtime dynamically switches
+    /// fallback resolution to the next available active camera.
+    TEST(camera_system, multiple_viewport_cameras_dynamic_deactivation)
+    {
+        // 1. Setup Two Active Cameras
+        auto events = event::event_registry();
+        auto registry = ecs::registry(events);
+        camera_system sys(registry, events);
+
+        const auto cam1 = registry.create();
+        registry.assign(cam1, ecs::transform_component::identity());
+        registry.assign(cam1, camera_component{
+                                  .aspect_ratio = 16.0F / 9.0F,
+                                  .vertical_fov = math::as_radians(60.0F),
+                                  .near_plane = 0.1F,
+                                  .is_active = true,
+                              });
+
+        const auto cam2 = registry.create();
+        registry.assign(cam2, ecs::transform_component::identity());
+        registry.assign(cam2, camera_component{
+                                  .aspect_ratio = 4.0F / 3.0F,
+                                  .vertical_fov = math::as_radians(45.0F),
+                                  .near_plane = 0.1F,
+                                  .is_active = true,
+                              });
+
+        // 2. Initial Fallback Resolves Camera 1
+        EXPECT_EQ(sys.get_active_camera_entity().value(), cam1);
+
+        // 3. Deactivate Camera 1 -> Resolves Camera 2
+        registry.replace(cam1, camera_component{
+                                   .aspect_ratio = 16.0F / 9.0F,
+                                   .vertical_fov = math::as_radians(60.0F),
+                                   .near_plane = 0.1F,
+                                   .is_active = false,
+                               });
+        EXPECT_EQ(sys.get_active_camera_entity().value(), cam2);
+
+        // 4. Deactivate Camera 2 -> Resolves Nullopt
+        registry.replace(cam2, camera_component{
+                                   .aspect_ratio = 4.0F / 3.0F,
+                                   .vertical_fov = math::as_radians(45.0F),
+                                   .near_plane = 0.1F,
+                                   .is_active = false,
+                               });
+        EXPECT_FALSE(sys.get_active_camera_entity().has_value());
+    }
+
+    /// @brief Verifies that when a possessed camera entity is destroyed and its raw slot index
+    /// is recycled by a new entity without camera components, is_valid() protects against ABA false-positives.
+    TEST(camera_system, recycled_slot_aba_protection)
+    {
+        // 1. Setup Camera System
+        auto events = event::event_registry();
+        auto registry = ecs::registry(events);
+        camera_system sys(registry, events);
+
+        // 2. Create and Possess Camera
+        const auto cam = registry.create();
+        registry.assign(cam, ecs::transform_component::identity());
+        registry.assign(cam, camera_component{
+                                 .aspect_ratio = 16.0F / 9.0F,
+                                 .vertical_fov = math::as_radians(60.0F),
+                                 .near_plane = 0.1F,
+                             });
+
+        sys.set_active_camera(cam);
+        EXPECT_EQ(sys.get_active_camera_entity().value(), cam);
+
+        // 3. Destroy Possessed Camera
+        registry.destroy(cam);
+
+        // 4. Allocate New Non-Camera Entity (May reuse slot index with new generation)
+        const auto other_ent = registry.create();
+        registry.assign(other_ent, ecs::transform_component::identity());
+
+        // 5. Assert Old Possessed Handle Is Rejected (Returns Nullopt)
+        EXPECT_FALSE(sys.get_active_camera_entity().has_value());
+        EXPECT_FALSE(sys.get_active_camera().has_value());
     }
 } // namespace tempest::graphics::tests

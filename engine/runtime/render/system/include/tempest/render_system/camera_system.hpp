@@ -26,7 +26,7 @@ namespace tempest::render_system
       public:
         explicit camera_system(ecs::registry& registry, event::event_registry& events);
         explicit camera_system(ecs::registry& registry);
-        ~camera_system();
+        ~camera_system() = default;
 
         camera_system(const camera_system&) = delete;
         camera_system(camera_system&&) noexcept = delete;
@@ -35,12 +35,11 @@ namespace tempest::render_system
 
         [[nodiscard]] auto get_active_camera_entity() const -> tempest::optional<ecs::entity>;
         [[nodiscard]] auto get_active_camera() const -> tempest::optional<render_camera>;
-        auto set_active_camera(ecs::entity camera_entity) -> void;
+        auto set_active_camera(tempest::optional<ecs::entity> camera_entity) -> void;
+        auto clear_active_camera() -> void;
 
       private:
         ecs::registry* _registry{nullptr};
-        event::event_registry* _events{nullptr};
-        event::subscription_handle<ecs::component_added_event<ecs::entity, active_camera_component>> _subscription_handle{};
         mutable tempest::optional<ecs::entity> _active_camera_entity{tempest::nullopt};
     };
 } // namespace tempest::render_system

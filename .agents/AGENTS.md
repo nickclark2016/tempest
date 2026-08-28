@@ -68,7 +68,25 @@ When ingesting, instantiating, or uploading entity hierarchies (such as glTF mod
 - Do not assume renderable components (`mesh_component`, `material_component`, `renderable_component`) reside on root entities.
 - Always recursively traverse `ecs::relationship_component<ecs::entity>` (`first_child`, `next_sibling`) to discover and upload all child entities, submeshes, and material references.
 
+### 14. Avoid `shared_ptr` / Prefer Explicit Ownership Semantics
+Do not use `std::shared_ptr` or `tempest::shared_ptr` for resource management, subsystem lifecycles, or architectural problem-solving across the engine codebase.
+- Shared ownership semantics obscure object lifetime boundaries, introduce atomic reference-counting overhead, and complicate deterministic destruction order.
+- Prefer explicit unique ownership (`tempest::unique_ptr` / `tempest::make_unique`), RAII scope management, explicit registration/unregistration cleanup methods, non-owning raw pointers/references with well-defined parent-child lifetimes, or generational indices (`ecs::entity` with `is_valid` validation).
+- When analyzing memory management issues, proposing fixes, or refactoring code, never suggest or introduce `shared_ptr` as a solution.
+
 ## Workflow & Build Guidelines
+
+### Iterative Milestone Execution & Sync Gates
+When executing multi-milestone plans or tasks with sync gates:
+- Execute strictly **one milestone per turn**.
+- After completing a milestone's code changes and verifying its automated tests, **immediately stop calling tools** to yield the turn and report test results.
+- **Never proceed to subsequent milestones** until the user explicitly reviews the current milestone and gives approval to proceed.
+
+### Test Case & Section Documentation
+Whenever adding or updating test cases:
+- Add descriptive documentation comments (e.g., `/// @brief ...`) above every test function detailing the exact behavior, invariant, or edge case under test.
+- Use clear inline comments and numbered steps (`// 1. Setup ...`, `// 2. Act ...`, `// 3. Assert ...`) to demarcate test sections and expectations.
+- Group related test cases within files using structured section banners.
 
 ### Build & Test Commands (Windows Clang)
 - **Premake Generation**:

@@ -79,13 +79,19 @@ namespace tempest::render_system
 
         /// @brief Builds the complete Render Graph DAG for the frame.
         void prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex = nullopt,
-                           optional<rhi::texture_view_handle> swapchain_view = nullopt);
+                           optional<rhi::texture_view_handle> swapchain_view = nullopt,
+                           optional<render_camera> camera_override = nullopt);
 
         /// @brief Executes the compiled Render Graph DAG on the GPU.
         auto render(const render_graph::frame_sync_options& sync = {}) -> expected<void, render_graph::execution_error>;
 
         /// @brief Resizes render targets and surface.
         void resize(uint32_t width, uint32_t height);
+
+        [[nodiscard]] auto get_config() const noexcept -> const renderer_config&
+        {
+            return _cfg;
+        }
 
         [[nodiscard]] auto get_tracked_renderable_count() const noexcept -> size_t
         {

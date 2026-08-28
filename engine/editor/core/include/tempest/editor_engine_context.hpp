@@ -2,6 +2,7 @@
 #define tempest_editor_editor_engine_context_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/editor_camera.hpp>
 #include <tempest/functional.hpp>
 #include <tempest/tempest.hpp>
 #include <tempest/vector.hpp>
@@ -30,6 +31,7 @@ namespace tempest::editor
 
         void register_on_editor_paint_callback(function<void(engine_context&)> callback);
         void register_on_editor_update_callback(function<void(engine_context&)> callback);
+        void clear_editor_callbacks();
 
         [[nodiscard]] auto get_simulation_state() const noexcept -> simulation_state
         {
@@ -51,11 +53,22 @@ namespace tempest::editor
             return _ui_ctx;
         }
 
+        [[nodiscard]] auto get_editor_camera() noexcept -> editor_camera&
+        {
+            return _editor_camera;
+        }
+
+        [[nodiscard]] auto get_editor_camera() const noexcept -> const editor_camera&
+        {
+            return _editor_camera;
+        }
+
         auto run() -> void override;
 
       private:
         simulation_state _sim_state = simulation_state::stopped;
         ui_context* _ui_ctx{nullptr};
+        editor_camera _editor_camera{};
 
         struct
         {

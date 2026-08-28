@@ -407,7 +407,8 @@ namespace tempest::render_system
     }
 
     void renderer::prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex,
-                                 optional<rhi::texture_view_handle> swapchain_view)
+                                 optional<rhi::texture_view_handle> swapchain_view,
+                                 optional<render_camera> camera_override)
     {
         _shaders.process_deferred_retirements();
         _pool.advance_frame();
@@ -529,21 +530,28 @@ namespace tempest::render_system
         };
 
         auto near_plane = 0.1F;
-        if (_camera_system)
-        {
-            auto cam_opt = _camera_system->get_active_camera();
-            if (cam_opt.has_value())
-            {
-                const auto& cam = *cam_opt;
-                scene.view = cam.view;
-                scene.inv_view = cam.inv_view;
-                scene.projection = cam.proj;
-                scene.inv_projection = cam.inv_proj;
-                scene.camera_position = cam.eye_position;
-            }
+        auto active_cam_opt = camera_override.has_value()
+                                  ? camera_override
+                                  : (_camera_system ? _camera_system->get_active_camera() : tempest::nullopt);
 
+        if (active_cam_opt.has_value())
+        {
+            const auto& cam = *active_cam_opt;
+            scene.view = cam.view;
+            scene.inv_view = cam.inv_view;
+            scene.projection = cam.proj;
+            scene.inv_projection = cam.inv_proj;
+            scene.camera_position = cam.eye_position;
+        }
+
+        if (camera_override.has_value() && camera_override->proj[3][2] > 0.0F)
+        {
+            near_plane = camera_override->proj[3][2];
+        }
+        else if (!camera_override.has_value() && _camera_system && _inputs.entity_registry)
+        {
             auto cam_ent_opt = _camera_system->get_active_camera_entity();
-            if (cam_ent_opt.has_value() && _inputs.entity_registry)
+            if (cam_ent_opt.has_value())
             {
                 if (const auto* c = _inputs.entity_registry->try_get<camera_component>(*cam_ent_opt))
                 {
@@ -726,7 +734,7 @@ namespace tempest::render_system
             add_light_culling_pass(_graph, _pool, _shaders, cluster_data.cluster_bounds_buffer, lights_buf,
                                    cluster_data.create_info, scene.light_count, _light_bitmask_target);
 
-        if (_inputs.entity_registry && _camera_system)
+        if (_inputs.entity_registry)
         {
             auto shadow_res = add_shadow_pass(shadow_pass_params{
                 .graph = _graph,
@@ -735,7 +743,8 @@ namespace tempest::render_system
                 .shadow_atlas = _directional_shadow_atlas_target,
                 .allocator = _directional_shadow_allocator,
                 .registry = *_inputs.entity_registry,
-                .camera_sys = *_camera_system,
+                .camera_sys = _camera_system,
+                .camera_override = camera_override,
                 .draw_count = _opaque_draw_count,
                 .draw_offset = _opaque_draw_offset,
             });

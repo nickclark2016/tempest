@@ -101,15 +101,20 @@ namespace tempest::render_system
         uint32_t first_instance{0};
     };
 
-    struct TEMPEST_API camera_component
+    enum class camera_target_type : uint32_t
     {
-        float aspect_ratio;
-        float vertical_fov;
-        float near_plane;
+        viewport = 0,
+        render_texture = 1,
     };
 
-    struct TEMPEST_API active_camera_component
+    struct TEMPEST_API camera_component
     {
+        float aspect_ratio{16.0F / 9.0F};
+        float vertical_fov{1.04719755F}; // ~60 degrees
+        float near_plane{0.1F};
+        camera_target_type target{camera_target_type::viewport};
+        guid render_texture_id{};
+        bool is_active{true};
     };
 
     struct TEMPEST_API directional_light_component

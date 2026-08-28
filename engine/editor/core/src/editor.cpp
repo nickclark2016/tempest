@@ -136,6 +136,14 @@ namespace tempest::editor
         menus_to_search->push_back(tempest::move(menu_elem));
     }
 
+    editor_context::~editor_context()
+    {
+        if (_engine_ctx != nullptr)
+        {
+            _engine_ctx->clear_editor_callbacks();
+        }
+    }
+
     editor_context::editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx)
         : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx}
     {
@@ -147,25 +155,14 @@ namespace tempest::editor
 
         register_engine_component_view_providers(*this);
 
-        auto& camera_sys = ctx.get_renderer().get_camera_system();
-
-        auto active_cam_entity = camera_sys.get_active_camera_entity();
-        if (!active_cam_entity.has_value())
-        {
-            auto editor_cam = ctx.get_entities().create();
-            ctx.get_entities().name(editor_cam, "Editor Camera");
-            ctx.get_entities().assign(editor_cam, ecs::transform_component::identity());
-            ctx.get_entities().assign(editor_cam, render_system::camera_component{
-                                                      .aspect_ratio = 16.0f / 9.0f,
-                                                      .vertical_fov = math::as_radians(60.0f),
-                                                      .near_plane = 0.1f,
-                                                  });
-            camera_sys.set_active_camera(editor_cam);
-        }
-
         register_on_paint_callback([&, this](engine_context& engine_ctx) {
             _entity_view->target = _scene_hierarchy_view->selected_entity;
 
+            // Sync aspect ratio to editor camera
+            const auto current_aspect = _viewport_view->aspect_ratio();
+            _engine_ctx->get_editor_camera().set_aspect_ratio(current_aspect);
+
+            // If a game camera exists, sync its aspect ratio too (only on delta to prevent event spam)
             auto& cam_sys = engine_ctx.get_renderer().get_camera_system();
             auto active_cam_opt = cam_sys.get_active_camera_entity();
             if (active_cam_opt.has_value())
@@ -173,9 +170,12 @@ namespace tempest::editor
                 const auto active_ent = active_cam_opt.value();
                 if (const auto* cam = engine_ctx.get_entities().try_get<render_system::camera_component>(active_ent))
                 {
-                    auto camera_copy = *cam;
-                    camera_copy.aspect_ratio = _viewport_view->aspect_ratio();
-                    engine_ctx.get_entities().assign_or_replace(active_ent, camera_copy);
+                    if (std::abs(cam->aspect_ratio - current_aspect) > 1e-4F)
+                    {
+                        auto camera_copy = *cam;
+                        camera_copy.aspect_ratio = current_aspect;
+                        engine_ctx.get_entities().assign_or_replace(active_ent, camera_copy);
+                    }
                 }
             }
 

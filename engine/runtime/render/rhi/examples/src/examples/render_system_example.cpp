@@ -154,7 +154,6 @@ namespace tempest::rhi::examples
             cam_tx.rotation({0.0F, 0.0F, 0.0F});
         }
         _registry.assign(_camera_entity, cam_tx);
-        _registry.assign(_camera_entity, render_system::active_camera_component{});
 
         // 3. Sun Light Setup
         auto sun = _registry.create();

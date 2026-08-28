@@ -132,7 +132,7 @@ namespace tempest::render_system::tests
         dev->wait_idle();
     }
 
-    TEST(render_system_tests, camera_system_active_selection)
+    TEST(render_system_tests, camera_system_single_camera_fallback)
     {
         auto events = event::event_registry{};
         auto registry = ecs::archetype_registry{events};
@@ -149,13 +149,29 @@ namespace tempest::render_system::tests
         auto active_cam = cam_sys.get_active_camera();
         ASSERT_TRUE(active_cam.has_value());
         EXPECT_NE(active_cam->proj[0][0], 0.0F);
+    }
 
-        // Assign explicit active_camera_component
+    TEST(render_system_tests, camera_system_explicit_possession_and_switching)
+    {
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto cam_sys = camera_system{registry, events};
+
+        auto cam1 = registry.create();
+        registry.assign(cam1, camera_component{.aspect_ratio = 16.0F / 9.0F, .vertical_fov = 1.0F, .near_plane = 0.1F});
+        registry.assign(cam1, ecs::transform_component::identity());
+
         auto cam2 = registry.create();
         registry.assign(cam2, camera_component{.aspect_ratio = 4.0F / 3.0F, .vertical_fov = 0.8F, .near_plane = 0.5F});
         registry.assign(cam2, ecs::transform_component::identity());
-        registry.assign(cam2, active_camera_component{});
 
+        // Default fallback picks cam1
+        auto active_entity = cam_sys.get_active_camera_entity();
+        ASSERT_TRUE(active_entity.has_value());
+        EXPECT_EQ(*active_entity, cam1);
+
+        // Explicitly possess cam2
+        cam_sys.set_active_camera(cam2);
         active_entity = cam_sys.get_active_camera_entity();
         ASSERT_TRUE(active_entity.has_value());
         EXPECT_EQ(*active_entity, cam2);
@@ -163,6 +179,55 @@ namespace tempest::render_system::tests
         auto render_cam = cam_sys.get_active_camera();
         ASSERT_TRUE(render_cam.has_value());
         EXPECT_NE(render_cam->proj[0][0], 0.0F);
+
+        // Clearing possession reverts to cam1 fallback
+        cam_sys.clear_active_camera();
+        active_entity = cam_sys.get_active_camera_entity();
+        ASSERT_TRUE(active_entity.has_value());
+        EXPECT_EQ(*active_entity, cam1);
+    }
+
+    TEST(render_system_tests, camera_system_inactive_and_render_texture_cameras_ignored)
+    {
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto cam_sys = camera_system{registry, events};
+
+        // Inactive camera
+        auto cam_inactive = registry.create();
+        registry.assign(cam_inactive, camera_component{
+                                          .aspect_ratio = 16.0F / 9.0F,
+                                          .vertical_fov = 1.0F,
+                                          .near_plane = 0.1F,
+                                          .is_active = false,
+                                      });
+        registry.assign(cam_inactive, ecs::transform_component::identity());
+
+        // Offscreen render texture camera
+        auto cam_tex = registry.create();
+        registry.assign(cam_tex, camera_component{
+                                     .aspect_ratio = 1.0F,
+                                     .vertical_fov = 1.0F,
+                                     .near_plane = 0.1F,
+                                     .target = camera_target_type::render_texture,
+                                     .is_active = true,
+                                 });
+        registry.assign(cam_tex, ecs::transform_component::identity());
+
+        // Viewport camera
+        auto cam_viewport = registry.create();
+        registry.assign(cam_viewport, camera_component{
+                                          .aspect_ratio = 16.0F / 9.0F,
+                                          .vertical_fov = 1.0F,
+                                          .near_plane = 0.1F,
+                                          .target = camera_target_type::viewport,
+                                          .is_active = true,
+                                      });
+        registry.assign(cam_viewport, ecs::transform_component::identity());
+
+        auto active_entity = cam_sys.get_active_camera_entity();
+        ASSERT_TRUE(active_entity.has_value());
+        EXPECT_EQ(*active_entity, cam_viewport);
     }
 
     TEST(render_system_tests, renderer_forward_pbr_execution)
@@ -206,7 +271,6 @@ namespace tempest::render_system::tests
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
-            registry.assign(cam_ent, active_camera_component{});
 
             // 2. Setup Sun Light Entity
             auto sun_ent = registry.create();
@@ -341,7 +405,6 @@ namespace tempest::render_system::tests
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 5.0F, -2.0F});
             registry.assign(cam, cam_tx);
-            registry.assign(cam, active_camera_component{});
 
             // Setup Sun Light
             auto sun = registry.create();
@@ -1249,7 +1312,6 @@ namespace tempest::render_system::tests
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 2.0F, -10.0F});
         registry.assign(cam_ent, cam_tx);
-        registry.assign(cam_ent, active_camera_component{});
 
         // 2. Setup Sun Light with shadow_caster_component
         auto sun_ent = registry.create();
@@ -1277,7 +1339,7 @@ namespace tempest::render_system::tests
             .shadow_atlas = shadow_atlas_tex,
             .allocator = allocator,
             .registry = registry,
-            .camera_sys = cam_sys,
+            .camera_sys = &cam_sys,
             .draw_count = 0,
         });
         const auto& shadow_data = shadow_res.shadow_data;
@@ -1331,7 +1393,6 @@ namespace tempest::render_system::tests
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 0.0F, -5.0F});
         registry.assign(cam_ent, cam_tx);
-        registry.assign(cam_ent, active_camera_component{});
 
         // 2. Setup Sun Light
         auto sun_ent = registry.create();
@@ -1418,7 +1479,7 @@ namespace tempest::render_system::tests
             .shadow_atlas = shadow_atlas_tex,
             .allocator = allocator,
             .registry = registry,
-            .camera_sys = cam_sys,
+            .camera_sys = &cam_sys,
             .draw_count = 1,
         });
 
@@ -1463,7 +1524,6 @@ namespace tempest::render_system::tests
                                          .near_plane = 0.1F,
                                      });
             registry.assign(cam_ent, ecs::transform_component::identity());
-            registry.assign(cam_ent, active_camera_component{});
 
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
@@ -1520,7 +1580,6 @@ namespace tempest::render_system::tests
                                          .near_plane = 0.1F,
                                      });
             registry.assign(cam_ent, ecs::transform_component::identity());
-            registry.assign(cam_ent, active_camera_component{});
 
             auto sun_ent = registry.create();
             registry.assign(sun_ent, directional_light_component{
@@ -1649,7 +1708,6 @@ namespace tempest::render_system::tests
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
-            registry.assign(cam_ent, active_camera_component{});
 
             // 2. Setup Sun Light Entity
             auto sun_ent = registry.create();
@@ -3398,7 +3456,6 @@ namespace tempest::render_system::tests
         auto cam_tx = ecs::transform_component::identity();
         cam_tx.position({0.0F, 0.0F, -4.0F});
         registry.assign(cam_ent, cam_tx);
-        registry.assign(cam_ent, active_camera_component{});
 
         // 2. Setup Sun Light Entity
         auto sun_ent = registry.create();
@@ -3582,7 +3639,6 @@ namespace tempest::render_system::tests
         cam_tx.position({0.0F, 0.35F, -0.55F});
         cam_tx.rotation({math::as_radians(28.0F), 0.0F, 0.0F});
         registry.assign(cam_ent, cam_tx);
-        registry.assign(cam_ent, active_camera_component{});
 
         // 2. Setup Sun Light Entity
         auto sun_ent = registry.create();
@@ -3887,7 +3943,6 @@ namespace tempest::render_system::tests
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
-            registry.assign(cam_ent, active_camera_component{});
 
             // 2. Setup Point Light Entity (between camera and quad, at (0, 0, -2))
             auto light_ent = registry.create();
@@ -4021,7 +4076,6 @@ namespace tempest::render_system::tests
             auto cam_tx = ecs::transform_component::identity();
             cam_tx.position({0.0F, 0.0F, -5.0F});
             registry.assign(cam_ent, cam_tx);
-            registry.assign(cam_ent, active_camera_component{});
 
             // 2. Setup Point Light Entity with green color
             auto light_ent = registry.create();
@@ -4262,6 +4316,370 @@ namespace tempest::render_system::tests
             EXPECT_TRUE(rend->get_resource_pool().get_material(mat_id).has_value());
             EXPECT_EQ(rend->get_active_draw_count(), 1U);
 
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+        }
+
+        dev->wait_idle();
+    }
+
+    // =========================================================================
+    // Camera Override & Decoupled Rendering Tests
+    // =========================================================================
+
+    /// @brief Verifies that prepare_frame and render execute successfully when an explicit
+    /// render_camera override is passed, even with ZERO camera entities in the ECS registry.
+    TEST(render_system_tests, renderer_direct_camera_override_execution)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Setup Scene Geometry without ANY Camera Entity in Registry
+            auto mesh_id = meshes.register_mesh(create_test_mesh());
+            auto mat_id = materials.register_material(core::material{});
+
+            auto geom_ent = registry.create();
+            registry.assign(geom_ent, core::mesh_component{.mesh_id = mesh_id});
+            registry.assign(geom_ent, core::material_component{.material_id = mat_id});
+            registry.assign(geom_ent, ecs::transform_component::identity());
+
+            // 2. Build Direct render_camera Override
+            const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(75.0F), 0.05F);
+            const auto eye = math::vec3<float>{0.0F, 10.0F, -20.0F};
+            const auto view =
+                math::look_at(eye, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F});
+            const auto override_camera = render_camera{
+                .proj = proj,
+                .inv_proj = math::inverse(proj),
+                .view = view,
+                .inv_view = math::inverse(view),
+                .eye_position = {eye.x, eye.y, eye.z, 1.0F},
+            };
+
+            // 3. Prepare Frame with Camera Override
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+
+            // 4. Assert GPU Scene Constants Reflect Override Camera Matrices
+            const auto slot = rend->get_resource_pool().get_frame_slot();
+            const auto* scene = static_cast<const scene_constants*>(
+                                    rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
+                                slot;
+            ASSERT_NE(scene, nullptr);
+            EXPECT_FLOAT_EQ(scene->camera_position.y, 10.0F);
+            EXPECT_FLOAT_EQ(scene->camera_position.z, -20.0F);
+
+            // 5. Execute Render Graph
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that directional shadow cascade frustums are correctly calculated
+    /// from an explicit render_camera override without ECS camera entities.
+    TEST(render_system_tests, renderer_direct_camera_override_shadows)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Setup Sun Light with 4 Shadow Cascades
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
+            registry.assign(sun_ent, shadow_caster_component{
+                                         .resolution = 2048,
+                                         .num_cascades = 4,
+                                         .split_lambda = 0.5F,
+                                         .max_shadow_distance = 100.0F,
+                                     });
+            auto sun_tx = ecs::transform_component::identity();
+            sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+            registry.assign(sun_ent, sun_tx);
+
+            // 2. Standalone render_camera Override
+            const auto proj = math::perspective(16.0F / 9.0F, math::as_radians(60.0F), 0.1F);
+            const auto eye = math::vec3<float>{0.0F, 2.0F, -10.0F};
+            const auto view =
+                math::look_at(eye, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F});
+            const auto override_camera = render_camera{
+                .proj = proj,
+                .inv_proj = math::inverse(proj),
+                .view = view,
+                .inv_view = math::inverse(view),
+                .eye_position = {eye.x, eye.y, eye.z, 1.0F},
+            };
+
+            // 3. Prepare Frame
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+
+            // 4. Assert Shadow Data Contains 4 Computed Cascades
+            const auto slot = rend->get_resource_pool().get_frame_slot();
+            const auto* shadow_data = static_cast<const directional_shadow_data*>(
+                                          rend->get_resource_pool().get_directional_shadow_buffer().cpu_address) +
+                                      slot;
+            ASSERT_NE(shadow_data, nullptr);
+            EXPECT_EQ(shadow_data->cascade_count, 4U);
+
+            // 5. Execute Render
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that calling prepare_frame with NO camera entity in the registry
+    /// and NO camera override gracefully renders with fallback identity matrices without errors.
+    TEST(render_system_tests, renderer_prepare_frame_without_camera_graceful)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Calling prepare_frame with NO camera entity and NO camera override
+            rend->prepare_frame(1280, 720);
+
+            // 2. Assert Render Completes Cleanly
+            auto render_res = rend->render();
+            EXPECT_TRUE(render_res.has_value());
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that when BOTH an ECS camera entity exists AND an explicit camera_override
+    /// is provided, the camera_override takes strict precedence on that frame, then reverts to the
+    /// ECS camera on subsequent frames when override is nullopt.
+    TEST(render_system_tests, renderer_camera_override_precedence_over_ecs)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 1280,
+            .render_height = 720,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Add ECS camera entity at Y = 100.0
+            auto ecs_cam_ent = registry.create();
+            registry.assign(ecs_cam_ent, camera_component{
+                                             .aspect_ratio = 16.0F / 9.0F,
+                                             .vertical_fov = 1.0F,
+                                             .near_plane = 0.1F,
+                                         });
+            auto ecs_tx = ecs::transform_component::identity();
+            ecs_tx.position({0.0F, 100.0F, 0.0F});
+            registry.assign(ecs_cam_ent, ecs_tx);
+
+            // 2. Prepare frame with direct camera override at Y = 5.0
+            const auto proj = math::perspective(16.0F / 9.0F, 1.0F, 0.1F);
+            const auto eye = math::vec3<float>{0.0F, 5.0F, -20.0F};
+            const auto view =
+                math::look_at(eye, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F});
+            const auto override_camera = render_camera{
+                .proj = proj,
+                .inv_proj = math::inverse(proj),
+                .view = view,
+                .inv_view = math::inverse(view),
+                .eye_position = {eye.x, eye.y, eye.z, 1.0F},
+            };
+
+            rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
+
+            auto slot = rend->get_resource_pool().get_frame_slot();
+            auto* scene = static_cast<const scene_constants*>(
+                              rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
+                          slot;
+            ASSERT_NE(scene, nullptr);
+            // Override camera takes precedence!
+            EXPECT_FLOAT_EQ(scene->camera_position.y, 5.0F);
+            EXPECT_FLOAT_EQ(scene->camera_position.z, -20.0F);
+
+            // 3. Prepare next frame with nullopt override -> falls back to ECS camera
+            rend->prepare_frame(1280, 720, nullopt, nullopt, nullopt);
+
+            slot = rend->get_resource_pool().get_frame_slot();
+            scene = static_cast<const scene_constants*>(
+                        rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
+                    slot;
+            ASSERT_NE(scene, nullptr);
+            // ECS camera is now active!
+            EXPECT_FLOAT_EQ(scene->camera_position.y, 100.0F);
+            EXPECT_FLOAT_EQ(scene->camera_position.z, 0.0F);
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that a direct camera override with non-default FOV (90 deg), aspect ratio (4:3),
+    /// and custom near plane (0.5) correctly extracts frustum geometry and computes valid 4-cascade shadow data.
+    TEST(render_system_tests, renderer_direct_camera_override_custom_fov_aspect_near)
+    {
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 800,
+            .render_height = 600,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 1. Setup Sun Light with 4 Shadow Cascades
+            auto sun_ent = registry.create();
+            registry.assign(sun_ent, directional_light_component{
+                                         .color = {1.0F, 1.0F, 1.0F},
+                                         .intensity = 2.0F,
+                                     });
+            registry.assign(sun_ent, shadow_caster_component{
+                                         .resolution = 2048,
+                                         .num_cascades = 4,
+                                         .split_lambda = 0.5F,
+                                         .max_shadow_distance = 100.0F,
+                                     });
+            auto sun_tx = ecs::transform_component::identity();
+            sun_tx.rotation({math::as_radians(45.0F), 0.0F, 0.0F});
+            registry.assign(sun_ent, sun_tx);
+
+            // 2. Build Camera Override with 4:3 Aspect, 90 deg FOV, 0.5 near plane
+            const auto proj = math::perspective(4.0F / 3.0F, math::as_radians(90.0F), 0.5F);
+            const auto eye = math::vec3<float>{0.0F, 10.0F, -30.0F};
+            const auto view =
+                math::look_at(eye, math::vec3<float>{0.0F, 0.0F, 0.0F}, math::vec3<float>{0.0F, 1.0F, 0.0F});
+            const auto override_camera = render_camera{
+                .proj = proj,
+                .inv_proj = math::inverse(proj),
+                .view = view,
+                .inv_view = math::inverse(view),
+                .eye_position = {eye.x, eye.y, eye.z, 1.0F},
+            };
+
+            // 3. Prepare Frame
+            rend->prepare_frame(800, 600, nullopt, nullopt, override_camera);
+
+            // 4. Assert Shadow Data Contains 4 Cascades Computed with Custom Frustum
+            const auto slot = rend->get_resource_pool().get_frame_slot();
+            const auto* shadow_data = static_cast<const directional_shadow_data*>(
+                                          rend->get_resource_pool().get_directional_shadow_buffer().cpu_address) +
+                                      slot;
+            ASSERT_NE(shadow_data, nullptr);
+            EXPECT_EQ(shadow_data->cascade_count, 4U);
+
+            // 5. Execute Render Graph
             auto render_res = rend->render();
             EXPECT_TRUE(render_res.has_value());
         }

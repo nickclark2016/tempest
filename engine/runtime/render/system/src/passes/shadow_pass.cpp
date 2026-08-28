@@ -67,10 +67,11 @@ namespace tempest::render_system
         shadow_data.cascade_count = 0;
 
         const auto sun = resolve_sun(params.registry);
-        const auto cam_opt = params.camera_sys.get_active_camera();
-        const auto cam_ent_opt = params.camera_sys.get_active_camera_entity();
+        const auto cam_opt = params.camera_override.has_value()
+                                 ? params.camera_override
+                                 : (params.camera_sys ? params.camera_sys->get_active_camera() : tempest::nullopt);
 
-        if (!sun.has_light || !cam_opt.has_value() || !cam_ent_opt.has_value())
+        if (!sun.has_light || !cam_opt.has_value())
         {
             return shadow_pass_result{
                 .shadow_data = shadow_data,
@@ -82,20 +83,50 @@ namespace tempest::render_system
         auto fov_y = 1.0F;
         auto aspect = 16.0F / 9.0F;
 
-        if (const auto* cam_comp = params.registry.try_get<camera_component>(*cam_ent_opt))
+        if (!params.camera_override.has_value() && params.camera_sys)
         {
-            near_plane = cam_comp->near_plane;
-            fov_y = cam_comp->vertical_fov;
-            aspect = cam_comp->aspect_ratio;
+            const auto cam_ent_opt = params.camera_sys->get_active_camera_entity();
+            if (cam_ent_opt.has_value())
+            {
+                if (const auto* cam_comp = params.registry.try_get<camera_component>(*cam_ent_opt))
+                {
+                    near_plane = cam_comp->near_plane;
+                    fov_y = cam_comp->vertical_fov;
+                    aspect = cam_comp->aspect_ratio;
+                }
+            }
+        }
+        else
+        {
+            const auto f = std::abs(cam_opt->proj[1][1]);
+            if (f > 1e-4F)
+            {
+                fov_y = 2.0F * std::atan(1.0F / f);
+                if (cam_opt->proj[0][0] > 0.0F)
+                {
+                    aspect = f / cam_opt->proj[0][0];
+                }
+            }
+            if (cam_opt->proj[3][2] > 0.0F)
+            {
+                near_plane = cam_opt->proj[3][2];
+            }
         }
 
         const auto& cam = *cam_opt;
         const auto cam_eye = math::vec3<float>{cam.eye_position.x, cam.eye_position.y, cam.eye_position.z};
         auto cam_forward =
             math::normalize(math::vec3<float>{-cam.inv_view[2][0], -cam.inv_view[2][1], -cam.inv_view[2][2]});
-        if (const auto* cam_tx = params.registry.try_get<ecs::transform_component>(*cam_ent_opt))
+        if (!params.camera_override.has_value() && params.camera_sys)
         {
-            cam_forward = math::extract_forward(math::quat(cam_tx->rotation()));
+            const auto cam_ent_opt = params.camera_sys->get_active_camera_entity();
+            if (cam_ent_opt.has_value())
+            {
+                if (const auto* cam_tx = params.registry.try_get<ecs::transform_component>(*cam_ent_opt))
+                {
+                    cam_forward = math::extract_forward(math::quat(cam_tx->rotation()));
+                }
+            }
         }
 
         const auto num_cascades = math::clamp(sun.caster.num_cascades, 1U, 4U);

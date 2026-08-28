@@ -941,6 +941,8 @@ namespace tempest::ecs
         template <typename... Ts>
         bool has(entity_type entity) const;
 
+        [[nodiscard]] bool is_valid(entity_type entity) const noexcept;
+
         size_t size() const noexcept;
 
         entity_type duplicate(entity_type src);
@@ -1347,6 +1349,11 @@ namespace tempest::ecs
     inline size_t basic_archetype_registry::size() const noexcept
     {
         return _entities.size();
+    }
+
+    inline bool basic_archetype_registry::is_valid(entity_type entity) const noexcept
+    {
+        return _entities.is_valid(entity);
     }
 
     inline size_t basic_archetype_registry::_index_of_component_in_archetype(size_t arch_index,

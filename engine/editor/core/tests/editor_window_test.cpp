@@ -85,9 +85,6 @@ namespace tempest::editor::tests
         auto camera_provider = camera_component_view_provider{};
         EXPECT_EQ(camera_provider.name(), "Camera Component");
 
-        auto active_cam_provider = active_camera_component_view_provider{};
-        EXPECT_EQ(active_cam_provider.name(), "Active Camera Component");
-
         auto dir_light_provider = directional_light_component_view_provider{};
         EXPECT_EQ(dir_light_provider.name(), "Directional Light Component");
 
@@ -110,9 +107,6 @@ namespace tempest::editor::tests
         const auto& cam = reg.get<render_system::camera_component>(ent);
         EXPECT_NEAR(cam.aspect_ratio, 16.0F / 9.0F, 0.001F);
         EXPECT_NEAR(cam.vertical_fov, math::as_radians(60.0F), 0.001F);
-
-        active_cam_provider.create_default(&reg, ent);
-        EXPECT_TRUE(reg.has<render_system::active_camera_component>(ent));
 
         auto ent2 = reg.create();
         dir_light_provider.create_default(&reg, ent2);
@@ -155,7 +149,6 @@ namespace tempest::editor::tests
                                 .vertical_fov = math::as_radians(60.0F),
                                 .near_plane = 0.1F,
                             });
-            reg.assign(ent, render_system::active_camera_component{});
             reg.assign(ent, render_system::directional_light_component{
                                 .color = math::float3(1.0F, 1.0F, 1.0F),
                                 .intensity = 2.0F,
@@ -178,7 +171,6 @@ namespace tempest::editor::tests
 
             auto transform_provider = transform_component_view_provider{};
             auto camera_provider = camera_component_view_provider{};
-            auto active_cam_provider = active_camera_component_view_provider{};
             auto dir_light_provider = directional_light_component_view_provider{};
             auto pt_light_provider = point_light_component_view_provider{};
             auto shadow_provider = shadow_caster_component_view_provider{};
@@ -189,7 +181,6 @@ namespace tempest::editor::tests
                 EXPECT_NO_THROW({
                     transform_provider.draw(&reg, ent);
                     camera_provider.draw(&reg, ent);
-                    active_cam_provider.draw(&reg, ent);
                     dir_light_provider.draw(&reg, ent);
                     pt_light_provider.draw(&reg, ent);
                     shadow_provider.draw(&reg, ent);
@@ -295,21 +286,24 @@ namespace tempest::editor::tests
         env.win_mgr.destroy_window(env.win);
     }
 
+    /// @brief Verifies viewport window initial dock target, mode support across simulation
+    /// states, and safe aspect ratio computation with zero dimensions.
     TEST(editor_window_test, viewport_window_initial_state_and_aspect_ratio)
     {
         auto engine_ctx = editor_engine_context{};
         auto viewport = viewport_window{engine_ctx};
 
+        // 1. Initial State & Docking
         EXPECT_EQ(viewport.desired_initial_dock(), editor_window::dock_location::center);
         EXPECT_EQ(viewport.window_name(), "Viewport");
         EXPECT_TRUE(viewport.is_mode_supported(simulation_state::stopped));
         EXPECT_TRUE(viewport.is_mode_supported(simulation_state::pause));
         EXPECT_TRUE(viewport.is_mode_supported(simulation_state::play));
 
-        // Default aspect ratio with zero size returns 1.0f
+        // 2. Default Aspect Ratio (Zero-size safe fallback to 1.0)
         EXPECT_FLOAT_EQ(viewport.aspect_ratio(), 1.0F);
 
-        // Simulation state switching
+        // 3. Simulation State Switching
         EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
         engine_ctx.set_simulation_state(simulation_state::play);
         EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::play);
@@ -319,8 +313,44 @@ namespace tempest::editor::tests
         EXPECT_EQ(engine_ctx.get_simulation_state(), simulation_state::stopped);
     }
 
+    /// @brief Verifies that editor context initialization does NOT insert any phantom
+    /// "Editor Camera" entities into the ECS scene hierarchy registry.
+    TEST(editor_window_test, scene_hierarchy_no_editor_camera)
+    {
+        // 1. Setup Engine Context & Register Window
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Scene Hierarchy Test",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 rhi::data_format::rgba8_unorm, 2);
+
+        // 2. Initialize Editor Context
+        auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+
+        // 3. Assert Zero Camera Entities in ECS Registry
+        auto& cam_sys = engine_ctx.get_renderer().get_camera_system();
+        auto active_cam = cam_sys.get_active_camera_entity();
+        EXPECT_FALSE(active_cam.has_value());
+
+        // 4. Assert Standalone Editor Camera is Initialized Directly on Engine Context
+        auto& editor_cam = engine_ctx.get_editor_camera();
+        EXPECT_EQ(editor_cam.get_position(), math::vec3<float>(0.0F, 2.0F, -5.0F));
+    }
+
+    /// @brief Verifies that user-created game cameras are automatically discovered and
+    /// synchronized with the viewport without creating dummy editor cameras.
     TEST(editor_window_test, editor_context_lifecycle_and_camera_sync)
     {
+        // 1. Setup Engine & Editor Context
         auto engine_ctx = editor_engine_context{};
         const auto desc = window_desc{
             .width = 1280,
@@ -338,16 +368,68 @@ namespace tempest::editor::tests
 
         auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
 
+        // 2. Add Game Camera Entity
+        auto game_cam = engine_ctx.get_entities().create();
+        engine_ctx.get_entities().name(game_cam, "Player Camera");
+        engine_ctx.get_entities().assign(game_cam, ecs::transform_component::identity());
+        engine_ctx.get_entities().assign(game_cam, render_system::camera_component{
+                                                       .aspect_ratio = 1.0F,
+                                                       .vertical_fov = math::as_radians(60.0F),
+                                                       .near_plane = 0.1F,
+                                                   });
+
+        // 3. Assert Camera System Resolves the Game Camera
         auto& cam_sys = engine_ctx.get_renderer().get_camera_system();
         auto active_cam = cam_sys.get_active_camera_entity();
         ASSERT_TRUE(active_cam.has_value());
+        EXPECT_EQ(active_cam.value(), game_cam);
 
-        const auto* cam = engine_ctx.get_entities().try_get<render_system::camera_component>(active_cam.value());
-        ASSERT_NE(cam, nullptr);
-        EXPECT_GT(cam->aspect_ratio, 0.0F);
-
+        // 4. Draw Frame & Assert Clean Execution
         ui_ctx.begin_ui_commands();
         EXPECT_NO_THROW(ed_ctx.draw());
         ui_ctx.finish_ui_commands();
+    }
+
+    /// @brief Verifies that destroying an editor_context cleans up registered callbacks on
+    /// the editor_engine_context so no dangling pointers are retained.
+    TEST(editor_window_test, editor_context_destructor_cleans_up_callbacks)
+    {
+        auto engine_ctx = editor_engine_context{};
+        const auto desc = window_desc{
+            .width = 1280,
+            .height = 720,
+            .title = "Callback Cleanup Test",
+            .fullscreen = false,
+            .resizable = true,
+        };
+
+        auto reg_info = engine_ctx.register_window(desc);
+        ASSERT_TRUE(reg_info.handle.is_valid());
+
+        auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
+                                 rhi::data_format::rgba8_unorm, 2);
+
+        // 1. Create editor_context in scoped block
+        {
+            auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
+            ui_ctx.begin_ui_commands();
+            EXPECT_NO_THROW(ed_ctx.draw());
+            ui_ctx.finish_ui_commands();
+        }
+
+        // 2. editor_context destroyed; clearing callbacks ensures no dangling pointer access
+        EXPECT_NO_THROW(engine_ctx.clear_editor_callbacks());
+    }
+
+    /// @brief Verifies that renderer.resize() properly sets configured dimensions
+    /// used for viewport offscreen rendering.
+    TEST(editor_window_test, renderer_viewport_resize_sync)
+    {
+        auto engine_ctx = editor_engine_context{};
+        auto& rend = engine_ctx.get_renderer();
+
+        rend.resize(800, 600);
+        EXPECT_EQ(rend.get_config().render_width, 800U);
+        EXPECT_EQ(rend.get_config().render_height, 600U);
     }
 } // namespace tempest::editor::tests

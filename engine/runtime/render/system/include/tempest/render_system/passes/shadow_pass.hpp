@@ -30,7 +30,8 @@ namespace tempest::render_system
         render_graph::rg_texture_id shadow_atlas;
         shelf_allocator& allocator;
         const ecs::archetype_registry& registry;
-        const camera_system& camera_sys;
+        const camera_system* camera_sys{nullptr};
+        optional<render_camera> camera_override{nullopt};
         uint32_t draw_count{0};
         uint32_t draw_offset{0};
     };

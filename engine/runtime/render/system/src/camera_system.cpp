@@ -9,38 +9,13 @@
 
 namespace tempest::render_system
 {
-    camera_system::camera_system(ecs::registry& registry, event::event_registry& events)
-        : _registry{&registry}, _events{&events}
-    {
-        _subscription_handle = _events->dispatcher<ecs::component_added_event<ecs::entity, active_camera_component>>().subscribe(
-            [this](const ecs::component_added_event<ecs::entity, active_camera_component>& evt) {
-                _active_camera_entity = evt.entity;
-
-                auto to_remove = tempest::vector<ecs::entity>();
-                _registry->each([&](const ecs::self_component& self, const active_camera_component&) {
-                    if (self.entity != evt.entity)
-                    {
-                        to_remove.push_back(self.entity);
-                    }
-                });
-                for (auto entity : to_remove)
-                {
-                    _registry->remove<active_camera_component>(entity);
-                }
-            });
-    }
-
-    camera_system::camera_system(ecs::registry& registry)
-        : camera_system(registry, registry.event_registry())
+    camera_system::camera_system(ecs::registry& registry, [[maybe_unused]] event::event_registry& events)
+        : _registry{&registry}
     {
     }
 
-    camera_system::~camera_system()
+    camera_system::camera_system(ecs::registry& registry) : camera_system(registry, registry.event_registry())
     {
-        if (_events != nullptr && _subscription_handle != event::null_subscription<ecs::component_added_event<ecs::entity, active_camera_component>>)
-        {
-            static_cast<void>(_events->dispatcher<ecs::component_added_event<ecs::entity, active_camera_component>>().unsubscribe(_subscription_handle));
-        }
     }
 
     auto camera_system::get_active_camera_entity() const -> tempest::optional<ecs::entity>
@@ -53,33 +28,26 @@ namespace tempest::render_system
         if (_active_camera_entity.has_value())
         {
             const auto entity = *_active_camera_entity;
-            if (_registry->has<active_camera_component>(entity) && _registry->has<camera_component>(entity))
+            if (_registry->is_valid(entity) && _registry->has<camera_component>(entity) &&
+                _registry->has<ecs::transform_component>(entity))
             {
-                return entity;
+                const auto* cam = _registry->try_get<camera_component>(entity);
+                if (cam != nullptr && cam->is_active)
+                {
+                    return entity;
+                }
             }
-        }
-
-        auto found_active = tempest::optional<ecs::entity>();
-        _registry->each([&](const ecs::self_component& self, const active_camera_component&, const camera_component&) {
-            if (!found_active.has_value())
-            {
-                found_active = self.entity;
-            }
-        });
-
-        if (found_active.has_value())
-        {
-            _active_camera_entity = found_active;
-            return found_active;
+            _active_camera_entity = tempest::nullopt;
         }
 
         auto fallback = tempest::optional<ecs::entity>();
-        _registry->each([&](const ecs::self_component& self, const camera_component&, const ecs::transform_component&) {
-            if (!fallback.has_value())
-            {
-                fallback = self.entity;
-            }
-        });
+        _registry->each(
+            [&](const ecs::self_component& self, const camera_component& cam, const ecs::transform_component&) {
+                if (!fallback.has_value() && cam.is_active && cam.target == camera_target_type::viewport)
+                {
+                    fallback = self.entity;
+                }
+            });
 
         return fallback;
     }
@@ -115,7 +83,7 @@ namespace tempest::render_system
         const auto view = math::look_at(pos, pos + f, u);
         const auto inv_proj = math::inverse(proj);
         const auto inv_view = math::inverse(view);
-        const auto eye_pos = math::vec4<float>(pos.x, pos.y, pos.z, 1.0f);
+        const auto eye_pos = math::vec4<float>(pos.x, pos.y, pos.z, 1.0F);
 
         return render_camera{
             .proj = proj,
@@ -126,30 +94,13 @@ namespace tempest::render_system
         };
     }
 
-    auto camera_system::set_active_camera(ecs::entity camera_entity) -> void
+    auto camera_system::set_active_camera(tempest::optional<ecs::entity> camera_entity) -> void
     {
-        if (_registry == nullptr)
-        {
-            return;
-        }
-
         _active_camera_entity = camera_entity;
+    }
 
-        auto to_remove = tempest::vector<ecs::entity>();
-        _registry->each([&](const ecs::self_component& self, const active_camera_component&) {
-            if (self.entity != camera_entity)
-            {
-                to_remove.push_back(self.entity);
-            }
-        });
-        for (auto entity : to_remove)
-        {
-            _registry->remove<active_camera_component>(entity);
-        }
-
-        if (!_registry->has<active_camera_component>(camera_entity))
-        {
-            _registry->assign(camera_entity, active_camera_component{});
-        }
+    auto camera_system::clear_active_camera() -> void
+    {
+        _active_camera_entity = tempest::nullopt;
     }
 } // namespace tempest::render_system

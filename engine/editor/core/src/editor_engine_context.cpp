@@ -21,6 +21,12 @@ namespace tempest::editor
         _editor_callbacks.on_update.push_back(tempest::move(callback));
     }
 
+    void editor_engine_context::clear_editor_callbacks()
+    {
+        _editor_callbacks.on_paint.clear();
+        _editor_callbacks.on_update.clear();
+    }
+
     auto editor_engine_context::run() -> void
     {
         _logger.trace("Starting editor engine");
@@ -206,7 +212,17 @@ namespace tempest::editor
         }
 
         // 1. Prepare and render 3D scene offscreen (no swapchain target passed)
-        _renderer->prepare_frame(cur_w, cur_h, nullopt, nullopt);
+        auto camera_override =
+            (_sim_state == simulation_state::play)
+                ? tempest::nullopt
+                : tempest::optional<render_system::render_camera>(_editor_camera.get_render_camera());
+
+        const auto cfg_w = _renderer->get_config().render_width;
+        const auto cfg_h = _renderer->get_config().render_height;
+        const auto target_w = (cfg_w > 0) ? cfg_w : cur_w;
+        const auto target_h = (cfg_h > 0) ? cfg_h : cur_h;
+
+        _renderer->prepare_frame(target_w, target_h, nullopt, nullopt, camera_override);
         static_cast<void>(_renderer->render());
 
         // 2. Run paint callbacks (triggers ImGui UI draw)

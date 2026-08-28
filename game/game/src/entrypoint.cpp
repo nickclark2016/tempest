@@ -29,15 +29,13 @@ extern "C"
             auto& registry = engine_ctx.get_entities();
 
             auto camera = registry.create();
-            registry.name(camera, "Main Camera");
+            registry.name(camera, "Camera");
             auto camera_data = tempest::render_system::camera_component{
                 .aspect_ratio = 16.0F / 9.0F,
                 .vertical_fov = tempest::math::as_radians(100.0F),
                 .near_plane = 0.01F,
             };
             registry.assign(camera, camera_data);
-            auto camera_active = tempest::render_system::active_camera_component{};
-            registry.assign(camera, camera_active);
             auto camera_tx = tempest::ecs::transform_component::identity();
             camera_tx.position({0.0F, 15.0F, -1.0F});
             camera_tx.rotation({0.0F, tempest::math::as_radians(90.0F), 0.0F});

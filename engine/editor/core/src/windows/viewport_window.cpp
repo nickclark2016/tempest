@@ -85,6 +85,74 @@ namespace tempest::editor
                 ui::image(alloc->sampled_descriptor, _viewport_size.x, _viewport_size.y);
             }
 
+            const auto is_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) || ImGui::IsItemHovered();
+            const auto is_active = ImGui::IsItemActive();
+            auto& io = ImGui::GetIO();
+            auto& cam = _ctx->get_editor_camera();
+
+            // Right click hold for fly camera navigation (active in edit/pause modes)
+            if (current_state != simulation_state::play && (is_hovered || is_active) &&
+                ImGui::IsMouseDown(ImGuiMouseButton_Right))
+            {
+                // Mouse look
+                const auto mouse_delta = io.MouseDelta;
+                if (mouse_delta.x != 0.0F || mouse_delta.y != 0.0F)
+                {
+                    constexpr auto sensitivity = 0.003F;
+                    cam.rotate(-mouse_delta.x * sensitivity, -mouse_delta.y * sensitivity);
+                }
+
+                // Speed modifier
+                auto speed = cam.get_move_speed();
+                if (io.KeyShift)
+                {
+                    speed *= 2.5F;
+                }
+
+                const auto dt = io.DeltaTime > 0.0F ? io.DeltaTime : (1.0F / 60.0F);
+
+                // WASD / QE navigation
+                auto forward = 0.0F;
+                auto right = 0.0F;
+                auto up = 0.0F;
+
+                if (ImGui::IsKeyDown(ImGuiKey_W))
+                {
+                    forward += speed * dt;
+                }
+                if (ImGui::IsKeyDown(ImGuiKey_S))
+                {
+                    forward -= speed * dt;
+                }
+                if (ImGui::IsKeyDown(ImGuiKey_D))
+                {
+                    right += speed * dt;
+                }
+                if (ImGui::IsKeyDown(ImGuiKey_A))
+                {
+                    right -= speed * dt;
+                }
+                if (ImGui::IsKeyDown(ImGuiKey_E))
+                {
+                    up += speed * dt;
+                }
+                if (ImGui::IsKeyDown(ImGuiKey_Q))
+                {
+                    up -= speed * dt;
+                }
+
+                if (forward != 0.0F || right != 0.0F || up != 0.0F)
+                {
+                    cam.move(forward, right, up);
+                }
+
+                // Mouse wheel speed adjustment
+                if (io.MouseWheel != 0.0F)
+                {
+                    cam.adjust_move_speed(io.MouseWheel * 0.5F);
+                }
+            }
+
             ImGui::EndChild();
         }
 

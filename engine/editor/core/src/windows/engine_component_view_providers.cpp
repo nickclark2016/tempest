@@ -58,25 +58,15 @@ namespace tempest::editor
 
         if (ImGui::CollapsingHeader("Camera Component", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            bool is_active = registry->has<render_system::active_camera_component>(target);
-            if (ImGui::Checkbox("Is Active Camera", &is_active))
-            {
-                if (is_active)
-                {
-                    registry->assign(target, render_system::active_camera_component{});
-                }
-                else
-                {
-                    registry->remove<render_system::active_camera_component>(target);
-                }
-            }
+            auto is_active = existing_camera->is_active;
+            const auto active_changed = ImGui::Checkbox("Is Active", &is_active);
 
             const auto new_fov = math::as_radians(ui::drag_scalar(
                 "Field of View (Vertical)", math::as_degrees(existing_camera->vertical_fov), 0.0F, 180.0F));
             const auto new_near_plane = ui::drag_scalar("Near Plane", existing_camera->near_plane, 0.001F, 10000.0F);
 
-            const auto changed =
-                new_fov != existing_camera->vertical_fov || new_near_plane != existing_camera->near_plane;
+            const auto changed = active_changed || new_fov != existing_camera->vertical_fov ||
+                                 new_near_plane != existing_camera->near_plane;
 
             if (changed)
             {
@@ -84,6 +74,9 @@ namespace tempest::editor
                     .aspect_ratio = existing_camera->aspect_ratio,
                     .vertical_fov = new_fov,
                     .near_plane = new_near_plane,
+                    .target = existing_camera->target,
+                    .render_texture_id = existing_camera->render_texture_id,
+                    .is_active = is_active,
                 };
 
                 registry->replace(target, cam);
@@ -98,33 +91,6 @@ namespace tempest::editor
                                      .vertical_fov = math::as_radians(60.0F),
                                      .near_plane = 0.1F,
                                  });
-    }
-
-    auto active_camera_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
-    {
-        const auto* const active_cam = registry->try_get<render_system::active_camera_component>(target);
-        if (active_cam == nullptr)
-        {
-            return;
-        }
-
-        if (ImGui::CollapsingHeader("Active Camera Component", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            bool is_active = true;
-            if (ImGui::Checkbox("Is Active Camera##ActiveTag", &is_active))
-            {
-                if (!is_active)
-                {
-                    registry->remove<render_system::active_camera_component>(target);
-                }
-            }
-        }
-    }
-
-    auto active_camera_component_view_provider::create_default(ecs::archetype_registry* registry, ecs::entity target)
-        -> void
-    {
-        registry->assign(target, render_system::active_camera_component{});
     }
 
     auto directional_light_component_view_provider::draw(ecs::archetype_registry* registry, ecs::entity target) -> void
@@ -292,7 +258,6 @@ namespace tempest::editor
     {
         ctx.register_component_view_provider(make_unique<transform_component_view_provider>());
         ctx.register_component_view_provider(make_unique<camera_component_view_provider>());
-        ctx.register_component_view_provider(make_unique<active_camera_component_view_provider>());
         ctx.register_component_view_provider(make_unique<directional_light_component_view_provider>());
         ctx.register_component_view_provider(make_unique<point_light_component_view_provider>());
         ctx.register_component_view_provider(make_unique<shadow_caster_component_view_provider>());

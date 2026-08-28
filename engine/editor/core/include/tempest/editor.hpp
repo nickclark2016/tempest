@@ -25,6 +25,7 @@ namespace tempest::editor
     {
       public:
         editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx);
+        ~editor_context();
         editor_context(const editor_context&) = delete;
         editor_context(editor_context&&) noexcept = delete;
         auto operator=(const editor_context&) -> editor_context& = delete;

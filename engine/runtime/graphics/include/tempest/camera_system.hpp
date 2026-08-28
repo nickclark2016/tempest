@@ -16,7 +16,7 @@ namespace tempest::graphics
       public:
         explicit camera_system(ecs::registry& registry, event::event_registry& events);
         explicit camera_system(ecs::registry& registry);
-        ~camera_system();
+        ~camera_system() = default;
 
         camera_system(const camera_system&) = delete;
         camera_system(camera_system&&) noexcept = delete;
@@ -24,23 +24,22 @@ namespace tempest::graphics
         auto operator=(camera_system&&) noexcept -> camera_system& = delete;
 
         /// @brief Query the current active camera entity in the registry.
-        /// Returns the entity tagged with active_camera_component, or falls back to the first entity
-        /// with camera_component and transform_component if no entity is tagged.
+        /// Returns the explicitly possessed camera if valid, or falls back to the first active viewport camera
+        /// with camera_component and transform_component.
         [[nodiscard]] auto get_active_camera_entity() const -> tempest::optional<ecs::entity>;
 
         /// @brief Constructs and returns the render_camera data (projection, view, inverse matrices, eye position)
         /// for the active camera entity.
         [[nodiscard]] auto get_active_camera() const -> tempest::optional<render_camera>;
 
-        /// @brief Sets the given camera_entity as the active camera in the registry, assigning active_camera_component
-        /// and removing it from any other camera entity.
-        auto set_active_camera(ecs::entity camera_entity) -> void;
+        /// @brief Sets the given camera_entity as the explicitly possessed active camera in the registry.
+        auto set_active_camera(tempest::optional<ecs::entity> camera_entity) -> void;
+
+        /// @brief Clears the explicitly possessed camera, falling back to scene camera resolution.
+        auto clear_active_camera() -> void;
 
       private:
         ecs::registry* _registry = nullptr;
-        event::event_registry* _events = nullptr;
-        event::subscription_handle<ecs::component_added_event<ecs::entity, active_camera_component>> _subscription_handle{};
-        // TODO: Investigate mutexes/atomicity to make active camera entity tracking thread-safe across concurrent threads.
         mutable tempest::optional<ecs::entity> _active_camera_entity = tempest::nullopt;
     };
 } // namespace tempest::graphics
