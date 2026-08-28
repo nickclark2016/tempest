@@ -57,6 +57,23 @@ namespace tempest::rhi::vk
             }
         }
 
+        auto get_device_type_from_vk_device_type(VkPhysicalDeviceType type) -> rhi::device_type
+        {
+            switch (type)
+            {
+            case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                return rhi::device_type::discrete_gpu;
+            case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                return rhi::device_type::integrated_gpu;
+            case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                return rhi::device_type::virtual_gpu;
+            case VK_PHYSICAL_DEVICE_TYPE_CPU:
+                return rhi::device_type::cpu;
+            default:
+                return rhi::device_type::unknown;
+            }
+        }
+
         auto enumerate_supported_devices(vkb::Instance& instance)
             -> expected<vector<vkb::PhysicalDevice>, context_creation_error>
         {
@@ -186,12 +203,20 @@ namespace tempest::rhi::vk
             dev_desc.features.mesh_shading =
                 std::ranges::find(supported_extensions, VK_NV_MESH_SHADER_EXTENSION_NAME) != supported_extensions.end();
 
-            // Get the device name from the physical device properties
+            // Get the device name, vendor, limits, and type from the physical device properties
             auto physical_device_props = physical_device.properties;
             dev_desc.name = physical_device_props.deviceName;
-
-            // Get the vendor from the physical device properties
             dev_desc.vendor = get_device_vendor_from_vk_vendor_id(physical_device_props.vendorID);
+            dev_desc.type = get_device_type_from_vk_device_type(physical_device_props.deviceType);
+            dev_desc.limits = device_limits{
+                .max_image_dimension_1d = physical_device_props.limits.maxImageDimension1D,
+                .max_image_dimension_2d = physical_device_props.limits.maxImageDimension2D,
+                .max_image_dimension_3d = physical_device_props.limits.maxImageDimension3D,
+                .max_image_dimension_cube = physical_device_props.limits.maxImageDimensionCube,
+                .max_image_array_layers = physical_device_props.limits.maxImageArrayLayers,
+                .max_uniform_buffer_range = physical_device_props.limits.maxUniformBufferRange,
+                .max_storage_buffer_range = physical_device_props.limits.maxStorageBufferRange,
+            };
             return dev_desc;
         }
     } // namespace

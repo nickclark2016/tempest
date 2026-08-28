@@ -10,13 +10,37 @@ namespace tempest::render_graph
         {
           public:
             uint64_t next_h = 1;
+            rhi::device_desc desc{
+                .limits =
+                    {
+                        .max_image_dimension_2d = 16384,
+                    },
+            };
 
-            auto wait_idle() -> void override {}
-            auto wait_for_sync([[maybe_unused]] rhi::host_sync_point sync_point) -> void override {}
+            auto wait_idle() -> void override
+            {
+            }
+            auto wait_for_sync([[maybe_unused]] rhi::host_sync_point sync_point) -> void override
+            {
+            }
 
-            [[nodiscard]] auto is_ray_tracing_supported() const -> bool override { return false; }
-            [[nodiscard]] auto is_mesh_shading_supported() const -> bool override { return false; }
-            [[nodiscard]] auto is_ray_query_supported() const -> bool override { return false; }
+            [[nodiscard]] auto get_device_desc() const noexcept -> const rhi::device_desc& override
+            {
+                return desc;
+            }
+
+            [[nodiscard]] auto is_ray_tracing_supported() const -> bool override
+            {
+                return false;
+            }
+            [[nodiscard]] auto is_mesh_shading_supported() const -> bool override
+            {
+                return false;
+            }
+            [[nodiscard]] auto is_ray_query_supported() const -> bool override
+            {
+                return false;
+            }
 
             [[nodiscard]] auto create_raw_surface([[maybe_unused]] rhi::native_wsi_handle native_window_handle)
                 -> expected<rhi::raw_surface_handle, rhi::raw_surface_creation_error> override
@@ -36,10 +60,18 @@ namespace tempest::render_graph
                 return nullptr;
             }
 
-            auto destroy_render_surface([[maybe_unused]] unique_ptr<rhi::render_surface> surface) -> void override {}
-            auto destroy_raw_surface([[maybe_unused]] rhi::raw_surface_handle surface) -> void override {}
+            auto destroy_render_surface([[maybe_unused]] unique_ptr<rhi::render_surface> surface) -> void override
+            {
+            }
+            auto destroy_raw_surface([[maybe_unused]] rhi::raw_surface_handle surface) -> void override
+            {
+            }
 
-            [[nodiscard]] auto get_semaphore_value([[maybe_unused]] rhi::semaphore_handle semaphore) const -> uint64_t override { return 0; }
+            [[nodiscard]] auto get_semaphore_value([[maybe_unused]] rhi::semaphore_handle semaphore) const
+                -> uint64_t override
+            {
+                return 0;
+            }
 
             [[nodiscard]] auto get_graphics_execution_port() -> rhi::execution_port& override
             {
@@ -56,12 +88,14 @@ namespace tempest::render_graph
                 return *reinterpret_cast<rhi::execution_port*>(this);
             }
 
-            [[nodiscard]] auto create_buffer([[maybe_unused]] const rhi::buffer_desc& desc) -> rhi::buffer_handle override
+            [[nodiscard]] auto create_buffer([[maybe_unused]] const rhi::buffer_desc& desc)
+                -> rhi::buffer_handle override
             {
                 return rhi::buffer_handle{.handle = next_h++};
             }
 
-            [[nodiscard]] auto create_texture([[maybe_unused]] const rhi::texture_desc& desc) -> rhi::texture_handle override
+            [[nodiscard]] auto create_texture([[maybe_unused]] const rhi::texture_desc& desc)
+                -> rhi::texture_handle override
             {
                 return rhi::texture_handle{.handle = next_h++};
             }
@@ -73,7 +107,8 @@ namespace tempest::render_graph
                 return rhi::texture_view_handle{.handle = next_h++};
             }
 
-            [[nodiscard]] auto create_sampler([[maybe_unused]] const rhi::sampler_desc& desc) -> rhi::sampler_handle override
+            [[nodiscard]] auto create_sampler([[maybe_unused]] const rhi::sampler_desc& desc)
+                -> rhi::sampler_handle override
             {
                 return rhi::sampler_handle{.handle = next_h++};
             }
@@ -105,30 +140,55 @@ namespace tempest::render_graph
                 return rhi::semaphore_handle{.handle = next_h++};
             }
 
-            auto destroy_buffer([[maybe_unused]] rhi::buffer_handle buffer) -> void override {}
-            auto destroy_texture([[maybe_unused]] rhi::texture_handle texture) -> void override {}
-            auto destroy_texture_view([[maybe_unused]] rhi::texture_view_handle view) -> void override {}
-            auto destroy_sampler([[maybe_unused]] rhi::sampler_handle sampler) -> void override {}
-            auto destroy_graphics_pipeline([[maybe_unused]] rhi::graphics_pipeline_handle pipeline) -> void override {}
-            auto destroy_compute_pipeline([[maybe_unused]] rhi::compute_pipeline_handle pipeline) -> void override {}
-            auto destroy_event([[maybe_unused]] rhi::event_handle event) -> void override {}
-            auto destroy_semaphore([[maybe_unused]] rhi::semaphore_handle semaphore) -> void override {}
+            auto destroy_buffer([[maybe_unused]] rhi::buffer_handle buffer) -> void override
+            {
+            }
+            auto destroy_texture([[maybe_unused]] rhi::texture_handle texture) -> void override
+            {
+            }
+            auto destroy_texture_view([[maybe_unused]] rhi::texture_view_handle view) -> void override
+            {
+            }
+            auto destroy_sampler([[maybe_unused]] rhi::sampler_handle sampler) -> void override
+            {
+            }
+            auto destroy_graphics_pipeline([[maybe_unused]] rhi::graphics_pipeline_handle pipeline) -> void override
+            {
+            }
+            auto destroy_compute_pipeline([[maybe_unused]] rhi::compute_pipeline_handle pipeline) -> void override
+            {
+            }
+            auto destroy_event([[maybe_unused]] rhi::event_handle event) -> void override
+            {
+            }
+            auto destroy_semaphore([[maybe_unused]] rhi::semaphore_handle semaphore) -> void override
+            {
+            }
 
-            [[nodiscard]] auto allocate_descriptor([[maybe_unused]] rhi::descriptor_type type) -> rhi::descriptor_handle override
+            [[nodiscard]] auto allocate_descriptor([[maybe_unused]] rhi::descriptor_type type)
+                -> rhi::descriptor_handle override
             {
                 return rhi::descriptor_handle{.index = 1, .generation = 1};
             }
 
             auto free_descriptor([[maybe_unused]] rhi::descriptor_type type,
-                                 [[maybe_unused]] rhi::descriptor_handle descriptor) -> void override {}
+                                 [[maybe_unused]] rhi::descriptor_handle descriptor) -> void override
+            {
+            }
             auto write_sampler_descriptor([[maybe_unused]] rhi::descriptor_handle slot,
-                                          [[maybe_unused]] rhi::sampler_handle sampler) -> void override {}
+                                          [[maybe_unused]] rhi::sampler_handle sampler) -> void override
+            {
+            }
             auto write_sampled_image_descriptor([[maybe_unused]] rhi::descriptor_handle slot,
                                                 [[maybe_unused]] rhi::texture_view_handle view,
-                                                [[maybe_unused]] rhi::image_layout layout) -> void override {}
+                                                [[maybe_unused]] rhi::image_layout layout) -> void override
+            {
+            }
             auto write_storage_image_descriptor([[maybe_unused]] rhi::descriptor_handle slot,
                                                 [[maybe_unused]] rhi::texture_view_handle view,
-                                                [[maybe_unused]] rhi::image_layout layout) -> void override {}
+                                                [[maybe_unused]] rhi::image_layout layout) -> void override
+            {
+            }
         };
     } // namespace
 
@@ -141,11 +201,12 @@ namespace tempest::render_graph
             init_list,
             registered_texture{
                 .id = 0,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "ColorHDR",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "ColorHDR",
+                    },
             },
         };
 
@@ -170,64 +231,68 @@ namespace tempest::render_graph
                 .name = "GBufferPass",
                 .pass_index = 0,
                 .queue = queue_type::graphics,
-                .texture_accesses = vector<texture_access>{
-                    init_list,
-                    texture_access{
-                        .texture = rg_texture_id{.id = 0, .version = 0},
-                        .type = access_type::write,
-                        .stages = rhi::pipeline_stage::attachment_output,
-                        .access = rhi::resource_access::write,
-                        .layout = rhi::image_layout::general,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 0},
+                            .type = access_type::write,
+                            .stages = rhi::pipeline_stage::attachment_output,
+                            .access = rhi::resource_access::write,
+                            .layout = rhi::image_layout::general,
+                        },
                     },
-                },
             },
             // Pass 1: Lighting compute read
             pass_node{
                 .name = "LightingPass",
                 .pass_index = 1,
                 .queue = queue_type::graphics,
-                .texture_accesses = vector<texture_access>{
-                    init_list,
-                    texture_access{
-                        .texture = rg_texture_id{.id = 0, .version = 1},
-                        .type = access_type::read,
-                        .stages = rhi::pipeline_stage::compute,
-                        .access = rhi::resource_access::read,
-                        .layout = rhi::image_layout::general,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::compute,
+                            .access = rhi::resource_access::read,
+                            .layout = rhi::image_layout::general,
+                        },
                     },
-                },
             },
             // Pass 2: PostProcess fragment read (Read-after-Read on same queue and layout: NO BARRIER)
             pass_node{
                 .name = "PostProcessPass",
                 .pass_index = 2,
                 .queue = queue_type::graphics,
-                .texture_accesses = vector<texture_access>{
-                    init_list,
-                    texture_access{
-                        .texture = rg_texture_id{.id = 0, .version = 1},
-                        .type = access_type::read,
-                        .stages = rhi::pipeline_stage::fragment,
-                        .access = rhi::resource_access::read,
-                        .layout = rhi::image_layout::general,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::fragment,
+                            .access = rhi::resource_access::read,
+                            .layout = rhi::image_layout::general,
+                        },
                     },
-                },
             },
             // Pass 3: Present blit read (Layout transition from general to present)
             pass_node{
                 .name = "PresentPass",
                 .pass_index = 3,
                 .queue = queue_type::graphics,
-                .texture_accesses = vector<texture_access>{
-                    init_list,
-                    texture_access{
-                        .texture = rg_texture_id{.id = 0, .version = 1},
-                        .type = access_type::read,
-                        .stages = rhi::pipeline_stage::blit,
-                        .access = rhi::resource_access::read,
-                        .layout = rhi::image_layout::present,
+                .texture_accesses =
+                    vector<texture_access>{
+                        init_list,
+                        texture_access{
+                            .texture = rg_texture_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::blit,
+                            .access = rhi::resource_access::read,
+                            .layout = rhi::image_layout::present,
+                        },
                     },
-                },
             },
         };
 
@@ -289,45 +354,48 @@ namespace tempest::render_graph
                 .name = "ComputePass",
                 .pass_index = 0,
                 .queue = queue_type::graphics,
-                .buffer_accesses = vector<buffer_access>{
-                    init_list,
-                    buffer_access{
-                        .buffer = rg_buffer_id{.id = 0, .version = 0},
-                        .type = access_type::write,
-                        .stages = rhi::pipeline_stage::compute,
-                        .access = rhi::resource_access::write,
+                .buffer_accesses =
+                    vector<buffer_access>{
+                        init_list,
+                        buffer_access{
+                            .buffer = rg_buffer_id{.id = 0, .version = 0},
+                            .type = access_type::write,
+                            .stages = rhi::pipeline_stage::compute,
+                            .access = rhi::resource_access::write,
+                        },
                     },
-                },
             },
             // Pass 1: Copy read (RaW hazard)
             pass_node{
                 .name = "CopyPass",
                 .pass_index = 1,
                 .queue = queue_type::graphics,
-                .buffer_accesses = vector<buffer_access>{
-                    init_list,
-                    buffer_access{
-                        .buffer = rg_buffer_id{.id = 0, .version = 1},
-                        .type = access_type::read,
-                        .stages = rhi::pipeline_stage::copy,
-                        .access = rhi::resource_access::read,
+                .buffer_accesses =
+                    vector<buffer_access>{
+                        init_list,
+                        buffer_access{
+                            .buffer = rg_buffer_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::copy,
+                            .access = rhi::resource_access::read,
+                        },
                     },
-                },
             },
             // Pass 2: Transfer read again (Read-after-Read: elided)
             pass_node{
                 .name = "ReadPass2",
                 .pass_index = 2,
                 .queue = queue_type::graphics,
-                .buffer_accesses = vector<buffer_access>{
-                    init_list,
-                    buffer_access{
-                        .buffer = rg_buffer_id{.id = 0, .version = 1},
-                        .type = access_type::read,
-                        .stages = rhi::pipeline_stage::copy,
-                        .access = rhi::resource_access::read,
+                .buffer_accesses =
+                    vector<buffer_access>{
+                        init_list,
+                        buffer_access{
+                            .buffer = rg_buffer_id{.id = 0, .version = 1},
+                            .type = access_type::read,
+                            .stages = rhi::pipeline_stage::copy,
+                            .access = rhi::resource_access::read,
+                        },
                     },
-                },
             },
         };
 

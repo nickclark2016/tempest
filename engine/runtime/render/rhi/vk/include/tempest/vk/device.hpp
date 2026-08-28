@@ -79,6 +79,11 @@ namespace tempest::rhi::vk
         auto wait_idle() -> void override;
         auto wait_for_sync(host_sync_point sync_point) -> void override;
 
+        [[nodiscard]] auto get_device_desc() const noexcept -> const device_desc& override
+        {
+            return _desc;
+        }
+
         [[nodiscard]] auto is_ray_tracing_supported() const -> bool override;
         [[nodiscard]] auto is_mesh_shading_supported() const -> bool override;
         [[nodiscard]] auto is_ray_query_supported() const -> bool override;

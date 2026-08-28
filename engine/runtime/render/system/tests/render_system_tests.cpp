@@ -1478,7 +1478,8 @@ namespace tempest::render_system::tests
 
             rend->prepare_frame(1280, 720);
 
-            EXPECT_TRUE(rend->get_shadow_atlas_texture().is_valid());
+            EXPECT_TRUE(rend->get_directional_shadow_atlas_texture().is_valid());
+            EXPECT_TRUE(rend->get_punctual_shadow_atlas_texture().is_valid());
 
             auto res = rend->render();
             EXPECT_TRUE(res.has_value());
@@ -1534,13 +1535,14 @@ namespace tempest::render_system::tests
 
             rend->prepare_frame(1280, 720);
 
-            EXPECT_TRUE(rend->get_shadow_atlas_texture().is_valid());
+            EXPECT_TRUE(rend->get_directional_shadow_atlas_texture().is_valid());
+            EXPECT_TRUE(rend->get_punctual_shadow_atlas_texture().is_valid());
 
             auto res = rend->render();
             EXPECT_TRUE(res.has_value());
 
             const auto* const alloc =
-                rend->get_render_graph().get_allocator().get_texture(rend->get_shadow_atlas_texture().id);
+                rend->get_render_graph().get_allocator().get_texture(rend->get_directional_shadow_atlas_texture().id);
             ASSERT_NE(alloc, nullptr);
             EXPECT_EQ(alloc->size.width, 16384U);
             EXPECT_EQ(alloc->size.height, 16384U);

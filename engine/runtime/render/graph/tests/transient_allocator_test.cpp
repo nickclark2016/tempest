@@ -20,13 +20,37 @@ namespace tempest::render_graph
 
             uint64_t next_handle = 1;
             uint32_t next_desc_index = 1;
+            rhi::device_desc desc{
+                .limits =
+                    {
+                        .max_image_dimension_2d = 16384,
+                    },
+            };
 
-            auto wait_idle() -> void override {}
-            auto wait_for_sync([[maybe_unused]] rhi::host_sync_point sync_point) -> void override {}
+            auto wait_idle() -> void override
+            {
+            }
+            auto wait_for_sync([[maybe_unused]] rhi::host_sync_point sync_point) -> void override
+            {
+            }
 
-            [[nodiscard]] auto is_ray_tracing_supported() const -> bool override { return false; }
-            [[nodiscard]] auto is_mesh_shading_supported() const -> bool override { return false; }
-            [[nodiscard]] auto is_ray_query_supported() const -> bool override { return false; }
+            [[nodiscard]] auto get_device_desc() const noexcept -> const rhi::device_desc& override
+            {
+                return desc;
+            }
+
+            [[nodiscard]] auto is_ray_tracing_supported() const -> bool override
+            {
+                return false;
+            }
+            [[nodiscard]] auto is_mesh_shading_supported() const -> bool override
+            {
+                return false;
+            }
+            [[nodiscard]] auto is_ray_query_supported() const -> bool override
+            {
+                return false;
+            }
 
             [[nodiscard]] auto create_raw_surface([[maybe_unused]] rhi::native_wsi_handle native_window_handle)
                 -> expected<rhi::raw_surface_handle, rhi::raw_surface_creation_error> override
@@ -46,10 +70,18 @@ namespace tempest::render_graph
                 return nullptr;
             }
 
-            auto destroy_render_surface([[maybe_unused]] unique_ptr<rhi::render_surface> surface) -> void override {}
-            auto destroy_raw_surface([[maybe_unused]] rhi::raw_surface_handle surface) -> void override {}
+            auto destroy_render_surface([[maybe_unused]] unique_ptr<rhi::render_surface> surface) -> void override
+            {
+            }
+            auto destroy_raw_surface([[maybe_unused]] rhi::raw_surface_handle surface) -> void override
+            {
+            }
 
-            [[nodiscard]] auto get_semaphore_value([[maybe_unused]] rhi::semaphore_handle semaphore) const -> uint64_t override { return 0; }
+            [[nodiscard]] auto get_semaphore_value([[maybe_unused]] rhi::semaphore_handle semaphore) const
+                -> uint64_t override
+            {
+                return 0;
+            }
 
             [[nodiscard]] auto get_graphics_execution_port() -> rhi::execution_port& override
             {
@@ -66,13 +98,15 @@ namespace tempest::render_graph
                 return *reinterpret_cast<rhi::execution_port*>(this);
             }
 
-            [[nodiscard]] auto create_buffer([[maybe_unused]] const rhi::buffer_desc& desc) -> rhi::buffer_handle override
+            [[nodiscard]] auto create_buffer([[maybe_unused]] const rhi::buffer_desc& desc)
+                -> rhi::buffer_handle override
             {
                 ++created_buffers;
                 return rhi::buffer_handle{.handle = next_handle++};
             }
 
-            [[nodiscard]] auto create_texture([[maybe_unused]] const rhi::texture_desc& desc) -> rhi::texture_handle override
+            [[nodiscard]] auto create_texture([[maybe_unused]] const rhi::texture_desc& desc)
+                -> rhi::texture_handle override
             {
                 ++created_textures;
                 return rhi::texture_handle{.handle = next_handle++};
@@ -86,7 +120,8 @@ namespace tempest::render_graph
                 return rhi::texture_view_handle{.handle = next_handle++};
             }
 
-            [[nodiscard]] auto create_sampler([[maybe_unused]] const rhi::sampler_desc& desc) -> rhi::sampler_handle override
+            [[nodiscard]] auto create_sampler([[maybe_unused]] const rhi::sampler_desc& desc)
+                -> rhi::sampler_handle override
             {
                 return rhi::sampler_handle{.handle = next_handle++};
             }
@@ -133,13 +168,24 @@ namespace tempest::render_graph
                 ++destroyed_views;
             }
 
-            auto destroy_sampler([[maybe_unused]] rhi::sampler_handle sampler) -> void override {}
-            auto destroy_graphics_pipeline([[maybe_unused]] rhi::graphics_pipeline_handle pipeline) -> void override {}
-            auto destroy_compute_pipeline([[maybe_unused]] rhi::compute_pipeline_handle pipeline) -> void override {}
-            auto destroy_event([[maybe_unused]] rhi::event_handle event) -> void override {}
-            auto destroy_semaphore([[maybe_unused]] rhi::semaphore_handle semaphore) -> void override {}
+            auto destroy_sampler([[maybe_unused]] rhi::sampler_handle sampler) -> void override
+            {
+            }
+            auto destroy_graphics_pipeline([[maybe_unused]] rhi::graphics_pipeline_handle pipeline) -> void override
+            {
+            }
+            auto destroy_compute_pipeline([[maybe_unused]] rhi::compute_pipeline_handle pipeline) -> void override
+            {
+            }
+            auto destroy_event([[maybe_unused]] rhi::event_handle event) -> void override
+            {
+            }
+            auto destroy_semaphore([[maybe_unused]] rhi::semaphore_handle semaphore) -> void override
+            {
+            }
 
-            [[nodiscard]] auto allocate_descriptor([[maybe_unused]] rhi::descriptor_type type) -> rhi::descriptor_handle override
+            [[nodiscard]] auto allocate_descriptor([[maybe_unused]] rhi::descriptor_type type)
+                -> rhi::descriptor_handle override
             {
                 ++allocated_descriptors;
                 return rhi::descriptor_handle{.index = next_desc_index++, .generation = 1};
@@ -152,13 +198,19 @@ namespace tempest::render_graph
             }
 
             auto write_sampler_descriptor([[maybe_unused]] rhi::descriptor_handle slot,
-                                          [[maybe_unused]] rhi::sampler_handle sampler) -> void override {}
+                                          [[maybe_unused]] rhi::sampler_handle sampler) -> void override
+            {
+            }
             auto write_sampled_image_descriptor([[maybe_unused]] rhi::descriptor_handle slot,
                                                 [[maybe_unused]] rhi::texture_view_handle view,
-                                                [[maybe_unused]] rhi::image_layout layout) -> void override {}
+                                                [[maybe_unused]] rhi::image_layout layout) -> void override
+            {
+            }
             auto write_storage_image_descriptor([[maybe_unused]] rhi::descriptor_handle slot,
                                                 [[maybe_unused]] rhi::texture_view_handle view,
-                                                [[maybe_unused]] rhi::image_layout layout) -> void override {}
+                                                [[maybe_unused]] rhi::image_layout layout) -> void override
+            {
+            }
         };
     } // namespace
 
@@ -172,19 +224,21 @@ namespace tempest::render_graph
             init_list,
             registered_texture{
                 .id = 0,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "TexA",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "TexA",
+                    },
             },
             registered_texture{
                 .id = 1,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "TexB",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "TexB",
+                    },
             },
         };
 
@@ -225,19 +279,21 @@ namespace tempest::render_graph
             init_list,
             registered_texture{
                 .id = 0,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "TexA",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "TexA",
+                    },
             },
             registered_texture{
                 .id = 1,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "TexB",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "TexB",
+                    },
             },
         };
 
@@ -277,19 +333,21 @@ namespace tempest::render_graph
             init_list,
             registered_texture{
                 .id = 0,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "SurfaceRelativeTex",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "SurfaceRelativeTex",
+                    },
             },
             registered_texture{
                 .id = 1,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::absolute(512, 512),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "FixedTex",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::absolute(512, 512),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "FixedTex",
+                    },
             },
         };
 
@@ -408,11 +466,12 @@ namespace tempest::render_graph
             init_list,
             registered_texture{
                 .id = 0,
-                .desc = rg_texture_desc{
-                    .size = rg_texture_size::surface_relative(1.0F, 1.0F),
-                    .format = rhi::data_format::rgba8_unorm,
-                    .name = "ColorTarget",
-                },
+                .desc =
+                    rg_texture_desc{
+                        .size = rg_texture_size::surface_relative(1.0F, 1.0F),
+                        .format = rhi::data_format::rgba8_unorm,
+                        .name = "ColorTarget",
+                    },
             },
         };
 

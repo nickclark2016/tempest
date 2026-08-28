@@ -756,9 +756,15 @@ namespace tempest::rhi
                                   filter_mode filter = filter_mode::linear) -> void = 0;
 
         // Debug markers and regions
-        virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void {}
-        virtual auto end_debug_region() -> void {}
-        virtual auto insert_debug_marker([[maybe_unused]] const debug_label& label) -> void {}
+        virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void
+        {
+        }
+        virtual auto end_debug_region() -> void
+        {
+        }
+        virtual auto insert_debug_marker([[maybe_unused]] const debug_label& label) -> void
+        {
+        }
 
       protected:
         command_list() = default;
@@ -793,12 +799,25 @@ namespace tempest::rhi
         unknown,
     };
 
+    struct device_limits
+    {
+        uint32_t max_image_dimension_1d{0};
+        uint32_t max_image_dimension_2d{0};
+        uint32_t max_image_dimension_3d{0};
+        uint32_t max_image_dimension_cube{0};
+        uint32_t max_image_array_layers{0};
+        uint64_t max_uniform_buffer_range{0};
+        uint64_t max_storage_buffer_range{0};
+    };
+
     struct device_desc
     {
         guid device_uuid;
         device_features features;
+        device_limits limits;
         string name;
         device_vendor vendor;
+        device_type type;
     };
 
     enum class graphics_api : uint8_t
@@ -903,13 +922,17 @@ namespace tempest::rhi
         virtual auto wait_idle() -> void = 0;
         virtual auto wait_for_sync(host_sync_point sync_point) -> void = 0;
 
+        // Device description & limits
+        [[nodiscard]] virtual auto get_device_desc() const noexcept -> const device_desc& = 0;
+
         // Capabilities
         [[nodiscard]] virtual auto is_ray_tracing_supported() const -> bool = 0;
         [[nodiscard]] virtual auto is_mesh_shading_supported() const -> bool = 0;
         [[nodiscard]] virtual auto is_ray_query_supported() const -> bool = 0;
 
         // Surface management
-        [[nodiscard]] virtual auto create_raw_surface(native_wsi_handle native_window_handle) -> expected<raw_surface_handle, raw_surface_creation_error> = 0;
+        [[nodiscard]] virtual auto create_raw_surface(native_wsi_handle native_window_handle)
+            -> expected<raw_surface_handle, raw_surface_creation_error> = 0;
         [[nodiscard]] virtual auto get_surface_capabilities(raw_surface_handle surface) -> surface_capabilities = 0;
         [[nodiscard]] virtual auto create_render_surface(const render_surface_desc& desc)
             -> unique_ptr<render_surface> = 0;
@@ -958,23 +981,34 @@ namespace tempest::rhi
                                                     image_layout layout = image_layout::general) -> void = 0;
 
         // Object naming
-        virtual auto set_debug_name([[maybe_unused]] buffer_handle handle, [[maybe_unused]] cstring_view name) -> void {}
-        virtual auto set_debug_name([[maybe_unused]] texture_handle handle, [[maybe_unused]] cstring_view name) -> void {}
+        virtual auto set_debug_name([[maybe_unused]] buffer_handle handle, [[maybe_unused]] cstring_view name) -> void
+        {
+        }
+        virtual auto set_debug_name([[maybe_unused]] texture_handle handle, [[maybe_unused]] cstring_view name) -> void
+        {
+        }
         virtual auto set_debug_name([[maybe_unused]] texture_view_handle handle, [[maybe_unused]] cstring_view name)
             -> void
         {
         }
-        virtual auto set_debug_name([[maybe_unused]] sampler_handle handle, [[maybe_unused]] cstring_view name) -> void {}
-        virtual auto set_debug_name([[maybe_unused]] graphics_pipeline_handle handle, [[maybe_unused]] cstring_view name)
-            -> void
+        virtual auto set_debug_name([[maybe_unused]] sampler_handle handle, [[maybe_unused]] cstring_view name) -> void
+        {
+        }
+        virtual auto set_debug_name([[maybe_unused]] graphics_pipeline_handle handle,
+                                    [[maybe_unused]] cstring_view name) -> void
         {
         }
         virtual auto set_debug_name([[maybe_unused]] compute_pipeline_handle handle, [[maybe_unused]] cstring_view name)
             -> void
         {
         }
-        virtual auto set_debug_name([[maybe_unused]] event_handle handle, [[maybe_unused]] cstring_view name) -> void {}
-        virtual auto set_debug_name([[maybe_unused]] semaphore_handle handle, [[maybe_unused]] cstring_view name) -> void {}
+        virtual auto set_debug_name([[maybe_unused]] event_handle handle, [[maybe_unused]] cstring_view name) -> void
+        {
+        }
+        virtual auto set_debug_name([[maybe_unused]] semaphore_handle handle, [[maybe_unused]] cstring_view name)
+            -> void
+        {
+        }
 
       protected:
         device() = default;
@@ -1019,9 +1053,15 @@ namespace tempest::rhi
             -> expected<void, submit_error> = 0;
 
         // Debug markers and regions
-        virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void {}
-        virtual auto end_debug_region() -> void {}
-        virtual auto insert_debug_marker([[maybe_unused]] const debug_label& label) -> void {}
+        virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void
+        {
+        }
+        virtual auto end_debug_region() -> void
+        {
+        }
+        virtual auto insert_debug_marker([[maybe_unused]] const debug_label& label) -> void
+        {
+        }
 
       protected:
         execution_port() = default;

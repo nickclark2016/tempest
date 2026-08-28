@@ -601,4 +601,36 @@ namespace tempest::rhi::vk
         device->destroy_event(evt);
         device->destroy_semaphore(sem);
     }
+
+    TEST(device_test, get_device_desc)
+    {
+        auto ctx_desc = context_desc{
+            .application_name = "Tempest Device Desc Test",
+            .api = graphics_api::vulkan,
+        };
+
+        auto result = vk::create_context(ctx_desc);
+        ASSERT_TRUE(result.has_value());
+
+        auto context = tempest::move(result).value();
+        auto devices = context->enumerate_devices();
+        ASSERT_FALSE(devices.empty());
+
+        const auto& enumerated_desc = devices[0];
+        EXPECT_FALSE(enumerated_desc.name.empty());
+        EXPECT_GE(enumerated_desc.limits.max_image_dimension_2d, 4096U);
+        EXPECT_GT(enumerated_desc.limits.max_uniform_buffer_range, 0U);
+        EXPECT_GT(enumerated_desc.limits.max_storage_buffer_range, 0U);
+
+        auto device = context->create_device(enumerated_desc.device_uuid);
+        ASSERT_NE(device, nullptr);
+
+        const auto& dev_desc = device->get_device_desc();
+        EXPECT_EQ(dev_desc.name, enumerated_desc.name);
+        EXPECT_EQ(dev_desc.vendor, enumerated_desc.vendor);
+        EXPECT_EQ(dev_desc.type, enumerated_desc.type);
+        EXPECT_EQ(dev_desc.limits.max_image_dimension_2d, enumerated_desc.limits.max_image_dimension_2d);
+        EXPECT_EQ(dev_desc.limits.max_storage_buffer_range, enumerated_desc.limits.max_storage_buffer_range);
+        EXPECT_GE(dev_desc.limits.max_image_dimension_2d, 4096U);
+    }
 } // namespace tempest::rhi::vk

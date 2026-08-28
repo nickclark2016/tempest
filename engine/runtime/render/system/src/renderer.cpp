@@ -2,6 +2,7 @@
 
 #include <bit>
 #include <cmath>
+#include <format>
 #include <tempest/algorithm.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/relationship_component.hpp>
@@ -19,6 +20,7 @@
 #include <tempest/render_system/passes/transparency_clear_pass.hpp>
 #include <tempest/render_system/passes/transparency_gather_pass.hpp>
 #include <tempest/render_system/passes/transparency_resolve_pass.hpp>
+#include <tempest/render_system/shadow_atlas_math.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transformations.hpp>
 
@@ -48,10 +50,9 @@ namespace tempest::render_system
             return world;
         }
 
-        auto calculate_shadow_atlas_dimensions(const ecs::archetype_registry* registry) -> math::vec2<uint32_t>
+        auto calculate_directional_shadow_atlas_dimensions(const ecs::archetype_registry* registry,
+                                                           uint32_t max_atlas_dim, logger* log) -> shadow_atlas_plan
         {
-            auto shadow_atlas_width = 8192U;
-            auto shadow_atlas_height = 8192U;
             constexpr auto shadow_padding = 4U;
 
             if (registry != nullptr)
@@ -81,19 +82,20 @@ namespace tempest::render_system
 
                 if (has_caster && cascade_res > 0 && cascade_count > 0)
                 {
-                    const auto padded_tile = cascade_res + shadow_padding * 2;
-                    const auto cols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(cascade_count))));
-                    const auto rows =
-                        static_cast<uint32_t>(std::ceil(static_cast<float>(cascade_count) / static_cast<float>(cols)));
-                    const auto req_w = cols * padded_tile;
-                    const auto req_h = rows * padded_tile;
-
-                    shadow_atlas_width = std::bit_ceil(tempest::max(512U, req_w));
-                    shadow_atlas_height = std::bit_ceil(tempest::max(512U, req_h));
+                    const auto plan = calculate_directional_shadow_atlas_plan(cascade_res, cascade_count, max_atlas_dim,
+                                                                              shadow_padding);
+                    if (log && plan.was_clamped)
+                    {
+                        const auto msg = std::format(
+                            "Directional shadow cascade resolution clamped from {} to {} to satisfy device limit {}.",
+                            cascade_res, plan.effective_cascade_resolution, max_atlas_dim);
+                        log->warn(string_view{msg.data(), msg.size()});
+                    }
+                    return plan;
                 }
             }
 
-            return math::vec2<uint32_t>{shadow_atlas_width, shadow_atlas_height};
+            return calculate_directional_shadow_atlas_plan(2048U, 0U, max_atlas_dim, shadow_padding);
         }
     } // namespace
     auto renderer::builder::build(rhi::device& dev, logger& log) -> unique_ptr<renderer>
@@ -138,14 +140,16 @@ namespace tempest::render_system
         : _device{other._device}, _log{other._log}, _cfg{other._cfg}, _inputs{other._inputs},
           _owned_camera_system{tempest::move(other._owned_camera_system)}, _camera_system{other._camera_system},
           _pool{tempest::move(other._pool)}, _shaders{tempest::move(other._shaders)},
-          _graph{tempest::move(other._graph)}, _shadow_atlas_target{other._shadow_atlas_target},
+          _graph{tempest::move(other._graph)}, _directional_shadow_atlas_target{other._directional_shadow_atlas_target},
+          _punctual_shadow_atlas_target{other._punctual_shadow_atlas_target},
           _hdr_color_target{other._hdr_color_target}, _depth_target{other._depth_target},
           _ssao_target{other._ssao_target}, _ssao_blurred_target{other._ssao_blurred_target},
           _moments_target{other._moments_target}, _zeroth_moment_target{other._zeroth_moment_target},
           _transparency_accum_target{other._transparency_accum_target},
           _tonemapped_color_target{other._tonemapped_color_target},
           _cluster_bounds_target{other._cluster_bounds_target}, _light_bitmask_target{other._light_bitmask_target},
-          _shadow_allocator{tempest::move(other._shadow_allocator)},
+          _directional_shadow_allocator{tempest::move(other._directional_shadow_allocator)},
+          _punctual_shadow_allocator{tempest::move(other._punctual_shadow_allocator)},
           _tracked_entities{tempest::move(other._tracked_entities)}, _active_draw_count{other._active_draw_count},
           _opaque_draw_count{other._opaque_draw_count}, _opaque_draw_offset{other._opaque_draw_offset},
           _transparent_draw_count{other._transparent_draw_count},
@@ -185,7 +189,8 @@ namespace tempest::render_system
             _pool = tempest::move(other._pool);
             _shaders = tempest::move(other._shaders);
             _graph = tempest::move(other._graph);
-            _shadow_atlas_target = other._shadow_atlas_target;
+            _directional_shadow_atlas_target = other._directional_shadow_atlas_target;
+            _punctual_shadow_atlas_target = other._punctual_shadow_atlas_target;
             _hdr_color_target = other._hdr_color_target;
             _depth_target = other._depth_target;
             _ssao_target = other._ssao_target;
@@ -196,7 +201,8 @@ namespace tempest::render_system
             _tonemapped_color_target = other._tonemapped_color_target;
             _cluster_bounds_target = other._cluster_bounds_target;
             _light_bitmask_target = other._light_bitmask_target;
-            _shadow_allocator = tempest::move(other._shadow_allocator);
+            _directional_shadow_allocator = tempest::move(other._directional_shadow_allocator);
+            _punctual_shadow_allocator = tempest::move(other._punctual_shadow_allocator);
             _tracked_entities = tempest::move(other._tracked_entities);
             _active_draw_count = other._active_draw_count;
             _opaque_draw_count = other._opaque_draw_count;
@@ -577,15 +583,28 @@ namespace tempest::render_system
         _pool.write_scene_constants(scene);
 
         // Create Transient Render Targets
-        const auto shadow_atlas_dims = calculate_shadow_atlas_dimensions(_inputs.entity_registry);
-        _shadow_allocator.reset(shadow_atlas_dims.x, shadow_atlas_dims.y, 4);
-        _shadow_atlas_target = _graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(shadow_atlas_dims.x, shadow_atlas_dims.y),
+        const auto max_image_dim = _device ? _device->get_device_desc().limits.max_image_dimension_2d : 8192U;
+        const auto dir_shadow_plan =
+            calculate_directional_shadow_atlas_dimensions(_inputs.entity_registry, max_image_dim, _log);
+        _directional_shadow_allocator.reset(dir_shadow_plan.atlas_size.x, dir_shadow_plan.atlas_size.y, 4);
+        _directional_shadow_atlas_target = _graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(dir_shadow_plan.atlas_size.x, dir_shadow_plan.atlas_size.y),
             .format = rhi::data_format::depth32_float,
             .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
             .mip_levels = 1,
             .array_layers = 1,
-            .name = "ShadowAtlasTarget",
+            .name = "DirectionalShadowAtlasTarget",
+        });
+
+        const auto punctual_atlas_dim = max_image_dim > 0 ? tempest::min(max_image_dim, 4096U) : 4096U;
+        _punctual_shadow_allocator.reset(punctual_atlas_dim, punctual_atlas_dim, 4);
+        _punctual_shadow_atlas_target = _graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(punctual_atlas_dim, punctual_atlas_dim),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .mip_levels = 1,
+            .array_layers = 1,
+            .name = "PunctualShadowAtlasTarget",
         });
 
         _hdr_color_target = _graph.create_texture(render_graph::rg_texture_desc{
@@ -713,8 +732,8 @@ namespace tempest::render_system
                 .graph = _graph,
                 .pool = _pool,
                 .shaders = _shaders,
-                .shadow_atlas = _shadow_atlas_target,
-                .allocator = _shadow_allocator,
+                .shadow_atlas = _directional_shadow_atlas_target,
+                .allocator = _directional_shadow_allocator,
                 .registry = *_inputs.entity_registry,
                 .camera_sys = *_camera_system,
                 .draw_count = _opaque_draw_count,
@@ -727,7 +746,7 @@ namespace tempest::render_system
             }
 
             _pool.write_directional_shadow_data(shadow_res.shadow_data);
-            _shadow_atlas_target = shadow_res.shadow_atlas;
+            _directional_shadow_atlas_target = shadow_res.shadow_atlas;
         }
 
         const auto& depth_data =
@@ -741,9 +760,9 @@ namespace tempest::render_system
         }
 
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
-        const auto& pbr_data = add_pbr_opaque_pass(_graph, _pool, _shaders, skybox_data.hdr_color,
-                                                   depth_data.depth_texture, _shadow_atlas_target, _opaque_draw_count,
-                                                   _opaque_draw_offset, culling_data.light_bitmask_buffer);
+        const auto& pbr_data = add_pbr_opaque_pass(
+            _graph, _pool, _shaders, skybox_data.hdr_color, depth_data.depth_texture, _directional_shadow_atlas_target,
+            _opaque_draw_count, _opaque_draw_offset, culling_data.light_bitmask_buffer);
 
         const auto& clear_data =
             add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target, width, height);
@@ -753,7 +772,7 @@ namespace tempest::render_system
         const auto& resolve_data = add_transparency_resolve_pass(
             _graph, _pool, _shaders, _transparency_accum_target, gather_data.moments_texture,
             gather_data.zeroth_moment_texture, depth_data.depth_texture, _transparent_draw_count,
-            _transparent_draw_offset, _shadow_atlas_target, culling_data.light_bitmask_buffer);
+            _transparent_draw_offset, _directional_shadow_atlas_target, culling_data.light_bitmask_buffer);
         const auto& blend_data = add_transparency_blend_pass(
             _graph, _pool, _shaders, pbr_data.hdr_color, resolve_data.accum_texture, gather_data.zeroth_moment_texture);
 

@@ -117,9 +117,14 @@ namespace tempest::render_system
             return _graph;
         }
 
-        [[nodiscard]] auto get_shadow_atlas_texture() const noexcept -> render_graph::rg_texture_id
+        [[nodiscard]] auto get_directional_shadow_atlas_texture() const noexcept -> render_graph::rg_texture_id
         {
-            return _shadow_atlas_target;
+            return _directional_shadow_atlas_target;
+        }
+
+        [[nodiscard]] auto get_punctual_shadow_atlas_texture() const noexcept -> render_graph::rg_texture_id
+        {
+            return _punctual_shadow_atlas_target;
         }
 
         [[nodiscard]] auto get_tonemapped_color_texture() const noexcept -> render_graph::rg_texture_id
@@ -210,7 +215,8 @@ namespace tempest::render_system
         render_graph::render_graph _graph;
 
         // Render Targets (Transient in Render Graph)
-        render_graph::rg_texture_id _shadow_atlas_target{};
+        render_graph::rg_texture_id _directional_shadow_atlas_target{};
+        render_graph::rg_texture_id _punctual_shadow_atlas_target{};
         render_graph::rg_texture_id _hdr_color_target{};
         render_graph::rg_texture_id _depth_target{};
         render_graph::rg_texture_id _ssao_target{};
@@ -222,7 +228,8 @@ namespace tempest::render_system
         render_graph::rg_buffer_id _cluster_bounds_target{};
         render_graph::rg_buffer_id _light_bitmask_target{};
 
-        shelf_allocator _shadow_allocator{};
+        shelf_allocator _directional_shadow_allocator{};
+        shelf_allocator _punctual_shadow_allocator{};
         vector<ecs::entity> _tracked_entities{};
         uint32_t _active_draw_count{0};
         uint32_t _opaque_draw_count{0};
