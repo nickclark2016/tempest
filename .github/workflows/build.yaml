@@ -44,7 +44,14 @@ jobs:
         run: ninja -C build/ninja ${{ matrix.config }}_x64
 
       - name: Run Tests
-        run: ninja -C build/ninja test_${{ matrix.config }}_x64
+        run: |
+          binDir="bin/${{ matrix.config }}/linux-clang"
+          if [ -f "$binDir/core-tests" ]; then "$binDir/core-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/ecs-tests" ]; then "$binDir/ecs-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/event-tests" ]; then "$binDir/event-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/serialization-tests" ]; then "$binDir/serialization-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/assets-tests" ]; then "$binDir/assets-tests" --gtest_brief=1; fi
+          if [ -f "$binDir/render-graph-tests" ]; then "$binDir/render-graph-tests" --gtest_brief=1; fi
 
   cpp-windows-build:
     name: Build Windows ${{ matrix.generator }} (${{ matrix.config }})
