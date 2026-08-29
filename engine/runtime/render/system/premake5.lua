@@ -19,7 +19,7 @@ scoped.project('render-system', function()
     }
 
     prebuildcommands {
-        '{MKDIR} "%{cfg.targetdir}/shaders/rs"',
+        '{MKDIR} "%{wks.basedir}/assets/shaders/engine"',
     }
 
     uses { 'vulkan', 'rhi-vk', 'render-graph' }
@@ -78,8 +78,8 @@ scoped.project('render-system', function()
             'options:debug-shaders'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!cfg.targetdir}/shaders/rs/%{file.basename}.vert.spv -entry VSMain -O0 -g3',
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!cfg.targetdir}/shaders/rs/%{file.basename}.frag.spv -entry FSMain -O0 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O0 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O0 -g3',
             }
         end)
 
@@ -87,14 +87,14 @@ scoped.project('render-system', function()
             'options:not debug-shaders'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!cfg.targetdir}/shaders/rs/%{file.basename}.vert.spv -entry VSMain -O3',
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!cfg.targetdir}/shaders/rs/%{file.basename}.frag.spv -entry FSMain -O3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv -entry VSMain -O3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv -entry FSMain -O3',
             }
         end)
 
         buildoutputs {
-            '%{!cfg.targetdir}/shaders/rs/%{file.basename}.vert.spv',
-            '%{!cfg.targetdir}/shaders/rs/%{file.basename}.frag.spv'
+            '%{!wks.basedir}/assets/shaders/engine/%{file.basename}.vert.spv',
+            '%{!wks.basedir}/assets/shaders/engine/%{file.basename}.frag.spv'
         }
 
         buildinputs {
@@ -109,7 +109,7 @@ scoped.project('render-system', function()
             'options:debug-shaders'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!cfg.targetdir}/shaders/rs/%{file.basename}.comp.spv -entry CSMain -O0 -g3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.comp.spv -entry CSMain -O0 -g3',
             }
         end)
 
@@ -117,12 +117,12 @@ scoped.project('render-system', function()
             'options:not debug-shaders'
         }, function()
             buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!cfg.targetdir}/shaders/rs/%{file.basename}.comp.spv -entry CSMain -O3',
+                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -fvk-use-entrypoint-name -o %{!wks.basedir}/assets/shaders/engine/%{file.basename}.comp.spv -entry CSMain -O3',
             }
         end)
         
         buildoutputs {
-            '%{!cfg.targetdir}/shaders/rs/%{file.basename}.comp.spv',
+            '%{!wks.basedir}/assets/shaders/engine/%{file.basename}.comp.spv',
         }
 
         buildinputs {

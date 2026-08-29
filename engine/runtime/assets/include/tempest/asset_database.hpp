@@ -75,6 +75,21 @@ namespace tempest::assets
             deserialize;
     };
 
+    struct TEMPEST_API shader_asset
+    {
+    };
+
+    struct TEMPEST_API mount_point
+    {
+        string path;
+        int32_t priority{0};
+
+        bool operator==(const mount_point& rhs) const noexcept
+        {
+            return priority == rhs.priority && path == rhs.path;
+        }
+    };
+
     class TEMPEST_API asset_database
     {
       public:
@@ -84,7 +99,7 @@ namespace tempest::assets
             flat_unordered_map<string, string> metadata;
         };
 
-        explicit asset_database(asset_type_registry* type_reg) noexcept;
+        explicit asset_database(asset_type_registry* type_reg = nullptr) noexcept;
 
         auto open(string_view db_path) -> void;
         [[nodiscard]] auto save() const -> bool;
@@ -92,6 +107,24 @@ namespace tempest::assets
         [[nodiscard]] auto load(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity;
         [[nodiscard]] auto find_by_guid(const guid& asset_id) const -> const asset_entry*;
         [[nodiscard]] auto find_by_path(string_view path) const -> const asset_entry*;
+
+        // Mount Root Management
+        auto mount_root(string_view root_path, int32_t priority = 0) -> void;
+        auto unmount_root(string_view root_path) -> void;
+        auto clear_mount_roots() -> void;
+        [[nodiscard]] auto get_mount_roots() const -> span<const mount_point>;
+
+        // Directory Scanning & Indexing
+        auto scan_and_index() -> void;
+
+        // Asset & Path Resolution
+        [[nodiscard]] auto find_asset(string_view path_or_name) const -> const asset_entry*;
+        [[nodiscard]] auto find_source_by_id(const guid& source_id) const -> const source_entry*;
+        [[nodiscard]] auto resolve_source_path(string_view path_or_name) const -> optional<string>;
+        [[nodiscard]] auto resolve_disk_path(string_view relative_path) const -> optional<string>;
+
+        // Filewatching & Change Notification
+        auto notify_file_changed(string_view disk_path) -> bool;
 
         auto register_asset(asset_type_id type, string_view source_path) -> guid;
         auto register_asset_with_guid(const guid& uid, asset_type_id type, string_view source_path) -> bool;
@@ -124,6 +157,10 @@ namespace tempest::assets
 
         string _db_path;
 
+        vector<mount_point> _mount_roots;
+        flat_unordered_map<string, string> _basename_to_relative_path;
+        flat_unordered_map<string, string> _relative_path_to_source_path;
+
         vector<unique_ptr<source_entry>> _sources;
         flat_unordered_map<string, size_t> _source_path_to_index;
         flat_unordered_map<guid, size_t> _source_id_to_index;
@@ -131,7 +168,10 @@ namespace tempest::assets
         vector<unique_ptr<asset_entry>> _assets;
         flat_unordered_map<guid, size_t> _asset_guid_to_index;
 
-        vector<byte> _blob_data;
+        mutable vector<unique_ptr<vector<byte>>> _blob_chunks;
+        mutable size_t _current_chunk_capacity{0};
+        mutable size_t _current_chunk_used{0};
+        mutable flat_unordered_map<guid, span<const byte>> _cached_blobs;
 
         flat_unordered_map<string, unique_ptr<asset_importer>> _importers;
         flat_unordered_map<guid, asset_metadata> _metadata;

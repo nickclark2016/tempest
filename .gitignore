@@ -39,6 +39,7 @@ TempestCache/
 *.ini
 
 # Generated asset files
+assets/
 **.tassetdb
 
 # Agents

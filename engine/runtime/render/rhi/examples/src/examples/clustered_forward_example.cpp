@@ -177,7 +177,7 @@ namespace tempest::rhi::examples
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
 
-        const auto model_path = "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+        const auto model_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
         if (std::filesystem::exists(model_path))
         {
             auto prefab_root = asset_db.load(model_path, _registry);

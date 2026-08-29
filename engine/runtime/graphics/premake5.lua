@@ -10,16 +10,10 @@ scoped.project('graphics', function()
         'include/**.hpp',
         'src/**.cpp',
         'src/**.hpp',
-        -- Shaders
-        'shaders/**.slang',
     }
 
     includedirs {
         'include',
-    }
-
-    prebuildcommands {
-        '{MKDIR} "%{cfg.targetdir}/shaders"',
     }
 
     uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan', 'rhi-vk' }
@@ -66,66 +60,6 @@ scoped.project('graphics', function()
             'graphics',
             'vk-bootstrap',
             'vma',
-        }
-    end)
-
-    scoped.filter({ 'files:shaders/raster/**.slang' }, function()
-        buildmessage 'Compiling %{file.relpath}'
-
-        scoped.filter({
-            'options:debug-shaders'
-        }, function()
-            buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O0 -g3',
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O0 -g3',
-            }
-        end)
-
-        scoped.filter({
-            'options:not debug-shaders'
-        }, function()
-            buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.vert.spv -entry VSMain -O3',
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.frag.spv -entry FSMain -O3',
-            }
-        end)
-
-        
-        buildoutputs {
-            '%{!cfg.targetdir}/shaders/%{file.basename}.vert.spv',
-            '%{!cfg.targetdir}/shaders/%{file.basename}.frag.spv'
-        }
-
-        buildinputs {
-            'shaders/common/**.slang',
-        }
-    end)
-
-    scoped.filter({ 'files:shaders/compute/**.slang' }, function()
-        buildmessage 'Compiling %{file.relpath}'
-
-        scoped.filter({
-            'options:debug-shaders'
-        }, function()
-            buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O0 -g3',
-            }
-        end)
-
-        scoped.filter({
-            'options:not debug-shaders'
-        }, function()
-            buildcommands {
-                '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -o %{!cfg.targetdir}/shaders/%{file.basename}.comp.spv -entry CSMain -O3',
-            }
-        end)
-        
-        buildoutputs {
-            '%{!cfg.targetdir}/shaders/%{file.basename}.comp.spv',
-        }
-
-        buildinputs {
-            'shaders/common/**.slang',
         }
     end)
 

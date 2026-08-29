@@ -14,6 +14,33 @@ namespace tempest::assets
     {
         constexpr array<uint8_t, 4> db_magic = {'T', 'E', 'B', 'F'};
         constexpr uint16_t db_version = 2;
+
+        auto normalize_path_str(string_view input) -> string
+        {
+            auto s = string(input);
+            for (auto& ch : s)
+            {
+                if (ch == '\\')
+                {
+                    ch = '/';
+                }
+            }
+            while (s.size() >= 2 && tempest::starts_with(s, "./"))
+            {
+                auto sub = tempest::substr(s, 2, s.size() - 2);
+                s = string(sub);
+            }
+            while (s.size() > 1 && s[0] == '/')
+            {
+                auto sub = tempest::substr(s, 1, s.size() - 1);
+                s = string(sub);
+            }
+            while (s.size() > 1 && tempest::ends_with(s, '/'))
+            {
+                s.pop_back();
+            }
+            return s;
+        }
     } // namespace
 
     asset_database::asset_database(asset_type_registry* type_reg) noexcept : _type_reg{type_reg}
@@ -30,7 +57,12 @@ namespace tempest::assets
         _source_id_to_index.clear();
         _assets.clear();
         _asset_guid_to_index.clear();
-        _blob_data.clear();
+        _blob_chunks.clear();
+        _current_chunk_capacity = 0;
+        _current_chunk_used = 0;
+        _cached_blobs.clear();
+        _basename_to_relative_path.clear();
+        _relative_path_to_source_path.clear();
         _dirty = false;
 
         // Try to read existing database file
@@ -122,14 +154,24 @@ namespace tempest::assets
             _assets.push_back(tempest::move(entry));
         }
 
-        // Read blob section
+        // Read blob section into initial chunk
         auto blob_size = serialization::serializer<serialization::binary_archive, uint64_t>::deserialize(archive);
         if (blob_size > 0)
         {
+            auto chunk0 = make_unique<vector<byte>>();
+            unsafe::resize_no_init(*chunk0, static_cast<size_t>(blob_size));
             auto blob_span = archive.read(static_cast<size_t>(blob_size));
-            const auto current_blob_size = _blob_data.size();
-            unsafe::resize_no_init(_blob_data, current_blob_size + blob_span.size());
-            tempest::memcpy(_blob_data.data() + current_blob_size, blob_span.data(), blob_span.size());
+            tempest::memcpy(chunk0->data(), blob_span.data(), static_cast<size_t>(blob_size));
+
+            for (const auto& asset : _assets)
+            {
+                if (asset->blob_size > 0 && asset->blob_offset + asset->blob_size <= blob_size)
+                {
+                    _cached_blobs[asset->id] = span<const byte>{chunk0->data() + asset->blob_offset,
+                                                                 static_cast<size_t>(asset->blob_size)};
+                }
+            }
+            _blob_chunks.push_back(tempest::move(chunk0));
         }
     }
 
@@ -168,6 +210,19 @@ namespace tempest::assets
                                                                                               src->source_hash);
         }
 
+        // Compute total blob size and contiguous compacted offsets
+        uint64_t total_blob_size = 0;
+        for (const auto& asset : _assets)
+        {
+            asset->blob_offset = total_blob_size;
+            auto it = _cached_blobs.find(asset->id);
+            if (it != _cached_blobs.end() && !it->second.empty())
+            {
+                asset->blob_size = it->second.size();
+            }
+            total_blob_size += asset->blob_size;
+        }
+
         // Write asset table
         serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
             archive, static_cast<uint64_t>(_assets.size()));
@@ -185,12 +240,16 @@ namespace tempest::assets
                 archive, asset->user_metadata);
         }
 
-        // Write blob section
+        // Write blob section (coalesced into contiguous stream)
         serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
-            archive, static_cast<uint64_t>(_blob_data.size()));
-        if (!_blob_data.empty())
+            archive, total_blob_size);
+        for (const auto& asset : _assets)
         {
-            archive.write(span<const byte>{_blob_data.data(), _blob_data.size()});
+            auto it = _cached_blobs.find(asset->id);
+            if (it != _cached_blobs.end() && !it->second.empty())
+            {
+                archive.write(it->second);
+            }
         }
 
         // Now write everything to disk with the binary header
@@ -255,8 +314,10 @@ namespace tempest::assets
 
     auto asset_database::find_by_path(string_view path) const -> const asset_entry*
     {
+        auto normalized = normalize_path_str(path);
+
         // Find the source entry for this path
-        auto src_it = _source_path_to_index.find(string(path));
+        auto src_it = _source_path_to_index.find(normalized);
         if (src_it == _source_path_to_index.end())
         {
             return nullptr;
@@ -275,12 +336,388 @@ namespace tempest::assets
         return nullptr;
     }
 
+    auto asset_database::mount_root(string_view root_path, int32_t priority) -> void
+    {
+        auto normalized = normalize_path_str(root_path);
+        if (normalized.empty())
+        {
+            normalized = ".";
+        }
+
+        for (auto& mp : _mount_roots)
+        {
+            if (mp.path == normalized)
+            {
+                mp.priority = priority;
+                for (size_t i = 1; i < _mount_roots.size(); ++i)
+                {
+                    auto key = tempest::move(_mount_roots[i]);
+                    size_t j = i;
+                    while (j > 0 && _mount_roots[j - 1].priority < key.priority)
+                    {
+                        _mount_roots[j] = tempest::move(_mount_roots[j - 1]);
+                        --j;
+                    }
+                    _mount_roots[j] = tempest::move(key);
+                }
+                return;
+            }
+        }
+
+        _mount_roots.push_back(mount_point{
+            .path = tempest::move(normalized),
+            .priority = priority,
+        });
+
+        for (size_t i = 1; i < _mount_roots.size(); ++i)
+        {
+            auto key = tempest::move(_mount_roots[i]);
+            size_t j = i;
+            while (j > 0 && _mount_roots[j - 1].priority < key.priority)
+            {
+                _mount_roots[j] = tempest::move(_mount_roots[j - 1]);
+                --j;
+            }
+            _mount_roots[j] = tempest::move(key);
+        }
+    }
+
+    auto asset_database::unmount_root(string_view root_path) -> void
+    {
+        auto normalized = normalize_path_str(root_path);
+        for (auto it = _mount_roots.begin(); it != _mount_roots.end(); ++it)
+        {
+            if (it->path == normalized)
+            {
+                _mount_roots.erase(it);
+                break;
+            }
+        }
+    }
+
+    auto asset_database::clear_mount_roots() -> void
+    {
+        _mount_roots.clear();
+    }
+
+    auto asset_database::get_mount_roots() const -> span<const mount_point>
+    {
+        return span<const mount_point>{_mount_roots.data(), _mount_roots.size()};
+    }
+
+    auto asset_database::scan_and_index() -> void
+    {
+        for (const auto& mp : _mount_roots)
+        {
+            auto root_path = filesystem::path(mp.path.c_str());
+            if (!filesystem::exists(root_path) || !filesystem::is_directory(root_path))
+            {
+                continue;
+            }
+
+            auto scan_dir = [&](auto& self, const filesystem::path& dir) -> void {
+                for (auto it = filesystem::directory_iterator(dir); it != filesystem::directory_iterator(); ++it)
+                {
+                    if (it->is_directory())
+                    {
+                        self(self, it->path());
+                    }
+                    else if (it->is_regular_file())
+                    {
+                        auto rel = filesystem::relative(it->path(), root_path);
+                        auto rel_str = normalize_path_str(rel.generic_string());
+                        if (rel_str.empty() || rel_str == ".")
+                        {
+                            continue;
+                        }
+
+                        auto filename_str = string(it->path().filename().string());
+
+                        // If not registered in _sources yet, register it
+                        auto src_it = _source_path_to_index.find(rel_str);
+                        if (src_it == _source_path_to_index.end())
+                        {
+                            _get_or_create_source(rel_str);
+
+                            // If shader file (.spv or .slang)
+                            if (tempest::ends_with(rel_str, ".spv") || tempest::ends_with(rel_str, ".slang"))
+                            {
+                                register_asset(asset_type_id::of<shader_asset>(), rel_str);
+                            }
+                        }
+
+                        // Populate basename index if not already present (higher priority mount root wins)
+                        if (!_basename_to_relative_path.contains(filename_str))
+                        {
+                            _basename_to_relative_path.insert({filename_str, rel_str});
+                        }
+
+                        // Map .spv back to .slang if .slang is encountered or discoverable
+                        if (tempest::ends_with(rel_str, ".vert.spv") || tempest::ends_with(rel_str, ".frag.spv") ||
+                            tempest::ends_with(rel_str, ".comp.spv"))
+                        {
+                            auto dot_idx = string::npos;
+                            for (size_t i = 0; i < filename_str.size(); ++i)
+                            {
+                                if (filename_str[i] == '.')
+                                {
+                                    dot_idx = i;
+                                    break;
+                                }
+                            }
+                            if (dot_idx != string::npos)
+                            {
+                                auto base_stem = string(tempest::substr(filename_str, 0, dot_idx));
+                                auto slang_name = base_stem;
+                                slang_name.append(".slang");
+                                _relative_path_to_source_path[rel_str] = slang_name;
+                            }
+                        }
+                    }
+                }
+            };
+
+            scan_dir(scan_dir, root_path);
+        }
+    }
+
+    auto asset_database::resolve_disk_path(string_view relative_path) const -> optional<string>
+    {
+        auto normalized = normalize_path_str(relative_path);
+        if (normalized.empty())
+        {
+            return nullopt;
+        }
+
+        auto direct_path = filesystem::path(normalized.c_str());
+        if (direct_path.is_absolute() && filesystem::exists(direct_path))
+        {
+            return direct_path.string();
+        }
+
+        for (const auto& mp : _mount_roots)
+        {
+            auto candidate = filesystem::path(mp.path.c_str()) / direct_path;
+            if (filesystem::exists(candidate))
+            {
+                return candidate.string();
+            }
+        }
+
+        if (filesystem::exists(direct_path))
+        {
+            return direct_path.string();
+        }
+
+        return nullopt;
+    }
+
+    auto asset_database::find_asset(string_view path_or_name) const -> const asset_entry*
+    {
+        auto normalized = normalize_path_str(path_or_name);
+        if (normalized.empty())
+        {
+            return nullptr;
+        }
+
+        // 1. Direct path lookup
+        const auto* entry = find_by_path(normalized);
+        if (entry != nullptr)
+        {
+            return entry;
+        }
+
+        // 2. Basename index lookup
+        auto base_it = _basename_to_relative_path.find(normalized);
+        if (base_it != _basename_to_relative_path.end())
+        {
+            entry = find_by_path(base_it->second);
+            if (entry != nullptr)
+            {
+                return entry;
+            }
+        }
+
+        // 3. Fallback: try prepending or stripping "shaders/"
+        if (!tempest::starts_with(normalized, "shaders/"))
+        {
+            auto with_shaders = string("shaders/");
+            with_shaders.append(normalized.data(), normalized.size());
+            entry = find_by_path(with_shaders);
+            if (entry != nullptr)
+            {
+                return entry;
+            }
+        }
+        else if (normalized.size() > 8)
+        {
+            auto without_shaders = string(tempest::substr(normalized, 8, normalized.size() - 8));
+            entry = find_by_path(without_shaders);
+            if (entry != nullptr)
+            {
+                return entry;
+            }
+        }
+
+        // 4. On-demand search across mounted roots
+        auto disk_path = resolve_disk_path(normalized);
+        auto asset_key = normalized;
+        if (!disk_path.has_value() && !tempest::starts_with(normalized, "shaders/"))
+        {
+            auto with_shaders = string("shaders/");
+            with_shaders.append(normalized.data(), normalized.size());
+            disk_path = resolve_disk_path(with_shaders);
+            if (disk_path.has_value())
+            {
+                asset_key = with_shaders;
+            }
+        }
+
+        if (disk_path.has_value())
+        {
+            auto* mutable_this = const_cast<asset_database*>(this);
+            auto type_id = (tempest::ends_with(asset_key, ".spv") || tempest::ends_with(asset_key, ".slang"))
+                               ? asset_type_id::of<shader_asset>()
+                               : asset_type_id::from_hash(0);
+            mutable_this->register_asset(type_id, asset_key);
+
+            auto fs_path = filesystem::path(asset_key.c_str());
+            auto filename_str = string(fs_path.filename().string());
+            if (!mutable_this->_basename_to_relative_path.contains(filename_str))
+            {
+                mutable_this->_basename_to_relative_path.insert({filename_str, asset_key});
+            }
+
+            return find_by_path(asset_key);
+        }
+
+        return nullptr;
+    }
+
+    auto asset_database::find_source_by_id(const guid& source_id) const -> const source_entry*
+    {
+        auto it = _source_id_to_index.find(source_id);
+        if (it != _source_id_to_index.end())
+        {
+            return _sources[it->second].get();
+        }
+        return nullptr;
+    }
+
+    auto asset_database::resolve_source_path(string_view path_or_name) const -> optional<string>
+    {
+        auto normalized = normalize_path_str(path_or_name);
+        if (normalized.empty())
+        {
+            return nullopt;
+        }
+
+        auto it = _relative_path_to_source_path.find(normalized);
+        if (it != _relative_path_to_source_path.end())
+        {
+            return it->second;
+        }
+
+        auto base_it = _basename_to_relative_path.find(normalized);
+        if (base_it != _basename_to_relative_path.end())
+        {
+            auto rel_it = _relative_path_to_source_path.find(base_it->second);
+            if (rel_it != _relative_path_to_source_path.end())
+            {
+                return rel_it->second;
+            }
+        }
+
+        if (tempest::ends_with(normalized, ".slang"))
+        {
+            return normalized;
+        }
+
+        if (tempest::ends_with(normalized, ".spv"))
+        {
+            auto fs_path = filesystem::path(normalized.c_str());
+            auto filename = fs_path.filename().string();
+            auto dot_pos = string::npos;
+            for (size_t i = 0; i < filename.size(); ++i)
+            {
+                if (filename[i] == '.')
+                {
+                    dot_pos = i;
+                    break;
+                }
+            }
+            if (dot_pos != string::npos)
+            {
+                auto slang_name = string(tempest::substr(filename, 0, dot_pos));
+                slang_name.append(".slang");
+                if (_source_path_to_index.contains(slang_name) || _basename_to_relative_path.contains(slang_name) ||
+                    resolve_disk_path(slang_name).has_value())
+                {
+                    return slang_name;
+                }
+            }
+        }
+
+        return nullopt;
+    }
+
+    auto asset_database::notify_file_changed(string_view disk_path) -> bool
+    {
+        auto normalized = normalize_path_str(disk_path);
+        if (normalized.empty())
+        {
+            return false;
+        }
+
+        auto fs_path = filesystem::path(normalized.c_str());
+        auto filename = fs_path.filename().string();
+
+        bool any_updated = false;
+
+        for (auto& src : _sources)
+        {
+            bool match = false;
+            if (src->source_path == normalized || tempest::ends_with(src->source_path, normalized))
+            {
+                match = true;
+            }
+            else
+            {
+                auto src_filename = filesystem::path(src->source_path.c_str()).filename().string();
+                if (src_filename == filename)
+                {
+                    match = true;
+                }
+            }
+
+            if (match)
+            {
+                for (auto& asset : _assets)
+                {
+                    if (asset->source_id == src->id)
+                    {
+                        _cached_blobs.erase(asset->id);
+                        asset->blob_size = 0;
+                        asset->blob_offset = 0;
+                        any_updated = true;
+                    }
+                }
+            }
+        }
+
+        if (any_updated)
+        {
+            _dirty = true;
+        }
+
+        return any_updated;
+    }
+
     auto asset_database::register_asset(asset_type_id type, string_view source_path) -> guid
     {
         auto& src = _get_or_create_source(source_path);
 
         auto new_id = guid::generate_random_guid();
-
         auto entry = make_unique<asset_entry>(asset_entry{
             .id = new_id,
             .type = type,
@@ -294,6 +731,8 @@ namespace tempest::assets
         auto index = _assets.size();
         _asset_guid_to_index.insert({new_id, index});
         _assets.push_back(tempest::move(entry));
+
+        _dirty = true;
 
         return new_id;
     }
@@ -333,13 +772,50 @@ namespace tempest::assets
         }
 
         auto& entry = _assets[iter->second];
-        entry->blob_offset = _blob_data.size();
         entry->blob_size = data.size();
-        _blob_data.insert(_blob_data.end(), data.begin(), data.end());
+
+        constexpr size_t default_chunk_size = 64 * 1024;
+        const byte* dest_ptr = nullptr;
+
+        if (data.size() > default_chunk_size)
+        {
+            // Large asset: dedicated chunk
+            auto dedicated = make_unique<vector<byte>>();
+            unsafe::resize_no_init(*dedicated, data.size());
+            tempest::memcpy(dedicated->data(), data.data(), data.size());
+            dest_ptr = dedicated->data();
+            _blob_chunks.push_back(tempest::move(dedicated));
+        }
+        else
+        {
+            // Small asset: pack into current chunk
+            if (_blob_chunks.empty() || _current_chunk_capacity - _current_chunk_used < data.size())
+            {
+                auto new_chunk = make_unique<vector<byte>>();
+                unsafe::resize_no_init(*new_chunk, default_chunk_size);
+                _current_chunk_capacity = default_chunk_size;
+                _current_chunk_used = 0;
+                _blob_chunks.push_back(tempest::move(new_chunk));
+            }
+
+            auto& active_chunk = _blob_chunks.back();
+            dest_ptr = active_chunk->data() + _current_chunk_used;
+            tempest::memcpy(const_cast<byte*>(dest_ptr), data.data(), data.size());
+            _current_chunk_used += data.size();
+        }
+
+        _cached_blobs[asset_id] = span<const byte>{dest_ptr, data.size()};
+        _dirty = true;
     }
 
     auto asset_database::get_blob(const guid& asset_id) const -> span<const byte>
     {
+        auto it = _cached_blobs.find(asset_id);
+        if (it != _cached_blobs.end() && !it->second.empty())
+        {
+            return it->second;
+        }
+
         auto iter = _asset_guid_to_index.find(asset_id);
         if (iter == _asset_guid_to_index.end())
         {
@@ -347,12 +823,24 @@ namespace tempest::assets
         }
 
         const auto& entry = _assets[iter->second];
-        if (entry->blob_size == 0)
+        auto src_it = _source_id_to_index.find(entry->source_id);
+        if (src_it != _source_id_to_index.end())
         {
-            return {};
+            const auto& src = _sources[src_it->second];
+            auto disk_path = resolve_disk_path(src->source_path);
+            if (disk_path.has_value())
+            {
+                auto bytes = core::read_bytes(string_view{disk_path->c_str(), disk_path->size()});
+                if (!bytes.empty())
+                {
+                    auto* mutable_this = const_cast<asset_database*>(this);
+                    mutable_this->store_blob(asset_id, span<const byte>{bytes.data(), bytes.size()});
+                    return mutable_this->_cached_blobs[asset_id];
+                }
+            }
         }
 
-        return span<const byte>{_blob_data.data() + entry->blob_offset, static_cast<size_t>(entry->blob_size)};
+        return {};
     }
 
     auto asset_database::register_importer(unique_ptr<asset_importer> importer, string_view extension) -> void
@@ -631,7 +1119,8 @@ namespace tempest::assets
 
     source_entry& asset_database::_get_or_create_source(string_view source_path)
     {
-        auto iter = _source_path_to_index.find(string(source_path));
+        auto normalized = normalize_path_str(source_path);
+        auto iter = _source_path_to_index.find(normalized);
         if (iter != _source_path_to_index.end())
         {
             return *_sources[iter->second];
@@ -640,7 +1129,7 @@ namespace tempest::assets
         auto new_id = guid::generate_random_guid();
         auto entry = make_unique<source_entry>(source_entry{
             .id = new_id,
-            .source_path = string(source_path),
+            .source_path = normalized,
             .source_hash = {},
         });
 

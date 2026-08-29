@@ -190,8 +190,8 @@ namespace tempest::rhi::examples
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
 
         const auto model_path = (_model == scene_model::chess)
-                                    ? "vendor/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf"
-                                    : "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+                                    ? "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf"
+                                    : "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
         if (std::filesystem::exists(model_path))
         {
             auto prefab_root = asset_db.load(model_path, _registry);

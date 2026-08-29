@@ -5,13 +5,35 @@
 
 namespace tempest::render_system
 {
-    shader_manager::shader_manager(rhi::device& dev, string_view shader_dir)
-        : _device{&dev}, _shader_dir{shader_dir.data(), shader_dir.size()}
+    shader_manager::shader_manager(rhi::device& dev, assets::asset_database* asset_db)
+        : _device{&dev}
     {
+        if (asset_db != nullptr)
+        {
+            _asset_db = asset_db;
+        }
+        else
+        {
+            _owned_asset_db = make_unique<assets::asset_database>();
+            _owned_asset_db->mount_root(".", 0);
+            _owned_asset_db->mount_root("assets", 5);
+            _owned_asset_db->mount_root("assets/shaders", 5);
+            _owned_asset_db->mount_root("assets/shaders/engine", 10);
+            _owned_asset_db->mount_root("shaders", 5);
+            _owned_asset_db->mount_root("shaders/engine", 10);
+            _owned_asset_db->scan_and_index();
+            _asset_db = _owned_asset_db.get();
+        }
+
         // Reserve index 0 as invalid sentinel across slot arrays
         _modules.push_back(shader_module_record{});
         _graphics_pipelines.push_back(graphics_pipeline_record{});
         _compute_pipelines.push_back(compute_pipeline_record{});
+    }
+
+    shader_manager::shader_manager(rhi::device& dev, assets::asset_database& asset_db)
+        : shader_manager(dev, &asset_db)
+    {
     }
 
     shader_manager::~shader_manager()
@@ -20,7 +42,8 @@ namespace tempest::render_system
     }
 
     shader_manager::shader_manager(shader_manager&& other) noexcept
-        : _device{other._device}, _shader_dir{tempest::move(other._shader_dir)},
+        : _device{other._device}, _asset_db{other._asset_db},
+          _owned_asset_db{tempest::move(other._owned_asset_db)},
           _modules{tempest::move(other._modules)}, _graphics_pipelines{tempest::move(other._graphics_pipelines)},
           _compute_pipelines{tempest::move(other._compute_pipelines)},
           _module_paths_to_handle{tempest::move(other._module_paths_to_handle)},
@@ -30,7 +53,12 @@ namespace tempest::render_system
           _module_to_compute_pipelines{tempest::move(other._module_to_compute_pipelines)},
           _retired_pipelines{tempest::move(other._retired_pipelines)}
     {
+        if (_owned_asset_db)
+        {
+            _asset_db = _owned_asset_db.get();
+        }
         other._device = nullptr;
+        other._asset_db = nullptr;
     }
 
     shader_manager& shader_manager::operator=(shader_manager&& other) noexcept
@@ -39,7 +67,8 @@ namespace tempest::render_system
         {
             release_all();
             _device = other._device;
-            _shader_dir = tempest::move(other._shader_dir);
+            _owned_asset_db = tempest::move(other._owned_asset_db);
+            _asset_db = _owned_asset_db ? _owned_asset_db.get() : other._asset_db;
             _modules = tempest::move(other._modules);
             _graphics_pipelines = tempest::move(other._graphics_pipelines);
             _compute_pipelines = tempest::move(other._compute_pipelines);
@@ -50,56 +79,42 @@ namespace tempest::render_system
             _module_to_compute_pipelines = tempest::move(other._module_to_compute_pipelines);
             _retired_pipelines = tempest::move(other._retired_pipelines);
             other._device = nullptr;
+            other._asset_db = nullptr;
         }
         return *this;
     }
 
     auto shader_manager::resolve_path(const std::filesystem::path& input_path) const -> optional<std::filesystem::path>
     {
+        auto path_str = input_path.generic_string();
+        if (_asset_db != nullptr)
+        {
+            auto resolved = _asset_db->resolve_disk_path(string_view{path_str.c_str(), path_str.size()});
+            if (resolved.has_value())
+            {
+                return std::filesystem::path(resolved->c_str());
+            }
+
+            const auto* asset = _asset_db->find_asset(string_view{path_str.c_str(), path_str.size()});
+            if (asset != nullptr)
+            {
+                const auto* src = _asset_db->find_source_by_id(asset->source_id);
+                if (src != nullptr)
+                {
+                    auto disk = _asset_db->resolve_disk_path(src->source_path);
+                    if (disk.has_value())
+                    {
+                        return std::filesystem::path(disk->c_str());
+                    }
+                }
+            }
+        }
+
         if (std::filesystem::exists(input_path))
         {
             return std::filesystem::weakly_canonical(input_path);
         }
 
-        const auto search_paths = {
-            std::filesystem::path(_shader_dir.c_str()) / input_path,
-            std::filesystem::path(_shader_dir.c_str()) / "rs" / input_path,
-            std::filesystem::path(_shader_dir.c_str()) / "editor" / input_path,
-            std::filesystem::path("assets/shaders/rs") / input_path,
-            std::filesystem::path("assets/shaders/editor") / input_path,
-            std::filesystem::path("assets/shaders") / input_path,
-            std::filesystem::path("shaders/rs") / input_path,
-            std::filesystem::path("shaders/editor") / input_path,
-            std::filesystem::path("shaders") / input_path,
-            std::filesystem::path("bin/Debug/linux-clang/shaders/rs") / input_path,
-            std::filesystem::path("bin/Debug/linux-clang/shaders/editor") / input_path,
-            std::filesystem::path("bin/Debug/linux-clang/shaders") / input_path,
-            std::filesystem::path("bin/Release/linux-clang/shaders/rs") / input_path,
-            std::filesystem::path("bin/Release/linux-clang/shaders/editor") / input_path,
-            std::filesystem::path("bin/Release/linux-clang/shaders") / input_path,
-            std::filesystem::path("bin/RelWithDebugInfo/linux-clang/shaders/rs") / input_path,
-            std::filesystem::path("bin/RelWithDebugInfo/linux-clang/shaders/editor") / input_path,
-            std::filesystem::path("bin/RelWithDebugInfo/linux-clang/shaders") / input_path,
-            std::filesystem::path("bin/Debug/windows-clang/shaders/rs") / input_path,
-            std::filesystem::path("bin/Debug/windows-clang/shaders/editor") / input_path,
-            std::filesystem::path("bin/Debug/windows-clang/shaders") / input_path,
-            std::filesystem::path("bin/Debug/windows-msc-v145/shaders/rs") / input_path,
-            std::filesystem::path("bin/Debug/windows-msc-v145/shaders/editor") / input_path,
-            std::filesystem::path("bin/Debug/windows-msc-v145/shaders") / input_path,
-            std::filesystem::path("../../../../bin/Debug/linux-clang/shaders/rs") / input_path,
-            std::filesystem::path("../../../../bin/Debug/linux-clang/shaders") / input_path,
-            std::filesystem::path("../../../../bin/Debug/windows-clang/shaders/rs") / input_path,
-            std::filesystem::path("../../../../bin/Debug/windows-clang/shaders") / input_path,
-            std::filesystem::path("engine/runtime/render/system/shaders") / input_path,
-        };
-
-        for (const auto& sp : search_paths)
-        {
-            if (std::filesystem::exists(sp))
-            {
-                return std::filesystem::weakly_canonical(sp);
-            }
-        }
         return nullopt;
     }
 
@@ -110,25 +125,33 @@ namespace tempest::render_system
             return mod.memory_blob;
         }
 
-        if (mod.canonical_path.has_value())
-        {
-            auto path_str = mod.canonical_path->string();
-            auto bytes = core::read_bytes(string_view{path_str.c_str(), path_str.size()});
-            if (!bytes.empty())
-            {
-                return bytes;
-            }
-        }
-
         if (mod.disk_location.has_value())
         {
+            auto path_str = mod.disk_location->generic_string();
+            if (_asset_db != nullptr)
+            {
+                const auto* asset = _asset_db->find_asset(string_view{path_str.c_str(), path_str.size()});
+                if (asset != nullptr)
+                {
+                    auto blob = _asset_db->get_blob(asset->id);
+                    if (!blob.empty())
+                    {
+                        auto result = vector<byte>{};
+                        unsafe::resize_no_init(result, blob.size());
+                        tempest::memcpy(result.data(), blob.data(), blob.size());
+                        return result;
+                    }
+                }
+            }
+
             auto resolved = resolve_path(*mod.disk_location);
             if (resolved.has_value())
             {
-                auto path_str = resolved->string();
-                return core::read_bytes(string_view{path_str.c_str(), path_str.size()});
+                auto disk_str = resolved->generic_string();
+                return core::read_bytes(string_view{disk_str.c_str(), disk_str.size()});
             }
         }
+
         return {};
     }
 
@@ -538,6 +561,12 @@ namespace tempest::render_system
 
     auto shader_manager::notify_file_changed(const std::filesystem::path& path) -> bool
     {
+        auto path_str = path.generic_string();
+        if (_asset_db != nullptr)
+        {
+            _asset_db->notify_file_changed(string_view{path_str.c_str(), path_str.size()});
+        }
+
         const auto filename = path.filename().string();
         const auto canonical = std::filesystem::exists(path)
                                    ? optional<std::filesystem::path>{std::filesystem::weakly_canonical(path)}
@@ -557,9 +586,19 @@ namespace tempest::render_system
             {
                 match = true;
             }
-            else if (mod.disk_location->filename() == filename || mod.disk_location->string() == path.string())
+            else if (mod.disk_location->filename() == filename || mod.disk_location->string() == path.string() ||
+                     mod.disk_location->generic_string() == path_str)
             {
                 match = true;
+            }
+            else if (_asset_db != nullptr)
+            {
+                auto mod_loc = mod.disk_location->generic_string();
+                auto resolved_src = _asset_db->resolve_source_path(string_view{mod_loc.c_str(), mod_loc.size()});
+                if (resolved_src.has_value() && (*resolved_src == path_str.c_str() || *resolved_src == filename.c_str()))
+                {
+                    match = true;
+                }
             }
 
             if (match)
@@ -671,6 +710,23 @@ namespace tempest::render_system
         if (it != _legacy_bytecode_cache.end())
         {
             return it->second;
+        }
+
+        if (_asset_db != nullptr)
+        {
+            const auto* asset = _asset_db->find_asset(shader_filename);
+            if (asset != nullptr)
+            {
+                auto blob = _asset_db->get_blob(asset->id);
+                if (!blob.empty())
+                {
+                    auto result = vector<byte>{};
+                    unsafe::resize_no_init(result, blob.size());
+                    tempest::memcpy(result.data(), blob.data(), blob.size());
+                    _legacy_bytecode_cache[key] = result;
+                    return result;
+                }
+            }
         }
 
         auto resolved =

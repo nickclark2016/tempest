@@ -13,6 +13,8 @@
 #include <tempest/vertex.hpp>
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 
 // ============================================================================
 // Test types for asset_type_id tests
@@ -961,4 +963,534 @@ TEST(asset_database_load, multi_asset_import_roundtrips_through_save_and_open)
     }
 
     cleanup_test_db();
+}
+
+// ============================================================================
+// 9. asset_database Mount, Scan, Index, and Source Resolution Tests
+// ============================================================================
+
+/// @brief Verifies that mount roots are maintained in descending priority order and can be unmounted or cleared.
+TEST(asset_database_mount_and_scan, mount_roots_priority_ordering)
+{
+    // 1. Setup
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount roots with mixed priorities
+    database.mount_root("assets/engine", 0);
+    database.mount_root("projects/game/assets", 10);
+    database.mount_root("fallback/assets", -5);
+    database.mount_root("plugins/custom/assets", 5);
+
+    // 3. Assert: Order should be descending by priority: 10, 5, 0, -5
+    auto roots = database.get_mount_roots();
+    ASSERT_EQ(roots.size(), 4U);
+    EXPECT_EQ(roots[0].priority, 10);
+    EXPECT_EQ(roots[0].path, "projects/game/assets");
+    EXPECT_EQ(roots[1].priority, 5);
+    EXPECT_EQ(roots[1].path, "plugins/custom/assets");
+    EXPECT_EQ(roots[2].priority, 0);
+    EXPECT_EQ(roots[2].path, "assets/engine");
+    EXPECT_EQ(roots[3].priority, -5);
+    EXPECT_EQ(roots[3].path, "fallback/assets");
+
+    // 4. Act & Assert: Unmount and clear
+    database.unmount_root("assets/engine");
+    roots = database.get_mount_roots();
+    EXPECT_EQ(roots.size(), 3U);
+
+    database.clear_mount_roots();
+    roots = database.get_mount_roots();
+    EXPECT_EQ(roots.size(), 0U);
+}
+
+/// @brief Verifies that scan_and_index discovers shaders in mounted directories, indexes normalized relative paths, and populates basename fallbacks.
+TEST(asset_database_mount_and_scan, scan_and_index_discovers_shaders_and_basenames)
+{
+    // 1. Setup: Create temporary mock mount directory with nested shaders
+    const auto temp_mount = std::filesystem::path("tempest_test_mount_scan");
+    std::filesystem::create_directories(temp_mount / "shaders" / "engine");
+    std::filesystem::create_directories(temp_mount / "shaders" / "post");
+
+    {
+        auto f1 = std::ofstream(temp_mount / "shaders" / "engine" / "pbr.vert.spv", std::ios::binary);
+        f1 << "mock_pbr_vert_bytecode_12345";
+        auto f2 = std::ofstream(temp_mount / "shaders" / "engine" / "pbr.frag.spv", std::ios::binary);
+        f2 << "mock_pbr_frag_bytecode_67890";
+        auto f3 = std::ofstream(temp_mount / "shaders" / "post" / "bloom.comp.spv", std::ios::binary);
+        f3 << "mock_bloom_comp_bytecode_abcde";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount directory and scan
+    database.mount_root(temp_mount.generic_string().c_str(), 0);
+    database.scan_and_index();
+
+    // 3. Assert: Exact relative path lookup
+    const auto* pbr_vert_exact = database.find_asset("shaders/engine/pbr.vert.spv");
+    ASSERT_NE(pbr_vert_exact, nullptr);
+    EXPECT_EQ(pbr_vert_exact->type, tempest::assets::asset_type_id::of<tempest::assets::shader_asset>());
+
+    // 4. Assert: Basename fallback lookup
+    const auto* pbr_vert_base = database.find_asset("pbr.vert.spv");
+    ASSERT_NE(pbr_vert_base, nullptr);
+    EXPECT_EQ(pbr_vert_base->id, pbr_vert_exact->id);
+
+    const auto* bloom_comp = database.find_asset("bloom.comp.spv");
+    ASSERT_NE(bloom_comp, nullptr);
+
+    // 5. Assert: On-demand bytecode reading from disk
+    auto bytes = database.get_blob(pbr_vert_exact->id);
+    EXPECT_FALSE(bytes.empty());
+    EXPECT_EQ(bytes.size(), sizeof("mock_pbr_vert_bytecode_12345") - 1);
+
+    // 6. Teardown
+    std::filesystem::remove_all(temp_mount);
+}
+
+/// @brief Verifies that higher-priority mount roots override assets with the same basename from lower-priority roots.
+TEST(asset_database_mount_and_scan, priority_override_precedence)
+{
+    // 1. Setup: Create engine and project mock folders with duplicate shader names
+    const auto engine_mount = std::filesystem::path("tempest_test_engine_root");
+    const auto project_mount = std::filesystem::path("tempest_test_project_root");
+    std::filesystem::create_directories(engine_mount / "shaders");
+    std::filesystem::create_directories(project_mount / "shaders");
+
+    {
+        auto f_engine = std::ofstream(engine_mount / "shaders" / "lighting.frag.spv", std::ios::binary);
+        f_engine << "ENGINE_DEFAULT_LIGHTING";
+        auto f_project = std::ofstream(project_mount / "shaders" / "lighting.frag.spv", std::ios::binary);
+        f_project << "PROJECT_CUSTOM_LIGHTING_OVERRIDE";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount engine root at 0 and project root at 10
+    database.mount_root(engine_mount.generic_string().c_str(), 0);
+    database.mount_root(project_mount.generic_string().c_str(), 10);
+    database.scan_and_index();
+
+    // 3. Assert: Basename lookup resolves to project override
+    const auto* asset = database.find_asset("lighting.frag.spv");
+    ASSERT_NE(asset, nullptr);
+
+    auto blob = database.get_blob(asset->id);
+    ASSERT_FALSE(blob.empty());
+    auto content = std::string(reinterpret_cast<const char*>(blob.data()), blob.size());
+    EXPECT_EQ(content, "PROJECT_CUSTOM_LIGHTING_OVERRIDE");
+
+    // 4. Teardown
+    std::filesystem::remove_all(engine_mount);
+    std::filesystem::remove_all(project_mount);
+}
+
+/// @brief Verifies that resolve_source_path maps compiled .spv files back to their original .slang source files.
+TEST(asset_database_mount_and_scan, resolve_source_path_maps_spv_to_slang)
+{
+    // 1. Setup: Create temporary mock folder with .spv and corresponding .slang
+    const auto temp_mount = std::filesystem::path("tempest_test_source_map");
+    std::filesystem::create_directories(temp_mount / "shaders");
+
+    {
+        auto f1 = std::ofstream(temp_mount / "shaders" / "tonemap.vert.spv", std::ios::binary);
+        f1 << "tonemap_vs";
+        auto f2 = std::ofstream(temp_mount / "shaders" / "tonemap.slang");
+        f2 << "// tonemap slang source";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(temp_mount.generic_string().c_str(), 0);
+    database.scan_and_index();
+
+    // 2. Act: Resolve source path
+    auto src_opt = database.resolve_source_path("shaders/tonemap.vert.spv");
+
+    // 3. Assert: Correctly resolves to tonemap.slang
+    ASSERT_TRUE(src_opt.has_value());
+    EXPECT_EQ(*src_opt, "tonemap.slang");
+
+    // 4. Teardown
+    std::filesystem::remove_all(temp_mount);
+}
+
+/// @brief Verifies that notify_file_changed detects source modifications and invalidates cached blobs for hot-reloading.
+TEST(asset_database_mount_and_scan, notify_file_changed_invalidates_cache)
+{
+    // 1. Setup: Create mock shader and index it
+    const auto temp_mount = std::filesystem::path("tempest_test_hotreload");
+    std::filesystem::create_directories(temp_mount / "shaders");
+    const auto shader_path = temp_mount / "shaders" / "reloaded.frag.spv";
+
+    {
+        auto f = std::ofstream(shader_path, std::ios::binary);
+        f << "INITIAL_BYTECODE";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(temp_mount.generic_string().c_str(), 0);
+    database.scan_and_index();
+
+    const auto* asset = database.find_asset("reloaded.frag.spv");
+    ASSERT_NE(asset, nullptr);
+    const auto asset_id = asset->id;
+
+    // Load initial bytes into cache
+    auto initial_blob = database.get_blob(asset_id);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(initial_blob.data()), initial_blob.size()), "INITIAL_BYTECODE");
+
+    // 2. Act: Modify file on disk and trigger notify_file_changed
+    {
+        auto f = std::ofstream(shader_path, std::ios::binary);
+        f << "UPDATED_HOT_RELOADED_BYTECODE";
+    }
+
+    bool notified = database.notify_file_changed("shaders/reloaded.frag.spv");
+    EXPECT_TRUE(notified);
+
+    // 3. Assert: Subsequent get_blob reloads updated bytes
+    auto reloaded_blob = database.get_blob(asset_id);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(reloaded_blob.data()), reloaded_blob.size()),
+              "UPDATED_HOT_RELOADED_BYTECODE");
+
+    // 4. Teardown
+    std::filesystem::remove_all(temp_mount);
+}
+
+/// @brief Verifies edge cases in path normalization: backslashes, leading/trailing slashes, and ./ prefixes.
+TEST(asset_database_mount_and_scan, path_normalization_edge_cases)
+{
+    // 1. Setup: Create test folder with trailing slash in mount path
+    const auto temp_mount = std::filesystem::path("tempest_test_norm_edge");
+    std::filesystem::create_directories(temp_mount / "shaders" / "edge");
+    {
+        auto f = std::ofstream(temp_mount / "shaders" / "edge" / "test.vert.spv", std::ios::binary);
+        f << "NORM_EDGE_TEST";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount with trailing slash and redundant dot-slashes
+    auto mount_with_slashes = temp_mount.generic_string() + "/";
+    database.mount_root(mount_with_slashes.c_str(), 0);
+    database.scan_and_index();
+
+    // 3. Assert: Queries with backslashes, leading slash, and ./ prefix all resolve identically
+    const auto* standard = database.find_asset("shaders/edge/test.vert.spv");
+    ASSERT_NE(standard, nullptr);
+
+    const auto* backslash = database.find_asset("shaders\\edge\\test.vert.spv");
+    ASSERT_NE(backslash, nullptr);
+    EXPECT_EQ(backslash->id, standard->id);
+
+    const auto* leading_slash = database.find_asset("/shaders/edge/test.vert.spv");
+    ASSERT_NE(leading_slash, nullptr);
+    EXPECT_EQ(leading_slash->id, standard->id);
+
+    const auto* dot_slash = database.find_asset("./shaders/edge/test.vert.spv");
+    ASSERT_NE(dot_slash, nullptr);
+    EXPECT_EQ(dot_slash->id, standard->id);
+
+    // 4. Teardown
+    std::filesystem::remove_all(temp_mount);
+}
+
+/// @brief Verifies that duplicate basenames in different subdirectories of the same mount root are uniquely addressable via exact relative paths.
+TEST(asset_database_mount_and_scan, duplicate_basename_different_subdirectories)
+{
+    // 1. Setup: Create pass_a and pass_b subdirectories with identical shader file names
+    const auto temp_mount = std::filesystem::path("tempest_test_dup_basename");
+    std::filesystem::create_directories(temp_mount / "shaders" / "pass_a");
+    std::filesystem::create_directories(temp_mount / "shaders" / "pass_b");
+
+    {
+        auto f_a = std::ofstream(temp_mount / "shaders" / "pass_a" / "main.frag.spv", std::ios::binary);
+        f_a << "PASS_A_BYTECODE";
+        auto f_b = std::ofstream(temp_mount / "shaders" / "pass_b" / "main.frag.spv", std::ios::binary);
+        f_b << "PASS_B_BYTECODE";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(temp_mount.generic_string().c_str(), 0);
+    database.scan_and_index();
+
+    // 2. Act: Query exact relative paths for both
+    const auto* asset_a = database.find_asset("shaders/pass_a/main.frag.spv");
+    const auto* asset_b = database.find_asset("shaders/pass_b/main.frag.spv");
+
+    // 3. Assert: Both assets exist and are distinct
+    ASSERT_NE(asset_a, nullptr);
+    ASSERT_NE(asset_b, nullptr);
+    EXPECT_NE(asset_a->id, asset_b->id);
+
+    auto blob_a = database.get_blob(asset_a->id);
+    auto blob_b = database.get_blob(asset_b->id);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob_a.data()), blob_a.size()), "PASS_A_BYTECODE");
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob_b.data()), blob_b.size()), "PASS_B_BYTECODE");
+
+    // 4. Teardown
+    std::filesystem::remove_all(temp_mount);
+}
+
+/// @brief Verifies that on-demand asset lookup locates and registers a file on disk even without an explicit scan_and_index call.
+TEST(asset_database_mount_and_scan, on_demand_lookup_without_explicit_scan)
+{
+    // 1. Setup: Create test folder with a shader file
+    const auto temp_mount = std::filesystem::path("tempest_test_ondemand");
+    std::filesystem::create_directories(temp_mount / "shaders" / "ondemand");
+    {
+        auto f = std::ofstream(temp_mount / "shaders" / "ondemand" / "lazy.comp.spv", std::ios::binary);
+        f << "LAZY_DISCOVERED_BYTECODE";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount root, but do NOT call scan_and_index()
+    database.mount_root(temp_mount.generic_string().c_str(), 0);
+
+    // 3. Assert: find_asset dynamically resolves the file on disk
+    const auto* asset = database.find_asset("shaders/ondemand/lazy.comp.spv");
+    ASSERT_NE(asset, nullptr);
+
+    auto blob = database.get_blob(asset->id);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob.data()), blob.size()), "LAZY_DISCOVERED_BYTECODE");
+
+    // 4. Teardown
+    std::filesystem::remove_all(temp_mount);
+}
+
+/// @brief Verifies that remounting an existing root with a new priority updates the priority and re-sorts the mount list.
+TEST(asset_database_mount_and_scan, mount_root_priority_update)
+{
+    // 1. Setup
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    database.mount_root("root_a", 0);
+    database.mount_root("root_b", 5);
+
+    // Initial order: root_b (5), root_a (0)
+    auto roots = database.get_mount_roots();
+    ASSERT_EQ(roots.size(), 2U);
+    EXPECT_EQ(roots[0].path, "root_b");
+    EXPECT_EQ(roots[1].path, "root_a");
+
+    // 2. Act: Update root_a to priority 10
+    database.mount_root("root_a", 10);
+
+    // 3. Assert: Order is now root_a (10), root_b (5)
+    roots = database.get_mount_roots();
+    ASSERT_EQ(roots.size(), 2U);
+    EXPECT_EQ(roots[0].path, "root_a");
+    EXPECT_EQ(roots[0].priority, 10);
+    EXPECT_EQ(roots[1].path, "root_b");
+    EXPECT_EQ(roots[1].priority, 5);
+}
+
+/// @brief Verifies that non-existent mount roots and invalid/empty path queries fail gracefully without crashing.
+TEST(asset_database_mount_and_scan, empty_and_invalid_path_handling)
+{
+    // 1. Setup: Mount non-existent folder
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    database.mount_root("non_existent_folder_xyz123", 0);
+
+    // 2. Act: scan_and_index on non-existent folder does not throw or crash
+    database.scan_and_index();
+
+    // 3. Assert: Empty and non-existent queries return nullptr / nullopt
+    EXPECT_EQ(database.find_asset(""), nullptr);
+    EXPECT_EQ(database.find_asset("non_existent_file.spv"), nullptr);
+    EXPECT_FALSE(database.resolve_source_path("").has_value());
+    EXPECT_FALSE(database.resolve_disk_path("non_existent_file.spv").has_value());
+    EXPECT_FALSE(database.notify_file_changed("non_existent_file.spv"));
+}
+
+/// @brief Verifies that small assets pack into shared 64KB chunks while oversized assets allocate dedicated chunks without pointer invalidation.
+TEST(asset_database_mount_and_scan, large_and_small_assets_chunk_arena)
+{
+    // 1. Setup
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // Register 10 small assets (each 8 KB)
+    auto small_ids = tempest::vector<tempest::guid>{};
+    for (int i = 0; i < 10; ++i)
+    {
+        auto name = std::string("small_asset_") + std::to_string(i) + ".bin";
+        auto id = database.register_asset(tempest::assets::asset_type_id::from_hash(100 + i), name.c_str());
+        small_ids.push_back(id);
+
+        auto payload = std::vector<tempest::byte>(8 * 1024, static_cast<tempest::byte>(i + 1));
+        database.store_blob(id, tempest::span<const tempest::byte>{payload.data(), payload.size()});
+    }
+
+    // Capture pointers of small assets
+    auto first_small_blob = database.get_blob(small_ids[0]);
+    ASSERT_EQ(first_small_blob.size(), 8 * 1024U);
+    const auto* initial_first_ptr = first_small_blob.data();
+
+    // 2. Act: Register an oversized asset (128 KB > 64 KB default chunk size)
+    auto large_id = database.register_asset(tempest::assets::asset_type_id::from_hash(999), "large_asset.bin");
+    auto large_payload = std::vector<tempest::byte>(128 * 1024, static_cast<tempest::byte>(0xAA));
+    database.store_blob(large_id, tempest::span<const tempest::byte>{large_payload.data(), large_payload.size()});
+
+    // 3. Assert: Memory stability - previous small blob span pointer remains unchanged!
+    auto post_alloc_small_blob = database.get_blob(small_ids[0]);
+    EXPECT_EQ(post_alloc_small_blob.data(), initial_first_ptr);
+    EXPECT_EQ(post_alloc_small_blob[0], static_cast<tempest::byte>(1));
+
+    // Assert: Large blob is correct
+    auto large_blob = database.get_blob(large_id);
+    EXPECT_EQ(large_blob.size(), 128 * 1024U);
+    EXPECT_EQ(large_blob[0], static_cast<tempest::byte>(0xAA));
+    EXPECT_EQ(large_blob[128 * 1024 - 1], static_cast<tempest::byte>(0xAA));
+}
+
+/// @brief Verifies that runtime chunks are completely coalesced into a single contiguous block when saved to .tassetdb and reopened.
+TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
+{
+    const auto test_db_path = std::filesystem::path("tempest_test_coalesce.tassetdb");
+    if (std::filesystem::exists(test_db_path))
+    {
+        std::filesystem::remove(test_db_path);
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto id_small = tempest::guid{};
+    auto id_large = tempest::guid{};
+
+    // 1. Setup & Act: Create database with multiple mixed-size chunks and save to disk
+    {
+        auto database = tempest::assets::asset_database{&type_reg};
+        database.open(test_db_path.generic_string().c_str());
+
+        id_small = database.register_asset(tempest::assets::asset_type_id::from_hash(1), "chunked_small.spv");
+        auto small_bytes = std::vector<tempest::byte>(4096, static_cast<tempest::byte>(0x11));
+        database.store_blob(id_small, tempest::span<const tempest::byte>{small_bytes.data(), small_bytes.size()});
+
+        id_large = database.register_asset(tempest::assets::asset_type_id::from_hash(2), "chunked_large.bin");
+        auto large_bytes = std::vector<tempest::byte>(96 * 1024, static_cast<tempest::byte>(0x22));
+        database.store_blob(id_large, tempest::span<const tempest::byte>{large_bytes.data(), large_bytes.size()});
+
+        bool saved = database.save();
+        EXPECT_TRUE(saved);
+    }
+
+    // 2. Act: Reopen from .tassetdb
+    {
+        auto database = tempest::assets::asset_database{&type_reg};
+        database.open(test_db_path.generic_string().c_str());
+
+        // 3. Assert: All assets are present, contiguous, and intact
+        const auto* entry_small = database.find_by_guid(id_small);
+        const auto* entry_large = database.find_by_guid(id_large);
+        ASSERT_NE(entry_small, nullptr);
+        ASSERT_NE(entry_large, nullptr);
+
+        // Coalesced contiguous offsets check
+        EXPECT_EQ(entry_small->blob_offset, 0U);
+        EXPECT_EQ(entry_small->blob_size, 4096U);
+        EXPECT_EQ(entry_large->blob_offset, 4096U);
+        EXPECT_EQ(entry_large->blob_size, 96 * 1024U);
+
+        auto blob_small = database.get_blob(id_small);
+        auto blob_large = database.get_blob(id_large);
+        EXPECT_EQ(blob_small.size(), 4096U);
+        EXPECT_EQ(blob_small[0], static_cast<tempest::byte>(0x11));
+        EXPECT_EQ(blob_large.size(), 96 * 1024U);
+        EXPECT_EQ(blob_large[0], static_cast<tempest::byte>(0x22));
+    }
+
+    // 4. Teardown
+    if (std::filesystem::exists(test_db_path))
+    {
+        std::filesystem::remove(test_db_path);
+    }
+}
+
+/// @brief Verifies mutation/hot-reload of an asset loaded from .tassetdb and subsequent re-coalescing on save.
+TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
+{
+    const auto test_db_path = std::filesystem::path("tempest_test_mutate_coalesce.tassetdb");
+    if (std::filesystem::exists(test_db_path))
+    {
+        std::filesystem::remove(test_db_path);
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto shader_id = tempest::guid{};
+    auto mesh_id = tempest::guid{};
+
+    // 1. Setup: Create and save initial database
+    {
+        auto database = tempest::assets::asset_database{&type_reg};
+        database.open(test_db_path.generic_string().c_str());
+
+        shader_id = database.register_asset(tempest::assets::asset_type_id::from_hash(10), "pbr.frag.spv");
+        auto initial_shader = std::string("INITIAL_SHADER_V1");
+        database.store_blob(shader_id, tempest::span<const tempest::byte>{
+                                           reinterpret_cast<const tempest::byte*>(initial_shader.data()),
+                                           initial_shader.size()});
+
+        mesh_id = database.register_asset(tempest::assets::asset_type_id::from_hash(20), "cube.mesh");
+        auto mesh_data = std::string("CUBE_MESH_DATA_UNTOUCHED");
+        database.store_blob(mesh_id, tempest::span<const tempest::byte>{
+                                         reinterpret_cast<const tempest::byte*>(mesh_data.data()), mesh_data.size()});
+
+        EXPECT_TRUE(database.save());
+    }
+
+    // 2. Act: Reopen and mutate shader_id (hot-reload simulation)
+    {
+        auto database = tempest::assets::asset_database{&type_reg};
+        database.open(test_db_path.generic_string().c_str());
+
+        // Mutate shader blob
+        auto updated_shader = std::string("RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
+        database.store_blob(shader_id, tempest::span<const tempest::byte>{
+                                           reinterpret_cast<const tempest::byte*>(updated_shader.data()),
+                                           updated_shader.size()});
+
+        // Verify in-memory updated content and untouched mesh content
+        auto cur_shader_blob = database.get_blob(shader_id);
+        EXPECT_EQ(std::string(reinterpret_cast<const char*>(cur_shader_blob.data()), cur_shader_blob.size()),
+                  "RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
+
+        auto cur_mesh_blob = database.get_blob(mesh_id);
+        EXPECT_EQ(std::string(reinterpret_cast<const char*>(cur_mesh_blob.data()), cur_mesh_blob.size()),
+                  "CUBE_MESH_DATA_UNTOUCHED");
+
+        // Save mutated database
+        EXPECT_TRUE(database.save());
+    }
+
+    // 3. Assert: Reopen and verify new mutated data is cleanly coalesced
+    {
+        auto database = tempest::assets::asset_database{&type_reg};
+        database.open(test_db_path.generic_string().c_str());
+
+        auto final_shader_blob = database.get_blob(shader_id);
+        EXPECT_EQ(std::string(reinterpret_cast<const char*>(final_shader_blob.data()), final_shader_blob.size()),
+                  "RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
+
+        auto final_mesh_blob = database.get_blob(mesh_id);
+        EXPECT_EQ(std::string(reinterpret_cast<const char*>(final_mesh_blob.data()), final_mesh_blob.size()),
+                  "CUBE_MESH_DATA_UNTOUCHED");
+    }
+
+    // 4. Teardown
+    if (std::filesystem::exists(test_db_path))
+    {
+        std::filesystem::remove(test_db_path);
+    }
 }

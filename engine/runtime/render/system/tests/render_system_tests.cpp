@@ -420,7 +420,7 @@ namespace tempest::render_system::tests
             auto asset_db = assets::asset_database{&asset_type_reg};
             assets::register_default_importers(asset_db, &meshes, &textures, &materials);
 
-            const auto sponza_path = "vendor/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+            const auto sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
             if (std::filesystem::exists(sponza_path))
             {
                 [[maybe_unused]] auto prefab_root = asset_db.load(sponza_path, registry);
@@ -3663,7 +3663,7 @@ namespace tempest::render_system::tests
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &meshes, &textures, &materials);
 
-        const auto chess_path = "vendor/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
+        const auto chess_path = "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
 
         if (std::filesystem::exists(chess_path))
         {

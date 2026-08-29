@@ -1,6 +1,7 @@
 #include <tempest/ui.hpp>
 
 #include <tempest/array.hpp>
+#include <tempest/asset_database.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/files.hpp>
 #include <tempest/int.hpp>
@@ -269,35 +270,25 @@ namespace tempest::editor
 
         auto load_shader_bytecode(string_view filename) -> vector<byte>
         {
-            const auto search_paths = {
-                std::filesystem::path("assets/shaders/editor") / filename.data(),
-                std::filesystem::path("assets/shaders") / filename.data(),
-                std::filesystem::path("shaders/editor") / filename.data(),
-                std::filesystem::path("shaders") / filename.data(),
-                std::filesystem::path("bin/Debug/windows-clang/shaders/editor") / filename.data(),
-                std::filesystem::path("bin/Debug/windows-clang/shaders") / filename.data(),
-                std::filesystem::path("bin/Debug/windows-msc-v145/shaders/editor") / filename.data(),
-                std::filesystem::path("bin/Debug/windows-msc-v145/shaders") / filename.data(),
-                std::filesystem::path("bin/RelWithDebugInfo/windows-clang/shaders/editor") / filename.data(),
-                std::filesystem::path("bin/RelWithDebugInfo/windows-msc-v145/shaders/editor") / filename.data(),
-                std::filesystem::path("bin/Release/windows-clang/shaders/editor") / filename.data(),
-                std::filesystem::path("bin/Release/windows-msc-v145/shaders/editor") / filename.data(),
-                std::filesystem::path("../shaders/editor") / filename.data(),
-                std::filesystem::path("../../../../bin/Debug/windows-clang/shaders/editor") / filename.data(),
-                std::filesystem::path("../../../../bin/Debug/windows-msc-v145/shaders/editor") / filename.data(),
-                std::filesystem::path("engine/editor/core/shaders") / filename.data(),
-            };
+            auto db = assets::asset_database{};
+            db.mount_root(".", 0);
+            db.mount_root("assets", 5);
+            db.mount_root("assets/shaders", 5);
+            db.mount_root("assets/shaders/editor", 10);
+            db.mount_root("shaders", 5);
+            db.mount_root("shaders/editor", 10);
+            db.scan_and_index();
 
-            for (const auto& sp : search_paths)
+            const auto* asset = db.find_asset(filename);
+            if (asset != nullptr)
             {
-                if (std::filesystem::exists(sp))
+                auto blob = db.get_blob(asset->id);
+                if (!blob.empty())
                 {
-                    auto path_str = sp.string();
-                    auto bytes = core::read_bytes(string_view{path_str.c_str(), path_str.size()});
-                    if (!bytes.empty())
-                    {
-                        return bytes;
-                    }
+                    auto result = vector<byte>{};
+                    unsafe::resize_no_init(result, blob.size());
+                    tempest::memcpy(result.data(), blob.data(), blob.size());
+                    return result;
                 }
             }
 

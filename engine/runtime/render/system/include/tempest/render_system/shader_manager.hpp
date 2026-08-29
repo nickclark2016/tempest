@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <tempest/api.hpp>
+#include <tempest/asset_database.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/optional.hpp>
@@ -65,13 +66,24 @@ namespace tempest::render_system
     class TEMPEST_API shader_manager
     {
       public:
-        explicit shader_manager(rhi::device& dev, string_view shader_dir = "shaders");
+        explicit shader_manager(rhi::device& dev, assets::asset_database& asset_db);
+        explicit shader_manager(rhi::device& dev, assets::asset_database* asset_db = nullptr);
         ~shader_manager();
 
         shader_manager(const shader_manager&) = delete;
         shader_manager& operator=(const shader_manager&) = delete;
         shader_manager(shader_manager&&) noexcept;
         shader_manager& operator=(shader_manager&&) noexcept;
+
+        [[nodiscard]] auto get_asset_database() noexcept -> assets::asset_database&
+        {
+            return *_asset_db;
+        }
+
+        [[nodiscard]] auto get_asset_database() const noexcept -> const assets::asset_database&
+        {
+            return *_asset_db;
+        }
 
         /// @brief Registers a shader module from a memory blob or disk location.
         /// If already registered with the same disk_location, returns the existing handle.
@@ -178,7 +190,8 @@ namespace tempest::render_system
         void enqueue_pipeline_retirement(rhi::graphics_pipeline_handle gfx, rhi::compute_pipeline_handle comp);
 
         rhi::device* _device{nullptr};
-        string _shader_dir;
+        assets::asset_database* _asset_db{nullptr};
+        unique_ptr<assets::asset_database> _owned_asset_db{nullptr};
 
         vector<shader_module_record> _modules;
         vector<graphics_pipeline_record> _graphics_pipelines;

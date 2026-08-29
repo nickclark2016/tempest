@@ -5,6 +5,28 @@ require 'build/install'
 scoped = require 'build/premake-scoped'
 require 'build/tests'
 
+-- Ensure workspace assets directory and vendor symlinks exist
+local workspaceAssetsDir = path.join(_MAIN_SCRIPT_DIR, 'assets')
+if not os.isdir(workspaceAssetsDir) then
+    os.mkdir(workspaceAssetsDir)
+end
+
+local gltfLink = path.join(workspaceAssetsDir, 'glTF-Sample-Assets')
+if not os.islink(gltfLink) and not os.isdir(gltfLink) then
+    local gltfTarget = path.join(_MAIN_SCRIPT_DIR, 'vendor/glTF-Sample-Assets')
+    if os.isdir(gltfTarget) then
+        os.linkdir(gltfTarget, gltfLink)
+    end
+end
+
+local polyLink = path.join(workspaceAssetsDir, 'polyhaven')
+if not os.islink(polyLink) and not os.isdir(polyLink) then
+    local polyTarget = path.join(_MAIN_SCRIPT_DIR, 'vendor/polyhaven')
+    if os.isdir(polyTarget) then
+        os.linkdir(polyTarget, polyLink)
+    end
+end
+
 scoped.workspace('Tempest', function()
     configurations { 'Debug', 'Release', 'RelWithDebugInfo' }
     platforms { 'x64' }
