@@ -11,6 +11,12 @@
 
 namespace tempest::render_graph
 {
+    struct transient_pool_config
+    {
+        uint32_t max_unused_cycles{2};
+        bool evict_mismatched_dimensions{true};
+    };
+
     struct pooled_texture
     {
         rhi::texture_handle handle{};
@@ -22,6 +28,7 @@ namespace tempest::render_graph
         bool in_use_this_frame = false;
         uint32_t last_pass_used = 0;
         uint32_t flight_slot = 0;
+        uint32_t unused_cycles = 0;
     };
 
     struct pooled_buffer
@@ -32,6 +39,7 @@ namespace tempest::render_graph
         bool in_use_this_frame = false;
         uint32_t last_pass_used = 0;
         uint32_t flight_slot = 0;
+        uint32_t unused_cycles = 0;
     };
 
     struct physical_texture_allocation
@@ -51,7 +59,8 @@ namespace tempest::render_graph
         uint64_t size = 0;
     };
 
-    /// \brief Manages physical GPU resource pooling, non-overlapping lifetime recycling, and dynamic resolution invalidation.
+    /// \brief Manages physical GPU resource pooling, non-overlapping lifetime recycling, and dynamic resolution
+    /// invalidation.
     class TEMPEST_API transient_allocator
     {
       public:
@@ -104,6 +113,16 @@ namespace tempest::render_graph
         [[nodiscard]] auto get_texture(uint32_t texture_id) const noexcept -> const physical_texture_allocation*;
         [[nodiscard]] auto get_buffer(uint32_t buffer_id) const noexcept -> const physical_buffer_allocation*;
 
+        void set_pool_config(const transient_pool_config& cfg) noexcept
+        {
+            _pool_config = cfg;
+        }
+
+        [[nodiscard]] auto get_pool_config() const noexcept -> const transient_pool_config&
+        {
+            return _pool_config;
+        }
+
         [[nodiscard]] auto get_texture_pool_count() const noexcept -> size_t
         {
             return _texture_pool.size();
@@ -117,6 +136,7 @@ namespace tempest::render_graph
       private:
         uint32_t _frames_in_flight{1};
         uint32_t _frame_slot{0};
+        transient_pool_config _pool_config{};
 
         vector<pooled_texture> _texture_pool;
         vector<pooled_buffer> _buffer_pool;

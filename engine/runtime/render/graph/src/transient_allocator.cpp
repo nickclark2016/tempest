@@ -314,6 +314,90 @@ namespace tempest::render_graph
                 _active_buffers[alias_id.id] = _active_buffers.find(target_id.id)->second;
             }
         }
+
+        // 4. Evict Stale Resources for current _frame_slot
+        // Resources for this flight slot have completed GPU execution and are safe to destroy if unused.
+        auto remaining_textures = vector<pooled_texture>{};
+        remaining_textures.reserve(_texture_pool.size());
+
+        for (auto& p : _texture_pool)
+        {
+            if (p.flight_slot == _frame_slot)
+            {
+                if (p.in_use_this_frame)
+                {
+                    p.unused_cycles = 0;
+                    remaining_textures.push_back(p);
+                }
+                else
+                {
+                    ++p.unused_cycles;
+                    bool should_evict = (p.unused_cycles >= _pool_config.max_unused_cycles);
+                    if (_pool_config.evict_mismatched_dimensions && p.is_surface_relative)
+                    {
+                        if (p.desc.width != surface_width || p.desc.height != surface_height)
+                        {
+                            should_evict = true;
+                        }
+                    }
+
+                    if (should_evict)
+                    {
+                        if (p.sampled_descriptor.index != ~0U)
+                        {
+                            dev.free_descriptor(rhi::descriptor_type::sampled_image, p.sampled_descriptor);
+                        }
+                        if (p.storage_descriptor.index != ~0U)
+                        {
+                            dev.free_descriptor(rhi::descriptor_type::storage_image, p.storage_descriptor);
+                        }
+                        dev.destroy_texture_view(p.view);
+                        dev.destroy_texture(p.handle);
+                    }
+                    else
+                    {
+                        remaining_textures.push_back(p);
+                    }
+                }
+            }
+            else
+            {
+                remaining_textures.push_back(p);
+            }
+        }
+        _texture_pool = tempest::move(remaining_textures);
+
+        auto remaining_buffers = vector<pooled_buffer>{};
+        remaining_buffers.reserve(_buffer_pool.size());
+
+        for (auto& p : _buffer_pool)
+        {
+            if (p.flight_slot == _frame_slot)
+            {
+                if (p.in_use_this_frame)
+                {
+                    p.unused_cycles = 0;
+                    remaining_buffers.push_back(p);
+                }
+                else
+                {
+                    ++p.unused_cycles;
+                    if (p.unused_cycles >= _pool_config.max_unused_cycles)
+                    {
+                        dev.destroy_buffer(p.handle);
+                    }
+                    else
+                    {
+                        remaining_buffers.push_back(p);
+                    }
+                }
+            }
+            else
+            {
+                remaining_buffers.push_back(p);
+            }
+        }
+        _buffer_pool = tempest::move(remaining_buffers);
     }
 
     void transient_allocator::release_all(rhi::device& dev)
@@ -369,7 +453,6 @@ namespace tempest::render_graph
         }
 
         _texture_pool = tempest::move(remaining_textures);
-        _active_textures.clear();
     }
 
     auto transient_allocator::get_texture(uint32_t texture_id) const noexcept -> const physical_texture_allocation*

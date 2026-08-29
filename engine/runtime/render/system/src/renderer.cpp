@@ -132,6 +132,7 @@ namespace tempest::render_system
         _unsubscribe_events();
         if (_device)
         {
+            _device->wait_idle();
             _graph.get_allocator().release_all(*_device);
         }
     }
@@ -616,7 +617,7 @@ namespace tempest::render_system
         });
 
         _hdr_color_target = _graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(width, height),
+            .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
             .format = _cfg.hdr_color_format,
             .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
             .mip_levels = 1,
@@ -625,7 +626,7 @@ namespace tempest::render_system
         });
 
         _depth_target = _graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(width, height),
+            .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
             .format = _cfg.depth_format,
             .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
             .mip_levels = 1,
@@ -636,7 +637,7 @@ namespace tempest::render_system
         if (_cfg.enable_ssao)
         {
             _ssao_target = _graph.create_texture(render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::absolute(width, height),
+                .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
                 .format = rhi::data_format::r8_unorm,
                 .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
                 .mip_levels = 1,
@@ -645,7 +646,7 @@ namespace tempest::render_system
             });
 
             _ssao_blurred_target = _graph.create_texture(render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::absolute(width, height),
+                .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
                 .format = rhi::data_format::r8_unorm,
                 .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
                 .mip_levels = 1,
@@ -655,7 +656,7 @@ namespace tempest::render_system
         }
 
         _moments_target = _graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(width, height),
+            .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
             .format = rhi::data_format::rgba16_float,
             .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled,
             .mip_levels = 1,
@@ -664,7 +665,7 @@ namespace tempest::render_system
         });
 
         _zeroth_moment_target = _graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(width, height),
+            .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
             .format = rhi::data_format::r32_float,
             .usage = rhi::texture_usage::storage | rhi::texture_usage::sampled,
             .mip_levels = 1,
@@ -673,7 +674,7 @@ namespace tempest::render_system
         });
 
         _transparency_accum_target = _graph.create_texture(render_graph::rg_texture_desc{
-            .size = render_graph::rg_texture_size::absolute(width, height),
+            .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
             .format = rhi::data_format::rgba16_float,
             .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled,
             .mip_levels = 1,
@@ -689,7 +690,7 @@ namespace tempest::render_system
         else
         {
             _tonemapped_color_target = _graph.create_texture(render_graph::rg_texture_desc{
-                .size = render_graph::rg_texture_size::absolute(width, height),
+                .size = render_graph::rg_texture_size::surface_relative(1.0F, 1.0F),
                 .format = _cfg.tonemapped_color_format,
                 .usage = rhi::texture_usage::color_attachment | rhi::texture_usage::sampled |
                          rhi::texture_usage::transfer_src,

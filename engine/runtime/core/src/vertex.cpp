@@ -28,17 +28,22 @@ namespace tempest::core
 
     void mesh::compute_normals()
     {
+        for (auto& vertex : vertices)
+        {
+            vertex.normal = math::vec3<float>(0.0F);
+        }
+
         // for each face, add the face normal to each contributing vertex
         for (size_t i = 0; i < num_triangles(); ++i)
         {
-            vertex& v0 = (*this)[3 * i + 0];
-            vertex& v1 = (*this)[3 * i + 1];
-            vertex& v2 = (*this)[3 * i + 2];
+            auto& v0 = (*this)[3 * i + 0];
+            auto& v1 = (*this)[3 * i + 1];
+            auto& v2 = (*this)[3 * i + 2];
 
-            auto edge0 = v1.position - v0.position;
-            auto edge1 = v2.position - v0.position;
+            const auto edge0 = v1.position - v0.position;
+            const auto edge1 = v2.position - v0.position;
 
-            auto face_normal = math::cross(edge0, edge1);
+            const auto face_normal = math::cross(edge0, edge1);
             v0.normal += face_normal;
             v1.normal += face_normal;
             v2.normal += face_normal;
@@ -47,7 +52,15 @@ namespace tempest::core
         // for each vertex, normalize the cumulative normal vector
         for (auto& vertex : vertices)
         {
-            vertex.normal = math::normalize(vertex.normal);
+            const auto len = math::norm(vertex.normal);
+            if (len > 1e-6F)
+            {
+                vertex.normal = math::normalize(vertex.normal);
+            }
+            else
+            {
+                vertex.normal = math::vec3<float>(0.0F, 1.0F, 0.0F);
+            }
         }
 
         has_normals = true;
@@ -55,8 +68,13 @@ namespace tempest::core
 
     void mesh::compute_tangents()
     {
-        // Per-triangle tdir accumulator (bitangent)
-        auto tangent_dir = vector<math::vec3<float>>(num_triangles() * 3, math::vec3<float>(0.0F));
+        for (auto& vertex : vertices)
+        {
+            vertex.tangent = math::vec4<float>(0.0F);
+        }
+
+        // Per-vertex bitangent accumulator
+        auto bitangents = vector<math::vec3<float>>(vertices.size(), math::vec3<float>(0.0F));
 
         for (size_t i = 0; i < num_triangles(); ++i)
         {
@@ -65,57 +83,75 @@ namespace tempest::core
             auto&& [v2, idx2] = get_tri_and_ind(3 * i + 2);
 
             // Edge vectors
-            math::vec3<float> edge1 = v1.position - v0.position;
-            math::vec3<float> edge2 = v2.position - v0.position;
+            const auto edge1 = v1.position - v0.position;
+            const auto edge2 = v2.position - v0.position;
 
             // UV deltas
-            float s1 = v1.uv.x - v0.uv.x;
-            float s2 = v2.uv.x - v0.uv.x;
-            float t1 = v1.uv.y - v0.uv.y;
-            float t2 = v2.uv.y - v0.uv.y;
+            const auto s1 = v1.uv.x - v0.uv.x;
+            const auto s2 = v2.uv.x - v0.uv.x;
+            const auto t1 = v1.uv.y - v0.uv.y;
+            const auto t2 = v2.uv.y - v0.uv.y;
 
-            float denom = s1 * t2 - s2 * t1;
+            const auto denom = s1 * t2 - s2 * t1;
 
-            math::vec3<float> sdir;
-            math::vec3<float> tdir;
+            auto sdir = math::vec3<float>{};
+            auto tdir = math::vec3<float>{};
 
-            if (abs(denom) > 1e-6f) // valid UV triangle
+            if (std::abs(denom) > 1e-6F) // valid UV triangle
             {
-                float r = 1.0f / denom;
+                const auto r = 1.0F / denom;
                 sdir = (edge1 * t2 - edge2 * t1) * r;
                 tdir = (edge2 * s1 - edge1 * s2) * r;
             }
             else // degenerate UVs: fallback tangent/bitangent
             {
                 // Pick a vector perpendicular to normal for sdir
-                math::vec3<float> n = v0.normal;
-                math::vec3<float> up = abs(n.z) < 0.999f ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
-                sdir = normalize(cross(up, n));
-                tdir = normalize(cross(n, sdir));
+                const auto n = v0.normal;
+                const auto up = std::abs(n.z) < 0.999F ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
+                sdir = math::normalize(math::cross(up, n));
+                tdir = math::normalize(math::cross(n, sdir));
             }
 
             // Accumulate per-vertex tangent (sdir) and bitangent (tdir)
-            v0.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0f);
-            v1.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0f);
-            v2.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0f);
+            v0.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0F);
+            v1.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0F);
+            v2.tangent += math::vec4(sdir.x, sdir.y, sdir.z, 0.0F);
 
-            tangent_dir[idx0] += tdir;
-            tangent_dir[idx1] += tdir;
-            tangent_dir[idx2] += tdir;
+            if (idx0 < bitangents.size())
+            {
+                bitangents[idx0] += tdir;
+            }
+            if (idx1 < bitangents.size())
+            {
+                bitangents[idx1] += tdir;
+            }
+            if (idx2 < bitangents.size())
+            {
+                bitangents[idx2] += tdir;
+            }
         }
 
         // Final orthogonalize & compute handedness
-        size_t vtx = 0;
-        for (auto& vertex : vertices)
+        for (size_t vtx = 0; vtx < vertices.size(); ++vtx)
         {
-            math::vec3<float> n = vertex.normal;
-            math::vec3<float> t = math::vec3(vertex.tangent.x, vertex.tangent.y, vertex.tangent.z);
+            auto& vertex = vertices[vtx];
+            const auto n = vertex.normal;
+            auto t = math::vec3(vertex.tangent.x, vertex.tangent.y, vertex.tangent.z);
 
-            // Gram-Schmidt orthogonalization
-            t = normalize(t - n * math::dot(n, t));
+            const auto t_len = math::norm(t);
+            if (t_len > 1e-6F)
+            {
+                // Gram-Schmidt orthogonalization
+                t = math::normalize(t - n * math::dot(n, t));
+            }
+            else
+            {
+                const auto up = std::abs(n.z) < 0.999F ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
+                t = math::normalize(math::cross(up, n));
+            }
 
             // Handedness
-            float handedness = math::dot(math::cross(n, t), tangent_dir[vtx++]) < 0.0f ? -1.0f : 1.0f;
+            const auto handedness = (math::dot(math::cross(n, t), bitangents[vtx]) < 0.0F) ? -1.0F : 1.0F;
 
             vertex.tangent = math::vec4(t.x, t.y, t.z, handedness);
         }

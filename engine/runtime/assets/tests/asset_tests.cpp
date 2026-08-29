@@ -1617,3 +1617,245 @@ TEST(gltf_importer_tests, no_orphan_template_primitives_created)
         std::filesystem::remove(bin_file_path);
     }
 }
+
+/// @brief Tests that meshes imported from glTF and saved to asset database retain byte-exact vertex and index data on
+/// reload.
+TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
+{
+    const auto db_path = std::filesystem::path("tempest_test_integrity.tassetdb");
+    const auto bin_file_path = std::filesystem::path("tempest_test_mesh_integrity.bin");
+    const auto gltf_file_path = std::filesystem::path("tempest_test_mesh_integrity.gltf");
+
+    if (std::filesystem::exists(db_path))
+    {
+        std::filesystem::remove(db_path);
+    }
+
+    // 1. Setup: Create glTF with 3 vertices and 3 indices with distinct position, normal, uv, tangent
+    {
+        auto f = std::ofstream(bin_file_path, std::ios::binary);
+        float pos[9] = {1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
+        float norm[9] = {0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F};
+        float uvs[6] = {0.1F, 0.2F, 0.3F, 0.4F, 0.5F, 0.6F};
+        uint16_t idx[3] = {0, 1, 2};
+        f.write(reinterpret_cast<const char*>(pos), sizeof(pos));
+        f.write(reinterpret_cast<const char*>(norm), sizeof(norm));
+        f.write(reinterpret_cast<const char*>(uvs), sizeof(uvs));
+        f.write(reinterpret_cast<const char*>(idx), sizeof(idx));
+    }
+
+    {
+        auto f = std::ofstream(gltf_file_path, std::ios::binary);
+        f << R"({
+        "asset": { "version": "2.0" },
+        "buffers": [
+            { "byteLength": 102, "uri": "tempest_test_mesh_integrity.bin" }
+        ],
+        "bufferViews": [
+            { "buffer": 0, "byteOffset": 0, "byteLength": 36 },
+            { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+            { "buffer": 0, "byteOffset": 72, "byteLength": 24 },
+            { "buffer": 0, "byteOffset": 96, "byteLength": 6 }
+        ],
+        "accessors": [
+            { "bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+            { "bufferView": 1, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+            { "bufferView": 2, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC2" },
+            { "bufferView": 3, "byteOffset": 0, "componentType": 5123, "count": 3, "type": "SCALAR" }
+        ],
+        "meshes": [
+            {
+                "primitives": [
+                    { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }, "indices": 3 }
+                ]
+            }
+        ],
+        "nodes": [
+            { "mesh": 0 }
+        ],
+        "scenes": [
+            { "nodes": [0] }
+        ],
+        "scene": 0
+    })";
+    }
+
+    // 2. Act 1: Import fresh and save to database
+    auto orig_mesh_guid = tempest::guid{};
+    auto orig_mesh = tempest::core::mesh{};
+    {
+        auto mesh_reg = tempest::core::mesh_registry{};
+        auto tex_reg = tempest::core::texture_registry{};
+        auto mat_reg = tempest::core::material_registry{};
+        auto type_reg = tempest::assets::asset_type_registry{};
+        auto database = tempest::assets::asset_database{&type_reg};
+        tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
+        database.open(db_path.generic_string().c_str());
+
+        auto events = tempest::event::event_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto root = database.load(gltf_file_path.generic_string().c_str(), registry);
+        EXPECT_TRUE(root != tempest::ecs::tombstone);
+
+        // Find the mesh in registry
+        for (auto it = mesh_reg.begin(); it != mesh_reg.end(); ++it)
+        {
+            orig_mesh_guid = it->first;
+            orig_mesh = it->second;
+            break;
+        }
+
+        EXPECT_TRUE(orig_mesh_guid != tempest::guid{});
+        EXPECT_EQ(orig_mesh.vertices.size(), 3U);
+        EXPECT_EQ(orig_mesh.indices.size(), 3U);
+
+        auto saved = database.save();
+        EXPECT_TRUE(saved);
+    }
+
+    // 3. Act 2: Re-open the database from scratch and load from blobs
+    {
+        auto mesh_reg = tempest::core::mesh_registry{};
+        auto tex_reg = tempest::core::texture_registry{};
+        auto mat_reg = tempest::core::material_registry{};
+        auto type_reg = tempest::assets::asset_type_registry{};
+        auto database = tempest::assets::asset_database{&type_reg};
+        tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
+        database.open(db_path.generic_string().c_str());
+
+        auto events = tempest::event::event_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto root = database.load(gltf_file_path.generic_string().c_str(), registry);
+        EXPECT_TRUE(root != tempest::ecs::tombstone);
+
+        auto reloaded_mesh_opt = mesh_reg.find(orig_mesh_guid);
+        ASSERT_TRUE(reloaded_mesh_opt.has_value());
+        const auto& reloaded_mesh = reloaded_mesh_opt.value();
+
+        EXPECT_EQ(reloaded_mesh.vertices.size(), orig_mesh.vertices.size());
+        EXPECT_EQ(reloaded_mesh.indices.size(), orig_mesh.indices.size());
+        EXPECT_EQ(reloaded_mesh.has_normals, orig_mesh.has_normals);
+        EXPECT_EQ(reloaded_mesh.has_tangents, orig_mesh.has_tangents);
+
+        for (size_t i = 0; i < orig_mesh.vertices.size(); ++i)
+        {
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].position.x, orig_mesh.vertices[i].position.x);
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].position.y, orig_mesh.vertices[i].position.y);
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].position.z, orig_mesh.vertices[i].position.z);
+
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].normal.x, orig_mesh.vertices[i].normal.x);
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].normal.y, orig_mesh.vertices[i].normal.y);
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].normal.z, orig_mesh.vertices[i].normal.z);
+
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].uv.x, orig_mesh.vertices[i].uv.x);
+            EXPECT_FLOAT_EQ(reloaded_mesh.vertices[i].uv.y, orig_mesh.vertices[i].uv.y);
+        }
+
+        for (size_t i = 0; i < orig_mesh.indices.size(); ++i)
+        {
+            EXPECT_EQ(reloaded_mesh.indices[i], orig_mesh.indices[i]);
+        }
+    }
+
+    // 4. Teardown
+    if (std::filesystem::exists(db_path))
+    {
+        std::filesystem::remove(db_path);
+    }
+    if (std::filesystem::exists(gltf_file_path))
+    {
+        std::filesystem::remove(gltf_file_path);
+    }
+    if (std::filesystem::exists(bin_file_path))
+    {
+        std::filesystem::remove(bin_file_path);
+    }
+}
+
+/// @brief Tests that Sponza glTF saves and reloads from asset database with complete hierarchy and mesh integrity.
+TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
+{
+    const auto db_path = std::filesystem::path("sponza_test.tassetdb");
+    const auto sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+
+    if (std::filesystem::exists(db_path))
+    {
+        std::filesystem::remove(db_path);
+    }
+
+    auto orig_meshes = tempest::flat_unordered_map<tempest::guid, tempest::core::mesh>{};
+    auto orig_mesh_count = 0U;
+
+    // 1. Act 1: Import Sponza and save database
+    {
+        auto mesh_reg = tempest::core::mesh_registry{};
+        auto tex_reg = tempest::core::texture_registry{};
+        auto mat_reg = tempest::core::material_registry{};
+        auto type_reg = tempest::assets::asset_type_registry{};
+        auto database = tempest::assets::asset_database{&type_reg};
+        tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
+        database.open(db_path.generic_string().c_str());
+
+        auto events = tempest::event::event_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto root = database.load(sponza_path, registry);
+        ASSERT_TRUE(root != tempest::ecs::tombstone);
+
+        for (auto it = mesh_reg.begin(); it != mesh_reg.end(); ++it)
+        {
+            orig_meshes[it->first] = it->second;
+            ++orig_mesh_count;
+        }
+
+        EXPECT_GT(orig_mesh_count, 0U);
+
+        auto saved = database.save();
+        EXPECT_TRUE(saved);
+    }
+
+    // 2. Act 2: Re-open and reload from tassetdb
+    {
+        auto mesh_reg = tempest::core::mesh_registry{};
+        auto tex_reg = tempest::core::texture_registry{};
+        auto mat_reg = tempest::core::material_registry{};
+        auto type_reg = tempest::assets::asset_type_registry{};
+        auto database = tempest::assets::asset_database{&type_reg};
+        tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
+        database.open(db_path.generic_string().c_str());
+
+        auto events = tempest::event::event_registry{};
+        auto registry = tempest::ecs::basic_archetype_registry{events};
+        auto root = database.load(sponza_path, registry);
+        ASSERT_TRUE(root != tempest::ecs::tombstone);
+
+        auto reloaded_mesh_count = 0U;
+        for (auto it = mesh_reg.begin(); it != mesh_reg.end(); ++it)
+        {
+            ++reloaded_mesh_count;
+            auto orig_it = orig_meshes.find(it->first);
+            ASSERT_TRUE(orig_it != orig_meshes.end());
+            const auto& orig_m = orig_it->second;
+            const auto& reloaded_m = it->second;
+
+            EXPECT_EQ(reloaded_m.vertices.size(), orig_m.vertices.size());
+            EXPECT_EQ(reloaded_m.indices.size(), orig_m.indices.size());
+            EXPECT_EQ(reloaded_m.has_normals, orig_m.has_normals);
+            EXPECT_EQ(reloaded_m.has_tangents, orig_m.has_tangents);
+
+            for (size_t i = 0; i < orig_m.vertices.size(); ++i)
+            {
+                EXPECT_FLOAT_EQ(reloaded_m.vertices[i].position.x, orig_m.vertices[i].position.x);
+                EXPECT_FLOAT_EQ(reloaded_m.vertices[i].position.y, orig_m.vertices[i].position.y);
+                EXPECT_FLOAT_EQ(reloaded_m.vertices[i].position.z, orig_m.vertices[i].position.z);
+            }
+        }
+
+        EXPECT_EQ(reloaded_mesh_count, orig_mesh_count);
+    }
+
+    // 3. Teardown
+    if (std::filesystem::exists(db_path))
+    {
+        std::filesystem::remove(db_path);
+    }
+}

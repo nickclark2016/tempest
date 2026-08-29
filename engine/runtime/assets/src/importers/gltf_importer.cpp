@@ -976,6 +976,7 @@ namespace tempest::assets
                     const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
 
                     process_mesh_normals(buffer, accessor, view, mesh.vertices);
+                    mesh.has_normals = true;
                 }
 
                 if (auto uvs = attribs["TEXCOORD_0"].get_uint64(); uvs.error() == simdjson::error_code::SUCCESS)
@@ -996,6 +997,7 @@ namespace tempest::assets
                     const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
 
                     process_mesh_tangents(buffer, accessor, view, mesh.vertices);
+                    mesh.has_tangents = true;
                 }
 
                 if (auto colors = attribs["COLOR_0"].get_uint64(); colors.error() == simdjson::error_code::SUCCESS)

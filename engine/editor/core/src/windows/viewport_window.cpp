@@ -99,7 +99,7 @@ namespace tempest::editor
                 if (mouse_delta.x != 0.0F || mouse_delta.y != 0.0F)
                 {
                     constexpr auto sensitivity = 0.003F;
-                    cam.rotate(-mouse_delta.x * sensitivity, -mouse_delta.y * sensitivity);
+                    cam.rotate(mouse_delta.x * sensitivity, mouse_delta.y * sensitivity);
                 }
 
                 // Speed modifier

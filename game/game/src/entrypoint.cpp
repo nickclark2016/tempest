@@ -57,15 +57,15 @@ extern "C"
             // Load Sun
             auto sun = registry.create();
             auto sun_data = tempest::render_system::directional_light_component{
-                .color = {1.0F, 1.0F, 1.0F},
-                .intensity = 1.0F,
+                .color = {1.0F, 0.95F, 0.88F},
+                .intensity = 2.5F,
             };
 
             auto sun_shadows = tempest::render_system::shadow_caster_component{
-                .resolution = 2048,
+                .resolution = 4096,
                 .num_cascades = 4,
                 .split_lambda = 0.9F,
-                .max_shadow_distance = 2048.0F,
+                .max_shadow_distance = 1024.0F,
             };
 
             auto sun_tx = tempest::ecs::transform_component::identity();

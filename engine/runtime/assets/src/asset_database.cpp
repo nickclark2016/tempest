@@ -58,6 +58,7 @@ namespace tempest::assets
         _assets.clear();
         _asset_guid_to_index.clear();
         _blob_chunks.clear();
+        _packing_chunk.reset();
         _current_chunk_capacity = 0;
         _current_chunk_used = 0;
         _cached_blobs.clear();
@@ -167,8 +168,8 @@ namespace tempest::assets
             {
                 if (asset->blob_size > 0 && asset->blob_offset + asset->blob_size <= blob_size)
                 {
-                    _cached_blobs[asset->id] = span<const byte>{chunk0->data() + asset->blob_offset,
-                                                                 static_cast<size_t>(asset->blob_size)};
+                    _cached_blobs[asset->id] =
+                        span<const byte>{chunk0->data() + asset->blob_offset, static_cast<size_t>(asset->blob_size)};
                 }
             }
             _blob_chunks.push_back(tempest::move(chunk0));
@@ -241,8 +242,7 @@ namespace tempest::assets
         }
 
         // Write blob section (coalesced into contiguous stream)
-        serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
-            archive, total_blob_size);
+        serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive, total_blob_size);
         for (const auto& asset : _assets)
         {
             auto it = _cached_blobs.find(asset->id);
@@ -788,18 +788,20 @@ namespace tempest::assets
         }
         else
         {
-            // Small asset: pack into current chunk
-            if (_blob_chunks.empty() || _current_chunk_capacity - _current_chunk_used < data.size())
+            // Small asset: pack into packing chunk
+            if (!_packing_chunk || _current_chunk_capacity - _current_chunk_used < data.size())
             {
-                auto new_chunk = make_unique<vector<byte>>();
-                unsafe::resize_no_init(*new_chunk, default_chunk_size);
+                if (_packing_chunk)
+                {
+                    _blob_chunks.push_back(tempest::move(_packing_chunk));
+                }
+                _packing_chunk = make_unique<vector<byte>>();
+                unsafe::resize_no_init(*_packing_chunk, default_chunk_size);
                 _current_chunk_capacity = default_chunk_size;
                 _current_chunk_used = 0;
-                _blob_chunks.push_back(tempest::move(new_chunk));
             }
 
-            auto& active_chunk = _blob_chunks.back();
-            dest_ptr = active_chunk->data() + _current_chunk_used;
+            dest_ptr = _packing_chunk->data() + _current_chunk_used;
             tempest::memcpy(const_cast<byte*>(dest_ptr), data.data(), data.size());
             _current_chunk_used += data.size();
         }

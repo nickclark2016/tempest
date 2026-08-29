@@ -66,13 +66,11 @@ namespace tempest::assets
 
         /// Try to serialize the component from `entity` into `out_bytes`.
         /// Returns true if the entity has this component and serialization succeeded.
-        function<bool(const ecs::archetype_registry& registry, ecs::entity entity, vector<byte>& out_bytes)>
-            serialize;
+        function<bool(const ecs::archetype_registry& registry, ecs::entity entity, vector<byte>& out_bytes)> serialize;
 
         /// Assign the component described by `bytes` onto `entity`.
         /// Returns true on success.
-        function<bool(ecs::archetype_registry& registry, ecs::entity entity, span<const byte> bytes)>
-            deserialize;
+        function<bool(ecs::archetype_registry& registry, ecs::entity entity, span<const byte> bytes)> deserialize;
     };
 
     struct TEMPEST_API shader_asset
@@ -169,6 +167,7 @@ namespace tempest::assets
         flat_unordered_map<guid, size_t> _asset_guid_to_index;
 
         mutable vector<unique_ptr<vector<byte>>> _blob_chunks;
+        mutable unique_ptr<vector<byte>> _packing_chunk;
         mutable size_t _current_chunk_capacity{0};
         mutable size_t _current_chunk_used{0};
         mutable flat_unordered_map<guid, span<const byte>> _cached_blobs;
@@ -179,10 +178,8 @@ namespace tempest::assets
         vector<component_serializer> _component_serializers;
         flat_unordered_map<size_t, size_t> _component_hash_to_index;
 
-        [[nodiscard]] auto _load_from_blobs(string_view source_path, ecs::archetype_registry& registry)
-            -> ecs::entity;
-        [[nodiscard]] auto _load_via_import(string_view source_path, ecs::archetype_registry& registry)
-            -> ecs::entity;
+        [[nodiscard]] auto _load_from_blobs(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity;
+        [[nodiscard]] auto _load_via_import(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity;
 
         auto _get_or_create_source(string_view source_path) -> source_entry&;
 
@@ -215,8 +212,7 @@ namespace tempest::assets
                 tempest::memcpy(out_bytes.data(), comp, sizeof(T));
                 return true;
             },
-            .deserialize = [](ecs::archetype_registry& registry, ecs::entity entity,
-                              span<const byte> bytes) -> bool {
+            .deserialize = [](ecs::archetype_registry& registry, ecs::entity entity, span<const byte> bytes) -> bool {
                 if (bytes.size() != sizeof(T))
                 {
                     return false;

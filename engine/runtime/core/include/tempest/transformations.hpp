@@ -342,8 +342,8 @@ namespace tempest::math
     {
         const auto dir = target - eye;
         const auto f = normalize(dir);
-        const auto s = normalize(cross(f, up));
-        const auto u = cross(s, f);
+        const auto s = normalize(cross(up, f));
+        const auto u = cross(f, s);
 
         mat4<T> result{
             vec4<T>{s.x, u.x, -f.x, 0},

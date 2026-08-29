@@ -218,3 +218,33 @@ TEST(transformations_test, reverse_z_perspective_near_plane)
     // 3. Assert - In reverse-Z, near plane maps to NDC z = 1.0
     EXPECT_NEAR(ndc_z, 1.0F, 1e-4F);
 }
+
+/// @brief Tests that look_at maps world right (+X) to view space right (+X) and world forward (+Z) to view space
+/// forward (-Z).
+TEST(transformations_test, look_at_orientation_and_handedness)
+{
+    // 1. Setup: Camera at origin looking along +Z (forward) with +Y (up)
+    const auto eye = vec3<float>{0.0F, 0.0F, 0.0F};
+    const auto target = vec3<float>{0.0F, 0.0F, 10.0F};
+    const auto up_dir = vec3<float>{0.0F, 1.0F, 0.0F};
+
+    // 2. Act
+    const auto view = look_at(eye, target, up_dir);
+
+    // Point to the right in world space (+X) and in front (+Z)
+    const auto right_point_world = vec4<float>{5.0F, 0.0F, 10.0F, 1.0F};
+    const auto right_point_view = view * right_point_world;
+
+    // Point above the camera in world space (+Y)
+    const auto top_point_world = vec4<float>{0.0F, 3.0F, 10.0F, 1.0F};
+    const auto top_point_view = view * top_point_world;
+
+    // 3. Assert: +X in world must be +X in view, +Y in world must be +Y in view, +Z in world must be -Z in view
+    EXPECT_NEAR(right_point_view.x, 5.0F, 1e-4F);
+    EXPECT_NEAR(right_point_view.y, 0.0F, 1e-4F);
+    EXPECT_NEAR(right_point_view.z, -10.0F, 1e-4F);
+
+    EXPECT_NEAR(top_point_view.x, 0.0F, 1e-4F);
+    EXPECT_NEAR(top_point_view.y, 3.0F, 1e-4F);
+    EXPECT_NEAR(top_point_view.z, -10.0F, 1e-4F);
+}
