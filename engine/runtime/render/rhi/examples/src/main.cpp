@@ -14,8 +14,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
 #define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#elif defined(TEMPEST_PLATFORM_LINUX)
+#define GLFW_EXPOSE_NATIVE_X11
 #include <GLFW/glfw3native.h>
 #endif
 
@@ -277,10 +280,15 @@ int main(int argc, char** argv)
     }
 
     // 3. Create WSI Surface & Negotiate sRGB Swapchain Format
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
+    };
+#elif defined(TEMPEST_PLATFORM_LINUX)
+    auto native_handle = native_wsi_handle{
+        .display = static_cast<void*>(glfwGetX11Display()),
+        .window = reinterpret_cast<void*>(static_cast<uintptr_t>(glfwGetX11Window(window))),
     };
 #else
     auto native_handle = native_wsi_handle{};

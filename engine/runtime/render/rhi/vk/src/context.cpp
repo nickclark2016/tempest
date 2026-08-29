@@ -1,6 +1,7 @@
 #if defined(TEMPEST_PLATFORM_WINDOWS)
 #define VK_USE_PLATFORM_WIN32_KHR
 #elif defined(TEMPEST_PLATFORM_LINUX)
+#define VK_USE_PLATFORM_XLIB_KHR
 #define VK_USE_PLATFORM_XCB_KHR
 #endif
 
@@ -252,6 +253,7 @@ namespace tempest::rhi::vk
 #if defined(TEMPEST_PLATFORM_WINDOWS)
         vkb_instance_builder.enable_extension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #elif defined(TEMPEST_PLATFORM_LINUX)
+        vkb_instance_builder.enable_extension(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
         vkb_instance_builder.enable_extension(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
 #endif
 

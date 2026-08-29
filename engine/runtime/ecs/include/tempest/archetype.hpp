@@ -1092,6 +1092,8 @@ namespace tempest::ecs
             _hashes.push_back(type_hash);
 
             hash_iter = _hashes.end() - 1;
+
+            _archetypes.emplace_back(new_types);
         }
 
         const auto target_archetype_index = tempest::distance(_hashes.begin(), hash_iter);

@@ -176,6 +176,16 @@ scoped.workspace('Tempest', function()
         }, function()
             editandcontinue 'Off'
         end)
+
+        scoped.filter({
+            'toolset:clang',
+            'system:not windows',
+        }, function()
+            buildoptions {
+                '-fno-omit-frame-pointer',
+                '-g'
+            }
+        end)
     end)
 
     scoped.filter({

@@ -9,8 +9,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
 #define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#elif defined(TEMPEST_PLATFORM_LINUX)
+#define GLFW_EXPOSE_NATIVE_X11
 #include <GLFW/glfw3native.h>
 #endif
 
@@ -65,10 +68,15 @@ TEST(swapchain_test, create_and_acquire)
     auto* window = glfwCreateWindow(640, 480, "Tempest Swapchain Test", nullptr, nullptr);
     ASSERT_NE(window, nullptr);
 
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
+    };
+#elif defined(TEMPEST_PLATFORM_LINUX)
+    auto native_handle = native_wsi_handle{
+        .display = static_cast<void*>(glfwGetX11Display()),
+        .window = reinterpret_cast<void*>(static_cast<uintptr_t>(glfwGetX11Window(window))),
     };
 #else
     auto native_handle = native_wsi_handle{};
@@ -132,10 +140,15 @@ TEST(swapchain_test, acquire_render_and_present)
     auto* window = glfwCreateWindow(800, 600, "Tempest Present Test", nullptr, nullptr);
     ASSERT_NE(window, nullptr);
 
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
+    };
+#elif defined(TEMPEST_PLATFORM_LINUX)
+    auto native_handle = native_wsi_handle{
+        .display = static_cast<void*>(glfwGetX11Display()),
+        .window = reinterpret_cast<void*>(static_cast<uintptr_t>(glfwGetX11Window(window))),
     };
 #else
     auto native_handle = native_wsi_handle{};
@@ -241,9 +254,9 @@ TEST(swapchain_test, acquire_render_and_present)
     };
 
     const auto* cmd_ptr = &cmd;
-    auto submit_res = graphics_port.submit(span<const command_list*>{&cmd_ptr, 1},
-                                           span<const device_sync_point>{&wait_point, 1},
-                                           span<const device_sync_point>{&signal_point, 1});
+    auto submit_res =
+        graphics_port.submit(span<const command_list*>{&cmd_ptr, 1}, span<const device_sync_point>{&wait_point, 1},
+                             span<const device_sync_point>{&signal_point, 1});
     ASSERT_TRUE(submit_res.has_value());
 
     // 4. Present image
@@ -275,10 +288,15 @@ TEST(swapchain_test, swapchain_recreation_handover)
     auto* window = glfwCreateWindow(640, 480, "Tempest Recreate Test", nullptr, nullptr);
     ASSERT_NE(window, nullptr);
 
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
+    };
+#elif defined(TEMPEST_PLATFORM_LINUX)
+    auto native_handle = native_wsi_handle{
+        .display = static_cast<void*>(glfwGetX11Display()),
+        .window = reinterpret_cast<void*>(static_cast<uintptr_t>(glfwGetX11Window(window))),
     };
 #else
     auto native_handle = native_wsi_handle{};
@@ -307,21 +325,29 @@ TEST(swapchain_test, swapchain_recreation_handover)
     glfwSetWindowSize(window, 800, 600);
     glfwPollEvents();
 
+    // Get the new framebuffer size after resizing the window
+    int fb_width = 0;
+    int fb_height = 0;
+    glfwGetFramebufferSize(window, &fb_width, &fb_height);
+
+    ASSERT_NE(fb_width, 0);
+    ASSERT_NE(fb_height, 0);
+
     auto caps_b = dev->get_surface_capabilities(raw_surf);
     auto surf_desc_b = render_surface_desc{
         .raw_surface = raw_surf,
         .present_mode = caps_b.supported_present_modes[0],
         .format = caps_b.supported_formats[0],
-        .width = 800,
-        .height = 600,
+        .width = static_cast<uint32_t>(fb_width),
+        .height = static_cast<uint32_t>(fb_height),
         .min_image_count = caps_b.min_image_count,
         .preferred_image_count = caps_b.min_image_count + 1,
         .old_surface = surf_a.get(),
     };
     auto surf_b = dev->create_render_surface(surf_desc_b);
     ASSERT_NE(surf_b, nullptr);
-    EXPECT_EQ(surf_b->get_width(), 800);
-    EXPECT_EQ(surf_b->get_height(), 600);
+    EXPECT_EQ(surf_b->get_width(), fb_width);
+    EXPECT_EQ(surf_b->get_height(), fb_height);
 
     // 3. Destroy Surface A (simulating higher-level deletion queue retirement)
     dev->destroy_render_surface(tempest::move(surf_a));
@@ -406,16 +432,16 @@ TEST(swapchain_test, swapchain_recreation_handover)
     };
 
     const auto* cmd_ptr = &cmd;
-    auto submit_res = graphics_port.submit(span<const command_list*>{&cmd_ptr, 1},
-                                           span<const device_sync_point>{&wait_point, 1},
-                                           span<const device_sync_point>{&signal_point, 1});
+    auto submit_res =
+        graphics_port.submit(span<const command_list*>{&cmd_ptr, 1}, span<const device_sync_point>{&wait_point, 1},
+                             span<const device_sync_point>{&signal_point, 1});
     ASSERT_TRUE(submit_res.has_value());
 
     // Test explicit execution_port overload
     auto present_res = surf_b->present(graphics_port, device_sync_point{
-        .semaphore = render_sem,
-        .value = 0,
-    });
+                                                          .semaphore = render_sem,
+                                                          .value = 0,
+                                                      });
     EXPECT_TRUE(present_res.has_value() || present_res.error() == swapchain_error::suboptimal);
 
     dev->wait_idle();

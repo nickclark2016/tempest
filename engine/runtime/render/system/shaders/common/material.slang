@@ -36,8 +36,13 @@ struct Material {
 };
 
 struct MaterialState {
-    Material* mat;
+    uint64_t mat_address;
     SamplerState linear_sampler;
+
+    property Material* mat {
+        get { return (Material*)mat_address; }
+        set { mat_address = (uint64_t)newValue; }
+    }
 };
 
 struct PixelData {

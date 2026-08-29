@@ -4,6 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #elif defined(TEMPEST_PLATFORM_LINUX)
+#define VK_USE_PLATFORM_XLIB_KHR
 #define VK_USE_PLATFORM_XCB_KHR
 #endif
 
@@ -659,7 +660,7 @@ namespace tempest::rhi::vk
     auto device::create_raw_surface(native_wsi_handle native_window_handle)
         -> expected<raw_surface_handle, raw_surface_creation_error>
     {
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
         auto surface_create_info = VkWin32SurfaceCreateInfoKHR{
             .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
             .pNext = nullptr,
@@ -673,6 +674,34 @@ namespace tempest::rhi::vk
         // Get the pointer to the vkCreateWin32SurfaceKHR function from the Vulkan dispatch table
         const auto create_ptr =
             reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(_instance_dispatch_table.fp_vkCreateWin32SurfaceKHR);
+
+        [[maybe_unused]] const auto result =
+            create_ptr(_instance_dispatch_table.instance, &surface_create_info, nullptr, &surface);
+        TEMPEST_ASSERT(result == VK_SUCCESS);
+
+        const auto raw_surface_desc = raw_surface{
+            .handle = surface,
+            .native_surface_handles = native_window_handle,
+        };
+
+        auto handle = _raw_surfaces.insert(tempest::move(raw_surface_desc));
+
+        return raw_surface_handle{
+            .handle = handle,
+        };
+#elif defined(TEMPEST_PLATFORM_LINUX)
+        auto surface_create_info = VkXlibSurfaceCreateInfoKHR{
+            .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+            .pNext = nullptr,
+            .flags = 0,
+            .dpy = static_cast<Display*>(native_window_handle.display),
+            .window = static_cast<Window>(reinterpret_cast<uintptr_t>(native_window_handle.window)),
+        };
+
+        auto* surface = VkSurfaceKHR{VK_NULL_HANDLE};
+
+        const auto create_ptr =
+            reinterpret_cast<PFN_vkCreateXlibSurfaceKHR>(_instance_dispatch_table.fp_vkCreateXlibSurfaceKHR);
 
         [[maybe_unused]] const auto result =
             create_ptr(_instance_dispatch_table.instance, &surface_create_info, nullptr, &surface);
@@ -1842,10 +1871,17 @@ namespace tempest::rhi::vk
           _default_pipeline_layout{create_default_pipeline_layout(_device, _sampler_set_layout,
                                                                   _sampled_image_set_layout, _storage_image_set_layout)}
     {
-#ifdef TEMPEST_PLATFORM_WINDOWS
+#if defined(TEMPEST_PLATFORM_WINDOWS)
         _instance_dispatch_table.fp_vkCreateWin32SurfaceKHR =
             reinterpret_cast<void*>(_instance_dispatch_table.getInstanceProcAddr("vkCreateWin32SurfaceKHR"));
         if (_instance_dispatch_table.fp_vkCreateWin32SurfaceKHR == nullptr)
+        {
+            tempest::terminate();
+        }
+#elif defined(TEMPEST_PLATFORM_LINUX)
+        _instance_dispatch_table.fp_vkCreateXlibSurfaceKHR =
+            reinterpret_cast<void*>(_instance_dispatch_table.getInstanceProcAddr("vkCreateXlibSurfaceKHR"));
+        if (_instance_dispatch_table.fp_vkCreateXlibSurfaceKHR == nullptr)
         {
             tempest::terminate();
         }
