@@ -81,7 +81,7 @@ TEST(quat_test, norm_and_normalize)
     const auto q_unit = normalize(q);
 
     // 3. Assert
-    EXPECT_NEAR(magnitude, std::sqrt(30.0F), 1e-4F);
+    EXPECT_NEAR(magnitude, tempest::math::sqrt(30.0F), 1e-4F);
     EXPECT_NEAR(norm(q_unit), 1.0F, 1e-5F);
 }
 
