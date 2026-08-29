@@ -21,7 +21,8 @@ struct LightGridRange {
 
 float4 clip_to_view(float4 clip, const ClusterGridCreateInfo create_info) {
     float4 view = mul(create_info.inv_projection, clip);
-    return view / max(abs(view.w), 1e-6);
+    float denom = abs(view.w) > 1e-6 ? view.w : 1e-6;
+    return view / denom;
 }
 
 float3 screen_to_view(float4 screen_coord, const ClusterGridCreateInfo create_info) {

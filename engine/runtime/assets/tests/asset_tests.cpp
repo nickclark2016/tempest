@@ -4,13 +4,19 @@
 #include <tempest/asset_serializers.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/asset_type_registry.hpp>
+#include <tempest/default_importers.hpp>
 #include <tempest/entity_hierarchy.hpp>
+#include <tempest/event.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/material.hpp>
 #include <tempest/meta.hpp>
+#include <tempest/relationship_component.hpp>
 #include <tempest/serial.hpp>
 #include <tempest/texture.hpp>
+#include <tempest/transform_component.hpp>
 #include <tempest/vertex.hpp>
+
+#include "../src/importers/gltf_importer.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -598,17 +604,16 @@ namespace
         tempest::guid last_registered_asset_id{};
 
         // Override the path-based overload so it doesn't try to read a file from disk.
-        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
-                                                            tempest::string_view path,
-                                                            tempest::ecs::archetype_registry& registry) override
+        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db, tempest::string_view path,
+                                                  tempest::ecs::archetype_registry& registry) override
         {
             return import(asset_db, tempest::span<const tempest::byte>{}, registry, tempest::some(path));
         }
 
         [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
-                                                            tempest::span<const tempest::byte> data,
-                                                            tempest::ecs::archetype_registry& registry,
-                                                            tempest::optional<tempest::string_view> path) override
+                                                  tempest::span<const tempest::byte> data,
+                                                  tempest::ecs::archetype_registry& registry,
+                                                  tempest::optional<tempest::string_view> path) override
         {
             (void)data;
             ++import_call_count;
@@ -643,17 +648,16 @@ namespace
         tempest::vector<tempest::guid> produced_material_ids;
 
         // Override the path-based overload so it doesn't try to read a file from disk.
-        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
-                                                            tempest::string_view path,
-                                                            tempest::ecs::archetype_registry& registry) override
+        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db, tempest::string_view path,
+                                                  tempest::ecs::archetype_registry& registry) override
         {
             return import(asset_db, tempest::span<const tempest::byte>{}, registry, tempest::some(path));
         }
 
         [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
-                                                            tempest::span<const tempest::byte> data,
-                                                            tempest::ecs::archetype_registry& registry,
-                                                            tempest::optional<tempest::string_view> path) override
+                                                  tempest::span<const tempest::byte> data,
+                                                  tempest::ecs::archetype_registry& registry,
+                                                  tempest::optional<tempest::string_view> path) override
         {
             (void)data;
             ++import_call_count;
@@ -1004,7 +1008,8 @@ TEST(asset_database_mount_and_scan, mount_roots_priority_ordering)
     EXPECT_EQ(roots.size(), 0U);
 }
 
-/// @brief Verifies that scan_and_index discovers shaders in mounted directories, indexes normalized relative paths, and populates basename fallbacks.
+/// @brief Verifies that scan_and_index discovers shaders in mounted directories, indexes normalized relative paths, and
+/// populates basename fallbacks.
 TEST(asset_database_mount_and_scan, scan_and_index_discovers_shaders_and_basenames)
 {
     // 1. Setup: Create temporary mock mount directory with nested shaders
@@ -1118,7 +1123,8 @@ TEST(asset_database_mount_and_scan, resolve_source_path_maps_spv_to_slang)
     std::filesystem::remove_all(temp_mount);
 }
 
-/// @brief Verifies that notify_file_changed detects source modifications and invalidates cached blobs for hot-reloading.
+/// @brief Verifies that notify_file_changed detects source modifications and invalidates cached blobs for
+/// hot-reloading.
 TEST(asset_database_mount_and_scan, notify_file_changed_invalidates_cache)
 {
     // 1. Setup: Create mock shader and index it
@@ -1201,7 +1207,8 @@ TEST(asset_database_mount_and_scan, path_normalization_edge_cases)
     std::filesystem::remove_all(temp_mount);
 }
 
-/// @brief Verifies that duplicate basenames in different subdirectories of the same mount root are uniquely addressable via exact relative paths.
+/// @brief Verifies that duplicate basenames in different subdirectories of the same mount root are uniquely addressable
+/// via exact relative paths.
 TEST(asset_database_mount_and_scan, duplicate_basename_different_subdirectories)
 {
     // 1. Setup: Create pass_a and pass_b subdirectories with identical shader file names
@@ -1239,7 +1246,8 @@ TEST(asset_database_mount_and_scan, duplicate_basename_different_subdirectories)
     std::filesystem::remove_all(temp_mount);
 }
 
-/// @brief Verifies that on-demand asset lookup locates and registers a file on disk even without an explicit scan_and_index call.
+/// @brief Verifies that on-demand asset lookup locates and registers a file on disk even without an explicit
+/// scan_and_index call.
 TEST(asset_database_mount_and_scan, on_demand_lookup_without_explicit_scan)
 {
     // 1. Setup: Create test folder with a shader file
@@ -1267,7 +1275,8 @@ TEST(asset_database_mount_and_scan, on_demand_lookup_without_explicit_scan)
     std::filesystem::remove_all(temp_mount);
 }
 
-/// @brief Verifies that remounting an existing root with a new priority updates the priority and re-sorts the mount list.
+/// @brief Verifies that remounting an existing root with a new priority updates the priority and re-sorts the mount
+/// list.
 TEST(asset_database_mount_and_scan, mount_root_priority_update)
 {
     // 1. Setup
@@ -1315,7 +1324,8 @@ TEST(asset_database_mount_and_scan, empty_and_invalid_path_handling)
     EXPECT_FALSE(database.notify_file_changed("non_existent_file.spv"));
 }
 
-/// @brief Verifies that small assets pack into shared 64KB chunks while oversized assets allocate dedicated chunks without pointer invalidation.
+/// @brief Verifies that small assets pack into shared 64KB chunks while oversized assets allocate dedicated chunks
+/// without pointer invalidation.
 TEST(asset_database_mount_and_scan, large_and_small_assets_chunk_arena)
 {
     // 1. Setup
@@ -1356,7 +1366,8 @@ TEST(asset_database_mount_and_scan, large_and_small_assets_chunk_arena)
     EXPECT_EQ(large_blob[128 * 1024 - 1], static_cast<tempest::byte>(0xAA));
 }
 
-/// @brief Verifies that runtime chunks are completely coalesced into a single contiguous block when saved to .tassetdb and reopened.
+/// @brief Verifies that runtime chunks are completely coalesced into a single contiguous block when saved to .tassetdb
+/// and reopened.
 TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
 {
     const auto test_db_path = std::filesystem::path("tempest_test_coalesce.tassetdb");
@@ -1438,9 +1449,9 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
 
         shader_id = database.register_asset(tempest::assets::asset_type_id::from_hash(10), "pbr.frag.spv");
         auto initial_shader = std::string("INITIAL_SHADER_V1");
-        database.store_blob(shader_id, tempest::span<const tempest::byte>{
-                                           reinterpret_cast<const tempest::byte*>(initial_shader.data()),
-                                           initial_shader.size()});
+        database.store_blob(
+            shader_id, tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(initial_shader.data()),
+                                                          initial_shader.size()});
 
         mesh_id = database.register_asset(tempest::assets::asset_type_id::from_hash(20), "cube.mesh");
         auto mesh_data = std::string("CUBE_MESH_DATA_UNTOUCHED");
@@ -1457,9 +1468,9 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
 
         // Mutate shader blob
         auto updated_shader = std::string("RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
-        database.store_blob(shader_id, tempest::span<const tempest::byte>{
-                                           reinterpret_cast<const tempest::byte*>(updated_shader.data()),
-                                           updated_shader.size()});
+        database.store_blob(
+            shader_id, tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(updated_shader.data()),
+                                                          updated_shader.size()});
 
         // Verify in-memory updated content and untouched mesh content
         auto cur_shader_blob = database.get_blob(shader_id);
@@ -1492,5 +1503,117 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
     if (std::filesystem::exists(test_db_path))
     {
         std::filesystem::remove(test_db_path);
+    }
+}
+
+// ============================================================================
+// 10. glTF Hierarchy & Transform Invariants
+// ============================================================================
+
+/// @brief Tests that glTF importing does not leave orphan template mesh primitives in the registry.
+TEST(gltf_importer_tests, no_orphan_template_primitives_created)
+{
+    // 1. Setup: Create binary buffer with 3 vertices and 3 indices
+    const auto bin_file_path = std::filesystem::path("tempest_test_instanced_mesh.bin");
+    {
+        auto f = std::ofstream(bin_file_path, std::ios::binary);
+        float verts[9] = {
+            0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F,
+        };
+        uint16_t indices[3] = {0, 1, 2};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+        f.write(reinterpret_cast<const char*>(indices), sizeof(indices));
+    }
+
+    const auto test_file_path = std::filesystem::path("tempest_test_instanced_mesh.gltf");
+    {
+        auto f = std::ofstream(test_file_path, std::ios::binary);
+        f << R"({
+        "asset": { "version": "2.0" },
+        "buffers": [
+            { "byteLength": 42, "uri": "tempest_test_instanced_mesh.bin" }
+        ],
+        "bufferViews": [
+            { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+            { "buffer": 0, "byteOffset": 36, "byteLength": 6, "target": 34963 }
+        ],
+        "accessors": [
+            { "bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3", "max": [1.0, 1.0, 0.0], "min": [0.0, 0.0, 0.0] },
+            { "bufferView": 1, "byteOffset": 0, "componentType": 5123, "count": 3, "type": "SCALAR", "max": [2], "min": [0] }
+        ],
+        "meshes": [
+            {
+                "primitives": [
+                    { "attributes": { "POSITION": 0 }, "indices": 1 }
+                ]
+            }
+        ],
+        "nodes": [
+            { "mesh": 0, "translation": [10.0, 0.0, 0.0] },
+            { "mesh": 0, "translation": [-10.0, 0.0, 0.0] }
+        ],
+        "scenes": [
+            { "nodes": [0, 1] }
+        ],
+        "scene": 0
+    })";
+    }
+
+    auto mesh_reg = tempest::core::mesh_registry{};
+    auto tex_reg = tempest::core::texture_registry{};
+    auto mat_reg = tempest::core::material_registry{};
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    tempest::assets::register_default_importers(database, &mesh_reg, &tex_reg, &mat_reg);
+
+    auto events = tempest::event::event_registry{};
+    auto registry = tempest::ecs::basic_archetype_registry{events};
+
+    // 2. Act: Import the glTF content via asset_database
+    auto root = database.load(test_file_path.generic_string().c_str(), registry);
+
+    EXPECT_TRUE(root != tempest::ecs::tombstone);
+
+    // 3. Assert: Exactly 2 mesh components exist in the registry (one for each node instance), NO orphan template
+    // primitives
+    auto mesh_count = 0U;
+    registry.each([&](const tempest::core::mesh_component&) { ++mesh_count; });
+
+    EXPECT_EQ(mesh_count, 2U);
+
+    // Root should have 2 children (the 2 nodes)
+    const auto* root_rel = registry.try_get<tempest::ecs::relationship_component<tempest::ecs::entity>>(root);
+    ASSERT_NE(root_rel, nullptr);
+    EXPECT_TRUE(root_rel->first_child != tempest::ecs::tombstone);
+
+    auto node_count = 0U;
+    auto child = root_rel->first_child;
+    while (child != tempest::ecs::tombstone)
+    {
+        ++node_count;
+        const auto* child_rel = registry.try_get<tempest::ecs::relationship_component<tempest::ecs::entity>>(child);
+        ASSERT_NE(child_rel, nullptr);
+        EXPECT_EQ(child_rel->parent, root);
+
+        // Each node should have 1 child mesh primitive
+        EXPECT_TRUE(child_rel->first_child != tempest::ecs::tombstone);
+        const auto* mesh_rel =
+            registry.try_get<tempest::ecs::relationship_component<tempest::ecs::entity>>(child_rel->first_child);
+        ASSERT_NE(mesh_rel, nullptr);
+        EXPECT_EQ(mesh_rel->parent, child);
+        EXPECT_TRUE(registry.has<tempest::core::mesh_component>(child_rel->first_child));
+
+        child = child_rel->next_sibling;
+    }
+    EXPECT_EQ(node_count, 2U);
+
+    // 4. Teardown
+    if (std::filesystem::exists(test_file_path))
+    {
+        std::filesystem::remove(test_file_path);
+    }
+    if (std::filesystem::exists(bin_file_path))
+    {
+        std::filesystem::remove(bin_file_path);
     }
 }

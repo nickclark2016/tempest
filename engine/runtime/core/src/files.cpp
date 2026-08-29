@@ -9,8 +9,11 @@ namespace tempest::core
 {
     vector<byte> read_bytes(string_view path)
     {
-        std::ifstream input(std::string(path.data()), std::ios::ate | std::ios::binary);
-        assert(input);
+        std::ifstream input(std::string(path.data(), path.size()), std::ios::ate | std::ios::binary);
+        if (!input.is_open())
+        {
+            return {};
+        }
         size_t file_size = (size_t)input.tellg();
         vector<byte> buffer;
         unsafe::resize_no_init(buffer, file_size);
@@ -22,7 +25,11 @@ namespace tempest::core
     string read_text(string_view path)
     {
         std::ostringstream buf;
-        std::ifstream input(std::string(path.data()), std::ios::ate | std::ios::binary);
+        std::ifstream input(std::string(path.data(), path.size()), std::ios::ate | std::ios::binary);
+        if (!input.is_open())
+        {
+            return {};
+        }
         buf << input.rdbuf();
         return buf.str().c_str();
     }

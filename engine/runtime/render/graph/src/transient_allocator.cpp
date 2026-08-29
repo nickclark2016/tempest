@@ -116,11 +116,11 @@ namespace tempest::render_graph
             for (size_t i = 0; i < _texture_pool.size(); ++i)
             {
                 auto& p = _texture_pool[i];
-                if (p.flight_slot == _frame_slot &&
-                    p.desc.width == req_desc.width && p.desc.height == req_desc.height &&
-                    p.desc.depth == req_desc.depth && p.desc.format == req_desc.format &&
-                    p.desc.usage == req_desc.usage && p.desc.memory_usage == req_desc.memory_usage &&
-                    p.desc.mip_levels == req_desc.mip_levels && p.desc.array_layers == req_desc.array_layers)
+                if (p.flight_slot == _frame_slot && p.desc.width == req_desc.width &&
+                    p.desc.height == req_desc.height && p.desc.depth == req_desc.depth &&
+                    p.desc.format == req_desc.format && p.desc.usage == req_desc.usage &&
+                    p.desc.memory_usage == req_desc.memory_usage && p.desc.mip_levels == req_desc.mip_levels &&
+                    p.desc.array_layers == req_desc.array_layers)
                 {
                     // Check if non-overlapping: previous pass user must have finished before lifetime.first_pass
                     if (!p.in_use_this_frame || p.last_pass_used < lifetime.first_pass)
@@ -149,14 +149,13 @@ namespace tempest::render_graph
             else
             {
                 const auto h = dev.create_texture(req_desc);
-                const auto v = dev.create_texture_view(
-                    h, rhi::texture_view_desc{
-                           .override_format = nullopt,
-                           .base_mip_level = 0,
-                           .mip_level_count = req_desc.mip_levels,
-                           .base_array_layer = 0,
-                           .array_layer_count = req_desc.array_layers,
-                       });
+                const auto v = dev.create_texture_view(h, rhi::texture_view_desc{
+                                                              .override_format = nullopt,
+                                                              .base_mip_level = 0,
+                                                              .mip_level_count = req_desc.mip_levels,
+                                                              .base_array_layer = 0,
+                                                              .array_layer_count = req_desc.array_layers,
+                                                          });
 
                 auto sampled_desc = rhi::descriptor_handle{};
                 if (static_cast<bool>(req_desc.usage & rhi::texture_usage::sampled))
@@ -238,7 +237,7 @@ namespace tempest::render_graph
             {
                 _active_buffers[buf_id] = physical_buffer_allocation{
                     .handle = reg_buf.imported_handle,
-                    .device_address = 0,
+                    .device_address = reg_buf.imported_handle.gpu_address,
                     .size = reg_buf.desc.size,
                 };
                 continue;
@@ -255,8 +254,7 @@ namespace tempest::render_graph
             for (size_t i = 0; i < _buffer_pool.size(); ++i)
             {
                 auto& p = _buffer_pool[i];
-                if (p.flight_slot == _frame_slot &&
-                    p.desc.size >= req_desc.size && p.desc.usage == req_desc.usage &&
+                if (p.flight_slot == _frame_slot && p.desc.size >= req_desc.size && p.desc.usage == req_desc.usage &&
                     p.desc.memory_usage == req_desc.memory_usage)
                 {
                     if (!p.in_use_this_frame || p.last_pass_used < lifetime.first_pass)
@@ -285,7 +283,7 @@ namespace tempest::render_graph
 
                 _buffer_pool.push_back(pooled_buffer{
                     .handle = h,
-                    .device_address = 0,
+                    .device_address = h.gpu_address,
                     .desc = req_desc,
                     .in_use_this_frame = true,
                     .last_pass_used = lifetime.last_pass,
@@ -294,7 +292,7 @@ namespace tempest::render_graph
 
                 _active_buffers[buf_id] = physical_buffer_allocation{
                     .handle = h,
-                    .device_address = 0,
+                    .device_address = h.gpu_address,
                     .size = req_desc.size,
                 };
             }

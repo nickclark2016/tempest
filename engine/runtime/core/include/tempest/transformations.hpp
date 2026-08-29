@@ -151,13 +151,13 @@ namespace tempest::math
     inline constexpr mat4<T> rotate(const mat4<T>& m, const T& angle, const vec3<T>& v)
     {
         const T a = angle;
-        const T c = cos(a);
-        const T s = sin(a);
+        const T c = math::cos(a);
+        const T s = math::sin(a);
 
         vec3<T> axis(normalize(v));
         vec3<T> temp((static_cast<T>(1) - c) * axis);
 
-        mat4<T> rot;
+        mat4<T> rot(static_cast<T>(1));
         rot[0][0] = c + temp[0] * axis[0];
         rot[0][1] = temp[0] * axis[1] + s * axis[2];
         rot[0][2] = temp[0] * axis[2] - s * axis[1];
@@ -241,13 +241,13 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr bool decompose(const mat4<T>& transformationMatrix, vec3<T>& translate, quat<T> rotation,
+    inline constexpr bool decompose(const mat4<T>& transformationMatrix, vec3<T>& translate, quat<T>& rotation,
                                     vec3<T>& scale)
     {
         auto local = transformationMatrix;
 
         // Matrix normalization
-        if (local[3][3] == 0)
+        if (local[3][3] == static_cast<T>(0))
         {
             return false;
         }
@@ -261,54 +261,42 @@ namespace tempest::math
         }
 
         // solve for translation and remove
-        vec4 translation = local[3];
+        const vec4<T> translation = local[3];
         translate.x = translation.x;
         translate.y = translation.y;
         translate.z = translation.z;
-        local[3] = vec4(static_cast<T>(0), static_cast<T>(0), static_cast<T>(0), translation.w);
+        local[3] = vec4<T>(static_cast<T>(0), static_cast<T>(0), static_cast<T>(0), translation.w);
 
         // solve for scale
-        vec3<float> row[3];
+        vec3<T> col[3];
         for (size_t i = 0; i < 3; ++i)
         {
-            for (size_t j = 0; j < 3; ++j)
-            {
-                row[i][j] = local[i][j];
-            }
+            col[i] = vec3<T>{local[i][0], local[i][1], local[i][2]};
         }
 
-        scale.x = norm(row[0]); // x scale is the length of the first row
-        scale.y = norm(row[1]);
-        scale.z = norm(row[2]);
+        scale.x = norm(col[0]);
+        scale.y = norm(col[1]);
+        scale.z = norm(col[2]);
 
-        T root, trace = row[0].x + row[1].y + row[2].z;
-        if (trace > static_cast<T>(0))
+        if (scale.x == static_cast<T>(0) || scale.y == static_cast<T>(0) || scale.z == static_cast<T>(0))
         {
-            root = math::sqrt(trace + static_cast<T>(1));
-            rotation.w = static_cast<T>(0.5) * root;
-            root = static_cast<T>(0.5) / root;
-            rotation.x = root * (row[1].z - row[2].y);
-            rotation.y = root * (row[2].x - row[0].z);
-            rotation.z = root * (row[0].y - row[1].x);
+            rotation = quat<T>(static_cast<T>(0), static_cast<T>(0), static_cast<T>(0), static_cast<T>(1));
+            return true;
         }
-        else
-        {
-            constexpr size_t next[3] = {1, 2, 0};
-            size_t i = 0;
-            if (row[1].y > row[0].x)
-                i = 1;
-            if (row[2].z > row[i][i])
-                i = 2;
-            size_t j = next[i];
-            size_t k = next[j];
 
-            root = math::sqrt(row[i][i] - row[j][j] - row[k][k] + static_cast<T>(1));
-            rotation[i + 1] = static_cast<T>(0.5) * root;
-            root = static_cast<T>(0.5) / root;
-            rotation[j + 1] = root * (row[i][j] + row[j][i]);
-            rotation[k + 1] = root * (row[i][k] + row[k][i]);
-            rotation.w = root * (row[j][k] - row[k][j]);
+        // Check for negative determinant (reflection)
+        if (dot(col[0], cross(col[1], col[2])) < static_cast<T>(0))
+        {
+            scale.x = -scale.x;
+            col[0] = -col[0];
         }
+
+        col[0] = col[0] / scale.x;
+        col[1] = col[1] / scale.y;
+        col[2] = col[2] / scale.z;
+
+        const mat3<T> rot_mat(col[0], col[1], col[2]);
+        rotation = as_quat(rot_mat);
 
         return true;
     }
@@ -328,7 +316,7 @@ namespace tempest::math
         T focal_length = static_cast<T>(1) / math::tan(fov_rad / 2);
 
         T x = focal_length / aspect;
-        T y = focal_length;
+        T y = -focal_length;
         T A = near / (far - near);
         T B = far * A;
 

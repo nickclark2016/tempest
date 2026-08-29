@@ -640,6 +640,9 @@ namespace tempest::render_system::tests
                 // Verify cluster 0 depth range is near plane [tile_near, tile_far]
                 EXPECT_LT(cb[0].min_corner.z, 0.0F);
                 EXPECT_LT(cb[0].max_corner.z, 0.0F);
+                // Verify cluster 0 is on the left (x < 0) and top (y > 0) of view frustum
+                EXPECT_LT(cb[0].min_corner.x, 0.0F);
+                EXPECT_GT(cb[0].max_corner.y, 0.0F);
             }
         }
         dev->destroy_buffer(cluster_readback);

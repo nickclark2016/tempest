@@ -73,7 +73,8 @@ namespace tempest::ecs
         }
     };
 
-    static_assert(is_trivial<math::mat4<float>>::value);
+    static_assert(is_trivial_v<transform_component>);
+    static_assert(is_trivial_v<math::mat4<float>>);
 } // namespace tempest::ecs
 
 #endif // tempest_ecs_transform_component_hpp

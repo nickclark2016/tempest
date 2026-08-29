@@ -102,7 +102,8 @@ namespace tempest::render_graph
                 -> rhi::buffer_handle override
             {
                 ++created_buffers;
-                return rhi::buffer_handle{.handle = next_handle++};
+                const auto h = next_handle++;
+                return rhi::buffer_handle{.handle = h, .gpu_address = h * 0x10000ULL};
             }
 
             [[nodiscard]] auto create_texture([[maybe_unused]] const rhi::texture_desc& desc)
@@ -521,5 +522,75 @@ namespace tempest::render_graph
 
         allocator.release_all(dev);
         EXPECT_EQ(dev.destroyed_textures, 2U);
+    }
+
+    /// @brief Verifies that allocated transient buffers and imported buffers expose their non-zero GPU device
+    /// addresses.
+    TEST(transient_allocator_test, buffer_device_address_propagation)
+    {
+        // 1. Setup: Mock device and transient allocator
+        auto dev = mock_device{};
+        auto allocator = transient_allocator{};
+        allocator.set_frames_in_flight(1);
+        allocator.set_frame_slot(0);
+
+        const auto imported_gpu_addr = 0xDEADBEEF0000ULL;
+
+        // 2. Act: Register 1 transient buffer and 1 imported buffer
+        const auto buffers = vector<registered_buffer>{
+            init_list,
+            registered_buffer{
+                .id = 0,
+                .desc =
+                    rg_buffer_desc{
+                        .size = 1024,
+                        .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address,
+                        .name = "TransientStorageBuffer",
+                    },
+                .is_imported = false,
+            },
+            registered_buffer{
+                .id = 1,
+                .desc =
+                    rg_buffer_desc{
+                        .size = 2048,
+                        .name = "ImportedBuffer",
+                    },
+                .is_imported = true,
+                .imported_handle =
+                    rhi::buffer_handle{
+                        .handle = 999,
+                        .gpu_address = imported_gpu_addr,
+                    },
+            },
+        };
+
+        auto lifetimes = flat_unordered_map<uint32_t, resource_lifetime>{};
+        lifetimes[0] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+        lifetimes[1] = resource_lifetime{.first_pass = 0, .last_pass = 0};
+
+        const auto dag = compiled_dag{
+            .sorted_pass_indices = vector<uint32_t>{init_list, 0U},
+            .resolved_texture_aliases = {},
+            .resolved_buffer_aliases = {},
+            .texture_lifetimes = {},
+            .buffer_lifetimes = tempest::move(lifetimes),
+        };
+
+        allocator.allocate(dev, dag, {}, buffers, 1920, 1080);
+
+        // 3. Assert: Both buffers have valid non-zero device addresses matching their physical GPU handles
+        const auto* transient_alloc = allocator.get_buffer(0);
+        ASSERT_NE(transient_alloc, nullptr);
+        EXPECT_NE(transient_alloc->device_address, 0ULL);
+        EXPECT_EQ(transient_alloc->device_address, transient_alloc->handle.gpu_address);
+
+        const auto* imported_alloc = allocator.get_buffer(1);
+        ASSERT_NE(imported_alloc, nullptr);
+        EXPECT_EQ(imported_alloc->device_address, imported_gpu_addr);
+
+        // 4. Teardown
+        allocator.release_all(dev);
+        EXPECT_EQ(dev.destroyed_buffers, 1U);
     }
 } // namespace tempest::render_graph

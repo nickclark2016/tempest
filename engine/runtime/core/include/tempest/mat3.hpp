@@ -207,7 +207,7 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr mat3<T> operator*(const mat3<T>& lhs, const vec3<T>& rhs) noexcept
+    inline constexpr vec3<T> operator*(const mat3<T>& lhs, const vec3<T>& rhs) noexcept
     {
         const auto m00 = lhs[0][0] * rhs[0] + lhs[1][0] * rhs[1] + lhs[2][0] * rhs[2];
         const auto m10 = lhs[0][1] * rhs[0] + lhs[1][1] * rhs[1] + lhs[2][1] * rhs[2];

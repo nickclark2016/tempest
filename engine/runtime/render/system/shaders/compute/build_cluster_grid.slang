@@ -18,10 +18,10 @@ void CSMain(uint3 work_group_id : SV_GroupID) {
     const uint tile_size_px = create_info.workgroup_count_tile_size_px.w;
     const uint tile_index = work_group_id.x + work_group_id.y * create_info.workgroup_count_tile_size_px.x + work_group_id.z * create_info.workgroup_count_tile_size_px.x * create_info.workgroup_count_tile_size_px.y;
 
-    float3 p0_view = screen_to_view(float4(float2(work_group_id.x,     work_group_id.y)     * tile_size_px, -1.0f, 1.0f), create_info);
-    float3 p1_view = screen_to_view(float4(float2(work_group_id.x + 1, work_group_id.y)     * tile_size_px, -1.0f, 1.0f), create_info);
-    float3 p2_view = screen_to_view(float4(float2(work_group_id.x,     work_group_id.y + 1) * tile_size_px, -1.0f, 1.0f), create_info);
-    float3 p3_view = screen_to_view(float4(float2(work_group_id.x + 1, work_group_id.y + 1) * tile_size_px, -1.0f, 1.0f), create_info);
+    float3 p0_view = screen_to_view(float4(float2(work_group_id.x,     work_group_id.y)     * tile_size_px, 1.0f, 1.0f), create_info);
+    float3 p1_view = screen_to_view(float4(float2(work_group_id.x + 1, work_group_id.y)     * tile_size_px, 1.0f, 1.0f), create_info);
+    float3 p2_view = screen_to_view(float4(float2(work_group_id.x,     work_group_id.y + 1) * tile_size_px, 1.0f, 1.0f), create_info);
+    float3 p3_view = screen_to_view(float4(float2(work_group_id.x + 1, work_group_id.y + 1) * tile_size_px, 1.0f, 1.0f), create_info);
 
     const float z_near = create_info.screen_bounds.z;
     const float z_far = create_info.screen_bounds.w;
