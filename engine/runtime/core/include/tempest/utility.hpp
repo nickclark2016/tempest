@@ -64,11 +64,7 @@ namespace tempest
     /// @tparam T1 First type.
     /// @tparam T2 Second type.
     template <typename T1, typename T2>
-    struct
-#if defined(_MSC_VER) && !defined(__clang__)
-        TEMPEST_API
-#endif
-        pair
+    struct pair
     {
         /// @brief Type of the first object.
         using first_type = T1;

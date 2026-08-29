@@ -104,28 +104,29 @@ scoped.project('tempest', function()
         'toolset:clang*',
     }, function()
         linker 'lld'
-        
-        wholearchive {
-            'assets',
-            'core',
-            'ecs',
-            'event',
-            'logger',
-            'math',
-            'render-graph',
-            'render-system',
-            'rhi-api',
-            'rhi-vk',
-            'serialization',
-
-            'miniz',
-            'simdjson',
-            'tinyexr',
-            'tlsf',
-            'vk-bootstrap',
-            'vma',
-        }
     end)
+
+    wholearchive {
+        'assets',
+        'core',
+        'ecs',
+        'event',
+        'logger',
+        'math',
+        'render-graph',
+        'render-system',
+        'rhi-api',
+        'rhi-vk',
+        'serialization',
+        'units',
+
+        'miniz',
+        'simdjson',
+        'tinyexr',
+        'tlsf',
+        'vk-bootstrap',
+        'vma',
+    }
 
     scoped.filter({
         'toolset:clang',
@@ -143,7 +144,7 @@ scoped.project('tempest', function()
         }
 
         uses {
-            'api:includedirs',
+            'api',
             'assets:includedirs',
             'core:defines',
             'core:includedirs',
@@ -202,6 +203,8 @@ scoped.project('tempest', function()
             links {
                 'kernel32',
                 'user32',
+                'Advapi32',
+                'Synchronization',
             }
         end)
 

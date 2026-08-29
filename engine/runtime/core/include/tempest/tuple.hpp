@@ -58,11 +58,7 @@ namespace tempest
         };
 
         template <typename T>
-        struct
-#if defined(_MSC_VER) && !defined(__clang__)
-            TEMPEST_API
-#endif
-            tuple_val
+        struct tuple_val
         {
             constexpr tuple_val() : val{} {};
 
@@ -73,11 +69,7 @@ namespace tempest
         };
 
         template <typename T>
-        struct
-#if defined(_MSC_VER) && !defined(__clang__)
-            TEMPEST_API
-#endif
-            tuple_val<T&>
+        struct tuple_val<T&>
         {
             constexpr tuple_val(T& u) : val{u} {};
 
@@ -89,11 +81,7 @@ namespace tempest
         };
 
         template <>
-        struct
-#if defined(_MSC_VER) && !defined(__clang__)
-            TEMPEST_API
-#endif
-            tuple_impl < >
+        struct tuple_impl<>
         {
             constexpr tuple_impl() noexcept = default;
             constexpr tuple_impl(const tuple_impl&) = default;
@@ -107,11 +95,7 @@ namespace tempest
         };
 
         template <typename Head, typename... Rest>
-        struct
-#if defined(_MSC_VER) && !defined(__clang__)
-            TEMPEST_API
-#endif
-            tuple_impl<Head, Rest...> : tuple_impl<Rest...>
+        struct tuple_impl<Head, Rest...> : tuple_impl<Rest...>
         {
             using type = Head;
             using base = tuple_impl<Rest...>;
@@ -299,11 +283,7 @@ namespace tempest
     inline constexpr size_t tuple_size_v = tuple_size<T>::value;
 
     template <typename... Ts>
-    class
-#if defined(_MSC_VER) && !defined(__clang__)
-        TEMPEST_API
-#endif
-        tuple : public detail::tuple_impl<Ts...>
+    class tuple : public detail::tuple_impl<Ts...>
     {
       public:
         constexpr tuple() = default;

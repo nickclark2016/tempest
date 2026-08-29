@@ -16,7 +16,7 @@ namespace tempest::math
 #pragma warning(disable : 4201)
 #endif
     template <typename T>
-    struct TEMPEST_API alignas(sizeof(T) * 4) quat
+    struct alignas(sizeof(T) * 4) quat
     {
 
         union {

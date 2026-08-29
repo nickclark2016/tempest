@@ -441,20 +441,20 @@ namespace tempest::ecs
     } // namespace detail
 
     template <typename T, size_t N, integral O>
-    class TEMPEST_API basic_entity_store
+    class basic_entity_store
     {
       public:
         static constexpr size_t entities_per_chunk = N;
         static constexpr size_t entities_per_block = sizeof(O) * CHAR_BIT;
         static constexpr size_t blocks_per_chunk = entities_per_chunk / entities_per_block;
 
-        struct TEMPEST_API block
+        struct block
         {
             O occupancy{0};
             array<T, entities_per_block> entities{};
         };
 
-        struct TEMPEST_API chunk
+        struct chunk
         {
             using value_type = T;
 
@@ -1458,7 +1458,7 @@ namespace tempest::ecs
     using archetype_registry = basic_archetype_registry;
     using registry = archetype_registry;
 
-    class TEMPEST_API basic_archetype_entity_hierarchy_iterator
+    class basic_archetype_entity_hierarchy_iterator
     {
       public:
         using value_type = basic_archetype_registry::entity_type;
@@ -1562,7 +1562,7 @@ namespace tempest::ecs
         return !(lhs == rhs);
     }
 
-    class TEMPEST_API basic_archetype_entity_hierarchy_view
+    class basic_archetype_entity_hierarchy_view
     {
       public:
         using iterator = basic_archetype_entity_hierarchy_iterator;
@@ -1626,7 +1626,7 @@ namespace tempest::ecs
         return {*_registry, tombstone, 0};
     }
 
-    class TEMPEST_API basic_archetype_entity_ancestor_iterator
+    class basic_archetype_entity_ancestor_iterator
     {
       public:
         using value_type = basic_archetype_registry::entity_type;
@@ -1691,7 +1691,7 @@ namespace tempest::ecs
         return !(lhs == rhs);
     }
 
-    class TEMPEST_API basic_archetype_entity_ancestor_view
+    class basic_archetype_entity_ancestor_view
     {
       public:
         using iterator = basic_archetype_entity_ancestor_iterator;

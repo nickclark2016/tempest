@@ -54,11 +54,6 @@ scoped.project('core', function()
             defines {
                 'TEMPEST_WIN_THREADS',
             }
-
-            links {
-                'Advapi32.lib',
-                'Synchronization.lib',
-            }
         end)
 
         scoped.filter({
@@ -94,14 +89,6 @@ scoped.project('core', function()
             'glfw',
             'tlsf',
         }
-
-        scoped.filter({
-            'system:windows'
-        }, function()
-            links {
-                'Advapi32.lib',
-            }
-        end)
     end)
 end)
 

@@ -7,7 +7,7 @@
 namespace tempest::math
 {
     template <typename T>
-    struct TEMPEST_API alignas(sizeof(vec4<T>)) mat4
+    struct alignas(sizeof(vec4<T>)) mat4
     {
 #if defined(_MSC_VER) && !defined(__clang__)
 #pragma warning(push)

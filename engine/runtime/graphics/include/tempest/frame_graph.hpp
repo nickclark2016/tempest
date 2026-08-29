@@ -56,19 +56,19 @@ namespace tempest::graphics
     };
 
     inline constexpr bool operator==(const base_graph_resource_handle& lhs,
-                                 const base_graph_resource_handle& rhs) noexcept
+                                     const base_graph_resource_handle& rhs) noexcept
     {
         return lhs.handle == rhs.handle && lhs.version == rhs.version && lhs.type == rhs.type;
     }
 
     inline constexpr bool operator!=(const base_graph_resource_handle& lhs,
-                                 const base_graph_resource_handle& rhs) noexcept
+                                     const base_graph_resource_handle& rhs) noexcept
     {
         return !(lhs == rhs);
     }
 
     template <rhi::rhi_handle_type T>
-    struct TEMPEST_API graph_resource_handle : base_graph_resource_handle
+    struct graph_resource_handle : base_graph_resource_handle
     {
         using base_graph_resource_handle::base_graph_resource_handle;
     };
@@ -160,7 +160,9 @@ namespace tempest::graphics
         using task_builder::fallback;
 
         template <typename... ExecTs>
-        void fallback(invocable_no_capture<graphics_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
+        void fallback(
+            invocable_no_capture<graphics_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+            ExecTs&&... exec_args)
         {
             if constexpr (sizeof...(ExecTs) == 0)
             {
@@ -172,7 +174,8 @@ namespace tempest::graphics
             else
             {
                 auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
-                _fallback_exec = [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                _fallback_exec = [record = tempest::move(record),
+                                  args = tempest::move(tup)](task_execution_context& ctx) {
                     auto graphics_ctx = reinterpret_cast<graphics_task_execution_context*>(&ctx);
                     tempest::apply(
                         [&](auto&&... unpacked) {
@@ -192,7 +195,9 @@ namespace tempest::graphics
         using task_builder::fallback;
 
         template <typename... ExecTs>
-        void fallback(invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
+        void fallback(
+            invocable_no_capture<compute_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+            ExecTs&&... exec_args)
         {
             if constexpr (sizeof...(ExecTs) == 0)
             {
@@ -204,7 +209,8 @@ namespace tempest::graphics
             else
             {
                 auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
-                _fallback_exec = [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                _fallback_exec = [record = tempest::move(record),
+                                  args = tempest::move(tup)](task_execution_context& ctx) {
                     auto compute_ctx = reinterpret_cast<compute_task_execution_context*>(&ctx);
                     tempest::apply(
                         [&](auto&&... unpacked) {
@@ -229,7 +235,9 @@ namespace tempest::graphics
         using task_builder::fallback;
 
         template <typename... ExecTs>
-        void fallback(invocable_no_capture<transfer_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record, ExecTs&&... exec_args)
+        void fallback(
+            invocable_no_capture<transfer_task_execution_context&, unwrap_reference_t<ExecTs>...> auto&& record,
+            ExecTs&&... exec_args)
         {
             if constexpr (sizeof...(ExecTs) == 0)
             {
@@ -241,7 +249,8 @@ namespace tempest::graphics
             else
             {
                 auto tup = tempest::make_tuple(tempest::forward<ExecTs>(exec_args)...);
-                _fallback_exec = [record = tempest::move(record), args = tempest::move(tup)](task_execution_context& ctx) {
+                _fallback_exec = [record = tempest::move(record),
+                                  args = tempest::move(tup)](task_execution_context& ctx) {
                     auto transfer_ctx = reinterpret_cast<transfer_task_execution_context*>(&ctx);
                     tempest::apply(
                         [&](auto&&... unpacked) {
@@ -376,8 +385,8 @@ namespace tempest::graphics
                   const graph_resource_handle<rhi::rhi_handle_type::render_surface>& dst);
 
         void copy_image_to_buffer(const graph_resource_handle<rhi::rhi_handle_type::image>& src,
-                                  const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst,
-                                  size_t dst_offset = 0, uint32_t src_mip = 0);
+                                  const graph_resource_handle<rhi::rhi_handle_type::buffer>& dst, size_t dst_offset = 0,
+                                  uint32_t src_mip = 0);
 
       private:
         friend class graph_executor;

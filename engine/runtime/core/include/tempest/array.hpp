@@ -10,11 +10,7 @@ namespace tempest
 {
     template <typename T, size_t N>
         requires is_default_constructible_v<T>
-    struct
-#if defined(_MSC_VER) && !defined(__clang__)
-        TEMPEST_API
-#endif
-        array
+    struct array
     {
         using value_type = T;
         using size_type = size_t;

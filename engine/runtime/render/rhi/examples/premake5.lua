@@ -25,13 +25,21 @@ scoped.project('rhi-examples', function()
         }
     end)
 
+    local function touch_cmd(file)
+        if _ACTION and _ACTION:startswith('vs') then
+            return 'powershell -NoProfile -Command "(Get-Item \'' .. file .. '\').LastWriteTime = Get-Date"'
+        else
+            return 'touch ' .. file
+        end
+    end
+
     scoped.filter({ 'files:shaders/triangle.slang' }, function()
         buildmessage 'Compiling %{file.relpath}'
         buildcommands {
             '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry VSMain -stage vertex -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name triangle_vs_spv -o %{!cfg.objdir}/shaders/triangle.vert.h',
             '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry FSMain -stage fragment -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name triangle_fs_spv -o %{!cfg.objdir}/shaders/triangle.frag.h',
-            'touch %{!cfg.objdir}/shaders/triangle.vert.h',
-            'touch %{!cfg.objdir}/shaders/triangle.frag.h',
+            touch_cmd('%{!cfg.objdir}/shaders/triangle.vert.h'),
+            touch_cmd('%{!cfg.objdir}/shaders/triangle.frag.h'),
         }
         buildoutputs {
             '%{!cfg.objdir}/shaders/triangle.vert.h',
@@ -43,7 +51,7 @@ scoped.project('rhi-examples', function()
         buildmessage 'Compiling %{file.relpath}'
         buildcommands {
             '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry PostProcessCSMain -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name postprocess_cs_spv -o %{!cfg.objdir}/shaders/postprocess.comp.h',
-            'touch %{!cfg.objdir}/shaders/postprocess.comp.h',
+            touch_cmd('%{!cfg.objdir}/shaders/postprocess.comp.h'),
         }
         buildoutputs {
             '%{!cfg.objdir}/shaders/postprocess.comp.h',
@@ -54,7 +62,7 @@ scoped.project('rhi-examples', function()
         buildmessage 'Compiling %{file.relpath}'
         buildcommands {
             '%{!fetch.slang.compiler} %{!file.abspath} -target spirv -capability SPIRV_1_5 -entry AnimateCSMain -stage compute -fvk-use-entrypoint-name -source-embed-style u32 -source-embed-name animate_cs_spv -o %{!cfg.objdir}/shaders/animate.comp.h',
-            'touch %{!cfg.objdir}/shaders/animate.comp.h',
+            touch_cmd('%{!cfg.objdir}/shaders/animate.comp.h'),
         }
         buildoutputs {
             '%{!cfg.objdir}/shaders/animate.comp.h',

@@ -26,6 +26,7 @@ scoped.workspace('Tempest', function()
     }, function()
         toolset 'v143'
         usestandardpreprocessor 'On'
+        disablewarnings { '4251' }
     end)
 
     scoped.filter({

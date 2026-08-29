@@ -6,8 +6,8 @@
 #include <tempest/iterator.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/span.hpp>
-#include <tempest/type_traits.hpp>
 #include <tempest/traits.hpp>
+#include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::ecs
@@ -15,7 +15,7 @@ namespace tempest::ecs
     namespace detail
     {
         template <typename T>
-        struct TEMPEST_API basic_sparse_set_iterator
+        struct basic_sparse_set_iterator
         {
             using value_type = T;
             using pointer = const T*;
@@ -45,7 +45,7 @@ namespace tempest::ecs
         };
 
         template <typename K, typename V>
-        struct TEMPEST_API basic_sparse_map_iterator_ptr
+        struct basic_sparse_map_iterator_ptr
         {
             pair<K&, V&> val;
 
@@ -54,13 +54,14 @@ namespace tempest::ecs
         };
 
         template <typename K, typename V>
-        struct TEMPEST_API basic_sparse_map_iterator
+        struct basic_sparse_map_iterator
         {
             using mapped_type = remove_cvref_t<V>;
 
             using value_type = pair<add_const_t<K>, mapped_type>;
             using reference = pair<add_lvalue_reference_t<add_const_t<K>>, add_lvalue_reference_t<mapped_type>>;
-            using const_reference = pair<add_lvalue_reference_t<add_const_t<K>>, add_const_t<add_lvalue_reference_t<mapped_type>>>;
+            using const_reference =
+                pair<add_lvalue_reference_t<add_const_t<K>>, add_const_t<add_lvalue_reference_t<mapped_type>>>;
             using pointer = basic_sparse_map_iterator_ptr<const K, V>;
             using const_pointer = basic_sparse_map_iterator_ptr<const K, const V>;
             using difference_type = ptrdiff_t;
@@ -397,7 +398,7 @@ namespace tempest::ecs
     } // namespace detail
 
     template <typename T, typename Allocator = allocator<T>>
-    class TEMPEST_API basic_sparse_set
+    class basic_sparse_set
     {
       public:
         using traits_type = entity_traits<T>;
@@ -499,7 +500,7 @@ namespace tempest::ecs
     };
 
     template <typename K, typename V, typename Allocator = allocator<K>>
-    class TEMPEST_API basic_sparse_map : public basic_sparse_map_interface<K>
+    class basic_sparse_map : public basic_sparse_map_interface<K>
     {
       public:
         using traits_type = entity_traits<K>;

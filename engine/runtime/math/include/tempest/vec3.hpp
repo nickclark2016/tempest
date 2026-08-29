@@ -10,7 +10,7 @@
 namespace tempest::math
 {
     template <typename T>
-    struct TEMPEST_API alignas(sizeof(T) * 4) vec3
+    struct alignas(sizeof(T) * 4) vec3
     {
 #if defined(_MSC_VER) && !defined(__clang__)
 #pragma warning(push)

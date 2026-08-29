@@ -52,7 +52,6 @@ namespace tempest::serialization
         requires is_trivially_copyable_v<T>
     struct serializer<binary_archive, T>
     {
-        TEMPEST_API
         static auto serialize(binary_archive& archive, const T& value) -> void
         {
             const auto obj_span = span<const T>{&value, 1};
@@ -60,7 +59,6 @@ namespace tempest::serialization
             archive.write(byte_span);
         }
 
-        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> T
         {
             const auto byte_span = archive.read(sizeof(T));
@@ -74,7 +72,6 @@ namespace tempest::serialization
     template <typename T, typename Allocator>
     struct serializer<binary_archive, vector<T, Allocator>>
     {
-        TEMPEST_API
         static auto serialize(binary_archive& archive, const vector<T>& vec) -> void
         {
             const auto size = static_cast<uint64_t>(vec.size());
@@ -93,7 +90,6 @@ namespace tempest::serialization
             }
         }
 
-        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> vector<T>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
@@ -121,7 +117,6 @@ namespace tempest::serialization
     template <typename T>
     struct serializer<binary_archive, optional<T>>
     {
-        TEMPEST_API
         static auto serialize(binary_archive& archive, const optional<T>& opt) -> void
         {
             const auto has_value = opt.has_value();
@@ -132,7 +127,6 @@ namespace tempest::serialization
             }
         }
 
-        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> optional<T>
         {
             const auto has_value = serializer<binary_archive, bool>::deserialize(archive);
@@ -147,7 +141,6 @@ namespace tempest::serialization
     template <typename CharT, typename Traits, typename Allocator>
     struct serializer<binary_archive, basic_string<CharT, Traits, Allocator>>
     {
-        TEMPEST_API
         static auto serialize(binary_archive& archive, const basic_string<CharT, Traits, Allocator>& str) -> void
         {
             const auto size = static_cast<uint64_t>(str.size());
@@ -155,7 +148,6 @@ namespace tempest::serialization
             archive.write(as_bytes(span{str.data(), str.size()}));
         }
 
-        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> basic_string<CharT, Traits, Allocator>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
@@ -170,13 +162,13 @@ namespace tempest::serialization
     template <typename Key, typename Value, typename Hash, typename KeyEqual, typename Allocator>
     struct serializer<binary_archive, flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>>
     {
-        TEMPEST_API
-        static auto serialize(binary_archive& archive, const flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>& map) -> void
+        static auto serialize(binary_archive& archive,
+                              const flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>& map) -> void
         {
             const auto size = static_cast<uint64_t>(map.size());
-            
+
             serializer<binary_archive, uint64_t>::serialize(archive, size);
-            
+
             for (const auto& [key, value] : map)
             {
                 serializer<binary_archive, Key>::serialize(archive, key);
@@ -184,12 +176,11 @@ namespace tempest::serialization
             }
         }
 
-        TEMPEST_API
         static auto deserialize(binary_archive& archive) -> flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>
         {
             const auto size = serializer<binary_archive, uint64_t>::deserialize(archive);
             auto map = flat_unordered_map<Key, Value, Hash, KeyEqual, Allocator>{};
-            
+
             for (uint64_t i = 0; i < size; ++i)
             {
                 auto key = serializer<binary_archive, Key>::deserialize(archive);

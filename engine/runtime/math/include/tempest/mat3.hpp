@@ -7,7 +7,7 @@
 namespace tempest::math
 {
     template <typename T>
-    struct TEMPEST_API alignas(sizeof(vec3<T>)) mat3
+    struct alignas(sizeof(vec3<T>)) mat3
     {
 #if defined(_MSC_VER) && !defined(__clang__)
 #pragma warning(push)
@@ -53,16 +53,20 @@ namespace tempest::math
         constexpr mat3& operator*=(const mat3& rhs) noexcept;
     };
 
-    template <typename T> mat3(const T) -> mat3<T>;
+    template <typename T>
+    mat3(const T) -> mat3<T>;
 
-    template <typename T> mat3(const vec3<T>&, const vec3<T>&, const vec3<T>&) -> mat3<T>;
+    template <typename T>
+    mat3(const vec3<T>&, const vec3<T>&, const vec3<T>&) -> mat3<T>;
 
     template <typename T>
     mat3(const T, const T, const T, const T, const T, const T, const T, const T, const T) -> mat3<T>;
 
-    template <typename T> mat3(const mat3<T>&) -> mat3<T>;
+    template <typename T>
+    mat3(const mat3<T>&) -> mat3<T>;
 
-    template <typename T> mat3(mat3<T>&&) -> mat3<T>;
+    template <typename T>
+    mat3(mat3<T>&&) -> mat3<T>;
 
     template <typename T>
     inline constexpr mat3<T>::mat3(const T diagonal)
@@ -83,17 +87,20 @@ namespace tempest::math
     {
     }
 
-    template <typename T> inline constexpr vec3<T>& mat3<T>::operator[](const std::size_t index) noexcept
+    template <typename T>
+    inline constexpr vec3<T>& mat3<T>::operator[](const std::size_t index) noexcept
     {
         return columns[index];
     }
 
-    template <typename T> inline constexpr const vec3<T>& mat3<T>::operator[](const std::size_t index) const noexcept
+    template <typename T>
+    inline constexpr const vec3<T>& mat3<T>::operator[](const std::size_t index) const noexcept
     {
         return columns[index];
     }
 
-    template <typename T> inline constexpr mat3<T>& mat3<T>::operator+=(const mat3& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T>& mat3<T>::operator+=(const mat3& rhs) noexcept
     {
         columns[0] += rhs[0];
         columns[1] += rhs[1];
@@ -101,7 +108,8 @@ namespace tempest::math
         return *this;
     }
 
-    template <typename T> inline constexpr mat3<T>& mat3<T>::operator-=(const mat3& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T>& mat3<T>::operator-=(const mat3& rhs) noexcept
     {
         columns[0] -= rhs[0];
         columns[1] -= rhs[1];
@@ -109,7 +117,8 @@ namespace tempest::math
         return *this;
     }
 
-    template <typename T> inline constexpr mat3<T>& mat3<T>::operator*=(const mat3& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T>& mat3<T>::operator*=(const mat3& rhs) noexcept
     {
         const auto m00 = columns[0][0] * rhs[0][0] + columns[1][0] * rhs[0][1] + columns[2][0] * rhs[0][2];
         const auto m10 = columns[0][1] * rhs[0][0] + columns[1][1] * rhs[0][1] + columns[2][1] * rhs[0][2];
@@ -136,17 +145,20 @@ namespace tempest::math
         return *this;
     }
 
-    template <typename T> inline constexpr bool operator==(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr bool operator==(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
     {
         return lhs[0] == rhs[0] && lhs[1] == rhs[1] && lhs[2] == rhs[2];
     }
 
-    template <typename T> inline constexpr bool operator!=(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr bool operator!=(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
     {
         return lhs[0] != rhs[0] || lhs[1] != rhs[1] || lhs[2] != rhs[2];
     }
 
-    template <typename T> inline constexpr mat3<T> operator+(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T> operator+(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
     {
         const auto col0 = lhs[0] + rhs[0];
         const auto col1 = lhs[1] + rhs[1];
@@ -154,7 +166,8 @@ namespace tempest::math
         return mat3(col0, col1, col2);
     }
 
-    template <typename T> inline constexpr mat3<T> operator-(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T> operator-(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
     {
         const auto col0 = lhs[0] - rhs[0];
         const auto col1 = lhs[1] - rhs[1];
@@ -162,7 +175,8 @@ namespace tempest::math
         return mat3(col0, col1, col2);
     }
 
-    template <typename T> inline constexpr mat3<T> operator*(const T lhs, const mat3<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T> operator*(const T lhs, const mat3<T>& rhs) noexcept
     {
         const auto col0 = lhs * rhs[0];
         const auto col1 = lhs * rhs[1];
@@ -170,7 +184,8 @@ namespace tempest::math
         return mat3(col0, col1, col2);
     }
 
-    template <typename T> inline constexpr mat3<T> operator*(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T> operator*(const mat3<T>& lhs, const mat3<T>& rhs) noexcept
     {
         const auto m00 = lhs[0][0] * rhs[0][0] + lhs[1][0] * rhs[0][1] + lhs[2][0] * rhs[0][2];
         const auto m10 = lhs[0][1] * rhs[0][0] + lhs[1][1] * rhs[0][1] + lhs[2][1] * rhs[0][2];
@@ -189,7 +204,8 @@ namespace tempest::math
         return result;
     }
 
-    template <typename T> inline constexpr mat3<T> operator*(const mat3<T>& lhs, const vec3<T>& rhs) noexcept
+    template <typename T>
+    inline constexpr mat3<T> operator*(const mat3<T>& lhs, const vec3<T>& rhs) noexcept
     {
         const auto m00 = lhs[0][0] * rhs[0] + lhs[1][0] * rhs[1] + lhs[2][0] * rhs[2];
         const auto m10 = lhs[0][1] * rhs[0] + lhs[1][1] * rhs[1] + lhs[2][1] * rhs[2];

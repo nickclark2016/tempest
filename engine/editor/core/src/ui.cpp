@@ -873,7 +873,7 @@ namespace tempest::editor
                                                   -1.0f - draw_data->DisplayPos.y * (2.0f / draw_data->DisplaySize.y)),
                         .vertex_buffer = fb.vertex_buffer.gpu_address +
                                          static_cast<uint64_t>(pcmd.VtxOffset + global_vtx_offset) * sizeof(ImDrawVert),
-                        .texture_id = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pcmd.GetTexID())),
+                        .texture_id = static_cast<uint32_t>(pcmd.GetTexID()),
                         .sampler_id = _impl->linear_sampler_descriptor.index,
                     };
 
