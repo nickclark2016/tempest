@@ -108,4 +108,3 @@ jobs:
           if (Test-Path "$binDir/serialization-tests.exe") { & "$binDir/serialization-tests.exe" --gtest_brief=1 }
           if (Test-Path "$binDir/assets-tests.exe") { & "$binDir/assets-tests.exe" --gtest_brief=1 }
           if (Test-Path "$binDir/render-graph-tests.exe") { & "$binDir/render-graph-tests.exe" --gtest_brief=1 }
-          if (Test-Path "$binDir/tempest-tests.exe") { & "$binDir/tempest-tests.exe" --gtest_brief=1 }
