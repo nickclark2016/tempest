@@ -308,7 +308,7 @@ namespace tempest
                 }
 
                 template <typename F>
-                static bool non_empty_function(const F& f) noexcept
+                static bool non_empty_function([[maybe_unused]] const F& f) noexcept
                 {
                     return true;
                 }

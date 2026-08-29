@@ -79,7 +79,7 @@ namespace tempest::core
             math::vec3<float> sdir;
             math::vec3<float> tdir;
 
-            if (fabs(denom) > 1e-6f) // valid UV triangle
+            if (abs(denom) > 1e-6f) // valid UV triangle
             {
                 float r = 1.0f / denom;
                 sdir = (edge1 * t2 - edge2 * t1) * r;
@@ -89,7 +89,7 @@ namespace tempest::core
             {
                 // Pick a vector perpendicular to normal for sdir
                 math::vec3<float> n = v0.normal;
-                math::vec3<float> up = fabs(n.z) < 0.999f ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
+                math::vec3<float> up = abs(n.z) < 0.999f ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
                 sdir = normalize(cross(up, n));
                 tdir = normalize(cross(n, sdir));
             }

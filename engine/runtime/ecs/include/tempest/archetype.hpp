@@ -1089,7 +1089,6 @@ namespace tempest::ecs
                           [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
             }
 
-            auto& new_archetype = _archetypes.emplace_back(new_types);
             _hashes.push_back(type_hash);
 
             hash_iter = _hashes.end() - 1;
