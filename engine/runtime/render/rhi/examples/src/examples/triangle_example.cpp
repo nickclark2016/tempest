@@ -1,6 +1,7 @@
 #include "triangle_example.hpp"
 
 #include <cstring>
+#include <stdint.h> // for uint32_t for shaders
 #include <tempest/array.hpp>
 #include <tempest/span.hpp>
 

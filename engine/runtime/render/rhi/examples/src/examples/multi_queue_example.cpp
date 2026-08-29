@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <stdint.h> // for uint32_t for shaders
 #include <tempest/array.hpp>
 #include <tempest/span.hpp>
 
@@ -75,9 +76,7 @@ namespace tempest::rhi::examples
         };
 
         constexpr auto indices = array<uint16_t, 9>{
-            0, 1, 2,
-            3, 4, 5,
-            6, 7, 8,
+            0, 1, 2, 3, 4, 5, 6, 7, 8,
         };
     } // namespace
 
@@ -282,8 +281,8 @@ namespace tempest::rhi::examples
         const auto& compute_pass = _render_graph->add_compute_pass<compute_pass_data>(
             "AsyncVertexAnimatePass",
             [this, &transfer_pass](render_graph::pass_builder& builder, compute_pass_data& data) {
-                data.input_pos = builder.read(transfer_pass.base_pos, rhi::pipeline_stage::compute,
-                                              rhi::resource_access::read);
+                data.input_pos =
+                    builder.read(transfer_pass.base_pos, rhi::pipeline_stage::compute, rhi::resource_access::read);
                 const auto dyn_pos = builder.import_buffer(_dynamic_positions_buffer);
                 const auto dyn_col = builder.import_buffer(_dynamic_colors_buffer);
                 data.output_pos = builder.write(dyn_pos, rhi::pipeline_stage::compute, rhi::resource_access::write);
@@ -316,17 +315,16 @@ namespace tempest::rhi::examples
         _render_graph->add_graphics_pass<raster_pass_data>(
             "StarRasterPass",
             [this, &compute_pass, sc_tex](render_graph::pass_builder& builder, raster_pass_data& data) {
-                data.pos = builder.read(compute_pass.output_pos, rhi::pipeline_stage::vertex,
-                                        rhi::resource_access::read);
-                data.col = builder.read(compute_pass.output_col, rhi::pipeline_stage::vertex,
-                                        rhi::resource_access::read);
-                data.target = builder.set_color_attachment(
-                    0, render_graph::rg_color_attachment{
-                           .texture = sc_tex,
-                           .load_op = rhi::load_op::clear,
-                           .store_op = rhi::store_op::store,
-                           .clear_value = {0.05F, 0.05F, 0.05F, 1.0F},
-                       });
+                data.pos =
+                    builder.read(compute_pass.output_pos, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.col =
+                    builder.read(compute_pass.output_col, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.target = builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                                  .texture = sc_tex,
+                                                                  .load_op = rhi::load_op::clear,
+                                                                  .store_op = rhi::store_op::store,
+                                                                  .clear_value = {0.05F, 0.05F, 0.05F, 1.0F},
+                                                              });
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const raster_pass_data& data,
@@ -356,9 +354,8 @@ namespace tempest::rhi::examples
         [[maybe_unused]] const auto exec_res = _render_graph->execute(info.dev, sync);
     }
 
-    auto multi_queue_example::on_resize([[maybe_unused]] rhi::device& dev,
-                                        rhi::render_surface_format surface_format, uint32_t width,
-                                        uint32_t height) -> void
+    auto multi_queue_example::on_resize([[maybe_unused]] rhi::device& dev, rhi::render_surface_format surface_format,
+                                        uint32_t width, uint32_t height) -> void
     {
         if (surface_format != _current_format)
         {
