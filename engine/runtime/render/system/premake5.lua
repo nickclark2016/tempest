@@ -38,7 +38,6 @@ scoped.project('render-system', function()
             'core',
             'ecs',
             'logger',
-            'math',
             'assets',
             'rhi-api',
             'render-graph',

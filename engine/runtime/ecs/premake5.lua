@@ -40,7 +40,6 @@ scoped.project('ecs', function()
             'api',
             'core',
             'event',
-            'math',
         }
     end)
 

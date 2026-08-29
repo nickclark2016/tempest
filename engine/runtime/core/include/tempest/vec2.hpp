@@ -2,10 +2,9 @@
 #define tempest_math_vec2_hpp__
 
 #include <tempest/api.hpp>
-
-#include <cmath>
-#include <cstddef>
-#include <type_traits>
+#include <tempest/int.hpp>
+#include <tempest/math_utils.hpp>
+#include <tempest/type_traits.hpp>
 
 namespace tempest::math
 {
@@ -42,8 +41,8 @@ namespace tempest::math
         constexpr vec2(const T scalar);
         constexpr vec2(const T x, const T y);
 
-        constexpr T& operator[](const std::size_t index) noexcept;
-        constexpr const T& operator[](const std::size_t index) const noexcept;
+        constexpr T& operator[](const size_t index) noexcept;
+        constexpr const T& operator[](const size_t index) const noexcept;
 
         vec2& operator+=(const vec2& rhs) noexcept;
         vec2& operator-=(const vec2& rhs) noexcept;
@@ -76,13 +75,13 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr T& vec2<T>::operator[](const std::size_t index) noexcept
+    inline constexpr T& vec2<T>::operator[](const size_t index) noexcept
     {
         return data[index];
     }
 
     template <typename T>
-    inline constexpr const T& vec2<T>::operator[](const std::size_t index) const noexcept
+    inline constexpr const T& vec2<T>::operator[](const size_t index) const noexcept
     {
         return data[index];
     }
@@ -176,7 +175,7 @@ namespace tempest::math
     template <typename T>
     inline constexpr T norm(const vec2<T>& v)
     {
-        return std::sqrt(v.x * v.x + v.y * v.y);
+        return math::sqrt(v.x * v.x + v.y * v.y);
     }
 
     template <typename T>

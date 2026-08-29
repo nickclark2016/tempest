@@ -2,6 +2,8 @@
 #define tempest_math_mat3_hpp__
 
 #include <tempest/api.hpp>
+#include <tempest/int.hpp>
+#include <tempest/type_traits.hpp>
 #include <tempest/vec3.hpp>
 
 namespace tempest::math
@@ -45,8 +47,8 @@ namespace tempest::math
         constexpr mat3(const T m00, const T m10, const T m20, const T m01, const T m11, const T m21, const T m02,
                        const T m12, const T m22);
 
-        constexpr vec3<T>& operator[](const std::size_t index) noexcept;
-        constexpr const vec3<T>& operator[](const std::size_t index) const noexcept;
+        constexpr vec3<T>& operator[](const size_t index) noexcept;
+        constexpr const vec3<T>& operator[](const size_t index) const noexcept;
 
         constexpr mat3& operator+=(const mat3& rhs) noexcept;
         constexpr mat3& operator-=(const mat3& rhs) noexcept;
@@ -88,13 +90,13 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr vec3<T>& mat3<T>::operator[](const std::size_t index) noexcept
+    inline constexpr vec3<T>& mat3<T>::operator[](const size_t index) noexcept
     {
         return columns[index];
     }
 
     template <typename T>
-    inline constexpr const vec3<T>& mat3<T>::operator[](const std::size_t index) const noexcept
+    inline constexpr const vec3<T>& mat3<T>::operator[](const size_t index) const noexcept
     {
         return columns[index];
     }

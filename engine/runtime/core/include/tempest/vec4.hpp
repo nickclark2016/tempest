@@ -2,10 +2,9 @@
 #define tempest_math_vec4_hpp__
 
 #include <tempest/api.hpp>
-
-#include <cmath>
-#include <cstddef>
-#include <type_traits>
+#include <tempest/int.hpp>
+#include <tempest/math_utils.hpp>
+#include <tempest/type_traits.hpp>
 
 namespace tempest::math
 {
@@ -41,8 +40,8 @@ namespace tempest::math
         constexpr vec4(const T scalar);
         constexpr vec4(const T x, const T y, const T z, const T w);
 
-        constexpr T& operator[](const std::size_t index) noexcept;
-        constexpr const T& operator[](const std::size_t index) const noexcept;
+        constexpr T& operator[](const size_t index) noexcept;
+        constexpr const T& operator[](const size_t index) const noexcept;
 
         vec4& operator+=(const vec4& rhs) noexcept;
         vec4& operator-=(const vec4& rhs) noexcept;
@@ -75,13 +74,13 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr T& vec4<T>::operator[](const std::size_t index) noexcept
+    inline constexpr T& vec4<T>::operator[](const size_t index) noexcept
     {
         return data[index];
     }
 
     template <typename T>
-    inline constexpr const T& vec4<T>::operator[](const std::size_t index) const noexcept
+    inline constexpr const T& vec4<T>::operator[](const size_t index) const noexcept
     {
         return data[index];
     }

@@ -8,8 +8,8 @@
 #include <tempest/vec3.hpp>
 #include <tempest/vec4.hpp>
 
-#include <cassert>
-#include <iostream>
+#include <tempest/int.hpp>
+#include <tempest/type_traits.hpp>
 
 #undef near
 #undef far
@@ -64,7 +64,7 @@ namespace tempest::math
         if (trace > 0)
         {
             // trace is positive
-            T s = std::sqrt(trace + 1);
+            T s = math::sqrt(trace + 1);
             quat.w = T(0.5) * s;
             s = T(0.5) / s;
             quat.x = (m[1][2] - m[2][1]) * s;
@@ -90,7 +90,7 @@ namespace tempest::math
             constexpr size_t next_ijk[3] = {1, 2, 0};
             size_t j = next_ijk[i];
             size_t k = next_ijk[j];
-            T s = std::sqrt((m[i][i] - (m[j][j] + m[k][k])) + 1);
+            T s = math::sqrt((m[i][i] - (m[j][j] + m[k][k])) + 1);
             quat[i] = T(0.5) * s;
             if (s != 0)
             {
@@ -189,9 +189,9 @@ namespace tempest::math
     inline constexpr quat<T> rotate(const quat<T>& q, const T& angle, const vec3<T>& axis)
     {
         const vec3 normalizedAxis = normalize(axis);
-        const T sine = std::sin(angle * static_cast<T>(0.5));
+        const T sine = math::sin(angle * static_cast<T>(0.5));
 
-        return q * quat<T>(cos(angle * static_cast<T>(0.5)), normalizedAxis.x * sine, normalizedAxis.y * sine,
+        return q * quat<T>(math::cos(angle * static_cast<T>(0.5)), normalizedAxis.x * sine, normalizedAxis.y * sine,
                            normalizedAxis.z * sine);
     }
 
@@ -252,9 +252,9 @@ namespace tempest::math
             return false;
         }
 
-        for (std::size_t i = 0; i < 4; ++i)
+        for (size_t i = 0; i < 4; ++i)
         {
-            for (std::size_t j = 0; j < 4; ++j)
+            for (size_t j = 0; j < 4; ++j)
             {
                 local[i][j] /= local[3][3];
             }
@@ -269,9 +269,9 @@ namespace tempest::math
 
         // solve for scale
         vec3<float> row[3];
-        for (std::size_t i = 0; i < 3; ++i)
+        for (size_t i = 0; i < 3; ++i)
         {
-            for (std::size_t j = 0; j < 3; ++j)
+            for (size_t j = 0; j < 3; ++j)
             {
                 row[i][j] = local[i][j];
             }
@@ -284,7 +284,7 @@ namespace tempest::math
         T root, trace = row[0].x + row[1].y + row[2].z;
         if (trace > static_cast<T>(0))
         {
-            root = std::sqrt(trace + static_cast<T>(1));
+            root = math::sqrt(trace + static_cast<T>(1));
             rotation.w = static_cast<T>(0.5) * root;
             root = static_cast<T>(0.5) / root;
             rotation.x = root * (row[1].z - row[2].y);
@@ -293,16 +293,16 @@ namespace tempest::math
         }
         else
         {
-            constexpr std::size_t next[3] = {1, 2, 0};
-            std::size_t i = 0;
+            constexpr size_t next[3] = {1, 2, 0};
+            size_t i = 0;
             if (row[1].y > row[0].x)
                 i = 1;
             if (row[2].z > row[i][i])
                 i = 2;
-            std::size_t j = next[i];
-            std::size_t k = next[j];
+            size_t j = next[i];
+            size_t k = next[j];
 
-            root = std::sqrt(row[i][i] - row[j][j] - row[k][k] + static_cast<T>(1));
+            root = math::sqrt(row[i][i] - row[j][j] - row[k][k] + static_cast<T>(1));
             rotation[i + 1] = static_cast<T>(0.5) * root;
             root = static_cast<T>(0.5) / root;
             rotation[j + 1] = root * (row[i][j] + row[j][i]);
@@ -317,7 +317,7 @@ namespace tempest::math
     inline constexpr mat4<T> perspective(const T aspect, const T fov, T near)
     {
         const T fovy = fov;
-        const T f = static_cast<T>(1) / std::tan(fovy / 2);
+        const T f = static_cast<T>(1) / math::tan(fovy / 2);
         return mat4<T>{f / aspect, 0, 0, 0, 0, -f, 0, 0, 0, 0, 0, -1, 0, 0, near, 0};
     }
 
@@ -325,7 +325,7 @@ namespace tempest::math
     inline constexpr mat4<T> perspective(const T aspect, const T fov, T near, const T far)
     {
         T fov_rad = fov;
-        T focal_length = static_cast<T>(1) / std::tan(fov_rad / 2);
+        T focal_length = static_cast<T>(1) / math::tan(fov_rad / 2);
 
         T x = focal_length / aspect;
         T y = focal_length;
@@ -380,11 +380,11 @@ namespace tempest::math
         quat q = normalize(as_quat(tmp));
         q = q.w < 0 ? -q : q;
 
-        constexpr T bias = static_cast<T>(1) / static_cast<T>((1 << (sizeof(std::uint16_t) * 8 - 1)) - 1);
+        constexpr T bias = static_cast<T>(1) / static_cast<T>((1 << (sizeof(uint16_t) * 8 - 1)) - 1);
         if (q.w < bias)
         {
             q.w = bias;
-            const T factor = static_cast<T>(std::sqrt(static_cast<T>(1) - bias * bias));
+            const T factor = static_cast<T>(math::sqrt(static_cast<T>(1) - bias * bias));
             q.x *= factor;
             q.y *= factor;
             q.z *= factor;
@@ -422,8 +422,8 @@ namespace tempest::math
     inline constexpr vec2<T> encode_direction_to_euler_angles(const vec3<T>& dir)
     {
         const auto d = normalize(dir);
-        const T theta = std::atan(static_cast<T>(1) / d.z);
-        const T phi = std::atan(d.y / d.x);
+        const T theta = math::atan(static_cast<T>(1) / d.z);
+        const T phi = math::atan(d.y / d.x);
         return {as_degrees(theta), as_degrees(phi)};
     }
 } // namespace tempest::math

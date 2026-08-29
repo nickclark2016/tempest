@@ -42,6 +42,18 @@ namespace tempest
                       static_cast<decltype(Start)>(StepSize)>::evaluate(f);
     }
 
+    template <typename T>
+    [[nodiscard]] inline constexpr const T& clamp(const T& v, const T& lo, const T& hi) noexcept
+    {
+        return (v < lo) ? lo : (hi < v) ? hi : v;
+    }
+
+    template <typename T, typename Compare>
+    [[nodiscard]] inline constexpr const T& clamp(const T& v, const T& lo, const T& hi, Compare comp)
+    {
+        return comp(v, lo) ? lo : comp(hi, v) ? hi : v;
+    }
+
     [[nodiscard]] inline constexpr integral auto fast_mod(const integral auto value, const integral auto mod) noexcept
     {
         return value & (mod - 1);
@@ -94,7 +106,7 @@ namespace tempest
     {
         TEMPEST_API
         void copy_bytes(const void* src, void* dest, size_t count);
-    }
+    } // namespace detail
 
     template <input_iterator InputIt, output_iterator<typename InputIt::value_type> OutputIt>
     inline constexpr OutputIt copy(InputIt first, InputIt last, OutputIt d_first)

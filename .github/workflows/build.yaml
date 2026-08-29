@@ -103,7 +103,6 @@ jobs:
         run: |
           $binDir = "bin/${{ matrix.config }}/${{ matrix.out_dir }}"
           if (Test-Path "$binDir/core-tests.exe") { & "$binDir/core-tests.exe" --gtest_brief=1 }
-          if (Test-Path "$binDir/math-tests.exe") { & "$binDir/math-tests.exe" --gtest_brief=1 }
           if (Test-Path "$binDir/ecs-tests.exe") { & "$binDir/ecs-tests.exe" --gtest_brief=1 }
           if (Test-Path "$binDir/event-tests.exe") { & "$binDir/event-tests.exe" --gtest_brief=1 }
           if (Test-Path "$binDir/serialization-tests.exe") { & "$binDir/serialization-tests.exe" --gtest_brief=1 }

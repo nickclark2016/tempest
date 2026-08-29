@@ -36,7 +36,6 @@ scoped.project('assets', function()
             'core',
             'ecs',
             'logger',
-            'math',
             'serialization',
         }
     end)

@@ -2,6 +2,8 @@
 #define tempest_math_mat4_hpp__
 
 #include <tempest/api.hpp>
+#include <tempest/int.hpp>
+#include <tempest/type_traits.hpp>
 #include <tempest/vec4.hpp>
 
 namespace tempest::math
@@ -54,8 +56,8 @@ namespace tempest::math
                        const T m31, const T m02, const T m12, const T m22, const T m32, const T m03, const T m13,
                        const T m23, const T m33);
 
-        constexpr vec4<T>& operator[](const std::size_t col) noexcept;
-        constexpr const vec4<T>& operator[](const std::size_t col) const noexcept;
+        constexpr vec4<T>& operator[](const size_t col) noexcept;
+        constexpr const vec4<T>& operator[](const size_t col) const noexcept;
 
         constexpr mat4& operator+=(const mat4& rhs) noexcept;
         constexpr mat4& operator-=(const mat4& rhs) noexcept;
@@ -107,13 +109,13 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr vec4<T>& mat4<T>::operator[](const std::size_t col) noexcept
+    inline constexpr vec4<T>& mat4<T>::operator[](const size_t col) noexcept
     {
         return columns[col];
     }
 
     template <typename T>
-    inline constexpr const vec4<T>& mat4<T>::operator[](const std::size_t col) const noexcept
+    inline constexpr const vec4<T>& mat4<T>::operator[](const size_t col) const noexcept
     {
         return columns[col];
     }

@@ -66,7 +66,7 @@ scoped.project('core', function()
     end)
 
     scoped.usage("PUBLIC", function()
-        uses { 'api', 'core:defines', 'math' }
+        uses { 'api', 'core:defines' }
     end)
 
     scoped.usage("core:includedirs", function()
@@ -106,7 +106,6 @@ scoped.group('Tests', function()
         }
 
         uses {
-            'rhi-vk',
             'tempest',
             'googletest',
         }

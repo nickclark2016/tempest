@@ -2,12 +2,10 @@
 #define tempest_math_quat_hpp__
 
 #include <tempest/api.hpp>
+#include <tempest/int.hpp>
 #include <tempest/math_utils.hpp>
+#include <tempest/type_traits.hpp>
 #include <tempest/vec3.hpp>
-
-#include <cmath>
-#include <cstddef>
-#include <type_traits>
 
 namespace tempest::math
 {
@@ -38,8 +36,8 @@ namespace tempest::math
         constexpr quat(const T x, const T y, const T z, const T w);
         constexpr quat(const vec3<T>& euler);
 
-        constexpr T& operator[](const std::size_t index) noexcept;
-        constexpr const T& operator[](const std::size_t index) const noexcept;
+        constexpr T& operator[](const size_t index) noexcept;
+        constexpr const T& operator[](const size_t index) const noexcept;
     };
 
     template <typename T>
@@ -71,8 +69,8 @@ namespace tempest::math
     inline constexpr quat<T>::quat(const vec3<T>& euler)
     {
         const vec3<T> half = static_cast<T>(0.5) * euler;
-        const vec3<T> c(std::cos(half.x), std::cos(half.y), std::cos(half.z));
-        const vec3<T> s(std::sin(half.x), std::sin(half.y), std::sin(half.z));
+        const vec3<T> c(math::cos(half.x), math::cos(half.y), math::cos(half.z));
+        const vec3<T> s(math::sin(half.x), math::sin(half.y), math::sin(half.z));
 
         w = c.x * c.y * c.z + s.x * s.y * s.z;
         x = s.x * c.y * c.z - c.x * s.y * s.z;
@@ -81,13 +79,13 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr T& quat<T>::operator[](const std::size_t index) noexcept
+    inline constexpr T& quat<T>::operator[](const size_t index) noexcept
     {
         return data[index];
     }
 
     template <typename T>
-    inline constexpr const T& quat<T>::operator[](const std::size_t index) const noexcept
+    inline constexpr const T& quat<T>::operator[](const size_t index) const noexcept
     {
         return data[index];
     }
@@ -100,10 +98,10 @@ namespace tempest::math
         // w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1
         // w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1
 
-        return quat4(lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z,
-                     lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
-                     lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x,
-                     lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w);
+        return quat(lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z,
+                    lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
+                    lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x,
+                    lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w);
     }
 
     template <typename T>
@@ -146,7 +144,7 @@ namespace tempest::math
     inline constexpr T norm(const quat<T>& q)
     {
         const T mag_squared = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-        return std::sqrt(mag_squared);
+        return math::sqrt(mag_squared);
     }
 
     template <typename T>
@@ -167,7 +165,7 @@ namespace tempest::math
             return static_cast<T>(0);
         }
 
-        return static_cast<T>(std::atan2(y, x));
+        return static_cast<T>(math::atan2(y, x));
     }
 
     template <typename T>
@@ -178,16 +176,16 @@ namespace tempest::math
 
         if (x == static_cast<T>(0) && y == static_cast<T>(0))
         {
-            return static_cast<T>(static_cast<T>(2) * std::atan2(q.x, q.w));
+            return static_cast<T>(static_cast<T>(2) * math::atan2(q.x, q.w));
         }
 
-        return static_cast<T>(std::atan2(y, x));
+        return static_cast<T>(math::atan2(y, x));
     }
 
     template <typename T>
     inline constexpr T yaw(const quat<T>& q)
     {
-        return std::asin(clamp(static_cast<T>(-2) * (q.x * q.z - q.w * q.y), static_cast<T>(-1), static_cast<T>(1)));
+        return math::asin(clamp(static_cast<T>(-2) * (q.x * q.z - q.w * q.y), static_cast<T>(-1), static_cast<T>(1)));
     }
 
     template <typename T>

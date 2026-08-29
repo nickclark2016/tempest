@@ -2,10 +2,9 @@
 #define tempest_math_vec3_hpp__
 
 #include <tempest/api.hpp>
-
-#include <cmath>
-#include <cstddef>
-#include <type_traits>
+#include <tempest/int.hpp>
+#include <tempest/math_utils.hpp>
+#include <tempest/type_traits.hpp>
 
 namespace tempest::math
 {
@@ -39,8 +38,8 @@ namespace tempest::math
         constexpr vec3(const T scalar);
         constexpr vec3(const T x, const T y, const T z);
 
-        constexpr T& operator[](const std::size_t index) noexcept;
-        constexpr const T& operator[](const std::size_t index) const noexcept;
+        constexpr T& operator[](const size_t index) noexcept;
+        constexpr const T& operator[](const size_t index) const noexcept;
 
         vec3& operator+=(const vec3& rhs) noexcept;
         vec3& operator-=(const vec3& rhs) noexcept;
@@ -73,13 +72,13 @@ namespace tempest::math
     }
 
     template <typename T>
-    inline constexpr T& vec3<T>::operator[](const std::size_t index) noexcept
+    inline constexpr T& vec3<T>::operator[](const size_t index) noexcept
     {
         return data[index];
     }
 
     template <typename T>
-    inline constexpr const T& vec3<T>::operator[](const std::size_t index) const noexcept
+    inline constexpr const T& vec3<T>::operator[](const size_t index) const noexcept
     {
         return data[index];
     }
@@ -191,7 +190,7 @@ namespace tempest::math
     inline constexpr T norm(const vec3<T>& v)
     {
         const T mag_squared = v.x * v.x + v.y * v.y + v.z * v.z;
-        return std::sqrt(mag_squared);
+        return math::sqrt(mag_squared);
     }
 
     template <typename T>
@@ -224,6 +223,18 @@ namespace tempest::math
     inline constexpr vec3<T> max(const vec3<T>& lhs, const vec3<T>& rhs)
     {
         return vec3<T>(lhs.x > rhs.x ? lhs.x : rhs.x, lhs.y > rhs.y ? lhs.y : rhs.y, lhs.z > rhs.z ? lhs.z : rhs.z);
+    }
+
+    template <typename T>
+    inline constexpr vec3<T> as_radians(const vec3<T>& v)
+    {
+        return vec3<T>(as_radians(v.x), as_radians(v.y), as_radians(v.z));
+    }
+
+    template <typename T>
+    inline constexpr vec3<T> as_degrees(const vec3<T>& v)
+    {
+        return vec3<T>(as_degrees(v.x), as_degrees(v.y), as_degrees(v.z));
     }
 
     using float3 = vec3<float>;

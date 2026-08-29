@@ -29,7 +29,6 @@ scoped.project('serialization', function(prj)
             'api',
             'core',
             'logger',
-            'math',
         }
     end)
 

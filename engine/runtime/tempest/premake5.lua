@@ -64,6 +64,15 @@ scoped.project('tempest', function()
         }
     end)
 
+    scoped.filter({
+        'system:windows'
+    }, function()
+        links {
+            'Advapi32',
+            'Synchronization',
+        }
+    end)
+
     scoped.usage("PRIVATE", function()
         uses {
             'api',
@@ -73,7 +82,6 @@ scoped.project('tempest', function()
             'event',
             'glfw',
             'logger',
-            'math',
             'render-graph',
             'render-system',
             'rhi-api',
@@ -112,7 +120,6 @@ scoped.project('tempest', function()
         'ecs',
         'event',
         'logger',
-        'math',
         'render-graph',
         'render-system',
         'rhi-api',
@@ -151,7 +158,6 @@ scoped.project('tempest', function()
             'ecs:includedirs',
             'event:includedirs',
             'logger:includedirs',
-            'math:includedirs',
             'render-graph:includedirs',
             'render-system:includedirs',
             'rhi-api:includedirs',
@@ -177,7 +183,6 @@ scoped.project('tempest', function()
                 'ecs',
                 'event',
                 'logger',
-                'math',
                 'rhi-api',
                 'serialization',
 

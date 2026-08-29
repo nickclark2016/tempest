@@ -38,7 +38,6 @@ scoped.project('units', function()
         uses {
             'api',
             'core',
-            'math',
         }
     end)
 
