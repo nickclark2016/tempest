@@ -2,6 +2,7 @@
 
 #include <tempest/algorithm.hpp>
 #include <tempest/int.hpp>
+#include <tempest/math_utils.hpp>
 #include <tempest/tuple.hpp>
 #include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
@@ -97,7 +98,7 @@ namespace tempest::core
             auto sdir = math::vec3<float>{};
             auto tdir = math::vec3<float>{};
 
-            if (std::abs(denom) > 1e-6F) // valid UV triangle
+            if (tempest::abs(denom) > 1e-6F) // valid UV triangle
             {
                 const auto r = 1.0F / denom;
                 sdir = (edge1 * t2 - edge2 * t1) * r;
@@ -107,7 +108,7 @@ namespace tempest::core
             {
                 // Pick a vector perpendicular to normal for sdir
                 const auto n = v0.normal;
-                const auto up = std::abs(n.z) < 0.999F ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
+                const auto up = tempest::abs(n.z) < 0.999F ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
                 sdir = math::normalize(math::cross(up, n));
                 tdir = math::normalize(math::cross(n, sdir));
             }
@@ -146,7 +147,7 @@ namespace tempest::core
             }
             else
             {
-                const auto up = std::abs(n.z) < 0.999F ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
+                const auto up = tempest::abs(n.z) < 0.999F ? math::vec3<float>(0, 0, 1) : math::vec3<float>(0, 1, 0);
                 t = math::normalize(math::cross(up, n));
             }
 
