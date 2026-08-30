@@ -642,3 +642,207 @@ TEST(path, replace_filename)
     EXPECT_EQ(with_rel_path.native(), "Documents/Foo.png");
 #endif
 }
+
+// ============================================================================
+// directory_entry Tests
+// ============================================================================
+
+/// @brief Tests default initialization of directory_entry.
+/// Validates that an uninitialized entry holds an empty path, unknown status,
+/// invalid size (-1), and reports exists() == false.
+TEST(directory_entry, default_constructor)
+{
+    // 1. Setup & Act
+    auto entry = fs::directory_entry{};
+
+    // 2. Assert
+    EXPECT_TRUE(entry.path().empty());
+    EXPECT_FALSE(entry.exists());
+    EXPECT_FALSE(entry.is_directory());
+    EXPECT_FALSE(entry.is_regular_file());
+    EXPECT_FALSE(entry.is_symlink());
+    EXPECT_FALSE(entry.is_block_file());
+    EXPECT_FALSE(entry.is_character_file());
+    EXPECT_FALSE(entry.is_fifo());
+    EXPECT_FALSE(entry.is_socket());
+    EXPECT_FALSE(entry.is_other());
+    EXPECT_EQ(entry.status().type(), fs::file_type::none);
+    EXPECT_EQ(entry.symlink_status().type(), fs::file_type::none);
+    EXPECT_EQ(entry.file_size(), static_cast<size_t>(-1));
+}
+
+/// @brief Tests constructing a directory_entry from an existing directory path.
+/// Validates eager caching of directory attributes and invalid file size.
+TEST(directory_entry, construct_from_existing_directory)
+{
+    // 1. Setup
+    auto cwd = fs::current_path();
+
+    // 2. Act
+    auto entry = fs::directory_entry{cwd};
+
+    // 3. Assert
+    EXPECT_EQ(entry.path(), cwd);
+    EXPECT_TRUE(entry.exists());
+    EXPECT_TRUE(entry.is_directory());
+    EXPECT_FALSE(entry.is_regular_file());
+    EXPECT_FALSE(entry.is_symlink());
+    EXPECT_EQ(entry.status().type(), fs::file_type::directory);
+    EXPECT_EQ(entry.file_size(), static_cast<size_t>(-1));
+}
+
+/// @brief Tests constructing a directory_entry from a non-existent path.
+/// Validates that exists() is false, status is not_found, and size is -1.
+TEST(directory_entry, construct_from_non_existent_path)
+{
+    // 1. Setup
+    auto non_existent = fs::path{"__tempest_non_existent_file_123456.tmp"};
+
+    // 2. Act
+    auto entry = fs::directory_entry{non_existent};
+
+    // 3. Assert
+    EXPECT_EQ(entry.path(), non_existent);
+    EXPECT_FALSE(entry.exists());
+    EXPECT_FALSE(entry.is_directory());
+    EXPECT_FALSE(entry.is_regular_file());
+    EXPECT_EQ(entry.status().type(), fs::file_type::not_found);
+    EXPECT_EQ(entry.file_size(), static_cast<size_t>(-1));
+}
+
+/// @brief Tests explicit 4-parameter constructor with pre-cached attributes and size.
+/// Validates that observer methods return the cached fields directly with zero syscalls.
+TEST(directory_entry, construct_with_cached_attributes)
+{
+    // 1. Setup
+    auto synthetic_path = fs::path{"/virtual/test/file.bin"};
+    auto synthetic_status =
+        fs::file_status{fs::file_type::regular, fs::permissions::owner_read | fs::permissions::owner_write};
+    auto synthetic_sym_status =
+        fs::file_status{fs::file_type::regular, fs::permissions::owner_read | fs::permissions::owner_write};
+    auto synthetic_size = size_t{1048576};
+
+    // 2. Act
+    auto entry = fs::directory_entry{synthetic_path, synthetic_status, synthetic_sym_status, synthetic_size};
+
+    // 3. Assert
+    EXPECT_EQ(entry.path(), synthetic_path);
+    EXPECT_TRUE(entry.exists());
+    EXPECT_TRUE(entry.is_regular_file());
+    EXPECT_FALSE(entry.is_directory());
+    EXPECT_FALSE(entry.is_symlink());
+    EXPECT_EQ(entry.status().type(), fs::file_type::regular);
+    EXPECT_EQ(entry.status().perms(), fs::permissions::owner_read | fs::permissions::owner_write);
+    EXPECT_EQ(entry.symlink_status().type(), fs::file_type::regular);
+    EXPECT_EQ(entry.file_size(), synthetic_size);
+}
+
+// ============================================================================
+// directory_iterator Tests
+// ============================================================================
+
+/// @brief Tests directory traversal over current working directory.
+/// Validates range-for iteration, non-empty enumeration, and absence of '.' / '..'.
+TEST(directory_iterator, traverse_current_directory)
+{
+    // 1. Setup
+    auto cwd = fs::current_path();
+    auto count = size_t{0};
+
+    // 2. Act
+    for (const auto& entry : fs::directory_iterator{cwd})
+    {
+        ++count;
+
+        // 3. Assert - neither '.' nor '..' should ever be yielded
+        auto filename = entry.path().filename().string();
+        EXPECT_NE(filename, ".");
+        EXPECT_NE(filename, "..");
+        EXPECT_TRUE(entry.exists());
+    }
+
+    EXPECT_GT(count, 0u);
+}
+
+/// @brief Tests that constructing an iterator on an invalid or non-existent path produces an empty range.
+TEST(directory_iterator, empty_on_invalid_directory)
+{
+    // 1. Setup
+    auto non_existent = fs::path{"__invalid_non_existent_dir_999"};
+
+    // 2. Act
+    auto it = fs::directory_iterator{non_existent};
+    auto end_it = fs::directory_iterator{};
+
+    // 3. Assert
+    EXPECT_EQ(it, end_it);
+}
+
+/// @brief Invariant validation: verifies that cached directory_entry attributes during iteration
+/// match standalone filesystem query functions exactly.
+TEST(directory_iterator, cached_attributes_match_standalone_queries)
+{
+    // 1. Setup
+    auto cwd = fs::current_path();
+    auto count = size_t{0};
+
+    // 2. Act & Assert
+    for (const auto& entry : fs::directory_iterator{cwd})
+    {
+        ++count;
+        const auto& p = entry.path();
+
+        EXPECT_EQ(entry.exists(), fs::exists(p));
+        EXPECT_EQ(entry.is_directory(), fs::is_directory(p));
+        EXPECT_EQ(entry.is_regular_file(), fs::is_regular_file(p));
+        EXPECT_EQ(entry.status().type(), fs::status(p).type());
+
+#ifdef _WIN32
+        if (entry.is_regular_file())
+        {
+            EXPECT_EQ(entry.file_size(), fs::file_size(p));
+        }
+#endif
+    }
+
+    EXPECT_GT(count, 0u);
+}
+
+// ============================================================================
+// filesystem_status & permissions Tests
+// ============================================================================
+
+/// @brief Tests attribute-derived Windows permissions and permission bitmask operations.
+TEST(filesystem_status, file_permissions)
+{
+    // 1. Setup
+    auto cwd = fs::current_path();
+
+    // 2. Act
+    auto st = fs::status(cwd);
+
+    // 3. Assert
+    EXPECT_TRUE(fs::status_known(st));
+    EXPECT_EQ(st.type(), fs::file_type::directory);
+
+#ifdef _WIN32
+    // On Windows, non-readonly directories have read/write/exec permissions
+    auto perms = st.perms();
+    EXPECT_TRUE((perms & fs::permissions::owner_read) != fs::permissions::none);
+    EXPECT_TRUE((perms & fs::permissions::owner_write) != fs::permissions::none);
+#endif
+}
+
+/// @brief Tests symlink_status observer behavior on normal directories and files.
+TEST(filesystem_status, symlink_status_equality)
+{
+    // 1. Setup
+    auto cwd = fs::current_path();
+
+    // 2. Act
+    auto direct_status = fs::status(cwd);
+    auto sym_status = fs::symlink_status(cwd);
+
+    // 3. Assert - For non-symlink directories, status and symlink_status match
+    EXPECT_EQ(direct_status.type(), sym_status.type());
+}

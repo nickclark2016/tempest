@@ -11,6 +11,11 @@
 
 namespace tempest::filesystem
 {
+    using tempest::operator|;
+    using tempest::operator&;
+    using tempest::operator^;
+    using tempest::operator~;
+
     namespace detail
     {
 #ifdef _WIN32
@@ -295,12 +300,12 @@ namespace tempest::filesystem
         friend path operator/(const path& lhs, const path& rhs) noexcept;
     };
 
-    bool operator==(const path& lhs, const path& rhs) noexcept;
-    bool operator!=(const path& lhs, const path& rhs) noexcept;
-    bool operator<(const path& lhs, const path& rhs) noexcept;
-    bool operator<=(const path& lhs, const path& rhs) noexcept;
-    bool operator>(const path& lhs, const path& rhs) noexcept;
-    bool operator>=(const path& lhs, const path& rhs) noexcept;
+    TEMPEST_API bool operator==(const path& lhs, const path& rhs) noexcept;
+    TEMPEST_API bool operator!=(const path& lhs, const path& rhs) noexcept;
+    TEMPEST_API bool operator<(const path& lhs, const path& rhs) noexcept;
+    TEMPEST_API bool operator<=(const path& lhs, const path& rhs) noexcept;
+    TEMPEST_API bool operator>(const path& lhs, const path& rhs) noexcept;
+    TEMPEST_API bool operator>=(const path& lhs, const path& rhs) noexcept;
 
     inline path operator/(const path& lhs, const path& rhs) noexcept
     {
@@ -427,6 +432,7 @@ namespace tempest::filesystem
       public:
         directory_entry() = default;
         explicit directory_entry(const path& p);
+        directory_entry(const path& p, file_status status, file_status symlink_status, size_t file_size);
 
         const path& path() const noexcept;
         operator const filesystem::path&() const noexcept;
@@ -448,6 +454,9 @@ namespace tempest::filesystem
 
       private:
         filesystem::path _path;
+        file_status _status{};
+        file_status _symlink_status{};
+        size_t _file_size{static_cast<size_t>(-1)};
     };
 
     // Filesystem Iterators

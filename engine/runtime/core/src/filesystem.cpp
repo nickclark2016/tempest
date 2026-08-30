@@ -7,8 +7,6 @@
 #define NOMINMAX
 #include <Windows.h>
 
-#include <AclAPI.h>
-#include <sddl.h>
 #include <winioctl.h>
 #else
 #include <dirent.h>
@@ -1558,148 +1556,37 @@ namespace tempest::filesystem
             return p;
         }
 
-        file_type get_file_type(const path::string_type& p)
+        file_type file_type_from_attributes(DWORD dwFileAttributes)
         {
-            WIN32_FILE_ATTRIBUTE_DATA file_info;
-            if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &file_info))
+            if (dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
             {
-                DWORD err = GetLastError();
-                if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
-                {
-                    return file_type::not_found; // File or path does not exist
-                }
-                return file_type::unknown; // Unknown error, treat as unknown type
+                return file_type::symlink;
             }
-
-            if (file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+            if (dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
             {
-                return file_type::symlink; // Reparse point indicates a symlink
+                return file_type::directory;
             }
-            if (file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            if (dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
             {
-                return file_type::directory; // Directory
+                return file_type::character;
             }
-            if (file_info.dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
-            {
-                return file_type::character; // Device file
-            }
-
             return file_type::regular;
         }
 
-        enum_mask<permissions> get_permissions(const path::string_type& p)
+        enum_mask<permissions> get_permissions(DWORD attributes)
         {
-            PSECURITY_DESCRIPTOR sec_desc = nullptr;
-            PSID owner = nullptr;
-            PSID group = nullptr;
-            PACL dacl = nullptr;
-
-            const auto res = GetNamedSecurityInfoW(p.c_str(), SE_FILE_OBJECT,
-                                                   OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
-                                                       DACL_SECURITY_INFORMATION,
-                                                   &owner, &group, &dacl, nullptr, &sec_desc);
-
-            if (res != ERROR_SUCCESS)
+            if (attributes == INVALID_FILE_ATTRIBUTES)
             {
                 return enum_mask(permissions::unknown);
             }
 
-            auto perms = enum_mask(permissions::none);
-
-            // Special case: NULL DACL = full access to everyone
-            if (dacl == nullptr)
+            if (attributes & FILE_ATTRIBUTE_READONLY)
             {
-                perms = make_enum_mask(permissions::owner_all, permissions::group_all, permissions::others_all);
-                LocalFree(sec_desc);
-                return perms;
+                return enum_mask(permissions::all) &
+                       ~(permissions::owner_write | permissions::group_write | permissions::others_write);
             }
 
-            // Build some well-known SIDs
-            PSID everyone_sid = nullptr;
-            {
-                SID_IDENTIFIER_AUTHORITY worldAuth = SECURITY_WORLD_SID_AUTHORITY;
-                AllocateAndInitializeSid(&worldAuth, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &everyone_sid);
-            }
-
-            PSID auth_users_sid = nullptr;
-            {
-                SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
-                AllocateAndInitializeSid(&ntAuth, 1, SECURITY_AUTHENTICATED_USER_RID, 0, 0, 0, 0, 0, 0, 0,
-                                         &auth_users_sid);
-            }
-
-            PSID builtin_users_sid = nullptr;
-            {
-                SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
-                AllocateAndInitializeSid(&ntAuth, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_USERS, 0, 0, 0, 0, 0,
-                                         0, &builtin_users_sid);
-            }
-
-            for (DWORD i = 0; i < dacl->AceCount; ++i)
-            {
-                void* ace = nullptr;
-                if (!GetAce(dacl, i, &ace))
-                {
-                    continue;
-                }
-
-                ACE_HEADER* ace_header = static_cast<ACE_HEADER*>(ace);
-                if (ace_header->AceType != ACCESS_ALLOWED_ACE_TYPE)
-                {
-                    continue; // ignore denies for now
-                }
-
-                auto* allowed_ace = reinterpret_cast<ACCESS_ALLOWED_ACE*>(ace);
-                PSID sid = reinterpret_cast<PSID>(&allowed_ace->SidStart);
-                DWORD mask = allowed_ace->Mask;
-
-                if (!IsValidSid(sid))
-                    continue;
-
-                // Owner
-                if (IsValidSid(owner) && EqualSid(sid, owner))
-                {
-                    if (mask & (FILE_GENERIC_READ | FILE_READ_DATA))
-                        perms |= permissions::owner_read;
-                    if (mask & (FILE_GENERIC_WRITE | FILE_WRITE_DATA))
-                        perms |= permissions::owner_write;
-                    if (mask & (FILE_GENERIC_EXECUTE | FILE_EXECUTE))
-                        perms |= permissions::owner_execute;
-                }
-                // Group
-                else if ((IsValidSid(group) && EqualSid(sid, group)) ||
-                         (builtin_users_sid && EqualSid(sid, builtin_users_sid)) ||
-                         (auth_users_sid && EqualSid(sid, auth_users_sid)))
-                {
-                    if (mask & (FILE_GENERIC_READ | FILE_READ_DATA))
-                        perms |= permissions::group_read;
-                    if (mask & (FILE_GENERIC_WRITE | FILE_WRITE_DATA))
-                        perms |= permissions::group_write;
-                    if (mask & (FILE_GENERIC_EXECUTE | FILE_EXECUTE))
-                        perms |= permissions::group_execute;
-                }
-                // Others
-                else if (everyone_sid && EqualSid(sid, everyone_sid))
-                {
-                    if (mask & (FILE_GENERIC_READ | FILE_READ_DATA))
-                        perms |= permissions::others_read;
-                    if (mask & (FILE_GENERIC_WRITE | FILE_WRITE_DATA))
-                        perms |= permissions::others_write;
-                    if (mask & (FILE_GENERIC_EXECUTE | FILE_EXECUTE))
-                        perms |= permissions::others_execute;
-                }
-            }
-
-            // cleanup
-            if (everyone_sid)
-                FreeSid(everyone_sid);
-            if (auth_users_sid)
-                FreeSid(auth_users_sid);
-            if (builtin_users_sid)
-                FreeSid(builtin_users_sid);
-            LocalFree(sec_desc);
-
-            return perms;
+            return enum_mask(permissions::all);
         }
 #else
         file_type model_to_file_type(mode_t mode)
@@ -1779,19 +1666,29 @@ namespace tempest::filesystem
     file_status status(const path& p)
     {
 #ifdef _WIN32
-        auto type = get_file_type(p.native());
-        if (type == file_type::symlink)
+        WIN32_FILE_ATTRIBUTE_DATA file_info;
+        if (!GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info))
+        {
+            const auto err = GetLastError();
+            if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+            {
+                return file_status(file_type::not_found);
+            }
+            return file_status(file_type::unknown);
+        }
+
+        if (file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
         {
             auto native_path = path(follow_symlink(p.native()));
             if (native_path.is_relative())
             {
                 native_path = p / native_path;
             }
-            type = get_file_type(native_path);
-            auto perms = get_permissions(native_path);
-            return file_status(type, perms);
+            return status(native_path);
         }
-        auto perms = get_permissions(p.native());
+
+        const auto type = file_type_from_attributes(file_info.dwFileAttributes);
+        const auto perms = get_permissions(file_info.dwFileAttributes);
         return file_status(type, perms);
 #else
         return get_unix_file_status(p.native(), true);
@@ -1801,9 +1698,19 @@ namespace tempest::filesystem
     file_status symlink_status(const path& p)
     {
 #ifdef _WIN32
-        const auto native_path = p.native();
-        auto type = get_file_type(native_path);
-        auto perms = get_permissions(native_path);
+        WIN32_FILE_ATTRIBUTE_DATA file_info;
+        if (!GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info))
+        {
+            const auto err = GetLastError();
+            if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+            {
+                return file_status(file_type::not_found);
+            }
+            return file_status(file_type::unknown);
+        }
+
+        const auto type = file_type_from_attributes(file_info.dwFileAttributes);
+        const auto perms = get_permissions(file_info.dwFileAttributes);
         return file_status(type, perms);
 #else
         return get_unix_file_status(p.native(), false);
@@ -1854,7 +1761,15 @@ namespace tempest::filesystem
 #endif
     }
 
-    directory_entry::directory_entry(const filesystem::path& p) : _path{p}
+    directory_entry::directory_entry(const filesystem::path& p)
+        : _path{p}, _status{filesystem::status(p)}, _symlink_status{filesystem::symlink_status(p)},
+          _file_size{filesystem::file_size(p)}
+    {
+    }
+
+    directory_entry::directory_entry(const filesystem::path& p, file_status status, file_status symlink_status,
+                                     size_t file_size)
+        : _path{p}, _status{status}, _symlink_status{symlink_status}, _file_size{file_size}
     {
     }
 
@@ -1870,62 +1785,62 @@ namespace tempest::filesystem
 
     bool directory_entry::exists() const
     {
-        return filesystem::exists(_path);
+        return filesystem::exists(_status);
     }
 
     bool directory_entry::is_block_file() const
     {
-        return filesystem::is_block_file(_path);
+        return filesystem::is_block_file(_status);
     }
 
     bool directory_entry::is_character_file() const
     {
-        return filesystem::is_character_file(_path);
+        return filesystem::is_character_file(_status);
     }
 
     bool directory_entry::is_directory() const
     {
-        return filesystem::is_directory(_path);
+        return filesystem::is_directory(_status);
     }
 
     bool directory_entry::is_fifo() const
     {
-        return filesystem::is_fifo(_path);
+        return filesystem::is_fifo(_status);
     }
 
     bool directory_entry::is_other() const
     {
-        return filesystem::is_other(_path);
+        return filesystem::is_other(_status);
     }
 
     bool directory_entry::is_regular_file() const
     {
-        return filesystem::is_regular_file(_path);
+        return filesystem::is_regular_file(_status);
     }
 
     bool directory_entry::is_socket() const
     {
-        return filesystem::is_socket(_path);
+        return filesystem::is_socket(_status);
     }
 
     bool directory_entry::is_symlink() const
     {
-        return filesystem::is_symlink(_path);
+        return filesystem::is_symlink(_symlink_status);
     }
 
     file_status directory_entry::status() const
     {
-        return filesystem::status(_path);
+        return _status;
     }
 
     file_status directory_entry::symlink_status() const
     {
-        return filesystem::symlink_status(_path);
+        return _symlink_status;
     }
 
     size_t directory_entry::file_size() const
     {
-        return filesystem::file_size(_path);
+        return _file_size;
     }
 
     directory_iterator::directory_iterator(const path& p) : _dir{p}
@@ -1937,9 +1852,9 @@ namespace tempest::filesystem
         }
 
 #ifdef _WIN32
-        const auto path = p.native() / L"*";
+        const auto search_path = p / "*";
         auto find_data = WIN32_FIND_DATAW{};
-        const auto h_find = FindFirstFileW(path.c_str(), &find_data);
+        const auto h_find = FindFirstFileW(search_path.c_str(), &find_data);
         if (h_find == INVALID_HANDLE_VALUE)
         {
             _index = 0;
@@ -1951,7 +1866,33 @@ namespace tempest::filesystem
             const auto name = path::string_type(find_data.cFileName);
             if (name != L"." && name != L"..")
             {
-                _entries.emplace_back(p / name);
+                const auto entry_path = p / name;
+                const auto perms = get_permissions(find_data.dwFileAttributes);
+
+                if (find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+                {
+                    const auto sym_status = file_status(file_type::symlink, perms);
+                    const auto target_status = filesystem::status(entry_path);
+                    const auto sz = target_status.type() == file_type::regular ? filesystem::file_size(entry_path)
+                                                                               : static_cast<size_t>(-1);
+                    _entries.emplace_back(entry_path, target_status, sym_status, sz);
+                }
+                else if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                {
+                    const auto dir_status = file_status(file_type::directory, perms);
+                    _entries.emplace_back(entry_path, dir_status, dir_status, static_cast<size_t>(-1));
+                }
+                else if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
+                {
+                    const auto dev_status = file_status(file_type::character, perms);
+                    _entries.emplace_back(entry_path, dev_status, dev_status, static_cast<size_t>(-1));
+                }
+                else
+                {
+                    const auto reg_status = file_status(file_type::regular, perms);
+                    const auto sz = (static_cast<uint64_t>(find_data.nFileSizeHigh) << 32) | find_data.nFileSizeLow;
+                    _entries.emplace_back(entry_path, reg_status, reg_status, static_cast<size_t>(sz));
+                }
             }
         } while (FindNextFileW(h_find, &find_data));
 
@@ -1970,7 +1911,54 @@ namespace tempest::filesystem
             const auto name = path::string_type(entry->d_name);
             if (name != "." && name != "..")
             {
-                _entries.emplace_back(p / name);
+                const auto entry_path = p / name;
+                auto ftype = file_type::unknown;
+#if defined(_DIRENT_HAVE_D_TYPE) || defined(DT_UNKNOWN)
+                switch (entry->d_type)
+                {
+                case DT_REG:
+                    ftype = file_type::regular;
+                    break;
+                case DT_DIR:
+                    ftype = file_type::directory;
+                    break;
+                case DT_LNK:
+                    ftype = file_type::symlink;
+                    break;
+                case DT_BLK:
+                    ftype = file_type::block;
+                    break;
+                case DT_CHR:
+                    ftype = file_type::character;
+                    break;
+                case DT_FIFO:
+                    ftype = file_type::fifo;
+                    break;
+                case DT_SOCK:
+                    ftype = file_type::socket;
+                    break;
+                default:
+                    ftype = file_type::unknown;
+                    break;
+                }
+#endif
+                if (ftype == file_type::unknown)
+                {
+                    _entries.emplace_back(entry_path);
+                }
+                else if (ftype == file_type::symlink)
+                {
+                    const auto sym_status = file_status(file_type::symlink);
+                    const auto target_status = filesystem::status(entry_path);
+                    const auto sz = target_status.type() == file_type::regular ? filesystem::file_size(entry_path)
+                                                                               : static_cast<size_t>(-1);
+                    _entries.emplace_back(entry_path, target_status, sym_status, sz);
+                }
+                else
+                {
+                    const auto st = file_status(ftype);
+                    _entries.emplace_back(entry_path, st, st, static_cast<size_t>(-1));
+                }
             }
         }
 
