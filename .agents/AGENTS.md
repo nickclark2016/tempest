@@ -123,6 +123,10 @@ Whenever adding or updating test cases:
   `.\bin\Debug\windows-clang\rhi-examples.exe --list`
   `.\bin\Debug\windows-clang\rhi-examples.exe --example triangle`
 
+### Architecture Proposals & Backlog Tracking
+- When identifying new ideas, optimizations, or architectural improvements that are deferred for future work, document them as formal proposals in `docs/design/proposals/<proposal_name>.md` and index them in `docs/design/README.md`.
+- When the user asks for suggestions on what to work on next, inspect `docs/design/proposals/` and present choices prioritized by relevance to recent work and current subsystem focus.
+
 ### Commit Messages
 - Commit message suggestions must always be a single line under 80 characters.
 
