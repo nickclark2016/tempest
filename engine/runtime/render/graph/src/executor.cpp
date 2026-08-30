@@ -43,17 +43,19 @@ namespace tempest::render_graph
             _timeline_semaphore = dev.create_timeline_semaphore();
         }
 
-        bool wait_semaphore_consumed = false;
+        auto wait_semaphore_consumed = false;
+        auto last_batch_signal_val = uint64_t{0};
 
         for (size_t batch_idx = 0; batch_idx < sync.queue_batches.size(); ++batch_idx)
         {
             const auto& batch = sync.queue_batches[batch_idx];
+            const auto is_last_batch = (batch_idx + 1 == sync.queue_batches.size());
             auto& port = get_execution_port(dev, batch.queue);
             auto& cmd = port.acquire_command_list(0, rhi::command_list_lifetime::transient);
 
 #if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
             auto batch_name = string{};
-            const auto* queue_name = batch.queue == queue_type::graphics       ? "Graphics"
+            const auto* queue_name = batch.queue == queue_type::graphics        ? "Graphics"
                                      : batch.queue == queue_type::async_compute ? "Async Compute"
                                                                                 : "Async Transfer";
             std::format_to(tempest::back_inserter(batch_name), "Queue Batch {} ({})", batch_idx, queue_name);
@@ -190,9 +192,8 @@ namespace tempest::render_graph
 #endif
             }
 
-            const auto is_last_batch = (batch_idx + 1 == sync.queue_batches.size());
-
-            // 3. If this is the final presenting batch and an explicitly presented texture is provided, transition it to present layout
+            // 3. If this is the final presenting batch and an explicitly presented texture is provided, transition it
+            // to present layout
             if (is_last_batch && frame_sync.signal_semaphore.has_value() && frame_sync.presented_texture.has_value())
             {
                 const auto tex_handle = *frame_sync.presented_texture;
@@ -222,8 +223,8 @@ namespace tempest::render_graph
             auto wait_sync = vector<rhi::device_sync_point>{};
             auto signal_sync = vector<rhi::device_sync_point>{};
 
-            // Cross-queue timeline wait
-            if (batch_idx > 0)
+            // Cross-queue timeline wait from previous batch
+            if (batch_idx > 0 && last_batch_signal_val > 0)
             {
                 auto wait_stages = rhi::pipeline_stage::top_of_pipe;
                 if (batch.queue == queue_type::async_compute)
@@ -237,7 +238,7 @@ namespace tempest::render_graph
 
                 wait_sync.push_back(rhi::device_sync_point{
                     .semaphore = _timeline_semaphore,
-                    .value = _current_timeline_value + batch_idx,
+                    .value = last_batch_signal_val,
                     .stages = wait_stages,
                 });
             }
@@ -245,7 +246,7 @@ namespace tempest::render_graph
             // Frame acquire binary semaphore wait (on the first graphics batch or first batch)
             if (!wait_semaphore_consumed && frame_sync.wait_semaphore.has_value())
             {
-                if (batch.queue == queue_type::graphics)
+                if (batch.queue == queue_type::graphics || is_last_batch)
                 {
                     wait_sync.push_back(rhi::device_sync_point{
                         .semaphore = *frame_sync.wait_semaphore,
@@ -256,12 +257,13 @@ namespace tempest::render_graph
                 }
             }
 
-            // Cross-queue timeline signal
+            // Cross-queue timeline signal for next batch
             if (!is_last_batch)
             {
+                last_batch_signal_val = ++_current_timeline_value;
                 signal_sync.push_back(rhi::device_sync_point{
                     .semaphore = _timeline_semaphore,
-                    .value = _current_timeline_value + batch_idx + 1,
+                    .value = last_batch_signal_val,
                     .stages = rhi::pipeline_stage::bottom_of_pipe,
                 });
             }
@@ -298,8 +300,6 @@ namespace tempest::render_graph
                 return unexpected(execution_error::queue_submit_failed);
             }
         }
-
-        _current_timeline_value += sync.queue_batches.size();
 
         for (auto* temporal_res : graph.get_tracked_temporal_resources())
         {

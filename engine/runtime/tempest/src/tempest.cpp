@@ -114,26 +114,6 @@ namespace tempest
 
             for (auto& win : _windows)
             {
-                if (win.acquire_sem.handle != 0)
-                {
-                    _device->destroy_semaphore(win.acquire_sem);
-                    win.acquire_sem = {};
-                }
-                if (win.timeline_sem.handle != 0)
-                {
-                    _device->destroy_semaphore(win.timeline_sem);
-                    win.timeline_sem = {};
-                }
-                for (auto sem : win.render_semaphores)
-                {
-                    _device->destroy_semaphore(sem);
-                }
-                win.render_semaphores.clear();
-
-                if (win.render_surface)
-                {
-                    _device->destroy_render_surface(tempest::move(win.render_surface));
-                }
                 if (win.raw_surface.handle != 0)
                 {
                     _device->destroy_raw_surface(win.raw_surface);
@@ -168,25 +148,9 @@ namespace tempest
             _window_manager.destroy_window(handle);
             return {};
         }
+
         auto raw_surf = raw_res.value();
-
         auto caps = _device->get_surface_capabilities(raw_surf);
-        auto selected_surface_format = optional<rhi::surface_format>{};
-        for (const auto& fmt : caps.supported_formats)
-        {
-            if (fmt.color_space == rhi::surface_color_space::srgb_nonlinear &&
-                (fmt.format == rhi::render_surface_format::bgra8_srgb ||
-                 fmt.format == rhi::render_surface_format::rgba8_srgb))
-            {
-                selected_surface_format = fmt;
-                break;
-            }
-        }
-        if (!selected_surface_format && !caps.supported_formats.empty())
-        {
-            selected_surface_format = caps.supported_formats[0];
-        }
-
         auto selected_present_mode = rhi::present_mode::vsync;
         for (const auto& mode : caps.supported_present_modes)
         {
@@ -197,58 +161,26 @@ namespace tempest
             }
         }
 
-        const auto surface_format_val = selected_surface_format.value_or(rhi::surface_format{
-            .format = rhi::render_surface_format::bgra8_srgb,
-            .color_space = rhi::surface_color_space::srgb_nonlinear,
-        });
-
         const auto cur_fb_w = _window_manager.get_framebuffer_width(handle);
         const auto cur_fb_h = _window_manager.get_framebuffer_height(handle);
+        const auto w = (cur_fb_w > 0) ? cur_fb_w : desc.width;
+        const auto h = (cur_fb_h > 0) ? cur_fb_h : desc.height;
 
-        auto surf_desc = rhi::render_surface_desc{
-            .raw_surface = raw_surf,
-            .present_mode = selected_present_mode,
-            .format = surface_format_val,
-            .width = (cur_fb_w > 0) ? cur_fb_w : desc.width,
-            .height = (cur_fb_h > 0) ? cur_fb_h : desc.height,
-            .min_image_count = caps.min_image_count,
-            .preferred_image_count = caps.min_image_count + 1,
-        };
-
-        auto surface = _device->create_render_surface(surf_desc);
-        if (!surface)
+        if (_renderer)
         {
-            _device->destroy_raw_surface(raw_surf);
-            _window_manager.destroy_window(handle);
-            return {};
+            _renderer->register_surface(handle, raw_surf, w, h, selected_present_mode);
         }
 
-        auto acquire_sem = _device->create_binary_semaphore();
-        auto timeline_sem = _device->create_timeline_semaphore();
-
-        _window_manager.register_resize_callback(
-            handle, [this, handle]([[maybe_unused]] uint32_t w, [[maybe_unused]] uint32_t h) {
-                for (auto& win : _windows)
-                {
-                    if (win.handle == handle)
-                    {
-                        win.need_recreate = true;
-                        break;
-                    }
-                }
-            });
+        _window_manager.register_resize_callback(handle, [this, handle](uint32_t rw, uint32_t rh) {
+            if (_renderer)
+            {
+                _renderer->resize_surface(handle, rw, rh);
+            }
+        });
 
         _windows.push_back(window_context{
             .handle = handle,
             .raw_surface = raw_surf,
-            .render_surface = tempest::move(surface),
-            .surface_format = surface_format_val,
-            .present_mode = selected_present_mode,
-            .acquire_sem = acquire_sem,
-            .timeline_sem = timeline_sem,
-            .timeline_value = 0,
-            .render_semaphores = {},
-            .need_recreate = false,
         });
 
         return window_registration_info{
@@ -454,7 +386,7 @@ namespace tempest
         {
             if (w.handle == win)
             {
-                return w.render_surface.get();
+                return _renderer ? _renderer->get_render_surface(win) : nullptr;
             }
         }
         return nullptr;
@@ -466,7 +398,7 @@ namespace tempest
         {
             if (w.handle == win)
             {
-                return w.render_surface.get();
+                return _renderer ? _renderer->get_render_surface(win) : nullptr;
             }
         }
         return nullptr;
@@ -499,28 +431,13 @@ namespace tempest
         {
             if (_window_manager.should_close(it->handle))
             {
-                if (_device)
+                if (_renderer)
                 {
-                    if (it->acquire_sem.handle != 0)
-                    {
-                        _device->destroy_semaphore(it->acquire_sem);
-                    }
-                    if (it->timeline_sem.handle != 0)
-                    {
-                        _device->destroy_semaphore(it->timeline_sem);
-                    }
-                    for (auto sem : it->render_semaphores)
-                    {
-                        _device->destroy_semaphore(sem);
-                    }
-                    if (it->render_surface)
-                    {
-                        _device->destroy_render_surface(tempest::move(it->render_surface));
-                    }
-                    if (it->raw_surface.handle != 0)
-                    {
-                        _device->destroy_raw_surface(it->raw_surface);
-                    }
+                    _renderer->unregister_surface(it->handle);
+                }
+                if (_device && it->raw_surface.handle != 0)
+                {
+                    _device->destroy_raw_surface(it->raw_surface);
                 }
                 _window_manager.destroy_window(it->handle);
                 it = _windows.erase(it);
@@ -553,113 +470,14 @@ namespace tempest
 
     auto standalone_engine_context::_render_frame() -> void
     {
-        if (!_renderer || !_device || _windows.empty())
+        if (!_renderer || _windows.empty())
         {
             return;
         }
 
-        auto& win = _windows.front();
-        if (!win.render_surface)
+        for (auto& win : _windows)
         {
-            return;
-        }
-
-        const auto cur_w = _window_manager.get_framebuffer_width(win.handle);
-        const auto cur_h = _window_manager.get_framebuffer_height(win.handle);
-
-        if (cur_w == 0 || cur_h == 0)
-        {
-            // Window is minimized
-            return;
-        }
-
-        if (cur_w != win.render_surface->get_width() || cur_h != win.render_surface->get_height() || win.need_recreate)
-        {
-            _device->wait_idle();
-
-            auto caps = _device->get_surface_capabilities(win.raw_surface);
-            auto new_surf_desc = rhi::render_surface_desc{
-                .raw_surface = win.raw_surface,
-                .present_mode = win.present_mode,
-                .format = win.surface_format,
-                .width = cur_w,
-                .height = cur_h,
-                .min_image_count = caps.min_image_count,
-                .preferred_image_count = caps.min_image_count + 1,
-                .old_surface = win.render_surface.get(),
-            };
-
-            auto new_surf = _device->create_render_surface(new_surf_desc);
-            if (new_surf)
-            {
-                _device->destroy_render_surface(tempest::move(win.render_surface));
-                win.render_surface = tempest::move(new_surf);
-                _renderer->resize(cur_w, cur_h);
-                win.need_recreate = false;
-            }
-            else
-            {
-                return;
-            }
-        }
-
-        if (win.timeline_value > 0)
-        {
-            _device->wait_for_sync(rhi::host_sync_point{
-                .semaphore = win.timeline_sem,
-                .value = win.timeline_value,
-            });
-        }
-
-        auto acquire_res = win.render_surface->acquire_next_image(rhi::device_sync_point{
-            .semaphore = win.acquire_sem,
-            .value = 0,
-            .stages = rhi::pipeline_stage::attachment_output,
-        });
-
-        if (!acquire_res.has_value())
-        {
-            if (acquire_res.error() == rhi::swapchain_error::out_of_date ||
-                acquire_res.error() == rhi::swapchain_error::suboptimal)
-            {
-                win.need_recreate = true;
-            }
-            return;
-        }
-
-        auto sc_img = acquire_res.value();
-
-        while (sc_img.swapchain_image_index >= win.render_semaphores.size())
-        {
-            win.render_semaphores.push_back(_device->create_binary_semaphore());
-        }
-        auto render_sem = win.render_semaphores[sc_img.swapchain_image_index];
-        win.timeline_value++;
-
-        _renderer->prepare_frame(cur_w, cur_h, sc_img.texture, sc_img.view);
-
-        const auto sync = render_graph::frame_sync_options{
-            .wait_semaphore = win.acquire_sem,
-            .wait_stages = rhi::pipeline_stage::attachment_output,
-            .signal_semaphore = render_sem,
-            .signal_stages = rhi::pipeline_stage::bottom_of_pipe,
-            .timeline_semaphore = win.timeline_sem,
-            .timeline_value = win.timeline_value,
-            .presented_texture = sc_img.texture,
-        };
-
-        static_cast<void>(_renderer->render(sync));
-
-        auto& graphics_port = _device->get_graphics_execution_port();
-        auto present_res = win.render_surface->present(graphics_port, rhi::device_sync_point{
-                                                                          .semaphore = render_sem,
-                                                                          .value = 0,
-                                                                      });
-
-        if (!present_res.has_value() && (present_res.error() == rhi::swapchain_error::out_of_date ||
-                                         present_res.error() == rhi::swapchain_error::suboptimal))
-        {
-            win.need_recreate = true;
+            [[maybe_unused]] auto result = _renderer->render_frame(win.handle);
         }
     }
 } // namespace tempest

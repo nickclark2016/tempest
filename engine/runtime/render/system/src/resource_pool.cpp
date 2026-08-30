@@ -17,6 +17,28 @@ namespace tempest::render_system
                 return;
             }
 
+            // Pre-barrier: transition source mip levels from copy write to blit read
+            const auto pre_blit_barrier = rhi::texture_barrier{
+                .texture = texture,
+                .src =
+                    {
+                        .stages = rhi::pipeline_stage::copy,
+                        .access = rhi::resource_access::write,
+                        .layout = rhi::image_layout::general,
+                    },
+                .dst =
+                    {
+                        .stages = rhi::pipeline_stage::blit,
+                        .access = rhi::resource_access::read,
+                        .layout = rhi::image_layout::general,
+                    },
+                .base_mip_level = 0,
+                .mip_level_count = first_generated_mip,
+                .base_array_layer = 0,
+                .array_layer_count = array_layers,
+            };
+            cmd.pipeline_barrier(span<const rhi::texture_barrier>{&pre_blit_barrier, 1}, {});
+
             for (uint32_t dst_mip = first_generated_mip; dst_mip < total_texture_mips; ++dst_mip)
             {
                 const auto src_mip = dst_mip - 1;

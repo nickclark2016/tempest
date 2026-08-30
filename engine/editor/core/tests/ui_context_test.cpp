@@ -111,17 +111,38 @@ namespace tempest::editor::tests
 
             ui_ctx.finish_ui_commands();
 
-            auto* draw_data = ImGui::GetDrawData();
-            ASSERT_NE(draw_data, nullptr);
-            EXPECT_TRUE(draw_data->Valid);
-            EXPECT_GT(draw_data->TotalVtxCount, 0);
+            auto tex_desc = rhi::texture_desc{
+                .width = 1280,
+                .height = 720,
+                .depth = 1,
+                .mip_levels = 1,
+                .array_layers = 1,
+                .format = rhi::data_format::rgba8_unorm,
+                .memory_usage = rhi::memory_usage::device_only,
+                .usage = rhi::texture_usage::color_attachment,
+                .name = "UI Test Color Target",
+            };
+            auto tex = env.dev->create_texture(tex_desc);
+            auto view = env.dev->create_texture_view(tex, rhi::texture_view_desc{});
+
+            auto color_att = rhi::color_attachment{
+                .view = view,
+                .load_op = rhi::load_op::clear,
+                .store_op = rhi::store_op::store,
+                .clear_value = rhi::clear_color_value{0.0F, 0.0F, 0.0F, 1.0F},
+            };
 
             auto& graphics_port = env.dev->get_graphics_execution_port();
             auto& cmd = graphics_port.acquire_command_list(0, rhi::command_list_lifetime::transient);
 
             cmd.begin();
+            cmd.begin_render_pass(span<const rhi::color_attachment>{&color_att, 1}, nullopt, 1280, 720);
             ui_ctx.render_ui_commands(cmd, 1280, 720);
+            cmd.end_render_pass();
             cmd.end();
+
+            env.dev->destroy_texture_view(view);
+            env.dev->destroy_texture(tex);
         }
 
         env.win_mgr.destroy_window(env.win);

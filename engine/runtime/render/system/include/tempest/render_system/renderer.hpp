@@ -7,6 +7,7 @@
 #include <tempest/functional.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/optional.hpp>
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/render_components.hpp>
@@ -16,6 +17,8 @@
 #include <tempest/rhi.hpp>
 #include <tempest/texture.hpp>
 #include <tempest/transform_component.hpp>
+#include <tempest/vector.hpp>
+#include <tempest/window_handle.hpp>
 
 namespace tempest::render_system
 {
@@ -77,15 +80,55 @@ namespace tempest::render_system
         renderer(renderer&&) noexcept;
         renderer& operator=(renderer&&) noexcept;
 
+        using ui_render_callback = function<void(rhi::command_list& cmd, uint32_t width, uint32_t height)>;
+
+        struct surface_state
+        {
+            window_handle window{null_window_handle};
+            rhi::raw_surface_handle raw_surface{};
+            unique_ptr<rhi::render_surface> render_surface{};
+            uint32_t width{0};
+            uint32_t height{0};
+            rhi::present_mode present_mode{rhi::present_mode::vsync};
+            bool need_recreate{false};
+            vector<rhi::semaphore_handle> acquire_semaphores{};
+            vector<rhi::semaphore_handle> render_semaphores{};
+            optional<rhi::swapchain_image> current_sc_image{nullopt};
+            rhi::semaphore_handle current_acquire_semaphore{};
+            rhi::semaphore_handle current_render_semaphore{};
+        };
+
+        // Surface Lifecycle Management
+        void register_surface(window_handle win, rhi::raw_surface_handle raw_surface, uint32_t width, uint32_t height,
+                              rhi::present_mode mode = rhi::present_mode::vsync);
+        void unregister_surface(window_handle win);
+        void resize_surface(window_handle win, uint32_t width, uint32_t height);
+
+        [[nodiscard]] auto get_render_surface(window_handle win = null_window_handle) const noexcept
+            -> const rhi::render_surface*;
+        [[nodiscard]] auto get_render_surface(window_handle win = null_window_handle) noexcept -> rhi::render_surface*;
+        [[nodiscard]] auto get_surface_format(window_handle win = null_window_handle) const noexcept
+            -> rhi::render_surface_format;
+
+        /// @brief Paces CPU with GPU by waiting for the active flight slot to complete, and prepares allocators.
+        void begin_frame(window_handle win = null_window_handle);
+
         /// @brief Builds the complete Render Graph DAG for the frame.
         void prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex = nullopt,
                            optional<rhi::texture_view_handle> swapchain_view = nullopt,
-                           optional<render_camera> camera_override = nullopt);
+                           optional<render_camera> camera_override = nullopt, ui_render_callback ui_callback = nullptr);
 
         /// @brief Executes the compiled Render Graph DAG on the GPU.
         auto render(const render_graph::frame_sync_options& sync = {}) -> expected<void, render_graph::execution_error>;
 
-        /// @brief Resizes render targets and surface.
+        /// @brief Presents the acquired swapchain image for the specified window surface.
+        auto present(window_handle win = null_window_handle) -> expected<void, rhi::swapchain_error>;
+
+        /// @brief Complete frame execution: begins frame, prepares DAG, renders, and presents to window surface.
+        auto render_frame(window_handle win = null_window_handle, optional<render_camera> camera_override = nullopt,
+                          ui_render_callback ui_callback = nullptr) -> expected<void, render_graph::execution_error>;
+
+        /// @brief Resizes default render target configuration.
         void resize(uint32_t width, uint32_t height);
 
         [[nodiscard]] auto get_config() const noexcept -> const renderer_config&
@@ -208,13 +251,74 @@ namespace tempest::render_system
             return _cached_lights;
         }
 
+        [[nodiscard]] auto get_current_flight_slot() const noexcept -> uint32_t
+        {
+            return static_cast<uint32_t>(_frame_index % _frames_in_flight);
+        }
+
+        [[nodiscard]] auto get_current_timeline_semaphore() const noexcept -> rhi::semaphore_handle
+        {
+            return _flight_slots.empty() ? rhi::semaphore_handle{}
+                                         : _flight_slots[get_current_flight_slot()].timeline_sem;
+        }
+
+        [[nodiscard]] auto get_current_timeline_value() const noexcept -> uint64_t
+        {
+            return _flight_slots.empty() ? 0ULL : _flight_slots[get_current_flight_slot()].timeline_value;
+        }
+
+        [[nodiscard]] auto get_flight_slot_timeline_semaphore(uint32_t slot) const noexcept -> rhi::semaphore_handle
+        {
+            return (slot < _flight_slots.size()) ? _flight_slots[slot].timeline_sem : rhi::semaphore_handle{};
+        }
+
+        [[nodiscard]] auto get_flight_slot_timeline_value(uint32_t slot) const noexcept -> uint64_t
+        {
+            return (slot < _flight_slots.size()) ? _flight_slots[slot].timeline_value : 0ULL;
+        }
+
+        auto set_flight_slot_timeline_value(uint32_t slot, uint64_t value) noexcept -> void
+        {
+            if (slot < _flight_slots.size())
+            {
+                _flight_slots[slot].timeline_value = value;
+            }
+        }
+
+        [[nodiscard]] auto get_frames_in_flight() const noexcept -> uint32_t
+        {
+            return _frames_in_flight;
+        }
+
+        [[nodiscard]] auto get_frame_index() const noexcept -> uint64_t
+        {
+            return _frame_index;
+        }
+
       private:
+        struct flight_slot
+        {
+            rhi::semaphore_handle timeline_sem{};
+            uint64_t timeline_value{0};
+        };
+
         rhi::device* _device{nullptr};
         logger* _log{nullptr};
         renderer_config _cfg;
         renderer_inputs _inputs;
         unique_ptr<camera_system> _owned_camera_system;
         camera_system* _camera_system{nullptr};
+
+        uint32_t _frames_in_flight{2};
+        uint64_t _frame_index{0};
+        vector<flight_slot> _flight_slots{};
+        bool _frame_begun{false};
+
+        vector<surface_state> _surfaces{};
+        window_handle _active_surface_window{null_window_handle};
+
+        [[nodiscard]] auto _find_surface(window_handle win) noexcept -> surface_state*;
+        [[nodiscard]] auto _find_surface(window_handle win) const noexcept -> const surface_state*;
 
         resource_pool _pool;
         shader_manager _shaders;

@@ -74,6 +74,27 @@ Do not use `std::shared_ptr` or `tempest::shared_ptr` for resource management, s
 - Prefer explicit unique ownership (`tempest::unique_ptr` / `tempest::make_unique`), RAII scope management, explicit registration/unregistration cleanup methods, non-owning raw pointers/references with well-defined parent-child lifetimes, or generational indices (`ecs::entity` with `is_valid` validation).
 - When analyzing memory management issues, proposing fixes, or refactoring code, never suggest or introduce `shared_ptr` as a solution.
 
+### 15. Render Graph Transient Resource Eviction & Surface-Relative Targets
+- Viewport- and surface-dependent transient render targets in render passes must be declared using `rg_texture_size::surface_relative(...)` rather than fixed absolute pixel dimensions.
+- Transient resource allocators must track inactivity across frame-in-flight cycles (`unused_cycles`) and immediately evict mismatched surface-relative textures on their next idle flight cycle during resolution changes to prevent unbounded VRAM growth.
+- In-flight active texture descriptor tables must not be cleared during resize callbacks while UI frame drawing is in progress.
+
+### 16. Binary Chunk Arena & Asset Packing Isolation
+- In binary asset databases, serialization chunk arenas, or pooled memory streams, never share packing cursor state (`current_chunk_used`, `current_chunk_capacity`) across dedicated large-asset allocations and small-asset packing buffers.
+- Always isolate small-asset packing into dedicated arena buffers so appending large standalone chunks cannot corrupt packing offsets or cause small object payloads to overwrite large asset buffers in memory.
+
+### 17. Offscreen Render Target UI Sampling & Pipeline Synchronization
+- When offscreen 3D render targets (such as `TonemappedColorTarget`) are sampled by UI passes (such as ImGui bindless textures), explicitly record pipeline barriers transitioning the texture from color attachment output write to fragment shader read before recording the UI pass.
+- In editor and tool harnesses, always evaluate UI window logic and viewport dimension updates (`on_paint()`) before executing 3D scene rendering so camera matrices and render target sizes update synchronously without 1-frame latency.
+
+### 18. Renderer Encapsulated Frame Flight Synchronization & UI Pass Integration
+- The `renderer` is the single source of truth for frame flight timeline synchronization. It internally manages per-flight-slot timeline semaphores matching `pool_config.frames_in_flight`.
+- `renderer::prepare_frame()` automatically performs host synchronization (`wait_for_sync`) on the active flight slot before mutating `resource_pool` or transient allocator state. Higher-level engine contexts (`standalone_engine_context`, `editor_engine_context`) must NOT manually track timeline values or execute timeline host waits.
+- UI overlay rendering (e.g. ImGui) must be integrated directly into the `renderer` Render Graph DAG via `prepare_frame(..., ui_callback)` rather than executed in a secondary ad-hoc queue submission. This allows the Render Graph `barrier_solver` to solve all image layout transitions and pipeline barriers seamlessly in a single unified execution.
+
+### 19. Texture Mipmap Generation Pre-Blit Synchronization
+- When generating mipmap chains via blit fallback after buffer-to-image texture upload (`copy_buffer_to_texture`), always record a pipeline barrier transitioning uploaded source mip levels from `pipeline_stage::copy` write access to `pipeline_stage::blit` read access before issuing `blit_texture` commands to prevent read-after-write hazards.
+
 ## Workflow & Build Guidelines
 
 ### Iterative Milestone Execution & Sync Gates

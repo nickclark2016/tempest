@@ -8,24 +8,10 @@
 #include <tempest/memory.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/string.hpp>
+#include <tempest/window_handle.hpp>
 
 namespace tempest
 {
-    /// \brief Strongly-typed handle representing an OS window managed by window_manager.
-    struct window_handle
-    {
-        uint32_t id{0};
-
-        [[nodiscard]] constexpr auto is_valid() const noexcept -> bool
-        {
-            return id != 0;
-        }
-
-        constexpr auto operator<=>(const window_handle&) const noexcept = default;
-    };
-
-    inline constexpr window_handle null_window_handle{0};
-
     /// \brief Cursor modes supported by window_manager.
     enum class cursor_mode : uint8_t
     {

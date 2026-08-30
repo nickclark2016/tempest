@@ -105,14 +105,6 @@ namespace tempest
         {
             window_handle handle{null_window_handle};
             rhi::raw_surface_handle raw_surface{};
-            unique_ptr<rhi::render_surface> render_surface;
-            rhi::surface_format surface_format{};
-            rhi::present_mode present_mode{rhi::present_mode::vsync};
-            rhi::semaphore_handle acquire_sem{};
-            rhi::semaphore_handle timeline_sem{};
-            uint64_t timeline_value{0};
-            vector<rhi::semaphore_handle> render_semaphores;
-            bool need_recreate{false};
         };
 
         standalone_engine_context();

@@ -114,10 +114,17 @@ namespace tempest::render_system
                        unique_ptr<camera_system> camera_sys)
         : _device{&dev}, _log{&log}, _cfg{cfg}, _inputs{inputs}, _owned_camera_system{tempest::move(camera_sys)},
           _camera_system{_inputs.camera_sys ? _inputs.camera_sys : _owned_camera_system.get()},
-          _pool{dev, cfg.pool_config}, _shaders{dev}, _graph{cfg.render_width, cfg.render_height},
-          _shadow_debug_mode{cfg.shadow_debug}
+          _frames_in_flight{math::max(1U, cfg.pool_config.frames_in_flight)}, _pool{dev, cfg.pool_config},
+          _shaders{dev}, _graph{cfg.render_width, cfg.render_height}, _shadow_debug_mode{cfg.shadow_debug}
     {
-        _graph.get_allocator().set_frames_in_flight(_cfg.pool_config.frames_in_flight);
+        _flight_slots.resize(_frames_in_flight);
+        for (auto& slot : _flight_slots)
+        {
+            slot.timeline_sem = _device->create_timeline_semaphore();
+            slot.timeline_value = 0;
+        }
+
+        _graph.get_allocator().set_frames_in_flight(_frames_in_flight);
         if (_inputs.entity_registry != nullptr)
         {
             _events = &_inputs.entity_registry->event_registry();
@@ -133,6 +140,35 @@ namespace tempest::render_system
         if (_device)
         {
             _device->wait_idle();
+            for (auto& surf : _surfaces)
+            {
+                for (auto sem : surf.acquire_semaphores)
+                {
+                    _device->destroy_semaphore(sem);
+                }
+                surf.acquire_semaphores.clear();
+
+                for (auto sem : surf.render_semaphores)
+                {
+                    _device->destroy_semaphore(sem);
+                }
+                surf.render_semaphores.clear();
+
+                if (surf.render_surface)
+                {
+                    _device->destroy_render_surface(tempest::move(surf.render_surface));
+                }
+            }
+            _surfaces.clear();
+
+            for (auto& slot : _flight_slots)
+            {
+                if (slot.timeline_sem.handle != 0)
+                {
+                    _device->destroy_semaphore(slot.timeline_sem);
+                    slot.timeline_sem = {};
+                }
+            }
             _graph.get_allocator().release_all(*_device);
         }
     }
@@ -140,6 +176,9 @@ namespace tempest::render_system
     renderer::renderer(renderer&& other) noexcept
         : _device{other._device}, _log{other._log}, _cfg{other._cfg}, _inputs{other._inputs},
           _owned_camera_system{tempest::move(other._owned_camera_system)}, _camera_system{other._camera_system},
+          _frames_in_flight{other._frames_in_flight}, _frame_index{other._frame_index},
+          _flight_slots{tempest::move(other._flight_slots)}, _frame_begun{other._frame_begun},
+          _surfaces{tempest::move(other._surfaces)}, _active_surface_window{other._active_surface_window},
           _pool{tempest::move(other._pool)}, _shaders{tempest::move(other._shaders)},
           _graph{tempest::move(other._graph)}, _directional_shadow_atlas_target{other._directional_shadow_atlas_target},
           _punctual_shadow_atlas_target{other._punctual_shadow_atlas_target},
@@ -176,6 +215,35 @@ namespace tempest::render_system
             _unsubscribe_events();
             if (_device)
             {
+                for (auto& surf : _surfaces)
+                {
+                    for (auto sem : surf.acquire_semaphores)
+                    {
+                        _device->destroy_semaphore(sem);
+                    }
+                    surf.acquire_semaphores.clear();
+
+                    for (auto sem : surf.render_semaphores)
+                    {
+                        _device->destroy_semaphore(sem);
+                    }
+                    surf.render_semaphores.clear();
+
+                    if (surf.render_surface)
+                    {
+                        _device->destroy_render_surface(tempest::move(surf.render_surface));
+                    }
+                }
+                _surfaces.clear();
+
+                for (auto& slot : _flight_slots)
+                {
+                    if (slot.timeline_sem.handle != 0)
+                    {
+                        _device->destroy_semaphore(slot.timeline_sem);
+                        slot.timeline_sem = {};
+                    }
+                }
                 _graph.get_allocator().release_all(*_device);
             }
 
@@ -187,6 +255,12 @@ namespace tempest::render_system
             _inputs = other._inputs;
             _owned_camera_system = tempest::move(other._owned_camera_system);
             _camera_system = other._camera_system;
+            _frames_in_flight = other._frames_in_flight;
+            _frame_index = other._frame_index;
+            _flight_slots = tempest::move(other._flight_slots);
+            _frame_begun = other._frame_begun;
+            _surfaces = tempest::move(other._surfaces);
+            _active_surface_window = other._active_surface_window;
             _pool = tempest::move(other._pool);
             _shaders = tempest::move(other._shaders);
             _graph = tempest::move(other._graph);
@@ -407,15 +481,292 @@ namespace tempest::render_system
         --_renderables_dirty_count;
     }
 
+    auto renderer::_find_surface(window_handle win) noexcept -> surface_state*
+    {
+        if (win.is_valid())
+        {
+            for (auto& s : _surfaces)
+            {
+                if (s.window == win)
+                {
+                    return &s;
+                }
+            }
+            return nullptr;
+        }
+        return _surfaces.empty() ? nullptr : &_surfaces.front();
+    }
+
+    auto renderer::_find_surface(window_handle win) const noexcept -> const surface_state*
+    {
+        if (win.is_valid())
+        {
+            for (const auto& s : _surfaces)
+            {
+                if (s.window == win)
+                {
+                    return &s;
+                }
+            }
+            return nullptr;
+        }
+        return _surfaces.empty() ? nullptr : &_surfaces.front();
+    }
+
+    void renderer::register_surface(window_handle win, rhi::raw_surface_handle raw_surface, uint32_t width,
+                                    uint32_t height, rhi::present_mode mode)
+    {
+        if (!_device || !win.is_valid())
+        {
+            return;
+        }
+
+        unregister_surface(win);
+
+        auto state = surface_state{
+            .window = win,
+            .raw_surface = raw_surface,
+            .render_surface = nullptr,
+            .width = width,
+            .height = height,
+            .present_mode = mode,
+            .need_recreate = false,
+        };
+
+        if (raw_surface.handle != 0 && width > 0 && height > 0)
+        {
+            auto caps = _device->get_surface_capabilities(raw_surface);
+            auto selected_format = optional<rhi::surface_format>{};
+            for (const auto& fmt : caps.supported_formats)
+            {
+                if (fmt.color_space == rhi::surface_color_space::srgb_nonlinear &&
+                    (fmt.format == rhi::render_surface_format::bgra8_srgb ||
+                     fmt.format == rhi::render_surface_format::rgba8_srgb))
+                {
+                    selected_format = fmt;
+                    break;
+                }
+            }
+            if (!selected_format)
+            {
+                selected_format = caps.supported_formats.empty()
+                                      ? rhi::surface_format{
+                                            .format = rhi::render_surface_format::bgra8_srgb,
+                                            .color_space = rhi::surface_color_space::srgb_nonlinear,
+                                        }
+                                      : caps.supported_formats[0];
+            }
+
+            auto desc = rhi::render_surface_desc{
+                .raw_surface = raw_surface,
+                .present_mode = mode,
+                .format = *selected_format,
+                .width = width,
+                .height = height,
+                .min_image_count = caps.min_image_count,
+                .preferred_image_count = caps.min_image_count + 1,
+            };
+            state.render_surface = _device->create_render_surface(desc);
+        }
+
+        _surfaces.push_back(tempest::move(state));
+        if (!_active_surface_window.is_valid())
+        {
+            _active_surface_window = win;
+        }
+    }
+
+    void renderer::unregister_surface(window_handle win)
+    {
+        for (auto it = _surfaces.begin(); it != _surfaces.end(); ++it)
+        {
+            if (it->window == win)
+            {
+                if (_device)
+                {
+                    _device->wait_idle();
+                    for (auto sem : it->acquire_semaphores)
+                    {
+                        _device->destroy_semaphore(sem);
+                    }
+                    it->acquire_semaphores.clear();
+
+                    for (auto sem : it->render_semaphores)
+                    {
+                        _device->destroy_semaphore(sem);
+                    }
+                    it->render_semaphores.clear();
+
+                    if (it->render_surface)
+                    {
+                        _device->destroy_render_surface(tempest::move(it->render_surface));
+                    }
+                }
+
+                _surfaces.erase(it);
+                if (_active_surface_window == win)
+                {
+                    _active_surface_window = _surfaces.empty() ? null_window_handle : _surfaces.front().window;
+                }
+                break;
+            }
+        }
+    }
+
+    void renderer::resize_surface(window_handle win, uint32_t width, uint32_t height)
+    {
+        if (auto* surf = _find_surface(win))
+        {
+            surf->width = width;
+            surf->height = height;
+            surf->need_recreate = true;
+        }
+    }
+
+    auto renderer::get_render_surface(window_handle win) const noexcept -> const rhi::render_surface*
+    {
+        const auto* surf = _find_surface(win);
+        return surf ? surf->render_surface.get() : nullptr;
+    }
+
+    auto renderer::get_render_surface(window_handle win) noexcept -> rhi::render_surface*
+    {
+        auto* surf = _find_surface(win);
+        return surf ? surf->render_surface.get() : nullptr;
+    }
+
+    auto renderer::get_surface_format(window_handle win) const noexcept -> rhi::render_surface_format
+    {
+        const auto* surf = get_render_surface(win);
+        return surf ? surf->get_format() : rhi::render_surface_format::bgra8_srgb;
+    }
+
+    void renderer::begin_frame(window_handle win)
+    {
+        const auto slot_idx = get_current_flight_slot();
+        if (_device && !_flight_slots.empty())
+        {
+            auto& slot = _flight_slots[slot_idx];
+            if (slot.timeline_value > 0)
+            {
+                _device->wait_for_sync(rhi::host_sync_point{
+                    .semaphore = slot.timeline_sem,
+                    .value = slot.timeline_value,
+                });
+            }
+        }
+
+        _shaders.process_deferred_retirements();
+        while (_pool.get_frame_slot() != slot_idx)
+        {
+            _pool.advance_frame();
+        }
+        _graph.get_allocator().set_frames_in_flight(_frames_in_flight);
+        _graph.get_allocator().set_frame_slot(slot_idx);
+        _graph.reset();
+
+        auto target_win = win.is_valid() ? win : _active_surface_window;
+        if (!target_win.is_valid() && !_surfaces.empty())
+        {
+            target_win = _surfaces.front().window;
+        }
+        _active_surface_window = target_win;
+
+        if (auto* surf = _find_surface(target_win))
+        {
+            if (_device && surf->render_surface && surf->raw_surface.handle != 0)
+            {
+                if (surf->width > 0 && surf->height > 0 &&
+                    (surf->width != surf->render_surface->get_width() ||
+                     surf->height != surf->render_surface->get_height() || surf->need_recreate))
+                {
+                    _device->wait_idle();
+                    auto caps = _device->get_surface_capabilities(surf->raw_surface);
+                    auto new_desc = rhi::render_surface_desc{
+                        .raw_surface = surf->raw_surface,
+                        .present_mode = surf->present_mode,
+                        .format =
+                            rhi::surface_format{
+                                .format = surf->render_surface->get_format(),
+                                .color_space = rhi::surface_color_space::srgb_nonlinear,
+                            },
+                        .width = surf->width,
+                        .height = surf->height,
+                        .min_image_count = caps.min_image_count,
+                        .preferred_image_count = caps.min_image_count + 1,
+                        .old_surface = surf->render_surface.get(),
+                    };
+                    auto new_surf = _device->create_render_surface(new_desc);
+                    if (new_surf)
+                    {
+                        _device->destroy_render_surface(tempest::move(surf->render_surface));
+                        surf->render_surface = tempest::move(new_surf);
+                        surf->need_recreate = false;
+                    }
+                }
+
+                while (slot_idx >= surf->acquire_semaphores.size())
+                {
+                    surf->acquire_semaphores.push_back(_device->create_binary_semaphore());
+                }
+                const auto acquire_sem = surf->acquire_semaphores[slot_idx];
+
+                auto acquire_res = surf->render_surface->acquire_next_image(rhi::device_sync_point{
+                    .semaphore = acquire_sem,
+                    .value = 0,
+                    .stages = rhi::pipeline_stage::attachment_output,
+                });
+
+                if (acquire_res.has_value())
+                {
+                    surf->current_sc_image = acquire_res.value();
+                    surf->current_acquire_semaphore = acquire_sem;
+
+                    while (surf->current_sc_image->swapchain_image_index >= surf->render_semaphores.size())
+                    {
+                        surf->render_semaphores.push_back(_device->create_binary_semaphore());
+                    }
+                    surf->current_render_semaphore =
+                        surf->render_semaphores[surf->current_sc_image->swapchain_image_index];
+                }
+                else
+                {
+                    surf->current_sc_image = nullopt;
+                    if (acquire_res.error() == rhi::swapchain_error::out_of_date ||
+                        acquire_res.error() == rhi::swapchain_error::suboptimal)
+                    {
+                        surf->need_recreate = true;
+                    }
+                }
+            }
+        }
+
+        _frame_begun = true;
+    }
+
     void renderer::prepare_frame(uint32_t width, uint32_t height, optional<rhi::texture_handle> swapchain_tex,
                                  optional<rhi::texture_view_handle> swapchain_view,
-                                 optional<render_camera> camera_override)
+                                 optional<render_camera> camera_override, ui_render_callback ui_callback)
     {
-        _shaders.process_deferred_retirements();
-        _pool.advance_frame();
-        _graph.get_allocator().set_frames_in_flight(_cfg.pool_config.frames_in_flight);
-        _graph.get_allocator().set_frame_slot(_pool.get_frame_slot());
-        _graph.reset();
+        if (!_frame_begun)
+        {
+            begin_frame(_active_surface_window);
+        }
+        _frame_begun = false;
+
+        auto effective_sc_tex = swapchain_tex;
+        auto effective_sc_view = swapchain_view;
+
+        if (!effective_sc_tex.has_value() && _active_surface_window.is_valid())
+        {
+            const auto* surf = _find_surface(_active_surface_window);
+            if (surf && surf->current_sc_image.has_value())
+            {
+                effective_sc_tex = surf->current_sc_image->texture;
+                effective_sc_view = surf->current_sc_image->view;
+            }
+        }
+
         _graph.set_surface_size(width, height);
 
         // 1. Automatically load any missing mesh/material/texture assets needed by tracked renderables
@@ -682,10 +1033,10 @@ namespace tempest::render_system
             .name = "TransparencyAccumTarget",
         });
 
-        if (swapchain_tex.has_value() && swapchain_view.has_value())
+        if (!ui_callback && effective_sc_tex.has_value() && effective_sc_view.has_value())
         {
             _tonemapped_color_target =
-                _graph.import_texture(*swapchain_tex, *swapchain_view, rhi::image_layout::undefined);
+                _graph.import_texture(*effective_sc_tex, *effective_sc_view, rhi::image_layout::undefined);
         }
         else
         {
@@ -786,8 +1137,46 @@ namespace tempest::render_system
         const auto& blend_data = add_transparency_blend_pass(
             _graph, _pool, _shaders, pbr_data.hdr_color, resolve_data.accum_texture, gather_data.zeroth_moment_texture);
 
-        add_tonemapping_pass(_graph, _pool, _shaders, blend_data.hdr_color, _tonemapped_color_target,
-                             _cfg.tonemapped_color_format);
+        const auto& tonemap_data = add_tonemapping_pass(_graph, _pool, _shaders, blend_data.hdr_color,
+                                                        _tonemapped_color_target, _cfg.tonemapped_color_format);
+        _tonemapped_color_target = tonemap_data.tonemapped_output;
+
+        if (ui_callback && effective_sc_tex.has_value() && effective_sc_view.has_value())
+        {
+            struct ui_pass_data
+            {
+                render_graph::rg_texture_id tonemapped_tex;
+                render_graph::rg_texture_id swapchain_target;
+            };
+
+            auto swapchain_target =
+                _graph.import_texture(*effective_sc_tex, *effective_sc_view, rhi::image_layout::undefined);
+
+            _graph.add_graphics_pass<ui_pass_data>(
+                "UIRenderPass",
+                [this, swapchain_target](render_graph::pass_builder& builder, ui_pass_data& data) {
+                    data.tonemapped_tex = _tonemapped_color_target;
+                    data.swapchain_target = swapchain_target;
+                    builder.read(data.tonemapped_tex, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                 rhi::image_layout::general);
+                    builder.write(data.swapchain_target, rhi::pipeline_stage::attachment_output,
+                                  rhi::resource_access::write, rhi::image_layout::general);
+                    builder.mark_sink();
+                },
+                [ui_cb = tempest::move(ui_callback), view = *effective_sc_view, width,
+                 height]([[maybe_unused]] const ui_pass_data& data,
+                         [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& cmd) {
+                    auto color_att = rhi::color_attachment{
+                        .view = view,
+                        .load_op = rhi::load_op::clear,
+                        .store_op = rhi::store_op::store,
+                        .clear_value = rhi::clear_color_value{0.0F, 0.0F, 0.0F, 1.0F},
+                    };
+                    cmd.begin_render_pass(span<const rhi::color_attachment>{&color_att, 1}, nullopt, width, height);
+                    ui_cb(cmd, width, height);
+                    cmd.end_render_pass();
+                });
+        }
     }
 
     auto renderer::render(const render_graph::frame_sync_options& sync) -> expected<void, render_graph::execution_error>
@@ -797,7 +1186,123 @@ namespace tempest::render_system
             return unexpected(render_graph::execution_error::compile_failed);
         }
 
-        return _graph.execute(*_device, sync);
+        const auto slot_idx = get_current_flight_slot();
+        auto effective_sync = sync;
+
+        if (_active_surface_window.is_valid())
+        {
+            auto* surf = _find_surface(_active_surface_window);
+            if (surf && surf->current_sc_image.has_value())
+            {
+                if (!effective_sync.wait_semaphore.has_value())
+                {
+                    effective_sync.wait_semaphore = surf->current_acquire_semaphore;
+                    effective_sync.wait_stages = rhi::pipeline_stage::attachment_output;
+                }
+                if (!effective_sync.signal_semaphore.has_value())
+                {
+                    effective_sync.signal_semaphore = surf->current_render_semaphore;
+                    effective_sync.signal_stages = rhi::pipeline_stage::bottom_of_pipe;
+                }
+                if (!effective_sync.presented_texture.has_value())
+                {
+                    effective_sync.presented_texture = surf->current_sc_image->texture;
+                }
+            }
+        }
+
+        if (!_flight_slots.empty() && !effective_sync.timeline_semaphore.has_value())
+        {
+            auto& slot = _flight_slots[slot_idx];
+            slot.timeline_value++;
+            effective_sync.timeline_semaphore = slot.timeline_sem;
+            effective_sync.timeline_value = slot.timeline_value;
+        }
+
+        const auto res = _graph.execute(*_device, effective_sync);
+        if (res.has_value())
+        {
+            _frame_index++;
+            _frame_begun = false;
+        }
+        return res;
+    }
+
+    auto renderer::present(window_handle win) -> expected<void, rhi::swapchain_error>
+    {
+        if (!_device)
+        {
+            return {};
+        }
+
+        auto target_win = win.is_valid() ? win : _active_surface_window;
+        if (!target_win.is_valid() && !_surfaces.empty())
+        {
+            target_win = _surfaces.front().window;
+        }
+
+        auto* surf = _find_surface(target_win);
+        if (!surf || !surf->render_surface || !surf->current_sc_image.has_value())
+        {
+            return {};
+        }
+
+        auto& graphics_port = _device->get_graphics_execution_port();
+        auto present_res = surf->render_surface->present(graphics_port, rhi::device_sync_point{
+                                                                            .semaphore = surf->current_render_semaphore,
+                                                                            .value = 0,
+                                                                        });
+
+        surf->current_sc_image = nullopt;
+
+        if (!present_res.has_value())
+        {
+            if (present_res.error() == rhi::swapchain_error::out_of_date ||
+                present_res.error() == rhi::swapchain_error::suboptimal)
+            {
+                surf->need_recreate = true;
+            }
+            return unexpected(present_res.error());
+        }
+
+        return {};
+    }
+
+    auto renderer::render_frame(window_handle win, optional<render_camera> camera_override,
+                                ui_render_callback ui_callback) -> expected<void, render_graph::execution_error>
+    {
+        auto target_win = win.is_valid() ? win : _active_surface_window;
+        if (!target_win.is_valid() && !_surfaces.empty())
+        {
+            target_win = _surfaces.front().window;
+        }
+
+        auto* surf = _find_surface(target_win);
+        auto w = (surf && surf->render_surface) ? surf->render_surface->get_width() : _cfg.render_width;
+        auto h = (surf && surf->render_surface) ? surf->render_surface->get_height() : _cfg.render_height;
+
+        begin_frame(target_win);
+
+        if (surf && surf->render_surface && !surf->current_sc_image.has_value())
+        {
+            // Image acquisition failed / recreate pending
+            return {};
+        }
+
+        prepare_frame(w, h, nullopt, nullopt, camera_override, tempest::move(ui_callback));
+
+        const auto render_res = render();
+        if (!render_res.has_value())
+        {
+            return render_res;
+        }
+
+        if (surf && surf->render_surface)
+        {
+            [[maybe_unused]] auto present_res = present(target_win);
+        }
+
+        return {};
     }
 
     void renderer::resize(uint32_t width, uint32_t height)
@@ -805,10 +1310,6 @@ namespace tempest::render_system
         _cfg.render_width = width;
         _cfg.render_height = height;
         _graph.set_surface_size(width, height);
-        if (_device)
-        {
-            _graph.get_allocator().on_surface_resize(*_device);
-        }
     }
 
     void renderer::_subscribe_events()
@@ -1003,111 +1504,111 @@ namespace tempest::render_system
 
         if (_mesh_added_sub != event::null_subscription<ecs::component_added_event<ecs::entity, core::mesh_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_added_event<ecs::entity, core::mesh_component>>().unsubscribe(
-                    _mesh_added_sub));
+                    _mesh_added_sub);
             _mesh_added_sub = {};
         }
         if (_mesh_replaced_sub !=
             event::null_subscription<ecs::component_replaced_event<ecs::entity, core::mesh_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::mesh_component>>().unsubscribe(
-                    _mesh_replaced_sub));
+                    _mesh_replaced_sub);
             _mesh_replaced_sub = {};
         }
         if (_mesh_removed_sub !=
             event::null_subscription<ecs::component_removed_event<ecs::entity, core::mesh_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_removed_event<ecs::entity, core::mesh_component>>().unsubscribe(
-                    _mesh_removed_sub));
+                    _mesh_removed_sub);
             _mesh_removed_sub = {};
         }
         if (_material_added_sub !=
             event::null_subscription<ecs::component_added_event<ecs::entity, core::material_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_added_event<ecs::entity, core::material_component>>().unsubscribe(
-                    _material_added_sub));
+                    _material_added_sub);
             _material_added_sub = {};
         }
         if (_material_replaced_sub !=
             event::null_subscription<ecs::component_replaced_event<ecs::entity, core::material_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::material_component>>().unsubscribe(
-                    _material_replaced_sub));
+                    _material_replaced_sub);
             _material_replaced_sub = {};
         }
         if (_material_removed_sub !=
             event::null_subscription<ecs::component_removed_event<ecs::entity, core::material_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_removed_event<ecs::entity, core::material_component>>().unsubscribe(
-                    _material_removed_sub));
+                    _material_removed_sub);
             _material_removed_sub = {};
         }
         if (_point_light_added_sub !=
             event::null_subscription<ecs::component_added_event<ecs::entity, point_light_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_added_event<ecs::entity, point_light_component>>().unsubscribe(
-                    _point_light_added_sub));
+                    _point_light_added_sub);
             _point_light_added_sub = {};
         }
         if (_point_light_replaced_sub !=
             event::null_subscription<ecs::component_replaced_event<ecs::entity, point_light_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_replaced_event<ecs::entity, point_light_component>>().unsubscribe(
-                    _point_light_replaced_sub));
+                    _point_light_replaced_sub);
             _point_light_replaced_sub = {};
         }
         if (_point_light_removed_sub !=
             event::null_subscription<ecs::component_removed_event<ecs::entity, point_light_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_removed_event<ecs::entity, point_light_component>>().unsubscribe(
-                    _point_light_removed_sub));
+                    _point_light_removed_sub);
             _point_light_removed_sub = {};
         }
         if (_dir_light_added_sub !=
             event::null_subscription<ecs::component_added_event<ecs::entity, directional_light_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_added_event<ecs::entity, directional_light_component>>().unsubscribe(
-                    _dir_light_added_sub));
+                    _dir_light_added_sub);
             _dir_light_added_sub = {};
         }
         if (_dir_light_replaced_sub !=
             event::null_subscription<ecs::component_replaced_event<ecs::entity, directional_light_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_replaced_event<ecs::entity, directional_light_component>>()
-                    .unsubscribe(_dir_light_replaced_sub));
+                    .unsubscribe(_dir_light_replaced_sub);
             _dir_light_replaced_sub = {};
         }
         if (_dir_light_removed_sub !=
             event::null_subscription<ecs::component_removed_event<ecs::entity, directional_light_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_removed_event<ecs::entity, directional_light_component>>()
-                    .unsubscribe(_dir_light_removed_sub));
+                    .unsubscribe(_dir_light_removed_sub);
             _dir_light_removed_sub = {};
         }
         if (_transform_replaced_sub !=
             event::null_subscription<ecs::component_replaced_event<ecs::entity, ecs::transform_component>>)
         {
-            static_cast<void>(
+            [[maybe_unused]] auto res =
                 _events->dispatcher<ecs::component_replaced_event<ecs::entity, ecs::transform_component>>().unsubscribe(
-                    _transform_replaced_sub));
+                    _transform_replaced_sub);
             _transform_replaced_sub = {};
         }
         if (_entity_destroyed_sub != event::null_subscription<ecs::entity_destroyed_event<ecs::entity>>)
         {
-            static_cast<void>(
-                _events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().unsubscribe(_entity_destroyed_sub));
+            [[maybe_unused]] auto res =
+                _events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().unsubscribe(_entity_destroyed_sub);
             _entity_destroyed_sub = {};
         }
     }

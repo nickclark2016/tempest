@@ -4,7 +4,7 @@ scoped.project('editor-entrypoint', function()
 
     targetdir '%{binaries}'
     objdir '%{intermediates}'
-    debugdir '.'
+    debugdir '%{wks.basedir}'
     
     scoped.filter({
         'system:not windows'

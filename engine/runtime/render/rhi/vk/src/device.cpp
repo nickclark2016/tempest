@@ -1320,12 +1320,14 @@ namespace tempest::rhi::vk
             .cullMode = as_vulkan(desc.rasterization_state.cull_mode),
             .frontFace = as_vulkan(desc.rasterization_state.front_face),
             .depthBiasEnable = desc.rasterization_state.depth_bias.has_value() ? VK_TRUE : VK_FALSE,
-            .depthBiasConstantFactor =
-                desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->constant_factor : 0.0f,
+            .depthBiasConstantFactor = desc.rasterization_state.depth_bias.has_value()
+                                           ? desc.rasterization_state.depth_bias->constant_factor
+                                           : 0.0f,
             .depthBiasClamp =
                 desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->clamp : 0.0f,
-            .depthBiasSlopeFactor =
-                desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->slope_factor : 0.0f,
+            .depthBiasSlopeFactor = desc.rasterization_state.depth_bias.has_value()
+                                        ? desc.rasterization_state.depth_bias->slope_factor
+                                        : 0.0f,
             .lineWidth = 1.0f,
         };
 
@@ -1505,7 +1507,8 @@ namespace tempest::rhi::vk
             return {};
         }
 
-        const auto entry_point = desc.shader_module.entry_point.empty() ? "main" : desc.shader_module.entry_point.data();
+        const auto entry_point =
+            desc.shader_module.entry_point.empty() ? "main" : desc.shader_module.entry_point.data();
 
         auto stage_ci = VkPipelineShaderStageCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -1948,9 +1951,9 @@ namespace tempest::rhi::vk
         // Calculate buffer sizes
         auto sampler_buffer_size = max_active_samplers * _sampler_descriptor_size;
         auto sampled_images_size = max_active_textures * _sampled_image_descriptor_size;
-        _storage_image_buffer_offset = ((sampled_images_size + _descriptor_buffer_offset_alignment - 1) /
-                                        _descriptor_buffer_offset_alignment) *
-                                       _descriptor_buffer_offset_alignment;
+        _storage_image_buffer_offset =
+            ((sampled_images_size + _descriptor_buffer_offset_alignment - 1) / _descriptor_buffer_offset_alignment) *
+            _descriptor_buffer_offset_alignment;
         auto resource_buffer_size =
             _storage_image_buffer_offset + (max_active_storage_images * _storage_image_descriptor_size);
 
@@ -1968,11 +1971,12 @@ namespace tempest::rhi::vk
             .usage = VMA_MEMORY_USAGE_AUTO,
         };
         auto sampler_alloc_info = VmaAllocationInfo{};
-        [[maybe_unused]] auto s_res = vmaCreateBuffer(_allocator, &sampler_buf_ci, &sampler_alloc_ci,
-                                                      &_sampler_descriptor_buffer, &_sampler_descriptor_allocation,
-                                                      &sampler_alloc_info);
+        [[maybe_unused]] auto s_res =
+            vmaCreateBuffer(_allocator, &sampler_buf_ci, &sampler_alloc_ci, &_sampler_descriptor_buffer,
+                            &_sampler_descriptor_allocation, &sampler_alloc_info);
         TEMPEST_ASSERT(s_res == VK_SUCCESS);
         _sampler_descriptor_buffer_ptr = static_cast<byte*>(sampler_alloc_info.pMappedData);
+        std::memset(_sampler_descriptor_buffer_ptr, 0, sampler_buffer_size);
 
         auto sampler_bda_info = VkBufferDeviceAddressInfo{
             .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -1995,11 +1999,12 @@ namespace tempest::rhi::vk
             .usage = VMA_MEMORY_USAGE_AUTO,
         };
         auto resource_alloc_info = VmaAllocationInfo{};
-        [[maybe_unused]] auto r_res = vmaCreateBuffer(_allocator, &resource_buf_ci, &resource_alloc_ci,
-                                                      &_resource_descriptor_buffer, &_resource_descriptor_allocation,
-                                                      &resource_alloc_info);
+        [[maybe_unused]] auto r_res =
+            vmaCreateBuffer(_allocator, &resource_buf_ci, &resource_alloc_ci, &_resource_descriptor_buffer,
+                            &_resource_descriptor_allocation, &resource_alloc_info);
         TEMPEST_ASSERT(r_res == VK_SUCCESS);
         _resource_descriptor_buffer_ptr = static_cast<byte*>(resource_alloc_info.pMappedData);
+        std::memset(_resource_descriptor_buffer_ptr, 0, resource_buffer_size);
 
         auto resource_bda_info = VkBufferDeviceAddressInfo{
             .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -2199,13 +2204,12 @@ namespace tempest::rhi::vk
                 },
         };
 
-        auto* dest_ptr =
-            _resource_descriptor_buffer_ptr + _storage_image_buffer_offset + slot.index * _storage_image_descriptor_size;
+        auto* dest_ptr = _resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
+                         slot.index * _storage_image_descriptor_size;
         _dispatch_table.getDescriptorEXT(&get_info, _storage_image_descriptor_size, dest_ptr);
     }
 
-    auto device::set_object_name([[maybe_unused]] uint64_t object_handle,
-                                 [[maybe_unused]] VkObjectType object_type,
+    auto device::set_object_name([[maybe_unused]] uint64_t object_handle, [[maybe_unused]] VkObjectType object_type,
                                  [[maybe_unused]] cstring_view name) const -> void
     {
 #if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
