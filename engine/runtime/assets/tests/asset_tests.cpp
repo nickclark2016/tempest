@@ -1859,3 +1859,578 @@ TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
         std::filesystem::remove(db_path);
     }
 }
+
+// ============================================================================
+// 11. Grouped Mount Aliases & Strict Isolation Tests
+// ============================================================================
+
+/// @brief Tests that multiple mount roots sharing the same alias resolve candidates in priority order.
+TEST(asset_database_mount_aliases, grouped_mount_alias_priority_resolution)
+{
+    // 1. Setup: Create directory hierarchies for high-priority and low-priority roots
+    auto root_high = std::filesystem::path("temp_test_alias_high");
+    auto root_low = std::filesystem::path("temp_test_alias_low");
+    std::filesystem::create_directories(root_high);
+    std::filesystem::create_directories(root_low);
+
+    {
+        std::ofstream fh((root_high / "common.slang").string().c_str());
+        fh << "// High priority common";
+    }
+    {
+        std::ofstream fl((root_low / "common.slang").string().c_str());
+        fl << "// Low priority common";
+    }
+    {
+        std::ofstream fb((root_low / "unique_low.slang").string().c_str());
+        fb << "// Unique low";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount both roots under alias "shaders" with distinct priorities and scan
+    database.mount_root(root_high.generic_string().c_str(), 10, "shaders");
+    database.mount_root(root_low.generic_string().c_str(), 5, "shaders");
+    database.scan_and_index();
+
+    // 3. Assert: Resolution checks
+    auto common_disk = database.resolve_disk_path("@shaders/common.slang");
+    ASSERT_TRUE(common_disk.has_value());
+    EXPECT_NE(std::string_view(common_disk->c_str()).find("temp_test_alias_high"), std::string_view::npos);
+
+    auto unique_disk = database.resolve_disk_path("@shaders/unique_low.slang");
+    ASSERT_TRUE(unique_disk.has_value());
+    EXPECT_NE(std::string_view(unique_disk->c_str()).find("temp_test_alias_low"), std::string_view::npos);
+
+    const auto* common_asset = database.find_asset("@shaders/common.slang");
+    ASSERT_NE(common_asset, nullptr);
+
+    const auto* unique_asset = database.find_asset("@shaders/unique_low.slang");
+    ASSERT_NE(unique_asset, nullptr);
+
+    auto common_src = database.resolve_source_path("@shaders/common.slang");
+    ASSERT_TRUE(common_src.has_value());
+    EXPECT_EQ(common_src.value(), "@shaders/common.slang");
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_high);
+    std::filesystem::remove_all(root_low);
+}
+
+/// @brief Tests that @alias/ queries enforce strict isolation and do not fall back to other roots.
+TEST(asset_database_mount_aliases, strict_alias_isolation)
+{
+    // 1. Setup: Create two separate roots (one unaliased, one under "textures")
+    auto root_unaliased = std::filesystem::path("temp_test_iso_unaliased");
+    auto root_textures = std::filesystem::path("temp_test_iso_textures");
+    std::filesystem::create_directories(root_unaliased);
+    std::filesystem::create_directories(root_textures);
+
+    {
+        std::ofstream f1((root_unaliased / "secret.txt").string().c_str());
+        f1 << "unaliased secret";
+    }
+    {
+        std::ofstream f2((root_textures / "diffuse.png").string().c_str());
+        f2 << "texture data";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount roots and scan
+    database.mount_root(root_unaliased.generic_string().c_str(), 10, "");
+    database.mount_root(root_textures.generic_string().c_str(), 10, "textures");
+    database.scan_and_index();
+
+    // 3. Assert: Querying @shaders for files that only exist in other roots must return nullopt/nullptr
+    EXPECT_FALSE(database.resolve_disk_path("@shaders/secret.txt").has_value());
+    EXPECT_FALSE(database.resolve_disk_path("@shaders/diffuse.png").has_value());
+    EXPECT_EQ(database.find_asset("@shaders/secret.txt"), nullptr);
+    EXPECT_EQ(database.find_asset("@shaders/diffuse.png"), nullptr);
+    EXPECT_FALSE(database.resolve_source_path("@shaders/secret.txt").has_value());
+
+    // Querying existing textures under @textures succeeds
+    EXPECT_TRUE(database.resolve_disk_path("@textures/diffuse.png").has_value());
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_unaliased);
+    std::filesystem::remove_all(root_textures);
+}
+
+/// @brief Tests case-sensitive matching for mount aliases.
+TEST(asset_database_mount_aliases, case_sensitive_alias_matching)
+{
+    // 1. Setup: Create mount directory with shader
+    auto root_case = std::filesystem::path("temp_test_case_alias");
+    std::filesystem::create_directories(root_case);
+
+    {
+        std::ofstream f((root_case / "pass.slang").string().c_str());
+        f << "// Case shader";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount with alias "Shaders" (capital S)
+    database.mount_root(root_case.generic_string().c_str(), 10, "Shaders");
+    database.scan_and_index();
+
+    // 3. Assert: Exact case matches; mismatched case fails under strict isolation
+    EXPECT_TRUE(database.resolve_disk_path("@Shaders/pass.slang").has_value());
+    EXPECT_FALSE(database.resolve_disk_path("@shaders/pass.slang").has_value());
+    EXPECT_NE(database.find_asset("@Shaders/pass.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("@shaders/pass.slang"), nullptr);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_case);
+}
+
+/// @brief Tests path normalization with aliases across forward-slash and backslash representations.
+TEST(asset_database_mount_aliases, path_normalization_with_aliases)
+{
+    // 1. Setup: Create nested subdirectories
+    auto root_norm = std::filesystem::path("temp_test_alias_norm");
+    std::filesystem::create_directories(root_norm / "sub" / "nested");
+
+    {
+        std::ofstream f((root_norm / "sub" / "nested" / "effect.slang").string().c_str());
+        f << "// Nested effect";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount and scan
+    database.mount_root(root_norm.generic_string().c_str(), 10, "core");
+    database.scan_and_index();
+
+    // 3. Assert: Querying with backslashes and redundant prefixes resolves cleanly
+    auto disk_forward = database.resolve_disk_path("@core/sub/nested/effect.slang");
+    auto disk_backward = database.resolve_disk_path("@core\\sub\\nested\\effect.slang");
+    ASSERT_TRUE(disk_forward.has_value());
+    ASSERT_TRUE(disk_backward.has_value());
+    EXPECT_EQ(disk_forward.value(), disk_backward.value());
+
+    EXPECT_NE(database.find_asset("@core\\sub\\nested\\effect.slang"), nullptr);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_norm);
+}
+
+/// @brief Tests that non-aliased fallback lookups resolve assets indexed inside aliased roots by basename.
+TEST(asset_database_mount_aliases, non_aliased_fallback_to_basenames)
+{
+    // 1. Setup: Create an aliased file
+    auto root_base = std::filesystem::path("temp_test_alias_base");
+    std::filesystem::create_directories(root_base / "pipelines");
+
+    {
+        std::ofstream f((root_base / "pipelines" / "pbr_deferred.slang").string().c_str());
+        f << "// PBR deferred";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount under alias and scan
+    database.mount_root(root_base.generic_string().c_str(), 10, "render");
+    database.scan_and_index();
+
+    // 3. Assert: Querying by bare filename finds the asset via basename index
+    const auto* asset_by_base = database.find_asset("pbr_deferred.slang");
+    ASSERT_NE(asset_by_base, nullptr);
+
+    const auto* asset_by_alias = database.find_asset("@render/pipelines/pbr_deferred.slang");
+    ASSERT_NE(asset_by_alias, nullptr);
+    EXPECT_EQ(asset_by_base->id, asset_by_alias->id);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_base);
+}
+
+// ============================================================================
+// 12. Directory Ignores, Whitelists & Predicates Tests
+// ============================================================================
+
+/// @brief Tests that default ignored directories (.git, build, bin, .agents, etc.) are skipped during scan.
+TEST(asset_database_ignores_and_predicates, default_ignored_directories_skipped)
+{
+    // 1. Setup: Create hierarchy containing default ignored directories
+    auto root_ignores = std::filesystem::path("temp_test_def_ignores");
+    std::filesystem::create_directories(root_ignores / ".git");
+    std::filesystem::create_directories(root_ignores / "build");
+    std::filesystem::create_directories(root_ignores / "bin");
+    std::filesystem::create_directories(root_ignores / ".agents");
+    std::filesystem::create_directories(root_ignores / "src");
+
+    {
+        std::ofstream f1((root_ignores / ".git" / "ignored.slang").string().c_str());
+        f1 << "git";
+        std::ofstream f2((root_ignores / "build" / "ignored.slang").string().c_str());
+        f2 << "build";
+        std::ofstream f3((root_ignores / "bin" / "ignored.slang").string().c_str());
+        f3 << "bin";
+        std::ofstream f4((root_ignores / ".agents" / "ignored.slang").string().c_str());
+        f4 << "agents";
+        std::ofstream f5((root_ignores / "src" / "valid.slang").string().c_str());
+        f5 << "valid";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount and scan
+    database.mount_root(root_ignores.generic_string().c_str(), 10);
+    database.scan_and_index();
+
+    // 3. Assert: valid file is found, ignored directories are skipped
+    EXPECT_NE(database.find_asset("src/valid.slang"), nullptr);
+    EXPECT_EQ(database.find_asset(".git/ignored.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("build/ignored.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("bin/ignored.slang"), nullptr);
+    EXPECT_EQ(database.find_asset(".agents/ignored.slang"), nullptr);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_ignores);
+}
+
+/// @brief Tests that default ignored extensions (.tmp, .bak, .pdb, .obj, etc.) are skipped during scan.
+TEST(asset_database_ignores_and_predicates, default_ignored_extensions_skipped)
+{
+    // 1. Setup: Create files with various extensions
+    auto root_ext = std::filesystem::path("temp_test_ext_ignores");
+    std::filesystem::create_directories(root_ext);
+
+    {
+        std::ofstream f1((root_ext / "shader.tmp").string().c_str());
+        f1 << "tmp";
+        std::ofstream f2((root_ext / "shader.bak").string().c_str());
+        f2 << "bak";
+        std::ofstream f3((root_ext / "shader.pdb").string().c_str());
+        f3 << "pdb";
+        std::ofstream f4((root_ext / "shader.obj").string().c_str());
+        f4 << "obj";
+        std::ofstream f5((root_ext / "shader.slang").string().c_str());
+        f5 << "slang";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Mount and scan
+    database.mount_root(root_ext.generic_string().c_str(), 10);
+    database.scan_and_index();
+
+    // 3. Assert: shader.slang is discovered, ignored extensions are omitted
+    EXPECT_NE(database.find_asset("shader.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("shader.tmp"), nullptr);
+    EXPECT_EQ(database.find_asset("shader.bak"), nullptr);
+    EXPECT_EQ(database.find_asset("shader.pdb"), nullptr);
+    EXPECT_EQ(database.find_asset("shader.obj"), nullptr);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_ext);
+}
+
+/// @brief Tests adding custom ignored directory and extension entries to asset_database.
+TEST(asset_database_ignores_and_predicates, custom_ignored_directory_and_extension)
+{
+    // 1. Setup: Create custom directory and custom extension files
+    auto root_custom = std::filesystem::path("temp_test_custom_ignores");
+    std::filesystem::create_directories(root_custom / "my_secret_dir");
+    std::filesystem::create_directories(root_custom / "normal_dir");
+
+    {
+        std::ofstream f1((root_custom / "my_secret_dir" / "file.slang").string().c_str());
+        f1 << "secret";
+        std::ofstream f2((root_custom / "normal_dir" / "file.custom").string().c_str());
+        f2 << "custom";
+        std::ofstream f3((root_custom / "normal_dir" / "file.slang").string().c_str());
+        f3 << "normal";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Configure custom ignores with and without leading dots
+    database.add_ignored_directory("my_secret_dir");
+    database.add_ignored_extension("custom"); // Test normalization without leading dot
+    database.mount_root(root_custom.generic_string().c_str(), 10);
+    database.scan_and_index();
+
+    // 3. Assert: Inspect ignore collections and scan results
+    auto ignored_dirs = database.get_ignored_directories();
+    auto ignored_exts = database.get_ignored_extensions();
+    EXPECT_GE(ignored_dirs.size(), 11U);
+    EXPECT_GE(ignored_exts.size(), 8U);
+
+    EXPECT_NE(database.find_asset("normal_dir/file.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("my_secret_dir/file.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("normal_dir/file.custom"), nullptr);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_custom);
+}
+
+/// @brief Tests that clear_ignores() removes all default and custom ignore rules.
+TEST(asset_database_ignores_and_predicates, clear_ignores_enables_all)
+{
+    // 1. Setup: Create file in build directory with .tmp extension
+    auto root_clear = std::filesystem::path("temp_test_clear_ignores");
+    std::filesystem::create_directories(root_clear / "build");
+
+    {
+        std::ofstream f((root_clear / "build" / "output.tmp").string().c_str());
+        f << "data";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+
+    // 2. Act: Clear all ignores and scan
+    database.clear_ignores();
+    EXPECT_EQ(database.get_ignored_directories().size(), 0U);
+    EXPECT_EQ(database.get_ignored_extensions().size(), 0U);
+
+    database.mount_root(root_clear.generic_string().c_str(), 10);
+    database.scan_and_index();
+
+    // 3. Assert: File in build/ with .tmp extension is now indexed
+    EXPECT_TRUE(database.resolve_source_path("build/output.tmp").has_value());
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_clear);
+}
+
+/// @brief Tests scan_options with extension whitelist, additional directory ignores, and custom predicate.
+TEST(asset_database_ignores_and_predicates, scan_options_whitelist_and_predicate)
+{
+    // 1. Setup: Create hierarchy with various folders and extensions
+    auto root_opts = std::filesystem::path("temp_test_scan_opts");
+    std::filesystem::create_directories(root_opts / "included");
+    std::filesystem::create_directories(root_opts / "pruned_by_predicate");
+    std::filesystem::create_directories(root_opts / "ad_hoc_ignored");
+
+    {
+        std::ofstream f1((root_opts / "included" / "test.slang").string().c_str());
+        f1 << "slang";
+        std::ofstream f2((root_opts / "included" / "test.txt").string().c_str());
+        f2 << "text";
+        std::ofstream f3((root_opts / "pruned_by_predicate" / "test.slang").string().c_str());
+        f3 << "pruned";
+        std::ofstream f4((root_opts / "ad_hoc_ignored" / "test.slang").string().c_str());
+        f4 << "adhoc";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(root_opts.generic_string().c_str(), 10, "assets");
+
+    // 2. Act: Scan with scan_options
+    auto opts = tempest::assets::scan_options{};
+    opts.extension_whitelist.push_back(".slang");
+    opts.additional_ignored_directories.push_back("ad_hoc_ignored");
+    opts.predicate = [](tempest::string_view rel_path, [[maybe_unused]] bool is_dir) {
+        return !tempest::starts_with(rel_path, "pruned_by_predicate");
+    };
+    database.scan_and_index(opts);
+
+    // 3. Assert: Whitelist, additional ignore, and predicate pruning rules are enforced
+    EXPECT_NE(database.find_asset("@assets/included/test.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("@assets/included/test.txt"), nullptr);
+    EXPECT_EQ(database.find_asset("@assets/pruned_by_predicate/test.slang"), nullptr);
+    EXPECT_EQ(database.find_asset("@assets/ad_hoc_ignored/test.slang"), nullptr);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_opts);
+}
+
+/// @brief Tests that loading an asset through an alias loads via importer initially, and subsequent loads hit the
+/// cached blob path.
+TEST(asset_database_mount_aliases, aliased_load_subsequent_blob_cache_hit)
+{
+    // 1. Setup: Create mock asset file and register a dummy importer
+    auto root_dir = std::filesystem::path("temp_test_alias_load_cache");
+    std::filesystem::create_directories(root_dir);
+
+    {
+        std::ofstream f((root_dir / "model.mock").string().c_str());
+        f << "MOCK_MESH_PAYLOAD";
+    }
+
+    struct mock_importer : tempest::assets::asset_importer
+    {
+        size_t import_count{0};
+        auto import(tempest::assets::asset_database& db, [[maybe_unused]] tempest::span<const tempest::byte> data,
+                    tempest::ecs::archetype_registry& registry, tempest::optional<tempest::string_view> asset_path)
+            -> tempest::ecs::entity override
+        {
+            ++import_count;
+            auto path = asset_path.value_or("mock_asset");
+            auto asset_id = db.register_asset(tempest::assets::asset_type_id::from_hash(123), path);
+            auto blob_str = std::string("PROCESSED_BLOB");
+            db.store_blob(asset_id, tempest::span<const tempest::byte>{
+                                        reinterpret_cast<const tempest::byte*>(blob_str.data()), blob_str.size()});
+            return registry.create<>();
+        }
+    };
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    auto imp = tempest::make_unique<mock_importer>();
+    auto* imp_ptr = imp.get();
+    database.register_importer(tempest::move(imp), ".mock");
+
+    database.mount_root(root_dir.generic_string().c_str(), 10, "models");
+
+    // 2. Act 1: Initial load via alias triggers importer
+    auto events = tempest::event::event_registry{};
+    auto registry1 = tempest::ecs::basic_archetype_registry{events};
+    auto e1 = database.load("@models/model.mock", registry1);
+    EXPECT_TRUE(e1 != tempest::ecs::tombstone);
+    EXPECT_EQ(imp_ptr->import_count, 1U);
+
+    // 3. Act 2: Subsequent load via alias hits blob cache without re-importing
+    auto registry2 = tempest::ecs::basic_archetype_registry{events};
+    auto e2 = database.load("@models/model.mock", registry2);
+    EXPECT_TRUE(e2 != tempest::ecs::tombstone);
+    EXPECT_EQ(imp_ptr->import_count, 1U);
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_dir);
+}
+
+/// @brief Tests unmounting an aliased root and verifying resolution fallbacks update accordingly.
+TEST(asset_database_mount_aliases, unmount_aliased_root_updates_resolution)
+{
+    // 1. Setup: Create two mount roots with same alias but different priorities
+    auto root_high = std::filesystem::path("temp_test_unmount_high");
+    auto root_low = std::filesystem::path("temp_test_unmount_low");
+    std::filesystem::create_directories(root_high);
+    std::filesystem::create_directories(root_low);
+
+    {
+        std::ofstream fh((root_high / "common.slang").string().c_str());
+        fh << "// High";
+        std::ofstream fl((root_low / "common.slang").string().c_str());
+        fl << "// Low";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(root_high.generic_string().c_str(), 10, "shaders");
+    database.mount_root(root_low.generic_string().c_str(), 5, "shaders");
+
+    // 2. Act & Assert 1: High priority root resolves first
+    auto disk1 = database.resolve_disk_path("@shaders/common.slang");
+    ASSERT_TRUE(disk1.has_value());
+    EXPECT_NE(std::string_view(disk1->c_str()).find("temp_test_unmount_high"), std::string_view::npos);
+
+    // 3. Act 2: Unmount high priority root
+    database.unmount_root(root_high.generic_string().c_str());
+
+    // 4. Assert 2: Resolution falls back to low priority root
+    auto disk2 = database.resolve_disk_path("@shaders/common.slang");
+    ASSERT_TRUE(disk2.has_value());
+    EXPECT_NE(std::string_view(disk2->c_str()).find("temp_test_unmount_low"), std::string_view::npos);
+
+    // 5. Teardown
+    std::filesystem::remove_all(root_high);
+    std::filesystem::remove_all(root_low);
+}
+
+/// @brief Tests that notify_file_changed invalidates only the specific aliased source matching the disk path.
+TEST(asset_database_mount_aliases, notify_file_changed_isolates_exact_aliased_mount)
+{
+    // 1. Setup: Create two separate roots containing a file with identical relative names
+    auto root_a = std::filesystem::path("temp_test_notify_a");
+    auto root_b = std::filesystem::path("temp_test_notify_b");
+    std::filesystem::create_directories(root_a);
+    std::filesystem::create_directories(root_b);
+
+    {
+        std::ofstream fa((root_a / "effect.slang").string().c_str());
+        fa << "ALPHA";
+        std::ofstream fb((root_b / "effect.slang").string().c_str());
+        fb << "BETA";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(root_a.generic_string().c_str(), 10, "alpha");
+    database.mount_root(root_b.generic_string().c_str(), 10, "beta");
+    database.scan_and_index();
+
+    const auto* asset_a = database.find_asset("@alpha/effect.slang");
+    const auto* asset_b = database.find_asset("@beta/effect.slang");
+    ASSERT_NE(asset_a, nullptr);
+    ASSERT_NE(asset_b, nullptr);
+
+    // Store blobs for both assets
+    auto data_a = std::string("BLOB_A");
+    auto data_b = std::string("BLOB_B");
+    database.store_blob(asset_a->id, tempest::span<const tempest::byte>{
+                                         reinterpret_cast<const tempest::byte*>(data_a.data()), data_a.size()});
+    database.store_blob(asset_b->id, tempest::span<const tempest::byte>{
+                                         reinterpret_cast<const tempest::byte*>(data_b.data()), data_b.size()});
+
+    EXPECT_FALSE(database.get_blob(asset_a->id).empty());
+    EXPECT_FALSE(database.get_blob(asset_b->id).empty());
+
+    // 2. Act: Notify that root_a's effect.slang changed
+    auto changed = database.notify_file_changed((root_a / "effect.slang").generic_string().c_str());
+    EXPECT_TRUE(changed);
+
+    // 3. Assert: asset_a blob was invalidated and reloads "ALPHA" from disk, while asset_b blob remains cached as
+    // "BLOB_B"
+    auto blob_a = database.get_blob(asset_a->id);
+    auto str_a = std::string(reinterpret_cast<const char*>(blob_a.data()), blob_a.size());
+    EXPECT_EQ(str_a, "ALPHA");
+
+    auto blob_b = database.get_blob(asset_b->id);
+    auto str_b = std::string(reinterpret_cast<const char*>(blob_b.data()), blob_b.size());
+    EXPECT_EQ(str_b, "BLOB_B");
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_a);
+    std::filesystem::remove_all(root_b);
+}
+
+/// @brief Tests parsing and handling of corner-case alias string formats (@, @/, @@alias).
+TEST(asset_database_mount_aliases, corner_case_alias_strings_handling)
+{
+    // 1. Setup: Create test folder with files
+    auto root_dir = std::filesystem::path("temp_test_corner_alias");
+    std::filesystem::create_directories(root_dir);
+
+    {
+        std::ofstream f1((root_dir / "test.slang").string().c_str());
+        f1 << "test";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(root_dir.generic_string().c_str(), 10, "core");
+    database.scan_and_index();
+
+    // 2. Act & Assert: Corner-case queries
+    // "@" and "@/" have empty alias and must not resolve against unaliased or aliased roots
+    EXPECT_FALSE(database.resolve_disk_path("@").has_value());
+    EXPECT_FALSE(database.resolve_disk_path("@/").has_value());
+    EXPECT_FALSE(database.resolve_disk_path("@/test.slang").has_value());
+    EXPECT_EQ(database.find_asset("@/test.slang"), nullptr);
+
+    // "@@core/test.slang" parses alias "@core" which does not match alias "core"
+    EXPECT_FALSE(database.resolve_disk_path("@@core/test.slang").has_value());
+    EXPECT_EQ(database.find_asset("@@core/test.slang"), nullptr);
+
+    // Redundant slashes in subpath normalize cleanly
+    EXPECT_TRUE(database.resolve_disk_path("@core//test.slang").has_value());
+    EXPECT_NE(database.find_asset("@core//test.slang"), nullptr);
+
+    // 3. Teardown
+    std::filesystem::remove_all(root_dir);
+}

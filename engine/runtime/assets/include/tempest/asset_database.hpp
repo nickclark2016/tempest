@@ -81,11 +81,19 @@ namespace tempest::assets
     {
         string path;
         int32_t priority{0};
+        string alias;
 
         bool operator==(const mount_point& rhs) const noexcept
         {
-            return priority == rhs.priority && path == rhs.path;
+            return priority == rhs.priority && path == rhs.path && alias == rhs.alias;
         }
+    };
+
+    struct TEMPEST_API scan_options
+    {
+        vector<string> extension_whitelist;
+        vector<string> additional_ignored_directories;
+        function<bool(string_view relative_path, bool is_directory)> predicate;
     };
 
     class TEMPEST_API asset_database
@@ -107,13 +115,20 @@ namespace tempest::assets
         [[nodiscard]] auto find_by_path(string_view path) const -> const asset_entry*;
 
         // Mount Root Management
-        auto mount_root(string_view root_path, int32_t priority = 0) -> void;
+        auto mount_root(string_view root_path, int32_t priority = 0, string_view alias = "") -> void;
         auto unmount_root(string_view root_path) -> void;
         auto clear_mount_roots() -> void;
         [[nodiscard]] auto get_mount_roots() const -> span<const mount_point>;
 
         // Directory Scanning & Indexing
-        auto scan_and_index() -> void;
+        auto scan_and_index(const scan_options& options = {}) -> void;
+
+        // Ignore Management
+        auto add_ignored_directory(string_view dir_name) -> void;
+        auto add_ignored_extension(string_view extension) -> void;
+        auto clear_ignores() -> void;
+        [[nodiscard]] auto get_ignored_directories() const -> span<const string>;
+        [[nodiscard]] auto get_ignored_extensions() const -> span<const string>;
 
         // Asset & Path Resolution
         [[nodiscard]] auto find_asset(string_view path_or_name) const -> const asset_entry*;
@@ -156,6 +171,8 @@ namespace tempest::assets
         string _db_path;
 
         vector<mount_point> _mount_roots;
+        vector<string> _ignored_directories;
+        vector<string> _ignored_extensions;
         flat_unordered_map<string, string> _basename_to_relative_path;
         flat_unordered_map<string, string> _relative_path_to_source_path;
 
