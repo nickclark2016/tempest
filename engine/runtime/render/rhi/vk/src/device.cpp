@@ -1,3 +1,4 @@
+#include <tempest/bit.hpp>
 #include <tempest/exception.hpp>
 #if defined(TEMPEST_PLATFORM_WINDOWS)
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -553,6 +554,15 @@ namespace tempest::rhi::vk
             _dispatch_table.destroyEvent(event, nullptr);
         }
         _events.clear();
+
+        for (const auto& pool : _query_pools)
+        {
+            if (pool.handle != VK_NULL_HANDLE)
+            {
+                _dispatch_table.destroyQueryPool(pool.handle, nullptr);
+            }
+        }
+        _query_pools.clear();
 
         for (const auto& pipeline : _graphics_pipelines)
         {
@@ -1624,6 +1634,97 @@ namespace tempest::rhi::vk
         };
     }
 
+    auto device::create_query_pool(const query_pool_desc& desc) -> query_pool_handle
+    {
+        auto vk_flags = VkQueryPipelineStatisticFlags{0};
+        auto vk_type = VK_QUERY_TYPE_TIMESTAMP;
+
+        if (desc.type == query_type::timestamp)
+        {
+            vk_type = VK_QUERY_TYPE_TIMESTAMP;
+        }
+        else if (desc.type == query_type::pipeline_statistics)
+        {
+            vk_type = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+            if (desc.pipeline_statistics & pipeline_statistic_flags::input_assembly_vertices)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::input_assembly_primitives)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::vertex_shader_invocations)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::geometry_shader_invocations)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::geometry_shader_primitives)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::clipping_input_primitives)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::clipping_output_primitives)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::fragment_shader_invocations)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::tessellation_control_shader_patches)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::tessellation_evaluation_shader_invocations)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT;
+            }
+            if (desc.pipeline_statistics & pipeline_statistic_flags::compute_shader_invocations)
+            {
+                vk_flags |= VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
+            }
+        }
+
+        const auto pool_create_info = VkQueryPoolCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queryType = vk_type,
+            .queryCount = desc.query_count,
+            .pipelineStatistics = vk_flags,
+        };
+
+        auto pool = VkQueryPool{VK_NULL_HANDLE};
+        const auto result = _dispatch_table.createQueryPool(&pool_create_info, nullptr, &pool);
+        if (result != VK_SUCCESS)
+        {
+            return {};
+        }
+
+        if (!desc.name.empty())
+        {
+            set_object_name(reinterpret_cast<uint64_t>(pool), VK_OBJECT_TYPE_QUERY_POOL, desc.name);
+        }
+
+        const auto slot_handle = _query_pools.insert(query_pool{
+            .handle = pool,
+            .type = desc.type,
+            .count = desc.query_count,
+            .pipeline_statistics = desc.pipeline_statistics,
+        });
+
+        return query_pool_handle{
+            .handle = slot_handle,
+        };
+    }
+
     auto device::destroy_buffer(buffer_handle buffer) -> void
     {
         auto buf_opt = get_buffer(buffer);
@@ -1705,6 +1806,75 @@ namespace tempest::rhi::vk
             _dispatch_table.destroySemaphore(vk_sem, nullptr);
             _semaphores.erase(semaphore.handle);
         }
+    }
+
+    auto device::destroy_query_pool(query_pool_handle pool) -> void
+    {
+        const auto qp_opt = get_query_pool(pool);
+        if (qp_opt.has_value())
+        {
+            if (qp_opt->handle != VK_NULL_HANDLE)
+            {
+                _dispatch_table.destroyQueryPool(qp_opt->handle, nullptr);
+            }
+            _query_pools.erase(pool.handle);
+        }
+    }
+
+    auto device::get_query_pool_results(query_pool_handle pool, uint32_t first_query, uint32_t query_count,
+                                        span<uint64_t> results, bool wait) -> bool
+    {
+        const auto qp_opt = get_query_pool(pool);
+        if (!qp_opt.has_value() || qp_opt->handle == VK_NULL_HANDLE || query_count == 0)
+        {
+            return false;
+        }
+
+        auto stats_count = uint32_t{1};
+        if (qp_opt->type == query_type::pipeline_statistics)
+        {
+            stats_count =
+                static_cast<uint32_t>(tempest::popcount(static_cast<uint32_t>(qp_opt->pipeline_statistics.value())));
+            if (stats_count == 0)
+            {
+                stats_count = 1;
+            }
+        }
+
+        const auto required_size = static_cast<size_t>(query_count) * stats_count;
+        if (results.size() < required_size)
+        {
+            return false;
+        }
+
+        auto flags = VkQueryResultFlags{VK_QUERY_RESULT_64_BIT};
+        if (wait)
+        {
+            flags |= VK_QUERY_RESULT_WAIT_BIT;
+        }
+
+        const auto stride = static_cast<VkDeviceSize>(stats_count * sizeof(uint64_t));
+        const auto data_size = static_cast<size_t>(query_count) * stride;
+
+        const auto result = _dispatch_table.getQueryPoolResults(qp_opt->handle, first_query, query_count, data_size,
+                                                                results.data(), stride, flags);
+
+        return result == VK_SUCCESS;
+    }
+
+    auto device::get_timestamp_period_ns() const noexcept -> float
+    {
+        return _calibrator.get_timestamp_period_ns();
+    }
+
+    auto device::get_calibrated_gpu_timestamp_offset_ns() const noexcept -> uint64_t
+    {
+        return _calibrator.get_calibrated_offset_ns();
+    }
+
+    auto device::convert_gpu_timestamp_to_cpu_ns(uint64_t gpu_ticks) const noexcept -> uint64_t
+    {
+        return _calibrator.convert_gpu_timestamp_to_cpu_ns(gpu_ticks);
     }
 
     namespace
@@ -1871,8 +2041,9 @@ namespace tempest::rhi::vk
           _storage_image_set_layout{create_storage_image_set_layout(_device, max_active_storage_images)},
           _sampled_image_set_layout{create_sampled_image_set_layout(_device, max_active_textures)},
           _sampler_set_layout{create_sampler_set_layout(_device, max_active_samplers)},
-          _default_pipeline_layout{create_default_pipeline_layout(_device, _sampler_set_layout,
-                                                                  _sampled_image_set_layout, _storage_image_set_layout)}
+          _default_pipeline_layout{create_default_pipeline_layout(
+              _device, _sampler_set_layout, _sampled_image_set_layout, _storage_image_set_layout)},
+          _calibrator{_physical_device.properties.limits.timestampPeriod, _dispatch_table, _device.device}
     {
 #if defined(TEMPEST_PLATFORM_WINDOWS)
         _instance_dispatch_table.fp_vkCreateWin32SurfaceKHR =
@@ -2299,6 +2470,15 @@ namespace tempest::rhi::vk
         if (sem != VK_NULL_HANDLE)
         {
             set_object_name(reinterpret_cast<uint64_t>(sem), VK_OBJECT_TYPE_SEMAPHORE, name);
+        }
+    }
+
+    auto device::set_debug_name(query_pool_handle handle, cstring_view name) -> void
+    {
+        const auto qp = get_query_pool(handle);
+        if (qp.has_value() && qp->handle != VK_NULL_HANDLE)
+        {
+            set_object_name(reinterpret_cast<uint64_t>(qp->handle), VK_OBJECT_TYPE_QUERY_POOL, name);
         }
     }
 } // namespace tempest::rhi::vk

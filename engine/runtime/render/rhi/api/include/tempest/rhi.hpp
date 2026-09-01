@@ -104,6 +104,14 @@ namespace tempest::rhi
         uint64_t handle;
     };
 
+    /// \brief A handle to a query pool object.
+    struct query_pool_handle
+    {
+        /// \brief The handle to the query pool object. This handle is unique to the device that created it and should
+        /// not be used with other devices.
+        uint64_t handle;
+    };
+
     /// \brief A handle to a sampler in the global descriptor heap.
     struct sampler_descriptor
     {
@@ -310,6 +318,36 @@ namespace tempest::rhi
         optional<float> max_anisotropy = nullopt;
         optional<compare_op> compare_op = nullopt;
         cstring_view name;
+    };
+
+    enum class query_type : uint8_t
+    {
+        timestamp,
+        pipeline_statistics,
+    };
+
+    enum class pipeline_statistic_flags : uint32_t
+    {
+        none = 0x00,
+        input_assembly_vertices = 0x01,
+        input_assembly_primitives = 0x02,
+        vertex_shader_invocations = 0x04,
+        geometry_shader_invocations = 0x08,
+        geometry_shader_primitives = 0x10,
+        clipping_input_primitives = 0x20,
+        clipping_output_primitives = 0x40,
+        fragment_shader_invocations = 0x80,
+        tessellation_control_shader_patches = 0x100,
+        tessellation_evaluation_shader_invocations = 0x200,
+        compute_shader_invocations = 0x400,
+    };
+
+    struct query_pool_desc
+    {
+        query_type type{query_type::timestamp};
+        uint32_t query_count{0};
+        enum_mask<pipeline_statistic_flags> pipeline_statistics{pipeline_statistic_flags::none};
+        cstring_view name{};
     };
 
     enum class pipeline_stage : uint32_t
@@ -755,6 +793,22 @@ namespace tempest::rhi
         virtual auto blit_texture(texture_handle src, texture_handle dst, span<const texture_blit_region> regions,
                                   filter_mode filter = filter_mode::linear) -> void = 0;
 
+        // Queries
+        virtual auto write_timestamp([[maybe_unused]] query_pool_handle pool, [[maybe_unused]] uint32_t query_index,
+                                     [[maybe_unused]] pipeline_stage stage = pipeline_stage::bottom_of_pipe) -> void
+        {
+        }
+        virtual auto begin_query([[maybe_unused]] query_pool_handle pool, [[maybe_unused]] uint32_t query_index) -> void
+        {
+        }
+        virtual auto end_query([[maybe_unused]] query_pool_handle pool, [[maybe_unused]] uint32_t query_index) -> void
+        {
+        }
+        virtual auto reset_query_pool([[maybe_unused]] query_pool_handle pool, [[maybe_unused]] uint32_t first_query,
+                                      [[maybe_unused]] uint32_t query_count) -> void
+        {
+        }
+
         // Debug markers and regions
         virtual auto begin_debug_region([[maybe_unused]] const debug_label& label) -> void
         {
@@ -1008,6 +1062,40 @@ namespace tempest::rhi
         virtual auto set_debug_name([[maybe_unused]] semaphore_handle handle, [[maybe_unused]] cstring_view name)
             -> void
         {
+        }
+        virtual auto set_debug_name([[maybe_unused]] query_pool_handle handle, [[maybe_unused]] cstring_view name)
+            -> void
+        {
+        }
+
+        // Queries & Calibration
+        [[nodiscard]] virtual auto create_query_pool([[maybe_unused]] const query_pool_desc& desc) -> query_pool_handle
+        {
+            return query_pool_handle{.handle = 0};
+        }
+        virtual auto destroy_query_pool([[maybe_unused]] query_pool_handle pool) -> void
+        {
+        }
+        virtual auto get_query_pool_results([[maybe_unused]] query_pool_handle pool,
+                                            [[maybe_unused]] uint32_t first_query,
+                                            [[maybe_unused]] uint32_t query_count,
+                                            [[maybe_unused]] span<uint64_t> results, [[maybe_unused]] bool wait = false)
+            -> bool
+        {
+            return false;
+        }
+        [[nodiscard]] virtual auto get_timestamp_period_ns() const noexcept -> float
+        {
+            return 1.0F;
+        }
+        [[nodiscard]] virtual auto get_calibrated_gpu_timestamp_offset_ns() const noexcept -> uint64_t
+        {
+            return 0;
+        }
+        [[nodiscard]] virtual auto convert_gpu_timestamp_to_cpu_ns([[maybe_unused]] uint64_t gpu_ticks) const noexcept
+            -> uint64_t
+        {
+            return 0;
         }
 
       protected:

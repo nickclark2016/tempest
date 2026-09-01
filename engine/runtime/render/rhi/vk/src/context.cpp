@@ -323,6 +323,8 @@ namespace tempest::rhi::vk
         }
 
         auto vkb_physical_device = *physical_device_iter;
+        vkb_physical_device.enable_extension_if_present(VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
+        vkb_physical_device.enable_extension_if_present(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
         auto device_builder = vkb::DeviceBuilder(vkb_physical_device);
         auto device_result = device_builder.build();
         if (!device_result)

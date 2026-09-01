@@ -22,8 +22,8 @@ namespace tempest::rhi::vk
     class TEMPEST_API command_list final : public rhi::command_list
     {
       public:
-        command_list(VkCommandBuffer command_buffer, const vkb::DispatchTable& dispatch_table,
-                     const vk::device& device, vkb::QueueType queue_type = vkb::QueueType::graphics) noexcept;
+        command_list(VkCommandBuffer command_buffer, const vkb::DispatchTable& dispatch_table, const vk::device& device,
+                     vkb::QueueType queue_type = vkb::QueueType::graphics) noexcept;
         command_list(const command_list&) = delete;
         command_list(command_list&&) noexcept = delete;
 
@@ -90,12 +90,19 @@ namespace tempest::rhi::vk
 
         // Transfer
         auto copy_buffer(buffer_handle src, buffer_handle dst, span<const buffer_copy_region> regions) -> void override;
-        auto copy_buffer_to_texture(buffer_handle src, texture_handle dst, span<const buffer_texture_copy_region> regions)
-            -> void override;
-        auto copy_texture_to_buffer(texture_handle src, buffer_handle dst, span<const buffer_texture_copy_region> regions)
-            -> void override;
+        auto copy_buffer_to_texture(buffer_handle src, texture_handle dst,
+                                    span<const buffer_texture_copy_region> regions) -> void override;
+        auto copy_texture_to_buffer(texture_handle src, buffer_handle dst,
+                                    span<const buffer_texture_copy_region> regions) -> void override;
         auto blit_texture(texture_handle src, texture_handle dst, span<const texture_blit_region> regions,
                           filter_mode filter = filter_mode::linear) -> void override;
+
+        // Queries
+        auto write_timestamp(query_pool_handle pool, uint32_t query_index,
+                             pipeline_stage stage = pipeline_stage::bottom_of_pipe) -> void override;
+        auto begin_query(query_pool_handle pool, uint32_t query_index) -> void override;
+        auto end_query(query_pool_handle pool, uint32_t query_index) -> void override;
+        auto reset_query_pool(query_pool_handle pool, uint32_t first_query, uint32_t query_count) -> void override;
 
         // Debug markers and regions
         auto begin_debug_region(const debug_label& label) -> void override;
@@ -413,7 +420,8 @@ namespace tempest::rhi::vk
         command_list_slab_allocator<persistent_slab_count, persistent_command_list_count> persistent_allocator;
 
         combined_command_list_slab_allocator(const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                                             uint32_t queue_family_index, vkb::QueueType queue_type = vkb::QueueType::graphics)
+                                             uint32_t queue_family_index,
+                                             vkb::QueueType queue_type = vkb::QueueType::graphics)
             : transient_allocator(dispatch_table, device, queue_family_index, queue_type),
               persistent_allocator(dispatch_table, device, queue_family_index, queue_type)
         {
@@ -424,8 +432,8 @@ namespace tempest::rhi::vk
     class TEMPEST_API execution_port final : public rhi::execution_port
     {
       public:
-        execution_port(vk::device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type,
-                       VkQueue queue, vkb::DispatchTable dispatch_table);
+        execution_port(vk::device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type, VkQueue queue,
+                       vkb::DispatchTable dispatch_table);
         execution_port(const execution_port&) = delete;
         execution_port(execution_port&&) noexcept = delete;
         ~execution_port() override;
