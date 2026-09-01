@@ -1874,6 +1874,11 @@ namespace tempest::rhi::vk
 
     auto device::convert_gpu_timestamp_to_cpu_ns(uint64_t gpu_ticks) const noexcept -> uint64_t
     {
+        if (++_calibration_query_counter >= 180)
+        {
+            _calibration_query_counter = 0;
+            _calibrator.calibrate(_dispatch_table, _device.device);
+        }
         return _calibrator.convert_gpu_timestamp_to_cpu_ns(gpu_ticks);
     }
 
@@ -2101,6 +2106,45 @@ namespace tempest::rhi::vk
         {
             _async_transfer_execution_port = make_unique<execution_port>(
                 *this, transfer_queue_index.value(), vkb::QueueType::transfer, transfer_queue.value(), _dispatch_table);
+        }
+
+        if (!_calibrator.is_calibrated() && _graphics_execution_port)
+        {
+            const auto cal_pool = create_query_pool(query_pool_desc{
+                .type = query_type::timestamp,
+                .query_count = 1,
+                .pipeline_statistics = pipeline_statistic_flags::none,
+                .name = "Device Calibration Pool",
+            });
+            const auto cal_sem = create_timeline_semaphore();
+            auto& cal_cmd = _graphics_execution_port->acquire_command_list(0, command_list_lifetime::transient);
+            cal_cmd.begin();
+            cal_cmd.reset_query_pool(cal_pool, 0, 1);
+            cal_cmd.write_timestamp(cal_pool, 0, pipeline_stage::bottom_of_pipe);
+            cal_cmd.end();
+
+            const auto cpu_start_ns = timeline_calibrator::query_cpu_timestamp_ns();
+            const auto* cmd_ptr = &cal_cmd;
+            const auto sync = device_sync_point{
+                .semaphore = cal_sem,
+                .value = 1,
+                .stages = pipeline_stage::bottom_of_pipe,
+            };
+            const auto submit_res = _graphics_execution_port->submit(span<const rhi::command_list*>{&cmd_ptr, 1}, {},
+                                                                     span<const device_sync_point>{&sync, 1});
+            if (submit_res.has_value())
+            {
+                const auto cpu_submitted_ns = timeline_calibrator::query_cpu_timestamp_ns();
+                wait_for_sync(host_sync_point{.semaphore = cal_sem, .value = 1});
+                const auto cpu_completed_ns = timeline_calibrator::query_cpu_timestamp_ns();
+                auto gpu_ticks = uint64_t{0};
+                if (get_query_pool_results(cal_pool, 0, 1, span<uint64_t>{&gpu_ticks, 1}, true))
+                {
+                    _calibrator.calibrate_fallback(cpu_submitted_ns, cpu_completed_ns, gpu_ticks);
+                }
+            }
+            destroy_semaphore(cal_sem);
+            destroy_query_pool(cal_pool);
         }
 
         // Query descriptor buffer properties

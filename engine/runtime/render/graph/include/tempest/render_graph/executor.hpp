@@ -42,6 +42,8 @@ namespace tempest::render_graph
         rhi::query_pool_handle pipeline_stats_pool{};
         uint32_t timestamp_count{0};
         uint32_t pipeline_stats_count{0};
+        uint32_t recorded_timestamp_count{0};
+        uint32_t recorded_pipeline_stats_count{0};
         enum_mask<rhi::pipeline_statistic_flags> pipeline_stats_mask{rhi::pipeline_statistic_flags::none};
 
         struct pass_query_binding

@@ -62,6 +62,12 @@ namespace tempest::profiler
         {
             closesocket(s);
         }
+
+        auto set_socket_nonblocking(native_socket_t s) -> void
+        {
+            u_long mode = 1;
+            ioctlsocket(s, FIONBIO, &mode);
+        }
 #else
         auto ensure_sockets_initialized() -> void
         {
@@ -71,7 +77,65 @@ namespace tempest::profiler
         {
             close(s);
         }
+
+        auto set_socket_nonblocking(native_socket_t s) -> void
+        {
+            int flags = fcntl(s, F_GETFL, 0);
+            fcntl(s, F_SETFL, flags | O_NONBLOCK);
+        }
 #endif
+
+        auto send_all_nonblocking(native_socket_t sock, const char* data, size_t total_size) -> bool
+        {
+            auto bytes_sent = size_t{0};
+            while (bytes_sent < total_size)
+            {
+                const auto chunk_to_send = static_cast<int>(tempest::min(total_size - bytes_sent, size_t{65536}));
+                const auto res = send(sock, data + bytes_sent, chunk_to_send, 0);
+                if (res > 0)
+                {
+                    bytes_sent += static_cast<size_t>(res);
+                }
+                else if (res < 0)
+                {
+#if defined(_WIN32)
+                    const auto err = WSAGetLastError();
+                    if (err == WSAEWOULDBLOCK)
+                    {
+                        auto write_fds = fd_set{};
+                        FD_ZERO(&write_fds);
+                        FD_SET(sock, &write_fds);
+                        auto tv = timeval{.tv_sec = 0, .tv_usec = 2000};
+                        if (select(static_cast<int>(sock + 1), nullptr, &write_fds, nullptr, &tv) > 0)
+                        {
+                            continue;
+                        }
+                        return false;
+                    }
+#else
+                    const auto err = errno;
+                    if (err == EWOULDBLOCK || err == EAGAIN)
+                    {
+                        auto write_fds = fd_set{};
+                        FD_ZERO(&write_fds);
+                        FD_SET(sock, &write_fds);
+                        auto tv = timeval{.tv_sec = 0, .tv_usec = 2000};
+                        if (select(static_cast<int>(sock + 1), nullptr, &write_fds, nullptr, &tv) > 0)
+                        {
+                            continue;
+                        }
+                        return false;
+                    }
+#endif
+                    return false;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         auto find_sub(string_view sv, string_view target, size_t pos = 0) -> size_t
         {
@@ -350,9 +414,8 @@ namespace tempest::profiler
             lock_guard<mutex> lock(_clients_mutex);
             for (const auto client : _ws_clients)
             {
-                const auto res = send(static_cast<native_socket_t>(client), reinterpret_cast<const char*>(frame.data()),
-                                      static_cast<int>(frame.size()), 0);
-                if (res < 0)
+                if (!send_all_nonblocking(static_cast<native_socket_t>(client),
+                                          reinterpret_cast<const char*>(frame.data()), frame.size()))
                 {
                     dead_clients.push_back(client);
                 }
@@ -388,9 +451,8 @@ namespace tempest::profiler
             lock_guard<mutex> lock(_clients_mutex);
             for (const auto client : _ws_clients)
             {
-                const auto res = send(static_cast<native_socket_t>(client), reinterpret_cast<const char*>(frame.data()),
-                                      static_cast<int>(frame.size()), 0);
-                if (res < 0)
+                if (!send_all_nonblocking(static_cast<native_socket_t>(client),
+                                          reinterpret_cast<const char*>(frame.data()), frame.size()))
                 {
                     dead_clients.push_back(client);
                 }
@@ -475,8 +537,23 @@ namespace tempest::profiler
                     setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay),
                                sizeof(nodelay));
 
+                    auto client_read_fds = fd_set{};
+                    FD_ZERO(&client_read_fds);
+                    FD_SET(client_sock, &client_read_fds);
+                    auto client_tv = timeval{};
+                    client_tv.tv_sec = 0;
+                    client_tv.tv_usec = 100000; // 100 ms
+
+                    const auto sel_client =
+                        select(static_cast<int>(client_sock + 1), &client_read_fds, nullptr, nullptr, &client_tv);
+                    auto bytes = int{0};
                     char buffer[4096];
-                    const auto bytes = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
+
+                    if (sel_client > 0 && FD_ISSET(client_sock, &client_read_fds))
+                    {
+                        bytes = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
+                    }
+
                     if (bytes > 0)
                     {
                         buffer[bytes] = '\0';
@@ -510,6 +587,22 @@ namespace tempest::profiler
                     const auto bytes = recv(client_sock, buffer, sizeof(buffer), 0);
                     if (bytes <= 0)
                     {
+                        if (bytes < 0)
+                        {
+#if defined(_WIN32)
+                            const auto err = WSAGetLastError();
+                            if (err == WSAEWOULDBLOCK)
+                            {
+                                continue;
+                            }
+#else
+                            const auto err = errno;
+                            if (err == EWOULDBLOCK || err == EAGAIN)
+                            {
+                                continue;
+                            }
+#endif
+                        }
                         _close_client_socket(c);
                     }
                     else
@@ -608,6 +701,11 @@ namespace tempest::profiler
 
     auto web_server::_handle_websocket_connection(int64_t client_socket, string_view ws_key) -> void
     {
+        const auto native_sock = static_cast<native_socket_t>(client_socket);
+        set_socket_nonblocking(native_sock);
+        auto buf_size = int{1024 * 1024}; // 1 MB send and receive buffers
+        setsockopt(native_sock, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
+        setsockopt(native_sock, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
         const auto accept_key = compute_websocket_accept_key(ws_key);
         auto response = std::string{};
         std::format_to(std::back_inserter(response),

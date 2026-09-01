@@ -33,27 +33,28 @@ namespace tempest::render_graph
         auto& flight_state = _flight_query_rings[flight_slot];
 
         // 1. Query readback from previous frame on this flight slot
-        if (!flight_state.recorded_passes.empty())
+        if (!flight_state.recorded_passes.empty() && flight_state.recorded_timestamp_count > 0)
         {
-            auto ts_results = vector<uint64_t>(flight_state.timestamp_count, 0);
+            auto ts_results = vector<uint64_t>(flight_state.recorded_timestamp_count, 0);
             auto read_ts_ok = false;
-            if (flight_state.timestamp_pool.handle != 0 && flight_state.timestamp_count > 0)
+            if (flight_state.timestamp_pool.handle != 0)
             {
-                read_ts_ok = dev.get_query_pool_results(flight_state.timestamp_pool, 0, flight_state.timestamp_count,
-                                                        span<uint64_t>{ts_results.data(), ts_results.size()}, false);
+                read_ts_ok =
+                    dev.get_query_pool_results(flight_state.timestamp_pool, 0, flight_state.recorded_timestamp_count,
+                                               span<uint64_t>{ts_results.data(), ts_results.size()}, true);
             }
 
             auto ps_results = vector<uint64_t>{};
             auto read_ps_ok = false;
             auto num_ps_entries_per_query = size_t{0};
-            if (flight_state.pipeline_stats_pool.handle != 0 && flight_state.pipeline_stats_count > 0)
+            if (flight_state.pipeline_stats_pool.handle != 0 && flight_state.recorded_pipeline_stats_count > 0)
             {
                 num_ps_entries_per_query = static_cast<size_t>(
                     tempest::popcount(static_cast<uint32_t>(flight_state.pipeline_stats_mask.value())));
-                ps_results.resize(flight_state.pipeline_stats_count * num_ps_entries_per_query, 0);
-                read_ps_ok =
-                    dev.get_query_pool_results(flight_state.pipeline_stats_pool, 0, flight_state.pipeline_stats_count,
-                                               span<uint64_t>{ps_results.data(), ps_results.size()}, false);
+                ps_results.resize(flight_state.recorded_pipeline_stats_count * num_ps_entries_per_query, 0);
+                read_ps_ok = dev.get_query_pool_results(flight_state.pipeline_stats_pool, 0,
+                                                        flight_state.recorded_pipeline_stats_count,
+                                                        span<uint64_t>{ps_results.data(), ps_results.size()}, true);
             }
 
             if (read_ts_ok && frame_sync.profiler != nullptr && frame_sync.profiler->is_enabled())
@@ -126,7 +127,7 @@ namespace tempest::render_graph
 
                 for (auto& [track_id, zones] : zones_by_track)
                 {
-                    const auto q_type = static_cast<queue_type>((track_id & 0xFFFFULL) - 1);
+                    const auto q_type = static_cast<queue_type>((track_id & 0x7FFF'FFFFULL) - 1);
                     frame_sync.profiler->register_track(track_id, get_queue_track_name(q_type));
 
                     auto chunk = frame_sync.profiler->acquire_chunk();
@@ -146,6 +147,8 @@ namespace tempest::render_graph
             }
 
             flight_state.recorded_passes.clear();
+            flight_state.recorded_timestamp_count = 0;
+            flight_state.recorded_pipeline_stats_count = 0;
         }
 
         auto& allocator = graph.get_allocator();
@@ -338,16 +341,7 @@ namespace tempest::render_graph
                     pass_stat_idx = current_stats_idx++;
                 }
 
-                if (flight_state.timestamp_pool.handle != 0)
-                {
-                    cmd.write_timestamp(flight_state.timestamp_pool, start_ts, rhi::pipeline_stage::top_of_pipe);
-                }
-                if (has_stats)
-                {
-                    cmd.begin_query(flight_state.pipeline_stats_pool, *pass_stat_idx);
-                }
-
-                // 1. Issue pre-pass pipeline barriers
+                // 1. Issue pre-pass pipeline barriers FIRST before the start timestamp query
                 const auto plan_it = plan_map.find(pass_idx);
                 if (plan_it != plan_map.end() && plan_it->second != nullptr)
                 {
@@ -356,6 +350,15 @@ namespace tempest::render_graph
                     {
                         cmd.pipeline_barrier(plan->texture_barriers, plan->buffer_barriers);
                     }
+                }
+
+                if (flight_state.timestamp_pool.handle != 0)
+                {
+                    cmd.write_timestamp(flight_state.timestamp_pool, start_ts, rhi::pipeline_stage::bottom_of_pipe);
+                }
+                if (has_stats)
+                {
+                    cmd.begin_query(flight_state.pipeline_stats_pool, *pass_stat_idx);
                 }
 
                 // 2. Detect color and depth-stencil attachments for dynamic rendering
@@ -557,6 +560,9 @@ namespace tempest::render_graph
                 return unexpected(execution_error::queue_submit_failed);
             }
         }
+
+        flight_state.recorded_timestamp_count = current_timestamp_idx;
+        flight_state.recorded_pipeline_stats_count = current_stats_idx;
 
         for (auto* temporal_res : graph.get_tracked_temporal_resources())
         {

@@ -101,7 +101,7 @@ namespace tempest::render_graph
 
     constexpr auto get_queue_track_id(queue_type queue) noexcept -> uint64_t
     {
-        return 0x8000'0000'0000'0000ULL | (static_cast<uint64_t>(queue) + 1);
+        return 0x8000'0000ULL | (static_cast<uint64_t>(queue) + 1);
     }
 
     constexpr auto get_queue_track_name(queue_type queue) noexcept -> string_view

@@ -33,13 +33,41 @@ namespace tempest::profiler
 
             if (!target_track)
             {
+                constexpr auto gpu_bit = uint64_t{0x8000'0000ULL};
+                const auto is_gpu = (tid & gpu_bit) != 0;
                 auto name_buf = std::string{};
-                std::format_to(std::back_inserter(name_buf), "Thread {}", tid);
+                auto type = track_type::cpu_thread;
+
+                if (is_gpu)
+                {
+                    type = track_type::gpu_queue;
+                    const auto queue_idx = (tid & 0x7FFF'FFFFULL) - 1;
+                    switch (queue_idx)
+                    {
+                    case 0:
+                        name_buf = "GPU: Graphics";
+                        break;
+                    case 1:
+                        name_buf = "GPU: Async Compute";
+                        break;
+                    case 2:
+                        name_buf = "GPU: Async Transfer";
+                        break;
+                    default:
+                        std::format_to(std::back_inserter(name_buf), "GPU: Queue {}", queue_idx);
+                        break;
+                    }
+                }
+                else
+                {
+                    type = track_type::cpu_thread;
+                    std::format_to(std::back_inserter(name_buf), "Thread {}", tid);
+                }
 
                 auto new_track = track_data{
                     .track_id = tid,
                     .name = string{name_buf.data(), name_buf.size()},
-                    .type = track_type::cpu_thread,
+                    .type = type,
                     .zones = {},
                     .markers = {},
                 };
@@ -133,6 +161,8 @@ namespace tempest::profiler
     {
         auto chunks = session.drain_completed_chunks();
         const auto chunk_span = span<const unique_ptr<event_chunk>>{chunks.data(), chunks.size()};
-        return create_capture_from_chunks(chunk_span);
+        auto result = create_capture_from_chunks(chunk_span);
+        session.recycle_chunks(tempest::move(chunks));
+        return result;
     }
 } // namespace tempest::profiler

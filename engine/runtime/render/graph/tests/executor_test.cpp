@@ -921,12 +921,12 @@ namespace tempest::render_graph
         // 3. Assert: Verify 4 timestamp writes (2 per pass) and query pool reset
         const auto& cmd = dev.graphics_port.cmd;
         EXPECT_EQ(cmd.written_timestamps.size(), 4U);
-        EXPECT_EQ(cmd.written_timestamps[0].stage, rhi::pipeline_stage::top_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[0].stage, rhi::pipeline_stage::bottom_of_pipe);
         EXPECT_EQ(cmd.written_timestamps[0].query_index, 0U);
         EXPECT_EQ(cmd.written_timestamps[1].stage, rhi::pipeline_stage::bottom_of_pipe);
         EXPECT_EQ(cmd.written_timestamps[1].query_index, 1U);
 
-        EXPECT_EQ(cmd.written_timestamps[2].stage, rhi::pipeline_stage::top_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[2].stage, rhi::pipeline_stage::bottom_of_pipe);
         EXPECT_EQ(cmd.written_timestamps[2].query_index, 2U);
         EXPECT_EQ(cmd.written_timestamps[3].stage, rhi::pipeline_stage::bottom_of_pipe);
         EXPECT_EQ(cmd.written_timestamps[3].query_index, 3U);
@@ -994,6 +994,12 @@ namespace tempest::render_graph
         auto has_graphics_track = false;
         const auto compute_track_id = get_queue_track_id(queue_type::async_compute);
         const auto graphics_track_id = get_queue_track_id(queue_type::graphics);
+
+        // Verify JS safe integer range limit (within 53 bits: < 2^53 = 9007199254740992)
+        EXPECT_LT(compute_track_id, 1ULL << 53);
+        EXPECT_LT(graphics_track_id, 1ULL << 53);
+        EXPECT_EQ(compute_track_id, 0x8000'0002ULL);
+        EXPECT_EQ(graphics_track_id, 0x8000'0001ULL);
 
         for (const auto& chunk : chunks)
         {

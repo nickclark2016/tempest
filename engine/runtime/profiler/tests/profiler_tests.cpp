@@ -1470,3 +1470,277 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
 
     server.stop();
 }
+
+//==============================================================================
+// GPU Track Classification & Telemetry Routing Tests
+//==============================================================================
+
+/// @brief Verify GPU tracks with bit 31 set are classified as track_type::gpu_queue, named cleanly, and routed to
+/// gpu_tracks.
+TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
+{
+    // 1. Setup: Create event chunks representing GPU queues and CPU threads
+    auto chunks = tempest::vector<tempest::unique_ptr<tempest::profiler::event_chunk>>{};
+
+    // Graphics queue: bit 31 set, index 0 -> track_id = 0x8000'0001ULL
+    auto chunk_gfx = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk_gfx->set_thread_id(0x8000'0001ULL);
+    chunk_gfx->add_zone(tempest::profiler::zone_record{
+        .start_ns = 1000,
+        .end_ns = 2000,
+        .depth = 0,
+        .name = "GBufferPass",
+    });
+    chunks.push_back(tempest::move(chunk_gfx));
+
+    // Async Compute queue: bit 31 set, index 1 -> track_id = 0x8000'0002ULL
+    auto chunk_compute = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk_compute->set_thread_id(0x8000'0002ULL);
+    chunk_compute->add_zone(tempest::profiler::zone_record{
+        .start_ns = 1500,
+        .end_ns = 2500,
+        .depth = 0,
+        .name = "CullingCompute",
+    });
+    chunks.push_back(tempest::move(chunk_compute));
+
+    // Async Transfer queue: bit 31 set, index 2 -> track_id = 0x8000'0003ULL
+    auto chunk_transfer = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk_transfer->set_thread_id(0x8000'0003ULL);
+    chunk_transfer->add_zone(tempest::profiler::zone_record{
+        .start_ns = 500,
+        .end_ns = 1200,
+        .depth = 0,
+        .name = "TextureUpload",
+    });
+    chunks.push_back(tempest::move(chunk_transfer));
+
+    // Custom GPU queue: bit 31 set, index 7 -> track_id = 0x8000'0008ULL
+    auto chunk_custom_gpu = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk_custom_gpu->set_thread_id(0x8000'0008ULL);
+    chunk_custom_gpu->add_zone(tempest::profiler::zone_record{
+        .start_ns = 3000,
+        .end_ns = 4000,
+        .depth = 0,
+        .name = "OpticalFlowPass",
+    });
+    chunks.push_back(tempest::move(chunk_custom_gpu));
+
+    // CPU thread: bit 31 not set -> track_id = 42
+    auto chunk_cpu = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk_cpu->set_thread_id(42);
+    chunk_cpu->add_zone(tempest::profiler::zone_record{
+        .start_ns = 800,
+        .end_ns = 2200,
+        .depth = 0,
+        .name = "SimulationUpdate",
+    });
+    chunks.push_back(tempest::move(chunk_cpu));
+
+    // 2. Act: Create capture session data from chunks
+    const auto chunk_span =
+        tempest::span<const tempest::unique_ptr<tempest::profiler::event_chunk>>{chunks.data(), chunks.size()};
+    const auto capture = tempest::profiler::create_capture_from_chunks(chunk_span);
+
+    // 3. Assert: Verify track classification and naming in capture session data
+    ASSERT_EQ(capture.tracks.size(), 5u);
+
+    // GPU: Graphics
+    EXPECT_EQ(capture.tracks[0].track_id, 0x8000'0001ULL);
+    EXPECT_EQ(capture.tracks[0].type, tempest::profiler::track_type::gpu_queue);
+    EXPECT_EQ(capture.tracks[0].name, "GPU: Graphics");
+
+    // GPU: Async Compute
+    EXPECT_EQ(capture.tracks[1].track_id, 0x8000'0002ULL);
+    EXPECT_EQ(capture.tracks[1].type, tempest::profiler::track_type::gpu_queue);
+    EXPECT_EQ(capture.tracks[1].name, "GPU: Async Compute");
+
+    // GPU: Async Transfer
+    EXPECT_EQ(capture.tracks[2].track_id, 0x8000'0003ULL);
+    EXPECT_EQ(capture.tracks[2].type, tempest::profiler::track_type::gpu_queue);
+    EXPECT_EQ(capture.tracks[2].name, "GPU: Async Transfer");
+
+    // GPU: Queue 7
+    EXPECT_EQ(capture.tracks[3].track_id, 0x8000'0008ULL);
+    EXPECT_EQ(capture.tracks[3].type, tempest::profiler::track_type::gpu_queue);
+    EXPECT_EQ(capture.tracks[3].name, "GPU: Queue 7");
+
+    // CPU Thread
+    EXPECT_EQ(capture.tracks[4].track_id, 42u);
+    EXPECT_EQ(capture.tracks[4].type, tempest::profiler::track_type::cpu_thread);
+    EXPECT_EQ(capture.tracks[4].name, "Thread 42");
+
+    // 4. Act & Assert: Convert to telemetry frame and verify segregation
+    const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(1, capture);
+    EXPECT_EQ(telemetry.gpu_tracks.size(), 4u);
+    EXPECT_EQ(telemetry.cpu_tracks.size(), 1u);
+
+    EXPECT_EQ(telemetry.gpu_tracks[0].name, "GPU: Graphics");
+    EXPECT_EQ(telemetry.gpu_tracks[1].name, "GPU: Async Compute");
+    EXPECT_EQ(telemetry.gpu_tracks[2].name, "GPU: Async Transfer");
+    EXPECT_EQ(telemetry.gpu_tracks[3].name, "GPU: Queue 7");
+
+    EXPECT_EQ(telemetry.cpu_tracks[0].name, "Thread 42");
+}
+
+/// @brief Verify GPU track IDs remain strictly within JavaScript safe integer range (53 bits, < 2^53).
+TEST(profiler_tests, gpu_track_id_js_safe_integer_range)
+{
+    // 1. Setup: Define maximum safe integer in IEEE-754 double precision (2^53 - 1)
+    constexpr auto js_max_safe_integer = uint64_t{(1ULL << 53) - 1};
+
+    // 2. Act: Generate GPU queue track IDs for standard and high index queues
+    const auto gfx_track_id = uint64_t{0x8000'0000ULL | 1ULL};
+    const auto compute_track_id = uint64_t{0x8000'0000ULL | 2ULL};
+    const auto transfer_track_id = uint64_t{0x8000'0000ULL | 3ULL};
+    const auto max_queue_track_id = uint64_t{0x8000'0000ULL | 0x7FFF'FFFFULL};
+
+    // 3. Assert: All GPU track IDs are well within the JS safe integer limit
+    EXPECT_LT(gfx_track_id, js_max_safe_integer);
+    EXPECT_LT(compute_track_id, js_max_safe_integer);
+    EXPECT_LT(transfer_track_id, js_max_safe_integer);
+    EXPECT_LT(max_queue_track_id, js_max_safe_integer);
+
+    // Verify track classification
+    auto chunk = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk->set_thread_id(gfx_track_id);
+    chunk->add_zone(tempest::profiler::zone_record{
+        .start_ns = 100,
+        .end_ns = 200,
+        .depth = 0,
+        .name = "Pass",
+    });
+
+    auto chunks = tempest::vector<tempest::unique_ptr<tempest::profiler::event_chunk>>{};
+    chunks.push_back(tempest::move(chunk));
+
+    const auto chunk_span =
+        tempest::span<const tempest::unique_ptr<tempest::profiler::event_chunk>>{chunks.data(), chunks.size()};
+    const auto capture = tempest::profiler::create_capture_from_chunks(chunk_span);
+
+    ASSERT_EQ(capture.tracks.size(), 1u);
+    EXPECT_EQ(capture.tracks[0].type, tempest::profiler::track_type::gpu_queue);
+    EXPECT_EQ(capture.tracks[0].name, "GPU: Graphics");
+    EXPECT_LT(capture.tracks[0].track_id, js_max_safe_integer);
+}
+
+/// @brief Verify drained chunks are recycled into the session pool without new heap allocations.
+TEST(profiler_tests, chunk_recycling_via_create_capture_from_session)
+{
+    // 1. Setup profiler session and verify empty initial pool
+    auto session = tempest::profiler::profiler_session{true};
+    EXPECT_EQ(session.get_chunk_pool().pool_size(), 0u);
+
+    // 2. Act: Record multiple zones exceeding a chunk, then create capture from session
+    constexpr auto event_count = size_t{2000};
+    for (auto i = size_t{0}; i < event_count; ++i)
+    {
+        [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "RecycleZone"};
+    }
+
+    const auto capture = tempest::profiler::create_capture_from_session(session);
+
+    // 3. Assert: Capture contains all events and drained chunks were recycled into pool
+    auto total_zones = size_t{0};
+    for (const auto& tr : capture.tracks)
+    {
+        total_zones += tr.zones.size();
+    }
+    EXPECT_EQ(total_zones, event_count);
+    EXPECT_GT(session.get_chunk_pool().pool_size(), 0u);
+
+    // 4. Act: Record second frame and capture again, verifying pool reuse
+    const auto pool_size_before = session.get_chunk_pool().pool_size();
+    for (auto i = size_t{0}; i < event_count; ++i)
+    {
+        [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "RecycleZone2"};
+    }
+
+    const auto capture2 = tempest::profiler::create_capture_from_session(session);
+    const auto pool_size_after = session.get_chunk_pool().pool_size();
+
+    // Pool size after second frame capture should equal pool size before, confirming zero net heap allocations
+    EXPECT_EQ(pool_size_after, pool_size_before);
+}
+
+/// @brief Verify non-blocking socket broadcasts handle multiple clients gracefully without stalling.
+TEST(profiler_tests, nonblocking_socket_broadcast_handling)
+{
+    // 1. Setup: Start web server
+    auto session = tempest::profiler::profiler_session{true};
+    auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8092, .max_port_attempts = 10};
+    auto server = tempest::profiler::web_server{session, config};
+    server.start();
+    ASSERT_TRUE(server.is_running());
+    const auto port = server.get_bound_port();
+
+    // 2. Act: Connect a WebSocket client
+    auto client = test_tcp_client{};
+    ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+
+    const auto ws_req = "GET /ws HTTP/1.1\r\n"
+                        "Host: 127.0.0.1\r\n"
+                        "Upgrade: websocket\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                        "Sec-WebSocket-Version: 13\r\n\r\n";
+
+    ASSERT_TRUE(client.send_string(ws_req));
+    const auto resp = client.receive_all(500);
+    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+
+    tempest::this_thread::yield();
+    EXPECT_EQ(server.connected_client_count(), 1u);
+
+    // 3. Act: Issue multiple non-blocking broadcasts in rapid succession
+    for (auto i = uint64_t{0}; i < 10; ++i)
+    {
+        auto t_frame = tempest::profiler::telemetry_frame{};
+        t_frame.frame_index = i;
+        server.broadcast_telemetry(t_frame);
+    }
+
+    // 4. Assert: Client is still connected and can receive frames without server stalling
+    EXPECT_EQ(server.connected_client_count(), 1u);
+    const auto bc_data = client.receive_all(500);
+    EXPECT_FALSE(bc_data.empty());
+
+    server.stop();
+}
+
+/// @brief Verify large multi-kilobyte telemetry frames transmit completely without truncation.
+TEST(profiler_tests, large_payload_nonblocking_send_all)
+{
+    // 1. Setup: Start web server
+    auto session = tempest::profiler::profiler_session{true};
+    auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8093, .max_port_attempts = 10};
+    auto server = tempest::profiler::web_server{session, config};
+    server.start();
+    ASSERT_TRUE(server.is_running());
+    const auto port = server.get_bound_port();
+
+    // 2. Connect client
+    auto client = test_tcp_client{};
+    ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+
+    const auto ws_req = "GET /ws HTTP/1.1\r\n"
+                        "Host: 127.0.0.1\r\n"
+                        "Upgrade: websocket\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                        "Sec-WebSocket-Version: 13\r\n\r\n";
+
+    ASSERT_TRUE(client.send_string(ws_req));
+    const auto resp = client.receive_all(500);
+    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+
+    // 3. Act: Broadcast a 128KB large payload
+    auto large_text = std::string(128 * 1024, 'A');
+    server.broadcast_text(tempest::string_view{large_text.data(), large_text.size()});
+
+    // 4. Assert: Client receives the complete WebSocket payload without truncation
+    const auto bc_data = client.receive_all(1000);
+    EXPECT_GT(bc_data.size(), 128 * 1024u);
+
+    server.stop();
+}

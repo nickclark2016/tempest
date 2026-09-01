@@ -59,6 +59,11 @@ namespace tempest::editor
         }
 
       private:
+        auto _process_shortcuts() -> void;
+        auto _draw_status_bar() -> void;
+        auto _draw_profiler_status_pill() -> void;
+        auto _draw_profiler_tooltip() -> void;
+
         editor_engine_context* _engine_ctx;
         window_handle _win;
         ui_context* _ui_ctx;

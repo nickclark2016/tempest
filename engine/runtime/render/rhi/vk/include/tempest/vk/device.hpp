@@ -347,7 +347,8 @@ namespace tempest::rhi::vk
         slot_map<raw_surface> _raw_surfaces;
         slot_map<query_pool> _query_pools;
 
-        timeline_calibrator _calibrator;
+        mutable timeline_calibrator _calibrator;
+        mutable uint32_t _calibration_query_counter{0};
 
         unique_ptr<execution_port> _graphics_execution_port = nullptr;
         unique_ptr<execution_port> _async_compute_execution_port = nullptr;

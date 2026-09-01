@@ -41,6 +41,9 @@
     // Selection & Interactivity
     selectedZone: null,
     hoveredZone: null,
+    hoveredFrameIndex: null,
+    showFrameBoundaries: true,
+    lastStatsRecalcTime: 0,
     selectionRange: null,   // { startNs, endNs }
     searchQuery: '',
     searchResultsCount: 0,
@@ -384,16 +387,27 @@
       state.frames.shift();
     }
 
-    updateDataBounds(frame);
+    const frameMin = updateDataBounds(frame);
     recalculateTracksAndMetrics();
-    recalculateStats();
+
+    // Throttled stats recalculation to keep live 60 FPS silky smooth
+    const now = performance.now();
+    if (now - state.lastStatsRecalcTime > 250) {
+      state.lastStatsRecalcTime = now;
+      recalculateStats();
+    }
     updateInfoMetadata();
 
-    // Auto-scroll timeline to follow live stream
+    // Auto-scroll timeline to follow live stream accommodating frames-in-flight delay
     if (state.isLive) {
-      const duration = state.viewEndNs - state.viewStartNs;
+      const duration = Math.max(state.viewEndNs - state.viewStartNs, 100000000);
       state.viewEndNs = state.maxTimeNs;
-      state.viewStartNs = Math.max(state.minTimeNs, state.maxTimeNs - duration);
+      let targetStart = state.maxTimeNs - duration;
+      if (frameMin !== undefined && frameMin !== Infinity && frameMin < targetStart) {
+        targetStart = frameMin;
+        state.viewEndNs = Math.max(state.maxTimeNs, targetStart + duration);
+      }
+      state.viewStartNs = Math.max(state.minTimeNs, targetStart);
     }
 
     requestAnimationFrame(render);
@@ -403,21 +417,33 @@
     let frameMin = Infinity;
     let frameMax = -Infinity;
 
-    const scanZones = (zones) => {
-      for (const z of zones) {
-        if (z.start_ns < frameMin) frameMin = z.start_ns;
-        if (z.end_ns > frameMax) frameMax = z.end_ns;
-      }
-    };
+    let cpuMin = Infinity;
+    let cpuMax = -Infinity;
+    let gpuMin = Infinity;
+    let gpuMax = -Infinity;
 
     if (frame.cpu_tracks) {
       for (const t of frame.cpu_tracks) {
-        if (t.zones) scanZones(t.zones);
+        if (t.zones) {
+          for (const z of t.zones) {
+            if (z.start_ns < cpuMin) cpuMin = z.start_ns;
+            if (z.end_ns > cpuMax) cpuMax = z.end_ns;
+            if (z.start_ns < frameMin) frameMin = z.start_ns;
+            if (z.end_ns > frameMax) frameMax = z.end_ns;
+          }
+        }
       }
     }
     if (frame.gpu_tracks) {
       for (const t of frame.gpu_tracks) {
-        if (t.zones) scanZones(t.zones);
+        if (t.zones) {
+          for (const z of t.zones) {
+            if (z.start_ns < gpuMin) gpuMin = z.start_ns;
+            if (z.end_ns > gpuMax) gpuMax = z.end_ns;
+            if (z.start_ns < frameMin) frameMin = z.start_ns;
+            if (z.end_ns > frameMax) frameMax = z.end_ns;
+          }
+        }
       }
     }
     if (frame.markers) {
@@ -426,6 +452,14 @@
         if (m.timestamp_ns > frameMax) frameMax = m.timestamp_ns;
       }
     }
+
+    frame.cpuStartNs = cpuMin !== Infinity ? cpuMin : null;
+    frame.cpuEndNs = cpuMax !== -Infinity ? cpuMax : null;
+    frame.cpuDurationNs = (frame.cpuStartNs !== null && frame.cpuEndNs !== null) ? (frame.cpuEndNs - frame.cpuStartNs) : 0;
+
+    frame.gpuStartNs = gpuMin !== Infinity ? gpuMin : null;
+    frame.gpuEndNs = gpuMax !== -Infinity ? gpuMax : null;
+    frame.gpuDurationNs = (frame.gpuStartNs !== null && frame.gpuEndNs !== null) ? (frame.gpuEndNs - frame.gpuStartNs) : 0;
 
     if (frameMin !== Infinity && frameMax !== -Infinity) {
       if (state.frames.length === 1 || state.minTimeNs === 0) {
@@ -438,11 +472,14 @@
         state.maxTimeNs = Math.max(state.maxTimeNs, frameMax);
       }
     }
+
+    return frameMin;
   }
 
   function recalculateTracksAndMetrics() {
     const trackMap = new Map(); // key: track_id -> track object
     const metricsMap = {};
+    state.markers = [];
 
     for (const f of state.frames) {
       // CPU Tracks
@@ -480,11 +517,17 @@
       if (f.gpu_tracks) {
         for (const t of f.gpu_tracks) {
           const key = `gpu_${t.track_id}`;
+          let cleanName = t.name || `Queue ${t.track_id}`;
+          if (cleanName.startsWith('GPU: ')) {
+            cleanName = cleanName.substring(5);
+          } else if (cleanName.startsWith('GPU:')) {
+            cleanName = cleanName.substring(4);
+          }
           if (!trackMap.has(key)) {
             trackMap.set(key, {
               id: key,
               track_id: t.track_id,
-              name: t.name || `GPU Queue ${t.track_id}`,
+              name: cleanName,
               type: 'gpu',
               zones: [],
               maxDepth: 0,
@@ -695,26 +738,35 @@
       // Viewport culling for track
       if (currentY + trackHeight >= state.rulerHeight && currentY <= height) {
         // Track Header Background
-        timelineCtx.fillStyle = '#161b22';
+        const isGpu = track.type === 'gpu';
+        timelineCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.14)' : '#161b22';
         timelineCtx.fillRect(0, currentY, width, state.trackHeaderHeight);
 
-        timelineCtx.strokeStyle = '#30363d';
+        timelineCtx.strokeStyle = isGpu ? 'rgba(57, 197, 187, 0.4)' : '#30363d';
         timelineCtx.strokeRect(0, currentY, width, state.trackHeaderHeight);
 
         // Chevron
-        timelineCtx.fillStyle = '#8b949e';
+        timelineCtx.fillStyle = isGpu ? '#39c5bb' : '#8b949e';
         timelineCtx.font = '11px sans-serif';
         timelineCtx.fillText(isCollapsed ? '▶' : '▼', 8, currentY + 16);
 
         // Track Name & Type Badge
-        const isGpu = track.type === 'gpu';
         timelineCtx.fillStyle = isGpu ? '#39c5bb' : '#58a6ff';
         timelineCtx.font = 'bold 11px monospace';
-        timelineCtx.fillText(track.name.toUpperCase(), 24, currentY + 16);
+        let displayName = track.name;
+        if (isGpu) {
+          if (displayName.startsWith('GPU: ')) {
+            displayName = displayName.substring(5);
+          } else if (displayName.startsWith('GPU:')) {
+            displayName = displayName.substring(4);
+          }
+        }
+        const trackTitle = isGpu ? `[GPU] ${displayName}` : displayName.toUpperCase();
+        timelineCtx.fillText(trackTitle, 24, currentY + 16);
 
-        timelineCtx.fillStyle = '#6e7681';
+        timelineCtx.fillStyle = isGpu ? '#7ee787' : '#6e7681';
         timelineCtx.font = '10px monospace';
-        timelineCtx.fillText(`(${track.zones.length} zones)`, 24 + timelineCtx.measureText(track.name.toUpperCase()).width + 8, currentY + 16);
+        timelineCtx.fillText(`(${track.zones.length} zones)`, 24 + timelineCtx.measureText(trackTitle).width + 8, currentY + 16);
 
         // Zones
         if (!isCollapsed) {
@@ -785,7 +837,10 @@
 
     state.totalContentHeight = currentY + state.scrollY;
 
-    // 3. Draw Marquee Selection
+    // 3. Draw Frame Boundaries (CPU vs GPU frames & correlation)
+    renderFrameBoundaries(timelineCtx, width, height, nsToX, visibleDuration);
+
+    // 4. Draw Marquee Selection
     if (state.selectionRange) {
       const selStartX = nsToX(state.selectionRange.startNs);
       const selEndX = nsToX(state.selectionRange.endNs);
@@ -800,13 +855,131 @@
       timelineCtx.strokeRect(selX, state.rulerHeight, selW, height - state.rulerHeight);
     }
 
-    // 4. Draw Sticky Top Ruler
+    // 5. Draw Sticky Top Ruler
     renderRuler(timelineCtx, width, nsToX, visibleDuration);
 
     // Update search count badge
     if (state.searchQuery) {
       dom.searchCount.textContent = `${state.searchResultsCount} matches`;
     }
+  }
+
+  function renderFrameBoundaries(ctx, width, height, nsToX, visibleDuration) {
+    if (!state.showFrameBoundaries || state.frames.length === 0) return;
+
+    // Find vertical bounds for CPU and GPU tracks
+    let cpuMinY = Infinity;
+    let cpuMaxY = -Infinity;
+    let gpuMinY = Infinity;
+    let gpuMaxY = -Infinity;
+
+    for (const track of state.tracks) {
+      if (track.renderY === undefined || track.renderHeight === undefined) continue;
+      if (track.type === 'gpu') {
+        if (track.renderY < gpuMinY) gpuMinY = track.renderY;
+        if (track.renderY + track.renderHeight > gpuMaxY) gpuMaxY = track.renderY + track.renderHeight;
+      } else {
+        if (track.renderY < cpuMinY) cpuMinY = track.renderY;
+        if (track.renderY + track.renderHeight > cpuMaxY) cpuMaxY = track.renderY + track.renderHeight;
+      }
+    }
+
+    if (cpuMinY === Infinity) {
+      cpuMinY = state.rulerHeight;
+      cpuMaxY = height / 2;
+    }
+    if (gpuMinY === Infinity) {
+      gpuMinY = cpuMaxY;
+      gpuMaxY = height;
+    }
+
+    // Clip to area below ruler
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, state.rulerHeight, width, height - state.rulerHeight);
+    ctx.clip();
+
+    for (const frame of state.frames) {
+      const isHovered = (state.hoveredFrameIndex === frame.frame_index);
+
+      // 1. CPU Frame Boundary
+      if (frame.cpuStartNs !== null && frame.cpuEndNs !== null) {
+        const x0 = nsToX(frame.cpuStartNs);
+        const x1 = nsToX(frame.cpuEndNs);
+        const w = Math.max(1, x1 - x0);
+
+        if (x1 >= 0 && x0 <= width) {
+          ctx.fillStyle = isHovered ? 'rgba(136, 80, 255, 0.16)' : 'rgba(88, 166, 255, 0.04)';
+          ctx.fillRect(x0, cpuMinY, w, Math.max(20, cpuMaxY - cpuMinY));
+
+          ctx.strokeStyle = isHovered ? 'rgba(163, 113, 247, 0.95)' : 'rgba(88, 166, 255, 0.25)';
+          ctx.lineWidth = isHovered ? 1.5 : 1;
+          ctx.setLineDash(isHovered ? [] : [3, 3]);
+          ctx.strokeRect(x0, cpuMinY, w, Math.max(20, cpuMaxY - cpuMinY));
+          ctx.setLineDash([]);
+
+          if (w > 30 || isHovered) {
+            ctx.fillStyle = isHovered ? '#a371f7' : 'rgba(88, 166, 255, 0.75)';
+            ctx.font = 'bold 9px monospace';
+            const tag = `CPU #${frame.frame_index} (${formatTime(frame.cpuDurationNs)})`;
+            ctx.fillText(tag, x0 + 4, Math.max(state.rulerHeight + 12, cpuMinY + 12));
+          }
+        }
+      }
+
+      // 2. GPU Frame Boundary
+      if (frame.gpuStartNs !== null && frame.gpuEndNs !== null) {
+        const gx0 = nsToX(frame.gpuStartNs);
+        const gx1 = nsToX(frame.gpuEndNs);
+        const gw = Math.max(1, gx1 - gx0);
+
+        if (gx1 >= 0 && gx0 <= width) {
+          ctx.fillStyle = isHovered ? 'rgba(57, 197, 187, 0.20)' : 'rgba(57, 197, 187, 0.05)';
+          ctx.fillRect(gx0, gpuMinY, gw, Math.max(20, gpuMaxY - gpuMinY));
+
+          ctx.strokeStyle = isHovered ? 'rgba(57, 197, 187, 1.0)' : 'rgba(57, 197, 187, 0.35)';
+          ctx.lineWidth = isHovered ? 1.5 : 1;
+          ctx.setLineDash(isHovered ? [] : [4, 3]);
+          ctx.strokeRect(gx0, gpuMinY, gw, Math.max(20, gpuMaxY - gpuMinY));
+          ctx.setLineDash([]);
+
+          if (gw > 30 || isHovered) {
+            ctx.fillStyle = isHovered ? '#39c5bb' : 'rgba(57, 197, 187, 0.85)';
+            ctx.font = 'bold 9px monospace';
+            const tag = `GPU #${frame.frame_index} (${formatTime(frame.gpuDurationNs)})`;
+            ctx.fillText(tag, gx0 + 4, Math.max(state.rulerHeight + 12, gpuMinY + 12));
+          }
+        }
+      }
+
+      // 3. Correlation Indicator for Hovered Frame
+      if (isHovered && frame.cpuEndNs !== null && frame.gpuStartNs !== null) {
+        const cpuEndX = nsToX(frame.cpuEndNs);
+        const gpuStartX = nsToX(frame.gpuStartNs);
+        const midY = (cpuMaxY + gpuMinY) / 2;
+
+        ctx.strokeStyle = '#f0883e';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath();
+        ctx.moveTo(cpuEndX, cpuMaxY);
+        ctx.lineTo(cpuEndX, midY);
+        ctx.lineTo(gpuStartX, midY);
+        ctx.lineTo(gpuStartX, gpuMinY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const latencyNs = frame.gpuStartNs - frame.cpuStartNs;
+        ctx.fillStyle = '#f0883e';
+        ctx.font = 'bold 9px monospace';
+        const latencyLabel = `Flight: ${formatTime(latencyNs)}`;
+        const textW = ctx.measureText(latencyLabel).width;
+        const textX = Math.min(cpuEndX, gpuStartX) + Math.abs(gpuStartX - cpuEndX) / 2 - textW / 2;
+        ctx.fillText(latencyLabel, textX, midY - 3);
+      }
+    }
+
+    ctx.restore();
   }
 
   function renderGrid(ctx, width, height, nsToX, visibleDuration) {
@@ -1201,20 +1374,52 @@
     // Calculate synthetic or real series
     const frameTimes = state.frames.map(f => {
       let dur = 0;
-      if (f.cpu_tracks && f.cpu_tracks[0] && f.cpu_tracks[0].zones && f.cpu_tracks[0].zones[0]) {
-        dur = f.cpu_tracks[0].zones[0].end_ns - f.cpu_tracks[0].zones[0].start_ns;
+      if (f.cpu_tracks && f.cpu_tracks.length > 0) {
+        for (const t of f.cpu_tracks) {
+          if (t.zones) {
+            for (const z of t.zones) {
+              const zdur = (z.end_ns >= z.start_ns) ? (z.end_ns - z.start_ns) : 0;
+              if (zdur > dur) dur = zdur;
+            }
+          }
+        }
       }
       return dur > 0 ? dur / 1000000 : 16.6;
     });
 
     const fpsSeries = frameTimes.map(ft => ft > 0 ? Math.min(240, 1000 / ft) : 60);
-    const memorySeries = state.frames.map((_, i) => 120 + Math.sin(i * 0.1) * 8);
-    const gpuSeries = state.frames.map((_, i) => 25000 + Math.cos(i * 0.15) * 5000);
+
+    const memorySeries = state.frames.map(f => {
+      let vramMb = 0;
+      if (f.metrics) {
+        for (const m of f.metrics) {
+          if (m.name && (m.name.toLowerCase().includes('vram') || m.name.toLowerCase().includes('memory') || m.name.toLowerCase().includes('bytes'))) {
+            vramMb = Math.max(vramMb, m.value / (1024 * 1024));
+          }
+        }
+      }
+      return vramMb;
+    });
+
+    const gpuPassDurations = state.frames.map(f => {
+      let totalGpuNs = 0;
+      if (f.gpu_tracks && f.gpu_tracks.length > 0) {
+        for (const t of f.gpu_tracks) {
+          if (t.zones) {
+            for (const z of t.zones) {
+              const dur = (z.end_ns >= z.start_ns) ? (z.end_ns - z.start_ns) : 0;
+              totalGpuNs += dur;
+            }
+          }
+        }
+      }
+      return totalGpuNs / 1000000;
+    });
 
     renderMiniChart(fpsCtx, dom.chartFps, fpsSeries, '#3fb950', dom.metricFpsVal, 'FPS');
     renderMiniChart(frametimeCtx, dom.chartFrametime, frameTimes, '#58a6ff', dom.metricFrametimeVal, 'ms');
     renderMiniChart(memoryCtx, dom.chartMemory, memorySeries, '#d29922', dom.metricMemoryVal, 'MB');
-    renderMiniChart(gpuCtx, dom.chartGpu, gpuSeries, '#39c5bb', dom.metricGpuVal, 'Invocations');
+    renderMiniChart(gpuCtx, dom.chartGpu, gpuPassDurations, '#39c5bb', dom.metricGpuVal, 'ms');
   }
 
   function updateInfoMetadata() {
@@ -1395,6 +1600,7 @@
     if (mouseY < state.rulerHeight) {
       dom.tooltip.style.display = 'none';
       state.hoveredZone = null;
+      state.hoveredFrameIndex = null;
       render();
       return;
     }
@@ -1402,21 +1608,40 @@
     const hit = hitTest(mouseX, mouseY);
     if (hit && hit.type === 'zone') {
       state.hoveredZone = hit.zone;
+      const z = hit.zone;
+
+      // Find corresponding frame
+      const parentFrame = state.frames.find(f => {
+        if (f.cpu_tracks) {
+          for (const t of f.cpu_tracks) {
+            if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
+          }
+        }
+        if (f.gpu_tracks) {
+          for (const t of f.gpu_tracks) {
+            if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
+          }
+        }
+        return false;
+      });
+      state.hoveredFrameIndex = parentFrame ? parentFrame.frame_index : null;
+
       dom.tooltip.style.display = 'block';
       dom.tooltip.style.left = `${Math.min(window.innerWidth - 300, mouseX + 16)}px`;
       dom.tooltip.style.top = `${Math.min(window.innerHeight - 150, mouseY + 16)}px`;
 
-      const z = hit.zone;
       dom.tooltip.innerHTML = `
         <div class="tt-title">${z.name}</div>
         <div class="tt-row"><span>Duration:</span><span class="tt-val">${formatTime(z.duration_ns)}</span></div>
         <div class="tt-row"><span>Start Time:</span><span class="tt-val">${formatTime(z.start_ns)}</span></div>
         <div class="tt-row"><span>Track:</span><span>${z.trackName || 'Main'}</span></div>
         <div class="tt-row"><span>Depth:</span><span>${z.depth}</span></div>
+        ${parentFrame ? `<div class="tt-row"><span>Frame:</span><span class="tt-val">#${parentFrame.frame_index}</span></div>` : ''}
       `;
     } else {
       dom.tooltip.style.display = 'none';
       state.hoveredZone = null;
+      state.hoveredFrameIndex = null;
     }
     render();
   }
