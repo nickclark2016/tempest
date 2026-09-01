@@ -36,7 +36,7 @@ scoped.project('profiler', function()
     end)
 
     scoped.usage("PUBLIC", function()
-        uses { 'api', 'core' }
+        uses { 'api', 'core', 'miniz' }
     end)
 
     scoped.usage("profiler:includedirs", function()
@@ -80,6 +80,7 @@ scoped.group('Tests', function()
         uses {
             'tempest',
             'googletest',
+            'simdjson',
         }
 
         scoped.filter({ 'system:linux' }, function()
