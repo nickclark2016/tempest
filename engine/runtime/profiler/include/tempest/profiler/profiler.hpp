@@ -7,6 +7,8 @@
 #include <tempest/profiler/session.hpp>
 #include <tempest/profiler/statistics.hpp>
 #include <tempest/profiler/types.hpp>
+#include <tempest/profiler/web_server.hpp>
+#include <tempest/profiler/websocket.hpp>
 #include <tempest/profiler/zone.hpp>
 
 #endif // tempest_profiler_profiler_hpp

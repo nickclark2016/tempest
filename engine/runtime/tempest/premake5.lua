@@ -70,6 +70,7 @@ scoped.project('tempest', function()
         links {
             'Advapi32',
             'Synchronization',
+            'ws2_32',
         }
     end)
 
@@ -214,6 +215,7 @@ scoped.project('tempest', function()
                 'user32',
                 'Advapi32',
                 'Synchronization',
+                'ws2_32',
             }
         end)
 

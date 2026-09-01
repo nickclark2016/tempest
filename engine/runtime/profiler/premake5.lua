@@ -35,6 +35,14 @@ scoped.project('profiler', function()
         }
     end)
 
+    scoped.filter({
+        'system:windows'
+    }, function()
+        links {
+            'ws2_32',
+        }
+    end)
+
     scoped.usage("PUBLIC", function()
         uses { 'api', 'core', 'miniz' }
     end)
@@ -57,6 +65,14 @@ scoped.project('profiler', function()
         links {
             'profiler',
         }
+
+        scoped.filter({
+            'system:windows'
+        }, function()
+            links {
+                'ws2_32',
+            }
+        end)
     end)
 end)
 
@@ -82,6 +98,10 @@ scoped.group('Tests', function()
             'googletest',
             'simdjson',
         }
+
+        scoped.filter({ 'system:windows' }, function()
+            links { 'ws2_32' }
+        end)
 
         scoped.filter({ 'system:linux' }, function()
             links { 'X11' }

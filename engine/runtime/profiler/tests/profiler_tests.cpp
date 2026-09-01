@@ -807,3 +807,481 @@ TEST(profiler_tests, corrupted_and_truncated_binary_error_handling)
     ASSERT_FALSE(res_io.has_value());
     ASSERT_EQ(res_io.error(), tempest::profiler::capture_error::io_error);
 }
+
+//==============================================================================
+// Embedded Web Server & RFC-6455 WebSocket Tests
+//==============================================================================
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
+namespace
+{
+    struct test_tcp_client
+    {
+#if defined(_WIN32)
+        using socket_type = SOCKET;
+        static constexpr socket_type invalid_s = INVALID_SOCKET;
+#else
+        using socket_type = int;
+        static constexpr socket_type invalid_s = -1;
+#endif
+
+        socket_type sock{invalid_s};
+
+        test_tcp_client() = default;
+
+        ~test_tcp_client()
+        {
+            close_sock();
+        }
+
+        auto connect_to(const char* host, uint16_t port) -> bool
+        {
+            close_sock();
+#if defined(_WIN32)
+            auto wsa = WSADATA{};
+            WSAStartup(MAKEWORD(2, 2), &wsa);
+#endif
+            sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            if (sock == invalid_s)
+            {
+                return false;
+            }
+
+            auto addr = sockaddr_in{};
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(port);
+            inet_pton(AF_INET, host, &addr.sin_addr);
+
+            if (connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0)
+            {
+                close_sock();
+                return false;
+            }
+            return true;
+        }
+
+        auto send_all(const void* data, size_t len) -> bool
+        {
+            if (sock == invalid_s)
+            {
+                return false;
+            }
+            auto ptr = reinterpret_cast<const char*>(data);
+            auto remaining = len;
+            while (remaining > 0)
+            {
+                const auto res = send(sock, ptr, static_cast<int>(remaining), 0);
+                if (res <= 0)
+                {
+                    return false;
+                }
+                ptr += res;
+                remaining -= res;
+            }
+            return true;
+        }
+
+        auto send_string(std::string_view s) -> bool
+        {
+            return send_all(s.data(), s.size());
+        }
+
+        auto receive_all(size_t timeout_ms = 1000) -> std::string
+        {
+            auto out = std::string{};
+            if (sock == invalid_s)
+            {
+                return out;
+            }
+
+            char buffer[4096];
+            while (true)
+            {
+                auto read_fds = fd_set{};
+                FD_ZERO(&read_fds);
+                FD_SET(sock, &read_fds);
+
+                auto tv = timeval{};
+                tv.tv_sec = static_cast<long>(timeout_ms / 1000);
+                tv.tv_usec = static_cast<long>((timeout_ms % 1000) * 1000);
+
+                const auto sel = select(static_cast<int>(sock + 1), &read_fds, nullptr, nullptr, &tv);
+                if (sel <= 0)
+                {
+                    break;
+                }
+
+                const auto bytes = recv(sock, buffer, sizeof(buffer), 0);
+                if (bytes <= 0)
+                {
+                    break;
+                }
+                out.append(buffer, static_cast<size_t>(bytes));
+                if (bytes < static_cast<int>(sizeof(buffer)))
+                {
+                    timeout_ms = 50;
+                }
+            }
+            return out;
+        }
+
+        auto close_sock() -> void
+        {
+            if (sock != invalid_s)
+            {
+#if defined(_WIN32)
+                closesocket(sock);
+#else
+                close(sock);
+#endif
+                sock = invalid_s;
+            }
+        }
+    };
+} // namespace
+
+/// @brief Verify socket lifecycle, port binding, and auto-increment when port 8080 is occupied.
+TEST(profiler_tests, socket_lifecycle_and_port_auto_increment)
+{
+    // 1. Setup: Create profiler session and web server instances
+    auto session = tempest::profiler::profiler_session{};
+    auto config1 = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8080, .max_port_attempts = 10};
+    auto server1 = tempest::profiler::web_server{session, config1};
+
+    // 2. Act: Start server 1 on port 8080
+    server1.start();
+    ASSERT_TRUE(server1.is_running());
+    const auto port1 = server1.get_bound_port();
+    ASSERT_EQ(port1, 8080u);
+    ASSERT_EQ(server1.get_server_url(), "http://127.0.0.1:8080");
+
+    // 3. Act & Assert: Start server 2 with same preferred port 8080 (should auto-increment to 8081)
+    auto config2 = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8080, .max_port_attempts = 10};
+    auto server2 = tempest::profiler::web_server{session, config2};
+    server2.start();
+    ASSERT_TRUE(server2.is_running());
+    const auto port2 = server2.get_bound_port();
+    ASSERT_EQ(port2, 8081u);
+    ASSERT_EQ(server2.get_server_url(), "http://127.0.0.1:8081");
+
+    // 4. Act & Assert: Gracefully stop both servers
+    server1.stop();
+    ASSERT_FALSE(server1.is_running());
+    ASSERT_EQ(server1.get_bound_port(), 0u);
+
+    server2.stop();
+    ASSERT_FALSE(server2.is_running());
+    ASSERT_EQ(server2.get_bound_port(), 0u);
+}
+
+/// @brief Verify HTTP GET / returns 200 OK with text/html content-type and valid payload.
+TEST(profiler_tests, http_get_request_handling)
+{
+    // 1. Setup: Start web server on dynamic port
+    auto session = tempest::profiler::profiler_session{};
+    auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8082, .max_port_attempts = 10};
+    auto server = tempest::profiler::web_server{session, config};
+    server.start();
+    ASSERT_TRUE(server.is_running());
+    const auto port = server.get_bound_port();
+
+    // 2. Act & Assert: HTTP GET /
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        ASSERT_TRUE(client.send_string("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
+        const auto response = client.receive_all(1000);
+        ASSERT_FALSE(response.empty());
+        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
+        ASSERT_NE(response.find("Content-Type: text/html"), std::string::npos);
+        ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
+    }
+
+    // 3. Act & Assert: HTTP GET /status
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        ASSERT_TRUE(client.send_string("GET /status HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
+        const auto response = client.receive_all(1000);
+        ASSERT_FALSE(response.empty());
+        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
+        ASSERT_NE(response.find("\"status\":\"ok\""), std::string::npos);
+    }
+
+    // 4. Act & Assert: HTTP GET /unknown_path (404)
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        ASSERT_TRUE(client.send_string("GET /unknown_path HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
+        const auto response = client.receive_all(1000);
+        ASSERT_FALSE(response.empty());
+        ASSERT_NE(response.find("HTTP/1.1 404 Not Found"), std::string::npos);
+    }
+
+    server.stop();
+}
+
+/// @brief Verify RFC-6455 WebSocket handshake Sec-WebSocket-Accept key computation against RFC test vectors.
+TEST(profiler_tests, rfc6455_websocket_handshake_key_computation)
+{
+    // 1. Setup: Test vector from RFC-6455 Section 1.3
+    const auto client_key1 = "dGhlIHNhbXBsZSBub25jZQ==";
+    const auto expected_accept1 = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
+
+    // 2. Act & Assert: Primary RFC test vector
+    const auto actual_accept1 = tempest::profiler::compute_websocket_accept_key(client_key1);
+    ASSERT_EQ(actual_accept1, expected_accept1);
+
+    // 3. Act & Assert: Additional valid nonce key test vector
+    const auto client_key2 = "x3JJHMbDL1EzLkh9GBhXDw==";
+    const auto expected_accept2 = "HSmrc0sMlYUkAGmm5OPpG2HaGWk=";
+    const auto actual_accept2 = tempest::profiler::compute_websocket_accept_key(client_key2);
+    ASSERT_EQ(actual_accept2, expected_accept2);
+
+    // 4. Act & Assert: Nonce key with leading/trailing whitespace
+    const auto client_key3 = "  dGhlIHNhbXBsZSBub25jZQ== \r\n";
+    const auto actual_accept3 = tempest::profiler::compute_websocket_accept_key(client_key3);
+    ASSERT_EQ(actual_accept3, expected_accept1);
+}
+
+/// @brief Verify WebSocket binary and text frame encoding and decoding.
+TEST(profiler_tests, websocket_frame_encoding_and_decoding)
+{
+    // 1. Setup: Test short text frame (len <= 125)
+    const auto text_sample = std::string{"Hello, Tempest Profiler RFC-6455!"};
+    auto text_bytes = tempest::vector<tempest::byte>{};
+    for (auto c : text_sample)
+    {
+        text_bytes.push_back(static_cast<tempest::byte>(c));
+    }
+
+    // 2. Act: Encode server text frame and decode
+    auto encoded_text = tempest::profiler::encode_websocket_frame(
+        tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{text_bytes.data(), text_bytes.size()});
+    ASSERT_GE(encoded_text.size(), 2u + text_bytes.size());
+    ASSERT_EQ(static_cast<uint8_t>(encoded_text[0]), 0x81); // FIN + text opcode
+
+    auto decoded_text = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{encoded_text.data(), encoded_text.size()});
+    ASSERT_TRUE(decoded_text.has_value());
+    ASSERT_EQ(decoded_text->opcode, tempest::profiler::ws_opcode::text);
+    ASSERT_EQ(decoded_text->payload.size(), text_bytes.size());
+    for (auto i = size_t{0}; i < text_bytes.size(); ++i)
+    {
+        ASSERT_EQ(decoded_text->payload[i], text_bytes[i]);
+    }
+
+    // 3. Act & Assert: Medium binary frame (126 <= len <= 65535)
+    auto medium_binary = tempest::vector<tempest::byte>(1024);
+    for (auto i = size_t{0}; i < medium_binary.size(); ++i)
+    {
+        medium_binary[i] = static_cast<tempest::byte>(i & 0xFF);
+    }
+    auto encoded_medium = tempest::profiler::encode_websocket_frame(
+        tempest::profiler::ws_opcode::binary,
+        tempest::span<const tempest::byte>{medium_binary.data(), medium_binary.size()});
+    ASSERT_EQ(static_cast<uint8_t>(encoded_medium[0]), 0x82); // FIN + binary opcode
+    ASSERT_EQ(static_cast<uint8_t>(encoded_medium[1]), 126);  // 16-bit extended length flag
+
+    auto decoded_medium = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{encoded_medium.data(), encoded_medium.size()});
+    ASSERT_TRUE(decoded_medium.has_value());
+    ASSERT_EQ(decoded_medium->opcode, tempest::profiler::ws_opcode::binary);
+    ASSERT_EQ(decoded_medium->payload.size(), 1024u);
+    ASSERT_EQ(decoded_medium->payload[500], medium_binary[500]);
+
+    // 4. Act & Assert: Masked client-to-server text frame
+    auto client_masked_frame = tempest::profiler::encode_websocket_client_frame(
+        tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{text_bytes.data(), text_bytes.size()},
+        0x37FA213D);
+    ASSERT_GE(client_masked_frame.size(), 6u + text_bytes.size());
+    ASSERT_TRUE((static_cast<uint8_t>(client_masked_frame[1]) & 0x80) != 0); // Mask bit set
+
+    auto decoded_client_frame = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{client_masked_frame.data(), client_masked_frame.size()});
+    ASSERT_TRUE(decoded_client_frame.has_value());
+    ASSERT_EQ(decoded_client_frame->opcode, tempest::profiler::ws_opcode::text);
+    ASSERT_EQ(decoded_client_frame->payload.size(), text_bytes.size());
+    for (auto i = size_t{0}; i < text_bytes.size(); ++i)
+    {
+        ASSERT_EQ(decoded_client_frame->payload[i], text_bytes[i]);
+    }
+
+    // 5. Act & Assert: Incomplete / truncated frame error handling
+    auto truncated = tempest::vector<tempest::byte>{client_masked_frame.begin(), client_masked_frame.begin() + 4};
+    auto decoded_trunc = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{truncated.data(), truncated.size()});
+    ASSERT_FALSE(decoded_trunc.has_value());
+    ASSERT_EQ(decoded_trunc.error(), tempest::profiler::ws_error::incomplete_frame);
+}
+
+/// @brief Verify telemetry streaming packet generation and bidirectional command dispatch.
+TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
+{
+    // 1. Setup: Start web server and record some profiler session events
+    auto session = tempest::profiler::profiler_session{true};
+    {
+        [[maybe_unused]] const auto z1 = tempest::profiler::scoped_zone{session, "EngineInit"};
+        session.get_or_register_thread().add_metric("FPS", 60.0, tempest::profiler::metric_unit::raw);
+        session.get_or_register_thread().add_marker("WarmupDone");
+    }
+
+    auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8084, .max_port_attempts = 10};
+    auto server = tempest::profiler::web_server{session, config};
+    server.start();
+    ASSERT_TRUE(server.is_running());
+    const auto port = server.get_bound_port();
+
+    // 2. Act: Connect client and perform WebSocket handshake
+    auto client = test_tcp_client{};
+    ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+
+    const auto ws_handshake_req = "GET /ws HTTP/1.1\r\n"
+                                  "Host: 127.0.0.1\r\n"
+                                  "Upgrade: websocket\r\n"
+                                  "Connection: Upgrade\r\n"
+                                  "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                                  "Sec-WebSocket-Version: 13\r\n\r\n";
+
+    ASSERT_TRUE(client.send_string(ws_handshake_req));
+    const auto hs_response = client.receive_all(500);
+    ASSERT_NE(hs_response.find("HTTP/1.1 101 Switching Protocols"), std::string::npos);
+    ASSERT_NE(hs_response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), std::string::npos);
+
+    // Allow worker thread to register connection
+    tempest::this_thread::yield();
+    ASSERT_EQ(server.connected_client_count(), 1u);
+
+    // 3. Act & Assert: Command "start_capture"
+    {
+        const auto cmd = std::string{"{\"command\":\"start_capture\"}"};
+        auto cmd_bytes = tempest::vector<tempest::byte>{};
+        for (auto c : cmd)
+        {
+            cmd_bytes.push_back(static_cast<tempest::byte>(c));
+        }
+        auto frame = tempest::profiler::encode_websocket_client_frame(
+            tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{cmd_bytes.data(), cmd_bytes.size()});
+        ASSERT_TRUE(client.send_all(frame.data(), frame.size()));
+
+        const auto resp_raw = client.receive_all(500);
+        ASSERT_FALSE(resp_raw.empty());
+        auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
+            reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
+        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_NE(resp_str.find("\"command\":\"start_capture\""), std::string::npos);
+        ASSERT_NE(resp_str.find("\"recording\":true"), std::string::npos);
+        ASSERT_TRUE(session.is_enabled());
+    }
+
+    // 4. Act & Assert: Command "query_stats"
+    {
+        const auto cmd = std::string{"{\"command\":\"query_stats\"}"};
+        auto cmd_bytes = tempest::vector<tempest::byte>{};
+        for (auto c : cmd)
+        {
+            cmd_bytes.push_back(static_cast<tempest::byte>(c));
+        }
+        auto frame = tempest::profiler::encode_websocket_client_frame(
+            tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{cmd_bytes.data(), cmd_bytes.size()});
+        ASSERT_TRUE(client.send_all(frame.data(), frame.size()));
+
+        const auto resp_raw = client.receive_all(500);
+        ASSERT_FALSE(resp_raw.empty());
+        auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
+            reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
+        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_NE(resp_str.find("\"type\":\"stats\""), std::string::npos);
+        ASSERT_NE(resp_str.find("EngineInit"), std::string::npos);
+    }
+
+    // 5. Act & Assert: Telemetry packet serialization & server broadcast
+    {
+        auto t_frame = tempest::profiler::telemetry_frame{};
+        t_frame.frame_index = 42;
+
+        auto t_track = tempest::profiler::telemetry_track{.track_id = 1, .name = "MainThread"};
+        t_track.zones.push_back(tempest::profiler::telemetry_zone{
+            .name = "RenderFrame",
+            .start_ns = 1000000,
+            .end_ns = 2000000,
+            .depth = 0,
+        });
+        t_frame.cpu_tracks.push_back(tempest::move(t_track));
+        t_frame.markers.push_back(
+            tempest::profiler::marker_record{.timestamp_ns = 2500000, .name = "SwapchainPresent"});
+
+        const auto json_payload = tempest::profiler::serialize_telemetry_frame_json(t_frame);
+        const auto json_payload_std = std::string(json_payload.data(), json_payload.size());
+        ASSERT_NE(json_payload_std.find("\"frame_index\":42"), std::string::npos);
+        ASSERT_NE(json_payload_std.find("\"name\":\"RenderFrame\""), std::string::npos);
+        ASSERT_NE(json_payload_std.find("\"name\":\"SwapchainPresent\""), std::string::npos);
+
+        // Broadcast to connected client
+        server.broadcast_telemetry(t_frame);
+        const auto bc_raw = client.receive_all(500);
+        ASSERT_FALSE(bc_raw.empty());
+        auto decoded = tempest::profiler::decode_websocket_frame(
+            tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(bc_raw.data()), bc_raw.size()});
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
+        auto bc_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_NE(bc_str.find("\"frame_index\":42"), std::string::npos);
+    }
+
+    // 6. Act & Assert: Command "stop_capture"
+    {
+        const auto cmd = std::string{"{\"command\":\"stop_capture\"}"};
+        auto cmd_bytes = tempest::vector<tempest::byte>{};
+        for (auto c : cmd)
+        {
+            cmd_bytes.push_back(static_cast<tempest::byte>(c));
+        }
+        auto frame = tempest::profiler::encode_websocket_client_frame(
+            tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{cmd_bytes.data(), cmd_bytes.size()});
+        ASSERT_TRUE(client.send_all(frame.data(), frame.size()));
+
+        const auto resp_raw = client.receive_all(500);
+        ASSERT_FALSE(resp_raw.empty());
+        auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
+            reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
+        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_NE(resp_str.find("\"command\":\"stop_capture\""), std::string::npos);
+        ASSERT_NE(resp_str.find("\"recording\":false"), std::string::npos);
+        ASSERT_FALSE(session.is_enabled());
+    }
+
+    // 7. Act & Assert: Graceful connection close
+    {
+        auto close_frame = tempest::profiler::encode_websocket_client_frame(tempest::profiler::ws_opcode::close, {});
+        ASSERT_TRUE(client.send_all(close_frame.data(), close_frame.size()));
+        client.close_sock();
+    }
+
+    server.stop();
+}
