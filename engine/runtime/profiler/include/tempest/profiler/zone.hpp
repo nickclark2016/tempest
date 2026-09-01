@@ -18,8 +18,10 @@ namespace tempest::profiler
     {
       public:
         scoped_zone_impl(profiler_session& session, string_view name, source_location loc = source_location::current());
+        scoped_zone_impl(profiler_session* session, string_view name, source_location loc = source_location::current());
         scoped_zone_impl(thread_profiler_context& ctx, string_view name,
                          source_location loc = source_location::current());
+        scoped_zone_impl() = default;
         ~scoped_zone_impl();
 
         scoped_zone_impl(const scoped_zone_impl&) = delete;
@@ -44,11 +46,17 @@ namespace tempest::profiler
         {
         }
 
+        constexpr scoped_zone_impl([[maybe_unused]] profiler_session* session, [[maybe_unused]] string_view name,
+                                   [[maybe_unused]] source_location loc = source_location::current()) noexcept
+        {
+        }
+
         constexpr scoped_zone_impl([[maybe_unused]] thread_profiler_context& ctx, [[maybe_unused]] string_view name,
                                    [[maybe_unused]] source_location loc = source_location::current()) noexcept
         {
         }
 
+        constexpr scoped_zone_impl() noexcept = default;
         ~scoped_zone_impl() = default;
 
         scoped_zone_impl(const scoped_zone_impl&) = delete;
@@ -79,6 +87,16 @@ namespace tempest::profiler
         }
     }
 
+    inline auto emit_marker(profiler_session* session, string_view name,
+                            source_location loc = source_location::current()) -> void
+    {
+        if (session != nullptr && session->is_enabled())
+        {
+            auto& ctx = session->get_or_register_thread();
+            ctx.add_marker(name, loc);
+        }
+    }
+
     inline auto emit_marker(thread_profiler_context& ctx, string_view name,
                             source_location loc = source_location::current()) -> void
     {
@@ -94,6 +112,16 @@ namespace tempest::profiler
         if (session.is_enabled())
         {
             auto& ctx = session.get_or_register_thread();
+            ctx.add_metric(name, value, unit);
+        }
+    }
+
+    inline auto emit_metric(profiler_session* session, string_view name, double value,
+                            metric_unit unit = metric_unit::raw) -> void
+    {
+        if (session != nullptr && session->is_enabled())
+        {
+            auto& ctx = session->get_or_register_thread();
             ctx.add_metric(name, value, unit);
         }
     }

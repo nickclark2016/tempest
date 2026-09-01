@@ -103,6 +103,7 @@ namespace tempest
                 .textures = &_texture_reg,
                 .materials = &_material_reg,
                 .asset_db = &_asset_database,
+                .profiler = &_profiler_session,
             });
             _renderer = builder.build(*_device, _logger);
         }
@@ -421,6 +422,7 @@ namespace tempest
 
     auto standalone_engine_context::_update_fixed(std::chrono::duration<float> delta_time) -> void
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_fixed"};
         for (auto& win : _windows)
         {
             auto& mouse = _window_manager.get_mouse(win.handle);
@@ -465,6 +467,7 @@ namespace tempest
 
     auto standalone_engine_context::_update_variable(std::chrono::duration<float> delta_time) -> void
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_variable"};
         for (auto&& callback : _on_variable_update_callbacks)
         {
             callback(*this, delta_time);
@@ -473,6 +476,7 @@ namespace tempest
 
     auto standalone_engine_context::_render_frame() -> void
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::render_frame"};
         if (!_renderer || _windows.empty())
         {
             return;

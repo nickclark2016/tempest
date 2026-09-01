@@ -398,6 +398,56 @@ namespace tempest::profiler
         return _register_thread_slow(tid);
     }
 
+    auto profiler_session::register_track(uint64_t track_id, string_view track_name) -> thread_profiler_context&
+    {
+        lock_guard guard(_registration_mutex);
+
+        auto hash_val = hash<uint64_t>{}(track_id);
+        auto slot_idx = hash_val % max_thread_slots;
+
+        for (size_t i = 0; i < max_thread_slots; ++i)
+        {
+            auto idx = (slot_idx + i) % max_thread_slots;
+            if (_slots[idx].thread_id.load(memory_order::relaxed) == track_id && _slots[idx].context)
+            {
+                if (!track_name.empty())
+                {
+                    _slots[idx].context->set_thread_name(track_name);
+                }
+                return *_slots[idx].context;
+            }
+        }
+
+        for (const auto& ctx : _overflow_contexts)
+        {
+            if (ctx && ctx->get_thread_id() == track_id)
+            {
+                if (!track_name.empty())
+                {
+                    ctx->set_thread_name(track_name);
+                }
+                return *ctx;
+            }
+        }
+
+        for (size_t i = 0; i < max_thread_slots; ++i)
+        {
+            auto idx = (slot_idx + i) % max_thread_slots;
+            if (_slots[idx].thread_id.load(memory_order::relaxed) == 0)
+            {
+                auto ctx = make_unique<thread_profiler_context>(*this, track_id, track_name);
+                _slots[idx].context = tempest::move(ctx);
+                _slots[idx].thread_id.store(track_id, memory_order::release);
+                return *_slots[idx].context;
+            }
+        }
+
+        auto ctx = make_unique<thread_profiler_context>(*this, track_id, track_name);
+        auto* ptr = ctx.get();
+        _overflow_contexts.push_back(tempest::move(ctx));
+        return *ptr;
+    }
+
     auto profiler_session::_register_thread_slow(uint64_t tid) -> thread_profiler_context&
     {
         lock_guard guard(_registration_mutex);

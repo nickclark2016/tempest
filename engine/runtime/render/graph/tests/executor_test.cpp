@@ -163,6 +163,53 @@ namespace tempest::render_graph
             {
             }
 
+            struct timestamp_write
+            {
+                rhi::query_pool_handle pool;
+                uint32_t query_index;
+                rhi::pipeline_stage stage;
+            };
+
+            struct query_op
+            {
+                rhi::query_pool_handle pool;
+                uint32_t query_index;
+            };
+
+            struct query_reset
+            {
+                rhi::query_pool_handle pool;
+                uint32_t first_query;
+                uint32_t query_count;
+            };
+
+            vector<timestamp_write> written_timestamps;
+            vector<query_op> begun_queries;
+            vector<query_op> ended_queries;
+            vector<query_reset> reset_queries;
+
+            auto write_timestamp(rhi::query_pool_handle query_pool, uint32_t query_index, rhi::pipeline_stage stage)
+                -> void override
+            {
+                written_timestamps.push_back({query_pool, query_index, stage});
+            }
+
+            auto begin_query(rhi::query_pool_handle query_pool, uint32_t query_index) -> void override
+            {
+                begun_queries.push_back({query_pool, query_index});
+            }
+
+            auto end_query(rhi::query_pool_handle query_pool, uint32_t query_index) -> void override
+            {
+                ended_queries.push_back({query_pool, query_index});
+            }
+
+            auto reset_query_pool(rhi::query_pool_handle query_pool, uint32_t first_query, uint32_t query_count)
+                -> void override
+            {
+                reset_queries.push_back({query_pool, first_query, query_count});
+            }
+
             vector<string> debug_regions;
             vector<string> debug_markers;
             uint32_t begin_debug_region_calls = 0;
@@ -252,6 +299,14 @@ namespace tempest::render_graph
             {
                 return {};
             }
+        };
+
+        struct mock_query_pool
+        {
+            rhi::query_type type{rhi::query_type::timestamp};
+            uint32_t query_count{0};
+            enum_mask<rhi::pipeline_statistic_flags> pipeline_statistics{rhi::pipeline_statistic_flags::none};
+            vector<uint64_t> results{};
         };
 
         class mock_device_with_ports final : public rhi::device
@@ -476,6 +531,64 @@ namespace tempest::render_graph
             auto set_debug_name(rhi::semaphore_handle handle, cstring_view name) -> void override
             {
                 object_debug_names[handle.handle] = string{name.data(), name.size()};
+            }
+
+            flat_unordered_map<uint64_t, mock_query_pool> query_pools{};
+            uint32_t query_pools_created{0};
+            uint32_t query_pools_destroyed{0};
+
+            [[nodiscard]] auto create_query_pool(const rhi::query_pool_desc& pool_desc)
+                -> rhi::query_pool_handle override
+            {
+                query_pools_created++;
+                const auto h = next_h++;
+                auto pool = mock_query_pool{
+                    .type = pool_desc.type,
+                    .query_count = pool_desc.query_count,
+                    .pipeline_statistics = pool_desc.pipeline_statistics,
+                    .results = vector<uint64_t>(pool_desc.query_count * 16, 1000ULL),
+                };
+                query_pools[h] = tempest::move(pool);
+                return rhi::query_pool_handle{.handle = h};
+            }
+
+            auto destroy_query_pool(rhi::query_pool_handle pool) -> void override
+            {
+                if (pool.handle != 0)
+                {
+                    query_pools_destroyed++;
+                    query_pools.erase(pool.handle);
+                }
+            }
+
+            [[nodiscard]] auto get_query_pool_results(rhi::query_pool_handle pool, uint32_t first_query,
+                                                      [[maybe_unused]] uint32_t query_count, span<uint64_t> results,
+                                                      [[maybe_unused]] bool wait) -> bool override
+            {
+                auto it = query_pools.find(pool.handle);
+                if (it == query_pools.end())
+                {
+                    return false;
+                }
+                for (size_t i = 0; i < results.size(); ++i)
+                {
+                    if (first_query + i < it->second.results.size())
+                    {
+                        results[i] = it->second.results[first_query + i];
+                    }
+                }
+                return true;
+            }
+
+            [[nodiscard]] auto get_timestamp_period_ns() const noexcept -> float override
+            {
+                return 1.0F;
+            }
+
+            [[nodiscard]] auto convert_gpu_timestamp_to_cpu_ns(uint64_t gpu_timestamp_ticks) const noexcept
+                -> uint64_t override
+            {
+                return gpu_timestamp_ticks;
             }
         };
     } // namespace
@@ -765,5 +878,275 @@ namespace tempest::render_graph
         // Check dynamic resource naming
         EXPECT_FALSE(dev.object_debug_names.empty());
 #endif
+    }
+
+    // =========================================================================
+    // Automated Pass Profiling & Pipeline Statistics Tests
+    // =========================================================================
+
+    /// @brief Verify automated start/end timestamp insertion across all compiled DAG passes.
+    TEST(executor_test, automated_start_end_timestamp_insertion_across_all_passes)
+    {
+        // 1. Setup device and render graph with multiple passes
+        auto dev = mock_device_with_ports{};
+        auto rg = render_graph{1920, 1080};
+
+        struct pass_data
+        {
+            rg_texture_id tex;
+        };
+
+        rg.add_graphics_pass<pass_data>(
+            "PassA",
+            [](pass_builder& builder, pass_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{.name = "TexA"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+            },
+            [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
+
+        rg.add_graphics_pass<pass_data>(
+            "PassB",
+            [](pass_builder& builder, pass_data& data) {
+                data.tex = builder.read_write(rg_texture_id{.id = 0, .version = 1}, rhi::pipeline_stage::fragment,
+                                              rhi::resource_access::read_write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
+
+        // 2. Act: Execute frame
+        const auto exec_res = rg.execute(dev);
+        ASSERT_TRUE(exec_res.has_value());
+
+        // 3. Assert: Verify 4 timestamp writes (2 per pass) and query pool reset
+        const auto& cmd = dev.graphics_port.cmd;
+        EXPECT_EQ(cmd.written_timestamps.size(), 4U);
+        EXPECT_EQ(cmd.written_timestamps[0].stage, rhi::pipeline_stage::top_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[0].query_index, 0U);
+        EXPECT_EQ(cmd.written_timestamps[1].stage, rhi::pipeline_stage::bottom_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[1].query_index, 1U);
+
+        EXPECT_EQ(cmd.written_timestamps[2].stage, rhi::pipeline_stage::top_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[2].query_index, 2U);
+        EXPECT_EQ(cmd.written_timestamps[3].stage, rhi::pipeline_stage::bottom_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[3].query_index, 3U);
+
+        EXPECT_GE(cmd.reset_queries.size(), 1U);
+    }
+
+    /// @brief Verify cross-queue pass attribution to Graphics and Async Compute execution port tracks.
+    TEST(executor_test, cross_queue_pass_attribution_to_execution_port_tracks)
+    {
+        // 1. Setup profiler session and multi-queue render graph
+        auto dev = mock_device_with_ports{};
+        auto profiler = profiler::profiler_session{true};
+        auto rg = render_graph{1920, 1080};
+
+        struct async_data
+        {
+            rg_buffer_id buf;
+        };
+        rg.add_compute_pass<async_data>(
+            "AsyncComputePass",
+            [](pass_builder& builder, async_data& data) {
+                auto b = builder.create_buffer(rg_buffer_desc{.size = 256, .name = "BufCompute"});
+                data.buf = builder.write(b, rhi::pipeline_stage::compute, rhi::resource_access::write);
+                builder.set_execution_queue(queue_type::async_compute);
+            },
+            [](const async_data&, pass_execution_context&, rhi::command_list&) {});
+
+        struct gfx_data
+        {
+            rg_buffer_id buf;
+            rg_texture_id tex;
+        };
+        rg.add_graphics_pass<gfx_data>(
+            "GraphicsPass",
+            [](pass_builder& builder, gfx_data& data) {
+                data.buf = builder.read(rg_buffer_id{.id = 0, .version = 1}, rhi::pipeline_stage::vertex,
+                                        rhi::resource_access::read);
+                auto t = builder.create_texture(rg_texture_desc{.name = "TexGfx"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [](const gfx_data&, pass_execution_context&, rhi::command_list&) {});
+
+        auto sync_opts = frame_sync_options{
+            .flight_slot_index = 0,
+            .frames_in_flight = 2,
+            .profiler = &profiler,
+        };
+
+        // 2. Act: Record frame 0
+        const auto exec_res0 = rg.execute(dev, sync_opts);
+        ASSERT_TRUE(exec_res0.has_value());
+
+        // Execute frame 1 on same slot to trigger readback of frame 0
+        const auto exec_res1 = rg.execute(dev, sync_opts);
+        ASSERT_TRUE(exec_res1.has_value());
+
+        // 3. Assert: Drain profiler chunks and verify track IDs
+        auto chunks = profiler.drain_completed_chunks();
+        ASSERT_GE(chunks.size(), 2U);
+
+        auto has_compute_track = false;
+        auto has_graphics_track = false;
+        const auto compute_track_id = get_queue_track_id(queue_type::async_compute);
+        const auto graphics_track_id = get_queue_track_id(queue_type::graphics);
+
+        for (const auto& chunk : chunks)
+        {
+            if (chunk->get_thread_id() == compute_track_id)
+            {
+                has_compute_track = true;
+                ASSERT_FALSE(chunk->zones().empty());
+                EXPECT_EQ(chunk->zones()[0].name, "AsyncComputePass");
+            }
+            else if (chunk->get_thread_id() == graphics_track_id)
+            {
+                has_graphics_track = true;
+                ASSERT_FALSE(chunk->zones().empty());
+                EXPECT_EQ(chunk->zones()[0].name, "GraphicsPass");
+            }
+        }
+
+        EXPECT_TRUE(has_compute_track);
+        EXPECT_TRUE(has_graphics_track);
+    }
+
+    /// @brief Verify selective pipeline statistics query capture on opted-in passes.
+    TEST(executor_test, selective_pipeline_statistics_query_capture_on_opted_in_passes)
+    {
+        // 1. Setup device, profiler, and passes with and without pipeline stats
+        auto dev = mock_device_with_ports{};
+        auto profiler = profiler::profiler_session{true};
+        auto rg = render_graph{1920, 1080};
+
+        struct pass_data
+        {
+            rg_texture_id tex;
+        };
+
+        rg.add_graphics_pass<pass_data>(
+            "GeometryPass",
+            [](pass_builder& builder, pass_data& data) {
+                auto t = builder.create_texture(rg_texture_desc{.name = "TexGeo"});
+                data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                         rhi::image_layout::general);
+                builder.enable_pipeline_statistics(rhi::pipeline_statistic_flags::input_assembly_vertices |
+                                                   rhi::pipeline_statistic_flags::fragment_shader_invocations);
+            },
+            [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
+
+        rg.add_graphics_pass<pass_data>(
+            "PostProcessPass",
+            [](pass_builder& builder, pass_data& data) {
+                data.tex = builder.read_write(rg_texture_id{.id = 0, .version = 1}, rhi::pipeline_stage::fragment,
+                                              rhi::resource_access::read_write, rhi::image_layout::general);
+                builder.mark_sink();
+            },
+            [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
+
+        auto sync_opts = frame_sync_options{
+            .flight_slot_index = 0,
+            .frames_in_flight = 2,
+            .profiler = &profiler,
+        };
+
+        // 2. Act: Record frame 0
+        const auto exec_res0 = rg.execute(dev, sync_opts);
+        ASSERT_TRUE(exec_res0.has_value());
+
+        // Verify command list recorded begin_query/end_query for GeometryPass but not PostProcessPass
+        const auto& cmd = dev.graphics_port.cmd;
+        EXPECT_EQ(cmd.begun_queries.size(), 1U);
+        EXPECT_EQ(cmd.ended_queries.size(), 1U);
+
+        // Mock query results for stats pool
+        for (auto& [h, pool] : dev.query_pools)
+        {
+            if (pool.type == rhi::query_type::pipeline_statistics)
+            {
+                pool.results[0] = 12345; // ia_vertices
+                pool.results[1] = 67890; // fs_invocations
+            }
+        }
+
+        // Execute next frame to trigger readback
+        const auto exec_res1 = rg.execute(dev, sync_opts);
+        ASSERT_TRUE(exec_res1.has_value());
+
+        // 3. Assert: Verify metrics attached to GeometryPass zone record
+        auto chunks = profiler.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto found_metrics = false;
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& zone : chunk->zones())
+            {
+                if (zone.name == "GeometryPass")
+                {
+                    ASSERT_EQ(zone.metrics.size(), 2U);
+                    EXPECT_EQ(zone.metrics[0].name, "ia_vertices");
+                    EXPECT_DOUBLE_EQ(zone.metrics[0].value, 12345.0);
+                    EXPECT_EQ(zone.metrics[1].name, "fs_invocations");
+                    EXPECT_DOUBLE_EQ(zone.metrics[1].value, 67890.0);
+                    found_metrics = true;
+                }
+                else if (zone.name == "PostProcessPass")
+                {
+                    EXPECT_TRUE(zone.metrics.empty());
+                }
+            }
+        }
+        EXPECT_TRUE(found_metrics);
+    }
+
+    /// @brief Verify multi-frame flight slot query ring recycling across 10+ frames without leaks or stalls.
+    TEST(executor_test, multi_frame_flight_slot_query_ring_recycling)
+    {
+        // 1. Setup device and executor
+        auto dev = mock_device_with_ports{};
+        auto executor = render_graph_executor{};
+        constexpr auto frames_in_flight = 3U;
+        constexpr auto num_frames = 15U;
+
+        struct pass_data
+        {
+            rg_texture_id tex;
+        };
+
+        // 2. Act: Loop over 15 frames cycling through 3 flight slots
+        for (uint32_t frame = 0; frame < num_frames; ++frame)
+        {
+            auto rg = render_graph{1920, 1080};
+            rg.add_graphics_pass<pass_data>(
+                "RenderPass",
+                [](pass_builder& builder, pass_data& data) {
+                    auto t = builder.create_texture(rg_texture_desc{.name = "Target"});
+                    data.tex = builder.write(t, rhi::pipeline_stage::attachment_output, rhi::resource_access::write,
+                                             rhi::image_layout::general);
+                    builder.enable_pipeline_statistics(rhi::pipeline_statistic_flags::input_assembly_vertices);
+                    builder.mark_sink();
+                },
+                [](const pass_data&, pass_execution_context&, rhi::command_list&) {});
+
+            const auto slot = frame % frames_in_flight;
+            auto sync_opts = frame_sync_options{
+                .flight_slot_index = slot,
+                .frames_in_flight = frames_in_flight,
+            };
+
+            const auto exec_res = executor.execute(dev, rg, sync_opts);
+            ASSERT_TRUE(exec_res.has_value());
+        }
+
+        // 3. Assert: Query pools are stable and reused across slots without unbounded allocations
+        EXPECT_LE(dev.query_pools_created, frames_in_flight * 2);
+
+        executor.release(dev);
+        EXPECT_EQ(dev.query_pools.size(), 0U);
     }
 } // namespace tempest::render_graph

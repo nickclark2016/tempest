@@ -21,6 +21,8 @@
 #include <tempest/vector.hpp>
 #include <tempest/window_handle.hpp>
 
+#include <tempest/profiler/profiler.hpp>
+
 namespace tempest::render_system
 {
     struct TEMPEST_API renderer_config
@@ -44,6 +46,7 @@ namespace tempest::render_system
         const core::texture_registry* textures{nullptr};
         const core::material_registry* materials{nullptr};
         non_null<assets::asset_database> asset_db;
+        profiler::profiler_session* profiler{nullptr};
     };
 
     class TEMPEST_API renderer

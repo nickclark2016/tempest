@@ -1065,7 +1065,21 @@ namespace tempest::rhi::vk
         const auto qp_opt = _parent_device->get_query_pool(pool);
         if (qp_opt.has_value() && qp_opt->handle != VK_NULL_HANDLE)
         {
-            _dispatch_table->cmdResetQueryPool(_command_buffer, qp_opt->handle, first_query, query_count);
+            if (_queue_type == vkb::QueueType::transfer)
+            {
+                if (_dispatch_table->fp_vkResetQueryPool != nullptr)
+                {
+                    _dispatch_table->resetQueryPool(qp_opt->handle, first_query, query_count);
+                }
+                else if (_dispatch_table->fp_vkResetQueryPoolEXT != nullptr)
+                {
+                    _dispatch_table->resetQueryPoolEXT(qp_opt->handle, first_query, query_count);
+                }
+            }
+            else
+            {
+                _dispatch_table->cmdResetQueryPool(_command_buffer, qp_opt->handle, first_query, query_count);
+            }
         }
     }
 

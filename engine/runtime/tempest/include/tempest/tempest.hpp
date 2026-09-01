@@ -9,6 +9,7 @@
 #include <tempest/functional.hpp>
 #include <tempest/input.hpp>
 #include <tempest/logger.hpp>
+#include <tempest/profiler/profiler.hpp>
 #include <tempest/render_system/renderer.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/vector.hpp>
@@ -96,6 +97,9 @@ namespace tempest
 
         [[nodiscard]] virtual auto get_logger() -> logger& = 0;
         [[nodiscard]] virtual auto get_logger() const -> const logger& = 0;
+
+        [[nodiscard]] virtual auto get_profiler_session() -> profiler::profiler_session& = 0;
+        [[nodiscard]] virtual auto get_profiler_session() const -> const profiler::profiler_session& = 0;
     };
 
     class TEMPEST_API standalone_engine_context : public engine_context
@@ -163,9 +167,20 @@ namespace tempest
             return _logger;
         }
 
+        [[nodiscard]] auto get_profiler_session() -> profiler::profiler_session& override
+        {
+            return _profiler_session;
+        }
+
+        [[nodiscard]] auto get_profiler_session() const -> const profiler::profiler_session& override
+        {
+            return _profiler_session;
+        }
+
       protected:
         vector<unique_ptr<log_sink>> _log_sinks;
         logger _logger;
+        profiler::profiler_session _profiler_session{};
 
         event::event_registry _event_registry;
         ecs::archetype_registry _entity_registry;

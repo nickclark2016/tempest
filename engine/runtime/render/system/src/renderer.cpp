@@ -645,6 +645,7 @@ namespace tempest::render_system
 
     void renderer::begin_frame(window_handle win)
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::begin_frame"};
         const auto slot_idx = get_current_flight_slot();
         if (_device && !_flight_slots.empty())
         {
@@ -750,6 +751,7 @@ namespace tempest::render_system
                                  optional<rhi::texture_view_handle> swapchain_view,
                                  optional<render_camera> camera_override, ui_render_callback ui_callback)
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::prepare_frame"};
         if (!_frame_begun)
         {
             begin_frame(_active_surface_window);
@@ -1183,6 +1185,7 @@ namespace tempest::render_system
 
     auto renderer::render(const render_graph::frame_sync_options& sync) -> expected<void, render_graph::execution_error>
     {
+        auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render"};
         if (!_device)
         {
             return unexpected(render_graph::execution_error::compile_failed);
@@ -1190,6 +1193,12 @@ namespace tempest::render_system
 
         const auto slot_idx = get_current_flight_slot();
         auto effective_sync = sync;
+        effective_sync.flight_slot_index = slot_idx;
+        effective_sync.frames_in_flight = _frames_in_flight;
+        if (effective_sync.profiler == nullptr)
+        {
+            effective_sync.profiler = _inputs.profiler;
+        }
 
         if (_active_surface_window.is_valid())
         {
@@ -1232,6 +1241,7 @@ namespace tempest::render_system
 
     auto renderer::present(window_handle win) -> expected<void, rhi::swapchain_error>
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::present"};
         if (!_device)
         {
             return {};
@@ -1273,6 +1283,7 @@ namespace tempest::render_system
     auto renderer::render_frame(window_handle win, optional<render_camera> camera_override,
                                 ui_render_callback ui_callback) -> expected<void, render_graph::execution_error>
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render_frame"};
         auto target_win = win.is_valid() ? win : _active_surface_window;
         if (!target_win.is_valid() && !_surfaces.empty())
         {

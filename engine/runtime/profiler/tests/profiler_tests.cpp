@@ -16,15 +16,15 @@ TEST(profiler_tests, nested_zone_hierarchies)
 
     // 2. Act: Record nested scopes
     {
-        auto root_zone = tempest::profiler::scoped_zone{session, "RootZone"};
+        [[maybe_unused]] const auto root_zone = tempest::profiler::scoped_zone{session, "RootZone"};
         {
-            auto child1_zone = tempest::profiler::scoped_zone{session, "ChildZone1"};
+            [[maybe_unused]] const auto child1_zone = tempest::profiler::scoped_zone{session, "ChildZone1"};
             {
-                auto grandchild_zone = tempest::profiler::scoped_zone{session, "GrandchildZone"};
+                [[maybe_unused]] const auto grandchild_zone = tempest::profiler::scoped_zone{session, "GrandchildZone"};
             }
         }
         {
-            auto child2_zone = tempest::profiler::scoped_zone{session, "ChildZone2"};
+            [[maybe_unused]] const auto child2_zone = tempest::profiler::scoped_zone{session, "ChildZone2"};
         }
     }
 
@@ -85,7 +85,7 @@ TEST(profiler_tests, concurrent_multithreaded_recording)
         threads.push_back(tempest::thread([&session]() {
             for (auto j = size_t{0}; j < zones_per_thread; ++j)
             {
-                auto zone = tempest::profiler::scoped_zone{session, "ConcurrentZone"};
+                [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "ConcurrentZone"};
             }
         }));
     }
@@ -118,11 +118,11 @@ TEST(profiler_tests, session_instance_isolation)
 
     // 2. Act: Record events into session A and session B independently
     {
-        auto zone_a = tempest::profiler::scoped_zone{session_a, "SessionA_Zone"};
+        [[maybe_unused]] const auto zone_a = tempest::profiler::scoped_zone{session_a, "SessionA_Zone"};
     }
     {
-        auto zone_b1 = tempest::profiler::scoped_zone{session_b, "SessionB_Zone1"};
-        auto zone_b2 = tempest::profiler::scoped_zone{session_b, "SessionB_Zone2"};
+        [[maybe_unused]] const auto zone_b1 = tempest::profiler::scoped_zone{session_b, "SessionB_Zone1"};
+        [[maybe_unused]] const auto zone_b2 = tempest::profiler::scoped_zone{session_b, "SessionB_Zone2"};
     }
 
     // 3. Assert: Drain chunks and verify strict separation
@@ -166,7 +166,7 @@ TEST(profiler_tests, implicit_thread_registration_and_naming)
     // 2. Act: Spawn a thread, set thread name, and record a zone
     auto worker = tempest::thread([&session]() {
         session.set_thread_name("WorkerThread-Alpha");
-        auto zone = tempest::profiler::scoped_zone{session, "WorkerTask"};
+        [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "WorkerTask"};
     });
     worker.join();
 
@@ -247,7 +247,7 @@ TEST(profiler_tests, chunk_arena_pool_recycling)
     constexpr auto event_count = size_t{2000};
     for (auto i = size_t{0}; i < event_count; ++i)
     {
-        auto zone = tempest::profiler::scoped_zone{session, "BulkZone"};
+        [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "BulkZone"};
     }
 
     // Drain chunks and assert multiple chunks were filled
@@ -269,7 +269,7 @@ TEST(profiler_tests, chunk_arena_pool_recycling)
     // Record another batch and verify recycled chunks are reused from pool
     for (auto i = size_t{0}; i < event_count; ++i)
     {
-        auto zone = tempest::profiler::scoped_zone{session, "BulkZoneReused"};
+        [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "BulkZoneReused"};
     }
 
     auto second_chunks = session.drain_completed_chunks();

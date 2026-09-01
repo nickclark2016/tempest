@@ -147,6 +147,7 @@ namespace tempest::editor
 
     auto editor_engine_context::_render_editor_frame() -> void
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "editor::render_frame"};
         if (!_renderer || _windows.empty())
         {
             return;
@@ -155,9 +156,12 @@ namespace tempest::editor
         auto& win = _windows.front();
 
         // 1. Run paint callbacks (evaluates ImGui layout, viewport size, mouse/keyboard navigation, camera updates)
-        for (auto&& on_paint : _editor_callbacks.on_paint)
         {
-            on_paint(*this);
+            [[maybe_unused]] const auto paint_zone = profiler::scoped_zone{_profiler_session, "editor::on_paint"};
+            for (auto&& on_paint : _editor_callbacks.on_paint)
+            {
+                on_paint(*this);
+            }
         }
 
         auto camera_override =

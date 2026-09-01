@@ -87,6 +87,7 @@ namespace tempest::profiler
         profiler_session& operator=(profiler_session&&) noexcept = delete;
 
         [[nodiscard]] auto get_or_register_thread() -> thread_profiler_context&;
+        auto register_track(uint64_t track_id, string_view track_name) -> thread_profiler_context&;
         auto set_thread_name(string_view name) -> void;
 
         [[nodiscard]] auto is_enabled() const noexcept -> bool;
