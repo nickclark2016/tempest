@@ -364,7 +364,13 @@ namespace tempest::profiler
             cursor += 4;
         }
 
-        if (data.size() < cursor + payload_len)
+        constexpr auto max_ws_payload_bytes = uint64_t{64 * 1024 * 1024}; // 64 MB
+        if (payload_len > max_ws_payload_bytes)
+        {
+            return unexpected(ws_error::payload_too_large);
+        }
+
+        if (data.size() < cursor || (data.size() - cursor) < payload_len)
         {
             return unexpected(ws_error::incomplete_frame);
         }

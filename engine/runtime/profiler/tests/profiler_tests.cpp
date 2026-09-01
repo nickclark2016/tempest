@@ -993,7 +993,8 @@ TEST(profiler_tests, socket_lifecycle_and_port_auto_increment)
     ASSERT_EQ(server2.get_bound_port(), 0u);
 }
 
-/// @brief Verify HTTP GET / returns 200 OK with text/html content-type and valid payload.
+/// @brief Verify HTTP GET request handling for all embedded single-page app web assets and endpoints with appropriate
+/// MIME types.
 TEST(profiler_tests, http_get_request_handling)
 {
     // 1. Setup: Start web server on dynamic port
@@ -1004,7 +1005,7 @@ TEST(profiler_tests, http_get_request_handling)
     ASSERT_TRUE(server.is_running());
     const auto port = server.get_bound_port();
 
-    // 2. Act & Assert: HTTP GET /
+    // 2. Act & Assert: HTTP GET / (index.html)
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1012,11 +1013,52 @@ TEST(profiler_tests, http_get_request_handling)
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
         ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/html"), std::string::npos);
+        ASSERT_NE(response.find("Content-Type: text/html; charset=utf-8"), std::string::npos);
+        ASSERT_NE(response.find("<!DOCTYPE html>"), std::string::npos);
         ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
+        ASSERT_NE(response.find("id=\"timeline-canvas\""), std::string::npos);
     }
 
-    // 3. Act & Assert: HTTP GET /status
+    // 3. Act & Assert: HTTP GET /index.html
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        ASSERT_TRUE(client.send_string("GET /index.html HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
+        const auto response = client.receive_all(1000);
+        ASSERT_FALSE(response.empty());
+        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
+        ASSERT_NE(response.find("Content-Type: text/html; charset=utf-8"), std::string::npos);
+        ASSERT_NE(response.find("<!DOCTYPE html>"), std::string::npos);
+    }
+
+    // 4. Act & Assert: HTTP GET /app.js
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        ASSERT_TRUE(client.send_string("GET /app.js HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
+        const auto response = client.receive_all(1500);
+        ASSERT_FALSE(response.empty());
+        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
+        ASSERT_NE(response.find("Content-Type: application/javascript; charset=utf-8"), std::string::npos);
+        ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
+        ASSERT_NE(response.find("initWebSocket"), std::string::npos);
+        ASSERT_NE(response.find("renderTimeline"), std::string::npos);
+    }
+
+    // 5. Act & Assert: HTTP GET /styles.css
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        ASSERT_TRUE(client.send_string("GET /styles.css HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
+        const auto response = client.receive_all(1000);
+        ASSERT_FALSE(response.empty());
+        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
+        ASSERT_NE(response.find("Content-Type: text/css; charset=utf-8"), std::string::npos);
+        ASSERT_NE(response.find("--accent-purple"), std::string::npos);
+        ASSERT_NE(response.find(".timeline-section"), std::string::npos);
+    }
+
+    // 6. Act & Assert: HTTP GET /status
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1024,10 +1066,11 @@ TEST(profiler_tests, http_get_request_handling)
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
         ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
+        ASSERT_NE(response.find("Content-Type: application/json; charset=utf-8"), std::string::npos);
         ASSERT_NE(response.find("\"status\":\"ok\""), std::string::npos);
     }
 
-    // 4. Act & Assert: HTTP GET /unknown_path (404)
+    // 7. Act & Assert: HTTP GET /unknown_path (404)
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
@@ -1035,6 +1078,7 @@ TEST(profiler_tests, http_get_request_handling)
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
         ASSERT_NE(response.find("HTTP/1.1 404 Not Found"), std::string::npos);
+        ASSERT_NE(response.find("Content-Type: text/plain; charset=utf-8"), std::string::npos);
     }
 
     server.stop();
@@ -1282,6 +1326,147 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
         ASSERT_TRUE(client.send_all(close_frame.data(), close_frame.size()));
         client.close_sock();
     }
+
+    server.stop();
+}
+
+/// @brief Verify WebSocket frame decoder rejects malicious allocation bombs and integer overflows.
+TEST(profiler_tests, websocket_frame_overflow_and_allocation_dos_protection)
+{
+    // 1. Setup: Construct an oversized/overflow payload frame header (length = 0xFFFFFFFF)
+    auto malicious_frame = tempest::vector<tempest::byte>{};
+    malicious_frame.push_back(static_cast<tempest::byte>(0x81)); // FIN | text
+    malicious_frame.push_back(static_cast<tempest::byte>(127));  // 64-bit extended length
+    // 8 bytes of length = 0xFFFFFFFFFFFFFFFF (overflow)
+    for (auto i = 0; i < 8; ++i)
+    {
+        malicious_frame.push_back(static_cast<tempest::byte>(0xFF));
+    }
+
+    // 2. Act: Decode frame
+    const auto result = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{malicious_frame.data(), malicious_frame.size()});
+
+    // 3. Assert: Must return payload_too_large or incomplete_frame without throwing bad_alloc or crashing
+    ASSERT_FALSE(result.has_value());
+    EXPECT_TRUE(result.error() == tempest::profiler::ws_error::payload_too_large ||
+                result.error() == tempest::profiler::ws_error::incomplete_frame);
+}
+
+/// @brief Verify HTTP GET requests with query strings cleanly serve assets.
+TEST(profiler_tests, http_request_query_string_stripping)
+{
+    // 1. Setup: Start web server
+    auto session = tempest::profiler::profiler_session{false};
+    auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8086, .max_port_attempts = 10};
+    auto server = tempest::profiler::web_server{session, config};
+    server.start();
+    ASSERT_TRUE(server.is_running());
+    const auto port = server.get_bound_port();
+
+    // 2. Act & Assert: Request /index.html?token=test1234
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        const auto req = "GET /index.html?token=test1234&v=1.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        ASSERT_TRUE(client.send_string(req));
+        const auto resp = client.receive_all(500);
+        EXPECT_NE(resp.find("HTTP/1.1 200 OK"), std::string::npos);
+        EXPECT_NE(resp.find("Content-Type: text/html"), std::string::npos);
+        EXPECT_NE(resp.find("Tempest Engine Profiler"), std::string::npos);
+    }
+
+    // 3. Act & Assert: Request /?v=1
+    {
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+        const auto req = "GET /?v=1 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        ASSERT_TRUE(client.send_string(req));
+        const auto resp = client.receive_all(500);
+        EXPECT_NE(resp.find("HTTP/1.1 200 OK"), std::string::npos);
+        EXPECT_NE(resp.find("Content-Type: text/html"), std::string::npos);
+    }
+
+    server.stop();
+}
+
+/// @brief Verify multiple concurrent WebSocket clients receive broadcast telemetry simultaneously without race or
+/// deadlock.
+TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
+{
+    // 1. Setup: Start web server
+    auto session = tempest::profiler::profiler_session{true};
+    auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8088, .max_port_attempts = 10};
+    auto server = tempest::profiler::web_server{session, config};
+    server.start();
+    ASSERT_TRUE(server.is_running());
+    const auto port = server.get_bound_port();
+
+    // 2. Act: Connect 3 concurrent WebSocket clients
+    auto client1 = test_tcp_client{};
+    auto client2 = test_tcp_client{};
+    auto client3 = test_tcp_client{};
+
+    ASSERT_TRUE(client1.connect_to("127.0.0.1", port));
+    ASSERT_TRUE(client2.connect_to("127.0.0.1", port));
+    ASSERT_TRUE(client3.connect_to("127.0.0.1", port));
+
+    const auto ws_req = "GET /ws HTTP/1.1\r\n"
+                        "Host: 127.0.0.1\r\n"
+                        "Upgrade: websocket\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                        "Sec-WebSocket-Version: 13\r\n\r\n";
+
+    ASSERT_TRUE(client1.send_string(ws_req));
+    ASSERT_TRUE(client2.send_string(ws_req));
+    ASSERT_TRUE(client3.send_string(ws_req));
+
+    const auto resp1 = client1.receive_all(500);
+    const auto resp2 = client2.receive_all(500);
+    const auto resp3 = client3.receive_all(500);
+
+    ASSERT_NE(resp1.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_NE(resp2.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_NE(resp3.find("HTTP/1.1 101"), std::string::npos);
+
+    tempest::this_thread::yield();
+    EXPECT_EQ(server.connected_client_count(), 3u);
+
+    // 3. Act: Broadcast telemetry frame to all 3 clients
+    auto t_frame = tempest::profiler::telemetry_frame{};
+    t_frame.frame_index = 100;
+    server.broadcast_telemetry(t_frame);
+
+    // 4. Assert: All 3 clients receive the broadcast frame
+    const auto r1 = client1.receive_all(500);
+    const auto r2 = client2.receive_all(500);
+    const auto r3 = client3.receive_all(500);
+
+    ASSERT_FALSE(r1.empty());
+    ASSERT_FALSE(r2.empty());
+    ASSERT_FALSE(r3.empty());
+
+    auto d1 = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(r1.data()), r1.size()});
+    auto d2 = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(r2.data()), r2.size()});
+    auto d3 = tempest::profiler::decode_websocket_frame(
+        tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(r3.data()), r3.size()});
+
+    ASSERT_TRUE(d1.has_value());
+    ASSERT_TRUE(d2.has_value());
+    ASSERT_TRUE(d3.has_value());
+
+    EXPECT_NE(
+        std::string(reinterpret_cast<const char*>(d1->payload.data()), d1->payload.size()).find("\"frame_index\":100"),
+        std::string::npos);
+    EXPECT_NE(
+        std::string(reinterpret_cast<const char*>(d2->payload.data()), d2->payload.size()).find("\"frame_index\":100"),
+        std::string::npos);
+    EXPECT_NE(
+        std::string(reinterpret_cast<const char*>(d3->payload.data()), d3->payload.size()).find("\"frame_index\":100"),
+        std::string::npos);
 
     server.stop();
 }

@@ -1,3 +1,4 @@
+#include "web_assets.hpp"
 #include <tempest/algorithm.hpp>
 #include <tempest/profiler/capture.hpp>
 #include <tempest/profiler/serialization.hpp>
@@ -71,65 +72,6 @@ namespace tempest::profiler
             close(s);
         }
 #endif
-
-        constexpr const char* s_embedded_html = R"html(<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Tempest Engine Profiler</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; background: #121214; color: #e1e1e6; margin: 0; padding: 24px; }
-    h1 { color: #8257e6; margin-bottom: 8px; }
-    .status { display: inline-block; padding: 4px 8px; border-radius: 4px; background: #04d361; color: #121214; font-weight: bold; }
-    .card { background: #202024; border-radius: 8px; padding: 16px; margin-top: 16px; border: 1px solid #323238; }
-    button { background: #8257e6; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-weight: bold; }
-    button:hover { background: #9466ff; }
-    pre { background: #121214; padding: 12px; border-radius: 4px; overflow-x: auto; max-height: 400px; }
-  </style>
-</head>
-<body>
-  <h1>Tempest Engine Profiler</h1>
-  <div class="status" id="ws-status">Connecting...</div>
-  <div class="card">
-    <h3>Live Telemetry & Controls</h3>
-    <button onclick="sendCommand('start_capture')">Start Capture</button>
-    <button onclick="sendCommand('stop_capture')">Stop Capture</button>
-    <button onclick="sendCommand('query_stats')">Query Stats</button>
-    <button onclick="sendCommand('get_snapshot')">Get Snapshot</button>
-  </div>
-  <div class="card">
-    <h3>Live Output</h3>
-    <pre id="output">Listening for live telemetry frames...</pre>
-  </div>
-  <script>
-    const loc = window.location;
-    const wsUri = (loc.protocol === "https:" ? "wss://" : "ws://") + loc.host + "/ws";
-    const ws = new WebSocket(wsUri);
-    const statusEl = document.getElementById("ws-status");
-    const outEl = document.getElementById("output");
-    ws.onopen = () => { statusEl.innerText = "Connected"; statusEl.style.background = "#04d361"; };
-    ws.onclose = () => { statusEl.innerText = "Disconnected"; statusEl.style.background = "#e54545"; };
-    ws.onerror = (e) => { statusEl.innerText = "Error"; statusEl.style.background = "#e54545"; };
-    ws.onmessage = (e) => {
-      if (typeof e.data === "string") {
-        try {
-          const parsed = JSON.parse(e.data);
-          outEl.innerText = JSON.stringify(parsed, null, 2);
-        } catch {
-          outEl.innerText = e.data;
-        }
-      } else {
-        outEl.innerText = `[Binary Frame: ${e.data.byteLength} bytes]`;
-      }
-    };
-    function sendCommand(cmd) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ command: cmd }));
-      }
-    }
-  </script>
-</body>
-</html>)html";
 
         auto find_sub(string_view sv, string_view target, size_t pos = 0) -> size_t
         {
@@ -253,11 +195,15 @@ namespace tempest::profiler
                 return "/";
             }
             const auto second_space = find_char(header_str, ' ', first_space + 1);
-            if (second_space == static_cast<size_t>(-1))
+            auto path = (second_space == static_cast<size_t>(-1))
+                            ? sub_view(header_str, first_space + 1)
+                            : sub_view(header_str, first_space + 1, second_space - first_space - 1);
+            const auto question_mark = find_char(path, '?');
+            if (question_mark != static_cast<size_t>(-1))
             {
-                return sub_view(header_str, first_space + 1);
+                path = sub_view(path, 0, question_mark);
             }
-            return sub_view(header_str, first_space + 1, second_space - first_space - 1);
+            return path;
         }
     } // namespace
 
@@ -595,15 +541,39 @@ namespace tempest::profiler
 
         if (path == "/" || path == "/index.html")
         {
-            const auto html_len = std::strlen(s_embedded_html);
+            const auto content = get_embedded_index_html();
             std::format_to(std::back_inserter(response),
                            "HTTP/1.1 200 OK\r\n"
                            "Content-Type: text/html; charset=utf-8\r\n"
                            "Content-Length: {}\r\n"
                            "Connection: close\r\n"
-                           "\r\n"
-                           "{}",
-                           html_len, s_embedded_html);
+                           "\r\n",
+                           content.size());
+            response.append(content.data(), content.size());
+        }
+        else if (path == "/app.js")
+        {
+            const auto content = get_embedded_app_js();
+            std::format_to(std::back_inserter(response),
+                           "HTTP/1.1 200 OK\r\n"
+                           "Content-Type: application/javascript; charset=utf-8\r\n"
+                           "Content-Length: {}\r\n"
+                           "Connection: close\r\n"
+                           "\r\n",
+                           content.size());
+            response.append(content.data(), content.size());
+        }
+        else if (path == "/styles.css")
+        {
+            const auto content = get_embedded_styles_css();
+            std::format_to(std::back_inserter(response),
+                           "HTTP/1.1 200 OK\r\n"
+                           "Content-Type: text/css; charset=utf-8\r\n"
+                           "Content-Length: {}\r\n"
+                           "Connection: close\r\n"
+                           "\r\n",
+                           content.size());
+            response.append(content.data(), content.size());
         }
         else if (path == "/status" || path == "/health")
         {

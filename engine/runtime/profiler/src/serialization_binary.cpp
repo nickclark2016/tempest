@@ -263,7 +263,9 @@ namespace tempest::profiler
             return unexpected(capture_error::unsupported_version);
         }
 
-        if (buffer.size() < sizeof(tprof_header) + header.compressed_size)
+        constexpr auto max_uncompressed_size = uint64_t{512 * 1024 * 1024}; // 512 MB
+        if (header.uncompressed_size > max_uncompressed_size ||
+            buffer.size() < sizeof(tprof_header) + header.compressed_size)
         {
             return unexpected(capture_error::corrupted_data);
         }

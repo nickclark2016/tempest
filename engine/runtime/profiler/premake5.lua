@@ -10,11 +10,28 @@ scoped.project('profiler', function()
         'include/**.hpp',
         'src/**.cpp',
         'src/**.hpp',
+        'web/**.html',
+        'web/**.css',
+        'web/**.js',
     }
 
     includedirs {
         'include',
     }
+
+    scoped.filter({ 'files:web/index.html' }, function()
+        buildmessage 'Embedding web assets from %{file.relpath}'
+        buildcommands {
+            'premake5 --file=%{!wks.basedir}/premake5.lua embed-web-assets',
+        }
+        buildoutputs {
+            '%{!wks.basedir}/engine/runtime/profiler/src/web_assets.cpp',
+        }
+        buildinputs {
+            'web/styles.css',
+            'web/app.js',
+        }
+    end)
 
     scoped.filter({
         'toolset:msc*'
