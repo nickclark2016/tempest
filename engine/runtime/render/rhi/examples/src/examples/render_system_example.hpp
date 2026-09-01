@@ -4,6 +4,8 @@
 #include "../example.hpp"
 
 #include <tempest/archetype.hpp>
+#include <tempest/asset_database.hpp>
+#include <tempest/asset_type_registry.hpp>
 #include <tempest/event_registry.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/material.hpp>
@@ -49,8 +51,8 @@ namespace tempest::rhi::examples
 
         [[nodiscard]] auto init(rhi::device& dev, rhi::render_surface_format surface_format) -> bool override;
         auto render(const frame_render_info& info) -> void override;
-        auto on_resize(rhi::device& dev, rhi::render_surface_format surface_format, uint32_t width,
-                       uint32_t height) -> void override;
+        auto on_resize(rhi::device& dev, rhi::render_surface_format surface_format, uint32_t width, uint32_t height)
+            -> void override;
         auto shutdown(rhi::device& dev) -> void override;
 
       private:
@@ -63,6 +65,8 @@ namespace tempest::rhi::examples
         core::mesh_registry _meshes{};
         core::material_registry _materials{};
         core::texture_registry _textures{};
+        assets::asset_type_registry _asset_types{};
+        assets::asset_database _asset_db{&_asset_types};
 
         unique_ptr<render_system::renderer> _renderer;
         ecs::entity _camera_entity{ecs::tombstone};

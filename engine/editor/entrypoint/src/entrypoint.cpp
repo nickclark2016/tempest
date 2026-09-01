@@ -83,8 +83,9 @@ namespace
             auto const target_format =
                 render_surface ? rhi::to_data_format(render_surface->get_format()) : rhi::data_format::rgba8_unorm;
 
-            auto ui_ctx = editor::ui_context(tempest_engine.get_window_manager(), window_data.handle,
-                                             tempest_engine.get_device(), target_format, 3);
+            auto ui_ctx =
+                editor::ui_context(tempest_engine.get_window_manager(), window_data.handle, tempest_engine.get_device(),
+                                   tempest_engine.get_assets(), target_format, 3);
 
             auto ui_editor = editor::editor_context(tempest_engine, window_data.handle, ui_ctx);
 

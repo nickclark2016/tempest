@@ -100,14 +100,15 @@ namespace tempest::render_system
     } // namespace
     auto renderer::builder::build(rhi::device& dev, logger& log) -> unique_ptr<renderer>
     {
+        TEMPEST_ASSERT(_inputs.has_value());
         auto owned_camera_sys = unique_ptr<camera_system>{};
-        if (_inputs.camera_sys == nullptr && _inputs.entity_registry != nullptr)
+        if (_inputs->camera_sys == nullptr && _inputs->entity_registry != nullptr)
         {
-            owned_camera_sys = make_unique<camera_system>(*_inputs.entity_registry);
-            _inputs.camera_sys = owned_camera_sys.get();
+            owned_camera_sys = make_unique<camera_system>(*_inputs->entity_registry);
+            _inputs->camera_sys = owned_camera_sys.get();
         }
 
-        return make_unique<renderer>(dev, log, _cfg, _inputs, tempest::move(owned_camera_sys));
+        return make_unique<renderer>(dev, log, _cfg, *_inputs, tempest::move(owned_camera_sys));
     }
 
     renderer::renderer(rhi::device& dev, logger& log, renderer_config cfg, renderer_inputs inputs,
@@ -115,7 +116,8 @@ namespace tempest::render_system
         : _device{&dev}, _log{&log}, _cfg{cfg}, _inputs{inputs}, _owned_camera_system{tempest::move(camera_sys)},
           _camera_system{_inputs.camera_sys ? _inputs.camera_sys : _owned_camera_system.get()},
           _frames_in_flight{math::max(1U, cfg.pool_config.frames_in_flight)}, _pool{dev, cfg.pool_config},
-          _shaders{dev}, _graph{cfg.render_width, cfg.render_height}, _shadow_debug_mode{cfg.shadow_debug}
+          _shaders{dev, inputs.asset_db}, _graph{cfg.render_width, cfg.render_height},
+          _shadow_debug_mode{cfg.shadow_debug}
     {
         _flight_slots.resize(_frames_in_flight);
         for (auto& slot : _flight_slots)

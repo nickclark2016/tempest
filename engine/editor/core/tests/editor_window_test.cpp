@@ -2,6 +2,7 @@
 
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
+#include <tempest/default_importers.hpp>
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
 #include <tempest/math_utils.hpp>
@@ -27,6 +28,7 @@ namespace tempest::editor::tests
         {
             unique_ptr<rhi::context> context;
             unique_ptr<rhi::device> dev;
+            assets::asset_database asset_db{};
             window_manager win_mgr;
             window_handle win{null_window_handle};
         };
@@ -56,9 +58,14 @@ namespace tempest::editor::tests
                 return {};
             }
 
+            auto asset_db = assets::asset_database{};
+            assets::mount_default_shader_roots(asset_db);
+            asset_db.scan_and_index();
+
             auto env = test_env{
                 .context = tempest::move(context),
                 .dev = tempest::move(dev),
+                .asset_db = tempest::move(asset_db),
                 .win_mgr = window_manager{},
             };
 
@@ -136,7 +143,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(env.win.is_valid());
 
         {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             auto events = event::event_registry{};
@@ -200,7 +207,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(env.win.is_valid());
 
         {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             auto events = event::event_registry{};
@@ -260,7 +267,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(env.win.is_valid());
 
         {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             auto events = event::event_registry{};
@@ -331,7 +338,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(reg_info.handle.is_valid());
 
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
-                                 rhi::data_format::rgba8_unorm, 2);
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
         // 2. Initialize Editor Context
         auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
@@ -364,7 +371,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(reg_info.handle.is_valid());
 
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
-                                 rhi::data_format::rgba8_unorm, 2);
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
         auto ed_ctx = editor_context(engine_ctx, reg_info.handle, ui_ctx);
 
@@ -407,7 +414,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(reg_info.handle.is_valid());
 
         auto ui_ctx = ui_context(engine_ctx.get_window_manager(), reg_info.handle, engine_ctx.get_device(),
-                                 rhi::data_format::rgba8_unorm, 2);
+                                 engine_ctx.get_assets(), rhi::data_format::rgba8_unorm, 2);
 
         // 1. Create editor_context in scoped block
         {

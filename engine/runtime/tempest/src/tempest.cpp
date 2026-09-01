@@ -66,6 +66,8 @@ namespace tempest
 #endif
 
         assets::register_default_importers(_asset_database, &_mesh_reg, &_texture_reg, &_material_reg);
+        assets::mount_default_shader_roots(_asset_database);
+        _asset_database.scan_and_index();
 
         auto ctx_desc = rhi::context_desc{
             .application_name = "Tempest Engine",
@@ -100,6 +102,7 @@ namespace tempest
                 .meshes = &_mesh_reg,
                 .textures = &_texture_reg,
                 .materials = &_material_reg,
+                .asset_db = &_asset_database,
             });
             _renderer = builder.build(*_device, _logger);
         }

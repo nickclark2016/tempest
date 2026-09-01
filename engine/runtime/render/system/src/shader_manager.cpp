@@ -5,35 +5,13 @@
 
 namespace tempest::render_system
 {
-    shader_manager::shader_manager(rhi::device& dev, assets::asset_database* asset_db)
-        : _device{&dev}
+    shader_manager::shader_manager(rhi::device& dev, assets::asset_database& asset_db)
+        : _device{&dev}, _asset_db{&asset_db}
     {
-        if (asset_db != nullptr)
-        {
-            _asset_db = asset_db;
-        }
-        else
-        {
-            _owned_asset_db = make_unique<assets::asset_database>();
-            _owned_asset_db->mount_root(".", 0);
-            _owned_asset_db->mount_root("assets", 5);
-            _owned_asset_db->mount_root("assets/shaders", 5);
-            _owned_asset_db->mount_root("assets/shaders/engine", 10);
-            _owned_asset_db->mount_root("shaders", 5);
-            _owned_asset_db->mount_root("shaders/engine", 10);
-            _owned_asset_db->scan_and_index();
-            _asset_db = _owned_asset_db.get();
-        }
-
         // Reserve index 0 as invalid sentinel across slot arrays
         _modules.push_back(shader_module_record{});
         _graphics_pipelines.push_back(graphics_pipeline_record{});
         _compute_pipelines.push_back(compute_pipeline_record{});
-    }
-
-    shader_manager::shader_manager(rhi::device& dev, assets::asset_database& asset_db)
-        : shader_manager(dev, &asset_db)
-    {
     }
 
     shader_manager::~shader_manager()
@@ -42,9 +20,8 @@ namespace tempest::render_system
     }
 
     shader_manager::shader_manager(shader_manager&& other) noexcept
-        : _device{other._device}, _asset_db{other._asset_db},
-          _owned_asset_db{tempest::move(other._owned_asset_db)},
-          _modules{tempest::move(other._modules)}, _graphics_pipelines{tempest::move(other._graphics_pipelines)},
+        : _device{other._device}, _asset_db{other._asset_db}, _modules{tempest::move(other._modules)},
+          _graphics_pipelines{tempest::move(other._graphics_pipelines)},
           _compute_pipelines{tempest::move(other._compute_pipelines)},
           _module_paths_to_handle{tempest::move(other._module_paths_to_handle)},
           _named_graphics_pipelines{tempest::move(other._named_graphics_pipelines)},
@@ -53,10 +30,6 @@ namespace tempest::render_system
           _module_to_compute_pipelines{tempest::move(other._module_to_compute_pipelines)},
           _retired_pipelines{tempest::move(other._retired_pipelines)}
     {
-        if (_owned_asset_db)
-        {
-            _asset_db = _owned_asset_db.get();
-        }
         other._device = nullptr;
         other._asset_db = nullptr;
     }
@@ -67,8 +40,7 @@ namespace tempest::render_system
         {
             release_all();
             _device = other._device;
-            _owned_asset_db = tempest::move(other._owned_asset_db);
-            _asset_db = _owned_asset_db ? _owned_asset_db.get() : other._asset_db;
+            _asset_db = other._asset_db;
             _modules = tempest::move(other._modules);
             _graphics_pipelines = tempest::move(other._graphics_pipelines);
             _compute_pipelines = tempest::move(other._compute_pipelines);
@@ -595,7 +567,8 @@ namespace tempest::render_system
             {
                 auto mod_loc = mod.disk_location->generic_string();
                 auto resolved_src = _asset_db->resolve_source_path(string_view{mod_loc.c_str(), mod_loc.size()});
-                if (resolved_src.has_value() && (*resolved_src == path_str.c_str() || *resolved_src == filename.c_str()))
+                if (resolved_src.has_value() &&
+                    (*resolved_src == path_str.c_str() || *resolved_src == filename.c_str()))
                 {
                     match = true;
                 }

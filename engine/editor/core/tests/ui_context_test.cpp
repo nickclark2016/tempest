@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <tempest/default_importers.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
@@ -18,6 +19,7 @@ namespace tempest::editor::tests
         {
             unique_ptr<rhi::context> context;
             unique_ptr<rhi::device> dev;
+            assets::asset_database asset_db{};
             window_manager win_mgr;
             window_handle win{null_window_handle};
         };
@@ -47,9 +49,14 @@ namespace tempest::editor::tests
                 return {};
             }
 
+            auto asset_db = assets::asset_database{};
+            assets::mount_default_shader_roots(asset_db);
+            asset_db.scan_and_index();
+
             auto env = test_env{
                 .context = tempest::move(context),
                 .dev = tempest::move(dev),
+                .asset_db = tempest::move(asset_db),
                 .win_mgr = window_manager{},
             };
 
@@ -72,7 +79,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(env.win.is_valid());
 
         {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
         }
 
         env.win_mgr.destroy_window(env.win);
@@ -85,7 +92,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(env.win.is_valid());
 
         {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             ui_ctx.begin_ui_commands();
@@ -171,7 +178,7 @@ namespace tempest::editor::tests
         env.dev->write_sampled_image_descriptor(descriptor, view, rhi::image_layout::general);
 
         {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             ui_ctx.begin_ui_commands();
@@ -194,7 +201,7 @@ namespace tempest::editor::tests
         ASSERT_TRUE(env.win.is_valid());
 
         {
-            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, rhi::data_format::rgba8_unorm, 2);
+            auto ui_ctx = ui_context(env.win_mgr, env.win, *env.dev, env.asset_db, rhi::data_format::rgba8_unorm, 2);
             ImGui::SetCurrentContext(ui_ctx.get_imgui_context());
 
             auto str1 = string{"Initial String"};

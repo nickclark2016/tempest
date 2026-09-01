@@ -2,6 +2,7 @@
 #define tempest_editor_ui_ui_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/asset_database.hpp>
 #include <tempest/cstring_view.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
@@ -17,8 +18,8 @@ namespace tempest::editor
     class TEMPEST_EDITOR_API ui_context
     {
       public:
-        ui_context(window_manager& win_mgr, window_handle win, rhi::device& device, rhi::data_format target_format,
-                   uint32_t frames_in_flight);
+        ui_context(window_manager& win_mgr, window_handle win, rhi::device& device, assets::asset_database& asset_db,
+                   rhi::data_format target_format, uint32_t frames_in_flight);
         ui_context(const ui_context&) = delete;
         ui_context(ui_context&&) noexcept = delete;
         ~ui_context();

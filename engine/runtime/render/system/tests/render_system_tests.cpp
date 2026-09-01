@@ -34,9 +34,18 @@ namespace tempest::render_system::tests
     {
         struct test_fixture
         {
-            unique_ptr<rhi::context> ctx;
-            unique_ptr<rhi::device> dev;
+            unique_ptr<rhi::context> ctx{};
+            unique_ptr<rhi::device> dev{};
+            assets::asset_database asset_db{nullptr};
         };
+
+        auto create_test_asset_database() -> assets::asset_database
+        {
+            auto db = assets::asset_database{};
+            assets::mount_default_shader_roots(db);
+            db.scan_and_index();
+            return db;
+        }
 
         auto create_test_device() -> test_fixture
         {
@@ -52,20 +61,22 @@ namespace tempest::render_system::tests
             auto ctx_res = rhi::create_context(ctx_desc);
             if (!ctx_res.has_value())
             {
-                return {};
+                return test_fixture{};
             }
 
             auto ctx = tempest::move(ctx_res).value();
             auto devices = ctx->enumerate_devices();
             if (devices.empty())
             {
-                return {};
+                return test_fixture{};
             }
 
             auto dev = ctx->create_device(devices[0].device_uuid);
+            auto asset_db = create_test_asset_database();
             return test_fixture{
                 .ctx = tempest::move(ctx),
                 .dev = tempest::move(dev),
+                .asset_db = tempest::move(asset_db),
             };
         }
 
@@ -255,6 +266,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -389,6 +401,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -511,7 +524,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         auto graph = render_graph::render_graph{1280, 720};
 
         auto cam = render_camera{
@@ -718,7 +731,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         auto graph = render_graph::render_graph{1280, 720};
 
         auto cam = render_camera{
@@ -761,7 +774,7 @@ namespace tempest::render_system::tests
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
 
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
 
         auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
         auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
@@ -824,7 +837,7 @@ namespace tempest::render_system::tests
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
 
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
 
         // Load bytecode into memory first
         auto vs_bytes = shaders.load_shader_bytecode("skybox.vert.spv");
@@ -874,7 +887,7 @@ namespace tempest::render_system::tests
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
 
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
 
         auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
         auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
@@ -926,7 +939,7 @@ namespace tempest::render_system::tests
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
 
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
 
         auto vs = shaders.register_shader_module("pbr.vert.spv", rhi::shader_stage::vertex, "VSMain");
         auto fs = shaders.register_shader_module("pbr.frag.spv", rhi::shader_stage::fragment, "FSMain");
@@ -982,6 +995,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -1292,7 +1306,7 @@ namespace tempest::render_system::tests
         auto registry = ecs::archetype_registry{events};
         auto cam_sys = camera_system{registry, events};
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         auto graph = render_graph::render_graph{1920, 1080};
         auto allocator = shelf_allocator{8192, 8192, 4};
 
@@ -1382,7 +1396,7 @@ namespace tempest::render_system::tests
         auto registry = ecs::archetype_registry{events};
         auto cam_sys = camera_system{registry, events};
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         auto graph = render_graph::render_graph{1280, 720};
         auto allocator = shelf_allocator{8192, 8192, 4};
 
@@ -1514,6 +1528,7 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -1570,6 +1585,7 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -1694,6 +1710,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -1871,7 +1888,7 @@ namespace tempest::render_system::tests
         auto* dev = fixture.dev.get();
         ASSERT_NE(dev, nullptr);
 
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -2026,7 +2043,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -2273,7 +2290,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -2472,7 +2489,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -2679,7 +2696,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -2873,7 +2890,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -3102,7 +3119,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -3211,7 +3228,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(dev, nullptr);
 
         auto pool = resource_pool{*dev};
-        auto shaders = shader_manager{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
         auto graph = render_graph::render_graph{width, height};
@@ -3444,6 +3461,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         auto rend = builder.build(*dev, log);
@@ -3626,6 +3644,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         auto rend = builder.build(*dev, log);
@@ -3825,6 +3844,7 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -3930,6 +3950,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4063,6 +4084,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4213,6 +4235,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4302,6 +4325,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4357,6 +4381,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4432,6 +4457,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4507,6 +4533,7 @@ namespace tempest::render_system::tests
         });
         builder.set_inputs(renderer_inputs{
             .entity_registry = &registry,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4552,6 +4579,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {
@@ -4636,6 +4664,7 @@ namespace tempest::render_system::tests
             .meshes = &meshes,
             .textures = &textures,
             .materials = &materials,
+            .asset_db = &fixture.asset_db,
         });
 
         {

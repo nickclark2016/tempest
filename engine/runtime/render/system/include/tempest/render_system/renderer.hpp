@@ -2,6 +2,7 @@
 #define tempest_render_system_renderer_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/checked.hpp>
 #include <tempest/ecs_events.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/functional.hpp>
@@ -42,6 +43,7 @@ namespace tempest::render_system
         const core::mesh_registry* meshes{nullptr};
         const core::texture_registry* textures{nullptr};
         const core::material_registry* materials{nullptr};
+        non_null<assets::asset_database> asset_db;
     };
 
     class TEMPEST_API renderer
@@ -68,7 +70,7 @@ namespace tempest::render_system
 
           private:
             renderer_config _cfg{};
-            renderer_inputs _inputs{};
+            optional<renderer_inputs> _inputs{};
         };
 
         explicit renderer(rhi::device& dev, logger& log, renderer_config cfg, renderer_inputs inputs,

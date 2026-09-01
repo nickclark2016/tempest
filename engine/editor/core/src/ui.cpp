@@ -268,18 +268,15 @@ namespace tempest::editor
             }
         }
 
-        auto load_shader_bytecode(string_view filename) -> vector<byte>
+        auto load_shader_bytecode(const assets::asset_database& db, string_view filename) -> vector<byte>
         {
-            auto db = assets::asset_database{};
-            db.mount_root(".", 0);
-            db.mount_root("assets", 5);
-            db.mount_root("assets/shaders", 5);
-            db.mount_root("assets/shaders/editor", 10);
-            db.mount_root("shaders", 5);
-            db.mount_root("shaders/editor", 10);
-            db.scan_and_index();
-
             const auto* asset = db.find_asset(filename);
+            if (asset == nullptr)
+            {
+                auto aliased = string("@shaders/");
+                aliased.append(filename.data(), filename.size());
+                asset = db.find_asset(aliased);
+            }
             if (asset != nullptr)
             {
                 auto blob = db.get_blob(asset->id);
@@ -318,6 +315,7 @@ namespace tempest::editor
         window_manager* win_mgr{nullptr};
         window_handle win{null_window_handle};
         rhi::device* dev{nullptr};
+        assets::asset_database* asset_db{nullptr};
         rhi::data_format target_format{rhi::data_format::unknown};
         uint32_t frames_in_flight{1};
 
@@ -563,8 +561,8 @@ namespace tempest::editor
         dev->write_sampler_descriptor(linear_sampler_descriptor, linear_sampler);
 
         // Load Slang-compiled shaders
-        auto vs_bytes = load_shader_bytecode("imgui.vert.spv");
-        auto fs_bytes = load_shader_bytecode("imgui.frag.spv");
+        auto vs_bytes = asset_db ? load_shader_bytecode(*asset_db, "imgui.vert.spv") : vector<byte>{};
+        auto fs_bytes = asset_db ? load_shader_bytecode(*asset_db, "imgui.frag.spv") : vector<byte>{};
 
         if (!vs_bytes.empty() && !fs_bytes.empty())
         {
@@ -622,12 +620,13 @@ namespace tempest::editor
     }
 
     ui_context::ui_context(window_manager& win_mgr, window_handle win, rhi::device& device,
-                           rhi::data_format target_format, uint32_t frames_in_flight)
+                           assets::asset_database& asset_db, rhi::data_format target_format, uint32_t frames_in_flight)
         : _impl(make_unique<impl>())
     {
         _impl->win_mgr = &win_mgr;
         _impl->win = win;
         _impl->dev = &device;
+        _impl->asset_db = &asset_db;
         _impl->target_format = target_format;
         _impl->frames_in_flight = tempest::max(1u, frames_in_flight);
 

@@ -13,6 +13,10 @@ namespace tempest::assets
     TEMPEST_API
     auto register_default_importers(asset_database& database, core::mesh_registry* mesh_reg,
                                     core::texture_registry* texture_reg, core::material_registry* material_reg) -> void;
+
+    /// \brief Mounts the standard engine shader and asset root directories to the asset database.
+    TEMPEST_API
+    auto mount_default_shader_roots(asset_database& database) -> void;
 } // namespace tempest::assets
 
 #endif // tempest_assets_default_importers_hpp

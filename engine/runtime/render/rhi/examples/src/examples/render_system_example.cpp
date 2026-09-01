@@ -114,6 +114,9 @@ namespace tempest::rhi::examples
             target_format = rhi::data_format::rgba8_srgb;
         }
 
+        assets::mount_default_shader_roots(_asset_db);
+        _asset_db.scan_and_index();
+
         // 1. Configure renderer
         auto builder = render_system::renderer::builder{};
         builder.set_config(render_system::renderer_config{
@@ -126,6 +129,7 @@ namespace tempest::rhi::examples
             .meshes = &_meshes,
             .textures = &_textures,
             .materials = &_materials,
+            .asset_db = &_asset_db,
         });
 
         _renderer = builder.build(dev, _logger);

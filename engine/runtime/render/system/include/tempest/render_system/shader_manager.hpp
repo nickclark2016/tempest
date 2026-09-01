@@ -67,7 +67,6 @@ namespace tempest::render_system
     {
       public:
         explicit shader_manager(rhi::device& dev, assets::asset_database& asset_db);
-        explicit shader_manager(rhi::device& dev, assets::asset_database* asset_db = nullptr);
         ~shader_manager();
 
         shader_manager(const shader_manager&) = delete;
@@ -87,7 +86,8 @@ namespace tempest::render_system
 
         /// @brief Registers a shader module from a memory blob or disk location.
         /// If already registered with the same disk_location, returns the existing handle.
-        /// If new initial_bytes are provided on re-registration, updates the module in-place and rebuilds dependent pipelines.
+        /// If new initial_bytes are provided on re-registration, updates the module in-place and rebuilds dependent
+        /// pipelines.
         auto register_shader_module(const shader_module_create_info& info) -> shader_module_handle;
 
         /// @brief Helper to register a shader module from a disk filename.
@@ -115,8 +115,7 @@ namespace tempest::render_system
             -> optional<graphics_pipeline_handle>;
 
         /// @brief Finds a previously registered compute pipeline handle by name.
-        [[nodiscard]] auto find_compute_pipeline(string_view name) const noexcept
-            -> optional<compute_pipeline_handle>;
+        [[nodiscard]] auto find_compute_pipeline(string_view name) const noexcept -> optional<compute_pipeline_handle>;
 
         /// @brief Reloads the specified shader module from disk and surgically recompiles all dependent pipelines.
         auto reload_shader_module(shader_module_handle handle) -> bool;
@@ -127,7 +126,8 @@ namespace tempest::render_system
         /// @brief Filewatching notification: triggers reload for any registered module matching the given path.
         auto notify_file_changed(const std::filesystem::path& path) -> bool;
 
-        /// @brief Drains retired RHI pipelines whose GPU completion timeline sync points have been reached across all queues.
+        /// @brief Drains retired RHI pipelines whose GPU completion timeline sync points have been reached across all
+        /// queues.
         void process_deferred_retirements();
 
         /// @brief Destroys all cached graphics and compute pipelines and clears registries.
@@ -182,16 +182,14 @@ namespace tempest::render_system
 
         auto resolve_path(const std::filesystem::path& input_path) const -> optional<std::filesystem::path>;
         auto read_module_bytes(const shader_module_record& mod) const -> vector<byte>;
-        auto compile_graphics_pipeline(const graphics_pipeline_record& rec,
-                                       span<const byte> override_bytes = {},
+        auto compile_graphics_pipeline(const graphics_pipeline_record& rec, span<const byte> override_bytes = {},
                                        shader_module_handle override_handle = {}) -> rhi::graphics_pipeline_handle;
-        auto compile_compute_pipeline(const compute_pipeline_record& rec,
-                                      span<const byte> override_bytes = {}) -> rhi::compute_pipeline_handle;
+        auto compile_compute_pipeline(const compute_pipeline_record& rec, span<const byte> override_bytes = {})
+            -> rhi::compute_pipeline_handle;
         void enqueue_pipeline_retirement(rhi::graphics_pipeline_handle gfx, rhi::compute_pipeline_handle comp);
 
         rhi::device* _device{nullptr};
         assets::asset_database* _asset_db{nullptr};
-        unique_ptr<assets::asset_database> _owned_asset_db{nullptr};
 
         vector<shader_module_record> _modules;
         vector<graphics_pipeline_record> _graphics_pipelines;

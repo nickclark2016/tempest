@@ -42,8 +42,8 @@ namespace tempest::assets
                         return false;
                     }
                     serialization::binary_archive archive;
-                    serialization::serializer<serialization::binary_archive, core::mesh>::serialize(
-                        archive, opt.value());
+                    serialization::serializer<serialization::binary_archive, core::mesh>::serialize(archive,
+                                                                                                    opt.value());
                     auto data = archive.read(archive.written_size());
                     out.insert(out.end(), data.begin(), data.end());
                     return true;
@@ -64,8 +64,8 @@ namespace tempest::assets
                         return false;
                     }
                     serialization::binary_archive archive;
-                    serialization::serializer<serialization::binary_archive, core::texture>::serialize(
-                        archive, opt.value());
+                    serialization::serializer<serialization::binary_archive, core::texture>::serialize(archive,
+                                                                                                       opt.value());
                     auto data = archive.read(archive.written_size());
                     out.insert(out.end(), data.begin(), data.end());
                     return true;
@@ -76,8 +76,7 @@ namespace tempest::assets
                     serialization::binary_archive archive;
                     archive.write(blob);
                     auto mat =
-                        serialization::serializer<serialization::binary_archive, core::material>::deserialize(
-                            archive);
+                        serialization::serializer<serialization::binary_archive, core::material>::deserialize(archive);
                     return material_reg->register_material_with_id(asset_id, tempest::move(mat));
                 },
                 [material_reg](const guid& asset_id, const asset_database&, vector<byte>& out) -> bool {
@@ -87,8 +86,8 @@ namespace tempest::assets
                         return false;
                     }
                     serialization::binary_archive archive;
-                    serialization::serializer<serialization::binary_archive, core::material>::serialize(
-                        archive, opt.value());
+                    serialization::serializer<serialization::binary_archive, core::material>::serialize(archive,
+                                                                                                        opt.value());
                     auto data = archive.read(archive.written_size());
                     out.insert(out.end(), data.begin(), data.end());
                     return true;
@@ -98,5 +97,14 @@ namespace tempest::assets
         database.register_importer(make_unique<gltf_importer>(mesh_reg, texture_reg, material_reg), ".gltf");
         database.register_importer(make_unique<glb_importer>(mesh_reg, texture_reg, material_reg), ".glb");
         database.register_importer(make_unique<exr_importer>(texture_reg), ".exr");
+    }
+
+    auto mount_default_shader_roots(asset_database& database) -> void
+    {
+        database.mount_root("assets/shaders/engine", 10, "shaders");
+        database.mount_root("assets/shaders/editor", 10, "shaders");
+        database.mount_root("assets/shaders", 5, "shaders");
+        database.mount_root("shaders", 5, "shaders");
+        database.mount_root("assets", 5, "");
     }
 } // namespace tempest::assets
