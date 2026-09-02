@@ -30,6 +30,7 @@
     zoneStats: new Map(),   // Map of zone name -> stats object
     
     // Time & Viewport
+    baseTimeNs: null,
     minTimeNs: 0,
     maxTimeNs: 0,
     viewStartNs: 0,
@@ -65,7 +66,8 @@
 
     // Layout Constants
     rulerHeight: 28,
-    trackHeaderHeight: 24,
+    trackHeaderHeight: 22,
+    frameHeaderHeight: 18,
     zoneHeight: 18,
     zoneSpacing: 2,
     trackPaddingBottom: 8,
@@ -190,6 +192,14 @@
       return `${(nanoseconds / 1000000).toFixed(2)} ms`;
     }
     return `${(nanoseconds / 1000000000).toFixed(3)} s`;
+  }
+
+  function formatRelativeTime(nanoseconds, forcedUnit = state.timeUnit) {
+    if (nanoseconds === undefined || nanoseconds === null || isNaN(nanoseconds)) {
+      return '0.00 ns';
+    }
+    const base = (state.baseTimeNs !== null && state.baseTimeNs !== undefined) ? state.baseTimeNs : 0;
+    return formatTime(nanoseconds - base, forcedUnit);
   }
 
   function formatBytes(bytes) {
@@ -338,6 +348,7 @@
     try {
       const data = JSON.parse(text);
       if (data.type === 'frame_data') {
+        if (!state.isLive) return;
         ingestTelemetryFrame(data);
       } else if (data.type === 'stats') {
         if (Array.isArray(data.zones)) {
@@ -371,23 +382,90 @@
   // =========================================================================
 
   function ingestTelemetryFrame(frame) {
-    if (!state.isLive && state.frames.length > 0) {
-      // If paused, buffer frame but do not shift viewport
-      state.frames.push(frame);
-      updateDataBounds(frame);
-      recalculateStats();
-      updateInfoMetadata();
-      requestAnimationFrame(render);
+    if (!state.isLive) {
+      // If paused, completely drop incoming live frame
       return;
     }
 
-    state.frames.push(frame);
-    // Keep a rolling buffer of up to 1000 frames to avoid unbounded memory growth in browser
-    if (state.frames.length > 1000) {
-      state.frames.shift();
+    // 1. Process CPU tracks, markers, and metrics for frame.frame_index
+    let cpuFrame = state.frames.find(f => f.frame_index === frame.frame_index);
+    if (!cpuFrame) {
+      cpuFrame = {
+        frame_index: frame.frame_index,
+        cpu_tracks: frame.cpu_tracks || [],
+        gpu_tracks: [],
+        markers: frame.markers || [],
+        metrics: frame.metrics || [],
+      };
+      state.frames.push(cpuFrame);
+    } else {
+      if (frame.cpu_tracks && frame.cpu_tracks.length > 0) {
+        if (!cpuFrame.cpu_tracks) cpuFrame.cpu_tracks = [];
+        for (const t of frame.cpu_tracks) {
+          const existing = cpuFrame.cpu_tracks.find(et => et.track_id === t.track_id);
+          if (existing) {
+            if (t.zones) existing.zones.push(...t.zones);
+          } else {
+            cpuFrame.cpu_tracks.push(t);
+          }
+        }
+      }
+      if (frame.markers && frame.markers.length > 0) {
+        if (!cpuFrame.markers) cpuFrame.markers = [];
+        cpuFrame.markers.push(...frame.markers);
+      }
+      if (frame.metrics && frame.metrics.length > 0) {
+        if (!cpuFrame.metrics) cpuFrame.metrics = [];
+        cpuFrame.metrics.push(...frame.metrics);
+      }
+    }
+    updateDataBounds(cpuFrame);
+
+    // 2. Process GPU tracks: route each GPU zone to its originating CPU frame_index
+    if (frame.gpu_tracks && frame.gpu_tracks.length > 0) {
+      for (const t of frame.gpu_tracks) {
+        if (!t.zones || t.zones.length === 0) continue;
+        for (const z of t.zones) {
+          const targetIdx = (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0)
+            ? z.frame_index
+            : frame.frame_index;
+
+          let targetGpuFrame = state.frames.find(f => f.frame_index === targetIdx);
+          if (!targetGpuFrame) {
+            targetGpuFrame = {
+              frame_index: targetIdx,
+              cpu_tracks: [],
+              gpu_tracks: [],
+              markers: [],
+              metrics: [],
+            };
+            state.frames.push(targetGpuFrame);
+          }
+          if (!targetGpuFrame.gpu_tracks) targetGpuFrame.gpu_tracks = [];
+          let gtrack = targetGpuFrame.gpu_tracks.find(gt => gt.track_id === t.track_id);
+          if (!gtrack) {
+            gtrack = {
+              track_id: t.track_id,
+              name: t.name,
+              zones: [],
+            };
+            targetGpuFrame.gpu_tracks.push(gtrack);
+          }
+          if (!gtrack.zones.some(ez => ez.name === z.name && ez.start_ns === z.start_ns && ez.depth === z.depth)) {
+            gtrack.zones.push(z);
+          }
+          updateDataBounds(targetGpuFrame);
+        }
+      }
     }
 
-    const frameMin = updateDataBounds(frame);
+    // Keep frames sorted by frame_index and bounded in size
+    state.frames.sort((a, b) => a.frame_index - b.frame_index);
+    if (state.frames.length > 1000) {
+      state.frames.splice(0, state.frames.length - 1000);
+    }
+
+    const frameMin = updateDataBounds(cpuFrame);
     recalculateTracksAndMetrics();
 
     // Throttled stats recalculation to keep live 60 FPS silky smooth
@@ -421,6 +499,8 @@
     let cpuMax = -Infinity;
     let gpuMin = Infinity;
     let gpuMax = -Infinity;
+    let graphicsGpuMin = Infinity;
+    let graphicsGpuMax = -Infinity;
 
     if (frame.cpu_tracks) {
       for (const t of frame.cpu_tracks) {
@@ -436,10 +516,15 @@
     }
     if (frame.gpu_tracks) {
       for (const t of frame.gpu_tracks) {
+        const isGraphics = !t.name || t.name.toLowerCase().includes('graphics') || frame.gpu_tracks.length === 1;
         if (t.zones) {
           for (const z of t.zones) {
             if (z.start_ns < gpuMin) gpuMin = z.start_ns;
             if (z.end_ns > gpuMax) gpuMax = z.end_ns;
+            if (isGraphics) {
+              if (z.start_ns < graphicsGpuMin) graphicsGpuMin = z.start_ns;
+              if (z.end_ns > graphicsGpuMax) graphicsGpuMax = z.end_ns;
+            }
             if (z.start_ns < frameMin) frameMin = z.start_ns;
             if (z.end_ns > frameMax) frameMax = z.end_ns;
           }
@@ -457,11 +542,16 @@
     frame.cpuEndNs = cpuMax !== -Infinity ? cpuMax : null;
     frame.cpuDurationNs = (frame.cpuStartNs !== null && frame.cpuEndNs !== null) ? (frame.cpuEndNs - frame.cpuStartNs) : 0;
 
-    frame.gpuStartNs = gpuMin !== Infinity ? gpuMin : null;
-    frame.gpuEndNs = gpuMax !== -Infinity ? gpuMax : null;
+    const effectiveGpuMin = graphicsGpuMin !== Infinity ? graphicsGpuMin : gpuMin;
+    const effectiveGpuMax = graphicsGpuMax !== -Infinity ? graphicsGpuMax : gpuMax;
+    frame.gpuStartNs = effectiveGpuMin !== Infinity ? effectiveGpuMin : null;
+    frame.gpuEndNs = effectiveGpuMax !== -Infinity ? effectiveGpuMax : null;
     frame.gpuDurationNs = (frame.gpuStartNs !== null && frame.gpuEndNs !== null) ? (frame.gpuEndNs - frame.gpuStartNs) : 0;
 
     if (frameMin !== Infinity && frameMax !== -Infinity) {
+      if (state.baseTimeNs === null) {
+        state.baseTimeNs = frameMin;
+      }
       if (state.frames.length === 1 || state.minTimeNs === 0) {
         state.minTimeNs = frameMin;
         state.maxTimeNs = frameMax;
@@ -497,6 +587,9 @@
             });
           }
           const tr = trackMap.get(key);
+          if (t.name && (!tr.name || tr.name.startsWith('Thread '))) {
+            tr.name = t.name;
+          }
           if (t.zones) {
             for (const z of t.zones) {
               const zoneObj = {
@@ -504,6 +597,7 @@
                 trackId: key,
                 trackName: tr.name,
                 category: 'cpu',
+                frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
               tr.zones.push(zoneObj);
@@ -534,6 +628,9 @@
             });
           }
           const tr = trackMap.get(key);
+          if (cleanName && (!tr.name || tr.name.startsWith('Queue '))) {
+            tr.name = cleanName;
+          }
           if (t.zones) {
             for (const z of t.zones) {
               const zoneObj = {
@@ -541,6 +638,7 @@
                 trackId: key,
                 trackName: tr.name,
                 category: 'gpu',
+                frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
               tr.zones.push(zoneObj);
@@ -572,7 +670,23 @@
       }
     }
 
-    state.tracks = Array.from(trackMap.values());
+    state.tracks = Array.from(trackMap.values()).sort((a, b) => {
+      // 1. CPU tracks above GPU tracks
+      if (a.type !== b.type) {
+        return a.type === 'cpu' ? -1 : 1;
+      }
+      // 2. Main Thread first among CPU tracks
+      if (a.type === 'cpu') {
+        if (a.name === 'Main Thread') return -1;
+        if (b.name === 'Main Thread') return 1;
+      }
+      // 3. Graphics Queue first among GPU tracks
+      if (a.type === 'gpu') {
+        if (a.name.includes('Graphics')) return -1;
+        if (b.name.includes('Graphics')) return 1;
+      }
+      return a.track_id - b.track_id;
+    });
     state.metrics = metricsMap;
 
     updateMetricCards();
@@ -729,7 +843,8 @@
     for (const track of state.tracks) {
       const isCollapsed = state.collapsedTracks.has(track.id);
       const depthCount = isCollapsed ? 1 : (track.maxDepth + 1);
-      const trackHeight = state.trackHeaderHeight + (isCollapsed ? 0 : depthCount * (state.zoneHeight + state.zoneSpacing)) + state.trackPaddingBottom;
+      const zonesAreaHeight = isCollapsed ? 0 : (depthCount * (state.zoneHeight + state.zoneSpacing) + 6);
+      const trackHeight = state.trackHeaderHeight + state.frameHeaderHeight + zonesAreaHeight + state.trackPaddingBottom;
 
       // Track bounding box for hit-testing
       track.renderY = currentY;
@@ -737,18 +852,24 @@
 
       // Viewport culling for track
       if (currentY + trackHeight >= state.rulerHeight && currentY <= height) {
-        // Track Header Background
         const isGpu = track.type === 'gpu';
-        timelineCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.14)' : '#161b22';
-        timelineCtx.fillRect(0, currentY, width, state.trackHeaderHeight);
 
-        timelineCtx.strokeStyle = isGpu ? 'rgba(57, 197, 187, 0.4)' : '#30363d';
-        timelineCtx.strokeRect(0, currentY, width, state.trackHeaderHeight);
+        // 1. Horizontal Separator between threads/queues
+        timelineCtx.fillStyle = '#30363d';
+        timelineCtx.fillRect(0, currentY, width, 1);
+
+        // 2. Track Header Background (just below the separator)
+        timelineCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.12)' : '#161b22';
+        timelineCtx.fillRect(0, currentY + 1, width, state.trackHeaderHeight - 1);
+
+        // Header bottom subtle divider
+        timelineCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.25)' : '#21262d';
+        timelineCtx.fillRect(0, currentY + state.trackHeaderHeight, width, 1);
 
         // Chevron
         timelineCtx.fillStyle = isGpu ? '#39c5bb' : '#8b949e';
         timelineCtx.font = '11px sans-serif';
-        timelineCtx.fillText(isCollapsed ? '▶' : '▼', 8, currentY + 16);
+        timelineCtx.fillText(isCollapsed ? '▶' : '▼', 8, currentY + 15);
 
         // Track Name & Type Badge
         timelineCtx.fillStyle = isGpu ? '#39c5bb' : '#58a6ff';
@@ -762,13 +883,17 @@
           }
         }
         const trackTitle = isGpu ? `[GPU] ${displayName}` : displayName.toUpperCase();
-        timelineCtx.fillText(trackTitle, 24, currentY + 16);
+        timelineCtx.fillText(trackTitle, 24, currentY + 15);
 
         timelineCtx.fillStyle = isGpu ? '#7ee787' : '#6e7681';
         timelineCtx.font = '10px monospace';
-        timelineCtx.fillText(`(${track.zones.length} zones)`, 24 + timelineCtx.measureText(trackTitle).width + 8, currentY + 16);
+        timelineCtx.fillText(`(${track.zones.length} zones)`, 24 + timelineCtx.measureText(trackTitle).width + 8, currentY + 15);
 
-        // Zones
+        // Frame header lane background (below track header, above call stacks)
+        timelineCtx.fillStyle = isGpu ? 'rgba(57, 197, 187, 0.02)' : 'rgba(88, 166, 255, 0.02)';
+        timelineCtx.fillRect(0, currentY + state.trackHeaderHeight + 1, width, state.frameHeaderHeight - 1);
+
+        // 3. Zones: Start vertically beneath the frame header lane
         if (!isCollapsed) {
           let lastDrawnPixel = -1;
           const query = state.searchQuery.trim().toLowerCase();
@@ -781,7 +906,7 @@
             // Frustum Culling
             if (zEndX < 0 || zStartX > width) continue;
 
-            const rowY = currentY + state.trackHeaderHeight + zone.depth * (state.zoneHeight + state.zoneSpacing);
+            const rowY = currentY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + zone.depth * (state.zoneHeight + state.zoneSpacing);
 
             // LOD Culling: If sub-pixel, merge to prevent millions of fillRect calls
             const pixelBucket = Math.floor(zStartX);
@@ -918,11 +1043,20 @@
           ctx.strokeRect(x0, cpuMinY, w, Math.max(20, cpuMaxY - cpuMinY));
           ctx.setLineDash([]);
 
-          if (w > 30 || isHovered) {
-            ctx.fillStyle = isHovered ? '#a371f7' : 'rgba(88, 166, 255, 0.75)';
-            ctx.font = 'bold 9px monospace';
+          if (w > 20 || isHovered) {
             const tag = `CPU #${frame.frame_index} (${formatTime(frame.cpuDurationNs)})`;
-            ctx.fillText(tag, x0 + 4, Math.max(state.rulerHeight + 12, cpuMinY + 12));
+            ctx.font = 'bold 9px monospace';
+            const tagW = ctx.measureText(tag).width;
+            const tagY = cpuMinY + state.trackHeaderHeight + 13;
+
+            ctx.fillStyle = isHovered ? 'rgba(22, 27, 34, 0.95)' : 'rgba(22, 27, 34, 0.85)';
+            ctx.fillRect(x0 + 2, tagY - 10, tagW + 6, 14);
+            ctx.strokeStyle = isHovered ? '#a371f7' : 'rgba(88, 166, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x0 + 2, tagY - 10, tagW + 6, 14);
+
+            ctx.fillStyle = isHovered ? '#a371f7' : 'rgba(88, 166, 255, 0.95)';
+            ctx.fillText(tag, x0 + 5, tagY);
           }
         }
       }
@@ -943,11 +1077,20 @@
           ctx.strokeRect(gx0, gpuMinY, gw, Math.max(20, gpuMaxY - gpuMinY));
           ctx.setLineDash([]);
 
-          if (gw > 30 || isHovered) {
-            ctx.fillStyle = isHovered ? '#39c5bb' : 'rgba(57, 197, 187, 0.85)';
-            ctx.font = 'bold 9px monospace';
+          if (gw > 20 || isHovered) {
             const tag = `GPU #${frame.frame_index} (${formatTime(frame.gpuDurationNs)})`;
-            ctx.fillText(tag, gx0 + 4, Math.max(state.rulerHeight + 12, gpuMinY + 12));
+            ctx.font = 'bold 9px monospace';
+            const tagW = ctx.measureText(tag).width;
+            const gtagY = gpuMinY + state.trackHeaderHeight + 13;
+
+            ctx.fillStyle = isHovered ? 'rgba(22, 27, 34, 0.95)' : 'rgba(22, 27, 34, 0.85)';
+            ctx.fillRect(gx0 + 2, gtagY - 10, tagW + 6, 14);
+            ctx.strokeStyle = isHovered ? '#39c5bb' : 'rgba(57, 197, 187, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(gx0 + 2, gtagY - 10, tagW + 6, 14);
+
+            ctx.fillStyle = isHovered ? '#39c5bb' : 'rgba(57, 197, 187, 0.95)';
+            ctx.fillText(tag, gx0 + 5, gtagY);
           }
         }
       }
@@ -970,12 +1113,19 @@
         ctx.setLineDash([]);
 
         const latencyNs = frame.gpuStartNs - frame.cpuStartNs;
-        ctx.fillStyle = '#f0883e';
         ctx.font = 'bold 9px monospace';
         const latencyLabel = `Flight: ${formatTime(latencyNs)}`;
         const textW = ctx.measureText(latencyLabel).width;
         const textX = Math.min(cpuEndX, gpuStartX) + Math.abs(gpuStartX - cpuEndX) / 2 - textW / 2;
-        ctx.fillText(latencyLabel, textX, midY - 3);
+
+        ctx.fillStyle = 'rgba(22, 27, 34, 0.9)';
+        ctx.fillRect(textX - 3, midY - 12, textW + 6, 14);
+        ctx.strokeStyle = '#f0883e';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(textX - 3, midY - 12, textW + 6, 14);
+
+        ctx.fillStyle = '#f0883e';
+        ctx.fillText(latencyLabel, textX, midY - 2);
       }
     }
 
@@ -1031,7 +1181,7 @@
       ctx.stroke();
 
       // Label
-      const timeStr = formatTime(ns);
+      const timeStr = formatRelativeTime(ns);
       ctx.fillText(timeStr, x + 4, state.rulerHeight / 2);
     }
   }
@@ -1094,7 +1244,7 @@
     overviewCtx.strokeRect(brushStartX, 0, brushWidth, height);
 
     // Update Overview Info text
-    dom.overviewTimeRange.textContent = `${formatTime(state.minTimeNs)} - ${formatTime(state.maxTimeNs)} (Total: ${formatTime(totalDuration)})`;
+    dom.overviewTimeRange.textContent = `${formatRelativeTime(state.minTimeNs)} - ${formatRelativeTime(state.maxTimeNs)} (Total: ${formatTime(totalDuration)})`;
     let totalZonesCount = 0;
     for (const tr of state.tracks) totalZonesCount += tr.zones.length;
     dom.overviewFrameStats.textContent = `Frames: ${state.frames.length} | Tracks: ${state.tracks.length} | Zones: ${totalZonesCount}`;
@@ -1429,7 +1579,7 @@
     dom.infoTotalZones.textContent = totalZones.toLocaleString();
     dom.infoTotalTracks.textContent = state.tracks.length.toString();
     dom.infoDuration.textContent = formatTime(state.maxTimeNs - state.minTimeNs);
-    dom.infoTimeExtent.textContent = `${formatTime(state.minTimeNs)} - ${formatTime(state.maxTimeNs)}`;
+    dom.infoTimeExtent.textContent = `${formatRelativeTime(state.minTimeNs)} - ${formatRelativeTime(state.maxTimeNs)}`;
   }
 
   // =========================================================================
@@ -1610,20 +1760,26 @@
       state.hoveredZone = hit.zone;
       const z = hit.zone;
 
-      // Find corresponding frame
-      const parentFrame = state.frames.find(f => {
-        if (f.cpu_tracks) {
-          for (const t of f.cpu_tracks) {
-            if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
+      // Find corresponding frame by exact frame_index or zone timestamp match
+      let parentFrame = null;
+      if (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) {
+        parentFrame = state.frames.find(f => f.frame_index === z.frame_index);
+      }
+      if (!parentFrame) {
+        parentFrame = state.frames.find(f => {
+          if (f.cpu_tracks) {
+            for (const t of f.cpu_tracks) {
+              if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
+            }
           }
-        }
-        if (f.gpu_tracks) {
-          for (const t of f.gpu_tracks) {
-            if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
+          if (f.gpu_tracks) {
+            for (const t of f.gpu_tracks) {
+              if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
+            }
           }
-        }
-        return false;
-      });
+          return false;
+        });
+      }
       state.hoveredFrameIndex = parentFrame ? parentFrame.frame_index : null;
 
       dom.tooltip.style.display = 'block';
@@ -1633,15 +1789,26 @@
       dom.tooltip.innerHTML = `
         <div class="tt-title">${z.name}</div>
         <div class="tt-row"><span>Duration:</span><span class="tt-val">${formatTime(z.duration_ns)}</span></div>
-        <div class="tt-row"><span>Start Time:</span><span class="tt-val">${formatTime(z.start_ns)}</span></div>
+        <div class="tt-row"><span>Start Time:</span><span class="tt-val">${formatRelativeTime(z.start_ns)}</span></div>
         <div class="tt-row"><span>Track:</span><span>${z.trackName || 'Main'}</span></div>
         <div class="tt-row"><span>Depth:</span><span>${z.depth}</span></div>
         ${parentFrame ? `<div class="tt-row"><span>Frame:</span><span class="tt-val">#${parentFrame.frame_index}</span></div>` : ''}
       `;
     } else {
+      // Check if mouseX is inside any frame boundary box in empty track space
+      const width = dom.timelineCanvas.width / (window.devicePixelRatio || 1);
+      const visibleDuration = state.viewEndNs - state.viewStartNs;
+      const mouseNs = state.viewStartNs + (mouseX / width) * visibleDuration;
+
+      const hoveredFrame = state.frames.find(f => {
+        const inCpu = f.cpuStartNs !== null && f.cpuEndNs !== null && mouseNs >= f.cpuStartNs && mouseNs <= f.cpuEndNs;
+        const inGpu = f.gpuStartNs !== null && f.gpuEndNs !== null && mouseNs >= f.gpuStartNs && mouseNs <= f.gpuEndNs;
+        return inCpu || inGpu;
+      });
+
       dom.tooltip.style.display = 'none';
       state.hoveredZone = null;
-      state.hoveredFrameIndex = null;
+      state.hoveredFrameIndex = hoveredFrame ? hoveredFrame.frame_index : null;
     }
     render();
   }
@@ -1683,7 +1850,8 @@
     for (const track of state.tracks) {
       const isCollapsed = state.collapsedTracks.has(track.id);
       const depthCount = isCollapsed ? 1 : (track.maxDepth + 1);
-      const trackHeight = state.trackHeaderHeight + (isCollapsed ? 0 : depthCount * (state.zoneHeight + state.zoneSpacing)) + state.trackPaddingBottom;
+      const zonesAreaHeight = isCollapsed ? 0 : (depthCount * (state.zoneHeight + state.zoneSpacing) + 6);
+      const trackHeight = state.trackHeaderHeight + state.frameHeaderHeight + zonesAreaHeight + state.trackPaddingBottom;
 
       // Check header hit
       if (mouseY >= currentY && mouseY < currentY + state.trackHeaderHeight) {
@@ -1691,9 +1859,9 @@
       }
 
       // Check zones hit
-      if (!isCollapsed && mouseY >= currentY + state.trackHeaderHeight && mouseY < currentY + trackHeight) {
+      if (!isCollapsed && mouseY >= currentY + state.trackHeaderHeight + state.frameHeaderHeight && mouseY < currentY + trackHeight) {
         for (const zone of track.zones) {
-          const rowY = currentY + state.trackHeaderHeight + zone.depth * (state.zoneHeight + state.zoneSpacing);
+          const rowY = currentY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + zone.depth * (state.zoneHeight + state.zoneSpacing);
           if (mouseY >= rowY && mouseY <= rowY + state.zoneHeight) {
             const zStartX = nsToX(zone.start_ns);
             const zEndX = nsToX(zone.end_ns);
@@ -1724,7 +1892,7 @@
 
     dom.selectionBadge.style.display = 'flex';
     dom.selectionDurationVal.textContent = formatTime(delta);
-    dom.selectionRangeVal.textContent = `[${formatTime(t1)} - ${formatTime(t2)}]`;
+    dom.selectionRangeVal.textContent = `[${formatRelativeTime(t1)} - ${formatRelativeTime(t2)}]`;
   }
 
   // =========================================================================
@@ -1769,6 +1937,7 @@
     state.zoneStats.clear();
     state.selectedZone = null;
     state.selectionRange = null;
+    state.baseTimeNs = null;
     state.minTimeNs = 0;
     state.maxTimeNs = 0;
     state.viewStartNs = 0;

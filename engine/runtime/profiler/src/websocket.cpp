@@ -436,9 +436,10 @@ namespace tempest::profiler
                 auto escaped_zname = std::string{};
                 escape_json_string_to(string_view{z.name.data(), z.name.size()}, escaped_zname);
 
-                std::format_to(std::back_inserter(json),
-                               "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"metrics\":[",
-                               escaped_zname, z.start_ns, z.end_ns, z.depth);
+                std::format_to(
+                    std::back_inserter(json),
+                    "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"frame_index\":{},\"metrics\":[",
+                    escaped_zname, z.start_ns, z.end_ns, z.depth, z.frame_index);
 
                 for (auto k = size_t{0}; k < z.metrics.size(); ++k)
                 {
@@ -483,9 +484,10 @@ namespace tempest::profiler
                 auto escaped_zname = std::string{};
                 escape_json_string_to(string_view{z.name.data(), z.name.size()}, escaped_zname);
 
-                std::format_to(std::back_inserter(json),
-                               "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"metrics\":[]}}",
-                               escaped_zname, z.start_ns, z.end_ns, z.depth);
+                std::format_to(
+                    std::back_inserter(json),
+                    "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"frame_index\":{},\"metrics\":[]}}",
+                    escaped_zname, z.start_ns, z.end_ns, z.depth, z.frame_index);
             }
             json += "]}";
         }
@@ -544,6 +546,7 @@ namespace tempest::profiler
                 tz.start_ns = zr.start_ns;
                 tz.end_ns = zr.end_ns;
                 tz.depth = zr.depth;
+                tz.frame_index = zr.task_id > 0 ? zr.task_id : frame_index;
                 tz.metrics = zr.metrics;
                 t.zones.push_back(move(tz));
             }

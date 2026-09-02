@@ -627,4 +627,26 @@ namespace tempest::profiler
         count += _overflow_contexts.size();
         return count;
     }
+
+    auto profiler_session::get_track_name(uint64_t track_id) const -> string
+    {
+        lock_guard guard(_registration_mutex);
+        for (const auto& slot : _slots)
+        {
+            if (slot.thread_id.load(memory_order::relaxed) == track_id && slot.context)
+            {
+                auto name_view = slot.context->get_thread_name();
+                return string{name_view.data(), name_view.size()};
+            }
+        }
+        for (const auto& ctx : _overflow_contexts)
+        {
+            if (ctx && ctx->get_thread_id() == track_id)
+            {
+                auto name_view = ctx->get_thread_name();
+                return string{name_view.data(), name_view.size()};
+            }
+        }
+        return {};
+    }
 } // namespace tempest::profiler

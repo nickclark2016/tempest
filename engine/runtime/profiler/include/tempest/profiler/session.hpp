@@ -104,6 +104,7 @@ namespace tempest::profiler
         [[nodiscard]] auto get_chunk_pool() const noexcept -> const chunk_pool&;
 
         [[nodiscard]] auto registered_thread_count() const noexcept -> size_t;
+        [[nodiscard]] auto get_track_name(uint64_t track_id) const -> string;
 
       private:
         auto _register_thread_slow(uint64_t tid) -> thread_profiler_context&;

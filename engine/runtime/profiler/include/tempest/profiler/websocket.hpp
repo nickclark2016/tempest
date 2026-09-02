@@ -45,6 +45,7 @@ namespace tempest::profiler
         uint64_t start_ns{0};
         uint64_t end_ns{0};
         uint32_t depth{0};
+        uint64_t frame_index{0};
         inplace_vector<metric_record, 4> metrics{};
     };
 

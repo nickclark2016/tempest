@@ -120,6 +120,7 @@ namespace tempest::editor
 {
     editor_engine_context::editor_engine_context()
     {
+        _profiler_session.set_thread_name("Main Thread");
         auto config = profiler::web_server_config{
             .host = "127.0.0.1",
             .port = 8080,
@@ -390,40 +391,42 @@ namespace tempest::editor
     auto editor_engine_context::_render_editor_frame() -> void
     {
         const auto frame_start = std::chrono::steady_clock::now();
-        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "editor::render_frame"};
-        if (!_renderer || _windows.empty())
         {
-            return;
-        }
-
-        auto& win = _windows.front();
-
-        // 1. Run paint callbacks (evaluates ImGui layout, viewport size, mouse/keyboard navigation, camera updates)
-        {
-            [[maybe_unused]] const auto paint_zone = profiler::scoped_zone{_profiler_session, "editor::on_paint"};
-            for (auto&& on_paint : _editor_callbacks.on_paint)
+            [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "editor::render_frame"};
+            if (!_renderer || _windows.empty())
             {
-                on_paint(*this);
+                return;
             }
+
+            auto& win = _windows.front();
+
+            // 1. Run paint callbacks (evaluates ImGui layout, viewport size, mouse/keyboard navigation, camera updates)
+            {
+                [[maybe_unused]] const auto paint_zone = profiler::scoped_zone{_profiler_session, "editor::on_paint"};
+                for (auto&& on_paint : _editor_callbacks.on_paint)
+                {
+                    on_paint(*this);
+                }
+            }
+
+            auto camera_override =
+                (_sim_state == simulation_state::play)
+                    ? tempest::nullopt
+                    : tempest::optional<render_system::render_camera>(_editor_camera.get_render_camera());
+
+            [[maybe_unused]] auto result = _renderer->render_frame(
+                win.handle, camera_override, [this](rhi::command_list& cmd, uint32_t w, uint32_t h) {
+                    if (_ui_ctx)
+                    {
+                        _ui_ctx->render_ui_commands(cmd, w, h);
+                    }
+                });
+
+            const auto frame_end = std::chrono::steady_clock::now();
+            const auto frame_dur =
+                std::chrono::duration_cast<std::chrono::duration<float, std::milli>>(frame_end - frame_start);
+            _last_cpu_time_ms = frame_dur.count();
         }
-
-        auto camera_override =
-            (_sim_state == simulation_state::play)
-                ? tempest::nullopt
-                : tempest::optional<render_system::render_camera>(_editor_camera.get_render_camera());
-
-        [[maybe_unused]] auto result = _renderer->render_frame(win.handle, camera_override,
-                                                               [this](rhi::command_list& cmd, uint32_t w, uint32_t h) {
-                                                                   if (_ui_ctx)
-                                                                   {
-                                                                       _ui_ctx->render_ui_commands(cmd, w, h);
-                                                                   }
-                                                               });
-
-        const auto frame_end = std::chrono::steady_clock::now();
-        const auto frame_dur =
-            std::chrono::duration_cast<std::chrono::duration<float, std::milli>>(frame_end - frame_start);
-        _last_cpu_time_ms = frame_dur.count();
 
         collect_and_broadcast_telemetry();
     }

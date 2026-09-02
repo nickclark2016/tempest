@@ -33,6 +33,7 @@ namespace tempest::render_graph
         optional<rhi::texture_handle> presented_texture{nullopt};
         uint32_t flight_slot_index{0};
         uint32_t frames_in_flight{2};
+        uint64_t frame_index{0};
         profiler::profiler_session* profiler{nullptr};
     };
 
@@ -44,6 +45,7 @@ namespace tempest::render_graph
         uint32_t pipeline_stats_count{0};
         uint32_t recorded_timestamp_count{0};
         uint32_t recorded_pipeline_stats_count{0};
+        uint64_t recorded_frame_index{0};
         enum_mask<rhi::pipeline_statistic_flags> pipeline_stats_mask{rhi::pipeline_statistic_flags::none};
 
         struct pass_query_binding
@@ -52,6 +54,7 @@ namespace tempest::render_graph
             queue_type queue{queue_type::graphics};
             uint32_t start_timestamp_idx{0};
             uint32_t end_timestamp_idx{0};
+            uint32_t depth{0};
             optional<uint32_t> pipeline_stats_idx{nullopt};
             enum_mask<rhi::pipeline_statistic_flags> pipeline_stats_flags{rhi::pipeline_statistic_flags::none};
         };

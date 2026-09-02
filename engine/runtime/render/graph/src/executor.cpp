@@ -5,6 +5,7 @@
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_graph/temporal_texture.hpp>
 
+#include <algorithm>
 #include <format>
 
 namespace tempest::render_graph
@@ -75,10 +76,10 @@ namespace tempest::render_graph
                     auto z = profiler::zone_record{
                         .start_ns = start_ns,
                         .end_ns = end_ns,
-                        .depth = 0,
+                        .depth = pass_rec.depth,
                         .name = pass_rec.pass_name,
                         .location = {},
-                        .task_id = 0,
+                        .task_id = flight_state.recorded_frame_index,
                         .metrics = {},
                     };
 
@@ -129,6 +130,16 @@ namespace tempest::render_graph
                 {
                     const auto q_type = static_cast<queue_type>((track_id & 0x7FFF'FFFFULL) - 1);
                     frame_sync.profiler->register_track(track_id, get_queue_track_name(q_type));
+
+                    // Sort zones so submit zones (depth 0) come before their nested child passes
+                    std::sort(zones.begin(), zones.end(),
+                              [](const profiler::zone_record& a, const profiler::zone_record& b) {
+                                  if (a.start_ns != b.start_ns)
+                                  {
+                                      return a.start_ns < b.start_ns;
+                                  }
+                                  return a.depth < b.depth;
+                              });
 
                     auto chunk = frame_sync.profiler->acquire_chunk();
                     chunk->set_thread_id(track_id);
@@ -188,7 +199,8 @@ namespace tempest::render_graph
             }
         }
 
-        const auto needed_timestamp_count = static_cast<uint32_t>(active_pass_count * 2);
+        const auto needed_timestamp_count =
+            static_cast<uint32_t>((sync.queue_batches.size() * 2) + (active_pass_count * 2));
         if (needed_timestamp_count > 0)
         {
             if (flight_state.timestamp_pool.handle == 0 || flight_state.timestamp_count < needed_timestamp_count)
@@ -259,10 +271,10 @@ namespace tempest::render_graph
 
             cmd.begin();
 
-            // Reset query pool slice used by this batch
+            // Reset query pool slice used by this batch (including submit start/end and pass queries)
             const auto batch_ts_start = current_timestamp_idx;
             const auto batch_ps_start = current_stats_idx;
-            auto batch_ts_count = uint32_t{0};
+            auto batch_ts_count = uint32_t{2}; // 2 timestamps for submit start and end
             auto batch_ps_count = uint32_t{0};
 
             for (const auto pass_idx : batch.pass_indices)
@@ -284,6 +296,13 @@ namespace tempest::render_graph
             if (flight_state.pipeline_stats_pool.handle != 0 && batch_ps_count > 0)
             {
                 cmd.reset_query_pool(flight_state.pipeline_stats_pool, batch_ps_start, batch_ps_count);
+            }
+
+            // Top-level submit zone start timestamp
+            const auto submit_start_ts = current_timestamp_idx++;
+            if (flight_state.timestamp_pool.handle != 0)
+            {
+                cmd.write_timestamp(flight_state.timestamp_pool, submit_start_ts, rhi::pipeline_stage::bottom_of_pipe);
             }
 
             for (const auto pass_idx : batch.pass_indices)
@@ -443,6 +462,7 @@ namespace tempest::render_graph
                     .queue = batch.queue,
                     .start_timestamp_idx = start_ts,
                     .end_timestamp_idx = end_ts,
+                    .depth = 1,
                     .pipeline_stats_idx = pass_stat_idx,
                     .pipeline_stats_flags = pass.pipeline_statistics,
                 });
@@ -477,6 +497,40 @@ namespace tempest::render_graph
                                                   rhi::resource_access::none, rhi::image_layout::present,
                                                   queue_type::graphics);
             }
+
+            // Top-level submit zone end timestamp
+            const auto submit_end_ts = current_timestamp_idx++;
+            if (flight_state.timestamp_pool.handle != 0)
+            {
+                cmd.write_timestamp(flight_state.timestamp_pool, submit_end_ts, rhi::pipeline_stage::bottom_of_pipe);
+            }
+
+            auto submit_name = string{};
+            switch (batch.queue)
+            {
+            case queue_type::graphics:
+                submit_name = "Graphics Submit";
+                break;
+            case queue_type::async_compute:
+                submit_name = "Async Compute Submit";
+                break;
+            case queue_type::async_transfer:
+                submit_name = "Async Transfer Submit";
+                break;
+            default:
+                submit_name = "Queue Submit";
+                break;
+            }
+
+            flight_state.recorded_passes.push_back(flight_query_state::pass_query_binding{
+                .pass_name = tempest::move(submit_name),
+                .queue = batch.queue,
+                .start_timestamp_idx = submit_start_ts,
+                .end_timestamp_idx = submit_end_ts,
+                .depth = 0,
+                .pipeline_stats_idx = nullopt,
+                .pipeline_stats_flags = rhi::pipeline_statistic_flags::none,
+            });
 
             cmd.end();
 
@@ -563,6 +617,7 @@ namespace tempest::render_graph
 
         flight_state.recorded_timestamp_count = current_timestamp_idx;
         flight_state.recorded_pipeline_stats_count = current_stats_idx;
+        flight_state.recorded_frame_index = frame_sync.frame_index;
 
         for (auto* temporal_res : graph.get_tracked_temporal_resources())
         {

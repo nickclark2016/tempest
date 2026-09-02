@@ -180,6 +180,15 @@ TEST(profiler_tests, implicit_thread_registration_and_naming)
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
     ASSERT_EQ(chunks[0]->zones().size(), 1u);
+
+    const auto tid = chunks[0]->get_thread_id();
+    ASSERT_EQ(session.get_track_name(tid), "WorkerThread-Alpha");
+
+    const auto chunk_span =
+        tempest::span<const tempest::unique_ptr<tempest::profiler::event_chunk>>{chunks.data(), chunks.size()};
+    const auto capture = tempest::profiler::create_capture_from_chunks(chunk_span, &session);
+    ASSERT_FALSE(capture.tracks.empty());
+    ASSERT_EQ(capture.tracks[0].name, "WorkerThread-Alpha");
 }
 
 //==============================================================================

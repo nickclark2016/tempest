@@ -47,7 +47,8 @@ namespace tempest::profiler
     };
 
     TEMPEST_API auto create_capture_from_session(profiler_session& session) -> capture_session_data;
-    TEMPEST_API auto create_capture_from_chunks(span<const unique_ptr<event_chunk>> chunks) -> capture_session_data;
+    TEMPEST_API auto create_capture_from_chunks(span<const unique_ptr<event_chunk>> chunks,
+                                                const profiler_session* session = nullptr) -> capture_session_data;
 } // namespace tempest::profiler
 
 #endif // tempest_profiler_capture_hpp

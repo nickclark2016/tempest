@@ -5,7 +5,8 @@
 
 namespace tempest::profiler
 {
-    auto create_capture_from_chunks(span<const unique_ptr<event_chunk>> chunks) -> capture_session_data
+    auto create_capture_from_chunks(span<const unique_ptr<event_chunk>> chunks, const profiler_session* session)
+        -> capture_session_data
     {
         auto result = capture_session_data{};
         auto has_events = false;
@@ -38,30 +39,45 @@ namespace tempest::profiler
                 auto name_buf = std::string{};
                 auto type = track_type::cpu_thread;
 
+                if (session != nullptr)
+                {
+                    auto registered_name = session->get_track_name(tid);
+                    if (!registered_name.empty())
+                    {
+                        name_buf = std::string{registered_name.data(), registered_name.size()};
+                    }
+                }
+
                 if (is_gpu)
                 {
                     type = track_type::gpu_queue;
-                    const auto queue_idx = (tid & 0x7FFF'FFFFULL) - 1;
-                    switch (queue_idx)
+                    if (name_buf.empty())
                     {
-                    case 0:
-                        name_buf = "GPU: Graphics";
-                        break;
-                    case 1:
-                        name_buf = "GPU: Async Compute";
-                        break;
-                    case 2:
-                        name_buf = "GPU: Async Transfer";
-                        break;
-                    default:
-                        std::format_to(std::back_inserter(name_buf), "GPU: Queue {}", queue_idx);
-                        break;
+                        const auto queue_idx = (tid & 0x7FFF'FFFFULL) - 1;
+                        switch (queue_idx)
+                        {
+                        case 0:
+                            name_buf = "GPU: Graphics";
+                            break;
+                        case 1:
+                            name_buf = "GPU: Async Compute";
+                            break;
+                        case 2:
+                            name_buf = "GPU: Async Transfer";
+                            break;
+                        default:
+                            std::format_to(std::back_inserter(name_buf), "GPU: Queue {}", queue_idx);
+                            break;
+                        }
                     }
                 }
                 else
                 {
                     type = track_type::cpu_thread;
-                    std::format_to(std::back_inserter(name_buf), "Thread {}", tid);
+                    if (name_buf.empty())
+                    {
+                        std::format_to(std::back_inserter(name_buf), "Thread {}", tid);
+                    }
                 }
 
                 auto new_track = track_data{
@@ -161,7 +177,7 @@ namespace tempest::profiler
     {
         auto chunks = session.drain_completed_chunks();
         const auto chunk_span = span<const unique_ptr<event_chunk>>{chunks.data(), chunks.size()};
-        auto result = create_capture_from_chunks(chunk_span);
+        auto result = create_capture_from_chunks(chunk_span, &session);
         session.recycle_chunks(tempest::move(chunks));
         return result;
     }

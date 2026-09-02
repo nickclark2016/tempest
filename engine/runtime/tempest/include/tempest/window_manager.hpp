@@ -28,6 +28,7 @@ namespace tempest
         string title{"Tempest Engine"};
         bool fullscreen{false};
         bool resizable{true};
+        rhi::present_mode present_mode{rhi::present_mode::vsync};
     };
 
     /// \brief Manages OS windows, GLFW encapsulation, event dispatching, and WSI handle generation.

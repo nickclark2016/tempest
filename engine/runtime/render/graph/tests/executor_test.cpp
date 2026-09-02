@@ -918,9 +918,9 @@ namespace tempest::render_graph
         const auto exec_res = rg.execute(dev);
         ASSERT_TRUE(exec_res.has_value());
 
-        // 3. Assert: Verify 4 timestamp writes (2 per pass) and query pool reset
+        // 3. Assert: Verify 6 timestamp writes (2 for submit zone + 4 for 2 passes) and query pool reset
         const auto& cmd = dev.graphics_port.cmd;
-        EXPECT_EQ(cmd.written_timestamps.size(), 4U);
+        EXPECT_EQ(cmd.written_timestamps.size(), 6U);
         EXPECT_EQ(cmd.written_timestamps[0].stage, rhi::pipeline_stage::bottom_of_pipe);
         EXPECT_EQ(cmd.written_timestamps[0].query_index, 0U);
         EXPECT_EQ(cmd.written_timestamps[1].stage, rhi::pipeline_stage::bottom_of_pipe);
@@ -930,11 +930,16 @@ namespace tempest::render_graph
         EXPECT_EQ(cmd.written_timestamps[2].query_index, 2U);
         EXPECT_EQ(cmd.written_timestamps[3].stage, rhi::pipeline_stage::bottom_of_pipe);
         EXPECT_EQ(cmd.written_timestamps[3].query_index, 3U);
+        EXPECT_EQ(cmd.written_timestamps[4].stage, rhi::pipeline_stage::bottom_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[4].query_index, 4U);
+        EXPECT_EQ(cmd.written_timestamps[5].stage, rhi::pipeline_stage::bottom_of_pipe);
+        EXPECT_EQ(cmd.written_timestamps[5].query_index, 5U);
 
         EXPECT_GE(cmd.reset_queries.size(), 1U);
     }
 
-    /// @brief Verify cross-queue pass attribution to Graphics and Async Compute execution port tracks.
+    /// @brief Verify cross-queue pass attribution to Graphics and Async Compute execution port tracks with nested
+    /// submit zones.
     TEST(executor_test, cross_queue_pass_attribution_to_execution_port_tracks)
     {
         // 1. Setup profiler session and multi-queue render graph
@@ -1006,14 +1011,20 @@ namespace tempest::render_graph
             if (chunk->get_thread_id() == compute_track_id)
             {
                 has_compute_track = true;
-                ASSERT_FALSE(chunk->zones().empty());
-                EXPECT_EQ(chunk->zones()[0].name, "AsyncComputePass");
+                ASSERT_GE(chunk->zones().size(), 2U);
+                EXPECT_EQ(chunk->zones()[0].name, "Async Compute Submit");
+                EXPECT_EQ(chunk->zones()[0].depth, 0U);
+                EXPECT_EQ(chunk->zones()[1].name, "AsyncComputePass");
+                EXPECT_EQ(chunk->zones()[1].depth, 1U);
             }
             else if (chunk->get_thread_id() == graphics_track_id)
             {
                 has_graphics_track = true;
-                ASSERT_FALSE(chunk->zones().empty());
-                EXPECT_EQ(chunk->zones()[0].name, "GraphicsPass");
+                ASSERT_GE(chunk->zones().size(), 2U);
+                EXPECT_EQ(chunk->zones()[0].name, "Graphics Submit");
+                EXPECT_EQ(chunk->zones()[0].depth, 0U);
+                EXPECT_EQ(chunk->zones()[1].name, "GraphicsPass");
+                EXPECT_EQ(chunk->zones()[1].depth, 1U);
             }
         }
 

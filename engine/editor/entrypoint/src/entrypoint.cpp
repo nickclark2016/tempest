@@ -70,6 +70,7 @@ namespace
                     .title = "Tempest Editor",
                     .fullscreen = false,
                     .resizable = true,
+                    .present_mode = rhi::present_mode::mailbox,
                 },
                 false);
 

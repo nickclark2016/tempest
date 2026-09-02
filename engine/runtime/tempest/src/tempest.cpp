@@ -156,12 +156,25 @@ namespace tempest
         auto raw_surf = raw_res.value();
         auto caps = _device->get_surface_capabilities(raw_surf);
         auto selected_present_mode = rhi::present_mode::vsync;
+        auto desired_found = false;
         for (const auto& mode : caps.supported_present_modes)
         {
-            if (mode == rhi::present_mode::vsync)
+            if (mode == desc.present_mode)
             {
                 selected_present_mode = mode;
+                desired_found = true;
                 break;
+            }
+        }
+        if (!desired_found)
+        {
+            for (const auto& mode : caps.supported_present_modes)
+            {
+                if (mode == rhi::present_mode::vsync)
+                {
+                    selected_present_mode = mode;
+                    break;
+                }
             }
         }
 

@@ -1195,6 +1195,7 @@ namespace tempest::render_system
         auto effective_sync = sync;
         effective_sync.flight_slot_index = slot_idx;
         effective_sync.frames_in_flight = _frames_in_flight;
+        effective_sync.frame_index = _frame_index;
         if (effective_sync.profiler == nullptr)
         {
             effective_sync.profiler = _inputs.profiler;

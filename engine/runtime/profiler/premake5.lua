@@ -19,6 +19,10 @@ scoped.project('profiler', function()
         'include',
     }
 
+    prebuildcommands {
+        'premake5 --file="%{wks.basedir}/premake5.lua" embed-web-assets',
+    }
+
     scoped.filter({ 'files:web/index.html' }, function()
         buildmessage 'Embedding web assets from %{file.relpath}'
         buildcommands {
@@ -28,8 +32,8 @@ scoped.project('profiler', function()
             '%{!wks.basedir}/engine/runtime/profiler/src/web_assets.cpp',
         }
         buildinputs {
-            'web/styles.css',
-            'web/app.js',
+            '%{!wks.basedir}/engine/runtime/profiler/web/styles.css',
+            '%{!wks.basedir}/engine/runtime/profiler/web/app.js',
         }
     end)
 
