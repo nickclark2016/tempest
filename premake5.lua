@@ -57,7 +57,10 @@ newaction {
     execute = embed_web_assets,
 }
 
-embed_web_assets()
+local web_assets_cpp = path.join(_MAIN_SCRIPT_DIR or _WORKING_DIR or '.', 'engine/runtime/profiler/src/web_assets.cpp')
+if not os.isfile(web_assets_cpp) then
+    embed_web_assets()
+end
 
 -- Ensure workspace assets directory and vendor symlinks exist
 local workspaceAssetsDir = path.join(_MAIN_SCRIPT_DIR, 'assets')

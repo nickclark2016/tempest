@@ -19,10 +19,6 @@ scoped.project('profiler', function()
         'include',
     }
 
-    prebuildcommands {
-        'premake5 --file="%{wks.basedir}/premake5.lua" embed-web-assets',
-    }
-
     scoped.filter({ 'files:web/index.html' }, function()
         buildmessage 'Embedding web assets from %{file.relpath}'
         buildcommands {
