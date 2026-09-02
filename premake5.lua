@@ -48,6 +48,8 @@ local function embed_web_assets()
             f:write(generated)
             f:close()
         end
+    else
+        os.touchfile(out_file)
     end
 end
 
