@@ -268,15 +268,19 @@ namespace tempest::editor
         auto gpu_time_ns = uint64_t{0};
         for (const auto& gtrack : telemetry.gpu_tracks)
         {
-            for (const auto& z : gtrack.zones)
+            const auto z_span = span<const profiler::telemetry_zone>{gtrack.zones.data(), gtrack.zones.size()};
+            const auto exclusives = profiler::compute_exclusive_durations_telemetry(z_span);
+            for (const auto& ez : exclusives)
             {
-                if (z.end_ns >= z.start_ns)
-                {
-                    gpu_time_ns += (z.end_ns - z.start_ns);
-                }
+                gpu_time_ns += ez.exclusive_duration_ns;
             }
         }
         _last_gpu_time_ms = static_cast<float>(gpu_time_ns) / 1000000.0f;
+
+        const auto frame_ms = _delta_frame_time.count() > 0.0f ? (_delta_frame_time.count() * 1000.0f) : 16.67f;
+        const auto fps = frame_ms > 0.0f ? (1000.0f / frame_ms) : 60.0f;
+
+        _stats_accumulator.record_frame(fps, frame_ms, _last_cpu_time_ms, _last_gpu_time_ms, telemetry);
 
         _last_telemetry_frame = tempest::move(telemetry);
 

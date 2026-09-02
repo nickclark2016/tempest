@@ -293,4 +293,70 @@ namespace tempest::editor::tests
 
         env.win_mgr.destroy_window(env.win);
     }
+
+    /// @brief Verifies rolling statistics accumulation in editor_engine_context and filtering of GPU queue submits.
+    TEST(editor_profiler_ux_test, editor_rolling_statistics_and_hot_zones)
+    {
+        // 1. Setup: Create editor engine context
+        auto engine_ctx = editor_engine_context{};
+
+        // Setup GPU track with submit envelope and passes
+        const auto gpu_track_id = 0x8000'0001ULL;
+        engine_ctx.get_profiler_session().register_track(gpu_track_id, "GPU: Graphics");
+
+        // Record frame 1: CPU zone + GPU submit envelope and pass
+        {
+            [[maybe_unused]] const auto z_cpu =
+                profiler::scoped_zone{engine_ctx.get_profiler_session(), "Editor::PaintPass"};
+
+            auto chunk = engine_ctx.get_profiler_session().acquire_chunk();
+            chunk->set_thread_id(gpu_track_id);
+            // Submit envelope (0 to 5ms)
+            chunk->add_zone(profiler::zone_record{
+                .start_ns = 0,
+                .end_ns = 5'000'000,
+                .depth = 0,
+                .name = "Graphics Submit",
+            });
+            // ForwardLightingPass (0.5 to 3.5ms = 3ms)
+            chunk->add_zone(profiler::zone_record{
+                .start_ns = 500'000,
+                .end_ns = 3'500'000,
+                .depth = 1,
+                .name = "ForwardLightingPass",
+            });
+            // SkyboxPass (3.5 to 4.5ms = 1ms)
+            chunk->add_zone(profiler::zone_record{
+                .start_ns = 3'500'000,
+                .end_ns = 4'500'000,
+                .depth = 1,
+                .name = "SkyboxPass",
+            });
+            engine_ctx.get_profiler_session().push_completed_chunk(tempest::move(chunk));
+        }
+
+        // 2. Act: Collect telemetry for frame 1
+        engine_ctx.collect_and_broadcast_telemetry();
+
+        // 3. Assert: Verify rolling stats and hot zones
+        EXPECT_EQ(engine_ctx.get_frame_index(), 1u);
+        EXPECT_GT(engine_ctx.get_rolling_fps(), 0.0f);
+        EXPECT_GT(engine_ctx.get_rolling_frame_time_ms(), 0.0f);
+        EXPECT_GT(engine_ctx.get_rolling_gpu_time_ms(), 0.0f);
+
+        const auto gpu_hot = engine_ctx.get_top_gpu_hot_zones(5);
+        // Verify submit envelope is filtered out
+        for (const auto& z : gpu_hot)
+        {
+            EXPECT_NE(z.name, "Graphics Submit");
+            EXPECT_FALSE(profiler::is_gpu_submit_zone_name(z.name));
+        }
+        ASSERT_GE(gpu_hot.size(), 2u);
+        EXPECT_EQ(gpu_hot[0].name, "ForwardLightingPass");
+        EXPECT_EQ(gpu_hot[1].name, "SkyboxPass");
+
+        const auto cpu_hot = engine_ctx.get_top_cpu_hot_zones(5);
+        ASSERT_GE(cpu_hot.size(), 1u);
+        EXPECT_EQ(cpu_hot[0].name, "Editor::PaintPass");
+    }
 } // namespace tempest::editor::tests

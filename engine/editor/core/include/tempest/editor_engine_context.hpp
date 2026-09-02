@@ -91,6 +91,43 @@ namespace tempest::editor
             return _last_gpu_time_ms;
         }
 
+        [[nodiscard]] auto get_rolling_fps() const noexcept -> float
+        {
+            return _stats_accumulator.sample_count() > 0 ? _stats_accumulator.get_rolling_fps() : 60.0f;
+        }
+
+        [[nodiscard]] auto get_rolling_frame_time_ms() const noexcept -> float
+        {
+            return _stats_accumulator.sample_count() > 0 ? _stats_accumulator.get_rolling_frame_time_ms() : 16.67f;
+        }
+
+        [[nodiscard]] auto get_rolling_cpu_time_ms() const noexcept -> float
+        {
+            return _stats_accumulator.sample_count() > 0 ? _stats_accumulator.get_rolling_cpu_time_ms()
+                                                         : _last_cpu_time_ms;
+        }
+
+        [[nodiscard]] auto get_rolling_gpu_time_ms() const noexcept -> float
+        {
+            return _stats_accumulator.sample_count() > 0 ? _stats_accumulator.get_rolling_gpu_time_ms()
+                                                         : _last_gpu_time_ms;
+        }
+
+        [[nodiscard]] auto get_top_cpu_hot_zones(size_t count = 5) const -> vector<profiler::hot_zone_entry>
+        {
+            return _stats_accumulator.get_top_cpu_hot_zones(count);
+        }
+
+        [[nodiscard]] auto get_top_gpu_hot_zones(size_t count = 5) const -> vector<profiler::hot_zone_entry>
+        {
+            return _stats_accumulator.get_top_gpu_hot_zones(count);
+        }
+
+        [[nodiscard]] auto get_stats_accumulator() const noexcept -> const profiler::frame_stats_accumulator&
+        {
+            return _stats_accumulator;
+        }
+
         [[nodiscard]] auto get_frame_index() const noexcept -> uint64_t
         {
             return _frame_index;
@@ -136,6 +173,7 @@ namespace tempest::editor
         unique_ptr<profiler::web_server> _web_server{};
         uint64_t _frame_index{0};
         profiler::telemetry_frame _last_telemetry_frame{};
+        profiler::frame_stats_accumulator _stats_accumulator{60};
         float _last_cpu_time_ms{0.0f};
         float _last_gpu_time_ms{0.0f};
         bool _capture_gpu_stats{true};

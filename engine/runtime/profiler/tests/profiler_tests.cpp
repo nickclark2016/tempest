@@ -1842,3 +1842,248 @@ TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
     EXPECT_NE(json_std.find("\"name\":\"Fragment Shader Invocations\",\"value\":50000.000"), std::string::npos);
     EXPECT_NE(json_std.find("\"name\":\"Compute Shader Invocations\",\"value\":1024.000"), std::string::npos);
 }
+
+//==============================================================================
+// Zone Exclusive Durations & Rolling Statistics Tests
+//==============================================================================
+
+/// @brief Verifies calculation of exclusive (self) timing for nested zone hierarchies and sibling zones.
+TEST(profiler_tests, zone_exclusive_duration_calculation)
+{
+    // 1. Setup: Construct nested zone records
+    // Hierarchy:
+    // RootZone (1000 - 3000 = 2000ns total, depth 0)
+    //   ├── ChildA (1000 - 1800 = 800ns total, depth 1)
+    //   │     └── Grandchild (1100 - 1500 = 400ns total, depth 2)
+    //   └── ChildB (2000 - 2600 = 600ns total, depth 1)
+    auto zones = tempest::vector<tempest::profiler::zone_record>{};
+    zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 1000,
+        .end_ns = 3000,
+        .depth = 0,
+        .name = "RootZone",
+    });
+    zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 1000,
+        .end_ns = 1800,
+        .depth = 1,
+        .name = "ChildA",
+    });
+    zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 1100,
+        .end_ns = 1500,
+        .depth = 2,
+        .name = "Grandchild",
+    });
+    zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 2000,
+        .end_ns = 2600,
+        .depth = 1,
+        .name = "ChildB",
+    });
+
+    // 2. Act: Compute exclusive durations
+    const auto z_span = tempest::span<const tempest::profiler::zone_record>{zones.data(), zones.size()};
+    const auto result = tempest::profiler::compute_exclusive_durations(z_span);
+
+    // 3. Assert: Verify each zone's exclusive time
+    ASSERT_EQ(result.size(), 4u);
+
+    // RootZone: Total = 2000ns, direct children (ChildA 800ns + ChildB 600ns = 1400ns) -> Exclusive = 600ns
+    EXPECT_EQ(result[0].name, "RootZone");
+    EXPECT_EQ(result[0].total_duration_ns, 2000u);
+    EXPECT_EQ(result[0].exclusive_duration_ns, 600u);
+
+    // ChildA: Total = 800ns, direct child (Grandchild 400ns) -> Exclusive = 400ns
+    EXPECT_EQ(result[1].name, "ChildA");
+    EXPECT_EQ(result[1].total_duration_ns, 800u);
+    EXPECT_EQ(result[1].exclusive_duration_ns, 400u);
+
+    // Grandchild: Total = 400ns, no children -> Exclusive = 400ns
+    EXPECT_EQ(result[2].name, "Grandchild");
+    EXPECT_EQ(result[2].total_duration_ns, 400u);
+    EXPECT_EQ(result[2].exclusive_duration_ns, 400u);
+
+    // ChildB: Total = 600ns, no children -> Exclusive = 600ns
+    EXPECT_EQ(result[3].name, "ChildB");
+    EXPECT_EQ(result[3].total_duration_ns, 600u);
+    EXPECT_EQ(result[3].exclusive_duration_ns, 600u);
+}
+
+/// @brief Verifies detection and filtering of GPU queue submit envelopes from hot zones.
+TEST(profiler_tests, gpu_submit_envelope_detection_and_hot_zone_filtering)
+{
+    // 1. Setup: Verify submit name detection helper
+    EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("Graphics Submit"));
+    EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("Async Compute Submit"));
+    EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("Async Transfer Submit"));
+    EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("Queue Submit"));
+    EXPECT_TRUE(tempest::profiler::is_gpu_submit_zone_name("CustomSubmitEnvelope"));
+    EXPECT_FALSE(tempest::profiler::is_gpu_submit_zone_name("PBROpaquePass"));
+    EXPECT_FALSE(tempest::profiler::is_gpu_submit_zone_name("ShadowPass"));
+    EXPECT_FALSE(tempest::profiler::is_gpu_submit_zone_name("BloomDownsample"));
+
+    // 2. Setup: Build mock GPU telemetry track with a top-level submit envelope and child passes
+    auto tracks = tempest::vector<tempest::profiler::telemetry_track>{};
+    auto gtrack = tempest::profiler::telemetry_track{
+        .track_id = 0x8000'0001ULL,
+        .name = "GPU: Graphics Queue",
+        .zones = {},
+    };
+
+    // Submit envelope (depth 0, 0 to 5ms)
+    gtrack.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "Graphics Submit",
+        .start_ns = 0,
+        .end_ns = 5'000'000,
+        .depth = 0,
+    });
+    // Pass A (depth 1, 0.5ms to 3.5ms = 3ms)
+    gtrack.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "ForwardLightingPass",
+        .start_ns = 500'000,
+        .end_ns = 3'500'000,
+        .depth = 1,
+    });
+    // Pass B (depth 1, 3.5ms to 4.8ms = 1.3ms)
+    gtrack.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "TonemapPass",
+        .start_ns = 3'500'000,
+        .end_ns = 4'800'000,
+        .depth = 1,
+    });
+    tracks.push_back(tempest::move(gtrack));
+
+    // 3. Act: Extract hot zones with GPU submit filtering enabled
+    const auto hot_zones = tempest::profiler::extract_hot_zones(
+        tempest::span<const tempest::profiler::telemetry_track>{tracks.data(), tracks.size()}, true, 5);
+
+    // 4. Assert: Submit envelope is omitted, passes are ranked by exclusive duration
+    ASSERT_EQ(hot_zones.size(), 2u);
+    EXPECT_EQ(hot_zones[0].name, "ForwardLightingPass");
+    EXPECT_NEAR(hot_zones[0].exclusive_duration_ms, 3.0, 1e-4);
+    EXPECT_EQ(hot_zones[1].name, "TonemapPass");
+    EXPECT_NEAR(hot_zones[1].exclusive_duration_ms, 1.3, 1e-4);
+}
+
+/// @brief Verifies frame_stats_accumulator rolling average computation and window sliding across N frames.
+TEST(profiler_tests, frame_stats_accumulator_rolling_averages_and_wrap)
+{
+    // 1. Setup: Create accumulator with capacity N = 4 frames
+    auto acc = tempest::profiler::frame_stats_accumulator{4};
+    EXPECT_EQ(acc.window_capacity(), 4u);
+    EXPECT_EQ(acc.sample_count(), 0u);
+    EXPECT_FLOAT_EQ(acc.get_rolling_fps(), 0.0f);
+    EXPECT_FLOAT_EQ(acc.get_rolling_frame_time_ms(), 0.0f);
+    EXPECT_FLOAT_EQ(acc.get_rolling_cpu_time_ms(), 0.0f);
+    EXPECT_FLOAT_EQ(acc.get_rolling_gpu_time_ms(), 0.0f);
+
+    auto empty_frame = tempest::profiler::telemetry_frame{};
+
+    // 2. Act & Assert: Push 1st frame (FPS=60, Frame=16.6ms, CPU=5.0ms, GPU=4.0ms)
+    acc.record_frame(60.0f, 16.6f, 5.0f, 4.0f, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 1u);
+    EXPECT_NEAR(acc.get_rolling_fps(), 60.0f, 1e-3);
+    EXPECT_NEAR(acc.get_rolling_frame_time_ms(), 16.6f, 1e-3);
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 5.0f, 1e-3);
+    EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 4.0f, 1e-3);
+
+    // 3. Act & Assert: Push 2nd frame (FPS=30, Frame=33.3ms, CPU=15.0ms, GPU=12.0ms)
+    acc.record_frame(30.0f, 33.3f, 15.0f, 12.0f, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 2u);
+    EXPECT_NEAR(acc.get_rolling_fps(), 45.0f, 1e-3);            // (60 + 30) / 2
+    EXPECT_NEAR(acc.get_rolling_frame_time_ms(), 24.95f, 1e-2); // (16.6 + 33.3) / 2
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 10.0f, 1e-3);    // (5.0 + 15.0) / 2
+    EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 8.0f, 1e-3);     // (4.0 + 12.0) / 2
+
+    // Push 3rd and 4th frames
+    acc.record_frame(60.0f, 16.0f, 6.0f, 4.0f, empty_frame);
+    acc.record_frame(60.0f, 16.0f, 6.0f, 4.0f, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 4u);
+    // Mean CPU over [5, 15, 6, 6] = 32 / 4 = 8.0ms
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 8.0f, 1e-3);
+
+    // 4. Act & Assert: Push 5th frame to trigger wrap-around (evicts 1st frame with CPU=5.0)
+    // New window: [15, 6, 6, 20] -> Sum = 47 / 4 = 11.75ms
+    acc.record_frame(50.0f, 20.0f, 20.0f, 10.0f, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 4u);
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 11.75f, 1e-3);
+
+    // 5. Act & Assert: Reset clears history
+    acc.reset();
+    EXPECT_EQ(acc.sample_count(), 0u);
+    EXPECT_FLOAT_EQ(acc.get_rolling_cpu_time_ms(), 0.0f);
+}
+
+/// @brief Verifies rolling hot zone aggregation and exclusive time averaging over multiple frames.
+TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
+{
+    // 1. Setup: Create accumulator with capacity 2 frames
+    auto acc = tempest::profiler::frame_stats_accumulator{2};
+
+    // Frame 1: CPU zone "Physics" (2ms), "Render" (4ms, exclusive 3ms with child 1ms)
+    auto frame1 = tempest::profiler::telemetry_frame{};
+    auto track1 = tempest::profiler::telemetry_track{
+        .track_id = 1,
+        .name = "Main Thread",
+        .zones = {},
+    };
+    track1.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "Render",
+        .start_ns = 0,
+        .end_ns = 4'000'000,
+        .depth = 0,
+    });
+    track1.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "RenderChild",
+        .start_ns = 0,
+        .end_ns = 1'000'000,
+        .depth = 1,
+    });
+    track1.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "Physics",
+        .start_ns = 4'000'000,
+        .end_ns = 6'000'000,
+        .depth = 0,
+    });
+    frame1.cpu_tracks.push_back(tempest::move(track1));
+
+    // Frame 2: CPU zone "Physics" (4ms), "Audio" (1ms)
+    auto frame2 = tempest::profiler::telemetry_frame{};
+    auto track2 = tempest::profiler::telemetry_track{
+        .track_id = 1,
+        .name = "Main Thread",
+        .zones = {},
+    };
+    track2.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "Physics",
+        .start_ns = 0,
+        .end_ns = 4'000'000,
+        .depth = 0,
+    });
+    track2.zones.push_back(tempest::profiler::telemetry_zone{
+        .name = "Audio",
+        .start_ns = 4'000'000,
+        .end_ns = 5'000'000,
+        .depth = 0,
+    });
+    frame2.cpu_tracks.push_back(tempest::move(track2));
+
+    // 2. Act: Record both frames
+    acc.record_frame(60.0f, 16.6f, 6.0f, 0.0f, frame1);
+    acc.record_frame(60.0f, 16.6f, 5.0f, 0.0f, frame2);
+
+    // 3. Act: Query rolling top CPU hot zones
+    const auto top_cpu = acc.get_top_cpu_hot_zones(5);
+
+    // 4. Assert:
+    // "Physics": frame1=2ms, frame2=4ms -> avg = 3.0ms
+    // "Render": frame1=3ms exclusive, frame2=0ms -> avg = 1.5ms
+    // "RenderChild": frame1=1ms exclusive, frame2=0ms -> avg = 0.5ms
+    // "Audio": frame1=0ms, frame2=1ms -> avg = 0.5ms
+    ASSERT_GE(top_cpu.size(), 2u);
+    EXPECT_EQ(top_cpu[0].name, "Physics");
+    EXPECT_NEAR(top_cpu[0].exclusive_duration_ms, 3.0, 1e-4);
+    EXPECT_EQ(top_cpu[1].name, "Render");
+    EXPECT_NEAR(top_cpu[1].exclusive_duration_ms, 1.5, 1e-4);
+}

@@ -1307,10 +1307,17 @@
   function selectZone(zone) {
     state.selectedZone = zone;
     if (!zone) {
+      state.selectedStatsRow = null;
       dom.inspectorPlaceholder.style.display = 'flex';
       dom.inspectorDetails.style.display = 'none';
+      renderHistogram(null);
       render();
       return;
+    }
+
+    state.selectedStatsRow = zone.name;
+    if (state.zoneStats.has(zone.name)) {
+      renderHistogram(state.zoneStats.get(zone.name));
     }
 
     dom.inspectorPlaceholder.style.display = 'none';
@@ -1734,6 +1741,42 @@
         }
 
         state.isDragging = false;
+        render();
+      }
+    });
+
+    // Double-Click Zoom on Zone / Range
+    canvas.addEventListener('dblclick', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const hit = hitTest(mouseX, mouseY);
+      if (hit && hit.type === 'zone') {
+        const z = hit.zone;
+        const dur = Math.max(100, z.end_ns - z.start_ns);
+        const margin = dur * 0.05;
+
+        state.viewStartNs = z.start_ns - margin;
+        state.viewEndNs = z.end_ns + margin;
+
+        selectZone(z);
+        if (state.isLive) {
+          toggleLiveStreaming(false);
+        }
+        render();
+      } else if (state.selectionRange) {
+        const t1 = Math.min(state.selectionRange.startNs, state.selectionRange.endNs);
+        const t2 = Math.max(state.selectionRange.startNs, state.selectionRange.endNs);
+        const dur = Math.max(100, t2 - t1);
+        const margin = dur * 0.05;
+
+        state.viewStartNs = t1 - margin;
+        state.viewEndNs = t2 + margin;
+
+        if (state.isLive) {
+          toggleLiveStreaming(false);
+        }
         render();
       }
     });
@@ -2270,6 +2313,20 @@
     dom.tabPanes.forEach(pane => {
       pane.classList.toggle('active', pane.id === `pane-${tabId}`);
     });
+
+    if (tabId === 'stats') {
+      if (state.selectedZone && !state.selectedStatsRow) {
+        state.selectedStatsRow = state.selectedZone.name;
+      }
+      renderStatsTable();
+      if (state.selectedStatsRow && state.zoneStats.has(state.selectedStatsRow)) {
+        renderHistogram(state.zoneStats.get(state.selectedStatsRow));
+      }
+      const selectedTr = dom.statsTbody.querySelector('tr.selected');
+      if (selectedTr) {
+        selectedTr.scrollIntoView({ block: 'nearest' });
+      }
+    }
   }
 
   function initUI() {

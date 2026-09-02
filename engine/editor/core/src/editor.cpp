@@ -344,10 +344,10 @@ namespace tempest::editor
         const auto clients = server ? server->connected_client_count() : size_t{0};
         const auto is_rec = _engine_ctx->is_recording();
 
-        const auto fps = ImGui::GetIO().Framerate > 0.0f ? ImGui::GetIO().Framerate : 60.0f;
-        const auto frame_ms = fps > 0.0f ? (1000.0f / fps) : 16.67f;
-        const auto cpu_ms = _engine_ctx->get_last_cpu_time_ms();
-        const auto gpu_ms = _engine_ctx->get_last_gpu_time_ms();
+        const auto fps = _engine_ctx->get_rolling_fps();
+        const auto frame_ms = _engine_ctx->get_rolling_frame_time_ms();
+        const auto cpu_ms = _engine_ctx->get_rolling_cpu_time_ms();
+        const auto gpu_ms = _engine_ctx->get_rolling_gpu_time_ms();
 
         const auto pill_text = std::format(" {:.1f} FPS | {:.1f}ms (CPU {:.1f}ms / GPU {:.1f}ms) | :{} ({}) ]", fps,
                                            frame_ms, cpu_ms, gpu_ms, port, clients);
@@ -461,10 +461,10 @@ namespace tempest::editor
         const auto* server = _engine_ctx->get_web_server();
         const auto clients = server ? server->connected_client_count() : size_t{0};
 
-        const auto fps = ImGui::GetIO().Framerate > 0.0f ? ImGui::GetIO().Framerate : 60.0f;
-        const auto frame_ms = fps > 0.0f ? (1000.0f / fps) : 16.67f;
-        const auto cpu_ms = _engine_ctx->get_last_cpu_time_ms();
-        const auto gpu_ms = _engine_ctx->get_last_gpu_time_ms();
+        const auto fps = _engine_ctx->get_rolling_fps();
+        const auto frame_ms = _engine_ctx->get_rolling_frame_time_ms();
+        const auto cpu_ms = _engine_ctx->get_rolling_cpu_time_ms();
+        const auto gpu_ms = _engine_ctx->get_rolling_gpu_time_ms();
 
         ImGui::BeginTooltip();
 
@@ -477,90 +477,35 @@ namespace tempest::editor
         ImGui::Text("GPU Time         : %.2f ms", gpu_ms);
         ImGui::Text("Active Clients   : %zu connected", clients);
 
-        struct zone_summary
-        {
-            string name;
-            double duration_ms;
-        };
-        auto cpu_zones = vector<zone_summary>{};
-        for (const auto& track : frame.cpu_tracks)
-        {
-            for (const auto& z : track.zones)
-            {
-                if (z.end_ns >= z.start_ns)
-                {
-                    const auto dur = static_cast<double>(z.end_ns - z.start_ns) / 1000000.0;
-                    cpu_zones.push_back({z.name, dur});
-                }
-            }
-        }
-
-        for (auto i = size_t{0}; i < cpu_zones.size(); ++i)
-        {
-            for (auto j = i + 1; j < cpu_zones.size(); ++j)
-            {
-                if (cpu_zones[j].duration_ms > cpu_zones[i].duration_ms)
-                {
-                    auto tmp = tempest::move(cpu_zones[i]);
-                    cpu_zones[i] = tempest::move(cpu_zones[j]);
-                    cpu_zones[j] = tempest::move(tmp);
-                }
-            }
-        }
+        const auto cpu_zones = _engine_ctx->get_top_cpu_hot_zones(5);
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Top CPU Zones:");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Top CPU Zones (Rolling):");
         if (cpu_zones.empty())
         {
             ImGui::TextDisabled("  (No CPU zones recorded)");
         }
         else
         {
-            const auto show_count = min(cpu_zones.size(), size_t{5});
-            for (auto i = size_t{0}; i < show_count; ++i)
+            for (const auto& z : cpu_zones)
             {
-                ImGui::Text("  • %-24s : %.2f ms", cpu_zones[i].name.c_str(), cpu_zones[i].duration_ms);
+                ImGui::Text("  • %-24s : %.2f ms", z.name.c_str(), z.exclusive_duration_ms);
             }
         }
 
-        auto gpu_zones = vector<zone_summary>{};
-        for (const auto& track : frame.gpu_tracks)
-        {
-            for (const auto& z : track.zones)
-            {
-                if (z.end_ns >= z.start_ns)
-                {
-                    const auto dur = static_cast<double>(z.end_ns - z.start_ns) / 1000000.0;
-                    gpu_zones.push_back({z.name, dur});
-                }
-            }
-        }
-
-        for (auto i = size_t{0}; i < gpu_zones.size(); ++i)
-        {
-            for (auto j = i + 1; j < gpu_zones.size(); ++j)
-            {
-                if (gpu_zones[j].duration_ms > gpu_zones[i].duration_ms)
-                {
-                    auto tmp = tempest::move(gpu_zones[i]);
-                    gpu_zones[i] = tempest::move(gpu_zones[j]);
-                    gpu_zones[j] = tempest::move(tmp);
-                }
-            }
-        }
+        const auto gpu_zones = _engine_ctx->get_top_gpu_hot_zones(5);
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1.0f), "Top GPU Passes:");
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1.0f), "Top GPU Passes (Rolling):");
         if (gpu_zones.empty())
         {
             ImGui::TextDisabled("  (No GPU passes recorded)");
         }
         else
         {
-            const auto show_count = min(gpu_zones.size(), size_t{5});
-            for (auto i = size_t{0}; i < show_count; ++i)
+            for (const auto& z : gpu_zones)
             {
-                ImGui::Text("  • %-24s : %.2f ms", gpu_zones[i].name.c_str(), gpu_zones[i].duration_ms);
+                ImGui::Text("  • %-24s : %.2f ms", z.name.c_str(), z.exclusive_duration_ms);
             }
         }
 
