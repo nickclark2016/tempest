@@ -17,9 +17,9 @@ ConstantBuffer<ShadowDepthPushConstants> push_constants;
 struct VertexOutput {
     float4 position : SV_Position;
     float2 uv       : UV0;
-    nointerpolation MaterialType material_type : MATERIAL_TYPE;
     nointerpolation float4 base_color_factor : BASE_COLOR_FACTOR;
     nointerpolation int base_texture_id : BASE_TEXTURE_ID;
+    nointerpolation float alpha_cutoff : ALPHA_CUTOFF;
 };
 
 [shader("vertex")]
@@ -39,25 +39,23 @@ VertexOutput VSMain(uint vertex_id : SV_VertexID, uint instance_id : SV_Instance
     VertexOutput output;
     output.position = clip_pos;
     output.uv = v.uv0;
-    output.material_type = instance.material.type;
     output.base_color_factor = instance.material.base_texture_factor;
     output.base_texture_id = instance.material.base_texture_id;
+    output.alpha_cutoff = instance.material.alpha_cutoff;
 
     return output;
 }
 
 [shader("fragment")]
 void FSMain(VertexOutput input) {
-    if (input.material_type == MaterialType::MASK) {
-        float4 base_color = input.base_color_factor;
+    float4 base_color = input.base_color_factor;
 
-        if (input.base_texture_id >= 0) {
-            SamplerState linear_sampler = bindless_samplers[push_constants.linear_sampler_index];
-            base_color *= bindless_textures[input.base_texture_id].Sample(linear_sampler, input.uv);
-        }
+    if (input.base_texture_id >= 0) {
+        SamplerState linear_sampler = bindless_samplers[push_constants.linear_sampler_index];
+        base_color *= bindless_textures[input.base_texture_id].Sample(linear_sampler, input.uv);
+    }
 
-        if (base_color.a < 0.5) { // Assuming a default alpha cutoff value
-            discard;
-        }
+    if (base_color.a < input.alpha_cutoff) {
+        discard;
     }
 }

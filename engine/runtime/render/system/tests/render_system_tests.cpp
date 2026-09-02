@@ -1064,10 +1064,12 @@ namespace tempest::render_system::tests
             rend->prepare_frame(1280, 720);
 
             // Assert draw counts:
-            // 5 total active draws: 3 opaque (ent0, ent2, ent4), 2 transparent (ent1, ent3)
+            // 5 total active draws: 2 opaque (ent0, ent4), 1 alpha-masked (ent2), 2 transparent (ent1, ent3)
             EXPECT_EQ(rend->get_active_draw_count(), 5U);
-            EXPECT_EQ(rend->get_opaque_draw_count(), 3U);
+            EXPECT_EQ(rend->get_opaque_draw_count(), 2U);
             EXPECT_EQ(rend->get_opaque_draw_offset(), 0U);
+            EXPECT_EQ(rend->get_alpha_masked_draw_count(), 1U);
+            EXPECT_EQ(rend->get_alpha_masked_draw_offset(), 2U);
             EXPECT_EQ(rend->get_transparent_draw_count(), 2U);
             EXPECT_EQ(rend->get_transparent_draw_offset(), 3U);
 
@@ -1092,12 +1094,14 @@ namespace tempest::render_system::tests
                 EXPECT_EQ(instances[i], i);
             }
 
-            // Opaque partition first
+            // Opaque partition first (ent0, ent4)
             EXPECT_EQ(objects[0].self_id, static_cast<uint32_t>(ent0));
-            EXPECT_EQ(objects[1].self_id, static_cast<uint32_t>(ent2));
-            EXPECT_EQ(objects[2].self_id, static_cast<uint32_t>(ent4));
+            EXPECT_EQ(objects[1].self_id, static_cast<uint32_t>(ent4));
 
-            // Transparent partition second
+            // Alpha-masked partition second (ent2)
+            EXPECT_EQ(objects[2].self_id, static_cast<uint32_t>(ent2));
+
+            // Transparent partition third (ent1, ent3)
             EXPECT_EQ(objects[3].self_id, static_cast<uint32_t>(ent1));
             EXPECT_EQ(objects[4].self_id, static_cast<uint32_t>(ent3));
         }
@@ -1357,7 +1361,10 @@ namespace tempest::render_system::tests
             .allocator = allocator,
             .registry = registry,
             .camera_sys = &cam_sys,
-            .draw_count = 0,
+            .opaque_draw_count = 0,
+            .opaque_draw_offset = 0,
+            .alpha_masked_draw_count = 0,
+            .alpha_masked_draw_offset = 0,
         });
         const auto& shadow_data = shadow_res.shadow_data;
 
@@ -1497,12 +1504,157 @@ namespace tempest::render_system::tests
             .allocator = allocator,
             .registry = registry,
             .camera_sys = &cam_sys,
-            .draw_count = 1,
+            .opaque_draw_count = 1,
+            .opaque_draw_offset = 0,
+            .alpha_masked_draw_count = 0,
+            .alpha_masked_draw_offset = 0,
         });
 
         EXPECT_EQ(shadow_res.shadow_data.cascade_count, 4U);
         EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
 
+        auto exec_res = graph.execute(*dev);
+        EXPECT_TRUE(exec_res.has_value());
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verifies that the directional shadow pass registers both the opaque and alpha-masked
+    /// graphics pipelines, binds them in sequence with their respective draw offsets/counts, and
+    /// successfully executes on the GPU.
+    TEST(render_system_tests, shadow_pass_dual_pipeline_opaque_and_masked_execution)
+    {
+        // 1. Setup Test Device, Asset Database, and Contexts
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        ASSERT_NE(dev, nullptr);
+
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto cam_sys = camera_system{registry, events};
+
+        auto cam_ent = registry.create();
+        registry.assign(cam_ent, camera_component{
+                                     .aspect_ratio = 16.0F / 9.0F,
+                                     .vertical_fov = 1.0F,
+                                     .near_plane = 0.1F,
+                                     .is_active = true,
+                                 });
+        registry.assign(cam_ent, ecs::transform_component::identity());
+
+        auto sun_ent = registry.create();
+        registry.assign(sun_ent, directional_light_component{
+                                     .color = {1.0F, 1.0F, 1.0F},
+                                     .intensity = 5.0F,
+                                 });
+        registry.assign(sun_ent, shadow_caster_component{
+                                     .resolution = 1024,
+                                     .num_cascades = 2,
+                                     .split_lambda = 0.5F,
+                                     .max_shadow_distance = 50.0F,
+                                     .normal_bias = 0.02F,
+                                     .depth_bias = 0.005F,
+                                     .priority = 0,
+                                 });
+        auto sun_tx = ecs::transform_component::identity();
+        sun_tx.rotation({math::as_radians(45.0F), math::as_radians(30.0F), 0.0F});
+        registry.assign(sun_ent, sun_tx);
+
+        auto meshes = core::mesh_registry{};
+        auto mesh_id = meshes.register_mesh(create_test_mesh());
+
+        auto pool = resource_pool{*dev};
+        auto shaders = shader_manager{*dev, fixture.asset_db};
+        auto allocator = shelf_allocator{4096, 4096, 4};
+        auto graph = render_graph::render_graph{1280, 720};
+
+        pool.load_meshes(span<const guid>{&mesh_id, 1}, meshes, graph);
+
+        auto shadow_atlas_tex = graph.create_texture(render_graph::rg_texture_desc{
+            .size = render_graph::rg_texture_size::absolute(4096, 4096),
+            .format = rhi::data_format::depth32_float,
+            .usage = rhi::texture_usage::depth_stencil_attachment | rhi::texture_usage::sampled,
+            .name = "DirectionalShadowAtlas",
+        });
+
+        const auto mesh_layout_opt = pool.get_mesh_layout(mesh_id);
+        ASSERT_TRUE(mesh_layout_opt.has_value());
+        const auto& ml = *mesh_layout_opt;
+
+        // Create 2 objects: Object 0 (Opaque), Object 1 (Alpha-Masked)
+        auto objects = array<object_payload, 2>{
+            object_payload{
+                .model = math::mat4<float>{1.0F},
+                .inv_transpose_model = math::mat4<float>{1.0F},
+                .mesh_gpu_address = pool.get_mesh_address(mesh_id),
+                .material_gpu_address = 0,
+                .parent_gpu_address = 0,
+                .self_id = 100,
+                .padding = 0,
+            },
+            object_payload{
+                .model = math::mat4<float>{1.0F},
+                .inv_transpose_model = math::mat4<float>{1.0F},
+                .mesh_gpu_address = pool.get_mesh_address(mesh_id),
+                .material_gpu_address = 0,
+                .parent_gpu_address = 0,
+                .self_id = 101,
+                .padding = 0,
+            },
+        };
+
+        auto instances = array<uint32_t, 2>{0, 1};
+        auto commands = array<indexed_indirect_command, 2>{
+            indexed_indirect_command{
+                .index_count = ml.index_count,
+                .instance_count = 1,
+                .first_index = (ml.mesh_start_offset + ml.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+                .vertex_offset = 0,
+                .first_instance = 0,
+            },
+            indexed_indirect_command{
+                .index_count = ml.index_count,
+                .instance_count = 1,
+                .first_index = (ml.mesh_start_offset + ml.index_offset) / static_cast<uint32_t>(sizeof(uint32_t)),
+                .vertex_offset = 0,
+                .first_instance = 1,
+            },
+        };
+
+        pool.write_objects(span<const object_payload>{objects.data(), objects.size()});
+        pool.write_instances(span<const uint32_t>{instances.data(), instances.size()});
+        pool.write_draw_commands(span<const indexed_indirect_command>{commands.data(), commands.size()});
+
+        // 2. Act: Record Frame Upload and Dual-Pipeline Shadow Pass
+        add_frame_upload_pass(graph, pool);
+        const auto shadow_res = add_shadow_pass(shadow_pass_params{
+            .graph = graph,
+            .pool = pool,
+            .shaders = shaders,
+            .shadow_atlas = shadow_atlas_tex,
+            .allocator = allocator,
+            .registry = registry,
+            .camera_sys = &cam_sys,
+            .opaque_draw_count = 1,
+            .opaque_draw_offset = 0,
+            .alpha_masked_draw_count = 1,
+            .alpha_masked_draw_offset = 1,
+        });
+
+        // 3. Assert: Verify Pipeline Registration and Render Graph Execution
+        EXPECT_EQ(shadow_res.shadow_data.cascade_count, 2U);
+        EXPECT_TRUE(shadow_res.shadow_atlas.is_valid());
+
+        // Verify both specialized pipelines are registered in shader_manager
+        const auto opaque_pipe_opt = shaders.find_graphics_pipeline("shadow_depth_opaque_pipeline");
+        ASSERT_TRUE(opaque_pipe_opt.has_value());
+        EXPECT_NE(shaders.get_rhi_pipeline(*opaque_pipe_opt).handle, 0ULL);
+
+        const auto masked_pipe_opt = shaders.find_graphics_pipeline("shadow_depth_masked_pipeline");
+        ASSERT_TRUE(masked_pipe_opt.has_value());
+        EXPECT_NE(shaders.get_rhi_pipeline(*masked_pipe_opt).handle, 0ULL);
+
+        // Execute render graph and verify clean completion
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
 

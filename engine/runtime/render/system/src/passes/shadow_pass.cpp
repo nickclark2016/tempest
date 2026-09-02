@@ -235,13 +235,13 @@ namespace tempest::render_system
         shadow_data.depth_bias = sun.caster.depth_bias;
         shadow_data.debug_mode = static_cast<uint32_t>(sun.caster.debug_mode);
 
-        auto pipe_h = params.shaders.find_graphics_pipeline("shadow_depth_pipeline");
-        if (!pipe_h.has_value())
+        auto opaque_pipe_h = params.shaders.find_graphics_pipeline("shadow_depth_opaque_pipeline");
+        if (!opaque_pipe_h.has_value())
         {
-            auto vs =
-                params.shaders.register_shader_module("shadow_depth.vert.spv", rhi::shader_stage::vertex, "VSMain");
-            auto fs =
-                params.shaders.register_shader_module("shadow_depth.frag.spv", rhi::shader_stage::fragment, "FSMain");
+            auto vs = params.shaders.register_shader_module("shadow_depth_opaque.vert.spv", rhi::shader_stage::vertex,
+                                                            "VSMain");
+            auto fs = params.shaders.register_shader_module("shadow_depth_opaque.frag.spv", rhi::shader_stage::fragment,
+                                                            "FSMain");
             auto stages = array{vs, fs};
 
             auto tmpl = graphics_pipeline_template{
@@ -268,10 +268,47 @@ namespace tempest::render_system
                         .depth_compare_op = rhi::compare_op::greater_or_equal,
                     },
             };
-            pipe_h = params.shaders.register_graphics_pipeline("shadow_depth_pipeline", tmpl);
+            opaque_pipe_h = params.shaders.register_graphics_pipeline("shadow_depth_opaque_pipeline", tmpl);
         }
 
-        const auto pipe = *pipe_h;
+        auto masked_pipe_h = params.shaders.find_graphics_pipeline("shadow_depth_masked_pipeline");
+        if (!masked_pipe_h.has_value())
+        {
+            auto vs = params.shaders.register_shader_module("shadow_depth_masked.vert.spv", rhi::shader_stage::vertex,
+                                                            "VSMain");
+            auto fs = params.shaders.register_shader_module("shadow_depth_masked.frag.spv", rhi::shader_stage::fragment,
+                                                            "FSMain");
+            auto stages = array{vs, fs};
+
+            auto tmpl = graphics_pipeline_template{
+                .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
+                .color_attachment_formats = {},
+                .depth_stencil_attachment_format = rhi::data_format::depth32_float,
+                .primitive_topology = rhi::primitive_topology::triangle_list,
+                .rasterization_state =
+                    {
+                        .polygon_mode = rhi::polygon_mode::fill,
+                        .cull_mode = rhi::cull_mode::none,
+                        .front_face = rhi::vertex_winding_order::counter_clockwise,
+                        .depth_bias =
+                            rhi::depth_bias_state{
+                                .constant_factor = 1.25F,
+                                .clamp = 0.0F,
+                                .slope_factor = 1.75F,
+                            },
+                    },
+                .depth_stencil_state =
+                    {
+                        .depth_test_enable = true,
+                        .depth_write_enable = true,
+                        .depth_compare_op = rhi::compare_op::greater_or_equal,
+                    },
+            };
+            masked_pipe_h = params.shaders.register_graphics_pipeline("shadow_depth_masked_pipeline", tmpl);
+        }
+
+        const auto opaque_pipe = *opaque_pipe_h;
+        const auto masked_pipe = *masked_pipe_h;
 
         const auto& pass_data = params.graph.add_graphics_pass<shadow_pass_data>(
             "ShadowPass",
@@ -299,22 +336,22 @@ namespace tempest::render_system
                 builder.read(cmd_buf, rhi::pipeline_stage::indirect_commands, rhi::resource_access::read);
                 builder.read(vtx_buf, rhi::pipeline_stage::vertex, rhi::resource_access::read);
             },
-            [&pool = params.pool, &shaders = params.shaders, draw_count = params.draw_count,
-             draw_offset = params.draw_offset, pipe, cascades_to_render = rendered_cascades](
-                [[maybe_unused]] const shadow_pass_data& data,
-                [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
-                if (draw_count == 0 || cascades_to_render.empty())
+            [&pool = params.pool, &shaders = params.shaders, opaque_draw_count = params.opaque_draw_count,
+             opaque_draw_offset = params.opaque_draw_offset, alpha_masked_draw_count = params.alpha_masked_draw_count,
+             alpha_masked_draw_offset = params.alpha_masked_draw_offset, opaque_pipe, masked_pipe,
+             cascades_to_render = rendered_cascades]([[maybe_unused]] const shadow_pass_data& data,
+                                                     [[maybe_unused]] render_graph::pass_execution_context& ctx,
+                                                     rhi::command_list& pass_cmd) {
+                if ((opaque_draw_count == 0 && alpha_masked_draw_count == 0) || cascades_to_render.empty())
                 {
                     return;
                 }
 
-                auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
-                if (rhi_pipe.handle == 0)
-                {
-                    return;
-                }
+                auto rhi_opaque_pipe =
+                    (opaque_draw_count > 0) ? shaders.get_rhi_pipeline(opaque_pipe) : rhi::graphics_pipeline_handle{};
+                auto rhi_masked_pipe = (alpha_masked_draw_count > 0) ? shaders.get_rhi_pipeline(masked_pipe)
+                                                                     : rhi::graphics_pipeline_handle{};
 
-                pass_cmd.bind_pipeline(rhi_pipe);
                 pass_cmd.bind_index_buffer(pool.get_vertex_buffer(), rhi::index_type::uint32, 0);
                 pass_cmd.set_depth_bias(1.25F, 0.0F, 1.75F);
 
@@ -339,14 +376,33 @@ namespace tempest::render_system
                         .padding = 0,
                     };
 
-                    pass_cmd.push_constants(
-                        rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
-                        span<const byte>{reinterpret_cast<const byte*>(&push_constants), sizeof(push_constants)});
+                    if (opaque_draw_count > 0 && rhi_opaque_pipe.handle != 0)
+                    {
+                        pass_cmd.bind_pipeline(rhi_opaque_pipe);
+                        pass_cmd.push_constants(
+                            rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
+                            span<const byte>{reinterpret_cast<const byte*>(&push_constants), sizeof(push_constants)});
 
-                    const auto byte_offset = pool.get_draw_commands_buffer_offset() +
-                                             static_cast<uint64_t>(draw_offset) * sizeof(indexed_indirect_command);
-                    pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, draw_count,
-                                                   sizeof(indexed_indirect_command));
+                        const auto byte_offset =
+                            pool.get_draw_commands_buffer_offset() +
+                            static_cast<uint64_t>(opaque_draw_offset) * sizeof(indexed_indirect_command);
+                        pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, opaque_draw_count,
+                                                       sizeof(indexed_indirect_command));
+                    }
+
+                    if (alpha_masked_draw_count > 0 && rhi_masked_pipe.handle != 0)
+                    {
+                        pass_cmd.bind_pipeline(rhi_masked_pipe);
+                        pass_cmd.push_constants(
+                            rhi::shader_stage::vertex | rhi::shader_stage::fragment, 0,
+                            span<const byte>{reinterpret_cast<const byte*>(&push_constants), sizeof(push_constants)});
+
+                        const auto byte_offset =
+                            pool.get_draw_commands_buffer_offset() +
+                            static_cast<uint64_t>(alpha_masked_draw_offset) * sizeof(indexed_indirect_command);
+                        pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset,
+                                                       alpha_masked_draw_count, sizeof(indexed_indirect_command));
+                    }
                 }
             });
 

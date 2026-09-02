@@ -194,6 +194,8 @@ namespace tempest::render_system
           _punctual_shadow_allocator{tempest::move(other._punctual_shadow_allocator)},
           _tracked_entities{tempest::move(other._tracked_entities)}, _active_draw_count{other._active_draw_count},
           _opaque_draw_count{other._opaque_draw_count}, _opaque_draw_offset{other._opaque_draw_offset},
+          _alpha_masked_draw_count{other._alpha_masked_draw_count},
+          _alpha_masked_draw_offset{other._alpha_masked_draw_offset},
           _transparent_draw_count{other._transparent_draw_count},
           _transparent_draw_offset{other._transparent_draw_offset}, _shadow_debug_mode{other._shadow_debug_mode},
           _pipeline_statistics{other._pipeline_statistics},
@@ -285,6 +287,8 @@ namespace tempest::render_system
             _active_draw_count = other._active_draw_count;
             _opaque_draw_count = other._opaque_draw_count;
             _opaque_draw_offset = other._opaque_draw_offset;
+            _alpha_masked_draw_count = other._alpha_masked_draw_count;
+            _alpha_masked_draw_offset = other._alpha_masked_draw_offset;
             _transparent_draw_count = other._transparent_draw_count;
             _transparent_draw_offset = other._transparent_draw_offset;
             _shadow_debug_mode = other._shadow_debug_mode;
@@ -384,10 +388,12 @@ namespace tempest::render_system
             return;
         }
 
-        // Partition entities into Opaque and Transparent batches based on material type
+        // Partition entities into Opaque, Alpha-Masked, and Transparent batches based on material type
         auto opaque_entities = vector<ecs::entity>{};
+        auto alpha_masked_entities = vector<ecs::entity>{};
         auto transparent_entities = vector<ecs::entity>{};
         opaque_entities.reserve(_tracked_entities.size());
+        alpha_masked_entities.reserve(_tracked_entities.size());
         transparent_entities.reserve(_tracked_entities.size());
 
         for (const auto entity : _tracked_entities)
@@ -423,6 +429,10 @@ namespace tempest::render_system
             {
                 transparent_entities.push_back(entity);
             }
+            else if (mat_type == material_type::mask)
+            {
+                alpha_masked_entities.push_back(entity);
+            }
             else
             {
                 opaque_entities.push_back(entity);
@@ -430,8 +440,9 @@ namespace tempest::render_system
         }
 
         _tracked_entities.clear();
-        _tracked_entities.reserve(opaque_entities.size() + transparent_entities.size());
+        _tracked_entities.reserve(opaque_entities.size() + alpha_masked_entities.size() + transparent_entities.size());
         _tracked_entities.insert(_tracked_entities.end(), opaque_entities.begin(), opaque_entities.end());
+        _tracked_entities.insert(_tracked_entities.end(), alpha_masked_entities.begin(), alpha_masked_entities.end());
         _tracked_entities.insert(_tracked_entities.end(), transparent_entities.begin(), transparent_entities.end());
 
         _renderable_indices.clear();
@@ -476,8 +487,10 @@ namespace tempest::render_system
 
         _opaque_draw_count = static_cast<uint32_t>(opaque_entities.size());
         _opaque_draw_offset = 0;
+        _alpha_masked_draw_count = static_cast<uint32_t>(alpha_masked_entities.size());
+        _alpha_masked_draw_offset = _opaque_draw_count;
         _transparent_draw_count = static_cast<uint32_t>(transparent_entities.size());
-        _transparent_draw_offset = _opaque_draw_count;
+        _transparent_draw_offset = _opaque_draw_count + _alpha_masked_draw_count;
         _active_draw_count = static_cast<uint32_t>(commands.size());
 
         _pool.write_instances(instances);
@@ -1106,8 +1119,10 @@ namespace tempest::render_system
                 .registry = *_inputs.entity_registry,
                 .camera_sys = _camera_system,
                 .camera_override = camera_override,
-                .draw_count = _opaque_draw_count,
-                .draw_offset = _opaque_draw_offset,
+                .opaque_draw_count = _opaque_draw_count,
+                .opaque_draw_offset = _opaque_draw_offset,
+                .alpha_masked_draw_count = _alpha_masked_draw_count,
+                .alpha_masked_draw_offset = _alpha_masked_draw_offset,
                 .pipeline_statistics = gfx_stats,
             });
 
@@ -1120,8 +1135,9 @@ namespace tempest::render_system
             _directional_shadow_atlas_target = shadow_res.shadow_atlas;
         }
 
-        const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target, _opaque_draw_count,
-                                                   _opaque_draw_offset, gfx_stats);
+        const auto non_transparent_draw_count = _opaque_draw_count + _alpha_masked_draw_count;
+        const auto& depth_data =
+            add_depth_prepass(_graph, _pool, _shaders, _depth_target, non_transparent_draw_count, 0, gfx_stats);
 
         if (_cfg.enable_ssao)
         {
@@ -1134,7 +1150,7 @@ namespace tempest::render_system
         const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target, -1, gfx_stats);
         const auto& pbr_data = add_pbr_opaque_pass(
             _graph, _pool, _shaders, skybox_data.hdr_color, depth_data.depth_texture, _directional_shadow_atlas_target,
-            _opaque_draw_count, _opaque_draw_offset, culling_data.light_bitmask_buffer, gfx_stats);
+            non_transparent_draw_count, 0, culling_data.light_bitmask_buffer, gfx_stats);
 
         const auto& clear_data =
             add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target, width, height);

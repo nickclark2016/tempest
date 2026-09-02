@@ -240,6 +240,11 @@ namespace tempest::render_system
             return _opaque_draw_count;
         }
 
+        [[nodiscard]] auto get_alpha_masked_draw_count() const noexcept -> uint32_t
+        {
+            return _alpha_masked_draw_count;
+        }
+
         [[nodiscard]] auto get_transparent_draw_count() const noexcept -> uint32_t
         {
             return _transparent_draw_count;
@@ -248,6 +253,11 @@ namespace tempest::render_system
         [[nodiscard]] auto get_opaque_draw_offset() const noexcept -> uint32_t
         {
             return _opaque_draw_offset;
+        }
+
+        [[nodiscard]] auto get_alpha_masked_draw_offset() const noexcept -> uint32_t
+        {
+            return _alpha_masked_draw_offset;
         }
 
         [[nodiscard]] auto get_transparent_draw_offset() const noexcept -> uint32_t
@@ -368,6 +378,8 @@ namespace tempest::render_system
         uint32_t _active_draw_count{0};
         uint32_t _opaque_draw_count{0};
         uint32_t _opaque_draw_offset{0};
+        uint32_t _alpha_masked_draw_count{0};
+        uint32_t _alpha_masked_draw_offset{0};
         uint32_t _transparent_draw_count{0};
         uint32_t _transparent_draw_offset{0};
         shadow_debug_mode _shadow_debug_mode{shadow_debug_mode::none};
