@@ -95,7 +95,37 @@ Do not use `std::shared_ptr` or `tempest::shared_ptr` for resource management, s
 ### 19. Texture Mipmap Generation Pre-Blit Synchronization
 - When generating mipmap chains via blit fallback after buffer-to-image texture upload (`copy_buffer_to_texture`), always record a pipeline barrier transitioning uploaded source mip levels from `pipeline_stage::copy` write access to `pipeline_stage::blit` read access before issuing `blit_texture` commands to prevent read-after-write hazards.
 
+### 20. Vulkan Timestamp Queries & Pipeline Stages for Pass Profiling
+- Do NOT use `pipeline_stage::top_of_pipe` for start timestamps in multi-pass command buffers; `TOP_OF_PIPE` triggers as soon as the GPU command processor parses the command packet, causing all subsequent passes in a queue batch to share identical start timestamps and accumulate prior passes' execution durations.
+- Record start timestamps using `pipeline_stage::bottom_of_pipe` (or `pipeline_stage::all_commands`) **after** pre-pass pipeline barriers so start timestamps reflect when preceding GPU execution and barrier flushes finish.
+- When reading back query results via `get_query_pool_results`, only query the exact count of queries written (`recorded_timestamp_count`), never the full query pool capacity (`timestamp_count`). Requesting unwritten queries in the pool range causes `vkGetQueryPoolResults` without `VK_QUERY_RESULT_WAIT_BIT` to return `VK_NOT_READY` and silently drop query readbacks.
+
+### 21. Cross-Platform & Web Serialization Number Precision (JS `MAX_SAFE_INTEGER`)
+- When generating 64-bit integer identifiers (such as track IDs, resource handles, or entity IDs) that are serialized to JSON for consumption by web/browser JavaScript UIs, ensure numeric values fit within JavaScript's safe integer range (< $2^{53} - 1$, e.g. using a 32-bit prefix `0x8000'0000ULL` rather than bit 63 `0x8000'0000'0000'0000ULL`), or serialize them as quoted JSON strings.
+- Bit 63 integers exceed $2^{53}$ and will be truncated/rounded to identical floating-point values by JavaScript's `JSON.parse()`.
+
+### 22. Non-Blocking Socket Framing & WebSocket Transport
+- When broadcasting large payloads (such as telemetry JSON frames) over non-blocking TCP sockets (`ioctlsocket(FIONBIO)` / `O_NONBLOCK`), partial sends (`0 < res < size`) must never discard the remaining unsent bytes on `res > 0`.
+- Senders must loop with non-blocking write readiness polling (`select` / `WSAPoll`) or buffered queues to complete frame transmission, preventing torn frames from corrupting the active WebSocket stream framing. Sockets should also be configured with adequate send/receive buffers (e.g. 1 MB).
+
+### 23. Profiler & Arena Pool Chunk Recycling
+- Chunks drained from profiler sessions or chunk arenas (`event_chunk`, binary chunk streams) must be recycled via `session.recycle_chunks()` or arena reset methods rather than destroyed (`operator delete`), eliminating redundant 64KB heap allocations and mutex contention on per-frame loops.
+
+### 24. Frame-Level `scoped_zone` RAII Scope Before Telemetry Capture
+- In frame runner loops or per-frame execution functions (such as `editor_engine_context::_render_editor_frame`), any top-level CPU profiling zones (`profiler::scoped_zone` at depth 0) must be encapsulated in an explicit nested scope (`{ ... }`) that terminates **before** invoking telemetry collection and broadcast (`collect_and_broadcast_telemetry()`).
+- Because `scoped_zone` records its completed duration in its destructor, failing to close its scope prior to telemetry capture causes the top-level zone to be flushed into the *subsequent* frame's payload ($N+1$), desynchronizing top-level CPU durations and frame hover correlations from child call stack zones ($N$).
+
+### 25. Profiler UI Timeline Multi-Lane Track Hierarchy
+- Timeline tracks in web/desktop profiler UIs must maintain 3 distinct vertical lanes to prevent visual text and badge collisions:
+  1. **Track Header Strip** (`trackHeaderHeight`): Houses the collapse chevron, thread/queue name (`MAIN THREAD`, `[GPU] Graphics Queue`), and zone count.
+  2. **Frame Header Lane** (`frameHeaderHeight`): Houses frame boundary badge pills (`CPU #N`, `GPU #N`) and correlation latency markers (`Flight: ...`).
+  3. **Call Stack Zone Area**: Call stack capture zones must start strictly beneath the frame header lane ($\text{rowY} = \text{currentY} + \text{trackHeaderHeight} + \text{frameHeaderHeight} + 4 + \text{depth} \times (\text{zoneHeight} + \text{zoneSpacing})$), with hit-testing synchronized to the exact same vertical offset.
+
 ## Workflow & Build Guidelines
+
+### Embedded Web Assets Build Integration
+- Web assets (`index.html`, `app.js`, `styles.css`) are embedded into `web_assets.cpp` via Premake custom actions (`embed-web-assets`) driven incrementally by build tool dependency graphs (Ninja custom build rules on `web/index.html` with inputs `styles.css`, `app.js`), rather than executed manually.
+- `premake5.lua` must only invoke `embed_web_assets()` during project generation if `web_assets.cpp` is missing (e.g. on clean clones), leaving all subsequent updates to the build system.
 
 ### Iterative Milestone Execution & Sync Gates
 When executing multi-milestone plans or tasks with sync gates:
@@ -129,4 +159,5 @@ Whenever adding or updating test cases:
 
 ### Commit Messages
 - Commit message suggestions must always be a single line under 80 characters.
+
 
