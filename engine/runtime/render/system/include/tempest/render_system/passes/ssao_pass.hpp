@@ -27,11 +27,11 @@ namespace tempest::render_system
         float padding{0.0F};
     };
 
-    TEMPEST_API auto add_ssao_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                   shader_manager& shaders, render_graph::rg_texture_id depth_tex,
-                                   render_graph::rg_texture_id ssao_raw_tex,
-                                   float radius = 0.5F, float bias = 0.025F, float power = 1.5F)
-        -> const ssao_pass_data&;
+    TEMPEST_API auto add_ssao_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                                   render_graph::rg_texture_id depth_tex, render_graph::rg_texture_id ssao_raw_tex,
+                                   float radius = 0.5F, float bias = 0.025F, float power = 1.5F,
+                                   enum_mask<rhi::pipeline_statistic_flags> pipeline_stats =
+                                       rhi::pipeline_statistic_flags::none) -> const ssao_pass_data&;
 } // namespace tempest::render_system
 
 #endif // tempest_render_system_ssao_pass_hpp

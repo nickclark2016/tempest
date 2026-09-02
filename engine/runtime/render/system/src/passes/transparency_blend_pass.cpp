@@ -4,11 +4,10 @@
 
 namespace tempest::render_system
 {
-    auto add_transparency_blend_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                     shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                                     render_graph::rg_texture_id accum_tex,
-                                     render_graph::rg_texture_id zeroth_moment_tex,
-                                     rhi::data_format target_format)
+    auto add_transparency_blend_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                                     render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id accum_tex,
+                                     render_graph::rg_texture_id zeroth_moment_tex, rhi::data_format target_format,
+                                     enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const transparency_blend_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_blend_pipeline");
@@ -18,6 +17,7 @@ namespace tempest::render_system
             auto fs = shaders.register_shader_module("pbr_oit_blend.frag.spv", rhi::shader_stage::fragment, "FSMain");
             auto stages = array{vs, fs};
             auto color_formats = array{target_format};
+
             auto blend_states = array{
                 rhi::attachment_blend_state{
                     .blend_enable = true,
@@ -31,6 +31,7 @@ namespace tempest::render_system
             auto tmpl = graphics_pipeline_template{
                 .shader_modules = span<const shader_module_handle>{stages.data(), stages.size()},
                 .color_attachment_formats = span<const rhi::data_format>{color_formats.data(), color_formats.size()},
+                .depth_stencil_attachment_format = nullopt,
                 .primitive_topology = rhi::primitive_topology::triangle_list,
                 .rasterization_state =
                     {
@@ -53,21 +54,24 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_blend_pass_data>(
             "TransparencyBlendPass",
-            [hdr_color_tex, accum_tex, zeroth_moment_tex](render_graph::pass_builder& builder,
-                                                          transparency_blend_pass_data& data) {
-                data.hdr_color = builder.set_color_attachment(
-                    0, render_graph::rg_color_attachment{
-                           .texture = hdr_color_tex,
-                           .load_op = rhi::load_op::load,
-                           .store_op = rhi::store_op::store,
-                       });
-                data.accum_texture = builder.read(accum_tex, rhi::pipeline_stage::fragment,
-                                                  rhi::resource_access::read, rhi::image_layout::general);
+            [hdr_color_tex, accum_tex, zeroth_moment_tex, pipeline_stats](render_graph::pass_builder& builder,
+                                                                          transparency_blend_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
+                data.hdr_color = builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                                     .texture = hdr_color_tex,
+                                                                     .load_op = rhi::load_op::load,
+                                                                     .store_op = rhi::store_op::store,
+                                                                 });
+                data.accum_texture = builder.read(accum_tex, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                                  rhi::image_layout::general);
                 data.zeroth_moment_texture = builder.read(zeroth_moment_tex, rhi::pipeline_stage::fragment,
                                                           rhi::resource_access::read, rhi::image_layout::general);
             },
-            [&pool, &shaders, pipe](const transparency_blend_pass_data& data,
-                                    render_graph::pass_execution_context& ctx,
+            [&pool, &shaders, pipe](const transparency_blend_pass_data& data, render_graph::pass_execution_context& ctx,
                                     rhi::command_list& pass_cmd) {
                 const auto accum_desc_idx = ctx.get_texture_descriptor(data.accum_texture);
                 const auto accum_idx = (accum_desc_idx != ~0U) ? static_cast<int32_t>(accum_desc_idx) : -1;

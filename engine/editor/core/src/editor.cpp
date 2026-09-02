@@ -88,6 +88,11 @@ namespace tempest::editor
             {
             }
 
+            auto is_checked() const noexcept -> bool override
+            {
+                return _ctx->is_live_stream_enabled();
+            }
+
             auto on_press() noexcept -> void override
             {
                 _ctx->set_live_stream_enabled(!_ctx->is_live_stream_enabled());
@@ -103,6 +108,11 @@ namespace tempest::editor
             gpu_stats_menu_item(editor_engine_context& ctx)
                 : menu_item("Tools", "Capture GPU Pipeline Statistics"), _ctx{&ctx}
             {
+            }
+
+            auto is_checked() const noexcept -> bool override
+            {
+                return _ctx->is_gpu_stats_enabled();
             }
 
             auto on_press() noexcept -> void override
@@ -144,7 +154,8 @@ namespace tempest::editor
             {
                 const auto shortcut = node.menu->get_shortcut();
                 const auto shortcut_str = shortcut.empty() ? nullptr : string(shortcut).c_str();
-                const auto pressed = ImGui::MenuItem(title.c_str(), shortcut_str, false, enabled);
+                const auto selected = node.menu->is_checked();
+                const auto pressed = ImGui::MenuItem(title.c_str(), shortcut_str, selected, enabled);
                 if (pressed)
                 {
                     node.menu->on_press();

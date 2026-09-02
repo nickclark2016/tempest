@@ -486,8 +486,23 @@ namespace tempest::profiler
 
                 std::format_to(
                     std::back_inserter(json),
-                    "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"frame_index\":{},\"metrics\":[]}}",
+                    "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"frame_index\":{},\"metrics\":[",
                     escaped_zname, z.start_ns, z.end_ns, z.depth, z.frame_index);
+
+                for (auto k = size_t{0}; k < z.metrics.size(); ++k)
+                {
+                    if (k > 0)
+                    {
+                        json += ",";
+                    }
+                    const auto& m = z.metrics[k];
+                    auto escaped_mname = std::string{};
+                    escape_json_string_to(m.name, escaped_mname);
+
+                    std::format_to(std::back_inserter(json), "{{\"name\":\"{}\",\"value\":{:.3f},\"unit\":{}}}",
+                                   escaped_mname, m.value, static_cast<uint8_t>(m.unit));
+                }
+                json += "]}";
             }
             json += "]}";
         }

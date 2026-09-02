@@ -20,6 +20,10 @@ namespace tempest::editor
 
         virtual auto validate() const noexcept -> bool;
         virtual auto on_press() noexcept -> void = 0;
+        virtual auto is_checked() const noexcept -> bool
+        {
+            return false;
+        }
         virtual auto get_shortcut() const noexcept -> string_view
         {
             return {};

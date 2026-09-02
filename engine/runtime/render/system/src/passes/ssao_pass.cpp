@@ -4,10 +4,9 @@
 
 namespace tempest::render_system
 {
-    auto add_ssao_pass(render_graph::render_graph& graph, resource_pool& pool,
-                       shader_manager& shaders, render_graph::rg_texture_id depth_tex,
-                       render_graph::rg_texture_id ssao_raw_tex,
-                       float radius, float bias, float power)
+    auto add_ssao_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                       render_graph::rg_texture_id depth_tex, render_graph::rg_texture_id ssao_raw_tex, float radius,
+                       float bias, float power, enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const ssao_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("ssao_pipeline");
@@ -41,23 +40,27 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<ssao_pass_data>(
             "SSAOPass",
-            [depth_tex, ssao_raw_tex, &pool](render_graph::pass_builder& builder, ssao_pass_data& data) {
-                data.depth_texture = builder.read(depth_tex, rhi::pipeline_stage::fragment,
-                                                  rhi::resource_access::read, rhi::image_layout::general);
-                data.ssao_raw = builder.set_color_attachment(
-                    0, render_graph::rg_color_attachment{
-                           .texture = ssao_raw_tex,
-                           .load_op = rhi::load_op::clear,
-                           .store_op = rhi::store_op::store,
-                           .clear_value = {1.0F, 1.0F, 1.0F, 1.0F},
-                       });
+            [depth_tex, ssao_raw_tex, &pool, pipeline_stats](render_graph::pass_builder& builder,
+                                                             ssao_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
+                data.depth_texture = builder.read(depth_tex, rhi::pipeline_stage::fragment, rhi::resource_access::read,
+                                                  rhi::image_layout::general);
+                data.ssao_raw = builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                                    .texture = ssao_raw_tex,
+                                                                    .load_op = rhi::load_op::clear,
+                                                                    .store_op = rhi::store_op::store,
+                                                                    .clear_value = {1.0F, 1.0F, 1.0F, 1.0F},
+                                                                });
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
-                data.scene_constants = builder.read(data.scene_constants, rhi::pipeline_stage::fragment,
-                                                    rhi::resource_access::read);
+                data.scene_constants =
+                    builder.read(data.scene_constants, rhi::pipeline_stage::fragment, rhi::resource_access::read);
             },
-            [&pool, &shaders, radius, bias, power, pipe](const ssao_pass_data& data,
-                                                         render_graph::pass_execution_context& ctx,
-                                                         rhi::command_list& pass_cmd) {
+            [&pool, &shaders, radius, bias, power,
+             pipe](const ssao_pass_data& data, render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
                 auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
                 if (rhi_pipe.handle == 0)
                 {

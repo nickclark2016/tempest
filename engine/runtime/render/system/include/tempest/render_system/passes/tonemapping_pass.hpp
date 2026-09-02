@@ -22,11 +22,12 @@ namespace tempest::render_system
         float _pad{0.0F};
     };
 
-    TEMPEST_API auto add_tonemapping_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                          shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                                          render_graph::rg_texture_id tonemapped_target,
-                                          rhi::data_format target_format = rhi::data_format::rgba8_srgb,
-                                          float exposure = 0.0F) -> const tonemapping_pass_data&;
+    TEMPEST_API auto add_tonemapping_pass(
+        render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+        render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id tonemapped_target,
+        rhi::data_format target_format = rhi::data_format::rgba8_srgb, float exposure = 0.0F,
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none)
+        -> const tonemapping_pass_data&;
 } // namespace tempest::render_system
 
 #endif // tempest_render_system_tonemapping_pass_hpp

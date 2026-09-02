@@ -41,7 +41,7 @@ namespace tempest::profiler
         string_view name{};
         source_location location{};
         uint64_t task_id{0};
-        inplace_vector<metric_record, 4> metrics{};
+        inplace_vector<metric_record, 16> metrics{};
     };
 } // namespace tempest::profiler
 

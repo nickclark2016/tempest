@@ -5,9 +5,9 @@
 
 namespace tempest::render_system
 {
-    auto add_skybox_pass(render_graph::render_graph& graph, resource_pool& pool,
-                         shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                         int32_t skybox_tex_idx) -> const skybox_pass_data&
+    auto add_skybox_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                         render_graph::rg_texture_id hdr_color_tex, int32_t skybox_tex_idx,
+                         enum_mask<rhi::pipeline_statistic_flags> pipeline_stats) -> const skybox_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("skybox_pipeline");
         if (!pipe_h.has_value())
@@ -40,17 +40,22 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<skybox_pass_data>(
             "SkyboxPass",
-            [&pool, hdr_color_tex](render_graph::pass_builder& builder, skybox_pass_data& data) {
-                data.hdr_color = builder.set_color_attachment(
-                    0, render_graph::rg_color_attachment{
-                           .texture = hdr_color_tex,
-                           .load_op = rhi::load_op::clear,
-                           .store_op = rhi::store_op::store,
-                           .clear_value = {0.05F, 0.05F, 0.08F, 1.0F},
-                       });
+            [&pool, hdr_color_tex, pipeline_stats](render_graph::pass_builder& builder, skybox_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
+                data.hdr_color = builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                                     .texture = hdr_color_tex,
+                                                                     .load_op = rhi::load_op::clear,
+                                                                     .store_op = rhi::store_op::store,
+                                                                     .clear_value = {0.05F, 0.05F, 0.08F, 1.0F},
+                                                                 });
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
-                data.scene_constants = builder.read(data.scene_constants, rhi::pipeline_stage::vertex, rhi::resource_access::read);
+                data.scene_constants =
+                    builder.read(data.scene_constants, rhi::pipeline_stage::vertex, rhi::resource_access::read);
             },
             [&pool, &shaders, skybox_tex_idx, pipe]([[maybe_unused]] const skybox_pass_data& data,
                                                     [[maybe_unused]] render_graph::pass_execution_context& ctx,

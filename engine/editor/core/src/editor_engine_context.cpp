@@ -129,6 +129,12 @@ namespace tempest::editor
         };
         _web_server = make_unique<profiler::web_server>(_profiler_session, tempest::move(config));
         _web_server->start();
+
+        if (_renderer)
+        {
+            _renderer->set_pipeline_statistics(_capture_gpu_stats ? render_system::all_pipeline_statistics
+                                                                  : enum_mask{rhi::pipeline_statistic_flags::none});
+        }
     }
 
     editor_engine_context::~editor_engine_context()
@@ -136,6 +142,16 @@ namespace tempest::editor
         if (_web_server)
         {
             _web_server->stop();
+        }
+    }
+
+    auto editor_engine_context::set_gpu_stats_enabled(bool enabled) noexcept -> void
+    {
+        _capture_gpu_stats = enabled;
+        if (_renderer)
+        {
+            _renderer->set_pipeline_statistics(enabled ? render_system::all_pipeline_statistics
+                                                       : enum_mask{rhi::pipeline_statistic_flags::none});
         }
     }
 

@@ -96,6 +96,7 @@ namespace tempest
                 .render_width = 1920,
                 .render_height = 1080,
                 .tonemapped_color_format = rhi::data_format::rgba8_srgb,
+                .pipeline_statistics = render_system::all_pipeline_statistics,
             });
             builder.set_inputs(render_system::renderer_inputs{
                 .entity_registry = &_entity_registry,

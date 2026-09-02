@@ -4718,4 +4718,123 @@ namespace tempest::render_system::tests
 
         dev->wait_idle();
     }
+
+    /// @brief Verify renderer pipeline statistics configuration and dynamic runtime mutation.
+    TEST(render_system_tests, renderer_pipeline_statistics_configuration_and_mutation)
+    {
+        // 1. Setup: Create test fixture and registry
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        if (!dev)
+        {
+            GTEST_SKIP() << "Vulkan device unavailable";
+        }
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        const auto stats_mask = rhi::pipeline_statistic_flags::input_assembly_vertices |
+                                rhi::pipeline_statistic_flags::fragment_shader_invocations |
+                                rhi::pipeline_statistic_flags::compute_shader_invocations;
+
+        // 2. Act & Assert: Verify renderer built with custom statistics mask
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 800,
+            .render_height = 600,
+            .pipeline_statistics = stats_mask,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+            EXPECT_EQ(rend->get_pipeline_statistics(), stats_mask);
+
+            // 3. Act: Dynamically update pipeline statistics
+            const auto updated_stats = rhi::pipeline_statistic_flags::vertex_shader_invocations |
+                                       rhi::pipeline_statistic_flags::clipping_input_primitives;
+            rend->set_pipeline_statistics(updated_stats);
+
+            // 4. Assert: Active statistics updated
+            EXPECT_EQ(rend->get_pipeline_statistics(), updated_stats);
+
+            rend->set_pipeline_statistics(rhi::pipeline_statistic_flags::none);
+            EXPECT_EQ(rend->get_pipeline_statistics(), rhi::pipeline_statistic_flags::none);
+        }
+
+        dev->wait_idle();
+    }
+
+    /// @brief Verify renderer executes frame rendering with pipeline statistics enabled and transitions back to
+    /// disabled cleanly.
+    TEST(render_system_tests, renderer_pipeline_statistics_frame_execution)
+    {
+        // 1. Setup: Create test fixture and renderer
+        auto fixture = create_test_device();
+        auto* dev = fixture.dev.get();
+        if (!dev)
+        {
+            GTEST_SKIP() << "Vulkan device unavailable";
+        }
+
+        auto sink = stdout_log_sink{};
+        auto log = logger{sink};
+        auto events = event::event_registry{};
+        auto registry = ecs::archetype_registry{events};
+        auto meshes = core::mesh_registry{};
+        auto materials = core::material_registry{};
+        auto textures = core::texture_registry{};
+
+        const auto stats_mask = rhi::pipeline_statistic_flags::input_assembly_vertices |
+                                rhi::pipeline_statistic_flags::fragment_shader_invocations |
+                                rhi::pipeline_statistic_flags::compute_shader_invocations;
+
+        auto builder = renderer::builder{};
+        builder.set_config(renderer_config{
+            .render_width = 800,
+            .render_height = 600,
+            .pipeline_statistics = stats_mask,
+        });
+        builder.set_inputs(renderer_inputs{
+            .entity_registry = &registry,
+            .meshes = &meshes,
+            .textures = &textures,
+            .materials = &materials,
+            .asset_db = &fixture.asset_db,
+        });
+
+        {
+            auto rend = builder.build(*dev, log);
+            ASSERT_NE(rend, nullptr);
+
+            // 2. Act: Prepare and render frame with pipeline statistics active
+            rend->prepare_frame(800, 600);
+            auto render_res = rend->render();
+
+            // 3. Assert: Frame execution succeeded
+            EXPECT_TRUE(render_res.has_value());
+
+            // 4. Act: Disable statistics and render subsequent frame
+            rend->set_pipeline_statistics(rhi::pipeline_statistic_flags::none);
+            rend->prepare_frame(800, 600);
+            auto disabled_res = rend->render();
+
+            // 5. Assert: Frame execution succeeded after disabling statistics
+            EXPECT_TRUE(disabled_res.has_value());
+        }
+
+        dev->wait_idle();
+    }
 } // namespace tempest::render_system::tests

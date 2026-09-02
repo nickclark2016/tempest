@@ -7,7 +7,8 @@ namespace tempest::render_system
     auto add_pbr_opaque_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
                              render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id depth_tex,
                              render_graph::rg_texture_id shadow_atlas, uint32_t draw_count, uint32_t draw_offset,
-                             render_graph::rg_buffer_id light_bitmask_buf) -> const pbr_opaque_pass_data&
+                             render_graph::rg_buffer_id light_bitmask_buf,
+                             enum_mask<rhi::pipeline_statistic_flags> pipeline_stats) -> const pbr_opaque_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_opaque_pipeline");
         if (!pipe_h.has_value())
@@ -42,8 +43,13 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<pbr_opaque_pass_data>(
             "PBROpaquePass",
-            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset,
-             light_bitmask_buf](render_graph::pass_builder& builder, pbr_opaque_pass_data& data) {
+            [&pool, hdr_color_tex, depth_tex, shadow_atlas, draw_count, draw_offset, light_bitmask_buf,
+             pipeline_stats](render_graph::pass_builder& builder, pbr_opaque_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
                 data.hdr_color = builder.set_color_attachment(0, render_graph::rg_color_attachment{
                                                                      .texture = hdr_color_tex,
                                                                      .load_op = rhi::load_op::load,

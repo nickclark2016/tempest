@@ -2,7 +2,9 @@
 #define tempest_render_graph_executor_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/array.hpp>
 #include <tempest/expected.hpp>
+#include <tempest/flat_unordered_map.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/render_graph/barrier_solver.hpp>
 #include <tempest/render_graph/dag.hpp>
@@ -37,16 +39,24 @@ namespace tempest::render_graph
         profiler::profiler_session* profiler{nullptr};
     };
 
+    struct queue_stats_state
+    {
+        rhi::query_pool_handle pool{};
+        uint32_t capacity{0};
+        uint32_t recorded_count{0};
+        enum_mask<rhi::pipeline_statistic_flags> mask{rhi::pipeline_statistic_flags::none};
+
+        queue_stats_state() = default;
+    };
+
     struct flight_query_state
     {
         rhi::query_pool_handle timestamp_pool{};
-        rhi::query_pool_handle pipeline_stats_pool{};
         uint32_t timestamp_count{0};
-        uint32_t pipeline_stats_count{0};
         uint32_t recorded_timestamp_count{0};
-        uint32_t recorded_pipeline_stats_count{0};
+
+        array<queue_stats_state, 3> queue_stats{};
         uint64_t recorded_frame_index{0};
-        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats_mask{rhi::pipeline_statistic_flags::none};
 
         struct pass_query_binding
         {

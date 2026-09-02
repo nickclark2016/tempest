@@ -122,10 +122,7 @@ namespace tempest::editor
             return _capture_gpu_stats;
         }
 
-        auto set_gpu_stats_enabled(bool enabled) noexcept -> void
-        {
-            _capture_gpu_stats = enabled;
-        }
+        auto set_gpu_stats_enabled(bool enabled) noexcept -> void;
 
         auto collect_and_broadcast_telemetry() -> void;
 

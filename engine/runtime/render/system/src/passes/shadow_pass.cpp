@@ -275,8 +275,13 @@ namespace tempest::render_system
 
         const auto& pass_data = params.graph.add_graphics_pass<shadow_pass_data>(
             "ShadowPass",
-            [&pool = params.pool, shadow_atlas_tex = params.shadow_atlas](render_graph::pass_builder& builder,
-                                                                          shadow_pass_data& data) {
+            [&pool = params.pool, shadow_atlas_tex = params.shadow_atlas,
+             stats = params.pipeline_statistics](render_graph::pass_builder& builder, shadow_pass_data& data) {
+                if (stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(stats);
+                }
+
                 data.shadow_atlas = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
                     .texture = shadow_atlas_tex,
                     .depth_load_op = rhi::load_op::clear,

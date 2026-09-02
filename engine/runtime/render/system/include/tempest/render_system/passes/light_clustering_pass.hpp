@@ -38,14 +38,12 @@ namespace tempest::render_system
 
     TEMPEST_API auto compute_cluster_grid_dimensions(uint32_t width, uint32_t height) -> math::vec4<uint32_t>;
 
-    TEMPEST_API auto add_light_clustering_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                               shader_manager& shaders,
-                                               render_graph::rg_buffer_id cluster_bounds_buf,
-                                               const render_camera& cam,
-                                               uint32_t screen_width, uint32_t screen_height,
-                                               uint32_t cluster_count_x = 0,
-                                               uint32_t cluster_count_y = 0,
-                                               uint32_t cluster_count_z = 0)
+    TEMPEST_API auto add_light_clustering_pass(
+        render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+        render_graph::rg_buffer_id cluster_bounds_buf, const render_camera& cam, uint32_t screen_width,
+        uint32_t screen_height, uint32_t cluster_count_x = 0, uint32_t cluster_count_y = 0,
+        uint32_t cluster_count_z = 0,
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none)
         -> const light_clustering_pass_data&;
 } // namespace tempest::render_system
 

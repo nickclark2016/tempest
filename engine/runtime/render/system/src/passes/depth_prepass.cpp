@@ -6,8 +6,8 @@
 namespace tempest::render_system
 {
     auto add_depth_prepass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
-                           render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset)
-        -> const depth_prepass_data&
+                           render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset,
+                           enum_mask<rhi::pipeline_statistic_flags> pipeline_stats) -> const depth_prepass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("zprepass_pipeline");
         if (!pipe_h.has_value())
@@ -41,7 +41,13 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<depth_prepass_data>(
             "DepthPrepass",
-            [&pool, depth_tex, draw_count, draw_offset](render_graph::pass_builder& builder, depth_prepass_data& data) {
+            [&pool, depth_tex, draw_count, draw_offset, pipeline_stats](render_graph::pass_builder& builder,
+                                                                        depth_prepass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
                 data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
                     .texture = depth_tex,
                     .depth_load_op = rhi::load_op::clear,

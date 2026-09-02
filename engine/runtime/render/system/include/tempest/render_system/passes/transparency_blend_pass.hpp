@@ -25,13 +25,10 @@ namespace tempest::render_system
     };
 
     TEMPEST_API auto add_transparency_blend_pass(
-        render_graph::render_graph& graph,
-        resource_pool& pool,
-        shader_manager& shaders,
-        render_graph::rg_texture_id hdr_color_tex,
-        render_graph::rg_texture_id accum_tex,
-        render_graph::rg_texture_id zeroth_moment_tex,
-        rhi::data_format target_format = rhi::data_format::rgba16_float)
+        render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+        render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id accum_tex,
+        render_graph::rg_texture_id zeroth_moment_tex, rhi::data_format target_format = rhi::data_format::rgba16_float,
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none)
         -> const transparency_blend_pass_data&;
 } // namespace tempest::render_system
 

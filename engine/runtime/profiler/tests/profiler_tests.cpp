@@ -1753,3 +1753,92 @@ TEST(profiler_tests, large_payload_nonblocking_send_all)
 
     server.stop();
 }
+
+/// @brief Verify GPU track zone metrics (pipeline statistics) are preserved in telemetry extraction and JSON
+/// serialization.
+TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
+{
+    // 1. Setup: Create profiler session and record GPU track chunk with pipeline stats
+    auto session = tempest::profiler::profiler_session{true};
+    const auto gpu_track_id = 0x8000'0001ULL; // Graphics Queue Track
+    session.register_track(gpu_track_id, "GPU: Graphics");
+
+    auto chunk = session.acquire_chunk();
+    chunk->set_thread_id(gpu_track_id);
+
+    auto z = tempest::profiler::zone_record{
+        .start_ns = 1000000,
+        .end_ns = 2000000,
+        .depth = 1,
+        .name = "PBROpaquePass",
+        .location = {},
+        .task_id = 42,
+        .metrics = {},
+    };
+
+    z.metrics.push_back(tempest::profiler::metric_record{
+        .name = "Input Assembly Vertices",
+        .value = 1200.0,
+        .unit = tempest::profiler::metric_unit::count,
+    });
+    z.metrics.push_back(tempest::profiler::metric_record{
+        .name = "Input Assembly Primitives",
+        .value = 400.0,
+        .unit = tempest::profiler::metric_unit::count,
+    });
+    z.metrics.push_back(tempest::profiler::metric_record{
+        .name = "Vertex Shader Invocations",
+        .value = 1200.0,
+        .unit = tempest::profiler::metric_unit::count,
+    });
+    z.metrics.push_back(tempest::profiler::metric_record{
+        .name = "Clipping Input Primitives",
+        .value = 400.0,
+        .unit = tempest::profiler::metric_unit::count,
+    });
+    z.metrics.push_back(tempest::profiler::metric_record{
+        .name = "Clipping Output Primitives",
+        .value = 380.0,
+        .unit = tempest::profiler::metric_unit::count,
+    });
+    z.metrics.push_back(tempest::profiler::metric_record{
+        .name = "Fragment Shader Invocations",
+        .value = 50000.0,
+        .unit = tempest::profiler::metric_unit::count,
+    });
+    z.metrics.push_back(tempest::profiler::metric_record{
+        .name = "Compute Shader Invocations",
+        .value = 1024.0,
+        .unit = tempest::profiler::metric_unit::count,
+    });
+
+    ASSERT_EQ(z.metrics.size(), 7u);
+    ASSERT_TRUE(chunk->add_zone(z));
+    session.push_completed_chunk(tempest::move(chunk));
+
+    // 2. Act: Extract capture session and build telemetry frame
+    const auto capture = tempest::profiler::create_capture_from_session(session);
+    const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(42, capture);
+
+    // 3. Assert: Verify GPU track structure and zone metrics preservation
+    ASSERT_EQ(telemetry.gpu_tracks.size(), 1u);
+    ASSERT_EQ(telemetry.gpu_tracks[0].zones.size(), 1u);
+    const auto& t_zone = telemetry.gpu_tracks[0].zones[0];
+    EXPECT_EQ(t_zone.name, "PBROpaquePass");
+    EXPECT_EQ(t_zone.metrics.size(), 7u);
+
+    // 4. Act: Serialize telemetry frame to JSON
+    const auto json_str = tempest::profiler::serialize_telemetry_frame_json(telemetry);
+    const auto json_std = std::string(json_str.data(), json_str.size());
+
+    // 5. Assert: JSON payload contains GPU track zones with all pipeline metrics
+    EXPECT_NE(json_std.find("\"gpu_tracks\":["), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"PBROpaquePass\""), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"Input Assembly Vertices\",\"value\":1200.000"), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"Input Assembly Primitives\",\"value\":400.000"), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"Vertex Shader Invocations\",\"value\":1200.000"), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"Clipping Input Primitives\",\"value\":400.000"), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"Clipping Output Primitives\",\"value\":380.000"), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"Fragment Shader Invocations\",\"value\":50000.000"), std::string::npos);
+    EXPECT_NE(json_std.find("\"name\":\"Compute Shader Invocations\",\"value\":1024.000"), std::string::npos);
+}

@@ -55,28 +55,31 @@ namespace tempest::render_system
     }
 
     auto add_light_clustering_pass(render_graph::render_graph& graph, [[maybe_unused]] resource_pool& pool,
-                                   shader_manager& shaders,
-                                   render_graph::rg_buffer_id cluster_bounds_buf,
-                                   const render_camera& cam,
-                                   uint32_t screen_width, uint32_t screen_height,
-                                   uint32_t cluster_count_x,
-                                   uint32_t cluster_count_y,
-                                   uint32_t cluster_count_z)
+                                   shader_manager& shaders, render_graph::rg_buffer_id cluster_bounds_buf,
+                                   const render_camera& cam, uint32_t screen_width, uint32_t screen_height,
+                                   uint32_t cluster_count_x, uint32_t cluster_count_y, uint32_t cluster_count_z,
+                                   enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const light_clustering_pass_data&
     {
-        auto grid_dims = math::vec4<uint32_t>{cluster_count_x, cluster_count_y, cluster_count_z, 0};
-        if (cluster_count_x == 0 || cluster_count_y == 0 || cluster_count_z == 0)
+        auto grid_dims = compute_cluster_grid_dimensions(screen_width, screen_height);
+        if (cluster_count_x > 0)
         {
-            grid_dims = compute_cluster_grid_dimensions(screen_width, screen_height);
+            grid_dims.x = cluster_count_x;
         }
-        else
+        if (cluster_count_y > 0)
         {
-            grid_dims.w = (screen_width + cluster_count_x - 1) / cluster_count_x;
+            grid_dims.y = cluster_count_y;
+        }
+        if (cluster_count_z > 0)
+        {
+            grid_dims.z = cluster_count_z;
         }
 
         const auto actual_cx = grid_dims.x;
         const auto actual_cy = grid_dims.y;
         const auto actual_cz = grid_dims.z;
+
+        grid_dims.w = (screen_width + actual_cx - 1) / actual_cx;
 
         const auto create_info = cluster_grid_create_info{
             .inv_projection = cam.inv_proj,
@@ -87,7 +90,8 @@ namespace tempest::render_system
         auto pipe_h = shaders.find_compute_pipeline("build_cluster_grid_pipeline");
         if (!pipe_h.has_value())
         {
-            auto cs = shaders.register_shader_module("build_cluster_grid.comp.spv", rhi::shader_stage::compute, "CSMain");
+            auto cs =
+                shaders.register_shader_module("build_cluster_grid.comp.spv", rhi::shader_stage::compute, "CSMain");
             auto tmpl = compute_pipeline_template{
                 .shader_module = cs,
             };
@@ -98,15 +102,20 @@ namespace tempest::render_system
 
         return graph.add_compute_pass<light_clustering_pass_data>(
             "LightClusteringPass",
-            [cluster_bounds_buf, create_info](render_graph::pass_builder& builder, light_clustering_pass_data& data) {
-                data.cluster_bounds_buffer = builder.write(cluster_bounds_buf, rhi::pipeline_stage::compute,
-                                                           rhi::resource_access::write);
+            [cluster_bounds_buf, create_info, pipeline_stats](render_graph::pass_builder& builder,
+                                                              light_clustering_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
+                data.cluster_bounds_buffer =
+                    builder.write(cluster_bounds_buf, rhi::pipeline_stage::compute, rhi::resource_access::write);
                 data.create_info = create_info;
             },
-            [&shaders, actual_cx, actual_cy, actual_cz, pipe](
-                const light_clustering_pass_data& data,
-                render_graph::pass_execution_context& ctx,
-                rhi::command_list& pass_cmd) {
+            [&shaders, actual_cx, actual_cy, actual_cz, pipe](const light_clustering_pass_data& data,
+                                                              render_graph::pass_execution_context& ctx,
+                                                              rhi::command_list& pass_cmd) {
                 auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
                 if (rhi_pipe.handle == 0)
                 {

@@ -1085,8 +1085,8 @@ namespace tempest::render_graph
         {
             if (pool.type == rhi::query_type::pipeline_statistics)
             {
-                pool.results[0] = 12345; // ia_vertices
-                pool.results[1] = 67890; // fs_invocations
+                pool.results[0] = 12345; // Input Assembly Vertices
+                pool.results[1] = 67890; // Fragment Shader Invocations
             }
         }
 
@@ -1106,9 +1106,9 @@ namespace tempest::render_graph
                 if (zone.name == "GeometryPass")
                 {
                     ASSERT_EQ(zone.metrics.size(), 2U);
-                    EXPECT_EQ(zone.metrics[0].name, "ia_vertices");
+                    EXPECT_EQ(zone.metrics[0].name, "Input Assembly Vertices");
                     EXPECT_DOUBLE_EQ(zone.metrics[0].value, 12345.0);
-                    EXPECT_EQ(zone.metrics[1].name, "fs_invocations");
+                    EXPECT_EQ(zone.metrics[1].name, "Fragment Shader Invocations");
                     EXPECT_DOUBLE_EQ(zone.metrics[1].value, 67890.0);
                     found_metrics = true;
                 }

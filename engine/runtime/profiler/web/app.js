@@ -1254,6 +1254,56 @@
   // Zone Detail Inspector & Self-Time Calculation
   // =========================================================================
 
+  function findParentFrame(zone) {
+    if (!zone) return null;
+    if (zone.frame_index !== undefined && zone.frame_index !== null && zone.frame_index !== 0) {
+      const found = state.frames.find(f => f.frame_index === zone.frame_index);
+      if (found) return found;
+    }
+    let found = state.frames.find(f => {
+      if (f.cpu_tracks) {
+        for (const t of f.cpu_tracks) {
+          if (t.zones && t.zones.some(pz => pz === zone || (pz.name === zone.name && pz.start_ns === zone.start_ns))) return true;
+        }
+      }
+      if (f.gpu_tracks) {
+        for (const t of f.gpu_tracks) {
+          if (t.zones && t.zones.some(pz => pz === zone || (pz.name === zone.name && pz.start_ns === zone.start_ns))) return true;
+        }
+      }
+      return false;
+    });
+    if (found) return found;
+
+    return state.frames.find(f => {
+      const inCpu = f.cpuStartNs !== null && f.cpuEndNs !== null && zone.start_ns >= f.cpuStartNs && zone.start_ns <= f.cpuEndNs;
+      const inGpu = f.gpuStartNs !== null && f.gpuEndNs !== null && zone.start_ns >= f.gpuStartNs && zone.start_ns <= f.gpuEndNs;
+      return inCpu || inGpu;
+    }) || null;
+  }
+
+  function getFrameDurationForZone(zone, parentFrame) {
+    if (parentFrame) {
+      const isGpu = zone.category === 'gpu' || (zone.trackName && zone.trackName.toLowerCase().includes('gpu'));
+      if (isGpu && parentFrame.gpuDurationNs > 0) {
+        return parentFrame.gpuDurationNs;
+      }
+      if (!isGpu && parentFrame.cpuDurationNs > 0) {
+        return parentFrame.cpuDurationNs;
+      }
+      if (parentFrame.cpuDurationNs > 0) return parentFrame.cpuDurationNs;
+      if (parentFrame.gpuDurationNs > 0) return parentFrame.gpuDurationNs;
+    }
+    const track = state.tracks.find(t => t.id === zone.trackId);
+    if (track && track.zones) {
+      const rootZone = track.zones.find(z => z.depth === 0 && zone.start_ns >= z.start_ns && zone.end_ns <= z.end_ns);
+      if (rootZone && rootZone.duration_ns > 0) {
+        return rootZone.duration_ns;
+      }
+    }
+    return 0;
+  }
+
   function selectZone(zone) {
     state.selectedZone = zone;
     if (!zone) {
@@ -1283,7 +1333,8 @@
     dom.inspSelfTime.textContent = `${formatTime(selfTime)} (${selfPct}%)`;
 
     // Percentage of Frame
-    const frameDur = state.maxTimeNs - state.minTimeNs;
+    const parentFrame = findParentFrame(zone);
+    const frameDur = getFrameDurationForZone(zone, parentFrame);
     const framePct = frameDur > 0 ? ((totalDur / frameDur) * 100).toFixed(2) : '0.00';
     dom.inspFramePct.textContent = `${framePct}%`;
 
@@ -1761,25 +1812,7 @@
       const z = hit.zone;
 
       // Find corresponding frame by exact frame_index or zone timestamp match
-      let parentFrame = null;
-      if (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) {
-        parentFrame = state.frames.find(f => f.frame_index === z.frame_index);
-      }
-      if (!parentFrame) {
-        parentFrame = state.frames.find(f => {
-          if (f.cpu_tracks) {
-            for (const t of f.cpu_tracks) {
-              if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
-            }
-          }
-          if (f.gpu_tracks) {
-            for (const t of f.gpu_tracks) {
-              if (t.zones && t.zones.some(pz => pz.name === z.name && pz.start_ns === z.start_ns)) return true;
-            }
-          }
-          return false;
-        });
-      }
+      const parentFrame = findParentFrame(z);
       state.hoveredFrameIndex = parentFrame ? parentFrame.frame_index : null;
 
       dom.tooltip.style.display = 'block';

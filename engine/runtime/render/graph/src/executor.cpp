@@ -45,17 +45,25 @@ namespace tempest::render_graph
                                                span<uint64_t>{ts_results.data(), ts_results.size()}, true);
             }
 
-            auto ps_results = vector<uint64_t>{};
-            auto read_ps_ok = false;
-            auto num_ps_entries_per_query = size_t{0};
-            if (flight_state.pipeline_stats_pool.handle != 0 && flight_state.recorded_pipeline_stats_count > 0)
+            auto ps_results_by_queue = flat_unordered_map<queue_type, vector<uint64_t>>{};
+            auto read_ps_ok_by_queue = flat_unordered_map<queue_type, bool>{};
+            auto num_ps_entries_by_queue = flat_unordered_map<queue_type, size_t>{};
+
+            for (size_t q_idx = 0; q_idx < flight_state.queue_stats.size(); ++q_idx)
             {
-                num_ps_entries_per_query = static_cast<size_t>(
-                    tempest::popcount(static_cast<uint32_t>(flight_state.pipeline_stats_mask.value())));
-                ps_results.resize(flight_state.recorded_pipeline_stats_count * num_ps_entries_per_query, 0);
-                read_ps_ok = dev.get_query_pool_results(flight_state.pipeline_stats_pool, 0,
-                                                        flight_state.recorded_pipeline_stats_count,
-                                                        span<uint64_t>{ps_results.data(), ps_results.size()}, true);
+                const auto q_type = static_cast<queue_type>(q_idx);
+                auto& q_stats = flight_state.queue_stats[q_idx];
+                if (q_stats.pool.handle != 0 && q_stats.recorded_count > 0)
+                {
+                    const auto num_entries =
+                        static_cast<size_t>(tempest::popcount(static_cast<uint32_t>(q_stats.mask.value())));
+                    num_ps_entries_by_queue[q_type] = num_entries;
+                    auto& q_results = ps_results_by_queue[q_type];
+                    q_results.resize(q_stats.recorded_count * num_entries, 0);
+                    read_ps_ok_by_queue[q_type] =
+                        dev.get_query_pool_results(q_stats.pool, 0, q_stats.recorded_count,
+                                                   span<uint64_t>{q_results.data(), q_results.size()}, true);
+                }
             }
 
             if (read_ts_ok && frame_sync.profiler != nullptr && frame_sync.profiler->is_enabled())
@@ -83,11 +91,14 @@ namespace tempest::render_graph
                         .metrics = {},
                     };
 
-                    if (pass_rec.pipeline_stats_idx.has_value() && read_ps_ok && num_ps_entries_per_query > 0)
+                    if (pass_rec.pipeline_stats_idx.has_value() && read_ps_ok_by_queue[pass_rec.queue] &&
+                        num_ps_entries_by_queue[pass_rec.queue] > 0)
                     {
+                        const auto& ps_results = ps_results_by_queue[pass_rec.queue];
+                        const auto num_ps_entries_per_query = num_ps_entries_by_queue[pass_rec.queue];
                         const auto query_offset = (*pass_rec.pipeline_stats_idx) * num_ps_entries_per_query;
                         auto entry_idx = size_t{0};
-                        const auto pool_flags = flight_state.pipeline_stats_mask;
+                        const auto pool_flags = flight_state.queue_stats[static_cast<size_t>(pass_rec.queue)].mask;
 
                         auto check_flag = [&](rhi::pipeline_statistic_flags flag, string_view metric_name) {
                             if (static_cast<bool>(pool_flags & flag))
@@ -108,18 +119,27 @@ namespace tempest::render_graph
                             }
                         };
 
-                        check_flag(rhi::pipeline_statistic_flags::input_assembly_vertices, "ia_vertices");
-                        check_flag(rhi::pipeline_statistic_flags::input_assembly_primitives, "ia_primitives");
-                        check_flag(rhi::pipeline_statistic_flags::vertex_shader_invocations, "vs_invocations");
-                        check_flag(rhi::pipeline_statistic_flags::geometry_shader_invocations, "gs_invocations");
-                        check_flag(rhi::pipeline_statistic_flags::geometry_shader_primitives, "gs_primitives");
-                        check_flag(rhi::pipeline_statistic_flags::clipping_input_primitives, "clip_in_primitives");
-                        check_flag(rhi::pipeline_statistic_flags::clipping_output_primitives, "clip_out_primitives");
-                        check_flag(rhi::pipeline_statistic_flags::fragment_shader_invocations, "fs_invocations");
-                        check_flag(rhi::pipeline_statistic_flags::tessellation_control_shader_patches, "tcs_patches");
+                        check_flag(rhi::pipeline_statistic_flags::input_assembly_vertices, "Input Assembly Vertices");
+                        check_flag(rhi::pipeline_statistic_flags::input_assembly_primitives,
+                                   "Input Assembly Primitives");
+                        check_flag(rhi::pipeline_statistic_flags::vertex_shader_invocations,
+                                   "Vertex Shader Invocations");
+                        check_flag(rhi::pipeline_statistic_flags::geometry_shader_invocations,
+                                   "Geometry Shader Invocations");
+                        check_flag(rhi::pipeline_statistic_flags::geometry_shader_primitives,
+                                   "Geometry Shader Primitives");
+                        check_flag(rhi::pipeline_statistic_flags::clipping_input_primitives,
+                                   "Clipping Input Primitives");
+                        check_flag(rhi::pipeline_statistic_flags::clipping_output_primitives,
+                                   "Clipping Output Primitives");
+                        check_flag(rhi::pipeline_statistic_flags::fragment_shader_invocations,
+                                   "Fragment Shader Invocations");
+                        check_flag(rhi::pipeline_statistic_flags::tessellation_control_shader_patches,
+                                   "Tessellation Control Shader Patches");
                         check_flag(rhi::pipeline_statistic_flags::tessellation_evaluation_shader_invocations,
-                                   "tes_invocations");
-                        check_flag(rhi::pipeline_statistic_flags::compute_shader_invocations, "cs_invocations");
+                                   "Tessellation Evaluation Shader Invocations");
+                        check_flag(rhi::pipeline_statistic_flags::compute_shader_invocations,
+                                   "Compute Shader Invocations");
                     }
 
                     const auto track_id = get_queue_track_id(pass_rec.queue);
@@ -159,7 +179,10 @@ namespace tempest::render_graph
 
             flight_state.recorded_passes.clear();
             flight_state.recorded_timestamp_count = 0;
-            flight_state.recorded_pipeline_stats_count = 0;
+            for (auto& q_stats : flight_state.queue_stats)
+            {
+                q_stats.recorded_count = 0;
+            }
         }
 
         auto& allocator = graph.get_allocator();
@@ -179,8 +202,8 @@ namespace tempest::render_graph
 
         // 2. Count passes and calculate required query pool capacities for current frame
         auto active_pass_count = size_t{0};
-        auto needed_stats_count = uint32_t{0};
-        auto union_stats_flags = enum_mask<rhi::pipeline_statistic_flags>{rhi::pipeline_statistic_flags::none};
+        auto needed_stats_per_queue = flat_unordered_map<queue_type, uint32_t>{};
+        auto union_stats_per_queue = flat_unordered_map<queue_type, enum_mask<rhi::pipeline_statistic_flags>>{};
 
         for (const auto& batch : sync.queue_batches)
         {
@@ -192,8 +215,13 @@ namespace tempest::render_graph
                     const auto& pass = all_passes[pass_idx];
                     if (pass.pipeline_statistics != rhi::pipeline_statistic_flags::none)
                     {
-                        ++needed_stats_count;
-                        union_stats_flags |= pass.pipeline_statistics;
+                        needed_stats_per_queue[batch.queue]++;
+                        auto pass_stats = pass.pipeline_statistics;
+                        if (batch.queue == queue_type::async_compute)
+                        {
+                            pass_stats &= rhi::pipeline_statistic_flags::compute_shader_invocations;
+                        }
+                        union_stats_per_queue[batch.queue] |= pass_stats;
                     }
                 }
             }
@@ -219,25 +247,29 @@ namespace tempest::render_graph
             }
         }
 
-        if (needed_stats_count > 0)
+        for (const auto& [q_type, needed_count] : needed_stats_per_queue)
         {
-            if (flight_state.pipeline_stats_pool.handle == 0 ||
-                flight_state.pipeline_stats_count < needed_stats_count ||
-                flight_state.pipeline_stats_mask != union_stats_flags)
+            auto q_mask = union_stats_per_queue[q_type];
+            if (needed_count > 0 && q_mask != rhi::pipeline_statistic_flags::none)
             {
-                if (flight_state.pipeline_stats_pool.handle != 0)
+                auto& q_state = flight_state.queue_stats[static_cast<size_t>(q_type)];
+                if (q_state.pool.handle == 0 || q_state.capacity < needed_count || q_state.mask != q_mask)
                 {
-                    dev.destroy_query_pool(flight_state.pipeline_stats_pool);
-                    flight_state.pipeline_stats_pool = {};
+                    if (q_state.pool.handle != 0)
+                    {
+                        dev.destroy_query_pool(q_state.pool);
+                        q_state.pool = {};
+                    }
+                    const auto ps_cap = tempest::max(needed_count, 16U);
+                    q_state.pool = dev.create_query_pool(rhi::query_pool_desc{
+                        .type = rhi::query_type::pipeline_statistics,
+                        .query_count = ps_cap,
+                        .pipeline_statistics = q_mask,
+                    });
+                    q_state.capacity = ps_cap;
+                    q_state.mask = q_mask;
                 }
-                const auto ps_cap = tempest::max(needed_stats_count, 16U);
-                flight_state.pipeline_stats_pool = dev.create_query_pool(rhi::query_pool_desc{
-                    .type = rhi::query_type::pipeline_statistics,
-                    .query_count = ps_cap,
-                    .pipeline_statistics = union_stats_flags,
-                });
-                flight_state.pipeline_stats_count = ps_cap;
-                flight_state.pipeline_stats_mask = union_stats_flags;
+                q_state.recorded_count = 0;
             }
         }
 
@@ -251,7 +283,7 @@ namespace tempest::render_graph
         auto wait_semaphore_consumed = false;
         auto last_batch_signal_val = uint64_t{0};
         auto current_timestamp_idx = uint32_t{0};
-        auto current_stats_idx = uint32_t{0};
+        auto current_stats_idx_per_queue = flat_unordered_map<queue_type, uint32_t>{};
 
         for (size_t batch_idx = 0; batch_idx < sync.queue_batches.size(); ++batch_idx)
         {
@@ -273,7 +305,7 @@ namespace tempest::render_graph
 
             // Reset query pool slice used by this batch (including submit start/end and pass queries)
             const auto batch_ts_start = current_timestamp_idx;
-            const auto batch_ps_start = current_stats_idx;
+            const auto batch_ps_start = current_stats_idx_per_queue[batch.queue];
             auto batch_ts_count = uint32_t{2}; // 2 timestamps for submit start and end
             auto batch_ps_count = uint32_t{0};
 
@@ -293,9 +325,10 @@ namespace tempest::render_graph
             {
                 cmd.reset_query_pool(flight_state.timestamp_pool, batch_ts_start, batch_ts_count);
             }
-            if (flight_state.pipeline_stats_pool.handle != 0 && batch_ps_count > 0)
+            auto& q_state = flight_state.queue_stats[static_cast<size_t>(batch.queue)];
+            if (q_state.pool.handle != 0 && batch_ps_count > 0)
             {
-                cmd.reset_query_pool(flight_state.pipeline_stats_pool, batch_ps_start, batch_ps_count);
+                cmd.reset_query_pool(q_state.pool, batch_ps_start, batch_ps_count);
             }
 
             // Top-level submit zone start timestamp
@@ -353,11 +386,11 @@ namespace tempest::render_graph
                 const auto start_ts = current_timestamp_idx++;
                 const auto end_ts = current_timestamp_idx++;
                 auto pass_stat_idx = optional<uint32_t>{nullopt};
-                const auto has_stats = (pass.pipeline_statistics != rhi::pipeline_statistic_flags::none) &&
-                                       (flight_state.pipeline_stats_pool.handle != 0);
+                const auto has_stats =
+                    (pass.pipeline_statistics != rhi::pipeline_statistic_flags::none) && (q_state.pool.handle != 0);
                 if (has_stats)
                 {
-                    pass_stat_idx = current_stats_idx++;
+                    pass_stat_idx = current_stats_idx_per_queue[batch.queue]++;
                 }
 
                 // 1. Issue pre-pass pipeline barriers FIRST before the start timestamp query
@@ -377,7 +410,7 @@ namespace tempest::render_graph
                 }
                 if (has_stats)
                 {
-                    cmd.begin_query(flight_state.pipeline_stats_pool, *pass_stat_idx);
+                    cmd.begin_query(q_state.pool, *pass_stat_idx);
                 }
 
                 // 2. Detect color and depth-stencil attachments for dynamic rendering
@@ -450,7 +483,8 @@ namespace tempest::render_graph
 
                 if (has_stats)
                 {
-                    cmd.end_query(flight_state.pipeline_stats_pool, *pass_stat_idx);
+                    cmd.end_query(q_state.pool, *pass_stat_idx);
+                    q_state.recorded_count = tempest::max(q_state.recorded_count, *pass_stat_idx + 1);
                 }
                 if (flight_state.timestamp_pool.handle != 0)
                 {
@@ -616,7 +650,6 @@ namespace tempest::render_graph
         }
 
         flight_state.recorded_timestamp_count = current_timestamp_idx;
-        flight_state.recorded_pipeline_stats_count = current_stats_idx;
         flight_state.recorded_frame_index = frame_sync.frame_index;
 
         for (auto* temporal_res : graph.get_tracked_temporal_resources())
@@ -646,10 +679,13 @@ namespace tempest::render_graph
                 dev.destroy_query_pool(slot.timestamp_pool);
                 slot.timestamp_pool = {};
             }
-            if (slot.pipeline_stats_pool.handle != 0)
+            for (auto& q_state : slot.queue_stats)
             {
-                dev.destroy_query_pool(slot.pipeline_stats_pool);
-                slot.pipeline_stats_pool = {};
+                if (q_state.pool.handle != 0)
+                {
+                    dev.destroy_query_pool(q_state.pool);
+                    q_state.pool = {};
+                }
             }
             slot.recorded_passes.clear();
         }

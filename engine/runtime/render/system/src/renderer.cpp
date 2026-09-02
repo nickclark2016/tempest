@@ -117,7 +117,7 @@ namespace tempest::render_system
           _camera_system{_inputs.camera_sys ? _inputs.camera_sys : _owned_camera_system.get()},
           _frames_in_flight{math::max(1U, cfg.pool_config.frames_in_flight)}, _pool{dev, cfg.pool_config},
           _shaders{dev, inputs.asset_db}, _graph{cfg.render_width, cfg.render_height},
-          _shadow_debug_mode{cfg.shadow_debug}
+          _shadow_debug_mode{cfg.shadow_debug}, _pipeline_statistics{cfg.pipeline_statistics}
     {
         _flight_slots.resize(_frames_in_flight);
         for (auto& slot : _flight_slots)
@@ -196,6 +196,7 @@ namespace tempest::render_system
           _opaque_draw_count{other._opaque_draw_count}, _opaque_draw_offset{other._opaque_draw_offset},
           _transparent_draw_count{other._transparent_draw_count},
           _transparent_draw_offset{other._transparent_draw_offset}, _shadow_debug_mode{other._shadow_debug_mode},
+          _pipeline_statistics{other._pipeline_statistics},
           _renderable_indices{tempest::move(other._renderable_indices)},
           _renderables_dirty_count{other._renderables_dirty_count}, _events{other._events},
           _point_light_indices{tempest::move(other._point_light_indices)},
@@ -287,6 +288,7 @@ namespace tempest::render_system
             _transparent_draw_count = other._transparent_draw_count;
             _transparent_draw_offset = other._transparent_draw_offset;
             _shadow_debug_mode = other._shadow_debug_mode;
+            _pipeline_statistics = other._pipeline_statistics;
             _renderable_indices = tempest::move(other._renderable_indices);
             _renderables_dirty_count = other._renderables_dirty_count;
             _point_light_indices = tempest::move(other._point_light_indices);
@@ -1081,14 +1083,17 @@ namespace tempest::render_system
             .inv_view = scene.inv_view,
             .eye_position = scene.camera_position,
         };
+        const auto gfx_stats = _pipeline_statistics & ~rhi::pipeline_statistic_flags::compute_shader_invocations;
+        const auto cs_stats = _pipeline_statistics & rhi::pipeline_statistic_flags::compute_shader_invocations;
+
         const auto& cluster_data =
             add_light_clustering_pass(_graph, _pool, _shaders, _cluster_bounds_target, active_cam, width, height,
-                                      grid_dims.x, grid_dims.y, grid_dims.z);
+                                      grid_dims.x, grid_dims.y, grid_dims.z, cs_stats);
 
         auto lights_buf = _graph.import_buffer(_pool.get_lights_buffer());
         const auto& culling_data =
             add_light_culling_pass(_graph, _pool, _shaders, cluster_data.cluster_bounds_buffer, lights_buf,
-                                   cluster_data.create_info, scene.light_count, _light_bitmask_target);
+                                   cluster_data.create_info, scene.light_count, _light_bitmask_target, cs_stats);
 
         if (_inputs.entity_registry)
         {
@@ -1103,6 +1108,7 @@ namespace tempest::render_system
                 .camera_override = camera_override,
                 .draw_count = _opaque_draw_count,
                 .draw_offset = _opaque_draw_offset,
+                .pipeline_statistics = gfx_stats,
             });
 
             if (_shadow_debug_mode != shadow_debug_mode::none)
@@ -1114,35 +1120,38 @@ namespace tempest::render_system
             _directional_shadow_atlas_target = shadow_res.shadow_atlas;
         }
 
-        const auto& depth_data =
-            add_depth_prepass(_graph, _pool, _shaders, _depth_target, _opaque_draw_count, _opaque_draw_offset);
+        const auto& depth_data = add_depth_prepass(_graph, _pool, _shaders, _depth_target, _opaque_draw_count,
+                                                   _opaque_draw_offset, gfx_stats);
 
         if (_cfg.enable_ssao)
         {
-            const auto& ssao_data = add_ssao_pass(_graph, _pool, _shaders, depth_data.depth_texture, _ssao_target);
+            const auto& ssao_data = add_ssao_pass(_graph, _pool, _shaders, depth_data.depth_texture, _ssao_target, 0.5F,
+                                                  0.025F, 1.5F, gfx_stats);
             add_ssao_blur_pass(_graph, _pool, _shaders, ssao_data.ssao_raw, depth_data.depth_texture,
                                _ssao_blurred_target, width, height);
         }
 
-        const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
+        const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target, -1, gfx_stats);
         const auto& pbr_data = add_pbr_opaque_pass(
             _graph, _pool, _shaders, skybox_data.hdr_color, depth_data.depth_texture, _directional_shadow_atlas_target,
-            _opaque_draw_count, _opaque_draw_offset, culling_data.light_bitmask_buffer);
+            _opaque_draw_count, _opaque_draw_offset, culling_data.light_bitmask_buffer, gfx_stats);
 
         const auto& clear_data =
             add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target, width, height);
         const auto& gather_data = add_transparency_gather_pass(
             _graph, _pool, _shaders, clear_data.moments_texture, clear_data.zeroth_moment_texture,
-            depth_data.depth_texture, _transparent_draw_count, _transparent_draw_offset);
+            depth_data.depth_texture, _transparent_draw_count, _transparent_draw_offset, gfx_stats);
         const auto& resolve_data = add_transparency_resolve_pass(
             _graph, _pool, _shaders, _transparency_accum_target, gather_data.moments_texture,
             gather_data.zeroth_moment_texture, depth_data.depth_texture, _transparent_draw_count,
-            _transparent_draw_offset, _directional_shadow_atlas_target, culling_data.light_bitmask_buffer);
-        const auto& blend_data = add_transparency_blend_pass(
-            _graph, _pool, _shaders, pbr_data.hdr_color, resolve_data.accum_texture, gather_data.zeroth_moment_texture);
+            _transparent_draw_offset, _directional_shadow_atlas_target, culling_data.light_bitmask_buffer, gfx_stats);
+        const auto& blend_data =
+            add_transparency_blend_pass(_graph, _pool, _shaders, pbr_data.hdr_color, resolve_data.accum_texture,
+                                        gather_data.zeroth_moment_texture, rhi::data_format::rgba16_float, gfx_stats);
 
-        const auto& tonemap_data = add_tonemapping_pass(_graph, _pool, _shaders, blend_data.hdr_color,
-                                                        _tonemapped_color_target, _cfg.tonemapped_color_format);
+        const auto& tonemap_data =
+            add_tonemapping_pass(_graph, _pool, _shaders, blend_data.hdr_color, _tonemapped_color_target,
+                                 _cfg.tonemapped_color_format, 0.0F, gfx_stats);
         _tonemapped_color_target = tonemap_data.tonemapped_output;
 
         if (ui_callback && effective_sc_tex.has_value() && effective_sc_view.has_value())
