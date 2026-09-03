@@ -13,6 +13,8 @@
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 
+#include <chrono>
+
 namespace tempest::profiler
 {
     struct web_server_config
@@ -53,6 +55,12 @@ namespace tempest::profiler
         auto _handle_control_command(int64_t client_socket, string_view command_str) -> void;
         auto _close_client_socket(int64_t client_socket) -> void;
 
+        struct pending_connection
+        {
+            int64_t socket{-1};
+            std::chrono::steady_clock::time_point connected_at{};
+        };
+
         profiler_session& _session;
         web_server_config _config;
         atomic<bool> _running{false};
@@ -60,6 +68,7 @@ namespace tempest::profiler
         atomic<int64_t> _server_socket{-1};
         thread _worker_thread{};
 
+        vector<pending_connection> _pending_clients{};
         vector<int64_t> _ws_clients{};
         mutable mutex _clients_mutex{};
     };

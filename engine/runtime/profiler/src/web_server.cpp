@@ -386,6 +386,12 @@ namespace tempest::profiler
             _ws_clients.clear();
         }
 
+        for (const auto& pending : _pending_clients)
+        {
+            close_socket(static_cast<native_socket_t>(pending.socket));
+        }
+        _pending_clients.clear();
+
         _bound_port.store(0);
     }
 
@@ -505,6 +511,16 @@ namespace tempest::profiler
                 }
             }
 
+            for (const auto& pending : _pending_clients)
+            {
+                const auto sock = static_cast<native_socket_t>(pending.socket);
+                FD_SET(sock, &read_fds);
+                if (sock > max_fd)
+                {
+                    max_fd = sock;
+                }
+            }
+
             auto tv = timeval{};
             tv.tv_sec = 0;
             tv.tv_usec = 50000; // 50 ms
@@ -524,31 +540,21 @@ namespace tempest::profiler
             {
                 auto client_addr = sockaddr_in{};
                 auto addr_len = static_cast<socklen_t>(sizeof(client_addr));
-                const auto client_sock = accept(server_sock, reinterpret_cast<sockaddr*>(&client_addr), &addr_len);
-
-                if (client_sock != invalid_sock)
+                while (true)
                 {
+                    const auto client_sock = accept(server_sock, reinterpret_cast<sockaddr*>(&client_addr), &addr_len);
+                    if (client_sock == invalid_sock)
+                    {
+                        break;
+                    }
+
+                    set_socket_nonblocking(client_sock);
                     auto nodelay = int{1};
                     setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay),
                                sizeof(nodelay));
 
-                    auto client_read_fds = fd_set{};
-                    FD_ZERO(&client_read_fds);
-                    FD_SET(client_sock, &client_read_fds);
-                    auto client_tv = timeval{};
-                    client_tv.tv_sec = 0;
-                    client_tv.tv_usec = 100000; // 100 ms
-
-                    const auto sel_client =
-                        select(static_cast<int>(client_sock + 1), &client_read_fds, nullptr, nullptr, &client_tv);
-                    auto bytes = int{0};
                     char buffer[4096];
-
-                    if (sel_client > 0 && FD_ISSET(client_sock, &client_read_fds))
-                    {
-                        bytes = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
-                    }
-
+                    const auto bytes = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
                     if (bytes > 0)
                     {
                         buffer[bytes] = '\0';
@@ -565,10 +571,106 @@ namespace tempest::profiler
                             _handle_http_request(static_cast<int64_t>(client_sock), req_view);
                         }
                     }
+                    else if (bytes < 0)
+                    {
+#if defined(_WIN32)
+                        const auto err = WSAGetLastError();
+                        if (err == WSAEWOULDBLOCK)
+                        {
+                            _pending_clients.push_back(pending_connection{
+                                .socket = static_cast<int64_t>(client_sock),
+                                .connected_at = std::chrono::steady_clock::now(),
+                            });
+                            continue;
+                        }
+#else
+                        const auto err = errno;
+                        if (err == EWOULDBLOCK || err == EAGAIN)
+                        {
+                            _pending_clients.push_back(pending_connection{
+                                .socket = static_cast<int64_t>(client_sock),
+                                .connected_at = std::chrono::steady_clock::now(),
+                            });
+                            continue;
+                        }
+#endif
+                        close_socket(client_sock);
+                    }
                     else
                     {
                         close_socket(client_sock);
                     }
+                }
+            }
+
+            // Read from pending handshake clients
+            const auto now = std::chrono::steady_clock::now();
+            for (auto it = _pending_clients.begin(); it != _pending_clients.end();)
+            {
+                const auto client_sock = static_cast<native_socket_t>(it->socket);
+                auto remove_pending = false;
+
+                if (FD_ISSET(client_sock, &read_fds))
+                {
+                    char buffer[4096];
+                    const auto bytes = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
+                    if (bytes > 0)
+                    {
+                        buffer[bytes] = '\0';
+                        const auto req_view = string_view{buffer, static_cast<size_t>(bytes)};
+                        const auto upgrade = find_header_value(req_view, "Upgrade");
+                        const auto sec_key = find_header_value(req_view, "Sec-WebSocket-Key");
+
+                        if (!upgrade.empty() && !sec_key.empty())
+                        {
+                            _handle_websocket_connection(it->socket, sec_key);
+                        }
+                        else
+                        {
+                            _handle_http_request(it->socket, req_view);
+                        }
+                        remove_pending = true;
+                    }
+                    else if (bytes == 0)
+                    {
+                        close_socket(client_sock);
+                        remove_pending = true;
+                    }
+                    else
+                    {
+#if defined(_WIN32)
+                        const auto err = WSAGetLastError();
+                        if (err != WSAEWOULDBLOCK)
+                        {
+                            close_socket(client_sock);
+                            remove_pending = true;
+                        }
+#else
+                        const auto err = errno;
+                        if (err != EWOULDBLOCK && err != EAGAIN)
+                        {
+                            close_socket(client_sock);
+                            remove_pending = true;
+                        }
+#endif
+                    }
+                }
+                else
+                {
+                    if (std::chrono::duration_cast<std::chrono::seconds>(now - it->connected_at).count() >= 5)
+                    {
+                        close_socket(client_sock);
+                        remove_pending = true;
+                    }
+                }
+
+                if (remove_pending)
+                {
+                    it = _pending_clients.erase(it);
+                }
+                else
+                {
+                    ++it;
                 }
             }
 
@@ -638,6 +740,12 @@ namespace tempest::profiler
                 }
             }
         }
+
+        for (const auto& pending : _pending_clients)
+        {
+            close_socket(static_cast<native_socket_t>(pending.socket));
+        }
+        _pending_clients.clear();
     }
 
     auto web_server::_handle_http_request(int64_t client_socket, string_view request_header) -> void
