@@ -21,8 +21,10 @@
 #include <ws2tcpip.h>
 using native_socket_t = SOCKET;
 constexpr native_socket_t invalid_sock = INVALID_SOCKET;
+constexpr auto nosignal_flag = int{0};
 #else
 #include <arpa/inet.h>
+#include <csignal>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -32,6 +34,11 @@ constexpr native_socket_t invalid_sock = INVALID_SOCKET;
 #include <unistd.h>
 using native_socket_t = int;
 constexpr native_socket_t invalid_sock = -1;
+#if defined(MSG_NOSIGNAL)
+constexpr auto nosignal_flag = MSG_NOSIGNAL;
+#else
+constexpr auto nosignal_flag = int{0};
+#endif
 #endif
 
 namespace tempest::profiler
@@ -54,8 +61,7 @@ namespace tempest::profiler
 
         auto ensure_sockets_initialized() -> void
         {
-            static auto guard = winsock_guard{};
-            (void)guard;
+            [[maybe_unused]] static auto guard = winsock_guard{};
         }
 
         auto close_socket(native_socket_t s) -> void
@@ -71,6 +77,10 @@ namespace tempest::profiler
 #else
         auto ensure_sockets_initialized() -> void
         {
+            [[maybe_unused]] static auto initialized = []() {
+                signal(SIGPIPE, SIG_IGN);
+                return true;
+            }();
         }
 
         auto close_socket(native_socket_t s) -> void
@@ -91,7 +101,7 @@ namespace tempest::profiler
             while (bytes_sent < total_size)
             {
                 const auto chunk_to_send = static_cast<int>(tempest::min(total_size - bytes_sent, size_t{65536}));
-                const auto res = send(sock, data + bytes_sent, chunk_to_send, 0);
+                const auto res = send(sock, data + bytes_sent, chunk_to_send, nosignal_flag);
                 if (res > 0)
                 {
                     bytes_sent += static_cast<size_t>(res);
@@ -695,7 +705,8 @@ namespace tempest::profiler
                            nf_len, not_found);
         }
 
-        send(static_cast<native_socket_t>(client_socket), response.data(), static_cast<int>(response.size()), 0);
+        send(static_cast<native_socket_t>(client_socket), response.data(), static_cast<int>(response.size()),
+             nosignal_flag);
         close_socket(static_cast<native_socket_t>(client_socket));
     }
 
@@ -716,8 +727,8 @@ namespace tempest::profiler
                        "\r\n",
                        accept_key.c_str());
 
-        const auto res =
-            send(static_cast<native_socket_t>(client_socket), response.data(), static_cast<int>(response.size()), 0);
+        const auto res = send(static_cast<native_socket_t>(client_socket), response.data(),
+                              static_cast<int>(response.size()), nosignal_flag);
         if (res >= 0)
         {
             lock_guard<mutex> lock(_clients_mutex);
@@ -735,13 +746,13 @@ namespace tempest::profiler
         {
             const auto pong = encode_websocket_frame(ws_opcode::pong, msg.payload);
             send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(pong.data()),
-                 static_cast<int>(pong.size()), 0);
+                 static_cast<int>(pong.size()), nosignal_flag);
         }
         else if (msg.opcode == ws_opcode::close)
         {
             const auto close_f = encode_websocket_frame(ws_opcode::close, {});
             send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(close_f.data()),
-                 static_cast<int>(close_f.size()), 0);
+                 static_cast<int>(close_f.size()), nosignal_flag);
             _close_client_socket(client_socket);
         }
         else if (msg.opcode == ws_opcode::text)
@@ -807,7 +818,7 @@ namespace tempest::profiler
         const auto frame = encode_websocket_frame(
             ws_opcode::text, span<const byte>{reinterpret_cast<const byte*>(resp.data()), resp.size()});
         send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(frame.data()),
-             static_cast<int>(frame.size()), 0);
+             static_cast<int>(frame.size()), nosignal_flag);
     }
 
     auto web_server::_close_client_socket(int64_t client_socket) -> void
