@@ -50,7 +50,8 @@ namespace tempest::profiler
       private:
         auto _server_loop() -> void;
         auto _handle_http_request(int64_t client_socket, string_view request_header) -> void;
-        auto _handle_websocket_connection(int64_t client_socket, string_view ws_key) -> void;
+        auto _handle_websocket_connection(int64_t client_socket, string_view ws_key, span<const byte> initial_rx = {})
+            -> void;
         auto _process_websocket_frame(int64_t client_socket, const ws_message& msg) -> bool;
         auto _handle_control_command(int64_t client_socket, string_view command_str) -> void;
         auto _close_client_socket(int64_t client_socket) -> void;
@@ -59,6 +60,13 @@ namespace tempest::profiler
         {
             int64_t socket{-1};
             std::chrono::steady_clock::time_point connected_at{};
+            string rx_buffer{};
+        };
+
+        struct websocket_client
+        {
+            int64_t socket{-1};
+            vector<byte> rx_buffer{};
         };
 
         profiler_session& _session;
@@ -69,7 +77,7 @@ namespace tempest::profiler
         thread _worker_thread{};
 
         vector<pending_connection> _pending_clients{};
-        vector<int64_t> _ws_clients{};
+        vector<websocket_client> _ws_clients{};
         mutable mutex _clients_mutex{};
     };
 } // namespace tempest::profiler
