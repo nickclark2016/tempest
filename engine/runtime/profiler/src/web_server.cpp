@@ -17,6 +17,9 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifndef FD_SETSIZE
+#define FD_SETSIZE 1024
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 using native_socket_t = SOCKET;
@@ -116,7 +119,7 @@ namespace tempest::profiler
                         FD_ZERO(&write_fds);
                         FD_SET(sock, &write_fds);
                         auto tv = timeval{.tv_sec = 0, .tv_usec = 2000};
-                        if (select(static_cast<int>(sock + 1), nullptr, &write_fds, nullptr, &tv) > 0)
+                        if (select(0, nullptr, &write_fds, nullptr, &tv) > 0)
                         {
                             continue;
                         }
@@ -126,6 +129,10 @@ namespace tempest::profiler
                     const auto err = errno;
                     if (err == EWOULDBLOCK || err == EAGAIN)
                     {
+                        if (sock >= FD_SETSIZE)
+                        {
+                            return false;
+                        }
                         auto write_fds = fd_set{};
                         FD_ZERO(&write_fds);
                         FD_SET(sock, &write_fds);
@@ -535,6 +542,12 @@ namespace tempest::profiler
                 for (const auto& c : _ws_clients)
                 {
                     const auto sock = static_cast<native_socket_t>(c.socket);
+#if !defined(_WIN32)
+                    if (sock >= FD_SETSIZE)
+                    {
+                        continue;
+                    }
+#endif
                     FD_SET(sock, &read_fds);
                     if (sock > max_fd)
                     {
@@ -546,6 +559,12 @@ namespace tempest::profiler
             for (const auto& pending : _pending_clients)
             {
                 const auto sock = static_cast<native_socket_t>(pending.socket);
+#if !defined(_WIN32)
+                if (sock >= FD_SETSIZE)
+                {
+                    continue;
+                }
+#endif
                 FD_SET(sock, &read_fds);
                 if (sock > max_fd)
                 {
@@ -557,7 +576,12 @@ namespace tempest::profiler
             tv.tv_sec = 0;
             tv.tv_usec = 50000; // 50 ms
 
-            const auto activity = select(static_cast<int>(max_fd + 1), &read_fds, nullptr, nullptr, &tv);
+#if defined(_WIN32)
+            const auto nfds = int{0};
+#else
+            const auto nfds = static_cast<int>(max_fd + 1);
+#endif
+            const auto activity = select(nfds, &read_fds, nullptr, nullptr, &tv);
             if (activity < 0 || !_running.load())
             {
                 continue;
@@ -574,11 +598,27 @@ namespace tempest::profiler
                 auto addr_len = static_cast<socklen_t>(sizeof(client_addr));
                 while (true)
                 {
+                    {
+                        auto lock = lock_guard{_clients_mutex};
+                        if (_ws_clients.size() + _pending_clients.size() + 1 >= FD_SETSIZE)
+                        {
+                            break;
+                        }
+                    }
+
                     const auto client_sock = accept(server_sock, reinterpret_cast<sockaddr*>(&client_addr), &addr_len);
                     if (client_sock == invalid_sock)
                     {
                         break;
                     }
+
+#if !defined(_WIN32)
+                    if (client_sock >= FD_SETSIZE)
+                    {
+                        close_socket(client_sock);
+                        break;
+                    }
+#endif
 
                     set_socket_nonblocking(client_sock);
                     auto nodelay = int{1};
