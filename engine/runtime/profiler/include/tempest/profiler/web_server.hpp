@@ -57,7 +57,7 @@ namespace tempest::profiler
         web_server_config _config;
         atomic<bool> _running{false};
         atomic<uint16_t> _bound_port{0};
-        int64_t _server_socket{-1};
+        atomic<int64_t> _server_socket{-1};
         thread _worker_thread{};
 
         vector<int64_t> _ws_clients{};

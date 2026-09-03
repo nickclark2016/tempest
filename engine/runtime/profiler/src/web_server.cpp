@@ -346,7 +346,12 @@ namespace tempest::profiler
             return;
         }
 
-        _server_socket = static_cast<int64_t>(bound_sock);
+        if (_worker_thread.joinable())
+        {
+            _worker_thread.join();
+        }
+
+        _server_socket.store(static_cast<int64_t>(bound_sock));
         _bound_port.store(bound_port);
         _running.store(true);
 
@@ -360,10 +365,15 @@ namespace tempest::profiler
             return;
         }
 
-        if (_server_socket != -1)
+        if (_worker_thread.joinable())
         {
-            close_socket(static_cast<native_socket_t>(_server_socket));
-            _server_socket = -1;
+            _worker_thread.join();
+        }
+
+        const auto s = _server_socket.exchange(-1);
+        if (s != -1)
+        {
+            close_socket(static_cast<native_socket_t>(s));
         }
 
         {
@@ -373,11 +383,6 @@ namespace tempest::profiler
                 close_socket(static_cast<native_socket_t>(client));
             }
             _ws_clients.clear();
-        }
-
-        if (_worker_thread.joinable())
-        {
-            _worker_thread.join();
         }
 
         _bound_port.store(0);
@@ -476,12 +481,13 @@ namespace tempest::profiler
             auto read_fds = fd_set{};
             FD_ZERO(&read_fds);
 
-            if (_server_socket == -1)
+            const auto s = _server_socket.load();
+            if (s == -1)
             {
                 break;
             }
 
-            const auto server_sock = static_cast<native_socket_t>(_server_socket);
+            const auto server_sock = static_cast<native_socket_t>(s);
             FD_SET(server_sock, &read_fds);
             auto max_fd = server_sock;
 
