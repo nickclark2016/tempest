@@ -367,7 +367,7 @@ namespace tempest::profiler
         }
 
         {
-            lock_guard<mutex> lock(_clients_mutex);
+            auto lock = lock_guard{_clients_mutex};
             for (const auto client : _ws_clients)
             {
                 close_socket(static_cast<native_socket_t>(client));
@@ -406,7 +406,7 @@ namespace tempest::profiler
 
     auto web_server::connected_client_count() const noexcept -> size_t
     {
-        lock_guard<mutex> lock(_clients_mutex);
+        auto lock = lock_guard{_clients_mutex};
         return _ws_clients.size();
     }
 
@@ -418,30 +418,20 @@ namespace tempest::profiler
         }
 
         const auto frame = encode_websocket_frame(ws_opcode::binary, frame_payload);
-        auto dead_clients = vector<int64_t>{};
 
+        auto lock = lock_guard{_clients_mutex};
+        for (auto it = _ws_clients.begin(); it != _ws_clients.end();)
         {
-            lock_guard<mutex> lock(_clients_mutex);
-            for (const auto client : _ws_clients)
+            const auto client = *it;
+            if (!send_all_nonblocking(static_cast<native_socket_t>(client), reinterpret_cast<const char*>(frame.data()),
+                                      frame.size()))
             {
-                if (!send_all_nonblocking(static_cast<native_socket_t>(client),
-                                          reinterpret_cast<const char*>(frame.data()), frame.size()))
-                {
-                    dead_clients.push_back(client);
-                }
+                close_socket(static_cast<native_socket_t>(client));
+                it = _ws_clients.erase(it);
             }
-
-            for (const auto dead : dead_clients)
+            else
             {
-                for (auto it = _ws_clients.begin(); it != _ws_clients.end(); ++it)
-                {
-                    if (*it == dead)
-                    {
-                        _ws_clients.erase(it);
-                        break;
-                    }
-                }
-                close_socket(static_cast<native_socket_t>(dead));
+                ++it;
             }
         }
     }
@@ -455,30 +445,20 @@ namespace tempest::profiler
 
         const auto frame = encode_websocket_frame(
             ws_opcode::text, span<const byte>{reinterpret_cast<const byte*>(text.data()), text.size()});
-        auto dead_clients = vector<int64_t>{};
 
+        auto lock = lock_guard{_clients_mutex};
+        for (auto it = _ws_clients.begin(); it != _ws_clients.end();)
         {
-            lock_guard<mutex> lock(_clients_mutex);
-            for (const auto client : _ws_clients)
+            const auto client = *it;
+            if (!send_all_nonblocking(static_cast<native_socket_t>(client), reinterpret_cast<const char*>(frame.data()),
+                                      frame.size()))
             {
-                if (!send_all_nonblocking(static_cast<native_socket_t>(client),
-                                          reinterpret_cast<const char*>(frame.data()), frame.size()))
-                {
-                    dead_clients.push_back(client);
-                }
+                close_socket(static_cast<native_socket_t>(client));
+                it = _ws_clients.erase(it);
             }
-
-            for (const auto dead : dead_clients)
+            else
             {
-                for (auto it = _ws_clients.begin(); it != _ws_clients.end(); ++it)
-                {
-                    if (*it == dead)
-                    {
-                        _ws_clients.erase(it);
-                        break;
-                    }
-                }
-                close_socket(static_cast<native_socket_t>(dead));
+                ++it;
             }
         }
     }
@@ -505,9 +485,8 @@ namespace tempest::profiler
             FD_SET(server_sock, &read_fds);
             auto max_fd = server_sock;
 
-            auto active_clients = vector<int64_t>{};
             {
-                lock_guard<mutex> lock(_clients_mutex);
+                auto lock = lock_guard{_clients_mutex};
                 for (const auto c : _ws_clients)
                 {
                     const auto sock = static_cast<native_socket_t>(c);
@@ -517,7 +496,6 @@ namespace tempest::profiler
                         max_fd = sock;
                     }
                 }
-                active_clients = _ws_clients;
             }
 
             auto tv = timeval{};
@@ -588,50 +566,68 @@ namespace tempest::profiler
             }
 
             // Read from active WebSocket clients
-            for (const auto c : active_clients)
             {
-                const auto client_sock = static_cast<native_socket_t>(c);
-                if (FD_ISSET(client_sock, &read_fds))
+                auto lock = lock_guard{_clients_mutex};
+                for (auto it = _ws_clients.begin(); it != _ws_clients.end();)
                 {
-                    char buffer[4096];
-                    const auto bytes = recv(client_sock, buffer, sizeof(buffer), 0);
-                    if (bytes <= 0)
+                    const auto c = *it;
+                    const auto client_sock = static_cast<native_socket_t>(c);
+                    if (FD_ISSET(client_sock, &read_fds))
                     {
-                        if (bytes < 0)
+                        auto should_close = false;
+                        char buffer[4096];
+                        const auto bytes = recv(client_sock, buffer, sizeof(buffer), 0);
+                        if (bytes <= 0)
                         {
+                            if (bytes < 0)
+                            {
 #if defined(_WIN32)
-                            const auto err = WSAGetLastError();
-                            if (err == WSAEWOULDBLOCK)
-                            {
-                                continue;
-                            }
+                                const auto err = WSAGetLastError();
+                                if (err == WSAEWOULDBLOCK)
+                                {
+                                    ++it;
+                                    continue;
+                                }
 #else
-                            const auto err = errno;
-                            if (err == EWOULDBLOCK || err == EAGAIN)
-                            {
-                                continue;
-                            }
+                                const auto err = errno;
+                                if (err == EWOULDBLOCK || err == EAGAIN)
+                                {
+                                    ++it;
+                                    continue;
+                                }
 #endif
-                        }
-                        _close_client_socket(c);
-                    }
-                    else
-                    {
-                        const auto decoded = decode_websocket_frame(
-                            span<const byte>{reinterpret_cast<const byte*>(buffer), static_cast<size_t>(bytes)});
-                        if (decoded)
-                        {
-                            _process_websocket_frame(c, *decoded);
+                            }
+                            should_close = true;
                         }
                         else
                         {
-                            if (decoded.error() == ws_error::invalid_frame ||
-                                decoded.error() == ws_error::connection_closed)
+                            const auto decoded = decode_websocket_frame(
+                                span<const byte>{reinterpret_cast<const byte*>(buffer), static_cast<size_t>(bytes)});
+                            if (decoded)
                             {
-                                _close_client_socket(c);
+                                if (!_process_websocket_frame(c, *decoded))
+                                {
+                                    should_close = true;
+                                }
+                            }
+                            else
+                            {
+                                if (decoded.error() == ws_error::invalid_frame ||
+                                    decoded.error() == ws_error::connection_closed)
+                                {
+                                    should_close = true;
+                                }
                             }
                         }
+
+                        if (should_close)
+                        {
+                            close_socket(client_sock);
+                            it = _ws_clients.erase(it);
+                            continue;
+                        }
                     }
+                    ++it;
                 }
             }
         }
@@ -731,7 +727,7 @@ namespace tempest::profiler
                               static_cast<int>(response.size()), nosignal_flag);
         if (res >= 0)
         {
-            lock_guard<mutex> lock(_clients_mutex);
+            auto lock = lock_guard{_clients_mutex};
             _ws_clients.push_back(client_socket);
         }
         else
@@ -740,26 +736,29 @@ namespace tempest::profiler
         }
     }
 
-    auto web_server::_process_websocket_frame(int64_t client_socket, const ws_message& msg) -> void
+    auto web_server::_process_websocket_frame(int64_t client_socket, const ws_message& msg) -> bool
     {
         if (msg.opcode == ws_opcode::ping)
         {
             const auto pong = encode_websocket_frame(ws_opcode::pong, msg.payload);
             send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(pong.data()),
                  static_cast<int>(pong.size()), nosignal_flag);
+            return true;
         }
         else if (msg.opcode == ws_opcode::close)
         {
             const auto close_f = encode_websocket_frame(ws_opcode::close, {});
             send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(close_f.data()),
                  static_cast<int>(close_f.size()), nosignal_flag);
-            _close_client_socket(client_socket);
+            return false;
         }
         else if (msg.opcode == ws_opcode::text)
         {
             const auto text = string_view{reinterpret_cast<const char*>(msg.payload.data()), msg.payload.size()};
             _handle_control_command(client_socket, text);
+            return true;
         }
+        return true;
     }
 
     auto web_server::_handle_control_command(int64_t client_socket, string_view command_str) -> void
@@ -824,7 +823,7 @@ namespace tempest::profiler
     auto web_server::_close_client_socket(int64_t client_socket) -> void
     {
         {
-            lock_guard<mutex> lock(_clients_mutex);
+            auto lock = lock_guard{_clients_mutex};
             for (auto it = _ws_clients.begin(); it != _ws_clients.end(); ++it)
             {
                 if (*it == client_socket)

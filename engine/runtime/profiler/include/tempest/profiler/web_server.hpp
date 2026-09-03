@@ -49,7 +49,7 @@ namespace tempest::profiler
         auto _server_loop() -> void;
         auto _handle_http_request(int64_t client_socket, string_view request_header) -> void;
         auto _handle_websocket_connection(int64_t client_socket, string_view ws_key) -> void;
-        auto _process_websocket_frame(int64_t client_socket, const ws_message& msg) -> void;
+        auto _process_websocket_frame(int64_t client_socket, const ws_message& msg) -> bool;
         auto _handle_control_command(int64_t client_socket, string_view command_str) -> void;
         auto _close_client_socket(int64_t client_socket) -> void;
 
