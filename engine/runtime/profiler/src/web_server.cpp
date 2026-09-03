@@ -436,9 +436,14 @@ namespace tempest::profiler
             return;
         }
 
+        auto lock = lock_guard{_clients_mutex};
+        if (_ws_clients.empty())
+        {
+            return;
+        }
+
         const auto frame = encode_websocket_frame(ws_opcode::binary, frame_payload);
 
-        auto lock = lock_guard{_clients_mutex};
         for (auto it = _ws_clients.begin(); it != _ws_clients.end();)
         {
             const auto client = it->socket;
@@ -462,10 +467,15 @@ namespace tempest::profiler
             return;
         }
 
+        auto lock = lock_guard{_clients_mutex};
+        if (_ws_clients.empty())
+        {
+            return;
+        }
+
         const auto frame = encode_websocket_frame(
             ws_opcode::text, span<const byte>{reinterpret_cast<const byte*>(text.data()), text.size()});
 
-        auto lock = lock_guard{_clients_mutex};
         for (auto it = _ws_clients.begin(); it != _ws_clients.end();)
         {
             const auto client = it->socket;
@@ -484,6 +494,19 @@ namespace tempest::profiler
 
     auto web_server::broadcast_telemetry(const telemetry_frame& frame) -> void
     {
+        if (!_running.load())
+        {
+            return;
+        }
+
+        {
+            auto lock = lock_guard{_clients_mutex};
+            if (_ws_clients.empty())
+            {
+                return;
+            }
+        }
+
         const auto json_str = serialize_telemetry_frame_json(frame);
         broadcast_text(string_view{json_str.data(), json_str.size()});
     }
