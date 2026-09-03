@@ -2184,3 +2184,75 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         server.stop();
     }
 }
+
+/// @brief Verify WebSocket control commands use exact matching rather than naive substring matching.
+TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handling)
+{
+    // 1. Setup: Start web server
+    auto session = tempest::profiler::profiler_session{true};
+    auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8094, .max_port_attempts = 10};
+    auto server = tempest::profiler::web_server{session, config};
+    server.start();
+    ASSERT_TRUE(server.is_running());
+    const auto port = server.get_bound_port();
+
+    auto client = test_tcp_client{};
+    ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+
+    const auto ws_req = "GET /ws HTTP/1.1\r\n"
+                        "Host: 127.0.0.1\r\n"
+                        "Upgrade: websocket\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                        "Sec-WebSocket-Version: 13\r\n\r\n";
+    ASSERT_TRUE(client.send_string(ws_req));
+    const auto resp = client.receive_all(500);
+    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+
+    // 2. Act & Assert: Send "stop_capture" with extra metadata mentioning "start_capture"
+    {
+        const auto cmd = std::string{"{\"command\":\"stop_capture\",\"note\":\"do not start_capture\"}"};
+        auto cmd_bytes = tempest::vector<tempest::byte>{};
+        for (auto c : cmd)
+        {
+            cmd_bytes.push_back(static_cast<tempest::byte>(c));
+        }
+        auto frame = tempest::profiler::encode_websocket_client_frame(
+            tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{cmd_bytes.data(), cmd_bytes.size()});
+        ASSERT_TRUE(client.send_all(frame.data(), frame.size()));
+
+        const auto resp_raw = client.receive_all(500);
+        ASSERT_FALSE(resp_raw.empty());
+        auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
+            reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
+        ASSERT_TRUE(decoded.has_value());
+        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        EXPECT_NE(resp_str.find("\"command\":\"stop_capture\""), std::string::npos);
+        EXPECT_FALSE(session.is_enabled());
+    }
+
+    // 3. Act & Assert: Send unknown command "restart_capture" (containing "start_capture" as substring)
+    {
+        const auto cmd = std::string{"{\"command\":\"restart_capture\"}"};
+        auto cmd_bytes = tempest::vector<tempest::byte>{};
+        for (auto c : cmd)
+        {
+            cmd_bytes.push_back(static_cast<tempest::byte>(c));
+        }
+        auto frame = tempest::profiler::encode_websocket_client_frame(
+            tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{cmd_bytes.data(), cmd_bytes.size()});
+        ASSERT_TRUE(client.send_all(frame.data(), frame.size()));
+
+        const auto resp_raw = client.receive_all(500);
+        ASSERT_FALSE(resp_raw.empty());
+        auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
+            reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
+        ASSERT_TRUE(decoded.has_value());
+        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        EXPECT_NE(resp_str.find("\"unknown_command\""), std::string::npos);
+        EXPECT_FALSE(session.is_enabled());
+    }
+
+    client.close_sock();
+    server.stop();
+}

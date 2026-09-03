@@ -206,9 +206,47 @@ namespace tempest::profiler
             return string_view{sv.data() + pos, actual_count};
         }
 
-        auto str_contains(string_view sv, string_view target) -> bool
+        auto extract_command_name(string_view text) -> string_view
         {
-            return find_sub(sv, target) != static_cast<size_t>(-1);
+            // Try extracting "command" property: "command" : "value"
+            const auto cmd_key_pos = find_sub(text, "\"command\"");
+            if (cmd_key_pos != static_cast<size_t>(-1))
+            {
+                const auto colon = find_char(text, ':', cmd_key_pos + 9);
+                if (colon != static_cast<size_t>(-1))
+                {
+                    auto val_start = colon + 1;
+                    while (val_start < text.size() && (text[val_start] == ' ' || text[val_start] == '\t' ||
+                                                       text[val_start] == '\r' || text[val_start] == '\n'))
+                    {
+                        ++val_start;
+                    }
+                    if (val_start < text.size() && text[val_start] == '"')
+                    {
+                        ++val_start;
+                        const auto val_end = find_char(text, '"', val_start);
+                        if (val_end != static_cast<size_t>(-1))
+                        {
+                            return sub_view(text, val_start, val_end - val_start);
+                        }
+                    }
+                }
+            }
+
+            // Fallback: trim quotes, brackets, and whitespace
+            auto start = size_t{0};
+            while (start < text.size() && (text[start] == ' ' || text[start] == '\t' || text[start] == '"' ||
+                                           text[start] == '{' || text[start] == '\r' || text[start] == '\n'))
+            {
+                ++start;
+            }
+            auto end = text.size();
+            while (end > start && (text[end - 1] == ' ' || text[end - 1] == '\t' || text[end - 1] == '"' ||
+                                   text[end - 1] == '}' || text[end - 1] == '\r' || text[end - 1] == '\n'))
+            {
+                --end;
+            }
+            return sub_view(text, start, end - start);
         }
 
         auto find_header_value(string_view header_str, string_view key_name) -> string_view
@@ -980,14 +1018,15 @@ namespace tempest::profiler
 
     auto web_server::_handle_control_command(int64_t client_socket, string_view command_str) -> bool
     {
+        const auto cmd = extract_command_name(command_str);
         auto resp = std::string{};
 
-        if (str_contains(command_str, "start_capture"))
+        if (cmd == "start_capture")
         {
             _session.set_enabled(true);
             resp = "{\"type\":\"response\",\"command\":\"start_capture\",\"status\":\"ok\",\"recording\":true}";
         }
-        else if (str_contains(command_str, "stop_capture"))
+        else if (cmd == "stop_capture")
         {
             _session.set_enabled(false);
             const auto capture = create_capture_from_session(_session);
@@ -996,7 +1035,7 @@ namespace tempest::profiler
                            "\"tracks\":{},\"metrics\":{}}}",
                            capture.tracks.size(), capture.metrics.size());
         }
-        else if (str_contains(command_str, "query_stats"))
+        else if (cmd == "query_stats")
         {
             const auto capture = create_capture_from_session(_session);
             const auto stats = compute_all_zone_statistics(capture);
@@ -1020,7 +1059,7 @@ namespace tempest::profiler
             }
             resp += "]}";
         }
-        else if (str_contains(command_str, "get_snapshot"))
+        else if (cmd == "get_snapshot")
         {
             const auto capture = create_capture_from_session(_session);
             const auto chrome_json = export_chrome_trace_json_string(capture);
