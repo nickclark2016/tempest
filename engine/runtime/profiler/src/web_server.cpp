@@ -25,6 +25,8 @@
 using native_socket_t = SOCKET;
 constexpr native_socket_t invalid_sock = INVALID_SOCKET;
 constexpr auto nosignal_flag = int{0};
+constexpr auto shutdown_send = SD_SEND;
+constexpr auto shutdown_both = SD_BOTH;
 #else
 #include <arpa/inet.h>
 #include <csignal>
@@ -42,6 +44,8 @@ constexpr auto nosignal_flag = MSG_NOSIGNAL;
 #else
 constexpr auto nosignal_flag = int{0};
 #endif
+constexpr auto shutdown_send = SHUT_WR;
+constexpr auto shutdown_both = SHUT_RDWR;
 #endif
 
 namespace tempest::profiler
@@ -97,6 +101,23 @@ namespace tempest::profiler
             fcntl(s, F_SETFL, flags | O_NONBLOCK);
         }
 #endif
+
+        auto graceful_close_socket(native_socket_t s, int how = shutdown_both) -> void
+        {
+            if (s == invalid_sock)
+            {
+                return;
+            }
+            shutdown(s, how);
+            if (how == shutdown_send)
+            {
+                char drain_buf[512];
+                while (recv(s, drain_buf, sizeof(drain_buf), 0) > 0)
+                {
+                }
+            }
+            close_socket(s);
+        }
 
         auto send_all_nonblocking(native_socket_t sock, const char* data, size_t total_size) -> bool
         {
@@ -951,7 +972,7 @@ namespace tempest::profiler
         }
 
         send_all_nonblocking(static_cast<native_socket_t>(client_socket), response.data(), response.size());
-        close_socket(static_cast<native_socket_t>(client_socket));
+        graceful_close_socket(static_cast<native_socket_t>(client_socket), shutdown_send);
     }
 
     auto web_server::_handle_websocket_connection(int64_t client_socket, string_view ws_key,
@@ -1089,6 +1110,6 @@ namespace tempest::profiler
                 }
             }
         }
-        close_socket(static_cast<native_socket_t>(client_socket));
+        graceful_close_socket(static_cast<native_socket_t>(client_socket), shutdown_both);
     }
 } // namespace tempest::profiler
