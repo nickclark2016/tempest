@@ -53,7 +53,7 @@ namespace tempest::profiler
         auto _handle_websocket_connection(int64_t client_socket, string_view ws_key, span<const byte> initial_rx = {})
             -> void;
         auto _process_websocket_frame(int64_t client_socket, const ws_message& msg) -> bool;
-        auto _handle_control_command(int64_t client_socket, string_view command_str) -> void;
+        auto _handle_control_command(int64_t client_socket, string_view command_str) -> bool;
         auto _close_client_socket(int64_t client_socket) -> void;
 
         struct pending_connection

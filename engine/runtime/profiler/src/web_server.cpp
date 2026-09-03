@@ -841,8 +841,7 @@ namespace tempest::profiler
                            nf_len, not_found);
         }
 
-        send(static_cast<native_socket_t>(client_socket), response.data(), static_cast<int>(response.size()),
-             nosignal_flag);
+        send_all_nonblocking(static_cast<native_socket_t>(client_socket), response.data(), response.size());
         close_socket(static_cast<native_socket_t>(client_socket));
     }
 
@@ -890,27 +889,25 @@ namespace tempest::profiler
         if (msg.opcode == ws_opcode::ping)
         {
             const auto pong = encode_websocket_frame(ws_opcode::pong, msg.payload);
-            send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(pong.data()),
-                 static_cast<int>(pong.size()), nosignal_flag);
-            return true;
+            return send_all_nonblocking(static_cast<native_socket_t>(client_socket),
+                                        reinterpret_cast<const char*>(pong.data()), pong.size());
         }
         else if (msg.opcode == ws_opcode::close)
         {
             const auto close_f = encode_websocket_frame(ws_opcode::close, {});
-            send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(close_f.data()),
-                 static_cast<int>(close_f.size()), nosignal_flag);
+            send_all_nonblocking(static_cast<native_socket_t>(client_socket),
+                                 reinterpret_cast<const char*>(close_f.data()), close_f.size());
             return false;
         }
         else if (msg.opcode == ws_opcode::text)
         {
             const auto text = string_view{reinterpret_cast<const char*>(msg.payload.data()), msg.payload.size()};
-            _handle_control_command(client_socket, text);
-            return true;
+            return _handle_control_command(client_socket, text);
         }
         return true;
     }
 
-    auto web_server::_handle_control_command(int64_t client_socket, string_view command_str) -> void
+    auto web_server::_handle_control_command(int64_t client_socket, string_view command_str) -> bool
     {
         auto resp = std::string{};
 
@@ -965,8 +962,8 @@ namespace tempest::profiler
 
         const auto frame = encode_websocket_frame(
             ws_opcode::text, span<const byte>{reinterpret_cast<const byte*>(resp.data()), resp.size()});
-        send(static_cast<native_socket_t>(client_socket), reinterpret_cast<const char*>(frame.data()),
-             static_cast<int>(frame.size()), nosignal_flag);
+        return send_all_nonblocking(static_cast<native_socket_t>(client_socket),
+                                    reinterpret_cast<const char*>(frame.data()), frame.size());
     }
 
     auto web_server::_close_client_socket(int64_t client_socket) -> void
