@@ -2087,3 +2087,100 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
     EXPECT_EQ(top_cpu[1].name, "Render");
     EXPECT_NEAR(top_cpu[1].exclusive_duration_ms, 1.5, 1e-4);
 }
+
+/// @brief Verify RFC 6455 compliance: rejection of reserved bits, invalid opcodes, oversized/fragmented control frames,
+/// and unmasked client frames.
+TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
+{
+    // 1. Setup & Assert: Non-zero RSV bits (RSV1 = 0x40, RSV2 = 0x20, RSV3 = 0x10) must be rejected
+    {
+        auto rsv_frame = tempest::vector<tempest::byte>{};
+        rsv_frame.push_back(static_cast<tempest::byte>(0xC1)); // FIN | RSV1 | text opcode
+        rsv_frame.push_back(static_cast<tempest::byte>(0x00)); // length 0
+        const auto res = tempest::profiler::decode_websocket_frame(
+            tempest::span<const tempest::byte>{rsv_frame.data(), rsv_frame.size()});
+        ASSERT_FALSE(res.has_value());
+        EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
+    }
+
+    // 2. Setup & Assert: Undefined reserved opcodes (e.g. 0x3, 0xB) must be rejected
+    {
+        auto invalid_opcode_frame = tempest::vector<tempest::byte>{};
+        invalid_opcode_frame.push_back(static_cast<tempest::byte>(0x83)); // FIN | reserved opcode 3
+        invalid_opcode_frame.push_back(static_cast<tempest::byte>(0x00));
+        const auto res = tempest::profiler::decode_websocket_frame(
+            tempest::span<const tempest::byte>{invalid_opcode_frame.data(), invalid_opcode_frame.size()});
+        ASSERT_FALSE(res.has_value());
+        EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
+    }
+
+    // 3. Setup & Assert: Fragmented control frames (FIN = 0) must be rejected per RFC 6455 Section 5.5
+    {
+        auto frag_ping = tempest::vector<tempest::byte>{};
+        frag_ping.push_back(static_cast<tempest::byte>(0x09)); // FIN=0 | ping opcode
+        frag_ping.push_back(static_cast<tempest::byte>(0x00));
+        const auto res = tempest::profiler::decode_websocket_frame(
+            tempest::span<const tempest::byte>{frag_ping.data(), frag_ping.size()});
+        ASSERT_FALSE(res.has_value());
+        EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
+    }
+
+    // 4. Setup & Assert: Control frames with payload > 125 bytes must be rejected per RFC 6455 Section 5.5
+    {
+        auto large_ping = tempest::vector<tempest::byte>{};
+        large_ping.push_back(static_cast<tempest::byte>(0x89)); // FIN | ping opcode
+        large_ping.push_back(static_cast<tempest::byte>(126));  // 16-bit extended length flag (> 125)
+        large_ping.push_back(static_cast<tempest::byte>(0x00));
+        large_ping.push_back(static_cast<tempest::byte>(126)); // length = 126
+        const auto res = tempest::profiler::decode_websocket_frame(
+            tempest::span<const tempest::byte>{large_ping.data(), large_ping.size()});
+        ASSERT_FALSE(res.has_value());
+        EXPECT_EQ(res.error(), tempest::profiler::ws_error::invalid_frame);
+    }
+
+    // 5. Setup & Assert: Server must drop connection on receiving unmasked client frame per RFC 6455 Section 5.1
+    {
+        auto session = tempest::profiler::profiler_session{false};
+        auto config = tempest::profiler::web_server_config{.host = "127.0.0.1", .port = 8092, .max_port_attempts = 10};
+        auto server = tempest::profiler::web_server{session, config};
+        server.start();
+        ASSERT_TRUE(server.is_running());
+        const auto port = server.get_bound_port();
+
+        auto client = test_tcp_client{};
+        ASSERT_TRUE(client.connect_to("127.0.0.1", port));
+
+        const auto ws_req = "GET /ws HTTP/1.1\r\n"
+                            "Host: 127.0.0.1\r\n"
+                            "Upgrade: websocket\r\n"
+                            "Connection: Upgrade\r\n"
+                            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                            "Sec-WebSocket-Version: 13\r\n\r\n";
+        ASSERT_TRUE(client.send_string(ws_req));
+        const auto resp = client.receive_all(500);
+        ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+        EXPECT_EQ(server.connected_client_count(), 1u);
+
+        // Send unmasked text frame from client
+        const auto raw_cmd = tempest::string_view{"{\"command\":\"start_capture\"}"};
+        auto unmasked_frame = tempest::vector<tempest::byte>{};
+        unmasked_frame.push_back(static_cast<tempest::byte>(0x81));           // FIN | text
+        unmasked_frame.push_back(static_cast<tempest::byte>(raw_cmd.size())); // Mask bit = 0
+        for (auto c : raw_cmd)
+        {
+            unmasked_frame.push_back(static_cast<tempest::byte>(c));
+        }
+        ASSERT_TRUE(client.send_all(unmasked_frame.data(), unmasked_frame.size()));
+
+        // Client must be disconnected by server
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+        while (server.connected_client_count() > 0 && std::chrono::steady_clock::now() < deadline)
+        {
+            tempest::this_thread::yield();
+        }
+        EXPECT_EQ(server.connected_client_count(), 0u);
+
+        client.close_sock();
+        server.stop();
+    }
+}

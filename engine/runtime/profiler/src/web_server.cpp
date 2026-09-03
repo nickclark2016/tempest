@@ -776,6 +776,14 @@ namespace tempest::profiler
                                 span<const byte>{it->rx_buffer.data(), it->rx_buffer.size()}, bytes_consumed);
                             if (decoded)
                             {
+                                if (!decoded->is_masked)
+                                {
+                                    // RFC 6455 Section 5.1: The server MUST close the connection upon receiving a frame
+                                    // that is not masked
+                                    should_close = true;
+                                    break;
+                                }
+
                                 if (!_process_websocket_frame(c, *decoded))
                                 {
                                     should_close = true;

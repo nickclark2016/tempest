@@ -314,11 +314,39 @@ namespace tempest::profiler
         }
 
         const auto byte0 = static_cast<uint8_t>(data[0]);
-        const auto opcode = static_cast<ws_opcode>(byte0 & 0x0F);
+
+        // RFC 6455 Section 5.2: RSV bits MUST be 0 unless an extension is negotiated
+        if ((byte0 & 0x70) != 0)
+        {
+            return unexpected(ws_error::invalid_frame);
+        }
+
+        const auto opcode_raw = static_cast<uint8_t>(byte0 & 0x0F);
+        const auto is_control = (opcode_raw & 0x08) != 0;
+        const auto is_valid_opcode = (opcode_raw <= 0x02) || (opcode_raw >= 0x08 && opcode_raw <= 0x0A);
+        if (!is_valid_opcode)
+        {
+            return unexpected(ws_error::invalid_frame);
+        }
+        const auto opcode = static_cast<ws_opcode>(opcode_raw);
 
         const auto byte1 = static_cast<uint8_t>(data[1]);
         const auto is_masked = (byte1 & 0x80) != 0;
         const auto payload_len_field = static_cast<uint8_t>(byte1 & 0x7F);
+
+        if (is_control)
+        {
+            // RFC 6455 Section 5.5: Control frames MUST NOT be fragmented
+            if ((byte0 & 0x80) == 0)
+            {
+                return unexpected(ws_error::invalid_frame);
+            }
+            // RFC 6455 Section 5.5: All control frames MUST have a payload length of 125 bytes or less
+            if (payload_len_field > 125)
+            {
+                return unexpected(ws_error::invalid_frame);
+            }
+        }
 
         auto cursor = size_t{2};
         auto payload_len = uint64_t{0};
@@ -377,6 +405,7 @@ namespace tempest::profiler
 
         auto msg = ws_message{};
         msg.opcode = opcode;
+        msg.is_masked = is_masked;
         msg.payload.resize(payload_len);
 
         if (is_masked)

@@ -37,6 +37,7 @@ namespace tempest::profiler
     {
         ws_opcode opcode{ws_opcode::text};
         vector<byte> payload{};
+        bool is_masked{false};
     };
 
     struct telemetry_zone
