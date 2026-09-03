@@ -71,7 +71,7 @@ namespace tempest::profiler
 
         auto set_socket_nonblocking(native_socket_t s) -> void
         {
-            u_long mode = 1;
+            auto mode = u_long{1};
             ioctlsocket(s, FIONBIO, &mode);
         }
 #else
@@ -90,7 +90,7 @@ namespace tempest::profiler
 
         auto set_socket_nonblocking(native_socket_t s) -> void
         {
-            int flags = fcntl(s, F_GETFL, 0);
+            auto flags = fcntl(s, F_GETFL, 0);
             fcntl(s, F_SETFL, flags | O_NONBLOCK);
         }
 #endif
@@ -330,6 +330,7 @@ namespace tempest::profiler
             {
                 if (listen(s, SOMAXCONN) == 0)
                 {
+                    set_socket_nonblocking(s);
                     bound_port = port;
                     bound_sock = s;
                     break;
