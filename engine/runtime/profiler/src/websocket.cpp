@@ -1,8 +1,8 @@
 #include <tempest/profiler/websocket.hpp>
 
-#include <array>
 #include <format>
-#include <string>
+#include <tempest/array.hpp>
+#include <tempest/iterator.hpp>
 
 namespace tempest::profiler
 {
@@ -13,7 +13,7 @@ namespace tempest::profiler
             return (value << count) | (value >> (32 - count));
         }
 
-        auto sha1(span<const uint8_t> data) -> std::array<uint8_t, 20>
+        auto sha1(span<const uint8_t> data) -> array<uint8_t, 20>
         {
             auto h0 = uint32_t{0x67452301};
             auto h1 = uint32_t{0xEFCDAB89};
@@ -39,7 +39,7 @@ namespace tempest::profiler
 
             for (auto chunk = size_t{0}; chunk < padded_len; chunk += 64)
             {
-                auto w = std::array<uint32_t, 80>{};
+                auto w = array<uint32_t, 80>{};
                 for (auto i = size_t{0}; i < 16; ++i)
                 {
                     w[i] = (static_cast<uint32_t>(padded[chunk + i * 4]) << 24) |
@@ -99,8 +99,8 @@ namespace tempest::profiler
                 h4 += e;
             }
 
-            auto digest = std::array<uint8_t, 20>{};
-            const uint32_t h[5] = {h0, h1, h2, h3, h4};
+            auto digest = array<uint8_t, 20>{};
+            const auto h = array<uint32_t, 5>{h0, h1, h2, h3, h4};
             for (auto i = size_t{0}; i < 5; ++i)
             {
                 digest[i * 4] = static_cast<uint8_t>((h[i] >> 24) & 0xFF);
@@ -114,9 +114,9 @@ namespace tempest::profiler
 
         constexpr char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-        auto base64_encode(span<const uint8_t> data) -> std::string
+        auto base64_encode(span<const uint8_t> data) -> string
         {
-            auto out = std::string{};
+            auto out = string{};
             out.reserve(((data.size() + 2) / 3) * 4);
             auto i = size_t{0};
             while (i < data.size())
@@ -156,7 +156,7 @@ namespace tempest::profiler
             return out;
         }
 
-        auto escape_json_string_to(string_view src, std::string& out) -> void
+        auto escape_json_string_to(string_view src, string& out) -> void
         {
             for (const auto c : src)
             {
@@ -186,7 +186,7 @@ namespace tempest::profiler
                 default:
                     if (static_cast<unsigned char>(c) < 0x20)
                     {
-                        std::format_to(std::back_inserter(out), "\\u{:04x}", static_cast<unsigned int>(c));
+                        std::format_to(tempest::back_inserter(out), "\\u{:04x}", static_cast<unsigned int>(c));
                     }
                     else
                     {
@@ -213,13 +213,13 @@ namespace tempest::profiler
             --end;
         }
 
-        auto combined = std::string(client_key.data() + start, end - start);
+        auto combined = string{client_key.data() + start, end - start};
         combined += "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
         const auto digest =
             sha1(span<const uint8_t>{reinterpret_cast<const uint8_t*>(combined.data()), combined.size()});
         const auto b64 = base64_encode(span<const uint8_t>{digest.data(), digest.size()});
-        return string{b64.data(), b64.size()};
+        return b64;
     }
 
     auto encode_websocket_frame(ws_opcode opcode, span<const byte> payload) -> vector<byte>
@@ -378,7 +378,7 @@ namespace tempest::profiler
             cursor += 8;
         }
 
-        auto mask_key = std::array<uint8_t, 4>{};
+        auto mask_key = array<uint8_t, 4>{};
         if (is_masked)
         {
             if (data.size() < cursor + 4)
@@ -435,10 +435,10 @@ namespace tempest::profiler
 
     auto serialize_telemetry_frame_json(const telemetry_frame& frame) -> string
     {
-        auto json = std::string{};
+        auto json = string{};
         json.reserve(8192);
 
-        std::format_to(std::back_inserter(json), "{{\"type\":\"frame_data\",\"frame_index\":{},\"cpu_tracks\":[",
+        std::format_to(tempest::back_inserter(json), "{{\"type\":\"frame_data\",\"frame_index\":{},\"cpu_tracks\":[",
                        frame.frame_index);
 
         // CPU Tracks
@@ -449,11 +449,11 @@ namespace tempest::profiler
                 json += ",";
             }
             const auto& track = frame.cpu_tracks[i];
-            auto escaped_tname = std::string{};
+            auto escaped_tname = string{};
             escape_json_string_to(string_view{track.name.data(), track.name.size()}, escaped_tname);
 
-            std::format_to(std::back_inserter(json), "{{\"track_id\":{},\"name\":\"{}\",\"zones\":[", track.track_id,
-                           escaped_tname);
+            std::format_to(tempest::back_inserter(json), "{{\"track_id\":{},\"name\":\"{}\",\"zones\":[",
+                           track.track_id, escaped_tname.c_str());
 
             for (auto j = size_t{0}; j < track.zones.size(); ++j)
             {
@@ -462,13 +462,13 @@ namespace tempest::profiler
                     json += ",";
                 }
                 const auto& z = track.zones[j];
-                auto escaped_zname = std::string{};
+                auto escaped_zname = string{};
                 escape_json_string_to(string_view{z.name.data(), z.name.size()}, escaped_zname);
 
                 std::format_to(
-                    std::back_inserter(json),
+                    tempest::back_inserter(json),
                     "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"frame_index\":{},\"metrics\":[",
-                    escaped_zname, z.start_ns, z.end_ns, z.depth, z.frame_index);
+                    escaped_zname.c_str(), z.start_ns, z.end_ns, z.depth, z.frame_index);
 
                 for (auto k = size_t{0}; k < z.metrics.size(); ++k)
                 {
@@ -477,11 +477,11 @@ namespace tempest::profiler
                         json += ",";
                     }
                     const auto& m = z.metrics[k];
-                    auto escaped_mname = std::string{};
+                    auto escaped_mname = string{};
                     escape_json_string_to(m.name, escaped_mname);
 
-                    std::format_to(std::back_inserter(json), "{{\"name\":\"{}\",\"value\":{:.3f},\"unit\":{}}}",
-                                   escaped_mname, m.value, static_cast<uint8_t>(m.unit));
+                    std::format_to(tempest::back_inserter(json), "{{\"name\":\"{}\",\"value\":{:.3f},\"unit\":{}}}",
+                                   escaped_mname.c_str(), m.value, static_cast<uint8_t>(m.unit));
                 }
                 json += "]}";
             }
@@ -497,11 +497,11 @@ namespace tempest::profiler
                 json += ",";
             }
             const auto& track = frame.gpu_tracks[i];
-            auto escaped_tname = std::string{};
+            auto escaped_tname = string{};
             escape_json_string_to(string_view{track.name.data(), track.name.size()}, escaped_tname);
 
-            std::format_to(std::back_inserter(json), "{{\"track_id\":{},\"name\":\"{}\",\"zones\":[", track.track_id,
-                           escaped_tname);
+            std::format_to(tempest::back_inserter(json), "{{\"track_id\":{},\"name\":\"{}\",\"zones\":[",
+                           track.track_id, escaped_tname.c_str());
 
             for (auto j = size_t{0}; j < track.zones.size(); ++j)
             {
@@ -510,13 +510,13 @@ namespace tempest::profiler
                     json += ",";
                 }
                 const auto& z = track.zones[j];
-                auto escaped_zname = std::string{};
+                auto escaped_zname = string{};
                 escape_json_string_to(string_view{z.name.data(), z.name.size()}, escaped_zname);
 
                 std::format_to(
-                    std::back_inserter(json),
+                    tempest::back_inserter(json),
                     "{{\"name\":\"{}\",\"start_ns\":{},\"end_ns\":{},\"depth\":{},\"frame_index\":{},\"metrics\":[",
-                    escaped_zname, z.start_ns, z.end_ns, z.depth, z.frame_index);
+                    escaped_zname.c_str(), z.start_ns, z.end_ns, z.depth, z.frame_index);
 
                 for (auto k = size_t{0}; k < z.metrics.size(); ++k)
                 {
@@ -525,11 +525,11 @@ namespace tempest::profiler
                         json += ",";
                     }
                     const auto& m = z.metrics[k];
-                    auto escaped_mname = std::string{};
+                    auto escaped_mname = string{};
                     escape_json_string_to(m.name, escaped_mname);
 
-                    std::format_to(std::back_inserter(json), "{{\"name\":\"{}\",\"value\":{:.3f},\"unit\":{}}}",
-                                   escaped_mname, m.value, static_cast<uint8_t>(m.unit));
+                    std::format_to(tempest::back_inserter(json), "{{\"name\":\"{}\",\"value\":{:.3f},\"unit\":{}}}",
+                                   escaped_mname.c_str(), m.value, static_cast<uint8_t>(m.unit));
                 }
                 json += "]}";
             }
@@ -545,11 +545,11 @@ namespace tempest::profiler
                 json += ",";
             }
             const auto& m = frame.markers[i];
-            auto escaped_mname = std::string{};
+            auto escaped_mname = string{};
             escape_json_string_to(m.name, escaped_mname);
 
-            std::format_to(std::back_inserter(json), "{{\"name\":\"{}\",\"timestamp_ns\":{}}}", escaped_mname,
-                           m.timestamp_ns);
+            std::format_to(tempest::back_inserter(json), "{{\"name\":\"{}\",\"timestamp_ns\":{}}}",
+                           escaped_mname.c_str(), m.timestamp_ns);
         }
         json += "],\"metrics\":[";
 
@@ -561,15 +561,15 @@ namespace tempest::profiler
                 json += ",";
             }
             const auto& m = frame.metrics[i];
-            auto escaped_mname = std::string{};
+            auto escaped_mname = string{};
             escape_json_string_to(m.name, escaped_mname);
 
-            std::format_to(std::back_inserter(json), "{{\"name\":\"{}\",\"value\":{:.3f},\"unit\":{}}}", escaped_mname,
-                           m.value, static_cast<uint8_t>(m.unit));
+            std::format_to(tempest::back_inserter(json), "{{\"name\":\"{}\",\"value\":{:.3f},\"unit\":{}}}",
+                           escaped_mname.c_str(), m.value, static_cast<uint8_t>(m.unit));
         }
         json += "]}";
 
-        return string{json.data(), json.size()};
+        return json;
     }
 
     auto create_telemetry_frame_from_capture(uint64_t frame_index, const capture_session_data& data) -> telemetry_frame

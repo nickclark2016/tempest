@@ -2,13 +2,13 @@
 
 #include <format>
 #include <fstream>
-#include <string>
+#include <tempest/iterator.hpp>
 
 namespace tempest::profiler
 {
     namespace
     {
-        auto escape_json_string_to(string_view src, std::string& out) -> void
+        auto escape_json_string_to(string_view src, string& out) -> void
         {
             for (const auto c : src)
             {
@@ -38,7 +38,7 @@ namespace tempest::profiler
                 default:
                     if (static_cast<unsigned char>(c) < 0x20)
                     {
-                        std::format_to(std::back_inserter(out), "\\u{:04x}", static_cast<unsigned int>(c));
+                        std::format_to(tempest::back_inserter(out), "\\u{:04x}", static_cast<unsigned int>(c));
                     }
                     else
                     {
@@ -52,7 +52,7 @@ namespace tempest::profiler
 
     auto export_chrome_trace_json_string(const capture_session_data& data) -> string
     {
-        auto json = std::string{};
+        auto json = string{};
         json.reserve(64 * 1024);
 
         json += "{\n  \"traceEvents\": [\n";
@@ -74,13 +74,13 @@ namespace tempest::profiler
         for (const auto& track : data.tracks)
         {
             append_separator();
-            auto escaped_name = std::string{};
+            auto escaped_name = string{};
             escape_json_string_to(string_view{track.name.data(), track.name.size()}, escaped_name);
 
-            std::format_to(std::back_inserter(json),
+            std::format_to(tempest::back_inserter(json),
                            "    {{\"name\": \"thread_name\", \"ph\": \"M\", \"pid\": 1, \"tid\": {}, \"args\": "
                            "{{\"name\": \"{}\"}}}}",
-                           track.track_id, escaped_name);
+                           track.track_id, escaped_name.c_str());
         }
 
         // 3. Zone and Marker Events
@@ -91,16 +91,16 @@ namespace tempest::profiler
             for (const auto& z : track.zones)
             {
                 append_separator();
-                auto escaped_zone_name = std::string{};
+                auto escaped_zone_name = string{};
                 escape_json_string_to(z.name, escaped_zone_name);
 
                 const auto start_us = static_cast<double>(z.start_ns) / 1000.0;
                 const auto dur_us = static_cast<double>(z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0) / 1000.0;
 
-                std::format_to(std::back_inserter(json),
+                std::format_to(tempest::back_inserter(json),
                                "    {{\"name\": \"{}\", \"cat\": \"{}\", \"ph\": \"X\", \"ts\": {:.3f}, \"dur\": "
                                "{:.3f}, \"pid\": 1, \"tid\": {}",
-                               escaped_zone_name, cat, start_us, dur_us, track.track_id);
+                               escaped_zone_name.c_str(), cat, start_us, dur_us, track.track_id);
 
                 const auto has_task_id = (z.task_id != 0);
                 const auto has_metrics = !z.metrics.empty();
@@ -112,7 +112,7 @@ namespace tempest::profiler
 
                     if (has_task_id)
                     {
-                        std::format_to(std::back_inserter(json), "\"task_id\": {}", z.task_id);
+                        std::format_to(tempest::back_inserter(json), "\"task_id\": {}", z.task_id);
                         first_arg = false;
                     }
 
@@ -123,9 +123,10 @@ namespace tempest::profiler
                             json += ", ";
                         }
                         first_arg = false;
-                        auto escaped_met_name = std::string{};
+                        auto escaped_met_name = string{};
                         escape_json_string_to(met.name, escaped_met_name);
-                        std::format_to(std::back_inserter(json), "\"{}\": {:.3f}", escaped_met_name, met.value);
+                        std::format_to(tempest::back_inserter(json), "\"{}\": {:.3f}", escaped_met_name.c_str(),
+                                       met.value);
                     }
 
                     json += "}";
@@ -137,44 +138,45 @@ namespace tempest::profiler
             for (const auto& m : track.markers)
             {
                 append_separator();
-                auto escaped_marker_name = std::string{};
+                auto escaped_marker_name = string{};
                 escape_json_string_to(m.name, escaped_marker_name);
 
                 const auto ts_us = static_cast<double>(m.timestamp_ns) / 1000.0;
-                std::format_to(std::back_inserter(json),
+                std::format_to(tempest::back_inserter(json),
                                "    {{\"name\": \"{}\", \"cat\": \"marker\", \"ph\": \"i\", \"ts\": {:.3f}, \"pid\": "
                                "1, \"tid\": {}, \"s\": \"t\"}}",
-                               escaped_marker_name, ts_us, track.track_id);
+                               escaped_marker_name.c_str(), ts_us, track.track_id);
             }
         }
 
         // 4. Metric Streams
         for (const auto& st : data.metrics)
         {
-            auto escaped_stream_name = std::string{};
+            auto escaped_stream_name = string{};
             escape_json_string_to(string_view{st.name.data(), st.name.size()}, escaped_stream_name);
 
             for (const auto& smp : st.samples)
             {
                 append_separator();
                 const auto ts_us = static_cast<double>(smp.timestamp_ns) / 1000.0;
-                std::format_to(std::back_inserter(json),
+                std::format_to(tempest::back_inserter(json),
                                "    {{\"name\": \"{}\", \"cat\": \"metric\", \"ph\": \"C\", \"ts\": {:.3f}, \"pid\": "
                                "1, \"tid\": 0, \"args\": {{\"value\": {:.3f}}}}}",
-                               escaped_stream_name, ts_us, smp.value);
+                               escaped_stream_name.c_str(), ts_us, smp.value);
             }
         }
 
         json += "\n  ],\n  \"displayTimeUnit\": \"ns\"\n}\n";
 
-        return string{json.data(), json.size()};
+        return json;
     }
 
     auto export_chrome_trace_json(const capture_session_data& data, string_view file_path)
         -> expected<void, capture_error>
     {
         const auto json_str = export_chrome_trace_json_string(data);
-        auto file = std::ofstream(std::string(file_path.data(), file_path.size()));
+        const auto path_str = string{file_path.data(), file_path.size()};
+        auto file = std::ofstream(path_str.c_str());
         if (!file.is_open())
         {
             return unexpected(capture_error::io_error);

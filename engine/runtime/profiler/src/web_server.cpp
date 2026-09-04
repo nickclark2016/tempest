@@ -8,7 +8,8 @@
 #include <cctype>
 #include <cstring>
 #include <format>
-#include <string>
+#include <tempest/array.hpp>
+#include <tempest/iterator.hpp>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -111,8 +112,8 @@ namespace tempest::profiler
             shutdown(s, how);
             if (how == shutdown_send)
             {
-                char drain_buf[512];
-                while (recv(s, drain_buf, sizeof(drain_buf), 0) > 0)
+                auto drain_buf = array<char, 512>{};
+                while (recv(s, drain_buf.data(), static_cast<int>(drain_buf.size()), 0) > 0)
                 {
                 }
             }
@@ -478,8 +479,9 @@ namespace tempest::profiler
         {
             return string{};
         }
-        auto str = std::format("http://{}:{}", _config.host.c_str(), port);
-        return string{str.data(), str.size()};
+        auto str = string{};
+        std::format_to(tempest::back_inserter(str), "http://{}:{}", _config.host.c_str(), port);
+        return str;
     }
 
     auto web_server::connected_client_count() const noexcept -> size_t
@@ -707,11 +709,11 @@ namespace tempest::profiler
                     setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay),
                                sizeof(nodelay));
 
-                    char buffer[4096];
-                    const auto bytes = recv(client_sock, buffer, sizeof(buffer), 0);
+                    auto buffer = array<char, 4096>{};
+                    const auto bytes = recv(client_sock, buffer.data(), static_cast<int>(buffer.size()), 0);
                     if (bytes > 0)
                     {
-                        auto rx = string{buffer, static_cast<size_t>(bytes)};
+                        auto rx = string{buffer.data(), static_cast<size_t>(bytes)};
                         if (!process_pending_data(static_cast<int64_t>(client_sock), rx))
                         {
                             _pending_clients.push_back(pending_connection{
@@ -756,11 +758,11 @@ namespace tempest::profiler
 
                 if (FD_ISSET(client_sock, &read_fds))
                 {
-                    char buffer[4096];
-                    const auto bytes = recv(client_sock, buffer, sizeof(buffer), 0);
+                    auto buffer = array<char, 4096>{};
+                    const auto bytes = recv(client_sock, buffer.data(), static_cast<int>(buffer.size()), 0);
                     if (bytes > 0)
                     {
-                        it->rx_buffer.append(buffer, static_cast<size_t>(bytes));
+                        it->rx_buffer.append(buffer.data(), static_cast<size_t>(bytes));
                         if (process_pending_data(it->socket, it->rx_buffer))
                         {
                             remove_pending = true;
@@ -818,8 +820,8 @@ namespace tempest::profiler
 
                         if (FD_ISSET(client_sock, &read_fds))
                         {
-                            char buffer[4096];
-                            const auto bytes = recv(client_sock, buffer, sizeof(buffer), 0);
+                            auto buffer = array<char, 4096>{};
+                            const auto bytes = recv(client_sock, buffer.data(), static_cast<int>(buffer.size()), 0);
                             if (bytes <= 0)
                             {
                                 if (bytes < 0)
@@ -845,8 +847,8 @@ namespace tempest::profiler
                             }
                             else
                             {
-                                it->rx_buffer.insert(it->rx_buffer.end(), reinterpret_cast<const byte*>(buffer),
-                                                     reinterpret_cast<const byte*>(buffer) + bytes);
+                                it->rx_buffer.insert(it->rx_buffer.end(), reinterpret_cast<const byte*>(buffer.data()),
+                                                     reinterpret_cast<const byte*>(buffer.data()) + bytes);
                             }
                         }
 
@@ -906,12 +908,12 @@ namespace tempest::profiler
     auto web_server::_handle_http_request(int64_t client_socket, string_view request_header) -> void
     {
         const auto path = extract_request_path(request_header);
-        auto response = std::string{};
+        auto response = string{};
 
         if (path == "/" || path == "/index.html")
         {
             const auto content = get_embedded_index_html();
-            std::format_to(std::back_inserter(response),
+            std::format_to(tempest::back_inserter(response),
                            "HTTP/1.1 200 OK\r\n"
                            "Content-Type: text/html; charset=utf-8\r\n"
                            "Content-Length: {}\r\n"
@@ -923,7 +925,7 @@ namespace tempest::profiler
         else if (path == "/app.js")
         {
             const auto content = get_embedded_app_js();
-            std::format_to(std::back_inserter(response),
+            std::format_to(tempest::back_inserter(response),
                            "HTTP/1.1 200 OK\r\n"
                            "Content-Type: application/javascript; charset=utf-8\r\n"
                            "Content-Length: {}\r\n"
@@ -935,7 +937,7 @@ namespace tempest::profiler
         else if (path == "/styles.css")
         {
             const auto content = get_embedded_styles_css();
-            std::format_to(std::back_inserter(response),
+            std::format_to(tempest::back_inserter(response),
                            "HTTP/1.1 200 OK\r\n"
                            "Content-Type: text/css; charset=utf-8\r\n"
                            "Content-Length: {}\r\n"
@@ -948,7 +950,7 @@ namespace tempest::profiler
         {
             constexpr const char* status_json = "{\"status\":\"ok\",\"profiler_running\":true}";
             const auto json_len = std::strlen(status_json);
-            std::format_to(std::back_inserter(response),
+            std::format_to(tempest::back_inserter(response),
                            "HTTP/1.1 200 OK\r\n"
                            "Content-Type: application/json; charset=utf-8\r\n"
                            "Content-Length: {}\r\n"
@@ -961,7 +963,7 @@ namespace tempest::profiler
         {
             constexpr const char* not_found = "Not Found";
             const auto nf_len = std::strlen(not_found);
-            std::format_to(std::back_inserter(response),
+            std::format_to(tempest::back_inserter(response),
                            "HTTP/1.1 404 Not Found\r\n"
                            "Content-Type: text/plain; charset=utf-8\r\n"
                            "Content-Length: {}\r\n"
@@ -984,8 +986,8 @@ namespace tempest::profiler
         setsockopt(native_sock, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
         setsockopt(native_sock, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
         const auto accept_key = compute_websocket_accept_key(ws_key);
-        auto response = std::string{};
-        std::format_to(std::back_inserter(response),
+        auto response = string{};
+        std::format_to(tempest::back_inserter(response),
                        "HTTP/1.1 101 Switching Protocols\r\n"
                        "Upgrade: websocket\r\n"
                        "Connection: Upgrade\r\n"
@@ -1040,7 +1042,7 @@ namespace tempest::profiler
     auto web_server::_handle_control_command(int64_t client_socket, string_view command_str) -> bool
     {
         const auto cmd = extract_command_name(command_str);
-        auto resp = std::string{};
+        auto resp = string{};
 
         if (cmd == "start_capture")
         {
@@ -1051,7 +1053,7 @@ namespace tempest::profiler
         {
             _session.set_enabled(false);
             const auto capture = create_capture_from_session(_session);
-            std::format_to(std::back_inserter(resp),
+            std::format_to(tempest::back_inserter(resp),
                            "{{\"type\":\"response\",\"command\":\"stop_capture\",\"status\":\"ok\",\"recording\":false,"
                            "\"tracks\":{},\"metrics\":{}}}",
                            capture.tracks.size(), capture.metrics.size());
@@ -1062,7 +1064,7 @@ namespace tempest::profiler
             const auto stats = compute_all_zone_statistics(capture);
 
             resp = "{\"type\":\"stats\",\"zone_count\":";
-            std::format_to(std::back_inserter(resp), "{},\"zones\":[", stats.size());
+            std::format_to(tempest::back_inserter(resp), "{},\"zones\":[", stats.size());
             for (auto i = size_t{0}; i < stats.size(); ++i)
             {
                 if (i > 0)
@@ -1070,12 +1072,12 @@ namespace tempest::profiler
                     resp += ",";
                 }
                 const auto& s = stats[i];
-                auto zname_str = std::string(s.zone_name.data(), s.zone_name.size());
-                std::format_to(std::back_inserter(resp),
+                auto zname_str = string{s.zone_name.data(), s.zone_name.size()};
+                std::format_to(tempest::back_inserter(resp),
                                "{{\"name\":\"{}\",\"count\":{},\"mean_ns\":{:.2f},\"min_ns\":{:.2f},\"max_ns\":{:.2f},"
                                "\"p50_ns\":{:.2f},\"p90_ns\":{:.2f},\"p95_ns\":{:.2f},\"p99_ns\":{:.2f},"
                                "\"std_deviation_ns\":{:.2f}}}",
-                               zname_str, s.count, s.mean_ns, s.min_ns, s.max_ns, s.p50_ns, s.p90_ns, s.p95_ns,
+                               zname_str.c_str(), s.count, s.mean_ns, s.min_ns, s.max_ns, s.p50_ns, s.p90_ns, s.p95_ns,
                                s.p99_ns, s.std_deviation_ns);
             }
             resp += "]}";
@@ -1084,7 +1086,7 @@ namespace tempest::profiler
         {
             const auto capture = create_capture_from_session(_session);
             const auto chrome_json = export_chrome_trace_json_string(capture);
-            resp = std::string(chrome_json.data(), chrome_json.size());
+            resp = string{chrome_json.data(), chrome_json.size()};
         }
         else
         {

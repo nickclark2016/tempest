@@ -2,6 +2,7 @@
 #include <tempest/profiler/session.hpp>
 
 #include <format>
+#include <tempest/iterator.hpp>
 
 namespace tempest::profiler
 {
@@ -66,7 +67,7 @@ namespace tempest::profiler
                             name_buf = "GPU: Async Transfer";
                             break;
                         default:
-                            std::format_to(std::back_inserter(name_buf), "GPU: Queue {}", queue_idx);
+                            std::format_to(tempest::back_inserter(name_buf), "GPU: Queue {}", queue_idx);
                             break;
                         }
                     }
@@ -76,7 +77,7 @@ namespace tempest::profiler
                     type = track_type::cpu_thread;
                     if (name_buf.empty())
                     {
-                        std::format_to(std::back_inserter(name_buf), "Thread {}", tid);
+                        std::format_to(tempest::back_inserter(name_buf), "Thread {}", tid);
                     }
                 }
 
