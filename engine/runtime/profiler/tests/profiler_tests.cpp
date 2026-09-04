@@ -1052,6 +1052,7 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
         ASSERT_NE(response.find("initWebSocket"), std::string::npos);
         ASSERT_NE(response.find("renderTimeline"), std::string::npos);
+        EXPECT_GT(response.size(), 65536u);
     }
 
     // 5. Act & Assert: HTTP GET /styles.css

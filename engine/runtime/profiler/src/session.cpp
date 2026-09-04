@@ -17,24 +17,24 @@
 
 namespace
 {
-    auto get_timestamp_ns() noexcept -> uint64_t
+    auto get_timestamp_ns() noexcept -> tempest::uint64_t
     {
 #if defined(_WIN32)
         static const auto frequency = []() {
             LARGE_INTEGER freq;
             QueryPerformanceFrequency(&freq);
-            return static_cast<uint64_t>(freq.QuadPart);
+            return static_cast<tempest::uint64_t>(freq.QuadPart);
         }();
         LARGE_INTEGER counter;
         QueryPerformanceCounter(&counter);
-        auto count = static_cast<uint64_t>(counter.QuadPart);
+        auto count = static_cast<tempest::uint64_t>(counter.QuadPart);
         return (count / frequency) * 1'000'000'000ULL + ((count % frequency) * 1'000'000'000ULL) / frequency;
 #elif defined(__linux__)
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ULL + static_cast<uint64_t>(ts.tv_nsec);
+        return static_cast<tempest::uint64_t>(ts.tv_sec) * 1'000'000'000ULL + static_cast<tempest::uint64_t>(ts.tv_nsec);
 #else
-        return static_cast<uint64_t>(
+        return static_cast<tempest::uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count());
 #endif
