@@ -563,7 +563,24 @@ namespace tempest::assets
             return false;
         }
 
+        // Compute total blob size and contiguous compacted offsets
+        uint64_t total_blob_size = 0;
+        for (const auto& asset : _assets)
+        {
+            asset->blob_offset = total_blob_size;
+            auto it = _cached_blobs.find(asset->id);
+            if (it != _cached_blobs.end() && !it->second.empty())
+            {
+                asset->blob_size = it->second.size();
+            }
+            total_blob_size += asset->blob_size;
+        }
+
         serialization::binary_archive archive;
+        if (total_blob_size > 0)
+        {
+            archive.reserve(static_cast<size_t>(total_blob_size));
+        }
 
         // Write type registry section
         uint64_t num_types = 0;
@@ -586,19 +603,6 @@ namespace tempest::assets
                                                                                               src->source_hash);
             serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive,
                                                                                           src->last_modified_time);
-        }
-
-        // Compute total blob size and contiguous compacted offsets
-        uint64_t total_blob_size = 0;
-        for (const auto& asset : _assets)
-        {
-            asset->blob_offset = total_blob_size;
-            auto it = _cached_blobs.find(asset->id);
-            if (it != _cached_blobs.end() && !it->second.empty())
-            {
-                asset->blob_size = it->second.size();
-            }
-            total_blob_size += asset->blob_size;
         }
 
         // Write asset table
