@@ -4,6 +4,7 @@
 #include <tempest/api.hpp>
 #include <tempest/bit.hpp>
 #include <tempest/compare.hpp>
+#include <tempest/hash.hpp>
 #include <tempest/int.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/tuple.hpp>
@@ -213,10 +214,30 @@ namespace tempest
 #endif
         }
 
+        constexpr uint64_t to_uint64() const noexcept
+        {
+#if defined(TEMPEST_WIN_THREADS)
+            return static_cast<uint64_t>(_handle);
+#elif defined(TEMPEST_POSIX_THREADS)
+            return static_cast<uint64_t>(tempest::bit_cast<uintptr_t>(_handle));
+#else
+#error "Unsupported platform"
+#endif
+        }
+
       private:
         detail::thread_handle _handle{};
 
         friend thread::id this_thread::get_id() noexcept;
+    };
+
+    template <>
+    struct hash<thread::id>
+    {
+        size_t operator()(thread::id id) const noexcept
+        {
+            return hash<uint64_t>()(id.to_uint64());
+        }
     };
 } // namespace tempest
 

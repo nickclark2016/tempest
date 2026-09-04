@@ -18,9 +18,11 @@
 
 #include "../src/importers/gltf_importer.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 // ============================================================================
 // Test types for asset_type_id tests
@@ -2430,6 +2432,265 @@ TEST(asset_database_mount_aliases, corner_case_alias_strings_handling)
     // Redundant slashes in subpath normalize cleanly
     EXPECT_TRUE(database.resolve_disk_path("@core//test.slang").has_value());
     EXPECT_NE(database.find_asset("@core//test.slang"), nullptr);
+
+    // 3. Teardown
+    std::filesystem::remove_all(root_dir);
+}
+
+//==============================================================================
+// Content Hashing & Disk Freshness Invalidation Tests
+//==============================================================================
+
+/// @brief Tests content_hash::compute for deterministic SHA-256 generation and differentiation.
+TEST(asset_database_disk_freshness, content_hash_deterministic_and_unique)
+{
+    // 1. Setup: Create sample byte payloads
+    auto bytes_a = std::string("Hello Tempest Asset Database");
+    auto bytes_b = std::string("Hello Tempest Asset Database Modified");
+    auto bytes_empty = std::string("");
+
+    // 2. Act: Compute hashes
+    auto hash_a1 = tempest::assets::content_hash::compute(
+        tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(bytes_a.data()), bytes_a.size()});
+    auto hash_a2 = tempest::assets::content_hash::compute(
+        tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(bytes_a.data()), bytes_a.size()});
+    auto hash_b = tempest::assets::content_hash::compute(
+        tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(bytes_b.data()), bytes_b.size()});
+    auto hash_empty = tempest::assets::content_hash::compute(tempest::span<const tempest::byte>{});
+
+    // 3. Assert: Determinism and inequality
+    EXPECT_EQ(hash_a1, hash_a2);
+    EXPECT_NE(hash_a1, hash_b);
+    EXPECT_NE(hash_a1, hash_empty);
+    EXPECT_NE(hash_b, hash_empty);
+}
+
+/// @brief Tests that get_blob() detects modified files on disk across database re-opens and returns the new blob.
+TEST(asset_database_disk_freshness, get_blob_returns_new_disk_blob_after_external_file_modification)
+{
+    // 1. Setup: Create test folder with test_shader.slang
+    auto root_dir = std::filesystem::path("temp_test_get_blob_freshness");
+    std::filesystem::create_directories(root_dir);
+    auto db_file = root_dir / "assets.tassetdb";
+    auto shader_file = root_dir / "test_shader.slang";
+
+    {
+        std::ofstream f(shader_file.string().c_str());
+        f << "version 1 payload";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database1 = tempest::assets::asset_database{&type_reg};
+    database1.open(db_file.generic_string().c_str());
+    database1.mount_root(root_dir.generic_string().c_str(), 10);
+    database1.scan_and_index();
+
+    auto* entry1 = database1.find_asset("test_shader.slang");
+    ASSERT_NE(entry1, nullptr);
+    auto asset_id = entry1->id;
+
+    auto blob1 = database1.get_blob(asset_id);
+    auto str1 = std::string(reinterpret_cast<const char*>(blob1.data()), blob1.size());
+    EXPECT_EQ(str1, "version 1 payload");
+
+    // Save database to disk with version 1 cached
+    EXPECT_TRUE(database1.save());
+
+    // 2. Act: Modify the file on disk before opening the database in a new instance
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    {
+        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
+        f << "version 2 new payload from disk";
+    }
+
+    auto database2 = tempest::assets::asset_database{&type_reg};
+    database2.mount_root(root_dir.generic_string().c_str(), 10);
+    database2.open(db_file.generic_string().c_str());
+
+    // Call get_blob on database2 without calling notify_file_changed
+    auto blob2 = database2.get_blob(asset_id);
+    auto str2 = std::string(reinterpret_cast<const char*>(blob2.data()), blob2.size());
+
+    // 3. Assert: get_blob must return the fresh version 2 from disk, not the stale blob from .tassetdb
+    EXPECT_EQ(str2, "version 2 new payload from disk");
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_dir);
+}
+
+/// @brief Tests that notify_file_changed works with absolute filesystem paths and root-relative paths.
+TEST(asset_database_disk_freshness, notify_file_changed_absolute_and_relative_paths)
+{
+    // 1. Setup: Create test folder with pbr.slang
+    auto root_dir = std::filesystem::path("temp_test_notify_paths");
+    std::filesystem::create_directories(root_dir);
+    auto shader_file = root_dir / "pbr.slang";
+
+    {
+        std::ofstream f(shader_file.string().c_str());
+        f << "initial pbr shader code";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(root_dir.generic_string().c_str(), 10);
+    database.scan_and_index();
+
+    auto* entry = database.find_asset("pbr.slang");
+    ASSERT_NE(entry, nullptr);
+    auto asset_id = entry->id;
+
+    auto initial_blob = database.get_blob(asset_id);
+    auto initial_str = std::string(reinterpret_cast<const char*>(initial_blob.data()), initial_blob.size());
+    EXPECT_EQ(initial_str, "initial pbr shader code");
+
+    // 2. Act: Modify disk file and notify using absolute OS path
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    {
+        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
+        f << "modified via absolute path";
+    }
+
+    auto abs_path = std::filesystem::absolute(shader_file).generic_string();
+    auto changed_abs = database.notify_file_changed(abs_path.c_str());
+    EXPECT_TRUE(changed_abs);
+
+    auto blob_after_abs = database.get_blob(asset_id);
+    auto str_after_abs = std::string(reinterpret_cast<const char*>(blob_after_abs.data()), blob_after_abs.size());
+    EXPECT_EQ(str_after_abs, "modified via absolute path");
+
+    // 3. Act: Modify disk file and notify using relative path
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    {
+        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
+        f << "modified via relative path";
+    }
+
+    auto changed_rel = database.notify_file_changed("pbr.slang");
+    EXPECT_TRUE(changed_rel);
+
+    auto blob_after_rel = database.get_blob(asset_id);
+    auto str_after_rel = std::string(reinterpret_cast<const char*>(blob_after_rel.data()), blob_after_rel.size());
+    EXPECT_EQ(str_after_rel, "modified via relative path");
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_dir);
+}
+
+/// @brief Tests that scan_and_index() refreshes existing source entries and stored blobs when files change on disk.
+TEST(asset_database_disk_freshness, scan_and_index_refreshes_modified_source_blobs)
+{
+    // 1. Setup: Create test folder with compute.slang
+    auto root_dir = std::filesystem::path("temp_test_scan_refresh");
+    std::filesystem::create_directories(root_dir);
+    auto shader_file = root_dir / "compute.slang";
+
+    {
+        std::ofstream f(shader_file.string().c_str());
+        f << "compute shader v1";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(root_dir.generic_string().c_str(), 10);
+    database.scan_and_index();
+
+    auto* entry = database.find_asset("compute.slang");
+    ASSERT_NE(entry, nullptr);
+    auto asset_id = entry->id;
+
+    auto blob1 = database.get_blob(asset_id);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob1.data()), blob1.size()), "compute shader v1");
+
+    // 2. Act: Modify file on disk and re-scan
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    {
+        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
+        f << "compute shader v2 refreshed";
+    }
+
+    database.scan_and_index();
+
+    // 3. Assert: Blob is updated to v2
+    auto blob2 = database.get_blob(asset_id);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob2.data()), blob2.size()), "compute shader v2 refreshed");
+
+    // 4. Teardown
+    std::filesystem::remove_all(root_dir);
+}
+
+/// @brief Tests that load() detects source file changes on disk and re-imports rather than returning stale cached
+/// blobs.
+TEST(asset_database_disk_freshness, load_reimports_when_source_file_changed_on_disk)
+{
+    // 1. Setup: Create mock importer tracking import count
+    struct test_versioned_importer : public tempest::assets::asset_importer
+    {
+        int import_count{0};
+
+        [[nodiscard]] auto import(tempest::assets::asset_database& db, tempest::string_view path,
+                                  tempest::ecs::archetype_registry& reg) -> tempest::ecs::entity override
+        {
+            return import(db, tempest::span<const tempest::byte>{}, reg, tempest::some(path));
+        }
+
+        [[nodiscard]] auto import(tempest::assets::asset_database& db,
+                                  [[maybe_unused]] tempest::span<const tempest::byte> data,
+                                  tempest::ecs::archetype_registry& reg, tempest::optional<tempest::string_view> path)
+            -> tempest::ecs::entity override
+        {
+            ++import_count;
+            auto root = reg.create<>();
+            auto dummy_type = tempest::assets::asset_type_id::from_hash(999);
+            if (path.has_value())
+            {
+                db.register_asset(dummy_type, path.value());
+            }
+            return root;
+        }
+    };
+
+    auto root_dir = std::filesystem::path("temp_test_load_reimport");
+    std::filesystem::create_directories(root_dir);
+    auto model_file = root_dir / "model.vasset";
+
+    {
+        std::ofstream f(model_file.string().c_str());
+        f << "version 1 model geometry";
+    }
+
+    auto type_reg = tempest::assets::asset_type_registry{};
+    auto database = tempest::assets::asset_database{&type_reg};
+    database.mount_root(root_dir.generic_string().c_str(), 10);
+
+    auto importer_ptr = tempest::make_unique<test_versioned_importer>();
+    auto* importer_raw = importer_ptr.get();
+    database.register_importer(tempest::move(importer_ptr), ".vasset");
+
+    auto events = tempest::event::event_registry{};
+    auto registry = tempest::ecs::archetype_registry{events};
+
+    // 2. Act: First load() invokes importer
+    auto ent1 = database.load("model.vasset", registry);
+    EXPECT_TRUE(ent1 != tempest::ecs::tombstone);
+    EXPECT_EQ(importer_raw->import_count, 1);
+
+    // Second load() without disk changes hits blob cache (no re-import)
+    auto ent2 = database.load("model.vasset", registry);
+    EXPECT_TRUE(ent2 != tempest::ecs::tombstone);
+    EXPECT_EQ(importer_raw->import_count, 1);
+
+    // Modify file on disk
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    {
+        std::ofstream f(model_file.string().c_str(), std::ios::trunc);
+        f << "version 2 model geometry updated";
+    }
+
+    // Third load() detects content hash change and triggers re-import
+    auto ent3 = database.load("model.vasset", registry);
+    EXPECT_TRUE(ent3 != tempest::ecs::tombstone);
+    EXPECT_EQ(importer_raw->import_count, 2);
 
     // 3. Teardown
     std::filesystem::remove_all(root_dir);

@@ -22,9 +22,10 @@ namespace tempest::render_system
         int32_t _pad{0};
     };
 
-    TEMPEST_API auto add_skybox_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                     shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                                     int32_t skybox_tex_idx = -1) -> const skybox_pass_data&;
+    TEMPEST_API auto add_skybox_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                                     render_graph::rg_texture_id hdr_color_tex, int32_t skybox_tex_idx = -1,
+                                     enum_mask<rhi::pipeline_statistic_flags> pipeline_stats =
+                                         rhi::pipeline_statistic_flags::none) -> const skybox_pass_data&;
 } // namespace tempest::render_system
 
 #endif // tempest_render_system_skybox_pass_hpp

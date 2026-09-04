@@ -4,13 +4,11 @@
 
 namespace tempest::render_system
 {
-    auto add_light_culling_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                shader_manager& shaders,
-                                render_graph::rg_buffer_id cluster_bounds_buf,
-                                render_graph::rg_buffer_id lights_buf,
-                                const cluster_grid_create_info& create_info,
-                                uint32_t light_count,
-                                optional<render_graph::rg_buffer_id> light_bitmask_buf)
+    auto add_light_culling_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                                render_graph::rg_buffer_id cluster_bounds_buf, render_graph::rg_buffer_id lights_buf,
+                                const cluster_grid_create_info& create_info, uint32_t light_count,
+                                optional<render_graph::rg_buffer_id> light_bitmask_buf,
+                                enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const light_culling_pass_data&
     {
         const auto cx = create_info.workgroup_count_tile_size_px.x;
@@ -29,7 +27,8 @@ namespace tempest::render_system
             const auto bitmask_buffer_size = tempest::max(1U, total_clusters * words_per_cluster) * sizeof(uint32_t);
             bitmask_buf = graph.create_buffer(render_graph::rg_buffer_desc{
                 .size = bitmask_buffer_size,
-                .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address | rhi::buffer_usage::transfer_src,
+                .usage = rhi::buffer_usage::storage_buffer | rhi::buffer_usage::device_address |
+                         rhi::buffer_usage::transfer_src,
                 .name = "LightBitmaskBuffer",
             });
         }
@@ -48,13 +47,21 @@ namespace tempest::render_system
 
         return graph.add_compute_pass<light_culling_pass_data>(
             "LightCullingPass",
-            [cluster_bounds_buf, lights_buf, bitmask_buf, &pool, create_info, light_count, words_per_cluster, total_clusters](
-                render_graph::pass_builder& builder, light_culling_pass_data& data) {
-                data.cluster_bounds_buffer = builder.read(cluster_bounds_buf, rhi::pipeline_stage::compute, rhi::resource_access::read);
+            [cluster_bounds_buf, lights_buf, bitmask_buf, &pool, create_info, light_count, words_per_cluster,
+             total_clusters, pipeline_stats](render_graph::pass_builder& builder, light_culling_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
+                data.cluster_bounds_buffer =
+                    builder.read(cluster_bounds_buf, rhi::pipeline_stage::compute, rhi::resource_access::read);
                 data.lights_buffer = builder.read(lights_buf, rhi::pipeline_stage::compute, rhi::resource_access::read);
-                data.light_bitmask_buffer = builder.write(bitmask_buf, rhi::pipeline_stage::compute, rhi::resource_access::write);
+                data.light_bitmask_buffer =
+                    builder.write(bitmask_buf, rhi::pipeline_stage::compute, rhi::resource_access::write);
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
-                data.scene_constants = builder.read(data.scene_constants, rhi::pipeline_stage::compute, rhi::resource_access::read);
+                data.scene_constants =
+                    builder.read(data.scene_constants, rhi::pipeline_stage::compute, rhi::resource_access::read);
                 data.create_info = create_info;
                 data.light_count = light_count;
                 data.words_per_cluster = words_per_cluster;

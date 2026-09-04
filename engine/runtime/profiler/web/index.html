@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tempest Engine Profiler</title>
+  <!-- Tempest Profiler Web UI -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Header / Navigation Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo">
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+        <span class="logo-title">TEMPEST</span>
+        <span class="logo-subtitle">PROFILER</span>
+      </div>
+      <div class="status-indicator" id="status-badge">
+        <span class="status-dot"></span>
+        <span class="status-text" id="status-text">Connecting...</span>
+      </div>
+    </div>
+
+    <!-- Center Search & Filter -->
+    <div class="header-center">
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input type="text" id="search-input" placeholder="Search zones (e.g. Render, Update, Present)..." autocomplete="off" />
+        <span class="search-count" id="search-count"></span>
+        <button class="icon-button" id="search-clear-btn" title="Clear Search" style="display: none;">&times;</button>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="header-right">
+      <div class="button-group">
+        <button class="btn btn-primary" id="btn-live-toggle" title="Toggle Live Streaming (Space)">
+          <span class="btn-icon">⏸</span>
+          <span id="live-toggle-text">Pause Live</span>
+        </button>
+        <button class="btn btn-secondary" id="btn-engine-capture" title="Start/Stop Backend Engine Capture">
+          <span class="btn-icon">⏺</span>
+          <span id="engine-capture-text">Record</span>
+        </button>
+      </div>
+
+      <div class="button-group">
+        <button class="btn btn-dark" id="btn-query-stats" title="Request Zone Statistics from Engine">Stats</button>
+        <button class="btn btn-dark" id="btn-snapshot" title="Fetch Chrome Trace Snapshot">Snapshot</button>
+        <button class="btn btn-dark" id="btn-save-trace" title="Save Capture to File">Export</button>
+        <button class="btn btn-dark" id="btn-open-file" title="Open .json or .tprof Capture File">Open</button>
+        <button class="btn btn-dark" id="btn-clear" title="Clear Telemetry Buffer">Clear</button>
+      </div>
+
+      <input type="file" id="file-input" accept=".json,.tprof" style="display: none;" />
+
+      <div class="view-controls">
+        <button class="icon-button" id="btn-fit-view" title="Fit Timeline to Capture (F)">⤢</button>
+        <button class="icon-button" id="btn-zoom-in" title="Zoom In (+)">+</button>
+        <button class="icon-button" id="btn-zoom-out" title="Zoom Out (-)">−</button>
+        <select id="select-time-unit" title="Time Unit Display">
+          <option value="auto">Auto</option>
+          <option value="ms">ms</option>
+          <option value="us">µs</option>
+          <option value="ns">ns</option>
+        </select>
+        <button class="icon-button" id="btn-shortcuts" title="Keyboard Shortcuts (?)">?</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-main">
+    <!-- Top Overview / Minimap Bar -->
+    <section class="overview-section">
+      <canvas id="overview-canvas"></canvas>
+      <div class="overview-info">
+        <span id="overview-time-range">0.00 ms - 0.00 ms (0.00 ms)</span>
+        <span id="overview-frame-stats">Frames: 0 | Zones: 0</span>
+      </div>
+    </section>
+
+    <!-- Center Flame Chart Timeline -->
+    <section class="timeline-section" id="timeline-container">
+      <canvas id="timeline-canvas"></canvas>
+      <!-- Floating Selection Duration Badge -->
+      <div class="selection-badge" id="selection-badge" style="display: none;">
+        <span class="badge-title">Selected Duration (&Delta;t):</span>
+        <span class="badge-value" id="selection-duration-val">0.00 ms</span>
+        <span class="badge-range" id="selection-range-val">[0.00 ms - 0.00 ms]</span>
+      </div>
+      <!-- Hover Tooltip -->
+      <div class="timeline-tooltip" id="tooltip" style="display: none;"></div>
+    </section>
+
+    <!-- Bottom Resizable Dock Panels -->
+    <section class="dock-section" id="dock-section">
+      <div class="dock-resize-handle" id="dock-resize-handle"></div>
+      
+      <!-- Dock Tabs Navigation -->
+      <div class="dock-tabs">
+        <button class="tab-btn active" data-tab="inspector">Zone Detail Inspector</button>
+        <button class="tab-btn" data-tab="stats">Statistical Analysis (P50 - P99)</button>
+        <button class="tab-btn" data-tab="metrics">Metric & Counter Graphs</button>
+        <button class="tab-btn" data-tab="info">Capture Metadata</button>
+        <div class="dock-tab-actions">
+          <button class="icon-button" id="btn-toggle-dock" title="Collapse/Expand Panel">▾</button>
+        </div>
+      </div>
+
+      <!-- Dock Tab Content Area -->
+      <div class="dock-content-area">
+        <!-- 1. Zone Detail Inspector Tab -->
+        <div class="tab-pane active" id="pane-inspector">
+          <div class="inspector-placeholder" id="inspector-placeholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M15 15l6 6m-11-4a7 7 0 110-14 7 7 0 010 14z" />
+            </svg>
+            <p>Select any zone or marker in the flame chart to inspect durations, self-time, hierarchy, and GPU stats.</p>
+          </div>
+          <div class="inspector-details" id="inspector-details" style="display: none;">
+            <div class="inspector-header">
+              <div class="inspector-title-row">
+                <span class="category-pill" id="insp-category">CPU</span>
+                <h2 class="zone-name" id="insp-name">ZoneName</h2>
+              </div>
+              <div class="inspector-sub">
+                <span id="insp-track">Main Thread (TID 1)</span>
+                <span class="sep">•</span>
+                <span id="insp-location">file.cpp:42</span>
+              </div>
+            </div>
+
+            <div class="inspector-grid">
+              <div class="card metric-card">
+                <div class="card-label">Total Duration</div>
+                <div class="card-value highlight" id="insp-duration">0.00 ms</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-label">Self Time (Exclusive)</div>
+                <div class="card-value" id="insp-self-time">0.00 ms (100.0%)</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-label">Percentage of Frame</div>
+                <div class="card-value" id="insp-frame-pct">0.0%</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-label">Call Stack Depth</div>
+                <div class="card-value" id="insp-depth">Level 0</div>
+              </div>
+            </div>
+
+            <!-- Attached Metrics & GPU Pipeline Stats -->
+            <div class="inspector-metrics-section">
+              <h3 class="section-subtitle">Attached Metrics & GPU Pipeline Statistics</h3>
+              <div class="metrics-list" id="insp-metrics-list">
+                <span class="empty-text">No custom metrics attached to this zone.</span>
+              </div>
+            </div>
+
+            <!-- Hierarchy Navigation (Parent & Children) -->
+            <div class="inspector-hierarchy-section">
+              <h3 class="section-subtitle">Zone Hierarchy Call Tree</h3>
+              <div class="hierarchy-tree" id="insp-hierarchy-tree">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Statistical Analysis Table Tab -->
+        <div class="tab-pane" id="pane-stats">
+          <div class="stats-toolbar">
+            <input type="text" id="stats-filter" placeholder="Filter statistics by name..." />
+            <button class="btn btn-dark btn-sm" id="btn-export-stats-csv">Export CSV</button>
+            <span class="stats-count" id="stats-total-count">0 unique zones</span>
+          </div>
+          <div class="stats-container">
+            <div class="table-wrapper">
+              <table class="data-table" id="stats-table">
+                <thead>
+                  <tr>
+                    <th data-sort="name">Zone Name <span class="sort-arrow"></span></th>
+                    <th data-sort="cat">Category <span class="sort-arrow"></span></th>
+                    <th data-sort="count" class="num">Count <span class="sort-arrow"></span></th>
+                    <th data-sort="total" class="num">Total Time <span class="sort-arrow"></span></th>
+                    <th data-sort="mean" class="num">Mean <span class="sort-arrow"></span></th>
+                    <th data-sort="min" class="num">Min <span class="sort-arrow"></span></th>
+                    <th data-sort="max" class="num">Max <span class="sort-arrow"></span></th>
+                    <th data-sort="p50" class="num">P50 (Median) <span class="sort-arrow"></span></th>
+                    <th data-sort="p90" class="num">P90 <span class="sort-arrow"></span></th>
+                    <th data-sort="p95" class="num">P95 <span class="sort-arrow"></span></th>
+                    <th data-sort="p99" class="num">P99 <span class="sort-arrow"></span></th>
+                    <th data-sort="stddev" class="num">StdDev <span class="sort-arrow"></span></th>
+                  </tr>
+                </thead>
+                <tbody id="stats-tbody">
+                  <tr><td colspan="12" class="empty-cell">No statistical data available. Record telemetry to view distributions.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- Histogram Distribution View for Selected Zone -->
+            <div class="distribution-view" id="distribution-view">
+              <div class="dist-header">
+                <h4 id="dist-title">Duration Distribution Histogram</h4>
+                <span id="dist-subtitle">Select a row in the table above to view distribution</span>
+              </div>
+              <canvas id="histogram-canvas"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Metric & Counter Graphs Tab -->
+        <div class="tab-pane" id="pane-metrics">
+          <div class="metrics-grid" id="metrics-grid">
+            <div class="metric-graph-card">
+              <div class="metric-graph-header">
+                <span class="metric-graph-title">Frame Rate (FPS)</span>
+                <span class="metric-graph-val" id="metric-fps-val">-- FPS</span>
+              </div>
+              <canvas id="chart-fps"></canvas>
+            </div>
+            <div class="metric-graph-card">
+              <div class="metric-graph-header">
+                <span class="metric-graph-title">CPU Frame Time</span>
+                <span class="metric-graph-val" id="metric-frametime-val">-- ms</span>
+              </div>
+              <canvas id="chart-frametime"></canvas>
+            </div>
+            <div class="metric-graph-card">
+              <div class="metric-graph-header">
+                <span class="metric-graph-title">Memory Allocation (MB)</span>
+                <span class="metric-graph-val" id="metric-memory-val">-- MB</span>
+              </div>
+              <canvas id="chart-memory"></canvas>
+            </div>
+            <div class="metric-graph-card">
+              <div class="metric-graph-header">
+                <span class="metric-graph-title">GPU Pass Duration</span>
+                <span class="metric-graph-val" id="metric-gpu-val">-- ms</span>
+              </div>
+              <canvas id="chart-gpu"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Capture Info Tab -->
+        <div class="tab-pane" id="pane-info">
+          <div class="info-content">
+            <div class="card">
+              <h3>Capture Session Information</h3>
+              <div class="info-grid">
+                <div class="info-row"><span class="info-label">Status:</span><span id="info-status">Live Telemetry</span></div>
+                <div class="info-row"><span class="info-label">WebSocket Server:</span><span id="info-ws-url">ws://127.0.0.1:8080/ws</span></div>
+                <div class="info-row"><span class="info-label">Total Frames:</span><span id="info-total-frames">0</span></div>
+                <div class="info-row"><span class="info-label">Total Zones:</span><span id="info-total-zones">0</span></div>
+                <div class="info-row"><span class="info-label">Total Tracks:</span><span id="info-total-tracks">0</span></div>
+                <div class="info-row"><span class="info-label">Capture Duration:</span><span id="info-duration">0.00 ms</span></div>
+                <div class="info-row"><span class="info-label">Time Extent:</span><span id="info-time-extent">0 ns - 0 ns</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Fullscreen Drag & Drop Replay Overlay -->
+  <div class="drop-overlay" id="drop-overlay">
+    <div class="drop-card">
+      <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+      </svg>
+      <h2>Drop Trace File to Replay</h2>
+      <p>Supports Tempest binary (<code>.tprof</code>), Chrome Trace JSON (<code>.json</code>), or raw telemetry JSON.</p>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div class="modal-backdrop" id="shortcuts-modal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Keyboard & Mouse Shortcuts</h3>
+        <button class="icon-button modal-close" id="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <table class="shortcuts-table">
+          <tr><td><kbd>Mouse Wheel</kbd></td><td>Zoom in / out centered at cursor</td></tr>
+          <tr><td><kbd>Left Drag</kbd> / <kbd>Middle Drag</kbd></td><td>Pan timeline horizontally and vertically</td></tr>
+          <tr><td><kbd>Shift + Drag</kbd></td><td>Marquee time range selection (&Delta;t measurement)</td></tr>
+          <tr><td><kbd>Left Click</kbd></td><td>Select zone to inspect details and self-time</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Toggle Live Streaming / Pause</td></tr>
+          <tr><td><kbd>F</kbd></td><td>Fit timeline view to entire capture extent</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Clear selection and search filter</td></tr>
+          <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>Jump to capture start / end</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

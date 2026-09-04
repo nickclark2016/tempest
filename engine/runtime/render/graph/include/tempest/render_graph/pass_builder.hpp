@@ -9,7 +9,8 @@ namespace tempest::render_graph
 {
     class render_graph;
 
-    /// \brief Builder object passed to a pass's setup callback to declare resource creations, accesses, attachments, and sinks.
+    /// \brief Builder object passed to a pass's setup callback to declare resource creations, accesses, attachments,
+    /// and sinks.
     class TEMPEST_API pass_builder
     {
       public:
@@ -22,8 +23,8 @@ namespace tempest::render_graph
 
         auto import_texture(rhi::texture_handle handle, rhi::texture_view_handle view,
                             rhi::image_layout initial_layout = rhi::image_layout::undefined) -> rg_texture_id;
-        auto import_texture(rhi::texture_handle handle,
-                            rhi::image_layout initial_layout = rhi::image_layout::undefined) -> rg_texture_id;
+        auto import_texture(rhi::texture_handle handle, rhi::image_layout initial_layout = rhi::image_layout::undefined)
+            -> rg_texture_id;
         auto import_buffer(rhi::buffer_handle handle) -> rg_buffer_id;
 
         auto read(rg_texture_id tex, enum_mask<rhi::pipeline_stage> stages, enum_mask<rhi::resource_access> access,
@@ -32,8 +33,9 @@ namespace tempest::render_graph
         auto write(rg_texture_id tex, enum_mask<rhi::pipeline_stage> stages, enum_mask<rhi::resource_access> access,
                    rhi::image_layout layout, const rg_subresource_range& subresource = {}) -> rg_texture_id;
 
-        auto read_write(rg_texture_id tex, enum_mask<rhi::pipeline_stage> stages, enum_mask<rhi::resource_access> access,
-                        rhi::image_layout layout, const rg_subresource_range& subresource = {}) -> rg_texture_id;
+        auto read_write(rg_texture_id tex, enum_mask<rhi::pipeline_stage> stages,
+                        enum_mask<rhi::resource_access> access, rhi::image_layout layout,
+                        const rg_subresource_range& subresource = {}) -> rg_texture_id;
 
         auto set_color_attachment(uint32_t slot, const rg_color_attachment& attachment) -> rg_texture_id;
         auto set_depth_stencil_attachment(const rg_depth_stencil_attachment& attachment) -> rg_texture_id;
@@ -61,6 +63,7 @@ namespace tempest::render_graph
         void mark_sink() noexcept;
         void set_execution_queue(queue_type queue) noexcept;
         void set_enable_condition(function<bool()> condition);
+        auto enable_pipeline_statistics(enum_mask<rhi::pipeline_statistic_flags> stats) -> pass_builder&;
 
       private:
         render_graph* _graph{nullptr};

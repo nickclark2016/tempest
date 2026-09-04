@@ -32,8 +32,11 @@ namespace tempest::render_system
         const ecs::archetype_registry& registry;
         const camera_system* camera_sys{nullptr};
         optional<render_camera> camera_override{nullopt};
-        uint32_t draw_count{0};
-        uint32_t draw_offset{0};
+        uint32_t opaque_draw_count{0};
+        uint32_t opaque_draw_offset{0};
+        uint32_t alpha_masked_draw_count{0};
+        uint32_t alpha_masked_draw_offset{0};
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_statistics{rhi::pipeline_statistic_flags::none};
     };
 
     auto TEMPEST_API add_shadow_pass(shadow_pass_params params) -> shadow_pass_result;

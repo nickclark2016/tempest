@@ -37,13 +37,12 @@ namespace tempest::render_system
         uint32_t padding{0};
     };
 
-    TEMPEST_API auto add_light_culling_pass(render_graph::render_graph& graph, resource_pool& pool,
-                                            shader_manager& shaders,
-                                            render_graph::rg_buffer_id cluster_bounds_buf,
-                                            render_graph::rg_buffer_id lights_buf,
-                                            const cluster_grid_create_info& create_info,
-                                            uint32_t light_count,
-                                            optional<render_graph::rg_buffer_id> light_bitmask_buf = nullopt)
+    TEMPEST_API auto add_light_culling_pass(
+        render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+        render_graph::rg_buffer_id cluster_bounds_buf, render_graph::rg_buffer_id lights_buf,
+        const cluster_grid_create_info& create_info, uint32_t light_count,
+        optional<render_graph::rg_buffer_id> light_bitmask_buf = nullopt,
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none)
         -> const light_culling_pass_data&;
 } // namespace tempest::render_system
 

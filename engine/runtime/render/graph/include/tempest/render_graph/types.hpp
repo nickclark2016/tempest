@@ -99,6 +99,25 @@ namespace tempest::render_graph
         async_transfer,
     };
 
+    constexpr auto get_queue_track_id(queue_type queue) noexcept -> uint64_t
+    {
+        return 0x8000'0000ULL | (static_cast<uint64_t>(queue) + 1);
+    }
+
+    constexpr auto get_queue_track_name(queue_type queue) noexcept -> string_view
+    {
+        switch (queue)
+        {
+        case queue_type::graphics:
+            return "GPU: Graphics";
+        case queue_type::async_compute:
+            return "GPU: Async Compute";
+        case queue_type::async_transfer:
+            return "GPU: Async Transfer";
+        }
+        return "GPU: Unknown";
+    }
+
     /// \brief Sizing strategy for render graph textures.
     enum class size_mode : uint8_t
     {
@@ -138,8 +157,8 @@ namespace tempest::render_graph
             };
         }
 
-        static constexpr auto surface_relative(float scale_x = 1.0F, float scale_y = 1.0F,
-                                               uint32_t depth = 1) noexcept -> rg_texture_size
+        static constexpr auto surface_relative(float scale_x = 1.0F, float scale_y = 1.0F, uint32_t depth = 1) noexcept
+            -> rg_texture_size
         {
             return rg_texture_size{
                 .mode = size_mode::surface_relative,
@@ -166,8 +185,7 @@ namespace tempest::render_graph
             };
         }
 
-        [[nodiscard]] auto evaluate(uint32_t surface_width, uint32_t surface_height) const noexcept
-            -> resolved_size
+        [[nodiscard]] auto evaluate(uint32_t surface_width, uint32_t surface_height) const noexcept -> resolved_size
         {
             if (mode == size_mode::absolute)
             {

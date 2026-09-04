@@ -48,6 +48,7 @@ scoped.project('render-graph', function()
         uses {
             'api',
             'core',
+            'profiler',
             'rhi-api',
         }
     end)

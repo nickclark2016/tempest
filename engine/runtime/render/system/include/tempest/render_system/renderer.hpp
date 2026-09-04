@@ -21,8 +21,18 @@
 #include <tempest/vector.hpp>
 #include <tempest/window_handle.hpp>
 
+#include <tempest/profiler/profiler.hpp>
+
 namespace tempest::render_system
 {
+    inline constexpr auto all_pipeline_statistics = rhi::pipeline_statistic_flags::input_assembly_vertices |
+                                                    rhi::pipeline_statistic_flags::input_assembly_primitives |
+                                                    rhi::pipeline_statistic_flags::vertex_shader_invocations |
+                                                    rhi::pipeline_statistic_flags::clipping_input_primitives |
+                                                    rhi::pipeline_statistic_flags::clipping_output_primitives |
+                                                    rhi::pipeline_statistic_flags::fragment_shader_invocations |
+                                                    rhi::pipeline_statistic_flags::compute_shader_invocations;
+
     struct TEMPEST_API renderer_config
     {
         uint32_t render_width{1920};
@@ -34,6 +44,7 @@ namespace tempest::render_system
         shadow_debug_mode shadow_debug{shadow_debug_mode::none};
         float cluster_far_plane{1000.0F};
         resource_pool_config pool_config{};
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_statistics{rhi::pipeline_statistic_flags::none};
     };
 
     struct TEMPEST_API renderer_inputs
@@ -44,6 +55,7 @@ namespace tempest::render_system
         const core::texture_registry* textures{nullptr};
         const core::material_registry* materials{nullptr};
         non_null<assets::asset_database> asset_db;
+        profiler::profiler_session* profiler{nullptr};
     };
 
     class TEMPEST_API renderer
@@ -138,6 +150,16 @@ namespace tempest::render_system
             return _cfg;
         }
 
+        auto set_pipeline_statistics(enum_mask<rhi::pipeline_statistic_flags> stats) noexcept -> void
+        {
+            _pipeline_statistics = stats;
+        }
+
+        [[nodiscard]] auto get_pipeline_statistics() const noexcept -> enum_mask<rhi::pipeline_statistic_flags>
+        {
+            return _pipeline_statistics;
+        }
+
         [[nodiscard]] auto get_tracked_renderable_count() const noexcept -> size_t
         {
             return _tracked_entities.size();
@@ -218,6 +240,11 @@ namespace tempest::render_system
             return _opaque_draw_count;
         }
 
+        [[nodiscard]] auto get_alpha_masked_draw_count() const noexcept -> uint32_t
+        {
+            return _alpha_masked_draw_count;
+        }
+
         [[nodiscard]] auto get_transparent_draw_count() const noexcept -> uint32_t
         {
             return _transparent_draw_count;
@@ -226,6 +253,11 @@ namespace tempest::render_system
         [[nodiscard]] auto get_opaque_draw_offset() const noexcept -> uint32_t
         {
             return _opaque_draw_offset;
+        }
+
+        [[nodiscard]] auto get_alpha_masked_draw_offset() const noexcept -> uint32_t
+        {
+            return _alpha_masked_draw_offset;
         }
 
         [[nodiscard]] auto get_transparent_draw_offset() const noexcept -> uint32_t
@@ -346,9 +378,12 @@ namespace tempest::render_system
         uint32_t _active_draw_count{0};
         uint32_t _opaque_draw_count{0};
         uint32_t _opaque_draw_offset{0};
+        uint32_t _alpha_masked_draw_count{0};
+        uint32_t _alpha_masked_draw_offset{0};
         uint32_t _transparent_draw_count{0};
         uint32_t _transparent_draw_offset{0};
         shadow_debug_mode _shadow_debug_mode{shadow_debug_mode::none};
+        enum_mask<rhi::pipeline_statistic_flags> _pipeline_statistics{rhi::pipeline_statistic_flags::none};
 
         // Renderable Tracking & ECS Subscriptions
         flat_unordered_map<ecs::entity, size_t> _renderable_indices{};

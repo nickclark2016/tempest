@@ -9,8 +9,17 @@ namespace tempest::serialization
     {
         const auto current_size = _buffer.size();
         const auto proposed_size = current_size + data.size();
+        if (proposed_size > _buffer.capacity())
+        {
+            _buffer.reserve(tempest::bit_ceil(proposed_size));
+        }
         unsafe::resize_no_init(_buffer, proposed_size);
         tempest::memcpy(_buffer.data() + current_size, data.data(), data.size());
+    }
+
+    auto binary_archive::reserve(size_t capacity) -> void
+    {
+        _buffer.reserve(capacity);
     }
 
     auto binary_archive::write(vector<byte> data) -> void

@@ -28,9 +28,11 @@ namespace tempest::render_system
         int32_t linear_sampler_index{0};
     };
 
-    TEMPEST_API auto add_depth_prepass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
-                                       render_graph::rg_texture_id depth_tex, uint32_t draw_count,
-                                       uint32_t draw_offset = 0) -> const depth_prepass_data&;
+    TEMPEST_API auto add_depth_prepass(
+        render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+        render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset = 0,
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_stats = rhi::pipeline_statistic_flags::none)
+        -> const depth_prepass_data&;
 } // namespace tempest::render_system
 
 #endif // tempest_render_system_depth_prepass_hpp

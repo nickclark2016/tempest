@@ -96,6 +96,7 @@ namespace tempest
                 .render_width = 1920,
                 .render_height = 1080,
                 .tonemapped_color_format = rhi::data_format::rgba8_srgb,
+                .pipeline_statistics = render_system::all_pipeline_statistics,
             });
             builder.set_inputs(render_system::renderer_inputs{
                 .entity_registry = &_entity_registry,
@@ -103,6 +104,7 @@ namespace tempest
                 .textures = &_texture_reg,
                 .materials = &_material_reg,
                 .asset_db = &_asset_database,
+                .profiler = &_profiler_session,
             });
             _renderer = builder.build(*_device, _logger);
         }
@@ -155,12 +157,25 @@ namespace tempest
         auto raw_surf = raw_res.value();
         auto caps = _device->get_surface_capabilities(raw_surf);
         auto selected_present_mode = rhi::present_mode::vsync;
+        auto desired_found = false;
         for (const auto& mode : caps.supported_present_modes)
         {
-            if (mode == rhi::present_mode::vsync)
+            if (mode == desc.present_mode)
             {
                 selected_present_mode = mode;
+                desired_found = true;
                 break;
+            }
+        }
+        if (!desired_found)
+        {
+            for (const auto& mode : caps.supported_present_modes)
+            {
+                if (mode == rhi::present_mode::vsync)
+                {
+                    selected_present_mode = mode;
+                    break;
+                }
             }
         }
 
@@ -421,6 +436,7 @@ namespace tempest
 
     auto standalone_engine_context::_update_fixed(std::chrono::duration<float> delta_time) -> void
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_fixed"};
         for (auto& win : _windows)
         {
             auto& mouse = _window_manager.get_mouse(win.handle);
@@ -465,6 +481,7 @@ namespace tempest
 
     auto standalone_engine_context::_update_variable(std::chrono::duration<float> delta_time) -> void
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_variable"};
         for (auto&& callback : _on_variable_update_callbacks)
         {
             callback(*this, delta_time);
@@ -473,6 +490,7 @@ namespace tempest
 
     auto standalone_engine_context::_render_frame() -> void
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::render_frame"};
         if (!_renderer || _windows.empty())
         {
             return;

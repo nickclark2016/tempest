@@ -9,7 +9,8 @@ namespace tempest::render_system
                                        render_graph::rg_texture_id zeroth_moment_tex,
                                        render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset,
                                        render_graph::rg_texture_id shadow_atlas,
-                                       render_graph::rg_buffer_id light_bitmask_buf)
+                                       render_graph::rg_buffer_id light_bitmask_buf,
+                                       enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const transparency_resolve_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_resolve_pipeline");
@@ -57,7 +58,13 @@ namespace tempest::render_system
         return graph.add_graphics_pass<transparency_resolve_pass_data>(
             "TransparencyResolvePass",
             [&pool, accum_tex, moments_tex, zeroth_moment_tex, depth_tex, shadow_atlas, draw_count, draw_offset,
-             light_bitmask_buf](render_graph::pass_builder& builder, transparency_resolve_pass_data& data) {
+             light_bitmask_buf,
+             pipeline_stats](render_graph::pass_builder& builder, transparency_resolve_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
                 data.accum_texture = builder.set_color_attachment(0, render_graph::rg_color_attachment{
                                                                          .texture = accum_tex,
                                                                          .load_op = rhi::load_op::clear,

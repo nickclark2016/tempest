@@ -6,6 +6,7 @@
 #include <tempest/logger.hpp>
 #include <tempest/serial.hpp>
 
+#include <filesystem>
 #include <fstream>
 
 namespace tempest::assets
@@ -13,7 +14,23 @@ namespace tempest::assets
     namespace
     {
         constexpr array<uint8_t, 4> db_magic = {'T', 'E', 'B', 'F'};
-        constexpr uint16_t db_version = 2;
+        constexpr uint16_t db_version = 3;
+
+        auto get_file_last_write_time(string_view disk_path) noexcept -> uint64_t
+        {
+            if (disk_path.empty())
+            {
+                return 0;
+            }
+            std::error_code ec;
+            auto ftime = std::filesystem::last_write_time(
+                std::filesystem::path(std::string(disk_path.data(), disk_path.size())), ec);
+            if (ec)
+            {
+                return 0;
+            }
+            return static_cast<uint64_t>(ftime.time_since_epoch().count());
+        }
 
         auto normalize_extension_str(string_view input) -> string
         {
@@ -168,7 +185,218 @@ namespace tempest::assets
 
             return false;
         }
+
+        constexpr uint32_t sha256_k[64] = {
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+
+        inline auto rotr32(uint32_t x, uint32_t n) noexcept -> uint32_t
+        {
+            return (x >> n) | (x << (32 - n));
+        }
+
+        inline auto sha256_ch(uint32_t x, uint32_t y, uint32_t z) noexcept -> uint32_t
+        {
+            return (x & y) ^ (~x & z);
+        }
+
+        inline auto sha256_maj(uint32_t x, uint32_t y, uint32_t z) noexcept -> uint32_t
+        {
+            return (x & y) ^ (x & z) ^ (y & z);
+        }
+
+        inline auto sha256_sig0(uint32_t x) noexcept -> uint32_t
+        {
+            return rotr32(x, 2) ^ rotr32(x, 13) ^ rotr32(x, 22);
+        }
+
+        inline auto sha256_sig1(uint32_t x) noexcept -> uint32_t
+        {
+            return rotr32(x, 6) ^ rotr32(x, 11) ^ rotr32(x, 25);
+        }
+
+        inline auto sha256_gam0(uint32_t x) noexcept -> uint32_t
+        {
+            return rotr32(x, 7) ^ rotr32(x, 18) ^ (x >> 3);
+        }
+
+        inline auto sha256_gam1(uint32_t x) noexcept -> uint32_t
+        {
+            return rotr32(x, 17) ^ rotr32(x, 19) ^ (x >> 10);
+        }
+
+        auto sha256_transform(uint32_t state[8], const uint8_t block[64]) noexcept -> void
+        {
+            uint32_t w[64];
+            for (size_t i = 0; i < 16; ++i)
+            {
+                w[i] = (static_cast<uint32_t>(block[i * 4 + 0]) << 24) |
+                       (static_cast<uint32_t>(block[i * 4 + 1]) << 16) |
+                       (static_cast<uint32_t>(block[i * 4 + 2]) << 8) | (static_cast<uint32_t>(block[i * 4 + 3]) << 0);
+            }
+            for (size_t i = 16; i < 64; ++i)
+            {
+                w[i] = sha256_gam1(w[i - 2]) + w[i - 7] + sha256_gam0(w[i - 15]) + w[i - 16];
+            }
+
+            uint32_t a = state[0];
+            uint32_t b = state[1];
+            uint32_t c = state[2];
+            uint32_t d = state[3];
+            uint32_t e = state[4];
+            uint32_t f = state[5];
+            uint32_t g = state[6];
+            uint32_t h = state[7];
+
+            for (size_t i = 0; i < 64; ++i)
+            {
+                uint32_t t1 = h + sha256_sig1(e) + sha256_ch(e, f, g) + sha256_k[i] + w[i];
+                uint32_t t2 = sha256_sig0(a) + sha256_maj(a, b, c);
+                h = g;
+                g = f;
+                f = e;
+                e = d + t1;
+                d = c;
+                c = b;
+                b = a;
+                a = t1 + t2;
+            }
+
+            state[0] += a;
+            state[1] += b;
+            state[2] += c;
+            state[3] += d;
+            state[4] += e;
+            state[5] += f;
+            state[6] += g;
+            state[7] += h;
+        }
+
+        auto paths_match(string_view disk_path_norm, string_view target_path_norm) -> bool
+        {
+            if (disk_path_norm == target_path_norm)
+            {
+                return true;
+            }
+
+            // Case-insensitive exact match
+            if (disk_path_norm.size() == target_path_norm.size())
+            {
+                bool eq = true;
+                for (size_t i = 0; i < disk_path_norm.size(); ++i)
+                {
+                    char c1 = (disk_path_norm[i] >= 'A' && disk_path_norm[i] <= 'Z') ? (disk_path_norm[i] + 32)
+                                                                                     : disk_path_norm[i];
+                    char c2 = (target_path_norm[i] >= 'A' && target_path_norm[i] <= 'Z') ? (target_path_norm[i] + 32)
+                                                                                         : target_path_norm[i];
+                    if (c1 != c2)
+                    {
+                        eq = false;
+                        break;
+                    }
+                }
+                if (eq)
+                {
+                    return true;
+                }
+            }
+
+            // Check if disk_path_norm ends with target_path_norm
+            if (disk_path_norm.size() > target_path_norm.size())
+            {
+                auto suffix = tempest::substr(disk_path_norm, disk_path_norm.size() - target_path_norm.size(),
+                                              target_path_norm.size());
+                if (suffix == target_path_norm)
+                {
+                    size_t prefix_len = disk_path_norm.size() - target_path_norm.size();
+                    if (prefix_len == 0 || disk_path_norm[prefix_len - 1] == '/' ||
+                        disk_path_norm[prefix_len - 1] == '\\')
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // Check if target_path_norm ends with disk_path_norm
+            if (target_path_norm.size() > disk_path_norm.size())
+            {
+                auto suffix = tempest::substr(target_path_norm, target_path_norm.size() - disk_path_norm.size(),
+                                              disk_path_norm.size());
+                if (suffix == disk_path_norm)
+                {
+                    size_t prefix_len = target_path_norm.size() - disk_path_norm.size();
+                    if (prefix_len == 0 || target_path_norm[prefix_len - 1] == '/' ||
+                        target_path_norm[prefix_len - 1] == '\\')
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
     } // namespace
+
+    auto content_hash::compute(span<const byte> bytes) noexcept -> content_hash
+    {
+        uint32_t state[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                             0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+
+        const auto* data = reinterpret_cast<const uint8_t*>(bytes.data());
+        size_t len = bytes.size();
+        size_t offset = 0;
+
+        uint8_t block[64];
+
+        while (len >= 64)
+        {
+            sha256_transform(state, data + offset);
+            offset += 64;
+            len -= 64;
+        }
+
+        for (size_t b = 0; b < 64; ++b)
+        {
+            block[b] = 0;
+        }
+        if (len > 0)
+        {
+            tempest::memcpy(block, data + offset, len);
+        }
+        block[len] = 0x80;
+
+        if (len >= 56)
+        {
+            sha256_transform(state, block);
+            for (size_t b = 0; b < 64; ++b)
+            {
+                block[b] = 0;
+            }
+        }
+
+        uint64_t total_bits = static_cast<uint64_t>(bytes.size()) * 8ULL;
+        for (size_t k = 0; k < 8; ++k)
+        {
+            block[63 - k] = static_cast<uint8_t>((total_bits >> (k * 8)) & 0xFF);
+        }
+        sha256_transform(state, block);
+
+        content_hash result;
+        for (size_t j = 0; j < 8; ++j)
+        {
+            result.data[j * 4 + 0] = static_cast<byte>((state[j] >> 24) & 0xFF);
+            result.data[j * 4 + 1] = static_cast<byte>((state[j] >> 16) & 0xFF);
+            result.data[j * 4 + 2] = static_cast<byte>((state[j] >> 8) & 0xFF);
+            result.data[j * 4 + 3] = static_cast<byte>((state[j] >> 0) & 0xFF);
+        }
+        return result;
+    }
 
     asset_database::asset_database(asset_type_registry* type_reg) noexcept : _type_reg{type_reg}
     {
@@ -258,11 +486,13 @@ namespace tempest::assets
             auto src_path = serialization::serializer<serialization::binary_archive, string>::deserialize(archive);
             auto src_hash =
                 serialization::serializer<serialization::binary_archive, content_hash>::deserialize(archive);
+            auto src_mtime = serialization::serializer<serialization::binary_archive, uint64_t>::deserialize(archive);
 
             auto entry = make_unique<source_entry>(source_entry{
                 .id = src_id,
                 .source_path = tempest::move(src_path),
                 .source_hash = src_hash,
+                .last_modified_time = src_mtime,
             });
 
             auto source_index = _sources.size();
@@ -333,7 +563,24 @@ namespace tempest::assets
             return false;
         }
 
+        // Compute total blob size and contiguous compacted offsets
+        uint64_t total_blob_size = 0;
+        for (const auto& asset : _assets)
+        {
+            asset->blob_offset = total_blob_size;
+            auto it = _cached_blobs.find(asset->id);
+            if (it != _cached_blobs.end() && !it->second.empty())
+            {
+                asset->blob_size = it->second.size();
+            }
+            total_blob_size += asset->blob_size;
+        }
+
         serialization::binary_archive archive;
+        if (total_blob_size > 0)
+        {
+            archive.reserve(static_cast<size_t>(total_blob_size));
+        }
 
         // Write type registry section
         uint64_t num_types = 0;
@@ -354,19 +601,8 @@ namespace tempest::assets
             serialization::serializer<serialization::binary_archive, string>::serialize(archive, src->source_path);
             serialization::serializer<serialization::binary_archive, content_hash>::serialize(archive,
                                                                                               src->source_hash);
-        }
-
-        // Compute total blob size and contiguous compacted offsets
-        uint64_t total_blob_size = 0;
-        for (const auto& asset : _assets)
-        {
-            asset->blob_offset = total_blob_size;
-            auto it = _cached_blobs.find(asset->id);
-            if (it != _cached_blobs.end() && !it->second.empty())
-            {
-                asset->blob_size = it->second.size();
-            }
-            total_blob_size += asset->blob_size;
+            serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive,
+                                                                                          src->last_modified_time);
         }
 
         // Write asset table
@@ -448,20 +684,25 @@ namespace tempest::assets
                 aliased_key.append(normalized_sub);
             }
 
-            auto path_it = _source_path_to_index.find(aliased_key);
-            if (path_it != _source_path_to_index.end())
-            {
-                return _load_from_blobs(aliased_key, registry);
-            }
-
             auto disk_path = resolve_disk_path(aliased_key);
             if (disk_path.has_value())
             {
                 auto norm_disk = normalize_path_str(disk_path.value());
-                auto disk_it = _source_path_to_index.find(norm_disk);
-                if (disk_it != _source_path_to_index.end())
+                auto disk_mtime = get_file_last_write_time(disk_path.value());
+
+                auto path_it = _source_path_to_index.find(aliased_key);
+                if (path_it == _source_path_to_index.end())
                 {
-                    return _load_from_blobs(norm_disk, registry);
+                    path_it = _source_path_to_index.find(norm_disk);
+                }
+
+                if (path_it != _source_path_to_index.end())
+                {
+                    auto& src = *_sources[path_it->second];
+                    if (src.last_modified_time != 0 && disk_mtime != 0 && src.last_modified_time == disk_mtime)
+                    {
+                        return _load_from_blobs(src.source_path, registry);
+                    }
                 }
 
                 auto ent = _load_via_import(disk_path.value(), registry);
@@ -470,13 +711,63 @@ namespace tempest::assets
                     auto reg_disk_it = _source_path_to_index.find(norm_disk);
                     if (reg_disk_it != _source_path_to_index.end())
                     {
+                        _sources[reg_disk_it->second]->last_modified_time = disk_mtime;
                         _source_path_to_index.insert({aliased_key, reg_disk_it->second});
+                    }
+                    auto alias_it = _source_path_to_index.find(aliased_key);
+                    if (alias_it != _source_path_to_index.end())
+                    {
+                        _sources[alias_it->second]->last_modified_time = disk_mtime;
                     }
                 }
                 return ent;
             }
 
+            auto path_it = _source_path_to_index.find(aliased_key);
+            if (path_it != _source_path_to_index.end())
+            {
+                return _load_from_blobs(aliased_key, registry);
+            }
+
             return ecs::tombstone;
+        }
+
+        auto norm_path = normalize_path_str(source_path);
+        auto disk_path = resolve_disk_path(norm_path);
+        if (disk_path.has_value())
+        {
+            auto disk_mtime = get_file_last_write_time(disk_path.value());
+
+            auto path_it = _source_path_to_index.find(norm_path);
+            if (path_it == _source_path_to_index.end())
+            {
+                path_it = _source_path_to_index.find(normalize_path_str(disk_path.value()));
+            }
+
+            if (path_it != _source_path_to_index.end())
+            {
+                auto& src = *_sources[path_it->second];
+                if (src.last_modified_time != 0 && disk_mtime != 0 && src.last_modified_time == disk_mtime)
+                {
+                    return _load_from_blobs(src.source_path, registry);
+                }
+            }
+
+            auto ent = _load_via_import(disk_path.value(), registry);
+            if (ent != ecs::tombstone)
+            {
+                auto reg_it = _source_path_to_index.find(norm_path);
+                if (reg_it != _source_path_to_index.end())
+                {
+                    _sources[reg_it->second]->last_modified_time = disk_mtime;
+                }
+                auto reg_disk_it = _source_path_to_index.find(normalize_path_str(disk_path.value()));
+                if (reg_disk_it != _source_path_to_index.end())
+                {
+                    _sources[reg_disk_it->second]->last_modified_time = disk_mtime;
+                }
+            }
+            return ent;
         }
 
         // Check if source exists in the database
@@ -803,16 +1094,40 @@ namespace tempest::assets
                             entry_key.append(child_rel);
                         }
 
+                        // 6. Query timestamp without reading file contents
+                        auto disk_p = resolve_disk_path(entry_key);
+                        auto disk_mtime = disk_p.has_value() ? get_file_last_write_time(disk_p.value()) : 0;
+
                         // If not registered in _sources yet, register it
                         auto src_it = _source_path_to_index.find(entry_key);
                         if (src_it == _source_path_to_index.end())
                         {
-                            _get_or_create_source(entry_key);
+                            auto& src = _get_or_create_source(entry_key);
+                            src.last_modified_time = disk_mtime;
 
                             // If shader file (.spv or .slang)
                             if (tempest::ends_with(entry_key, ".spv") || tempest::ends_with(entry_key, ".slang"))
                             {
                                 register_asset(asset_type_id::of<shader_asset>(), entry_key);
+                            }
+                        }
+                        else
+                        {
+                            // Existing source - check if timestamp modified on disk
+                            auto& src = *_sources[src_it->second];
+                            if (src.last_modified_time != 0 && disk_mtime != 0 && src.last_modified_time != disk_mtime)
+                            {
+                                src.last_modified_time = disk_mtime;
+                                for (auto& asset : _assets)
+                                {
+                                    if (asset->source_id == src.id)
+                                    {
+                                        _cached_blobs.erase(asset->id);
+                                        asset->blob_size = 0;
+                                        asset->blob_offset = 0;
+                                    }
+                                }
+                                _dirty = true;
                             }
                         }
 
@@ -1191,7 +1506,7 @@ namespace tempest::assets
         for (auto& src : _sources)
         {
             bool match = false;
-            if (src->source_path == normalized || tempest::ends_with(src->source_path, normalized))
+            if (paths_match(normalized, src->source_path))
             {
                 match = true;
             }
@@ -1201,7 +1516,7 @@ namespace tempest::assets
                 if (resolved_disk.has_value())
                 {
                     auto norm_resolved = normalize_path_str(resolved_disk.value());
-                    if (norm_resolved == normalized || tempest::ends_with(norm_resolved, normalized))
+                    if (paths_match(normalized, norm_resolved))
                     {
                         match = true;
                     }
@@ -1218,13 +1533,35 @@ namespace tempest::assets
 
             if (match)
             {
+                auto resolved = resolve_disk_path(src->source_path);
+                auto disk_to_read = resolved.has_value() ? resolved.value() : string(normalized);
+                src->last_modified_time = get_file_last_write_time(disk_to_read);
+                auto bytes = core::read_bytes(string_view{disk_to_read.c_str(), disk_to_read.size()});
+
+                if (!bytes.empty())
+                {
+                    src->source_hash = content_hash::compute(span<const byte>{bytes.data(), bytes.size()});
+                }
+                else
+                {
+                    src->source_hash = {};
+                }
+
                 for (auto& asset : _assets)
                 {
                     if (asset->source_id == src->id)
                     {
-                        _cached_blobs.erase(asset->id);
-                        asset->blob_size = 0;
-                        asset->blob_offset = 0;
+                        if (!bytes.empty() && (asset->type == asset_type_id::of<shader_asset>() ||
+                                               asset->type == asset_type_id::from_hash(0)))
+                        {
+                            store_blob(asset->id, span<const byte>{bytes.data(), bytes.size()});
+                        }
+                        else
+                        {
+                            _cached_blobs.erase(asset->id);
+                            asset->blob_size = 0;
+                            asset->blob_offset = 0;
+                        }
                         any_updated = true;
                     }
                 }
@@ -1338,12 +1675,6 @@ namespace tempest::assets
 
     auto asset_database::get_blob(const guid& asset_id) const -> span<const byte>
     {
-        auto it = _cached_blobs.find(asset_id);
-        if (it != _cached_blobs.end() && !it->second.empty())
-        {
-            return it->second;
-        }
-
         auto iter = _asset_guid_to_index.find(asset_id);
         if (iter == _asset_guid_to_index.end())
         {
@@ -1352,20 +1683,38 @@ namespace tempest::assets
 
         const auto& entry = _assets[iter->second];
         auto src_it = _source_id_to_index.find(entry->source_id);
+
         if (src_it != _source_id_to_index.end())
         {
             const auto& src = _sources[src_it->second];
             auto disk_path = resolve_disk_path(src->source_path);
             if (disk_path.has_value())
             {
+                auto disk_mtime = get_file_last_write_time(disk_path.value());
+                auto cached_it = _cached_blobs.find(asset_id);
+                if (cached_it != _cached_blobs.end() && !cached_it->second.empty() && src->last_modified_time != 0 &&
+                    disk_mtime != 0 && disk_mtime == src->last_modified_time)
+                {
+                    return cached_it->second;
+                }
+
+                // Modified offline or not yet cached
                 auto bytes = core::read_bytes(string_view{disk_path->c_str(), disk_path->size()});
                 if (!bytes.empty())
                 {
                     auto* mutable_this = const_cast<asset_database*>(this);
+                    src->source_hash = content_hash::compute(span<const byte>{bytes.data(), bytes.size()});
+                    src->last_modified_time = disk_mtime;
                     mutable_this->store_blob(asset_id, span<const byte>{bytes.data(), bytes.size()});
                     return mutable_this->_cached_blobs[asset_id];
                 }
             }
+        }
+
+        auto it = _cached_blobs.find(asset_id);
+        if (it != _cached_blobs.end() && !it->second.empty())
+        {
+            return it->second;
         }
 
         return {};
@@ -1556,7 +1905,18 @@ namespace tempest::assets
         }
 
         // Ensure the source is tracked regardless of whether the importer registered assets.
-        _get_or_create_source(source_path);
+        auto& src = _get_or_create_source(source_path);
+
+        auto disk_p = resolve_disk_path(source_path);
+        if (disk_p.has_value())
+        {
+            src.last_modified_time = get_file_last_write_time(disk_p.value());
+            auto bytes = core::read_bytes(string_view{disk_p->c_str(), disk_p->size()});
+            if (!bytes.empty())
+            {
+                src.source_hash = content_hash::compute(span<const byte>{bytes.data(), bytes.size()});
+            }
+        }
 
         // If the importer didn't register any assets, create a placeholder entry so the
         // source is considered "cached" on subsequent runs and load() takes the blob path.
@@ -1638,7 +1998,21 @@ namespace tempest::assets
             serialization::serializer<serialization::binary_archive, entity_hierarchy>::serialize(hier_archive,
                                                                                                   hierarchy);
             auto hier_blob = hier_archive.read(hier_archive.written_size());
-            auto hier_id = register_asset(asset_type_id::of<entity_hierarchy>(), source_path);
+
+            auto hier_type = asset_type_id::of<entity_hierarchy>();
+            guid hier_id{};
+            for (const auto& asset : _assets)
+            {
+                if (asset->source_id == src.id && asset->type == hier_type)
+                {
+                    hier_id = asset->id;
+                    break;
+                }
+            }
+            if (hier_id == guid{})
+            {
+                hier_id = register_asset(hier_type, source_path);
+            }
             store_blob(hier_id, hier_blob);
         }
 
@@ -1659,6 +2033,7 @@ namespace tempest::assets
             .id = new_id,
             .source_path = normalized,
             .source_hash = {},
+            .last_modified_time = 0,
         });
 
         auto index = _sources.size();

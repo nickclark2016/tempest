@@ -53,7 +53,8 @@ namespace tempest
         constexpr vector(vector&& other, const Allocator& alloc);
 
         template <typename... Ts>
-            requires (sizeof...(Ts) > 0) && (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
+            requires(sizeof...(Ts) > 0) &&
+                    (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
         constexpr vector(init_list_t, Ts&&... values);
 
         constexpr ~vector();
@@ -294,7 +295,8 @@ namespace tempest
 
     template <typename T, typename Allocator>
     template <typename... Ts>
-        requires (sizeof...(Ts) > 0) && (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
+        requires(sizeof...(Ts) > 0) &&
+                (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
     constexpr vector<T, Allocator>::vector(init_list_t, Ts&&... values)
     {
         static_assert(sizeof...(Ts) > 0, "At least one value must be provided");
@@ -560,9 +562,20 @@ namespace tempest
         auto new_data = allocator_traits<Allocator>::allocate(_alloc, new_cap);
         auto new_end = new_data;
 
-        for (auto it = begin(); it != end(); ++it)
+        if constexpr (is_trivially_copyable_v<T>)
         {
-            allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
+            if (_data && size() > 0)
+            {
+                tempest::memcpy(new_data, _data, size() * sizeof(T));
+            }
+            new_end = new_data + size();
+        }
+        else
+        {
+            for (auto it = begin(); it != end(); ++it)
+            {
+                allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
+            }
         }
 
         clear();
@@ -584,9 +597,20 @@ namespace tempest
         auto new_data = allocator_traits<Allocator>::allocate(_alloc, size());
         auto new_end = new_data;
 
-        for (auto it = begin(); it != end(); ++it)
+        if constexpr (is_trivially_copyable_v<T>)
         {
-            allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
+            if (_data && size() > 0)
+            {
+                tempest::memcpy(new_data, _data, size() * sizeof(T));
+            }
+            new_end = new_data + size();
+        }
+        else
+        {
+            for (auto it = begin(); it != end(); ++it)
+            {
+                allocator_traits<Allocator>::construct(_alloc, new_end++, tempest::move(*it));
+            }
         }
 
         clear();

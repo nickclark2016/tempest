@@ -309,7 +309,8 @@ namespace tempest::rhi::vk
 
     command_list::command_list(VkCommandBuffer command_buffer, const vkb::DispatchTable& dispatch_table,
                                const vk::device& device, vkb::QueueType queue_type) noexcept
-        : _command_buffer{command_buffer}, _dispatch_table{&dispatch_table}, _parent_device{&device}, _queue_type{queue_type}
+        : _command_buffer{command_buffer}, _dispatch_table{&dispatch_table}, _parent_device{&device},
+          _queue_type{queue_type}
     {
     }
 
@@ -351,12 +352,12 @@ namespace tempest::rhi::vk
             if (_queue_type == vkb::QueueType::graphics)
             {
                 _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                                 _parent_device->get_global_pipeline_layout(), 0, 1,
-                                                                 &sampler_buffer_index, &sampler_offset);
+                                                                  _parent_device->get_global_pipeline_layout(), 0, 1,
+                                                                  &sampler_buffer_index, &sampler_offset);
             }
             _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                                             _parent_device->get_global_pipeline_layout(), 0, 1,
-                                                             &sampler_buffer_index, &sampler_offset);
+                                                              _parent_device->get_global_pipeline_layout(), 0, 1,
+                                                              &sampler_buffer_index, &sampler_offset);
 
             // Buffer index 1 is Sampled Images (Set 1 at offset 0) and Storage Images (Set 2 at offset storage_offset)
             auto resource_buffer_indices = array<uint32_t, 2>{1, 1};
@@ -364,13 +365,13 @@ namespace tempest::rhi::vk
                 array<VkDeviceSize, 2>{0, _parent_device->get_storage_image_descriptor_buffer_offset()};
             if (_queue_type == vkb::QueueType::graphics)
             {
-                _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                                 _parent_device->get_global_pipeline_layout(), 1, 2,
-                                                                 resource_buffer_indices.data(), resource_offsets.data());
+                _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(
+                    _command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _parent_device->get_global_pipeline_layout(), 1,
+                    2, resource_buffer_indices.data(), resource_offsets.data());
             }
             _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                                             _parent_device->get_global_pipeline_layout(), 1, 2,
-                                                             resource_buffer_indices.data(), resource_offsets.data());
+                                                              _parent_device->get_global_pipeline_layout(), 1, 2,
+                                                              resource_buffer_indices.data(), resource_offsets.data());
         }
     }
 
@@ -605,9 +606,9 @@ namespace tempest::rhi::vk
             {
                 const auto& view = *view_opt;
                 const auto fmt = view.format;
-                const auto is_depth = (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT ||
-                                       fmt == VK_FORMAT_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-                                       fmt == VK_FORMAT_X8_D24_UNORM_PACK32);
+                const auto is_depth =
+                    (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT || fmt == VK_FORMAT_D24_UNORM_S8_UINT ||
+                     fmt == VK_FORMAT_D32_SFLOAT_S8_UINT || fmt == VK_FORMAT_X8_D24_UNORM_PACK32);
                 const auto is_stencil = (fmt == VK_FORMAT_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D32_SFLOAT_S8_UINT ||
                                          fmt == VK_FORMAT_S8_UINT || fmt == VK_FORMAT_D16_UNORM_S8_UINT);
 
@@ -660,12 +661,8 @@ namespace tempest::rhi::vk
             .viewMask = 0,
             .colorAttachmentCount = static_cast<uint32_t>(color_attachment_descriptions.size()),
             .pColorAttachments = color_attachment_descriptions.data(),
-            .pDepthAttachment = depth_attachment_desc.has_value()
-                                    ? &depth_attachment_desc.value()
-                                    : nullptr,
-            .pStencilAttachment = stencil_attachment_desc.has_value()
-                                      ? &stencil_attachment_desc.value()
-                                      : nullptr,
+            .pDepthAttachment = depth_attachment_desc.has_value() ? &depth_attachment_desc.value() : nullptr,
+            .pStencilAttachment = stencil_attachment_desc.has_value() ? &stencil_attachment_desc.value() : nullptr,
         };
 
         _dispatch_table->cmdBeginRendering(_command_buffer, &rendering_info);
@@ -1003,6 +1000,87 @@ namespace tempest::rhi::vk
         };
 
         _dispatch_table->cmdBlitImage2(_command_buffer, &blit_info);
+    }
+
+    auto command_list::write_timestamp(query_pool_handle pool, uint32_t query_index, pipeline_stage stage) -> void
+    {
+        const auto qp_opt = _parent_device->get_query_pool(pool);
+        if (!qp_opt.has_value() || qp_opt->handle == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        if (_dispatch_table->fp_vkCmdWriteTimestamp2 != nullptr)
+        {
+            const auto stage_flags2 = as_vulkan(stage);
+            _dispatch_table->cmdWriteTimestamp2(_command_buffer, stage_flags2, qp_opt->handle, query_index);
+        }
+        else if (_dispatch_table->fp_vkCmdWriteTimestamp != nullptr)
+        {
+            auto stage_flag1 = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            if (stage == pipeline_stage::top_of_pipe)
+            {
+                stage_flag1 = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            }
+            else if (stage == pipeline_stage::vertex)
+            {
+                stage_flag1 = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+            }
+            else if (stage == pipeline_stage::fragment)
+            {
+                stage_flag1 = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            }
+            else if (stage == pipeline_stage::compute)
+            {
+                stage_flag1 = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            }
+            else if ((static_cast<uint32_t>(stage) & static_cast<uint32_t>(pipeline_stage::all_transfer)) != 0)
+            {
+                stage_flag1 = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            }
+            _dispatch_table->cmdWriteTimestamp(_command_buffer, stage_flag1, qp_opt->handle, query_index);
+        }
+    }
+
+    auto command_list::begin_query(query_pool_handle pool, uint32_t query_index) -> void
+    {
+        const auto qp_opt = _parent_device->get_query_pool(pool);
+        if (qp_opt.has_value() && qp_opt->handle != VK_NULL_HANDLE)
+        {
+            _dispatch_table->cmdBeginQuery(_command_buffer, qp_opt->handle, query_index, 0);
+        }
+    }
+
+    auto command_list::end_query(query_pool_handle pool, uint32_t query_index) -> void
+    {
+        const auto qp_opt = _parent_device->get_query_pool(pool);
+        if (qp_opt.has_value() && qp_opt->handle != VK_NULL_HANDLE)
+        {
+            _dispatch_table->cmdEndQuery(_command_buffer, qp_opt->handle, query_index);
+        }
+    }
+
+    auto command_list::reset_query_pool(query_pool_handle pool, uint32_t first_query, uint32_t query_count) -> void
+    {
+        const auto qp_opt = _parent_device->get_query_pool(pool);
+        if (qp_opt.has_value() && qp_opt->handle != VK_NULL_HANDLE)
+        {
+            if (_queue_type == vkb::QueueType::transfer)
+            {
+                if (_dispatch_table->fp_vkResetQueryPool != nullptr)
+                {
+                    _dispatch_table->resetQueryPool(qp_opt->handle, first_query, query_count);
+                }
+                else if (_dispatch_table->fp_vkResetQueryPoolEXT != nullptr)
+                {
+                    _dispatch_table->resetQueryPoolEXT(qp_opt->handle, first_query, query_count);
+                }
+            }
+            else
+            {
+                _dispatch_table->cmdResetQueryPool(_command_buffer, qp_opt->handle, first_query, query_count);
+            }
+        }
     }
 
     auto command_list::begin_debug_region([[maybe_unused]] const debug_label& label) -> void

@@ -38,6 +38,10 @@ TempestCache/
 # UI configuration files
 *.ini
 
+# Profiler captures
+captures/
+*.tprof
+
 # Generated asset files
 assets/
 **.tassetdb

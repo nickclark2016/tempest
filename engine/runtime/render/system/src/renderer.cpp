@@ -117,7 +117,7 @@ namespace tempest::render_system
           _camera_system{_inputs.camera_sys ? _inputs.camera_sys : _owned_camera_system.get()},
           _frames_in_flight{math::max(1U, cfg.pool_config.frames_in_flight)}, _pool{dev, cfg.pool_config},
           _shaders{dev, inputs.asset_db}, _graph{cfg.render_width, cfg.render_height},
-          _shadow_debug_mode{cfg.shadow_debug}
+          _shadow_debug_mode{cfg.shadow_debug}, _pipeline_statistics{cfg.pipeline_statistics}
     {
         _flight_slots.resize(_frames_in_flight);
         for (auto& slot : _flight_slots)
@@ -194,8 +194,11 @@ namespace tempest::render_system
           _punctual_shadow_allocator{tempest::move(other._punctual_shadow_allocator)},
           _tracked_entities{tempest::move(other._tracked_entities)}, _active_draw_count{other._active_draw_count},
           _opaque_draw_count{other._opaque_draw_count}, _opaque_draw_offset{other._opaque_draw_offset},
+          _alpha_masked_draw_count{other._alpha_masked_draw_count},
+          _alpha_masked_draw_offset{other._alpha_masked_draw_offset},
           _transparent_draw_count{other._transparent_draw_count},
           _transparent_draw_offset{other._transparent_draw_offset}, _shadow_debug_mode{other._shadow_debug_mode},
+          _pipeline_statistics{other._pipeline_statistics},
           _renderable_indices{tempest::move(other._renderable_indices)},
           _renderables_dirty_count{other._renderables_dirty_count}, _events{other._events},
           _point_light_indices{tempest::move(other._point_light_indices)},
@@ -284,9 +287,12 @@ namespace tempest::render_system
             _active_draw_count = other._active_draw_count;
             _opaque_draw_count = other._opaque_draw_count;
             _opaque_draw_offset = other._opaque_draw_offset;
+            _alpha_masked_draw_count = other._alpha_masked_draw_count;
+            _alpha_masked_draw_offset = other._alpha_masked_draw_offset;
             _transparent_draw_count = other._transparent_draw_count;
             _transparent_draw_offset = other._transparent_draw_offset;
             _shadow_debug_mode = other._shadow_debug_mode;
+            _pipeline_statistics = other._pipeline_statistics;
             _renderable_indices = tempest::move(other._renderable_indices);
             _renderables_dirty_count = other._renderables_dirty_count;
             _point_light_indices = tempest::move(other._point_light_indices);
@@ -382,10 +388,12 @@ namespace tempest::render_system
             return;
         }
 
-        // Partition entities into Opaque and Transparent batches based on material type
+        // Partition entities into Opaque, Alpha-Masked, and Transparent batches based on material type
         auto opaque_entities = vector<ecs::entity>{};
+        auto alpha_masked_entities = vector<ecs::entity>{};
         auto transparent_entities = vector<ecs::entity>{};
         opaque_entities.reserve(_tracked_entities.size());
+        alpha_masked_entities.reserve(_tracked_entities.size());
         transparent_entities.reserve(_tracked_entities.size());
 
         for (const auto entity : _tracked_entities)
@@ -421,6 +429,10 @@ namespace tempest::render_system
             {
                 transparent_entities.push_back(entity);
             }
+            else if (mat_type == material_type::mask)
+            {
+                alpha_masked_entities.push_back(entity);
+            }
             else
             {
                 opaque_entities.push_back(entity);
@@ -428,8 +440,9 @@ namespace tempest::render_system
         }
 
         _tracked_entities.clear();
-        _tracked_entities.reserve(opaque_entities.size() + transparent_entities.size());
+        _tracked_entities.reserve(opaque_entities.size() + alpha_masked_entities.size() + transparent_entities.size());
         _tracked_entities.insert(_tracked_entities.end(), opaque_entities.begin(), opaque_entities.end());
+        _tracked_entities.insert(_tracked_entities.end(), alpha_masked_entities.begin(), alpha_masked_entities.end());
         _tracked_entities.insert(_tracked_entities.end(), transparent_entities.begin(), transparent_entities.end());
 
         _renderable_indices.clear();
@@ -474,8 +487,10 @@ namespace tempest::render_system
 
         _opaque_draw_count = static_cast<uint32_t>(opaque_entities.size());
         _opaque_draw_offset = 0;
+        _alpha_masked_draw_count = static_cast<uint32_t>(alpha_masked_entities.size());
+        _alpha_masked_draw_offset = _opaque_draw_count;
         _transparent_draw_count = static_cast<uint32_t>(transparent_entities.size());
-        _transparent_draw_offset = _opaque_draw_count;
+        _transparent_draw_offset = _opaque_draw_count + _alpha_masked_draw_count;
         _active_draw_count = static_cast<uint32_t>(commands.size());
 
         _pool.write_instances(instances);
@@ -645,6 +660,7 @@ namespace tempest::render_system
 
     void renderer::begin_frame(window_handle win)
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::begin_frame"};
         const auto slot_idx = get_current_flight_slot();
         if (_device && !_flight_slots.empty())
         {
@@ -750,6 +766,7 @@ namespace tempest::render_system
                                  optional<rhi::texture_view_handle> swapchain_view,
                                  optional<render_camera> camera_override, ui_render_callback ui_callback)
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::prepare_frame"};
         if (!_frame_begun)
         {
             begin_frame(_active_surface_window);
@@ -1079,14 +1096,17 @@ namespace tempest::render_system
             .inv_view = scene.inv_view,
             .eye_position = scene.camera_position,
         };
+        const auto gfx_stats = _pipeline_statistics & ~rhi::pipeline_statistic_flags::compute_shader_invocations;
+        const auto cs_stats = _pipeline_statistics & rhi::pipeline_statistic_flags::compute_shader_invocations;
+
         const auto& cluster_data =
             add_light_clustering_pass(_graph, _pool, _shaders, _cluster_bounds_target, active_cam, width, height,
-                                      grid_dims.x, grid_dims.y, grid_dims.z);
+                                      grid_dims.x, grid_dims.y, grid_dims.z, cs_stats);
 
         auto lights_buf = _graph.import_buffer(_pool.get_lights_buffer());
         const auto& culling_data =
             add_light_culling_pass(_graph, _pool, _shaders, cluster_data.cluster_bounds_buffer, lights_buf,
-                                   cluster_data.create_info, scene.light_count, _light_bitmask_target);
+                                   cluster_data.create_info, scene.light_count, _light_bitmask_target, cs_stats);
 
         if (_inputs.entity_registry)
         {
@@ -1099,8 +1119,11 @@ namespace tempest::render_system
                 .registry = *_inputs.entity_registry,
                 .camera_sys = _camera_system,
                 .camera_override = camera_override,
-                .draw_count = _opaque_draw_count,
-                .draw_offset = _opaque_draw_offset,
+                .opaque_draw_count = _opaque_draw_count,
+                .opaque_draw_offset = _opaque_draw_offset,
+                .alpha_masked_draw_count = _alpha_masked_draw_count,
+                .alpha_masked_draw_offset = _alpha_masked_draw_offset,
+                .pipeline_statistics = gfx_stats,
             });
 
             if (_shadow_debug_mode != shadow_debug_mode::none)
@@ -1112,35 +1135,39 @@ namespace tempest::render_system
             _directional_shadow_atlas_target = shadow_res.shadow_atlas;
         }
 
+        const auto non_transparent_draw_count = _opaque_draw_count + _alpha_masked_draw_count;
         const auto& depth_data =
-            add_depth_prepass(_graph, _pool, _shaders, _depth_target, _opaque_draw_count, _opaque_draw_offset);
+            add_depth_prepass(_graph, _pool, _shaders, _depth_target, non_transparent_draw_count, 0, gfx_stats);
 
         if (_cfg.enable_ssao)
         {
-            const auto& ssao_data = add_ssao_pass(_graph, _pool, _shaders, depth_data.depth_texture, _ssao_target);
+            const auto& ssao_data = add_ssao_pass(_graph, _pool, _shaders, depth_data.depth_texture, _ssao_target, 0.5F,
+                                                  0.025F, 1.5F, gfx_stats);
             add_ssao_blur_pass(_graph, _pool, _shaders, ssao_data.ssao_raw, depth_data.depth_texture,
                                _ssao_blurred_target, width, height);
         }
 
-        const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target);
+        const auto& skybox_data = add_skybox_pass(_graph, _pool, _shaders, _hdr_color_target, -1, gfx_stats);
         const auto& pbr_data = add_pbr_opaque_pass(
             _graph, _pool, _shaders, skybox_data.hdr_color, depth_data.depth_texture, _directional_shadow_atlas_target,
-            _opaque_draw_count, _opaque_draw_offset, culling_data.light_bitmask_buffer);
+            non_transparent_draw_count, 0, culling_data.light_bitmask_buffer, gfx_stats);
 
         const auto& clear_data =
             add_transparency_clear_pass(_graph, _shaders, _moments_target, _zeroth_moment_target, width, height);
         const auto& gather_data = add_transparency_gather_pass(
             _graph, _pool, _shaders, clear_data.moments_texture, clear_data.zeroth_moment_texture,
-            depth_data.depth_texture, _transparent_draw_count, _transparent_draw_offset);
+            depth_data.depth_texture, _transparent_draw_count, _transparent_draw_offset, gfx_stats);
         const auto& resolve_data = add_transparency_resolve_pass(
             _graph, _pool, _shaders, _transparency_accum_target, gather_data.moments_texture,
             gather_data.zeroth_moment_texture, depth_data.depth_texture, _transparent_draw_count,
-            _transparent_draw_offset, _directional_shadow_atlas_target, culling_data.light_bitmask_buffer);
-        const auto& blend_data = add_transparency_blend_pass(
-            _graph, _pool, _shaders, pbr_data.hdr_color, resolve_data.accum_texture, gather_data.zeroth_moment_texture);
+            _transparent_draw_offset, _directional_shadow_atlas_target, culling_data.light_bitmask_buffer, gfx_stats);
+        const auto& blend_data =
+            add_transparency_blend_pass(_graph, _pool, _shaders, pbr_data.hdr_color, resolve_data.accum_texture,
+                                        gather_data.zeroth_moment_texture, rhi::data_format::rgba16_float, gfx_stats);
 
-        const auto& tonemap_data = add_tonemapping_pass(_graph, _pool, _shaders, blend_data.hdr_color,
-                                                        _tonemapped_color_target, _cfg.tonemapped_color_format);
+        const auto& tonemap_data =
+            add_tonemapping_pass(_graph, _pool, _shaders, blend_data.hdr_color, _tonemapped_color_target,
+                                 _cfg.tonemapped_color_format, 0.0F, gfx_stats);
         _tonemapped_color_target = tonemap_data.tonemapped_output;
 
         if (ui_callback && effective_sc_tex.has_value() && effective_sc_view.has_value())
@@ -1183,6 +1210,7 @@ namespace tempest::render_system
 
     auto renderer::render(const render_graph::frame_sync_options& sync) -> expected<void, render_graph::execution_error>
     {
+        auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render"};
         if (!_device)
         {
             return unexpected(render_graph::execution_error::compile_failed);
@@ -1190,6 +1218,13 @@ namespace tempest::render_system
 
         const auto slot_idx = get_current_flight_slot();
         auto effective_sync = sync;
+        effective_sync.flight_slot_index = slot_idx;
+        effective_sync.frames_in_flight = _frames_in_flight;
+        effective_sync.frame_index = _frame_index;
+        if (effective_sync.profiler == nullptr)
+        {
+            effective_sync.profiler = _inputs.profiler;
+        }
 
         if (_active_surface_window.is_valid())
         {
@@ -1232,6 +1267,7 @@ namespace tempest::render_system
 
     auto renderer::present(window_handle win) -> expected<void, rhi::swapchain_error>
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::present"};
         if (!_device)
         {
             return {};
@@ -1273,6 +1309,7 @@ namespace tempest::render_system
     auto renderer::render_frame(window_handle win, optional<render_camera> camera_override,
                                 ui_render_callback ui_callback) -> expected<void, render_graph::execution_error>
     {
+        [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render_frame"};
         auto target_win = win.is_valid() ? win : _active_surface_window;
         if (!target_win.is_valid() && !_surfaces.empty())
         {

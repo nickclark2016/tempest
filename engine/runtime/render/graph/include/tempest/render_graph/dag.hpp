@@ -73,6 +73,7 @@ namespace tempest::render_graph
         flat_unordered_map<rg_buffer_id, rg_buffer_id> buffer_fallbacks;
 
         bool is_sink = false;
+        enum_mask<rhi::pipeline_statistic_flags> pipeline_statistics{rhi::pipeline_statistic_flags::none};
         function<bool()> enable_condition = [] { return true; };
         function<void(pass_execution_context&, rhi::command_list&)> execute_fn;
     };
@@ -138,8 +139,8 @@ namespace tempest::render_graph
 
         auto import_texture(rhi::texture_handle handle, rhi::texture_view_handle view,
                             rhi::image_layout initial_layout = rhi::image_layout::undefined) -> rg_texture_id;
-        auto import_texture(rhi::texture_handle handle,
-                            rhi::image_layout initial_layout = rhi::image_layout::undefined) -> rg_texture_id;
+        auto import_texture(rhi::texture_handle handle, rhi::image_layout initial_layout = rhi::image_layout::undefined)
+            -> rg_texture_id;
         auto import_buffer(rhi::buffer_handle handle) -> rg_buffer_id;
 
         auto add_pass(pass_node node) -> uint32_t;

@@ -7,7 +7,8 @@ namespace tempest::render_system
     auto add_transparency_gather_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
                                       render_graph::rg_texture_id moments_tex,
                                       render_graph::rg_texture_id zeroth_moment_tex,
-                                      render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset)
+                                      render_graph::rg_texture_id depth_tex, uint32_t draw_count, uint32_t draw_offset,
+                                      enum_mask<rhi::pipeline_statistic_flags> pipeline_stats)
         -> const transparency_gather_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("pbr_oit_gather_pipeline");
@@ -42,8 +43,13 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<transparency_gather_pass_data>(
             "TransparencyGatherPass",
-            [&pool, moments_tex, zeroth_moment_tex, depth_tex, draw_count,
-             draw_offset](render_graph::pass_builder& builder, transparency_gather_pass_data& data) {
+            [&pool, moments_tex, zeroth_moment_tex, depth_tex, draw_count, draw_offset,
+             pipeline_stats](render_graph::pass_builder& builder, transparency_gather_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
                 data.depth_texture = builder.set_depth_stencil_attachment(render_graph::rg_depth_stencil_attachment{
                     .texture = depth_tex,
                     .depth_load_op = rhi::load_op::load,

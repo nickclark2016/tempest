@@ -5,11 +5,10 @@
 
 namespace tempest::render_system
 {
-    auto add_tonemapping_pass(render_graph::render_graph& graph, resource_pool& pool,
-                              shader_manager& shaders, render_graph::rg_texture_id hdr_color_tex,
-                              render_graph::rg_texture_id tonemapped_target,
-                              rhi::data_format target_format,
-                              float exposure) -> const tonemapping_pass_data&
+    auto add_tonemapping_pass(render_graph::render_graph& graph, resource_pool& pool, shader_manager& shaders,
+                              render_graph::rg_texture_id hdr_color_tex, render_graph::rg_texture_id tonemapped_target,
+                              rhi::data_format target_format, float exposure,
+                              enum_mask<rhi::pipeline_statistic_flags> pipeline_stats) -> const tonemapping_pass_data&
     {
         auto pipe_h = shaders.find_graphics_pipeline("tonemap_pipeline");
         if (!pipe_h.has_value())
@@ -42,21 +41,25 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<tonemapping_pass_data>(
             "TonemappingPass",
-            [hdr_color_tex, tonemapped_target](render_graph::pass_builder& builder, tonemapping_pass_data& data) {
+            [hdr_color_tex, tonemapped_target, pipeline_stats](render_graph::pass_builder& builder,
+                                                               tonemapping_pass_data& data) {
+                if (pipeline_stats != rhi::pipeline_statistic_flags::none)
+                {
+                    builder.enable_pipeline_statistics(pipeline_stats);
+                }
+
                 data.hdr_color = builder.read(hdr_color_tex, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                               rhi::image_layout::general);
-                data.tonemapped_output = builder.set_color_attachment(
-                    0, render_graph::rg_color_attachment{
-                           .texture = tonemapped_target,
-                           .load_op = rhi::load_op::clear,
-                           .store_op = rhi::store_op::store,
-                           .clear_value = {0.0F, 0.0F, 0.0F, 1.0F},
-                       });
+                data.tonemapped_output = builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                                             .texture = tonemapped_target,
+                                                                             .load_op = rhi::load_op::clear,
+                                                                             .store_op = rhi::store_op::store,
+                                                                             .clear_value = {0.0F, 0.0F, 0.0F, 1.0F},
+                                                                         });
                 builder.mark_sink();
             },
             [&pool, &shaders, exposure, pipe](const tonemapping_pass_data& data,
-                                              render_graph::pass_execution_context& ctx,
-                                              rhi::command_list& pass_cmd) {
+                                              render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
                 const auto desc_idx = ctx.get_texture_descriptor(data.hdr_color);
                 const auto hdr_tex_idx = (desc_idx != ~0U) ? static_cast<int32_t>(desc_idx) : -1;
 

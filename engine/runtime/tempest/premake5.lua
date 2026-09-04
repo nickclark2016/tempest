@@ -70,6 +70,7 @@ scoped.project('tempest', function()
         links {
             'Advapi32',
             'Synchronization',
+            'ws2_32',
         }
     end)
 
@@ -82,6 +83,7 @@ scoped.project('tempest', function()
             'event',
             'glfw',
             'logger',
+            'profiler',
             'render-graph',
             'render-system',
             'rhi-api',
@@ -120,6 +122,7 @@ scoped.project('tempest', function()
         'ecs',
         'event',
         'logger',
+        'profiler',
         'render-graph',
         'render-system',
         'rhi-api',
@@ -158,6 +161,7 @@ scoped.project('tempest', function()
             'ecs:includedirs',
             'event:includedirs',
             'logger:includedirs',
+            'profiler:includedirs',
             'render-graph:includedirs',
             'render-system:includedirs',
             'rhi-api:includedirs',
@@ -183,6 +187,7 @@ scoped.project('tempest', function()
                 'ecs',
                 'event',
                 'logger',
+                'profiler',
                 'rhi-api',
                 'serialization',
 
@@ -210,6 +215,7 @@ scoped.project('tempest', function()
                 'user32',
                 'Advapi32',
                 'Synchronization',
+                'ws2_32',
             }
         end)
 

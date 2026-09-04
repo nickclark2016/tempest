@@ -190,7 +190,7 @@ namespace tempest::render_graph
             .type = access_type::write,
             .stages = rhi::pipeline_stage::attachment_output,
             .access = (attachment.load_op == rhi::load_op::load) ? rhi::resource_access::read_write
-                                                                  : rhi::resource_access::write,
+                                                                 : rhi::resource_access::write,
             .layout = rhi::image_layout::general,
             .subresource = attachment.subresource,
             .load_op = attachment.load_op,
@@ -226,8 +226,7 @@ namespace tempest::render_graph
         return next;
     }
 
-    auto pass_builder::use_temporal_texture(temporal_texture& tex, uint32_t requested_history_depth)
-        -> temporal_binding
+    auto pass_builder::use_temporal_texture(temporal_texture& tex, uint32_t requested_history_depth) -> temporal_binding
     {
         _graph->track_temporal_resource(&tex);
 
@@ -308,7 +307,8 @@ namespace tempest::render_graph
     }
 
     auto pass_builder::read_write(rg_buffer_id buf, enum_mask<rhi::pipeline_stage> stages,
-                                  enum_mask<rhi::resource_access> access, uint64_t offset, uint64_t size) -> rg_buffer_id
+                                  enum_mask<rhi::resource_access> access, uint64_t offset, uint64_t size)
+        -> rg_buffer_id
     {
         read(buf, stages, access, offset, size);
         return write(buf, stages, access, offset, size);
@@ -351,6 +351,12 @@ namespace tempest::render_graph
     void pass_builder::set_enable_condition(function<bool()> condition)
     {
         _node->enable_condition = tempest::move(condition);
+    }
+
+    auto pass_builder::enable_pipeline_statistics(enum_mask<rhi::pipeline_statistic_flags> stats) -> pass_builder&
+    {
+        _node->pipeline_statistics = stats;
+        return *this;
     }
 
     // =========================================================================
@@ -424,8 +430,7 @@ namespace tempest::render_graph
             [src_tex, swapchain_rg_tex](pass_builder& builder, present_pass_data& data) {
                 data.src = builder.read(src_tex, rhi::pipeline_stage::blit, rhi::resource_access::read,
                                         rhi::image_layout::general);
-                data.dst = builder.write(swapchain_rg_tex, rhi::pipeline_stage::blit,
-                                         rhi::resource_access::write,
+                data.dst = builder.write(swapchain_rg_tex, rhi::pipeline_stage::blit, rhi::resource_access::write,
                                          rhi::image_layout::present);
                 builder.mark_sink();
             },
@@ -451,12 +456,13 @@ namespace tempest::render_graph
                 for (size_t i = 0; i < textures.size(); ++i)
                 {
                     const auto imported = builder.import_texture(textures[i], views[i], rhi::image_layout::undefined);
-                    const auto target = builder.set_color_attachment(static_cast<uint32_t>(i), rg_color_attachment{
-                                                                                                  .texture = imported,
-                                                                                                  .load_op = rhi::load_op::clear,
-                                                                                                  .store_op = rhi::store_op::store,
-                                                                                                  .clear_value = clear_value,
-                                                                                              });
+                    const auto target =
+                        builder.set_color_attachment(static_cast<uint32_t>(i), rg_color_attachment{
+                                                                                   .texture = imported,
+                                                                                   .load_op = rhi::load_op::clear,
+                                                                                   .store_op = rhi::store_op::store,
+                                                                                   .clear_value = clear_value,
+                                                                               });
                     data.targets.push_back(target);
                 }
                 builder.mark_sink();

@@ -31,6 +31,18 @@ namespace tempest::assets
         static constexpr size_t hash_size = 32;
 
         array<byte, hash_size> data{};
+
+        bool operator==(const content_hash& rhs) const noexcept
+        {
+            return data == rhs.data;
+        }
+
+        bool operator!=(const content_hash& rhs) const noexcept
+        {
+            return data != rhs.data;
+        }
+
+        static auto compute(span<const byte> bytes) noexcept -> content_hash;
     };
 
     struct TEMPEST_API source_entry
@@ -38,6 +50,7 @@ namespace tempest::assets
         guid id;
         string source_path;
         content_hash source_hash;
+        uint64_t last_modified_time{0};
     };
 
     struct TEMPEST_API asset_entry

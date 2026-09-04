@@ -3,6 +3,7 @@
 
 #include <tempest/rhi.hpp>
 #include <tempest/slot_map.hpp>
+#include <tempest/vk/calibration.hpp>
 
 #include <VkBootstrap.h>
 #include <VkBootstrapDispatch.h>
@@ -11,6 +12,14 @@
 namespace tempest::rhi::vk
 {
     class execution_port;
+
+    struct query_pool
+    {
+        VkQueryPool handle;
+        query_type type;
+        uint32_t count;
+        enum_mask<pipeline_statistic_flags> pipeline_statistics;
+    };
 
     struct buffer
     {
@@ -114,6 +123,7 @@ namespace tempest::rhi::vk
         [[nodiscard]] auto create_event() -> event_handle override;
         [[nodiscard]] auto create_timeline_semaphore() -> semaphore_handle override;
         [[nodiscard]] auto create_binary_semaphore() -> semaphore_handle override;
+        [[nodiscard]] auto create_query_pool(const query_pool_desc& desc) -> query_pool_handle override;
 
         auto destroy_buffer(buffer_handle buffer) -> void override;
         auto destroy_texture(texture_handle texture) -> void override;
@@ -123,6 +133,13 @@ namespace tempest::rhi::vk
         auto destroy_compute_pipeline(compute_pipeline_handle pipeline) -> void override;
         auto destroy_event(event_handle event) -> void override;
         auto destroy_semaphore(semaphore_handle semaphore) -> void override;
+        auto destroy_query_pool(query_pool_handle pool) -> void override;
+
+        [[nodiscard]] auto get_query_pool_results(query_pool_handle pool, uint32_t first_query, uint32_t query_count,
+                                                  span<uint64_t> results, bool wait = false) -> bool override;
+        [[nodiscard]] auto get_timestamp_period_ns() const noexcept -> float override;
+        [[nodiscard]] auto get_calibrated_gpu_timestamp_offset_ns() const noexcept -> uint64_t override;
+        [[nodiscard]] auto convert_gpu_timestamp_to_cpu_ns(uint64_t gpu_ticks) const noexcept -> uint64_t override;
 
         [[nodiscard]] auto allocate_descriptor(descriptor_type type) -> descriptor_handle override;
         auto free_descriptor(descriptor_type type, descriptor_handle descriptor) -> void override;
@@ -140,6 +157,7 @@ namespace tempest::rhi::vk
         auto set_debug_name(compute_pipeline_handle handle, cstring_view name) -> void override;
         auto set_debug_name(event_handle handle, cstring_view name) -> void override;
         auto set_debug_name(semaphore_handle handle, cstring_view name) -> void override;
+        auto set_debug_name(query_pool_handle handle, cstring_view name) -> void override;
 
         auto set_object_name(uint64_t object_handle, VkObjectType object_type, cstring_view name) const -> void;
 
@@ -253,6 +271,26 @@ namespace tempest::rhi::vk
             return *iter;
         }
 
+        [[nodiscard]] auto get_query_pool(query_pool_handle handle) const -> optional<query_pool>
+        {
+            const auto iter = _query_pools.find(handle.handle);
+            if (iter == _query_pools.end())
+            {
+                return nullopt;
+            }
+            return *iter;
+        }
+
+        [[nodiscard]] auto get_calibrator() noexcept -> timeline_calibrator&
+        {
+            return _calibrator;
+        }
+
+        [[nodiscard]] auto get_calibrator() const noexcept -> const timeline_calibrator&
+        {
+            return _calibrator;
+        }
+
         [[nodiscard]] auto get_global_pipeline_layout() const noexcept -> VkPipelineLayout
         {
             return _default_pipeline_layout;
@@ -307,6 +345,10 @@ namespace tempest::rhi::vk
         slot_map<VkSemaphore> _semaphores;
         slot_map<VkEvent> _events;
         slot_map<raw_surface> _raw_surfaces;
+        slot_map<query_pool> _query_pools;
+
+        mutable timeline_calibrator _calibrator;
+        mutable uint32_t _calibration_query_counter{0};
 
         unique_ptr<execution_port> _graphics_execution_port = nullptr;
         unique_ptr<execution_port> _async_compute_execution_port = nullptr;
