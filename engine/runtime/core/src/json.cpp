@@ -8,25 +8,28 @@ namespace tempest
 {
     namespace
     {
+        constexpr auto json_default_alignment = size_t{16};
+
         auto yyjson_malloc_cb(void* ctx, size_t size) -> void*
         {
             auto* alloc = static_cast<abstract_allocator*>(ctx);
-            return alloc->allocate(size, 16);
+            return alloc->allocate(size, json_default_alignment);
         }
 
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
         auto yyjson_realloc_cb(void* ctx, void* ptr, size_t old_size, size_t size) -> void*
         {
             auto* alloc = static_cast<abstract_allocator*>(ctx);
             if (ptr == nullptr)
             {
-                return alloc->allocate(size, 16);
+                return alloc->allocate(size, json_default_alignment);
             }
             if (size == 0)
             {
                 alloc->deallocate(ptr);
                 return nullptr;
             }
-            auto* new_ptr = alloc->allocate(size, 16);
+            auto* new_ptr = alloc->allocate(size, json_default_alignment);
             if (new_ptr != nullptr)
             {
                 const auto copy_bytes = (old_size < size) ? old_size : size;
@@ -36,6 +39,7 @@ namespace tempest
             return new_ptr;
         }
 
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
         void yyjson_free_cb(void* ctx, void* ptr)
         {
             auto* alloc = static_cast<abstract_allocator*>(ctx);
@@ -55,6 +59,7 @@ namespace tempest
     // json_object_iterator
     //==============================================================================
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     json_object_iterator::json_object_iterator(const yyjson_val* cur, size_t idx, size_t max) noexcept
         : _cur{cur}, _idx{idx}, _max{max}
     {
@@ -89,6 +94,7 @@ namespace tempest
     // json_array_iterator
     //==============================================================================
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     json_array_iterator::json_array_iterator(const yyjson_val* cur, size_t idx, size_t max) noexcept
         : _cur{cur}, _idx{idx}, _max{max}
     {
@@ -167,7 +173,7 @@ namespace tempest
 
     auto json_value::as_bool() const noexcept -> expected<bool, json_error>
     {
-        if (_val && yyjson_is_bool(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_bool(unconst(_val)))
         {
             return yyjson_get_bool(unconst(_val));
         }
@@ -186,10 +192,10 @@ namespace tempest
         }
         if (yyjson_is_uint(unconst(_val)))
         {
-            const auto u = yyjson_get_uint(unconst(_val));
-            if (u <= static_cast<uint64_t>(numeric_limits<int64_t>::max()))
+            const auto uint_val = yyjson_get_uint(unconst(_val));
+            if (uint_val <= static_cast<uint64_t>(numeric_limits<int64_t>::max()))
             {
-                return static_cast<int64_t>(u);
+                return static_cast<int64_t>(uint_val);
             }
             return unexpected(json_error::out_of_range);
         }
@@ -208,10 +214,10 @@ namespace tempest
         }
         if (yyjson_is_sint(unconst(_val)))
         {
-            const auto s = yyjson_get_sint(unconst(_val));
-            if (s >= 0)
+            const auto sint_val = yyjson_get_sint(unconst(_val));
+            if (sint_val >= 0)
             {
-                return static_cast<uint64_t>(s);
+                return static_cast<uint64_t>(sint_val);
             }
             return unexpected(json_error::out_of_range);
         }
@@ -304,7 +310,7 @@ namespace tempest
 
     auto json_value::as_double() const noexcept -> expected<double, json_error>
     {
-        if (_val && yyjson_is_real(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_real(unconst(_val)))
         {
             return yyjson_get_real(unconst(_val));
         }
@@ -313,22 +319,22 @@ namespace tempest
 
     auto json_value::as_float() const noexcept -> expected<float, json_error>
     {
-        if (_val && yyjson_is_real(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_real(unconst(_val)))
         {
-            const auto d = yyjson_get_real(unconst(_val));
-            if (d > static_cast<double>(numeric_limits<float>::max()) ||
-                d < static_cast<double>(numeric_limits<float>::lowest()))
+            const auto double_val = yyjson_get_real(unconst(_val));
+            if (double_val > static_cast<double>(numeric_limits<float>::max()) ||
+                double_val < static_cast<double>(numeric_limits<float>::lowest()))
             {
                 return unexpected(json_error::out_of_range);
             }
-            return static_cast<float>(d);
+            return static_cast<float>(double_val);
         }
         return unexpected(json_error::type_mismatch);
     }
 
     auto json_value::as_number() const noexcept -> expected<double, json_error>
     {
-        if (_val && yyjson_is_num(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_num(unconst(_val)))
         {
             return yyjson_get_num(unconst(_val));
         }
@@ -337,7 +343,7 @@ namespace tempest
 
     auto json_value::as_string() const noexcept -> expected<string_view, json_error>
     {
-        if (_val && yyjson_is_str(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_str(unconst(_val)))
         {
             return string_view{yyjson_get_str(unconst(_val)), yyjson_get_len(unconst(_val))};
         }
@@ -346,7 +352,7 @@ namespace tempest
 
     auto json_value::as_object() const noexcept -> expected<json_object, json_error>
     {
-        if (_val && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
         {
             return json_object{_val};
         }
@@ -355,7 +361,7 @@ namespace tempest
 
     auto json_value::as_array() const noexcept -> expected<json_array, json_error>
     {
-        if (_val && yyjson_is_arr(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)))
         {
             return json_array{_val};
         }
@@ -364,7 +370,7 @@ namespace tempest
 
     auto json_value::operator[](string_view key) const noexcept -> json_value
     {
-        if (_val && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
         {
             return json_value{yyjson_obj_getn(unconst(_val), key.data(), key.size())};
         }
@@ -373,7 +379,7 @@ namespace tempest
 
     auto json_value::operator[](size_t index) const noexcept -> json_value
     {
-        if (_val && yyjson_is_arr(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)))
         {
             return json_value{yyjson_arr_get(unconst(_val), index)};
         }
@@ -404,7 +410,7 @@ namespace tempest
 
     auto json_value::contains(string_view key) const noexcept -> bool
     {
-        if (_val && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
         {
             return yyjson_obj_getn(unconst(_val), key.data(), key.size()) != nullptr;
         }
@@ -454,7 +460,7 @@ namespace tempest
 
     auto json_object::begin() const noexcept -> json_object_iterator
     {
-        if (_val && yyjson_is_obj(unconst(_val)) && unsafe_yyjson_get_len(unconst(_val)) > 0)
+        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)) && unsafe_yyjson_get_len(unconst(_val)) > 0)
         {
             return json_object_iterator{unsafe_yyjson_get_first(unconst(_val)), 0,
                                         unsafe_yyjson_get_len(unconst(_val))};
@@ -464,7 +470,7 @@ namespace tempest
 
     auto json_object::end() const noexcept -> json_object_iterator
     {
-        if (_val && yyjson_is_obj(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_obj(unconst(_val)))
         {
             const auto len = unsafe_yyjson_get_len(unconst(_val));
             return json_object_iterator{nullptr, len, len};
@@ -506,7 +512,7 @@ namespace tempest
 
     auto json_array::begin() const noexcept -> json_array_iterator
     {
-        if (_val && yyjson_is_arr(unconst(_val)) && unsafe_yyjson_get_len(unconst(_val)) > 0)
+        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)) && unsafe_yyjson_get_len(unconst(_val)) > 0)
         {
             return json_array_iterator{unsafe_yyjson_get_first(unconst(_val)), 0, unsafe_yyjson_get_len(unconst(_val))};
         }
@@ -515,7 +521,7 @@ namespace tempest
 
     auto json_array::end() const noexcept -> json_array_iterator
     {
-        if (_val && yyjson_is_arr(unconst(_val)))
+        if ((_val != nullptr) && yyjson_is_arr(unconst(_val)))
         {
             const auto len = unsafe_yyjson_get_len(unconst(_val));
             return json_array_iterator{nullptr, len, len};
@@ -567,7 +573,7 @@ namespace tempest
 
         auto err = yyjson_read_err{};
         auto* doc = yyjson_read_opts(const_cast<char*>(json_str.data()), json_str.size(), 0, &alc, &err);
-        if (!doc)
+        if (doc == nullptr)
         {
             return unexpected(json_error::parse_error);
         }
@@ -587,7 +593,7 @@ namespace tempest
         auto err = yyjson_read_err{};
         auto* doc = yyjson_read_opts(const_cast<char*>(reinterpret_cast<const char*>(json_bytes.data())),
                                      json_bytes.size(), 0, &alc, &err);
-        if (!doc)
+        if (doc == nullptr)
         {
             return unexpected(json_error::parse_error);
         }

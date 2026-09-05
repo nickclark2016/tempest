@@ -78,6 +78,12 @@ namespace tempest
     /// @brief Unsigned integer type capable of holding a pointer.
     using uintptr_t = decltype(sizeof(static_cast<void*>(nullptr)));
 
+    /// @brief Maximum-width signed integer type.
+    using intmax_t = int64_t;
+
+    /// @brief Maximum-width unsigned integer type.
+    using uintmax_t = uint64_t;
+
     /// @brief Integer type representing a byte as specified by the C++ language standard.
     enum class byte : unsigned char
     {
@@ -85,56 +91,56 @@ namespace tempest
 
     /// @brief Converts a byte to an integer type.
     /// @tparam T The integer type to convert to.
-    /// @param b The byte to convert.
+    /// @param byte_val The byte to convert.
     /// @return The byte converted to the specified integer type.
     template <typename T>
-    constexpr auto to_integer(byte b) noexcept -> T
+    constexpr auto to_integer(byte byte_val) noexcept -> T
     {
-        return static_cast<T>(b);
+        return static_cast<T>(byte_val);
     }
 
     /// @brief Left shift assignment operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr auto operator<<=(byte& b, T shift) noexcept -> byte&
+    constexpr auto operator<<=(byte& byte_val, T shift) noexcept -> byte&
     {
-        return b = byte(to_integer<unsigned int>(b) << shift);
+        return byte_val = byte(to_integer<unsigned int>(byte_val) << shift);
     }
 
     /// @brief Right shift assignment operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr auto operator>>=(byte& b, T shift) noexcept -> byte&
+    constexpr auto operator>>=(byte& byte_val, T shift) noexcept -> byte&
     {
-        return b = byte(to_integer<unsigned int>(b) >> shift);
+        return byte_val = byte(to_integer<unsigned int>(byte_val) >> shift);
     }
 
     /// @brief Left shift operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr auto operator<<(byte b, T shift) noexcept -> byte
+    constexpr auto operator<<(byte byte_val, T shift) noexcept -> byte
     {
-        return byte(to_integer<unsigned int>(b) << shift);
+        return byte(to_integer<unsigned int>(byte_val) << shift);
     }
 
     /// @brief Right shift operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr auto operator>>(byte b, T shift) noexcept -> byte
+    constexpr auto operator>>(byte byte_val, T shift) noexcept -> byte
     {
-        return byte(to_integer<unsigned int>(b) >> shift);
+        return byte(to_integer<unsigned int>(byte_val) >> shift);
     }
 
     /// @brief Bitwise AND assignment operator for byte.
@@ -192,11 +198,11 @@ namespace tempest
     }
 
     /// @brief Bitwise NOT operator for byte.
-    /// @param b The byte to invert.
+    /// @param byte_val The byte to invert.
     /// @return The inverted byte.
-    constexpr auto operator~(byte b) noexcept -> byte
+    constexpr auto operator~(byte byte_val) noexcept -> byte
     {
-        return byte(~to_integer<unsigned int>(b));
+        return byte(~to_integer<unsigned int>(byte_val));
     }
 } // namespace tempest
 
