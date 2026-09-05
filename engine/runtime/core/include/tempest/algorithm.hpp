@@ -612,6 +612,187 @@ namespace tempest
     {
         return find_if(begin, end, p) == end;
     }
+
+    namespace detail
+    {
+        template <random_access_iterator RandomIt, typename Compare>
+        constexpr void insertion_sort(RandomIt first, RandomIt last, Compare comp)
+        {
+            if (first == last)
+            {
+                return;
+            }
+
+            for (auto i = first + 1; i != last; ++i)
+            {
+                auto val = tempest::move(*i);
+                auto j = i;
+                while (j != first && comp(val, *(j - 1)))
+                {
+                    *j = tempest::move(*(j - 1));
+                    --j;
+                }
+                *j = tempest::move(val);
+            }
+        }
+
+        template <random_access_iterator RandomIt, typename Compare>
+        constexpr void sift_down(RandomIt first, iter_difference_t<RandomIt> root, iter_difference_t<RandomIt> len,
+                                 Compare comp)
+        {
+            while (2 * root + 1 < len)
+            {
+                auto child = 2 * root + 1;
+                if (child + 1 < len && comp(*(first + child), *(first + child + 1)))
+                {
+                    ++child;
+                }
+                if (comp(*(first + root), *(first + child)))
+                {
+                    tempest::swap(*(first + root), *(first + child));
+                    root = child;
+                }
+                else
+                {
+                    return;
+                }
+            }
+        }
+
+        template <random_access_iterator RandomIt, typename Compare>
+        constexpr void heap_sort(RandomIt first, RandomIt last, Compare comp)
+        {
+            using diff_t = iter_difference_t<RandomIt>;
+            const auto len = static_cast<diff_t>(last - first);
+            if (len <= 1)
+            {
+                return;
+            }
+
+            for (diff_t i = (len - 2) / 2; i >= 0; --i)
+            {
+                sift_down(first, i, len, comp);
+                if (i == 0)
+                {
+                    break;
+                }
+            }
+
+            for (diff_t i = len - 1; i > 0; --i)
+            {
+                tempest::swap(*first, *(first + i));
+                sift_down(first, diff_t{0}, i, comp);
+            }
+        }
+
+        template <random_access_iterator RandomIt, typename Compare>
+        constexpr auto median_of_three(RandomIt a, RandomIt b, RandomIt c, Compare comp) -> RandomIt
+        {
+            if (comp(*a, *b))
+            {
+                if (comp(*b, *c))
+                {
+                    return b;
+                }
+                return comp(*a, *c) ? c : a;
+            }
+            if (comp(*a, *c))
+            {
+                return a;
+            }
+            return comp(*b, *c) ? c : b;
+        }
+
+        template <random_access_iterator RandomIt, typename Compare>
+        constexpr void introsort_loop(RandomIt first, RandomIt last, iter_difference_t<RandomIt> depth_limit,
+                                      Compare comp)
+        {
+            while (last - first > 16)
+            {
+                if (depth_limit == 0)
+                {
+                    heap_sort(first, last, comp);
+                    return;
+                }
+                --depth_limit;
+
+                auto mid = first + (last - first) / 2;
+                auto pivot_it = median_of_three(first, mid, last - 1, comp);
+                tempest::swap(*pivot_it, *(last - 1));
+
+                auto i = first;
+                auto j = last - 2;
+
+                while (true)
+                {
+                    while (i <= j && comp(*i, *(last - 1)))
+                    {
+                        ++i;
+                    }
+                    while (i <= j && comp(*(last - 1), *j))
+                    {
+                        --j;
+                    }
+                    if (i >= j)
+                    {
+                        break;
+                    }
+                    tempest::swap(*i, *j);
+                    ++i;
+                    --j;
+                }
+                tempest::swap(*i, *(last - 1));
+
+                if (i - first < last - (i + 1))
+                {
+                    introsort_loop(first, i, depth_limit, comp);
+                    first = i + 1;
+                }
+                else
+                {
+                    introsort_loop(i + 1, last, depth_limit, comp);
+                    last = i;
+                }
+            }
+            insertion_sort(first, last, comp);
+        }
+    } // namespace detail
+
+    /// @brief Sorts the elements in the range [first, last) in non-descending order using comp.
+    /// @tparam RandomIt Random-access iterator type.
+    /// @tparam Compare Comparison function object type.
+    /// @param first Beginning of range to sort.
+    /// @param last End of range to sort.
+    /// @param comp Binary predicate taking two elements and returning true if first is less than second.
+    template <random_access_iterator RandomIt, typename Compare>
+    constexpr void sort(RandomIt first, RandomIt last, Compare comp)
+    {
+        const auto count = last - first;
+        if (count <= 1)
+        {
+            return;
+        }
+
+        using diff_t = iter_difference_t<RandomIt>;
+        auto depth_limit = diff_t{0};
+        for (auto temp = count; temp > 0; temp >>= 1)
+        {
+            ++depth_limit;
+        }
+        depth_limit *= 2;
+
+        detail::introsort_loop(first, last, depth_limit, comp);
+    }
+
+    /// @brief Sorts the elements in the range [first, last) in non-descending order using operator<.
+    /// @tparam RandomIt Random-access iterator type.
+    /// @param first Beginning of range to sort.
+    /// @param last End of range to sort.
+    template <random_access_iterator RandomIt>
+    constexpr void sort(RandomIt first, RandomIt last)
+    {
+        tempest::sort(first, last, [](const auto& lhs, const auto& rhs) { return lhs < rhs; });
+    }
 } // namespace tempest
 
 #endif // tempest_core_algorithm_hpp

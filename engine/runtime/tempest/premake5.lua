@@ -134,7 +134,6 @@ scoped.project('tempest', function()
         'yyjson',
         'tinyexr',
         'tlsf',
-        'vma',
     }
 
     scoped.filter({
@@ -195,7 +194,6 @@ scoped.project('tempest', function()
                 'yyjson',
                 'tinyexr',
                 'tlsf',
-                'vma',
                 'rhi-vk',
            }
         end)

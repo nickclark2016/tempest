@@ -89,6 +89,7 @@ scoped.group('Tests', function()
         uses {
             'googletest',
             'tempest',
+            'tinyexr',
         }
 
         externalwarnings 'Off'

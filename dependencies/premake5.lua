@@ -4,7 +4,6 @@ scoped.group('Vendor', function()
     include 'imgui'
     include 'miniz'
     include 'yyjson'
-    include 'spdlog'
     include 'stb'
     include 'tinyexr'
     include 'tlsf'

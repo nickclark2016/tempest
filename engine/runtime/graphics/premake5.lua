@@ -58,7 +58,6 @@ scoped.project('graphics', function()
 
         links {
             'graphics',
-            'vma',
         }
     end)
 
