@@ -14,13 +14,13 @@
 namespace tempest
 {
     template <typename T>
-    constexpr T* addressof(T& arg) noexcept
+    constexpr auto addressof(T& arg) noexcept -> T*
     {
         return __builtin_addressof(arg);
     }
 
     template <typename T>
-    const T* addressof(const T&&) = delete;
+    auto addressof(const T&&) -> const T* = delete;
 
     template <typename T>
     struct pointer_traits;
@@ -35,7 +35,7 @@ namespace tempest
         template <typename U>
         using rebind = U*;
 
-        static pointer pointer_to(element_type& p) noexcept
+        static auto pointer_to(element_type& p) noexcept -> pointer
         {
             if constexpr (requires { T::pointer_to(p); })
             {
@@ -50,13 +50,13 @@ namespace tempest
 
     template <typename T>
         requires(!is_function_v<T>)
-    [[nodiscard]] inline constexpr auto to_address(T* p) noexcept
+    [[nodiscard]] constexpr auto to_address(T* p) noexcept
     {
         return p;
     }
 
     template <typename T>
-    [[nodiscard]] inline constexpr auto to_address(const T& p) noexcept
+    [[nodiscard]] constexpr auto to_address(const T& p) noexcept
     {
         if constexpr (requires { pointer_traits<T>::to_address(p); })
         {
@@ -69,13 +69,13 @@ namespace tempest
     }
 
     template <typename T, typename... Args>
-    [[nodiscard]] inline constexpr T* construct_at(T* ptr, Args&&... args)
+    [[nodiscard]] constexpr auto construct_at(T* ptr, Args&&... args) -> T*
     {
         return ::new (static_cast<void*>(ptr)) T(tempest::forward<Args>(args)...);
     }
 
     template <typename T>
-    inline constexpr void destroy_at(T* ptr)
+    constexpr void destroy_at(T* ptr)
     {
         if constexpr (is_array_v<T>)
         {
@@ -91,7 +91,7 @@ namespace tempest
     }
 
     template <forward_iterator ForwardIt>
-    inline constexpr void destroy(ForwardIt first, ForwardIt last)
+    constexpr void destroy(ForwardIt first, ForwardIt last)
     {
         for (; first != last; ++first)
         {
@@ -100,7 +100,7 @@ namespace tempest
     }
 
     template <forward_iterator ForwardIt>
-    inline constexpr void destroy_n(ForwardIt first, size_t n)
+    constexpr void destroy_n(ForwardIt first, size_t n)
     {
         for (size_t i = 0; i < n; ++i)
         {
@@ -110,7 +110,7 @@ namespace tempest
     }
 
     template <forward_iterator ForwardIt, typename T>
-    inline constexpr void uninitialized_fill(ForwardIt first, ForwardIt last, const T& value)
+    constexpr void uninitialized_fill(ForwardIt first, ForwardIt last, const T& value)
     {
         for (; first != last; ++first)
         {
@@ -119,7 +119,7 @@ namespace tempest
     }
 
     template <forward_iterator ForwardIt, integral Count, typename T>
-    inline constexpr void uninitialized_fill_n(ForwardIt first, Count n, const T& value)
+    constexpr void uninitialized_fill_n(ForwardIt first, Count n, const T& value)
     {
         for (Count i = 0; i < n; ++i)
         {
@@ -129,7 +129,7 @@ namespace tempest
     }
 
     template <input_iterator InputIt, forward_iterator FwdIt>
-    inline constexpr FwdIt uninitialized_copy(InputIt first, InputIt last, FwdIt d_first)
+    constexpr auto uninitialized_copy(InputIt first, InputIt last, FwdIt d_first) -> FwdIt
     {
         for (; first != last; ++first, ++d_first)
         {
@@ -139,7 +139,7 @@ namespace tempest
     }
 
     template <input_iterator InputIt, integral Size, forward_iterator FwdIt>
-    inline constexpr FwdIt uninitialized_copy_n(InputIt first, Size n, FwdIt d_first)
+    constexpr auto uninitialized_copy_n(InputIt first, Size n, FwdIt d_first) -> FwdIt
     {
         for (Size i = 0; i < n; ++i)
         {
@@ -151,7 +151,7 @@ namespace tempest
     }
 
     template <input_iterator InputIt, forward_iterator FwdIt>
-    inline constexpr FwdIt uninitialized_move(InputIt first, InputIt last, FwdIt d_first)
+    constexpr auto uninitialized_move(InputIt first, InputIt last, FwdIt d_first) -> FwdIt
     {
         for (; first != last; ++first, ++d_first)
         {
@@ -161,7 +161,7 @@ namespace tempest
     }
 
     template <input_iterator InputIt, integral Size, forward_iterator FwdIt>
-    inline constexpr FwdIt uninitialized_move_n(InputIt first, Size n, FwdIt d_first)
+    constexpr auto uninitialized_move_n(InputIt first, Size n, FwdIt d_first) -> FwdIt
     {
         for (Size i = 0; i < n; ++i)
         {
@@ -178,7 +178,7 @@ namespace tempest
         no_copy(const no_copy&) = delete;
         virtual ~no_copy() = default;
 
-        no_copy& operator=(const no_copy&) = delete;
+        auto operator=(const no_copy&) -> no_copy& = delete;
 
       private:
     };
@@ -189,7 +189,7 @@ namespace tempest
         no_move(no_move&&) noexcept = delete;
         virtual ~no_move() = default;
 
-        no_move& operator=(no_move&&) noexcept = delete;
+        auto operator=(no_move&&) noexcept -> no_move& = delete;
     };
 
     class no_copy_move : public no_copy, no_move
@@ -200,7 +200,7 @@ namespace tempest
     {
       public:
         virtual ~abstract_allocator() = default;
-        virtual void* allocate(size_t size, size_t alignment, source_location loc = source_location::current()) = 0;
+        virtual auto allocate(size_t size, size_t alignment, source_location loc = source_location::current()) -> void* = 0;
         virtual void deallocate(void* ptr) = 0;
     };
 
@@ -213,28 +213,28 @@ namespace tempest
 
         ~stack_allocator() override;
 
-        stack_allocator& operator=(const stack_allocator&) = delete;
-        stack_allocator& operator=(stack_allocator&& rhs) noexcept;
+        auto operator=(const stack_allocator&) -> stack_allocator& = delete;
+        auto operator=(stack_allocator&& rhs) noexcept -> stack_allocator&;
 
-        [[nodiscard]] void* allocate(size_t size, size_t alignment,
-                                     source_location loc = source_location::current()) override;
+        [[nodiscard]] auto allocate(size_t size, size_t alignment,
+                                     source_location loc = source_location::current()) -> void* override;
         void deallocate(void* ptr) override;
 
-        size_t get_marker() const noexcept;
+        [[nodiscard]] auto get_marker() const noexcept -> size_t;
         void free_marker(size_t marker);
 
         void release();
         void reset();
 
         template <typename T>
-        T* allocate_typed(size_t count, source_location loc = source_location::current())
+        auto allocate_typed(size_t count, source_location loc = source_location::current()) -> T*
         {
             void* ptr = allocate(sizeof(T) * count, alignof(T), loc);
             return static_cast<T*>(ptr);
         }
 
       private:
-        byte* _buffer{0};
+        byte* _buffer{nullptr};
         size_t _capacity{0};
         size_t _allocated_bytes{0};
     };
@@ -247,11 +247,11 @@ namespace tempest
         heap_allocator(heap_allocator&& other) noexcept;
         ~heap_allocator() override;
 
-        heap_allocator& operator=(const heap_allocator&) = delete;
-        heap_allocator& operator=(heap_allocator&& rhs) noexcept;
+        auto operator=(const heap_allocator&) -> heap_allocator& = delete;
+        auto operator=(heap_allocator&& rhs) noexcept -> heap_allocator&;
 
-        [[nodiscard]] void* allocate(size_t size, size_t alignment,
-                                     source_location loc = source_location::current()) override;
+        [[nodiscard]] auto allocate(size_t size, size_t alignment,
+                                     source_location loc = source_location::current()) -> void* override;
         void deallocate(void* ptr) override;
 
       private:
@@ -261,6 +261,22 @@ namespace tempest
         size_t _max_size{0};
 
         void _release();
+    };
+
+    class TEMPEST_API system_allocator final : public abstract_allocator
+    {
+      public:
+        system_allocator() = default;
+        ~system_allocator() override = default;
+
+        system_allocator(const system_allocator&) = default;
+        system_allocator(system_allocator&&) noexcept = default;
+        auto operator=(const system_allocator&) -> system_allocator& = default;
+        auto operator=(system_allocator&&) noexcept -> system_allocator& = default;
+
+        [[nodiscard]] auto allocate(size_t size, size_t alignment,
+                                     source_location loc = source_location::current()) -> void* override;
+        void deallocate(void* ptr) override;
     };
 
     template <typename T, size_t N>
@@ -290,14 +306,16 @@ namespace tempest
         constexpr allocator(allocator&&) noexcept = default;
 
         template <typename U>
-        constexpr allocator(const allocator<U>&) noexcept {}
+        constexpr allocator(const allocator<U>& /*unused*/) noexcept
+        {
+        }
 
         constexpr ~allocator() = default;
 
-        allocator& operator=(const allocator&) noexcept = default;
-        allocator& operator=(allocator&&) noexcept = default;
+        auto operator=(const allocator&) noexcept -> allocator& = default;
+        auto operator=(allocator&&) noexcept -> allocator& = default;
 
-        [[nodiscard]] constexpr T* allocate(size_t n)
+        [[nodiscard]] constexpr auto allocate(size_t n) -> T*
         {
             void* data = ::operator new[](sizeof(T) * n, std::align_val_t(alignof(T)), std::nothrow);
             return static_cast<T*>(data);
@@ -310,7 +328,7 @@ namespace tempest
     };
 
     template <typename T, typename U>
-    [[nodiscard]] constexpr bool operator==(const allocator<T>&, const allocator<U>&) noexcept
+    [[nodiscard]] constexpr auto operator==(const allocator<T>& /*unused*/, const allocator<U>& /*unused*/) noexcept -> bool
     {
         return true;
     }
@@ -344,7 +362,7 @@ namespace tempest
         template <::tempest::propagate_on_container_copy_assignment Alloc>
         struct propagate_on_container_copy_assignment<Alloc>
         {
-            using type = typename Alloc::propagate_on_container_copy_assignment;
+            using type = Alloc::propagate_on_container_copy_assignment;
         };
 
         template <typename Alloc>
@@ -356,7 +374,7 @@ namespace tempest
         template <::tempest::propagate_on_container_move_assignment Alloc>
         struct propagate_on_container_move_assignment<Alloc>
         {
-            using type = typename Alloc::propagate_on_container_move_assignment;
+            using type = Alloc::propagate_on_container_move_assignment;
         };
 
         template <typename Alloc>
@@ -368,19 +386,19 @@ namespace tempest
         template <::tempest::propagate_on_container_swap Alloc>
         struct propagate_on_container_swap<Alloc>
         {
-            using type = typename Alloc::propagate_on_container_swap;
+            using type = Alloc::propagate_on_container_swap;
         };
 
         template <typename Alloc>
         struct is_always_equal
         {
-            using type = typename is_empty<Alloc>::type;
+            using type = is_empty<Alloc>::type;
         };
 
         template <::tempest::is_always_equal Alloc>
         struct is_always_equal<Alloc>
         {
-            using type = typename Alloc::is_always_equal;
+            using type = Alloc::is_always_equal;
         };
 
         template <typename Alloc>
@@ -392,7 +410,7 @@ namespace tempest
         template <::tempest::select_on_container_copy_construction Alloc>
         struct select_on_container_copy_construction<Alloc>
         {
-            using type = typename Alloc::select_on_container_copy_construction;
+            using type = Alloc::select_on_container_copy_construction;
         };
     } // namespace detail
 
@@ -400,9 +418,9 @@ namespace tempest
     struct allocator_traits
     {
         using allocator_type = Alloc;
-        using value_type = typename Alloc::value_type;
-        using size_type = typename Alloc::size_type;
-        using difference_type = typename Alloc::difference_type;
+        using value_type = Alloc::value_type;
+        using size_type = Alloc::size_type;
+        using difference_type = Alloc::difference_type;
         using pointer = value_type*;
         using const_pointer = const value_type*;
         using reference = value_type&;
@@ -411,11 +429,11 @@ namespace tempest
         using const_void_pointer = const void*;
 
         using propagate_on_container_copy_assignment =
-            typename detail::propagate_on_container_copy_assignment<Alloc>::type;
+            detail::propagate_on_container_copy_assignment<Alloc>::type;
         using propagate_on_container_move_assignment =
-            typename detail::propagate_on_container_move_assignment<Alloc>::type;
-        using propagate_on_container_swap = typename detail::propagate_on_container_swap<Alloc>::type;
-        using is_always_equal = typename detail::is_always_equal<Alloc>::type;
+            detail::propagate_on_container_move_assignment<Alloc>::type;
+        using propagate_on_container_swap = detail::propagate_on_container_swap<Alloc>::type;
+        using is_always_equal = detail::is_always_equal<Alloc>::type;
 
         template <typename T>
         using rebind_alloc = allocator<T>;
@@ -423,7 +441,7 @@ namespace tempest
         template <typename T>
         using rebind_traits = allocator_traits<rebind_alloc<T>>;
 
-        [[nodiscard]] static constexpr pointer allocate(allocator_type& alloc, size_type n);
+        [[nodiscard]] static constexpr auto allocate(allocator_type& alloc, size_type n) -> pointer;
         static constexpr void deallocate(allocator_type& alloc, pointer p, size_type n);
 
         template <typename T, typename... Args>
@@ -432,27 +450,27 @@ namespace tempest
         template <typename T>
         static constexpr void destroy(allocator_type& alloc, T* p);
 
-        static constexpr size_type max_size(const allocator_type& alloc) noexcept;
+        static constexpr auto max_size(const allocator_type& alloc) noexcept -> size_type;
 
-        static constexpr Alloc select_on_container_copy_construction(const Alloc& rhs);
+        static constexpr auto select_on_container_copy_construction(const Alloc& rhs) -> Alloc;
     };
 
     template <typename Alloc>
-    inline constexpr allocator_traits<Alloc>::pointer allocator_traits<Alloc>::allocate(allocator_type& alloc,
-                                                                                        size_type n)
+    constexpr auto allocator_traits<Alloc>::allocate(allocator_type& alloc,
+                                                                                        size_type n) -> allocator_traits<Alloc>::pointer
     {
         return alloc.allocate(n);
     }
 
     template <typename Alloc>
-    inline constexpr void allocator_traits<Alloc>::deallocate(allocator_type& alloc, pointer p, size_type n)
+    constexpr void allocator_traits<Alloc>::deallocate(allocator_type& alloc, pointer p, size_type n)
     {
         alloc.deallocate(p, n);
     }
 
     template <typename Alloc>
     template <typename T, typename... Args>
-    inline constexpr void allocator_traits<Alloc>::construct([[maybe_unused]] allocator_type& alloc, T* p,
+    constexpr void allocator_traits<Alloc>::construct([[maybe_unused]] allocator_type& alloc, T* p,
                                                              Args&&... args)
     {
         (void)::tempest::construct_at(p, tempest::forward<Args>(args)...);
@@ -460,20 +478,20 @@ namespace tempest
 
     template <typename Alloc>
     template <typename T>
-    inline constexpr void allocator_traits<Alloc>::destroy([[maybe_unused]] allocator_type& alloc, T* p)
+    constexpr void allocator_traits<Alloc>::destroy([[maybe_unused]] allocator_type& alloc, T* p)
     {
         ::tempest::destroy_at(p);
     }
 
     template <typename Alloc>
-    inline constexpr typename allocator_traits<Alloc>::size_type allocator_traits<Alloc>::max_size(
-        [[maybe_unused]] const allocator_type& alloc) noexcept
+    constexpr auto allocator_traits<Alloc>::max_size(
+        [[maybe_unused]] const allocator_type& alloc) noexcept -> allocator_traits<Alloc>::size_type
     {
         return numeric_limits<size_type>::max() / sizeof(value_type);
     }
 
     template <typename Alloc>
-    inline constexpr Alloc allocator_traits<Alloc>::select_on_container_copy_construction(const Alloc& rhs)
+    constexpr auto allocator_traits<Alloc>::select_on_container_copy_construction(const Alloc& rhs) -> Alloc
     {
         if constexpr (::tempest::select_on_container_copy_construction<Alloc>)
         {
@@ -492,7 +510,9 @@ namespace tempest
 
         template <typename U>
             requires convertible_to<U*, T*>
-        constexpr default_delete(const default_delete<U>&) noexcept {}
+        constexpr default_delete(const default_delete<U>& /*unused*/) noexcept
+        {
+        }
 
         void operator()(T* ptr) const noexcept
         {
@@ -507,7 +527,9 @@ namespace tempest
 
         template <typename U>
             requires convertible_to<U (*)[], T (*)[]>
-        constexpr default_delete(const default_delete<U[]>&) noexcept {}
+        constexpr default_delete(const default_delete<U[]>& /*unused*/) noexcept
+        {
+        }
 
         void operator()(T* ptr) const noexcept
         {
@@ -523,7 +545,7 @@ namespace tempest
         using element_type = T;
 
         constexpr unique_ptr() noexcept = default;
-        
+
         constexpr unique_ptr(nullptr_t) noexcept
         {
         }
@@ -558,7 +580,7 @@ namespace tempest
             }
         }
 
-        constexpr unique_ptr& operator=(unique_ptr&& other) noexcept
+        constexpr auto operator=(unique_ptr&& other) noexcept -> unique_ptr&
         {
             if (this == addressof(other)) [[unlikely]]
             {
@@ -571,23 +593,22 @@ namespace tempest
         }
 
         template <typename U, typename E>
-        constexpr unique_ptr& operator=(unique_ptr<U, E>&& other) noexcept
+        constexpr auto operator=(unique_ptr<U, E>&& other) noexcept -> unique_ptr&
         {
             reset(other.release());
             _deleter = tempest::move(other._deleter);
             return *this;
         }
 
-        constexpr unique_ptr& operator=(nullptr_t) noexcept
+        constexpr auto operator=(nullptr_t) noexcept -> unique_ptr&
         {
             reset();
             return *this;
         }
 
-        unique_ptr& operator=(const unique_ptr&) = delete;
+        auto operator=(const unique_ptr&) -> unique_ptr& = delete;
 
-
-        [[nodiscard]] constexpr pointer release() noexcept
+        [[nodiscard]] constexpr auto release() noexcept -> pointer
         {
             return tempest::exchange(_ptr, nullptr);
         }
@@ -613,17 +634,17 @@ namespace tempest
             swap(_deleter, other._deleter);
         }
 
-        constexpr pointer get() const noexcept
+        constexpr auto get() const noexcept -> pointer
         {
             return _ptr;
         }
 
-        constexpr Deleter& get_deleter() noexcept
+        constexpr auto get_deleter() noexcept -> Deleter&
         {
             return _deleter;
         }
 
-        constexpr const Deleter& get_deleter() const noexcept
+        constexpr auto get_deleter() const noexcept -> const Deleter&
         {
             return _deleter;
         }
@@ -633,12 +654,12 @@ namespace tempest
             return _ptr != nullptr;
         }
 
-        constexpr add_lvalue_reference_t<T> operator*() const noexcept(noexcept(*declval<pointer>()))
+        constexpr auto operator*() const noexcept(noexcept(*declval<pointer>())) -> add_lvalue_reference_t<T>
         {
             return *_ptr;
         }
 
-        constexpr pointer operator->() const noexcept
+        constexpr auto operator->() const noexcept -> pointer
         {
             return _ptr;
         }
@@ -659,48 +680,48 @@ namespace tempest
     }
 
     template <typename T, typename... Args>
-    inline constexpr unique_ptr<T> make_unique(Args&&... args)
+    constexpr auto make_unique(Args&&... args) -> unique_ptr<T>
     {
         return unique_ptr<T>(new T(tempest::forward<Args>(args)...));
     }
 
     template <typename T, typename Deleter>
-    inline bool operator==(const unique_ptr<T, Deleter>& lhs, const unique_ptr<T, Deleter>& rhs) noexcept
+    inline auto operator==(const unique_ptr<T, Deleter>& lhs, const unique_ptr<T, Deleter>& rhs) noexcept -> bool
     {
         return lhs.get() == rhs.get();
     }
 
     template <typename T, typename Deleter>
-    inline bool operator==(const unique_ptr<T, Deleter>& lhs, nullptr_t) noexcept
+    inline auto operator==(const unique_ptr<T, Deleter>& lhs, nullptr_t) noexcept -> bool
     {
         return !lhs;
     }
 
     template <typename T, typename Deleter>
-    inline bool operator==(nullptr_t, const unique_ptr<T, Deleter>& rhs) noexcept
+    inline auto operator==(nullptr_t, const unique_ptr<T, Deleter>& rhs) noexcept -> bool
     {
         return !rhs;
     }
 
     template <typename T, typename Deleter>
-    inline bool operator!=(const unique_ptr<T, Deleter>& lhs, const unique_ptr<T, Deleter>& rhs) noexcept
+    inline auto operator!=(const unique_ptr<T, Deleter>& lhs, const unique_ptr<T, Deleter>& rhs) noexcept -> bool
     {
         return !(lhs == rhs);
     }
 
     template <typename T, typename Deleter>
-    inline bool operator!=(const unique_ptr<T, Deleter>& lhs, nullptr_t) noexcept
+    inline auto operator!=(const unique_ptr<T, Deleter>& lhs, nullptr_t) noexcept -> bool
     {
         return static_cast<bool>(lhs);
     }
 
     template <typename T, typename Deleter>
-    inline bool operator!=(nullptr_t, const unique_ptr<T, Deleter>& rhs) noexcept
+    inline auto operator!=(nullptr_t, const unique_ptr<T, Deleter>& rhs) noexcept -> bool
     {
         return static_cast<bool>(rhs);
     }
 
-    void* aligned_alloc(size_t n, size_t alignment);
+    auto aligned_alloc(size_t n, size_t alignment) -> void*;
     void aligned_free(void* ptr);
 } // namespace tempest
 

@@ -44,29 +44,29 @@ namespace tempest
 
         ~basic_string_view() = default;
 
-        constexpr basic_string_view& operator=(const basic_string_view&) noexcept = default;
-        constexpr basic_string_view& operator=(basic_string_view&&) noexcept = default;
+        constexpr auto operator=(const basic_string_view&) noexcept -> basic_string_view& = default;
+        constexpr auto operator=(basic_string_view&&) noexcept -> basic_string_view& = default;
 
-        [[nodiscard]] constexpr const_iterator begin() const noexcept;
-        [[nodiscard]] constexpr const_iterator cbegin() const noexcept;
-        [[nodiscard]] constexpr const_iterator end() const noexcept;
-        [[nodiscard]] constexpr const_iterator cend() const noexcept;
+        [[nodiscard]] constexpr auto begin() const noexcept -> const_iterator;
+        [[nodiscard]] constexpr auto cbegin() const noexcept -> const_iterator;
+        [[nodiscard]] constexpr auto end() const noexcept -> const_iterator;
+        [[nodiscard]] constexpr auto cend() const noexcept -> const_iterator;
 
-        [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept;
-        [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept;
-        [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept;
-        [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept;
+        [[nodiscard]] constexpr auto rbegin() const noexcept -> const_reverse_iterator;
+        [[nodiscard]] constexpr auto crbegin() const noexcept -> const_reverse_iterator;
+        [[nodiscard]] constexpr auto rend() const noexcept -> const_reverse_iterator;
+        [[nodiscard]] constexpr auto crend() const noexcept -> const_reverse_iterator;
 
-        [[nodiscard]] constexpr const_reference operator[](size_type pos) const;
-        [[nodiscard]] constexpr const_reference at(size_type pos) const;
-        [[nodiscard]] constexpr const_reference front() const;
-        [[nodiscard]] constexpr const_reference back() const;
+        [[nodiscard]] constexpr auto operator[](size_type pos) const -> const_reference;
+        [[nodiscard]] constexpr auto at(size_type pos) const -> const_reference;
+        [[nodiscard]] constexpr auto front() const -> const_reference;
+        [[nodiscard]] constexpr auto back() const -> const_reference;
 
-        [[nodiscard]] constexpr const_pointer data() const noexcept;
-        [[nodiscard]] constexpr size_type size() const noexcept;
-        [[nodiscard]] constexpr size_type length() const noexcept;
-        [[nodiscard]] constexpr size_type max_size() const noexcept;
-        [[nodiscard]] constexpr bool empty() const noexcept;
+        [[nodiscard]] constexpr auto data() const noexcept -> const_pointer;
+        [[nodiscard]] constexpr auto size() const noexcept -> size_type;
+        [[nodiscard]] constexpr auto length() const noexcept -> size_type;
+        [[nodiscard]] constexpr auto max_size() const noexcept -> size_type;
+        [[nodiscard]] constexpr auto empty() const noexcept -> bool;
 
       private:
         const CharT* _start{nullptr};
@@ -74,14 +74,14 @@ namespace tempest
     };
 
     template <typename CharT, typename Traits>
-    constexpr bool operator==(const basic_string_view<CharT, Traits>& lhs,
-                              const basic_string_view<CharT, Traits>& rhs) noexcept
+    constexpr auto operator==(const basic_string_view<CharT, Traits>& lhs,
+                              const basic_string_view<CharT, Traits>& rhs) noexcept -> bool
     {
         return lhs.size() == rhs.size() && Traits::compare(lhs.data(), rhs.data(), lhs.size()) == 0;
     }
 
     template <typename CharT, typename Traits>
-    constexpr bool operator==(const basic_string_view<CharT, Traits>& lhs, const CharT* rhs) noexcept
+    constexpr auto operator==(const basic_string_view<CharT, Traits>& lhs, const CharT* rhs) noexcept -> bool
     {
         return lhs == basic_string_view<CharT, Traits>(rhs);
     }
@@ -129,61 +129,61 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::begin() const noexcept -> const_iterator
+    constexpr auto basic_string_view<CharT, Traits>::begin() const noexcept -> const_iterator
     {
         return _start;
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::cbegin() const noexcept -> const_iterator
+    constexpr auto basic_string_view<CharT, Traits>::cbegin() const noexcept -> const_iterator
     {
         return _start;
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::end() const noexcept -> const_iterator
+    constexpr auto basic_string_view<CharT, Traits>::end() const noexcept -> const_iterator
     {
         return _end;
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::cend() const noexcept -> const_iterator
+    constexpr auto basic_string_view<CharT, Traits>::cend() const noexcept -> const_iterator
     {
         return _end;
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::rbegin() const noexcept -> const_reverse_iterator
+    constexpr auto basic_string_view<CharT, Traits>::rbegin() const noexcept -> const_reverse_iterator
     {
         return const_reverse_iterator(_end);
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::crbegin() const noexcept -> const_reverse_iterator
+    constexpr auto basic_string_view<CharT, Traits>::crbegin() const noexcept -> const_reverse_iterator
     {
         return const_reverse_iterator(_end);
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::rend() const noexcept -> const_reverse_iterator
+    constexpr auto basic_string_view<CharT, Traits>::rend() const noexcept -> const_reverse_iterator
     {
         return const_reverse_iterator(_start);
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::crend() const noexcept -> const_reverse_iterator
+    constexpr auto basic_string_view<CharT, Traits>::crend() const noexcept -> const_reverse_iterator
     {
         return const_reverse_iterator(_start);
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::operator[](size_type pos) const -> const_reference
+    constexpr auto basic_string_view<CharT, Traits>::operator[](size_type pos) const -> const_reference
     {
         return _start[pos];
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::at(size_type pos) const -> const_reference
+    constexpr auto basic_string_view<CharT, Traits>::at(size_type pos) const -> const_reference
     {
         assert(pos < size());
 
@@ -191,43 +191,43 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::front() const -> const_reference
+    constexpr auto basic_string_view<CharT, Traits>::front() const -> const_reference
     {
         return *_start;
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::back() const -> const_reference
+    constexpr auto basic_string_view<CharT, Traits>::back() const -> const_reference
     {
         return *(_end - 1);
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::data() const noexcept -> const_pointer
+    constexpr auto basic_string_view<CharT, Traits>::data() const noexcept -> const_pointer
     {
         return _start;
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::size() const noexcept -> size_type
+    constexpr auto basic_string_view<CharT, Traits>::size() const noexcept -> size_type
     {
         return _end - _start;
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::length() const noexcept -> size_type
+    constexpr auto basic_string_view<CharT, Traits>::length() const noexcept -> size_type
     {
         return size();
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::max_size() const noexcept -> size_type
+    constexpr auto basic_string_view<CharT, Traits>::max_size() const noexcept -> size_type
     {
         return numeric_limits<size_type>::max();
     }
 
     template <typename CharT, typename Traits>
-    inline constexpr auto basic_string_view<CharT, Traits>::empty() const noexcept -> bool
+    constexpr auto basic_string_view<CharT, Traits>::empty() const noexcept -> bool
     {
         return _start == _end;
     }
@@ -461,49 +461,49 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr bool starts_with(basic_string_view<CharT, Traits> sv, CharT ch) noexcept
+    constexpr auto starts_with(basic_string_view<CharT, Traits> sv, CharT ch) noexcept -> bool
     {
         return starts_with(sv.begin(), sv.end(), ch);
     }
 
     template <typename CharT, typename Traits>
-    constexpr bool starts_with(basic_string_view<CharT, Traits> sv, const CharT* str) noexcept
+    constexpr auto starts_with(basic_string_view<CharT, Traits> sv, const CharT* str) noexcept -> bool
     {
         return starts_with(sv.begin(), sv.end(), str, Traits::length(str));
     }
 
     template <typename CharT, typename Traits>
-    constexpr bool starts_with(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept
+    constexpr auto starts_with(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept -> bool
     {
         return starts_with(sv.begin(), sv.end(), str.begin(), str.end());
     }
 
     template <typename CharT, typename Traits, typename It>
-    constexpr bool starts_with(basic_string_view<CharT, Traits> sv, It first, It last) noexcept
+    constexpr auto starts_with(basic_string_view<CharT, Traits> sv, It first, It last) noexcept -> bool
     {
         return starts_with(sv.begin(), sv.end(), first, last);
     }
 
     template <typename CharT, typename Traits>
-    constexpr bool ends_with(basic_string_view<CharT, Traits> sv, CharT ch) noexcept
+    constexpr auto ends_with(basic_string_view<CharT, Traits> sv, CharT ch) noexcept -> bool
     {
         return ends_with(sv.begin(), sv.end(), ch);
     }
 
     template <typename CharT, typename Traits>
-    constexpr bool ends_with(basic_string_view<CharT, Traits> sv, const CharT* str) noexcept
+    constexpr auto ends_with(basic_string_view<CharT, Traits> sv, const CharT* str) noexcept -> bool
     {
         return ends_with(sv.begin(), sv.end(), str, Traits::length(str));
     }
 
     template <typename CharT, typename Traits>
-    constexpr bool ends_with(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept
+    constexpr auto ends_with(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept -> bool
     {
         return ends_with(sv.begin(), sv.end(), str.begin(), str.end());
     }
 
     template <typename CharT, typename Traits, typename It>
-    constexpr bool ends_with(basic_string_view<CharT, Traits> sv, It first, It last) noexcept
+    constexpr auto ends_with(basic_string_view<CharT, Traits> sv, It first, It last) noexcept -> bool
     {
         return ends_with(sv.begin(), sv.end(), first, last);
     }
@@ -517,7 +517,7 @@ namespace tempest
     template <typename CharT, typename Traits>
     struct hash<basic_string_view<CharT, Traits>>
     {
-        size_t operator()(const basic_string_view<CharT, Traits>& sv) const noexcept
+        auto operator()(const basic_string_view<CharT, Traits>& sv) const noexcept -> size_t
         {
             return detail::fnv1a_auto(sv.data(), sv.size());
         }

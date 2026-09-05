@@ -36,7 +36,7 @@ namespace tempest
         constexpr operator value_type() const noexcept;
 
         /// @brief Function call operator returning the wrapped value.
-        constexpr value_type operator()() const noexcept;
+        constexpr auto operator()() const noexcept -> value_type;
     };
 
     template <typename T, T v>
@@ -46,7 +46,7 @@ namespace tempest
     }
 
     template <typename T, T v>
-    constexpr typename integral_constant<T, v>::value_type integral_constant<T, v>::operator()() const noexcept
+    constexpr auto integral_constant<T, v>::operator()() const noexcept -> integral_constant<T, v>::value_type
     {
         return value;
     }
@@ -86,7 +86,7 @@ namespace tempest
     /// @tparam T Type to select if the condition is true.
     /// @tparam F Type to select if the condition is false.
     template <bool B, typename T, typename F>
-    using conditional_t = typename conditional<B, T, F>::type;
+    using conditional_t = conditional<B, T, F>::type;
 
     /// @brief Logical AND of multiple type traits.
     template <typename...>
@@ -260,7 +260,7 @@ namespace tempest
     /// @brief Remove the const qualifier from a type.
     /// @tparam T Type to remove the const qualifier from.
     template <typename T>
-    using remove_const_t = typename remove_const<T>::type;
+    using remove_const_t = remove_const<T>::type;
 
     /// @brief Remove the volatile qualifier from a type.
     /// @tparam T Type to remove the volatile qualifier from.
@@ -283,7 +283,7 @@ namespace tempest
     /// @brief Remove the volatile qualifier from a type.
     /// @tparam T Type to remove the volatile qualifier from.
     template <typename T>
-    using remove_volatile_t = typename remove_volatile<T>::type;
+    using remove_volatile_t = remove_volatile<T>::type;
 
     /// @brief Remove the const and volatile qualifiers from a type.
     /// @tparam T Type to remove the const and volatile qualifiers from.
@@ -291,13 +291,13 @@ namespace tempest
     struct remove_cv
     {
         /// @brief The type without the const and volatile qualifiers.
-        using type = typename remove_const<typename remove_volatile<T>::type>::type;
+        using type = remove_const<typename remove_volatile<T>::type>::type;
     };
 
     /// @brief Remove the const and volatile qualifiers from a type.
     /// @tparam T Type to remove the const and volatile qualifiers from.
     template <typename T>
-    using remove_cv_t = typename remove_cv<T>::type;
+    using remove_cv_t = remove_cv<T>::type;
 
     // Const-volatile modifications
 
@@ -376,17 +376,17 @@ namespace tempest
     /// @brief Adds the const qualifier to a type.
     /// @tparam T Type to add the const qualifier to.
     template <typename T>
-    using add_const_t = typename add_const<T>::type;
+    using add_const_t = add_const<T>::type;
 
     /// @brief Adds the volatile qualifier to a type.
     /// @tparam T Type to add the volatile qualifier to.
     template <typename T>
-    using add_volatile_t = typename add_volatile<T>::type;
+    using add_volatile_t = add_volatile<T>::type;
 
     /// @brief Adds the const and volatile qualifiers to a type.
     /// @tparam T Type to add the const and volatile qualifiers to.
     template <typename T>
-    using add_cv_t = typename add_cv<T>::type;
+    using add_cv_t = add_cv<T>::type;
 
     namespace detail
     {
@@ -1044,7 +1044,7 @@ namespace tempest
     /// @brief Type trait to remove the reference from a type.
     /// @tparam T Type to remove the reference from.
     template <typename T>
-    using remove_reference_t = typename remove_reference<T>::type;
+    using remove_reference_t = remove_reference<T>::type;
 
     /// @brief Type trait to add an lvalue reference to a type.
     /// @tparam T Type to add an lvalue reference to.
@@ -1067,7 +1067,7 @@ namespace tempest
     /// @brief Type trait to add an lvalue reference to a type.
     /// @tparam T Type to add an lvalue reference to.
     template <typename T>
-    using add_lvalue_reference_t = typename add_lvalue_reference<T>::type;
+    using add_lvalue_reference_t = add_lvalue_reference<T>::type;
 
     /// @brief Type trait to add an rvalue reference to a type.
     /// @tparam T Type to add an rvalue reference to.
@@ -1090,7 +1090,7 @@ namespace tempest
     /// @brief Type trait to add an rvalue reference to a type.
     /// @tparam T Type to add an rvalue reference to.
     template <typename T>
-    using add_rvalue_reference_t = typename add_rvalue_reference<T>::type;
+    using add_rvalue_reference_t = add_rvalue_reference<T>::type;
 
     /// @brief Type trait to remove const-volatile modifiers and references from a type.
     /// @tparam T Type to remove const-volatile modifiers and references from.
@@ -1104,7 +1104,7 @@ namespace tempest
     /// @brief Type trait to remove const-volatile modifiers and references from a type.
     /// @tparam T Type to remove const-volatile modifiers and references from.
     template <typename T>
-    using remove_cvref_t = typename remove_cvref<T>::type;
+    using remove_cvref_t = remove_cvref<T>::type;
 
     /// @brief Type trait that is an alias to the type it is instantiated with.
     /// @tparam T Type to create an alias for.
@@ -1117,7 +1117,7 @@ namespace tempest
     /// @brief Type trait that is an alias to the type it is instantiated with.
     /// @tparam T Type to create an alias for.
     template <typename T>
-    using type_identity_t = typename type_identity<T>::type;
+    using type_identity_t = type_identity<T>::type;
 
     template <typename... T>
     struct make_void
@@ -1126,7 +1126,7 @@ namespace tempest
     };
 
     template <typename... Ts>
-    using void_t = typename make_void<Ts...>::type;
+    using void_t = make_void<Ts...>::type;
 
     namespace detail
     {
@@ -1149,13 +1149,13 @@ namespace tempest
     struct add_pointer
     {
         /// @brief The type with a pointer.
-        using type = typename detail::add_pointer_impl<T>::type;
+        using type = detail::add_pointer_impl<T>::type;
     };
 
     /// @brief Type trait to add a pointer to a type.
     /// @tparam T Type to add a pointer to.
     template <typename T>
-    using add_pointer_t = typename add_pointer<T>::type;
+    using add_pointer_t = add_pointer<T>::type;
 
     /// @brief Type trait to remove the pointer from a type.
     /// @tparam T Type to remove the pointer from.
@@ -1205,7 +1205,7 @@ namespace tempest
     /// @brief Type trait to remove the pointer from a type.
     /// @tparam T Type to remove the pointer from.
     template <typename T>
-    using remove_pointer_t = typename remove_pointer<T>::type;
+    using remove_pointer_t = remove_pointer<T>::type;
 
     /// @brief Type trait to remove extent from a type.
     /// @tparam T Type to remove extent from.
@@ -1238,7 +1238,7 @@ namespace tempest
     /// @brief Type trait to remove extent from a type.
     /// @tparam T Type to remove extent from.
     template <typename T>
-    using remove_extent_t = typename remove_extent<T>::type;
+    using remove_extent_t = remove_extent<T>::type;
 
     /// @brief Type trait to remove all extents from a type.
     /// @tparam T Type to remove all extents from.
@@ -1255,7 +1255,7 @@ namespace tempest
     struct remove_all_extents<T[]>
     {
         /// @brief The type without all extents.
-        using type = typename remove_all_extents<T>::type;
+        using type = remove_all_extents<T>::type;
     };
 
     /// @brief Type trait to remove all extents from a type.
@@ -1265,13 +1265,13 @@ namespace tempest
     struct remove_all_extents<T[N]>
     {
         /// @brief The type without all extents.
-        using type = typename remove_all_extents<T>::type;
+        using type = remove_all_extents<T>::type;
     };
 
     /// @brief Type trait to remove all extents from a type.
     /// @tparam T Type to remove all extents from.
     template <typename T>
-    using remove_all_extents_t = typename remove_all_extents<T>::type;
+    using remove_all_extents_t = remove_all_extents<T>::type;
 
     /// @brief Type trait to check if a type is constructible from a set of arguments.
     /// @tparam T Type to check if is constructible.
@@ -1611,7 +1611,7 @@ namespace tempest
     /// @note Implementation note: This function will always static_assert false if called in an evaluated context. This
     /// is to prevent an ill-formed implementation via ODR violation.
     template <typename T>
-    inline add_rvalue_reference_t<T> declval() noexcept
+    inline auto declval() noexcept -> add_rvalue_reference_t<T>
     {
         static_assert(false, "declval is not allowed in an evaluated context.");
     }
@@ -1633,7 +1633,7 @@ namespace tempest
     /// @brief Type trait used to perform the type conversion when a type is passed by value to a function.
     /// @tparam T Type to decay.
     template <typename T>
-    using decay_t = typename decay<T>::type;
+    using decay_t = decay<T>::type;
 
     template <bool B, typename T = void>
     struct enable_if
@@ -1647,18 +1647,18 @@ namespace tempest
     };
 
     template <bool B, typename T = void>
-    using enable_if_t = typename enable_if<B, T>::type;
+    using enable_if_t = enable_if<B, T>::type;
 
     template <typename T>
         requires(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
-    inline constexpr void swap(T& a,
+    constexpr void swap(T& a,
                                T& b) noexcept(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>);
 
     template <typename T>
-    constexpr T&& forward(remove_reference_t<T>& t) noexcept;
+    constexpr auto forward(remove_reference_t<T>& t) noexcept -> T&&;
 
     template <typename T>
-    constexpr T&& forward(remove_reference_t<T>&& t) noexcept;
+    constexpr auto forward(remove_reference_t<T>&& t) noexcept -> T&&;
 
     namespace detail
     {
@@ -1751,7 +1751,7 @@ namespace tempest
         };
     } // namespace detail
 
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
     /// @brief Type trait to check if a type is convertible to another type.
     /// @tparam From Type to check if is convertible from.
     /// @tparam To Type to check if is convertible to.
@@ -1800,7 +1800,7 @@ namespace tempest
         };
     } // namespace detail
 
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
     /// @brief Type trait to check if a type is nothrow convertible to another type.
     /// @tparam From Type to check if is nothrow convertible from.
     /// @tparam To Type to check if is nothrow convertible to.
@@ -1893,12 +1893,12 @@ namespace tempest
         struct result_of_member_function_ref_impl
         {
             template <typename Fn, typename Tp, typename... Args>
-            static result_of_success<decltype((declval<Tp>().*declval<Fn>())(declval<Args>()...)),
-                                     invoke_member_function_ref>
-            test(int);
+            static auto
+            test(int) -> result_of_success<decltype((declval<Tp>().*declval<Fn>())(declval<Args>()...)),
+                                     invoke_member_function_ref>;
 
             template <typename...>
-            static failure_type test(...);
+            static auto test(...) -> failure_type;
         };
 
         template <typename MemPtr, typename Arg, typename... Args>
@@ -1910,12 +1910,12 @@ namespace tempest
         struct result_of_member_function_deref_impl
         {
             template <typename Fn, typename Tp, typename... Args>
-            static result_of_success<decltype(((*declval<Tp>()).*declval<Fn>())(declval<Args>()...)),
-                                     invoke_member_function_deref>
-            test(int);
+            static auto
+            test(int) -> result_of_success<decltype(((*declval<Tp>()).*declval<Fn>())(declval<Args>()...)),
+                                     invoke_member_function_deref>;
 
             template <typename...>
-            static failure_type test(...);
+            static auto test(...) -> failure_type;
         };
 
         template <typename MemPtr, typename Arg, typename... Args>
@@ -1932,7 +1932,7 @@ namespace tempest
         {
             using arg_val = remove_cvref_t<Arg>;
             using mem_ptr = Res T::*;
-            using type = typename conditional_t<is_base_of<T, arg_val>::value,
+            using type = conditional_t<is_base_of<T, arg_val>::value,
                                                 result_of_member_function_ref<mem_ptr, Arg, Args...>,
                                                 result_of_member_function_deref<mem_ptr, Arg, Args...>>::type;
         };
@@ -1940,10 +1940,10 @@ namespace tempest
         struct result_of_member_object_ref_impl
         {
             template <typename MemPtr, typename Tp>
-            static result_of_success<decltype(declval<Tp>().*declval<MemPtr>()), invoke_member_object_ref> test(int);
+            static auto test(int) -> result_of_success<decltype(declval<Tp>().*declval<MemPtr>()), invoke_member_object_ref>;
 
             template <typename...>
-            static failure_type test(...);
+            static auto test(...) -> failure_type;
         };
 
         template <typename MemPtr, typename Arg>
@@ -1955,11 +1955,11 @@ namespace tempest
         struct result_of_member_object_deref_impl
         {
             template <typename MemPtr, typename Tp>
-            static result_of_success<decltype((*declval<Tp>()).*declval<MemPtr>()), invoke_member_object_deref> test(
-                int);
+            static auto test(
+                int) -> result_of_success<decltype((*declval<Tp>()).*declval<MemPtr>()), invoke_member_object_deref>;
 
             template <typename...>
-            static failure_type test(...);
+            static auto test(...) -> failure_type;
         };
 
         template <typename MemPtr, typename Arg>
@@ -1976,7 +1976,7 @@ namespace tempest
         {
             using arg_val = remove_cvref_t<Arg>;
             using mem_ptr = Res T::*;
-            using type = typename conditional_t<disjunction_v<is_same<arg_val, T>, is_base_of<T, arg_val>>,
+            using type = conditional_t<disjunction_v<is_same<arg_val, T>, is_base_of<T, arg_val>>,
                                                 result_of_member_object_ref<mem_ptr, Arg>,
                                                 result_of_member_function_deref<mem_ptr, Arg>>::type;
         };
@@ -2014,10 +2014,10 @@ namespace tempest
         struct result_of_other_impl
         {
             template <typename Fn, typename... Args>
-            static result_of_success<decltype(declval<Fn>()(declval<Args>()...)), invoke_other> test(int);
+            static auto test(int) -> result_of_success<decltype(declval<Fn>()(declval<Args>()...)), invoke_other>;
 
             template <typename...>
-            static failure_type test(...);
+            static auto test(...) -> failure_type;
         };
 
         template <typename Fn, typename... Args>
@@ -2034,7 +2034,7 @@ namespace tempest
         };
 
         template <typename Fn, typename... Args>
-        using invoke_result_impl_t = typename invoke_result_impl<Fn, Args...>::type;
+        using invoke_result_impl_t = invoke_result_impl<Fn, Args...>::type;
 
         template <typename Result, typename Ret, bool = is_void_v<Ret>, typename = void>
         struct is_invocable_impl : false_type
@@ -2052,18 +2052,18 @@ namespace tempest
         struct is_invocable_impl<Result, Ret, false, void_t<typename Result::type>>
         {
           private:
-            using result_t = typename Result::type;
-            static result_t s_get() noexcept;
+            using result_t = Result::type;
+            static auto s_get() noexcept -> result_t;
 
             template <typename Tp>
             static void s_conv(type_identity_t<Tp>) noexcept;
 
             template <typename Tp, bool nothrow = noexcept(s_conv<Tp>(s_get())),
                       typename = decltype(s_conv<Tp>(s_get())), bool dangle = false>
-            static bool_constant<nothrow && !dangle> test(int);
+            static auto test(int) -> bool_constant<nothrow && !dangle>;
 
             template <typename Tp, bool = false>
-            static false_type test(...);
+            static auto test(...) -> false_type;
 
           public:
             using type = decltype(test<Ret, true>(1));
@@ -2077,35 +2077,35 @@ namespace tempest
         };
 
         template <typename Fn, typename T, typename... Args>
-        constexpr bool is_nothrow_callable(invoke_member_function_ref)
+        constexpr auto is_nothrow_callable(invoke_member_function_ref /*unused*/) -> bool
         {
-            using U = typename invoke_unwrap<T>::type;
+            using U = invoke_unwrap<T>::type;
             return noexcept((tempest::declval<U>().*tempest::declval<Fn>())(tempest::declval<Args>()...));
         }
 
         template <typename Fn, typename T, typename... Args>
-        constexpr bool is_nothrow_callable(invoke_member_function_deref)
+        constexpr auto is_nothrow_callable(invoke_member_function_deref /*unused*/) -> bool
         {
-            using U = typename invoke_unwrap<T>::type;
+            using U = invoke_unwrap<T>::type;
             return noexcept(((*tempest::declval<U>()).*tempest::declval<Fn>())(tempest::declval<Args>()...));
         }
 
         template <typename Fn, typename T, typename... Args>
-        constexpr bool is_nothrow_callable(invoke_member_object_ref)
+        constexpr auto is_nothrow_callable(invoke_member_object_ref /*unused*/) -> bool
         {
-            using U = typename invoke_unwrap<T>::type;
+            using U = invoke_unwrap<T>::type;
             return noexcept(tempest::declval<U>().*tempest::declval<Fn>());
         }
 
         template <typename Fn, typename T, typename... Args>
-        constexpr bool is_nothrow_callable(invoke_member_object_deref)
+        constexpr auto is_nothrow_callable(invoke_member_object_deref /*unused*/) -> bool
         {
-            using U = typename invoke_unwrap<T>::type;
+            using U = invoke_unwrap<T>::type;
             return noexcept((*tempest::declval<U>()).*tempest::declval<Fn>());
         }
 
         template <typename Fn, typename... Args>
-        constexpr bool is_nothrow_callable(invoke_other)
+        constexpr auto is_nothrow_callable(invoke_other /*unused*/) -> bool
         {
             return noexcept(tempest::declval<Fn>()(tempest::declval<Args>()...));
         }
@@ -2131,7 +2131,7 @@ namespace tempest
     /// @tparam Fn Function type to invoke.
     /// @tparam ...Args Argument types to pass to the function.
     template <typename Fn, typename... Args>
-    using invoke_result_t = typename invoke_result<Fn, Args...>::type;
+    using invoke_result_t = invoke_result<Fn, Args...>::type;
 
     /// @brief Type trait to get if the function is invocable with a set of arguments.
     /// @tparam Fn Function type to invoke.
@@ -2181,7 +2181,7 @@ namespace tempest
     namespace detail
     {
         template <typename Result, typename Ret>
-        using is_nothrow_invocable_impl = typename is_invocable_impl<Result, Ret>::nothrow_conv;
+        using is_nothrow_invocable_impl = is_invocable_impl<Result, Ret>::nothrow_conv;
     }
 
     /// @brief Type trait to get if the function is nothrow invocable with a set of arguments and returns a specific
@@ -2239,7 +2239,7 @@ namespace tempest
     struct common_type;
 
     template <typename... Ts>
-    using common_type_t = typename common_type<Ts...>::type;
+    using common_type_t = common_type<Ts...>::type;
 
     template <>
     struct common_type<>
@@ -2300,7 +2300,7 @@ namespace tempest
     namespace detail
     {
         template <typename T>
-        T returns_same_type() noexcept;
+        auto returns_same_type() noexcept -> T;
     }
 
     template <typename, typename, template <typename> typename, template <typename> typename>
@@ -2370,7 +2370,7 @@ namespace tempest
     struct common_reference;
 
     template <typename... Ts>
-    using common_reference_t = typename common_reference<Ts...>::type;
+    using common_reference_t = common_reference<Ts...>::type;
 
     template <>
     struct common_reference<>
@@ -2776,7 +2776,7 @@ namespace tempest
     /// @brief Type trait to get the underlying type of an enumeration.
     /// @tparam T Enumeration type to get the underlying type of.
     template <typename T>
-    using underlying_type_t = typename underlying_type<T>::type;
+    using underlying_type_t = underlying_type<T>::type;
 
     template <typename T>
     struct make_signed
@@ -2881,7 +2881,7 @@ namespace tempest
     };
 
     template <typename T>
-    using make_signed_t = typename make_signed<T>::type;
+    using make_signed_t = make_signed<T>::type;
 
     template <typename T>
     struct make_unsigned
@@ -2986,7 +2986,7 @@ namespace tempest
     };
 
     template <typename T>
-    using make_unsigned_t = typename make_unsigned<T>::type;
+    using make_unsigned_t = make_unsigned<T>::type;
 
     /// @brief Type trait to get the alignment of a type.
     /// @tparam T Type to get the alignment of.
@@ -3067,7 +3067,7 @@ namespace tempest
 
     /// @brief Type trait to check if a function is being evaluated at compile-time.
     /// @return True if the function is being evaluated at compile-time, false otherwise.
-    inline constexpr bool is_constant_evaluated() noexcept
+    constexpr auto is_constant_evaluated() noexcept -> bool
     {
         return __builtin_is_constant_evaluated();
     }
@@ -3103,7 +3103,7 @@ namespace tempest
     /// @tparam T Type to copy the reference of.
     /// @tparam U Type to copy the reference to.
     template <typename T, typename U>
-    using copy_ref_t = typename copy_ref<T, U>::type;
+    using copy_ref_t = copy_ref<T, U>::type;
 
     /// @brief Type trait to copy the constness of a type.
     /// @tparam T Type to copy the constness of.
@@ -3127,7 +3127,7 @@ namespace tempest
     /// @tparam T Type to copy the constness of.
     /// @tparam U Type to copy the constness to.
     template <typename T, typename U>
-    using copy_const_t = typename copy_const<T, U>::type;
+    using copy_const_t = copy_const<T, U>::type;
 
     /// @brief Type trait to copy the volatility of a type.
     /// @tparam T Type to copy the volatility of.
@@ -3151,7 +3151,7 @@ namespace tempest
     /// @tparam T Type to copy the volatility of.
     /// @tparam U Type to copy the volatility to.
     template <typename T, typename U>
-    using copy_volatile_t = typename copy_volatile<T, U>::type;
+    using copy_volatile_t = copy_volatile<T, U>::type;
 
     /// @brief Type trait to copy the constness and volatility of a type.
     /// @tparam T Type to copy the constness and volatility of.
@@ -3166,7 +3166,7 @@ namespace tempest
     /// @tparam T Type to copy the constness and volatility of.
     /// @tparam U Type to copy the constness and volatility to.
     template <typename T, typename U>
-    using copy_cv_t = typename copy_cv<T, U>::type;
+    using copy_cv_t = copy_cv<T, U>::type;
 
     /// @brief Type trait to copy the constness, volatility and reference of a type.
     /// @tparam T Type to copy the constness, volatility and reference of.
@@ -3181,7 +3181,7 @@ namespace tempest
     /// @tparam T Type to copy the constness, volatility and reference of.
     /// @tparam U Type to copy the constness, volatility and reference to.
     template <typename T, typename U>
-    using copy_cvref_t = typename copy_cvref<T, U>::type;
+    using copy_cvref_t = copy_cvref<T, U>::type;
 
     template <typename T, template <typename...> typename U>
     inline constexpr bool is_specialization_v = false;

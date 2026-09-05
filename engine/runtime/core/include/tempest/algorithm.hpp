@@ -14,7 +14,7 @@ namespace tempest
     struct loop_unroller
     {
         template <typename Fn>
-        inline static constexpr void evaluate(Fn f)
+        static constexpr void evaluate(Fn f)
         {
             f(StartIdx);
             loop_unroller<IdxType, StartIdx + StepSize, EndIdx, StepSize>::evaluate(f);
@@ -25,7 +25,7 @@ namespace tempest
     struct loop_unroller<IdxType, StartIdx, EndIdx, StepSize, false>
     {
         template <typename Fn>
-        inline static constexpr void evaluate([[maybe_unused]] Fn f)
+        static constexpr void evaluate([[maybe_unused]] Fn f)
         {
             // no op
             // loop does not continue, as loop function evaluated to false
@@ -33,7 +33,7 @@ namespace tempest
     };
 
     template <auto Start, auto End, auto StepSize, typename Fn>
-    inline constexpr void unroll_loop(Fn f)
+    constexpr void unroll_loop(Fn f)
     {
         static_assert(is_convertible_v<decltype(End), decltype(Start)>, "End cannot be converted to type of Start.");
         static_assert(is_convertible_v<decltype(StepSize), decltype(Start)>,
@@ -43,48 +43,48 @@ namespace tempest
     }
 
     template <typename T>
-    [[nodiscard]] inline constexpr const T& clamp(const T& v, const T& lo, const T& hi) noexcept
+    [[nodiscard]] constexpr auto clamp(const T& v, const T& lo, const T& hi) noexcept -> const T&
     {
         return (v < lo) ? lo : (hi < v) ? hi : v;
     }
 
     template <typename T, typename Compare>
-    [[nodiscard]] inline constexpr const T& clamp(const T& v, const T& lo, const T& hi, Compare comp)
+    [[nodiscard]] constexpr auto clamp(const T& v, const T& lo, const T& hi, Compare comp) -> const T&
     {
         return comp(v, lo) ? lo : comp(hi, v) ? hi : v;
     }
 
-    [[nodiscard]] inline constexpr integral auto fast_mod(const integral auto value, const integral auto mod) noexcept
+    [[nodiscard]] constexpr auto fast_mod(const integral auto value, const integral auto mod) noexcept -> integral auto
     {
         return value & (mod - 1);
     }
 
     template <integral T>
-    [[nodiscard]] inline constexpr bool is_bit_set(T n, T k) noexcept
+    [[nodiscard]] constexpr auto is_bit_set(T n, T k) noexcept -> bool
     {
         return (n >> k) & static_cast<T>(1);
     }
 
     template <integral T>
-    [[nodiscard]] inline constexpr T set_bit(T n, T k) noexcept
+    [[nodiscard]] constexpr auto set_bit(T n, T k) noexcept -> T
     {
         return n | (static_cast<T>(1) << k);
     }
 
     template <integral T>
-    [[nodiscard]] inline constexpr T clear_bit(T n, T k) noexcept
+    [[nodiscard]] constexpr auto clear_bit(T n, T k) noexcept -> T
     {
         return n & ~(static_cast<T>(1) << k);
     }
 
     template <integral T>
-    [[nodiscard]] inline constexpr T toggle_bit(T n, T k) noexcept
+    [[nodiscard]] constexpr auto toggle_bit(T n, T k) noexcept -> T
     {
         return n ^ (static_cast<T>(1) << k);
     }
 
     template <typename Iter, typename T>
-    inline constexpr void fill(Iter begin, Iter end, const T& value)
+    constexpr void fill(Iter begin, Iter end, const T& value)
     {
         for (auto it = begin; it != end; ++it)
         {
@@ -93,7 +93,7 @@ namespace tempest
     }
 
     template <typename Iter, typename Count, typename T>
-    inline constexpr void fill_n(Iter begin, Count count, const T& value)
+    constexpr void fill_n(Iter begin, Count count, const T& value)
     {
         for (Count i = 0; i < count; ++i)
         {
@@ -109,9 +109,9 @@ namespace tempest
     } // namespace detail
 
     template <input_iterator InputIt, output_iterator<typename InputIt::value_type> OutputIt>
-    inline constexpr OutputIt copy(InputIt first, InputIt last, OutputIt d_first)
+    constexpr auto copy(InputIt first, InputIt last, OutputIt d_first) -> OutputIt
     {
-        using value_type = typename InputIt::value_type;
+        using value_type = InputIt::value_type;
 
         if constexpr (is_trivial_v<value_type> && contiguous_iterator<InputIt>)
         {
@@ -131,14 +131,14 @@ namespace tempest
 
     template <input_iterator InputIt, typename Size,
               output_iterator<typename iterator_traits<InputIt>::value_type> OutputIt>
-    inline constexpr OutputIt copy_n(InputIt first, Size count, OutputIt d_first)
+    constexpr auto copy_n(InputIt first, Size count, OutputIt d_first) -> OutputIt
     {
         if (count == 0)
         {
             return d_first;
         }
 
-        using value_type = typename iterator_traits<InputIt>::value_type;
+        using value_type = iterator_traits<InputIt>::value_type;
 
         if constexpr (is_trivial_v<value_type> && contiguous_iterator<InputIt>)
         {
@@ -155,8 +155,8 @@ namespace tempest
         }
     }
 
-    template <input_iterator It, typename T = typename iterator_traits<It>::value_type>
-    [[nodiscard]] inline constexpr It find(It first, It last, const T& value)
+    template <input_iterator It, typename T = iterator_traits<It>::value_type>
+    [[nodiscard]] constexpr auto find(It first, It last, const T& value) -> It
     {
         while (first != last)
         {
@@ -170,7 +170,7 @@ namespace tempest
     }
 
     template <input_iterator It, typename Compare>
-    [[nodiscard]] inline constexpr It find_if(It first, It last, Compare comp)
+    [[nodiscard]] constexpr auto find_if(It first, It last, Compare comp) -> It
     {
         while (first != last)
         {
@@ -184,7 +184,7 @@ namespace tempest
     }
 
     template <input_iterator It, typename Compare>
-    [[nodiscard]] inline constexpr It find_if_not(It first, It last, Compare comp)
+    [[nodiscard]] constexpr auto find_if_not(It first, It last, Compare comp) -> It
     {
         while (first != last)
         {
@@ -198,7 +198,7 @@ namespace tempest
     }
 
     template <forward_iterator It>
-    [[nodiscard]] inline constexpr It min_element(It first, It last)
+    [[nodiscard]] constexpr auto min_element(It first, It last) -> It
     {
         if (first == last)
         {
@@ -221,7 +221,7 @@ namespace tempest
     }
 
     template <forward_iterator It, typename Compare>
-    [[nodiscard]] inline constexpr It min_element(It first, It last, Compare comp)
+    [[nodiscard]] constexpr auto min_element(It first, It last, Compare comp) -> It
     {
         if (first == last)
         {
@@ -243,7 +243,7 @@ namespace tempest
     }
 
     template <forward_iterator It>
-    [[nodiscard]] inline constexpr It max_element(It first, It last)
+    [[nodiscard]] constexpr auto max_element(It first, It last) -> It
     {
         if (first == last)
         {
@@ -265,7 +265,7 @@ namespace tempest
     }
 
     template <forward_iterator It, typename Compare>
-    [[nodiscard]] inline constexpr It max_element(It first, It last, Compare comp)
+    [[nodiscard]] constexpr auto max_element(It first, It last, Compare comp) -> It
     {
         if (first == last)
         {
@@ -287,31 +287,31 @@ namespace tempest
     }
 
     template <typename T>
-    inline constexpr const T& min(const T& a, const T& b)
+    constexpr auto min(const T& a, const T& b) -> const T&
     {
         return (a < b) ? a : b;
     }
 
     template <typename T, typename Compare>
-    inline constexpr const T& min(const T& a, const T& b, Compare comp)
+    constexpr auto min(const T& a, const T& b, Compare comp) -> const T&
     {
         return comp(a, b) ? a : b;
     }
 
     template <typename T>
-    inline constexpr const T& max(const T& a, const T& b)
+    constexpr auto max(const T& a, const T& b) -> const T&
     {
         return (a > b) ? a : b;
     }
 
     template <typename T, typename Compare>
-    inline constexpr const T& max(const T& a, const T& b, Compare comp)
+    constexpr auto max(const T& a, const T& b, Compare comp) -> const T&
     {
         return comp(a, b) ? b : a;
     }
 
     template <forward_iterator It>
-    [[nodiscard]] inline constexpr pair<It, It> minmax_element(It first, It last)
+    [[nodiscard]] constexpr auto minmax_element(It first, It last) -> pair<It, It>
     {
         if (first == last)
         {
@@ -339,7 +339,7 @@ namespace tempest
     }
 
     template <forward_iterator It, typename Compare>
-    [[nodiscard]] inline constexpr pair<It, It> minmax_element(It first, It last, Compare comp)
+    [[nodiscard]] constexpr auto minmax_element(It first, It last, Compare comp) -> pair<It, It>
     {
         if (first == last)
         {
@@ -366,10 +366,10 @@ namespace tempest
         return {min_it, max_it};
     }
 
-    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type>
-    inline constexpr It lower_bound(It first, It last, const T& value)
+    template <forward_iterator It, typename T = iterator_traits<It>::value_type>
+    constexpr auto lower_bound(It first, It last, const T& value) -> It
     {
-        using diff_type = typename iterator_traits<It>::difference_type;
+        using diff_type = iterator_traits<It>::difference_type;
         diff_type count = distance(first, last);
 
         while (count > 0)
@@ -392,10 +392,10 @@ namespace tempest
         return first;
     }
 
-    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type, typename Compare>
-    inline constexpr It lower_bound(It first, It last, const T& value, Compare comp)
+    template <forward_iterator It, typename T = iterator_traits<It>::value_type, typename Compare>
+    constexpr auto lower_bound(It first, It last, const T& value, Compare comp) -> It
     {
-        using diff_type = typename iterator_traits<It>::difference_type;
+        using diff_type = iterator_traits<It>::difference_type;
         diff_type count = distance(first, last);
 
         while (count > 0)
@@ -418,10 +418,10 @@ namespace tempest
         return first;
     }
 
-    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type>
-    inline constexpr It upper_bound(It first, It last, const T& value)
+    template <forward_iterator It, typename T = iterator_traits<It>::value_type>
+    constexpr auto upper_bound(It first, It last, const T& value) -> It
     {
-        using diff_type = typename iterator_traits<It>::difference_type;
+        using diff_type = iterator_traits<It>::difference_type;
         diff_type count = distance(first, last);
 
         while (count > 0)
@@ -444,10 +444,10 @@ namespace tempest
         return first;
     }
 
-    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type, typename Compare>
-    inline constexpr It upper_bound(It first, It last, const T& value, Compare comp)
+    template <forward_iterator It, typename T = iterator_traits<It>::value_type, typename Compare>
+    constexpr auto upper_bound(It first, It last, const T& value, Compare comp) -> It
     {
-        using diff_type = typename iterator_traits<It>::difference_type;
+        using diff_type = iterator_traits<It>::difference_type;
         diff_type count = distance(first, last);
 
         while (count > 0)
@@ -470,7 +470,7 @@ namespace tempest
     }
 
     template <input_iterator It1, input_iterator It2>
-    inline constexpr bool equal(It1 first1, It1 last1, It2 first2)
+    constexpr auto equal(It1 first1, It1 last1, It2 first2) -> bool
     {
         for (; first1 != last1; ++first1, ++first2)
         {
@@ -496,14 +496,14 @@ namespace tempest
     }
 
     template <input_iterator It1, input_iterator It2>
-    inline constexpr bool equal(It1 first1, It1 last1, It2 first2, It2 last2)
+    constexpr auto equal(It1 first1, It1 last1, It2 first2, It2 last2) -> bool
     {
         return (last1 - first1) == (last2 - first2) && equal(first1, last1, first2);
     }
 
     // TODO: Replace iterator with input_iterator when I fix flat_map's const iterator to be input_iterator compatible
     template <iterator It1, iterator It2, typename Compare>
-    inline constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2, Compare comp)
+    constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2, Compare comp)
         -> decltype(comp(*first1, *first2))
     {
         bool exhausted1 = (first1 == last1);
@@ -527,13 +527,13 @@ namespace tempest
     }
 
     template <iterator It1, iterator It2>
-    inline constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2)
+    constexpr auto lexicographical_compare_three_way(It1 first1, It1 last1, It2 first2, It2 last2)
     {
         return lexicographical_compare_three_way(first1, last1, first2, last2, tempest::compare_three_way{});
     }
 
-    template <forward_iterator It, typename T = typename iterator_traits<It>::value_type>
-    inline constexpr It remove(It first, It last, const T& value)
+    template <forward_iterator It, typename T = iterator_traits<It>::value_type>
+    constexpr auto remove(It first, It last, const T& value) -> It
     {
         first = find(first, last, value);
 
@@ -553,7 +553,7 @@ namespace tempest
     }
 
     template <forward_iterator It, typename Compare>
-    inline constexpr It remove_if(It first, It last, Compare comp)
+    constexpr auto remove_if(It first, It last, Compare comp) -> It
     {
         first = find_if(first, last, comp);
 
@@ -596,19 +596,19 @@ namespace tempest
     }
 
     template <input_iterator InputIt, typename UnaryPred>
-    constexpr bool all_of(InputIt begin, InputIt end, UnaryPred p)
+    constexpr auto all_of(InputIt begin, InputIt end, UnaryPred p) -> bool
     {
         return find_if_not(begin, end, p) == end;
     }
 
     template <input_iterator InputIt, typename UnaryPred>
-    constexpr bool any_of(InputIt begin, InputIt end, UnaryPred p)
+    constexpr auto any_of(InputIt begin, InputIt end, UnaryPred p) -> bool
     {
         return find_if(begin, end, p) != end;
     }
 
     template <input_iterator InputIt, typename UnaryPred>
-    constexpr bool none_of(InputIt begin, InputIt end, UnaryPred p)
+    constexpr auto none_of(InputIt begin, InputIt end, UnaryPred p) -> bool
     {
         return find_if(begin, end, p) == end;
     }

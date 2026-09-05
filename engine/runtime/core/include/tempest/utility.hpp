@@ -19,8 +19,8 @@ namespace tempest
     struct tuple_element;
 
     template <typename T>
-    inline constexpr conditional_t<is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>, T&&, const T&>
-    move_if_noexcept(T& t) noexcept
+    constexpr auto
+    move_if_noexcept(T& t) noexcept -> conditional_t<is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>, T&&, const T&>
     {
         if constexpr (is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>)
         {
@@ -38,7 +38,7 @@ namespace tempest
     /// @param b Second object to swap.
     template <typename T>
         requires(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
-    inline constexpr void swap(T& a,
+    constexpr void swap(T& a,
                                T& b) noexcept(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
     {
         T temp = move(a);
@@ -53,7 +53,7 @@ namespace tempest
     /// @param new_value New value to assign to the object.
     /// @return Old value of the object.
     template <typename T, typename U = T>
-    inline constexpr T exchange(T& obj, U&& new_value)
+    constexpr auto exchange(T& obj, U&& new_value) -> T
     {
         T old_value = tempest::move(obj);
         obj = tempest::forward<U>(new_value);
@@ -126,12 +126,12 @@ namespace tempest
         /// @brief Copy assignment operator.
         /// @param other Object to copy from.
         /// @return Reference to this object.
-        constexpr pair& operator=(const pair& other) = default;
+        constexpr auto operator=(const pair& other) -> pair& = default;
 
         /// @brief Move assignment operator.
         /// @param other Object to move from.
         /// @return Reference to this object.
-        constexpr pair& operator=(pair&& other) = default;
+        constexpr auto operator=(pair&& other) -> pair& = default;
 
         /// @brief Copy assignment operator from a pair of convertible objects.
         /// @tparam U1 Type of the first object.
@@ -139,7 +139,7 @@ namespace tempest
         /// @param other Pair to copy from.
         /// @return Reference to this object.
         template <typename U1, typename U2>
-        constexpr pair& operator=(const pair<U1, U2>& other)
+        constexpr auto operator=(const pair<U1, U2>& other) -> pair&
             requires(is_assignable_v<T1&, const U1&> && is_assignable_v<T2&, const U2&>);
 
         /// @brief Move assignment operator from a pair of convertible objects.
@@ -148,14 +148,14 @@ namespace tempest
         /// @param other Pair to move from.
         /// @return Reference to this object.
         template <typename U1, typename U2>
-        constexpr pair& operator=(pair<U1, U2>&& other)
+        constexpr auto operator=(pair<U1, U2>&& other) -> pair&
             requires(is_assignable_v<T1&, U1 &&> && is_assignable_v<T2&, U2 &&>);
 
         constexpr void swap(pair& other) noexcept(is_nothrow_swappable_v<T1> && is_nothrow_swappable_v<T2>);
     };
 
     template <typename T1, typename T2>
-    inline constexpr pair<T1, T2>::pair(const T1& first, const T2& second)
+    constexpr pair<T1, T2>::pair(const T1& first, const T2& second)
         requires(is_copy_constructible_v<T1> && is_copy_constructible_v<T2>)
         : first(first), second(second)
     {
@@ -164,7 +164,7 @@ namespace tempest
     template <typename T1, typename T2>
     template <typename U1, typename U2>
         requires(is_constructible_v<T1, U1> && is_constructible_v<T2, U2>)
-    inline constexpr pair<T1, T2>::pair(U1&& first, U2&& second)
+    constexpr pair<T1, T2>::pair(U1&& first, U2&& second)
         : first(tempest::forward<U1>(first)), second(tempest::forward<U2>(second))
     {
     }
@@ -179,7 +179,7 @@ namespace tempest
 
     template <typename T1, typename T2>
     template <typename U1, typename U2>
-    inline constexpr pair<T1, T2>::pair(pair<U1, U2>&& other)
+    constexpr pair<T1, T2>::pair(pair<U1, U2>&& other)
         requires(is_constructible_v<T1, U1 &&> && is_constructible_v<T2, U2 &&>)
         : first(move(other.first)), second(move(other.second))
     {
@@ -187,7 +187,7 @@ namespace tempest
 
     template <typename T1, typename T2>
     template <typename U1, typename U2>
-    inline constexpr pair<T1, T2>& pair<T1, T2>::operator=(const pair<U1, U2>& other)
+    constexpr auto pair<T1, T2>::operator=(const pair<U1, U2>& other) -> pair<T1, T2>&
         requires(is_assignable_v<T1&, const U1&> && is_assignable_v<T2&, const U2&>)
     {
         first = other.first;
@@ -197,7 +197,7 @@ namespace tempest
 
     template <typename T1, typename T2>
     template <typename U1, typename U2>
-    inline constexpr pair<T1, T2>& pair<T1, T2>::operator=(pair<U1, U2>&& other)
+    constexpr auto pair<T1, T2>::operator=(pair<U1, U2>&& other) -> pair<T1, T2>&
         requires(is_assignable_v<T1&, U1 &&> && is_assignable_v<T2&, U2 &&>)
     {
         first = move(other.first);
@@ -206,7 +206,7 @@ namespace tempest
     }
 
     template <typename T1, typename T2>
-    inline constexpr void pair<T1, T2>::swap(pair& other) noexcept(is_nothrow_swappable_v<T1> &&
+    constexpr void pair<T1, T2>::swap(pair& other) noexcept(is_nothrow_swappable_v<T1> &&
                                                                    is_nothrow_swappable_v<T2>)
     {
         swap(first, other.first);
@@ -220,7 +220,7 @@ namespace tempest
     /// @param second Second object.
     /// @return Pair containing the two objects.
     template <typename T1, typename T2>
-    inline constexpr pair<T1, T2> make_pair(T1&& first, T2&& second)
+    constexpr auto make_pair(T1&& first, T2&& second) -> pair<T1, T2>
     {
         return pair<T1, T2>(forward<T1>(first), forward<T2>(second));
     }
@@ -234,7 +234,7 @@ namespace tempest
     /// @param rhs Right-hand side pair.
     /// @return True if the pairs are equal, false otherwise.
     template <typename T1, typename T2, typename U1, typename U2>
-    inline constexpr bool operator==(const pair<T1, T2>& lhs, const pair<U1, U2>& rhs)
+    constexpr auto operator==(const pair<T1, T2>& lhs, const pair<U1, U2>& rhs) -> bool
     {
         return lhs.first == rhs.first && lhs.second == rhs.second;
     }
@@ -248,7 +248,7 @@ namespace tempest
     /// @param rhs Right-hand side pair.
     /// @return True if the pairs are not equal, false otherwise.
     template <typename T1, typename T2, typename U1, typename U2>
-    inline constexpr bool operator!=(const pair<T1, T2>& lhs, const pair<U1, U2>& rhs)
+    constexpr auto operator!=(const pair<T1, T2>& lhs, const pair<U1, U2>& rhs) -> bool
     {
         return !(lhs == rhs);
     }
@@ -312,7 +312,7 @@ namespace tempest
     };
 
     template <size_t I, typename T1, typename T2>
-    inline constexpr typename tuple_element<I, pair<T1, T2>>::type& get(pair<T1, T2>& p)
+    constexpr auto get(pair<T1, T2>& p) -> tuple_element<I, pair<T1, T2>>::type&
     {
         if constexpr (I == 0)
         {
@@ -325,7 +325,7 @@ namespace tempest
     }
 
     template <size_t I, typename T1, typename T2>
-    inline constexpr const typename tuple_element<I, pair<T1, T2>>::type& get(const pair<T1, T2>& p)
+    constexpr auto get(const pair<T1, T2>& p) -> const tuple_element<I, pair<T1, T2>>::type&
     {
         if constexpr (I == 0)
         {
@@ -338,7 +338,7 @@ namespace tempest
     }
 
     template <size_t I, typename T1, typename T2>
-    inline constexpr typename tuple_element<I, pair<T1, T2>>::type&& get(pair<T1, T2>&& p) noexcept
+    constexpr auto get(pair<T1, T2>&& p) noexcept -> tuple_element<I, pair<T1, T2>>::type&&
     {
         if constexpr (I == 0)
         {
@@ -351,7 +351,7 @@ namespace tempest
     }
 
     template <size_t I, typename T1, typename T2>
-    inline constexpr const typename tuple_element<I, pair<T1, T2>>::type&& get(const pair<T1, T2>&& p) noexcept
+    constexpr auto get(const pair<T1, T2>&& p) noexcept -> const tuple_element<I, pair<T1, T2>>::type&&
     {
         if constexpr (I == 0)
         {
@@ -364,61 +364,61 @@ namespace tempest
     }
 
     template <typename T, typename U>
-    constexpr T& get(pair<T, U>& p)
+    constexpr auto get(pair<T, U>& p) -> T&
     {
         return p.first;
     }
 
     template <typename T, typename U>
-    constexpr const T& get(const pair<T, U>& p)
+    constexpr auto get(const pair<T, U>& p) -> const T&
     {
         return p.first;
     }
 
     template <typename T, typename U>
-    constexpr T&& get(pair<T, U>&& p) noexcept
+    constexpr auto get(pair<T, U>&& p) noexcept -> T&&
     {
         return tempest::move(p).first;
     }
 
     template <typename T, typename U>
-    constexpr const T&& get(const pair<T, U>&& p) noexcept
+    constexpr auto get(const pair<T, U>&& p) noexcept -> const T&&
     {
         return tempest::move(p).first;
     }
 
     template <typename T, typename U>
-    constexpr U& get(pair<T, U>& p)
+    constexpr auto get(pair<T, U>& p) -> U&
     {
         return p.second;
     }
 
     template <typename T, typename U>
-    constexpr const U& get(const pair<T, U>& p)
+    constexpr auto get(const pair<T, U>& p) -> const U&
     {
         return p.second;
     }
 
     template <typename T, typename U>
-    constexpr U&& get(pair<T, U>&& p) noexcept
+    constexpr auto get(pair<T, U>&& p) noexcept -> U&&
     {
         return tempest::move(p).second;
     }
 
     template <typename T, typename U>
-    constexpr const U&& get(const pair<T, U>&& p) noexcept
+    constexpr auto get(const pair<T, U>&& p) noexcept -> const U&&
     {
         return tempest::move(p).second;
     }
 
     template <typename T, typename U>
-    inline constexpr bool operator==(const pair<T, U>& lhs, const pair<T, U>& rhs)
+    constexpr auto operator==(const pair<T, U>& lhs, const pair<T, U>& rhs) -> bool
     {
         return lhs.first == rhs.first && lhs.second == rhs.second;
     }
 
     template <typename T, typename U>
-    inline constexpr bool operator!=(const pair<T, U>& lhs, const pair<T, U>& rhs)
+    constexpr auto operator!=(const pair<T, U>& lhs, const pair<T, U>& rhs) -> bool
     {
         return !(lhs == rhs);
     }
@@ -475,7 +475,7 @@ namespace tempest
     {
         using value_type = T;
 
-        static constexpr size_t size() noexcept
+        static constexpr auto size() noexcept -> size_t
         {
             return sizeof...(Is);
         }

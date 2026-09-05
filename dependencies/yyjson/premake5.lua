@@ -1,27 +1,31 @@
-project 'simdjson'
+project 'yyjson'
     kind 'StaticLib'
-    language 'C++'
-    cppdialect 'C++20'
+    language 'C'
+    cdialect 'C11'
 
     targetdir '%{binaries}'
     objdir '%{intermediates}'
 
     files {
-        'include/simdjson.h',
-        'src/simdjson.cpp',
+        'include/yyjson.h',
+        'src/yyjson.c',
+    }
+
+    includedirs {
+        'include',
     }
 
     warnings 'Off'
 
-    usage "INTERFACE"
+    usage 'INTERFACE'
         externalincludedirs {
             'include',
         }
 
         dependson {
-            'simdjson',
+            'yyjson',
         }
 
         links {
-            'simdjson',
+            'yyjson',
         }

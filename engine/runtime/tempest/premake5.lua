@@ -131,7 +131,7 @@ scoped.project('tempest', function()
         'units',
 
         'miniz',
-        'simdjson',
+        'yyjson',
         'tinyexr',
         'tlsf',
         'vma',
@@ -192,7 +192,7 @@ scoped.project('tempest', function()
 
                 'glfw',
                 'miniz',
-                'simdjson',
+                'yyjson',
                 'tinyexr',
                 'tlsf',
                 'vma',

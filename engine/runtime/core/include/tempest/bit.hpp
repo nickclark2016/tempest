@@ -35,14 +35,14 @@ namespace tempest
     /// @return Object initialized with the bits from `from`
     template <typename To, typename From>
         requires(sizeof(To) == sizeof(From) && is_trivially_copyable_v<To> && is_trivially_copyable_v<From>)
-    [[nodiscard]] inline constexpr To bit_cast(const From& from) noexcept
+    [[nodiscard]] constexpr auto bit_cast(const From& from) noexcept -> To
     {
         return __builtin_bit_cast(To, from);
     }
 
     template <typename T>
         requires(has_unique_object_representations_v<T> && is_integral_v<T>)
-    [[nodiscard]] inline constexpr T byteswap(T n) noexcept
+    [[nodiscard]] constexpr auto byteswap(T n) noexcept -> T
     {
         // runtime
         if (!is_constant_evaluated())
@@ -111,13 +111,13 @@ namespace tempest
     template <typename T>
         requires(is_integral_v<T> && is_unsigned_v<T> && !is_same_v<T, bool> && !is_same_v<T, char> &&
                  !is_same_v<T, wchar_t> && !is_same_v<T, char16_t> && !is_same_v<T, char32_t>)
-    inline constexpr bool has_single_bit(T n) noexcept
+    constexpr auto has_single_bit(T n) noexcept -> bool
     {
         return n && !(n & (n - 1));
     }
 
     template <unsigned_integral T>
-    inline constexpr int countl_zero(T n) noexcept
+    constexpr auto countl_zero(T n) noexcept -> int
     {
 #if defined(_MSC_VER) && !defined(__clang__)
         constexpr auto width = sizeof(T) * 8;
@@ -197,13 +197,13 @@ namespace tempest
     }
 
     template <unsigned_integral T>
-    inline constexpr int countl_one(T n) noexcept
+    constexpr auto countl_one(T n) noexcept -> int
     {
         return countl_zero(static_cast<T>(~n));
     }
 
     template <unsigned_integral T>
-    inline constexpr int countr_zero(T n) noexcept
+    constexpr auto countr_zero(T n) noexcept -> int
     {
 #if defined(_MSC_VER) && !defined(__clang__)
         constexpr auto width = sizeof(T) * 8;
@@ -286,13 +286,13 @@ namespace tempest
     }
 
     template <unsigned_integral T>
-    inline constexpr int countr_one(T n) noexcept
+    constexpr auto countr_one(T n) noexcept -> int
     {
         return countr_zero(static_cast<T>(~n));
     }
 
     template <unsigned_integral T>
-    inline constexpr int popcount(T n) noexcept
+    constexpr auto popcount(T n) noexcept -> int
     {
 #if defined(_MSC_VER) && !defined(__clang__)
         if (is_constant_evaluated())
@@ -356,15 +356,15 @@ namespace tempest
     }
 
     template <unsigned_integral T>
-    inline constexpr int bit_width(T n) noexcept
+    constexpr auto bit_width(T n) noexcept -> int
     {
         return (8 * sizeof(T)) - countl_zero(n);
     }
 
     template <unsigned_integral T>
-    inline constexpr T bit_ceil(T n) noexcept
+    constexpr auto bit_ceil(T n) noexcept -> T
     {
-        if (n <= 1u)
+        if (n <= 1U)
         {
             return T(1);
         }
@@ -377,15 +377,16 @@ namespace tempest
         {
             // Case of promoted integral type
             constexpr int offset = static_cast<int>((sizeof(unsigned) * 8) - (sizeof(T) * 8));
-            return T(1u << (bit_width(T(n - 1)) + offset) >> offset);
+            return T(1U << (bit_width(T(n - 1)) + offset) >> offset);
         }
     }
 
     template <unsigned_integral T>
-    inline constexpr T bit_floor(T n) noexcept
+    constexpr auto bit_floor(T n) noexcept -> T
     {
-        if (n == 0)
+        if (n == 0) {
             return 0;
+}
         return T(1) << (bit_width(n) - 1);
     }
 } // namespace tempest

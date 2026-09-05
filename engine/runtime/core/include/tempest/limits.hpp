@@ -4,6 +4,7 @@
 #include <tempest/bit.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/int.hpp>
+#include <tempest/type_traits.hpp>
 
 #ifndef CHAR_BIT
 #define CHAR_BIT 8
@@ -15,7 +16,7 @@ namespace tempest
     class numeric_limits
     {
       public:
-        inline static constexpr bool is_specialized = false;
+        static constexpr bool is_specialized = false;
     };
 
     namespace detail
@@ -23,26 +24,26 @@ namespace tempest
         template <typename T>
         struct integral_numeric_limits_specialization
         {
-            inline static constexpr bool is_specialized = true;
-            inline static constexpr bool is_signed = is_signed_v<T>;
-            inline static constexpr bool is_integer = true;
-            inline static constexpr bool is_exact = true;
-            inline static constexpr bool has_infinity = false;
-            inline static constexpr bool has_quiet_NaN = false;
-            inline static constexpr bool has_signaling_NaN = false;
-            inline static constexpr bool is_iec559 = false;
-            inline static constexpr bool is_bounded = true;
-            inline static constexpr bool is_modulo = true;
-            inline static constexpr int digits = is_same_v<T, bool> ? 1 : sizeof(T) * 8 - (is_signed_v<T> ? 1 : 0);
-            inline static constexpr int digits10 = is_same_v<T, bool> ? 0 : digits * 30103 / 100000;
-            inline static constexpr int max_digits10 = 0;
-            inline static constexpr int radix = 2;
-            inline static constexpr int min_exponent = 0;
-            inline static constexpr int min_exponent10 = 0;
-            inline static constexpr int max_exponent = 0;
-            inline static constexpr int max_exponent10 = 0;
+            static constexpr bool is_specialized = true;
+            static constexpr bool is_signed = is_signed_v<T>;
+            static constexpr bool is_integer = true;
+            static constexpr bool is_exact = true;
+            static constexpr bool has_infinity = false;
+            static constexpr bool has_quiet_NaN = false;
+            static constexpr bool has_signaling_NaN = false;
+            static constexpr bool is_iec559 = false;
+            static constexpr bool is_bounded = true;
+            static constexpr bool is_modulo = !is_signed_v<T> && !is_same_v<T, bool>;
+            static constexpr int digits = is_same_v<T, bool> ? 1 : (sizeof(T) * 8) - (is_signed_v<T> ? 1 : 0);
+            static constexpr int digits10 = is_same_v<T, bool> ? 0 : digits * 30103 / 100000;
+            static constexpr int max_digits10 = 0;
+            static constexpr int radix = 2;
+            static constexpr int min_exponent = 0;
+            static constexpr int min_exponent10 = 0;
+            static constexpr int max_exponent = 0;
+            static constexpr int max_exponent10 = 0;
 
-            inline static constexpr T min() noexcept
+            static constexpr auto min() noexcept -> T
             {
                 if constexpr (is_same_v<T, bool>)
                 {
@@ -50,7 +51,8 @@ namespace tempest
                 }
                 else if constexpr (is_signed_v<T>)
                 {
-                    return T(1) << (digits - 1);
+                    using U = make_unsigned_t<T>;
+                    return static_cast<T>(U(1) << digits);
                 }
                 else
                 {
@@ -58,7 +60,12 @@ namespace tempest
                 }
             }
 
-            inline static constexpr T max() noexcept
+            static constexpr auto lowest() noexcept -> T
+            {
+                return min();
+            }
+
+            static constexpr auto max() noexcept -> T
             {
                 if constexpr (is_same_v<T, bool>)
                 {
@@ -66,15 +73,41 @@ namespace tempest
                 }
                 else if constexpr (is_signed_v<T>)
                 {
-                    return ~(T(1) << (digits - 1));
+                    using U = make_unsigned_t<T>;
+                    return static_cast<T>((U(1) << digits) - 1);
                 }
                 else
                 {
                     return ~T(0);
                 }
             }
+
+            static constexpr auto epsilon() noexcept -> T
+            {
+                return T(0);
+            }
+
+            static constexpr auto round_error() noexcept -> T
+            {
+                return T(0);
+            }
+
+            static constexpr auto infinity() noexcept -> T
+            {
+                return T(0);
+            }
+
+            static constexpr auto quiet_NaN() noexcept -> T
+            {
+                return T(0);
+            }
+
+            static constexpr auto signaling_NaN() noexcept -> T
+            {
+                return T(0);
+            }
         };
-    }
+    } // namespace detail
 
     template <integral T>
     class numeric_limits<T> : public detail::integral_numeric_limits_specialization<T>
@@ -85,61 +118,61 @@ namespace tempest
     class numeric_limits<float>
     {
       public:
-        inline static constexpr bool is_specialized = true;
-        inline static constexpr bool is_signed = true;
-        inline static constexpr bool is_integer = false;
-        inline static constexpr bool is_exact = false;
-        inline static constexpr bool has_infinity = true;
-        inline static constexpr bool has_quiet_NaN = true;
-        inline static constexpr bool has_signaling_NaN = true;
-        inline static constexpr bool is_iec559 = true;
-        inline static constexpr bool is_bounded = true;
-        inline static constexpr bool is_modulo = false;
-        inline static constexpr int digits = 24;
-        inline static constexpr int digits10 = 6;
-        inline static constexpr int max_digits10 = 9;
-        inline static constexpr int radix = 2;
-        inline static constexpr int min_exponent = -125;
-        inline static constexpr int min_exponent10 = -37;
-        inline static constexpr int max_exponent = 128;
-        inline static constexpr int max_exponent10 = 38;
+        static constexpr bool is_specialized = true;
+        static constexpr bool is_signed = true;
+        static constexpr bool is_integer = false;
+        static constexpr bool is_exact = false;
+        static constexpr bool has_infinity = true;
+        static constexpr bool has_quiet_NaN = true;
+        static constexpr bool has_signaling_NaN = true;
+        static constexpr bool is_iec559 = true;
+        static constexpr bool is_bounded = true;
+        static constexpr bool is_modulo = false;
+        static constexpr int digits = 24;
+        static constexpr int digits10 = 6;
+        static constexpr int max_digits10 = 9;
+        static constexpr int radix = 2;
+        static constexpr int min_exponent = -125;
+        static constexpr int min_exponent10 = -37;
+        static constexpr int max_exponent = 128;
+        static constexpr int max_exponent10 = 38;
 
-        inline static constexpr float min() noexcept
+        static constexpr auto min() noexcept -> float
         {
-            return 1.17549435e-38f;
+            return 1.17549435e-38F;
         }
 
-        inline static constexpr float max() noexcept
+        static constexpr auto max() noexcept -> float
         {
-            return 3.40282347e+38f;
+            return 3.40282347e+38F;
         }
 
-        inline static constexpr float lowest() noexcept
+        static constexpr auto lowest() noexcept -> float
         {
-            return -3.40282347e+38f;
+            return -3.40282347e+38F;
         }
 
-        inline static constexpr float epsilon() noexcept
+        static constexpr auto epsilon() noexcept -> float
         {
-            return 1.19209290e-7f;
+            return 1.19209290e-7F;
         }
 
-        inline static constexpr float round_error() noexcept
+        static constexpr auto round_error() noexcept -> float
         {
-            return 0.5f;
+            return 0.5F;
         }
 
-        inline static constexpr float infinity() noexcept
+        static constexpr auto infinity() noexcept -> float
         {
             return __builtin_huge_valf();
         }
 
-        inline static constexpr float quiet_NaN() noexcept
+        static constexpr auto quiet_NaN() noexcept -> float
         {
             return __builtin_nanf("");
         }
 
-        inline static constexpr float signaling_NaN() noexcept
+        static constexpr auto signaling_NaN() noexcept -> float
         {
             return __builtin_nansf("");
         }
@@ -149,61 +182,61 @@ namespace tempest
     class numeric_limits<double>
     {
       public:
-        inline static constexpr bool is_specialized = true;
-        inline static constexpr bool is_signed = true;
-        inline static constexpr bool is_integer = false;
-        inline static constexpr bool is_exact = false;
-        inline static constexpr bool has_infinity = true;
-        inline static constexpr bool has_quiet_NaN = true;
-        inline static constexpr bool has_signaling_NaN = true;
-        inline static constexpr bool is_iec559 = true;
-        inline static constexpr bool is_bounded = true;
-        inline static constexpr bool is_modulo = false;
-        inline static constexpr int digits = 53;
-        inline static constexpr int digits10 = 15;
-        inline static constexpr int max_digits10 = 17;
-        inline static constexpr int radix = 2;
-        inline static constexpr int min_exponent = -1021;
-        inline static constexpr int min_exponent10 = -307;
-        inline static constexpr int max_exponent = 1024;
-        inline static constexpr int max_exponent10 = 308;
+        static constexpr bool is_specialized = true;
+        static constexpr bool is_signed = true;
+        static constexpr bool is_integer = false;
+        static constexpr bool is_exact = false;
+        static constexpr bool has_infinity = true;
+        static constexpr bool has_quiet_NaN = true;
+        static constexpr bool has_signaling_NaN = true;
+        static constexpr bool is_iec559 = true;
+        static constexpr bool is_bounded = true;
+        static constexpr bool is_modulo = false;
+        static constexpr int digits = 53;
+        static constexpr int digits10 = 15;
+        static constexpr int max_digits10 = 17;
+        static constexpr int radix = 2;
+        static constexpr int min_exponent = -1021;
+        static constexpr int min_exponent10 = -307;
+        static constexpr int max_exponent = 1024;
+        static constexpr int max_exponent10 = 308;
 
-        inline static constexpr double min() noexcept
+        static constexpr auto min() noexcept -> double
         {
             return 2.2250738585072014e-308;
         }
 
-        inline static constexpr double max() noexcept
+        static constexpr auto max() noexcept -> double
         {
             return 1.7976931348623157e+308;
         }
 
-        inline static constexpr double lowest() noexcept
+        static constexpr auto lowest() noexcept -> double
         {
             return -1.7976931348623157e+308;
         }
 
-        inline static constexpr double epsilon() noexcept
+        static constexpr auto epsilon() noexcept -> double
         {
             return 2.2204460492503131e-16;
         }
 
-        inline static constexpr double round_error() noexcept
+        static constexpr auto round_error() noexcept -> double
         {
             return 0.5;
         }
 
-        inline static constexpr double infinity() noexcept
+        static constexpr auto infinity() noexcept -> double
         {
             return __builtin_huge_val();
         }
 
-        inline static constexpr double quiet_NaN() noexcept
+        static constexpr auto quiet_NaN() noexcept -> double
         {
             return __builtin_nan("");
         }
 
-        inline static constexpr double signaling_NaN() noexcept
+        static constexpr auto signaling_NaN() noexcept -> double
         {
             return __builtin_nans("");
         }

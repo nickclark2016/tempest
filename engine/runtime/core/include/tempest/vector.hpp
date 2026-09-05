@@ -30,8 +30,8 @@ namespace tempest
         using difference_type = ptrdiff_t;
         using reference = value_type&;
         using const_reference = const value_type&;
-        using pointer = typename allocator_traits<Allocator>::pointer;
-        using const_pointer = typename allocator_traits<Allocator>::const_pointer;
+        using pointer = allocator_traits<Allocator>::pointer;
+        using const_pointer = allocator_traits<Allocator>::const_pointer;
         using iterator = pointer;
         using const_iterator = const_pointer;
         using reverse_iterator = tempest::reverse_iterator<iterator>;
@@ -55,77 +55,77 @@ namespace tempest
         template <typename... Ts>
             requires(sizeof...(Ts) > 0) &&
                     (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
-        constexpr vector(init_list_t, Ts&&... values);
+        constexpr vector(init_list_t /*unused*/, Ts&&... values);
 
         constexpr ~vector();
 
-        constexpr vector& operator=(const vector& other)
+        constexpr auto operator=(const vector& other) -> vector&
             requires is_copy_assignable_v<T>;
-        constexpr vector& operator=(vector&& other) noexcept(
+        constexpr auto operator=(vector&& other) noexcept(
             allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
-            allocator_traits<Allocator>::is_always_equal::value);
+            allocator_traits<Allocator>::is_always_equal::value) -> vector&;
 
         constexpr void assign(size_type count, const T& value);
 
         template <typename InputIt>
         constexpr void assign(InputIt first, InputIt last);
 
-        constexpr allocator_type get_allocator() const;
+        constexpr auto get_allocator() const -> allocator_type;
 
-        constexpr reference at(size_type pos);
-        constexpr const_reference at(size_type pos) const;
-        constexpr reference operator[](size_type pos);
-        constexpr const_reference operator[](size_type pos) const;
+        constexpr auto at(size_type pos) -> reference;
+        constexpr auto at(size_type pos) const -> const_reference;
+        constexpr auto operator[](size_type pos) -> reference;
+        constexpr auto operator[](size_type pos) const -> const_reference;
 
-        constexpr reference front();
-        constexpr const_reference front() const;
-        constexpr reference back();
-        constexpr const_reference back() const;
+        constexpr auto front() -> reference;
+        constexpr auto front() const -> const_reference;
+        constexpr auto back() -> reference;
+        constexpr auto back() const -> const_reference;
 
-        constexpr T* data() noexcept;
-        constexpr const T* data() const noexcept;
+        constexpr auto data() noexcept -> T*;
+        constexpr auto data() const noexcept -> const T*;
 
-        constexpr iterator begin() noexcept;
-        constexpr const_iterator begin() const noexcept;
-        constexpr const_iterator cbegin() const noexcept;
+        constexpr auto begin() noexcept -> iterator;
+        constexpr auto begin() const noexcept -> const_iterator;
+        constexpr auto cbegin() const noexcept -> const_iterator;
 
-        constexpr iterator end() noexcept;
-        constexpr const_iterator end() const noexcept;
-        constexpr const_iterator cend() const noexcept;
+        constexpr auto end() noexcept -> iterator;
+        constexpr auto end() const noexcept -> const_iterator;
+        constexpr auto cend() const noexcept -> const_iterator;
 
-        constexpr reverse_iterator rbegin() noexcept;
-        constexpr const_reverse_iterator rbegin() const noexcept;
-        constexpr const_reverse_iterator crbegin() const noexcept;
+        constexpr auto rbegin() noexcept -> reverse_iterator;
+        constexpr auto rbegin() const noexcept -> const_reverse_iterator;
+        constexpr auto crbegin() const noexcept -> const_reverse_iterator;
 
-        constexpr reverse_iterator rend() noexcept;
-        constexpr const_reverse_iterator rend() const noexcept;
-        constexpr const_reverse_iterator crend() const noexcept;
+        constexpr auto rend() noexcept -> reverse_iterator;
+        constexpr auto rend() const noexcept -> const_reverse_iterator;
+        constexpr auto crend() const noexcept -> const_reverse_iterator;
 
-        constexpr bool empty() const noexcept;
-        constexpr size_type size() const noexcept;
-        constexpr size_type max_size() const noexcept;
-        constexpr size_type capacity() const noexcept;
+        [[nodiscard]] constexpr auto empty() const noexcept -> bool;
+        [[nodiscard]] constexpr auto size() const noexcept -> size_type;
+        [[nodiscard]] constexpr auto max_size() const noexcept -> size_type;
+        [[nodiscard]] constexpr auto capacity() const noexcept -> size_type;
 
         constexpr void reserve(size_type new_cap);
         constexpr void shrink_to_fit();
 
         constexpr void clear() noexcept;
 
-        constexpr iterator insert(const_iterator pos, const T& value)
+        constexpr auto insert(const_iterator pos, const T& value) -> iterator
             requires is_copy_constructible_v<T>;
-        constexpr iterator insert(const_iterator pos, T&& value);
+        constexpr auto insert(const_iterator pos, T&& value) -> iterator;
 
-        constexpr iterator insert(const_iterator pos, size_type count, const T& value)
+        constexpr auto insert(const_iterator pos, size_type count, const T& value) -> iterator
             requires is_copy_constructible_v<T>;
 
         template <typename InputIt>
-        constexpr iterator insert(const_iterator pos, InputIt first, InputIt last);
+        constexpr auto insert(const_iterator pos, InputIt first, InputIt last) -> iterator;
 
         template <typename... Args>
-        constexpr iterator emplace(const_iterator pos, Args&&... args);
+        constexpr auto emplace(const_iterator pos, Args&&... args) -> iterator;
 
-        constexpr iterator erase(const_iterator pos);
-        constexpr iterator erase(const_iterator first, const_iterator last);
+        constexpr auto erase(const_iterator pos) -> iterator;
+        constexpr auto erase(const_iterator first, const_iterator last) -> iterator;
 
         constexpr void push_back(const T& value)
             requires is_copy_constructible_v<T>;
@@ -133,7 +133,7 @@ namespace tempest
         constexpr void push_back(T&& value);
 
         template <typename... Args>
-        constexpr reference emplace_back(Args&&... args);
+        constexpr auto emplace_back(Args&&... args) -> reference;
 
         constexpr void pop_back();
 
@@ -144,7 +144,7 @@ namespace tempest
                                                     allocator_traits<Allocator>::is_always_equal::value);
 
         template <typename U>
-        vector<U> reinterpret_as() noexcept;
+        auto reinterpret_as() noexcept -> vector<U>;
 
       private:
         Allocator _alloc;
@@ -153,7 +153,7 @@ namespace tempest
         T* _end{nullptr};
         T* _capacity_end{nullptr};
 
-        constexpr size_type _compute_next_capacity(size_type requested_capacity) const noexcept;
+        [[nodiscard]] constexpr auto _compute_next_capacity(size_type requested_capacity) const noexcept -> size_type;
 
         template <typename... Args>
         constexpr void _emplace_one_at_back(Args&&... args);
@@ -162,7 +162,7 @@ namespace tempest
     };
 
     template <typename T, typename Allocator>
-    constexpr bool operator==(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs);
+    constexpr auto operator==(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs) -> bool;
 
     template <typename T, typename Allocator>
     constexpr auto operator<=>(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs);
@@ -171,10 +171,10 @@ namespace tempest
     constexpr void swap(vector<T, Allocator>& lhs, vector<T, Allocator>& rhs) noexcept(noexcept(lhs.swap(rhs)));
 
     template <typename T, typename Alloc, typename U>
-    constexpr vector<T, Alloc>::size_type erase(vector<T, Alloc>& c, const U& value);
+    constexpr auto erase(vector<T, Alloc>& c, const U& value) -> vector<T, Alloc>::size_type;
 
     template <typename T, typename Alloc, typename Pred>
-    constexpr vector<T, Alloc>::size_type erase_if(vector<T, Alloc>& c, Pred pred);
+    constexpr auto erase_if(vector<T, Alloc>& c, Pred pred) -> vector<T, Alloc>::size_type;
 
     template <typename InputIt, typename Alloc = allocator<typename iterator_traits<InputIt>::value_type>>
     vector(InputIt, InputIt, Alloc = Alloc()) -> vector<typename iterator_traits<InputIt>::value_type, Alloc>;
@@ -200,7 +200,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     template <input_iterator It>
-    inline constexpr vector<T, Allocator>::vector(It first, It last, const Allocator& alloc) : _alloc{alloc}
+    constexpr vector<T, Allocator>::vector(It first, It last, const Allocator& alloc) : _alloc{alloc}
     {
         reserve(distance(first, last));
 
@@ -258,11 +258,11 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr vector<T, Allocator>::vector(vector&& other) noexcept : _alloc{tempest::move(other._alloc)}
+    constexpr vector<T, Allocator>::vector(vector&& other) noexcept : _alloc{tempest::move(other._alloc)}, _data(other._data), _end(other._end), _capacity_end(other._capacity_end)
     {
-        _data = other._data;
-        _end = other._end;
-        _capacity_end = other._capacity_end;
+        
+        
+        
 
         other._data = nullptr;
         other._end = nullptr;
@@ -297,7 +297,7 @@ namespace tempest
     template <typename... Ts>
         requires(sizeof...(Ts) > 0) &&
                 (conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>)
-    constexpr vector<T, Allocator>::vector(init_list_t, Ts&&... values)
+    constexpr vector<T, Allocator>::vector(init_list_t /*unused*/, Ts&&... values)
     {
         static_assert(sizeof...(Ts) > 0, "At least one value must be provided");
         static_assert((conjunction_v<is_convertible<Ts, T>...> || conjunction_v<is_constructible<T, Ts>...>),
@@ -318,7 +318,7 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr vector<T, Allocator>& vector<T, Allocator>::operator=(const vector& other)
+    constexpr auto vector<T, Allocator>::operator=(const vector& other) -> vector<T, Allocator>&
         requires is_copy_assignable_v<T>
     {
         if (this == &other)
@@ -338,9 +338,9 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr vector<T, Allocator>& vector<T, Allocator>::operator=(vector&& other) noexcept(
+    constexpr auto vector<T, Allocator>::operator=(vector&& other) noexcept(
         allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
-        allocator_traits<Allocator>::is_always_equal::value)
+        allocator_traits<Allocator>::is_always_equal::value) -> vector<T, Allocator>&
     {
         if (this == &other)
         {
@@ -388,165 +388,165 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::allocator_type vector<T, Allocator>::get_allocator() const
+    constexpr auto vector<T, Allocator>::get_allocator() const -> vector<T, Allocator>::allocator_type
     {
         return _alloc;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::at(size_type pos)
+    constexpr auto vector<T, Allocator>::at(size_type pos) -> vector<T, Allocator>::reference
     {
         TEMPEST_ASSERT(pos < size());
         return _data[pos];
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reference vector<T, Allocator>::at(size_type pos) const
+    constexpr auto vector<T, Allocator>::at(size_type pos) const -> vector<T, Allocator>::const_reference
     {
         TEMPEST_ASSERT(pos < size());
         return _data[pos];
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::operator[](size_type pos)
+    constexpr auto vector<T, Allocator>::operator[](size_type pos) -> vector<T, Allocator>::reference
     {
         return _data[pos];
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reference vector<T, Allocator>::operator[](size_type pos) const
+    constexpr auto vector<T, Allocator>::operator[](size_type pos) const -> vector<T, Allocator>::const_reference
     {
         return _data[pos];
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::front()
+    constexpr auto vector<T, Allocator>::front() -> vector<T, Allocator>::reference
     {
         return *_data;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reference vector<T, Allocator>::front() const
+    constexpr auto vector<T, Allocator>::front() const -> vector<T, Allocator>::const_reference
     {
         return *_data;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::back()
+    constexpr auto vector<T, Allocator>::back() -> vector<T, Allocator>::reference
     {
         return *(_end - 1);
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reference vector<T, Allocator>::back() const
+    constexpr auto vector<T, Allocator>::back() const -> vector<T, Allocator>::const_reference
     {
         return *(_end - 1);
     }
 
     template <typename T, typename Allocator>
-    constexpr T* vector<T, Allocator>::data() noexcept
+    constexpr auto vector<T, Allocator>::data() noexcept -> T*
     {
         return _data;
     }
 
     template <typename T, typename Allocator>
-    constexpr const T* vector<T, Allocator>::data() const noexcept
+    constexpr auto vector<T, Allocator>::data() const noexcept -> const T*
     {
         return _data;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::begin() noexcept
+    constexpr auto vector<T, Allocator>::begin() noexcept -> vector<T, Allocator>::iterator
     {
         return _data;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_iterator vector<T, Allocator>::begin() const noexcept
+    constexpr auto vector<T, Allocator>::begin() const noexcept -> vector<T, Allocator>::const_iterator
     {
         return _data;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_iterator vector<T, Allocator>::cbegin() const noexcept
+    constexpr auto vector<T, Allocator>::cbegin() const noexcept -> vector<T, Allocator>::const_iterator
     {
         return _data;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::end() noexcept
+    constexpr auto vector<T, Allocator>::end() noexcept -> vector<T, Allocator>::iterator
     {
         return _end;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_iterator vector<T, Allocator>::end() const noexcept
+    constexpr auto vector<T, Allocator>::end() const noexcept -> vector<T, Allocator>::const_iterator
     {
         return _end;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_iterator vector<T, Allocator>::cend() const noexcept
+    constexpr auto vector<T, Allocator>::cend() const noexcept -> vector<T, Allocator>::const_iterator
     {
         return _end;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::reverse_iterator vector<T, Allocator>::rbegin() noexcept
+    constexpr auto vector<T, Allocator>::rbegin() noexcept -> vector<T, Allocator>::reverse_iterator
     {
         return reverse_iterator{end()};
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reverse_iterator vector<T, Allocator>::rbegin() const noexcept
+    constexpr auto vector<T, Allocator>::rbegin() const noexcept -> vector<T, Allocator>::const_reverse_iterator
     {
         return const_reverse_iterator{end()};
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reverse_iterator vector<T, Allocator>::crbegin() const noexcept
+    constexpr auto vector<T, Allocator>::crbegin() const noexcept -> vector<T, Allocator>::const_reverse_iterator
     {
         return const_reverse_iterator{cend()};
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::reverse_iterator vector<T, Allocator>::rend() noexcept
+    constexpr auto vector<T, Allocator>::rend() noexcept -> vector<T, Allocator>::reverse_iterator
     {
         return reverse_iterator{begin()};
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reverse_iterator vector<T, Allocator>::rend() const noexcept
+    constexpr auto vector<T, Allocator>::rend() const noexcept -> vector<T, Allocator>::const_reverse_iterator
     {
         return const_reverse_iterator{begin()};
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::const_reverse_iterator vector<T, Allocator>::crend() const noexcept
+    constexpr auto vector<T, Allocator>::crend() const noexcept -> vector<T, Allocator>::const_reverse_iterator
     {
         return const_reverse_iterator{begin()};
     }
 
     template <typename T, typename Allocator>
-    constexpr bool vector<T, Allocator>::empty() const noexcept
+    constexpr auto vector<T, Allocator>::empty() const noexcept -> bool
     {
         return size() == 0;
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::size_type vector<T, Allocator>::size() const noexcept
+    constexpr auto vector<T, Allocator>::size() const noexcept -> vector<T, Allocator>::size_type
     {
         return static_cast<size_type>(_end - _data);
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::size_type vector<T, Allocator>::max_size() const noexcept
+    constexpr auto vector<T, Allocator>::max_size() const noexcept -> vector<T, Allocator>::size_type
     {
         return allocator_traits<Allocator>::max_size(_alloc);
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::size_type vector<T, Allocator>::capacity() const noexcept
+    constexpr auto vector<T, Allocator>::capacity() const noexcept -> vector<T, Allocator>::size_type
     {
         return _capacity_end - _data;
     }
@@ -636,7 +636,7 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, const T& value)
+    constexpr auto vector<T, Allocator>::insert(const_iterator pos, const T& value) -> vector<T, Allocator>::iterator
         requires is_copy_constructible_v<T>
     {
         auto index = pos - begin();
@@ -662,7 +662,7 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, T&& value)
+    constexpr auto vector<T, Allocator>::insert(const_iterator pos, T&& value) -> vector<T, Allocator>::iterator
     {
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
@@ -688,8 +688,8 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, size_type count,
-                                                                                   const T& value)
+    constexpr auto vector<T, Allocator>::insert(const_iterator pos, size_type count,
+                                                                                   const T& value) -> vector<T, Allocator>::iterator
         requires is_copy_constructible_v<T>
     {
         auto index = pos - begin();
@@ -724,8 +724,8 @@ namespace tempest
 
     template <typename T, typename Allocator>
     template <typename InputIt>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::insert(const_iterator pos, InputIt first,
-                                                                                   InputIt last)
+    constexpr auto vector<T, Allocator>::insert(const_iterator pos, InputIt first,
+                                                                                   InputIt last) -> vector<T, Allocator>::iterator
     {
         const auto index = pos - begin();
         const auto count = static_cast<size_t>(distance(first, last));
@@ -738,7 +738,7 @@ namespace tempest
         ptrdiff_t end_index = size();
         ptrdiff_t start_index = index;
 
-        for (auto i = 0u; i < count_to_move; ++i)
+        for (auto i = 0U; i < count_to_move; ++i)
         {
             allocator_traits<Allocator>::construct(_alloc, _end + i, tempest::move(_data[index + i - 1]));
         }
@@ -760,7 +760,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     template <typename... Args>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::emplace(const_iterator pos, Args&&... args)
+    constexpr auto vector<T, Allocator>::emplace(const_iterator pos, Args&&... args) -> vector<T, Allocator>::iterator
     {
         auto index = pos - begin();
         reserve(_compute_next_capacity(size() + 1));
@@ -777,7 +777,7 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(const_iterator pos)
+    constexpr auto vector<T, Allocator>::erase(const_iterator pos) -> vector<T, Allocator>::iterator
     {
         auto index = pos - begin();
 
@@ -795,8 +795,8 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::iterator vector<T, Allocator>::erase(const_iterator first,
-                                                                                  const_iterator last)
+    constexpr auto vector<T, Allocator>::erase(const_iterator first,
+                                                                                  const_iterator last) -> vector<T, Allocator>::iterator
     {
         auto index = first - begin();
         auto count = last - first;
@@ -831,7 +831,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     template <typename... Args>
-    constexpr typename vector<T, Allocator>::reference vector<T, Allocator>::emplace_back(Args&&... args)
+    constexpr auto vector<T, Allocator>::emplace_back(Args&&... args) -> vector<T, Allocator>::reference
     {
         _emplace_one_at_back(tempest::forward<Args>(args)...);
         return back();
@@ -839,7 +839,7 @@ namespace tempest
 
     template <typename T, typename Allocator>
     template <typename U>
-    inline vector<U> tempest::vector<T, Allocator>::reinterpret_as() noexcept
+    inline auto tempest::vector<T, Allocator>::reinterpret_as() noexcept -> vector<U>
     {
         if constexpr (tempest::is_same_v<T, U>)
         {
@@ -917,40 +917,40 @@ namespace tempest
     }
 
     template <typename T, typename Allocator>
-    constexpr typename vector<T, Allocator>::size_type vector<T, Allocator>::_compute_next_capacity(
-        size_type requested_capacity) const noexcept
+    constexpr auto vector<T, Allocator>::_compute_next_capacity(
+        size_type requested_capacity) const noexcept -> vector<T, Allocator>::size_type
     {
         return tempest::bit_ceil(requested_capacity);
     }
 
     template <typename T, typename Allocator>
     template <typename... Args>
-    inline constexpr void vector<T, Allocator>::_emplace_one_at_back(Args&&... args)
+    constexpr void vector<T, Allocator>::_emplace_one_at_back(Args&&... args)
     {
         reserve(_compute_next_capacity(size() + 1));
         (void)tempest::construct_at(_end++, tempest::forward<Args>(args)...);
     }
 
     template <typename T, typename Allocator>
-    inline constexpr bool operator==(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs)
+    constexpr auto operator==(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs) -> bool
     {
         return tempest::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
     }
 
     template <typename T, typename Allocator>
-    inline constexpr auto operator<=>(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs)
+    constexpr auto operator<=>(const vector<T, Allocator>& lhs, const vector<T, Allocator>& rhs)
     {
         return tempest::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
     }
 
     template <typename T, typename Allocator>
-    inline constexpr void swap(vector<T, Allocator>& lhs, vector<T, Allocator>& rhs) noexcept(noexcept(lhs.swap(rhs)))
+    constexpr void swap(vector<T, Allocator>& lhs, vector<T, Allocator>& rhs) noexcept(noexcept(lhs.swap(rhs)))
     {
         lhs.swap(rhs);
     }
 
     template <typename T, typename Alloc, typename U>
-    inline constexpr vector<T, Alloc>::size_type erase(vector<T, Alloc>& c, const U& value)
+    constexpr auto erase(vector<T, Alloc>& c, const U& value) -> vector<T, Alloc>::size_type
     {
         auto it = tempest::remove(c.begin(), c.end(), value);
         auto count = tempest::distance(it, c.end());
@@ -959,7 +959,7 @@ namespace tempest
     }
 
     template <typename T, typename Alloc, typename Pred>
-    inline constexpr vector<T, Alloc>::size_type erase_if(vector<T, Alloc>& c, Pred pred)
+    constexpr auto erase_if(vector<T, Alloc>& c, Pred pred) -> vector<T, Alloc>::size_type
     {
         auto it = tempest::remove_if(c.begin(), c.end(), pred);
         auto count = tempest::distance(it, c.end());
@@ -968,61 +968,61 @@ namespace tempest
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::size_type size(const vector<T, Alloc>& c) noexcept
+    constexpr auto size(const vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::size_type
     {
         return c.size();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::pointer data(vector<T, Alloc>& c) noexcept
+    constexpr auto data(vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::pointer
     {
         return c.data();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::const_pointer data(const vector<T, Alloc>& c) noexcept
+    constexpr auto data(const vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::const_pointer
     {
         return c.data();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::iterator begin(vector<T, Alloc>& c) noexcept
+    constexpr auto begin(vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::iterator
     {
         return c.begin();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::const_iterator begin(const vector<T, Alloc>& c) noexcept
+    constexpr auto begin(const vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::const_iterator
     {
         return c.begin();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::const_iterator cbegin(const vector<T, Alloc>& c) noexcept
+    constexpr auto cbegin(const vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::const_iterator
     {
         return c.cbegin();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::iterator end(vector<T, Alloc>& c) noexcept
+    constexpr auto end(vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::iterator
     {
         return c.end();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::const_iterator end(const vector<T, Alloc>& c) noexcept
+    constexpr auto end(const vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::const_iterator
     {
         return c.end();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr typename vector<T, Alloc>::const_iterator cend(const vector<T, Alloc>& c) noexcept
+    constexpr auto cend(const vector<T, Alloc>& c) noexcept -> vector<T, Alloc>::const_iterator
     {
         return c.cend();
     }
 
     template <typename T, typename Alloc>
-    inline constexpr bool empty(const vector<T, Alloc>& c) noexcept
+    constexpr auto empty(const vector<T, Alloc>& c) noexcept -> bool
     {
         return c.empty();
     }

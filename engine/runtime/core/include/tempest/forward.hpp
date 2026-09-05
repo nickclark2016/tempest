@@ -7,7 +7,7 @@
 namespace tempest
 {
     template <typename T>
-    constexpr add_const_t<T>& as_const(T& t) noexcept
+    constexpr auto as_const(T& t) noexcept -> add_const_t<T>&
     {
         return t;
     }
@@ -23,7 +23,7 @@ namespace tempest
 #if defined(_MSC_VER) && !defined(__clang__)
     [[msvc::intrinsic]]
 #endif
-    inline constexpr T&& forward(remove_reference_t<T>& t) noexcept
+    constexpr auto forward(remove_reference_t<T>& t) noexcept -> T&&
     {
         return static_cast<T&&>(t);
     }
@@ -36,14 +36,14 @@ namespace tempest
 #if defined(_MSC_VER) && !defined(__clang__)
     [[msvc::intrinsic]]
 #endif
-    inline constexpr T&& forward(remove_reference_t<T>&& t) noexcept
+    constexpr auto forward(remove_reference_t<T>&& t) noexcept -> T&&
     {
         static_assert(!is_lvalue_reference<T>::value, "Can't forward an rvalue as an lvalue.");
         return static_cast<T&&>(t);
     }
 
     template <typename T, typename U>
-    constexpr auto&& forward_like(U&& u) noexcept
+    constexpr auto forward_like(U&& u) noexcept -> auto&&
     {
         constexpr bool is_adding_const = is_const_v<remove_reference_t<T>>;
         if constexpr (is_lvalue_reference_v<T&&>)
@@ -54,7 +54,7 @@ namespace tempest
             }
             else
             {
-                return static_cast<U&>(u);
+                return u;
             }
         }
         else

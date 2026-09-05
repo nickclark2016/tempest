@@ -25,31 +25,31 @@ namespace std
 
         constexpr source_location() noexcept = default;
 
-        constexpr const char* file_name() const noexcept
+        [[nodiscard]] constexpr auto file_name() const noexcept -> const char*
         {
             return _impl->_M_file_name;
         }
 
-        constexpr const char* function_name() const noexcept
+        [[nodiscard]] constexpr auto function_name() const noexcept -> const char*
         {
             return _impl->_M_function_name;
         }
 
-        constexpr unsigned line() const noexcept
+        [[nodiscard]] constexpr auto line() const noexcept -> unsigned
         {
             return _impl->_M_line;
         }
 
-        constexpr unsigned column() const noexcept
+        [[nodiscard]] constexpr auto column() const noexcept -> unsigned
         {
             return _impl->_M_column;
         }
 
-        static consteval source_location current(
-            decltype(__builtin_source_location()) ptr = __builtin_source_location()) noexcept
+        static consteval auto current(decltype(__builtin_source_location()) ptr = __builtin_source_location()) noexcept
+            -> source_location
         {
             source_location loc;
-            loc._impl = static_cast<const __impl*>(ptr);
+            loc._impl = static_cast<const struct __impl*>(ptr);
             return loc;
         }
     };
@@ -62,11 +62,10 @@ namespace tempest
     struct TEMPEST_API source_location
     {
       public:
-#if defined(_MSC_VER)
-        static consteval source_location current(const uint32_t line = __builtin_LINE(),
-                                                 const uint32_t column = __builtin_COLUMN(),
-                                                 const char* file = __builtin_FILE(),
-                                                 const char* func = __builtin_FUNCSIG()) noexcept;
+#ifdef _MSC_VER
+        static consteval auto current(uint32_t line = __builtin_LINE(), uint32_t column = __builtin_COLUMN(),
+                                      const char* file = __builtin_FILE(),
+                                      const char* func = __builtin_FUNCSIG()) noexcept -> source_location;
 #elif defined(__GNUC__)
         static consteval source_location current(
             decltype(__builtin_source_location()) ptr = __builtin_source_location()) noexcept;
@@ -76,11 +75,11 @@ namespace tempest
 
         constexpr source_location() noexcept = default;
 
-        constexpr const char* file_name() const noexcept;
-        constexpr const char* function_name() const noexcept;
+        [[nodiscard]] constexpr auto file_name() const noexcept -> const char*;
+        [[nodiscard]] constexpr auto function_name() const noexcept -> const char*;
 
-        constexpr size_t line() const noexcept;
-        constexpr size_t column() const noexcept;
+        [[nodiscard]] constexpr auto line() const noexcept -> size_t;
+        [[nodiscard]] constexpr auto column() const noexcept -> size_t;
 
       private:
         struct impl
@@ -94,9 +93,9 @@ namespace tempest
         impl _impl;
     };
 
-#if defined(_MSC_VER)
-    inline consteval source_location source_location::current(const uint32_t line, const uint32_t column,
-                                                              const char* file, const char* func) noexcept
+#ifdef _MSC_VER
+    consteval auto source_location::current(const uint32_t line, const uint32_t column, const char* file,
+                                            const char* func) noexcept -> source_location
     {
         source_location loc;
         loc._impl._file = file;
@@ -118,22 +117,22 @@ namespace tempest
     }
 #endif
 
-    inline constexpr const char* source_location::file_name() const noexcept
+    constexpr auto source_location::file_name() const noexcept -> const char*
     {
         return _impl._file;
     }
 
-    inline constexpr const char* source_location::function_name() const noexcept
+    constexpr auto source_location::function_name() const noexcept -> const char*
     {
         return _impl._function;
     }
 
-    inline constexpr size_t source_location::line() const noexcept
+    constexpr auto source_location::line() const noexcept -> size_t
     {
         return _impl._line;
     }
 
-    inline constexpr size_t source_location::column() const noexcept
+    constexpr auto source_location::column() const noexcept -> size_t
     {
         return _impl._column;
     }

@@ -20,7 +20,7 @@
 #include <filesystem>
 
 #include <cmath>
-#include <simdjson.h>
+#include <tempest/json.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -29,7 +29,11 @@ namespace tempest::assets
 {
     using math::float3;
 
-    namespace sjd = simdjson::dom;
+    using tempest::json_array;
+    using tempest::json_document;
+    using tempest::json_object;
+    using tempest::json_value;
+    using tempest::system_allocator;
 
     namespace
     {
@@ -83,7 +87,7 @@ namespace tempest::assets
             vector<double> max;
         };
 
-        auto get_metadata(const simdjson::dom::object& obj) -> asset_database::asset_metadata
+        auto get_metadata(const json_object& obj) -> asset_database::asset_metadata
         {
             asset_database::asset_metadata meta;
 
@@ -93,7 +97,10 @@ namespace tempest::assets
                 {
                     continue;
                 }
-                meta.metadata[string(key.data(), key.size())] = value.get_string().value().data();
+                if (auto str_val = value.as_string(); str_val.has_value())
+                {
+                    meta.metadata[string(key.data(), key.size())] = string(str_val->data(), str_val->size());
+                }
             }
 
             return meta;
@@ -116,21 +123,21 @@ namespace tempest::assets
             return decoded_data;
         }
 
-        auto read_buffer(const simdjson::dom::element& buffer, const optional<std::filesystem::path>& dir)
-            -> vector<byte>
+        auto read_buffer(const json_value& buffer, const optional<std::filesystem::path>& dir) -> vector<byte>
         {
             vector<byte> data;
 
             uint64_t byte_length = 0;
-            if (buffer["byteLength"].get(byte_length) == simdjson::error_code::SUCCESS)
+            if (buffer["byteLength"].get(byte_length))
             {
                 data.resize(byte_length);
             }
 
-            std::string_view uri;
-            if (buffer["uri"].get(uri) == simdjson::error_code::SUCCESS)
+            string_view uri;
+            if (buffer["uri"].get(uri))
             {
-                if (uri.starts_with("data:"))
+                auto uri_sv = std::string_view{uri.data(), uri.size()};
+                if (uri_sv.starts_with("data:"))
                 {
                     data = parse_base64({reinterpret_cast<const byte*>(uri.data()), uri.size()});
                 }
@@ -138,7 +145,7 @@ namespace tempest::assets
                 {
                     if (dir)
                     {
-                        auto full_path = (*dir / uri).string();
+                        auto full_path = (*dir / uri_sv).string();
                         data = core::read_bytes({full_path.c_str(), full_path.size()});
                     }
                     else
@@ -151,20 +158,21 @@ namespace tempest::assets
             return data;
         }
 
-        auto read_image(const simdjson::dom::element& img, const optional<std::filesystem::path>& dir) -> image_payload
+        auto read_image(const json_value& img, const optional<std::filesystem::path>& dir) -> image_payload
         {
             image_payload payload;
 
-            std::string_view uri;
+            string_view uri;
             uint64_t buffer_view_index = ~static_cast<std::uint64_t>(0);
-            if (auto error = img["uri"].get(uri); error == simdjson::error_code::SUCCESS)
+            if (img["uri"].get(uri))
             {
-                if (uri.starts_with("data:"))
+                auto uri_sv = std::string_view{uri.data(), uri.size()};
+                if (uri_sv.starts_with("data:"))
                 {
                     // Extract mime type
-                    if (auto mime_type = uri.find("image/"))
+                    if (auto mime_type = uri_sv.find("image/"); mime_type != std::string_view::npos)
                     {
-                        auto mime_end = uri.find_first_of(";,", mime_type);
+                        auto mime_end = uri_sv.find_first_of(";,", mime_type);
                         payload.mime_type = string{uri.data() + mime_type, mime_end - mime_type};
                     }
 
@@ -174,45 +182,47 @@ namespace tempest::assets
                 {
                     if (dir)
                     {
-                        auto full_path = (*dir / uri).string();
+                        auto full_path = (*dir / uri_sv).string();
                         payload.data = core::read_bytes({full_path.c_str(), full_path.size()});
                         payload.file_path = {full_path.c_str(), full_path.size()};
                     }
                     else
                     {
                         payload.data = core::read_bytes({uri.data(), uri.size()});
-                        payload.file_path = uri.data();
+                        payload.file_path = string{uri.data(), uri.size()};
                     }
                 }
             }
-            else if (auto error_bv = img["bufferView"].get(buffer_view_index);
-                     error_bv == simdjson::error_code::SUCCESS)
+            else if (img["bufferView"].get(buffer_view_index))
             {
                 payload.buffer_view_index = static_cast<int32_t>(buffer_view_index);
-                payload.mime_type = img["mimeType"].get_string().value().data();
+                if (auto mime = img["mimeType"].as_string(); mime.has_value())
+                {
+                    payload.mime_type = string{mime->data(), mime->size()};
+                }
             }
 
-            std::string_view name;
-            if (auto error_img = img["name"].get(name); error_img == simdjson::error_code::SUCCESS)
+            string_view name;
+            if (img["name"].get(name))
             {
-                payload.name = name.data();
+                payload.name = string{name.data(), name.size()};
             }
 
             return payload;
         }
 
-        auto read_buffer_views(const simdjson::dom::element& buffer_views) -> vector<buffer_view_payload>
+        auto read_buffer_views(const json_array& buffer_views) -> vector<buffer_view_payload>
         {
             vector<buffer_view_payload> views;
 
             for (const auto& view : buffer_views)
             {
                 buffer_view_payload payload{};
-                payload.buffer_id = static_cast<uint32_t>(view["buffer"].get_uint64().value());
-                payload.byte_length = static_cast<uint32_t>(view["byteLength"].get_uint64().value());
+                payload.buffer_id = static_cast<uint32_t>(view["buffer"].as_uint64().value_or(0));
+                payload.byte_length = static_cast<uint32_t>(view["byteLength"].as_uint64().value_or(0));
 
                 uint64_t byte_offset = 0;
-                if (view["byteOffset"].get(byte_offset) != simdjson::error_code::SUCCESS)
+                if (!view["byteOffset"].get(byte_offset))
                 {
                     payload.byte_offset = 0;
                 }
@@ -222,7 +232,7 @@ namespace tempest::assets
                 }
 
                 uint64_t byte_stride = 0;
-                if (view["byteStride"].get(byte_stride) != simdjson::error_code::SUCCESS)
+                if (!view["byteStride"].get(byte_stride))
                 {
                     payload.byte_stride = 0;
                 }
@@ -237,17 +247,17 @@ namespace tempest::assets
             return views;
         }
 
-        vector<accessor_payload> read_accessors(const simdjson::dom::element& accessors)
+        auto read_accessors(const json_array& accessors) -> vector<accessor_payload>
         {
             vector<accessor_payload> accs;
 
             for (const auto& accessor : accessors)
             {
                 accessor_payload payload;
-                payload.buffer_view = static_cast<uint32_t>(accessor["bufferView"].get_uint64().value());
+                payload.buffer_view = static_cast<uint32_t>(accessor["bufferView"].as_uint64().value_or(0));
 
                 uint64_t buffer_offset = 0;
-                if (accessor["byteOffset"].get(buffer_offset) != simdjson::error_code::SUCCESS)
+                if (!accessor["byteOffset"].get(buffer_offset))
                 {
                     payload.buffer_offset = 0;
                 }
@@ -256,9 +266,9 @@ namespace tempest::assets
                     payload.buffer_offset = static_cast<uint32_t>(buffer_offset);
                 }
 
-                payload.ctype = static_cast<component_type>(accessor["componentType"].get_uint64().value());
+                payload.ctype = static_cast<component_type>(accessor["componentType"].as_uint64().value_or(0));
 
-                auto accessor_type = accessor["type"].get_string().value();
+                auto accessor_type = accessor["type"].as_string().value_or("");
                 if (accessor_type == "SCALAR")
                 {
                     payload.atype = accessor_type::SCALAR;
@@ -288,30 +298,36 @@ namespace tempest::assets
                     payload.atype = accessor_type::MAT4;
                 }
 
-                if (accessor["normalized"].get(payload.normalized) != simdjson::error_code::SUCCESS)
+                if (!accessor["normalized"].get(payload.normalized))
                 {
                     payload.normalized = false;
                 }
 
                 uint64_t count = 0;
-                (void)accessor["count"].get(count);
+                accessor["count"].get(count);
                 payload.count = static_cast<uint32_t>(count);
 
-                sjd::array min;
-                sjd::array max;
-                if (accessor["min"].get(min) == simdjson::error_code::SUCCESS)
+                auto min = json_array{};
+                auto max = json_array{};
+                if (accessor["min"].get(min))
                 {
                     for (const auto& val : min)
                     {
-                        payload.min.push_back(val);
+                        if (auto num = val.as_number(); num.has_value())
+                        {
+                            payload.min.push_back(*num);
+                        }
                     }
                 }
 
-                if (accessor["max"].get(max) == simdjson::error_code::SUCCESS)
+                if (accessor["max"].get(max))
                 {
                     for (const auto& val : max)
                     {
-                        payload.max.push_back(val);
+                        if (auto num = val.as_number(); num.has_value())
+                        {
+                            payload.max.push_back(*num);
+                        }
                     }
                 }
 
@@ -331,14 +347,14 @@ namespace tempest::assets
             inline constexpr uint32_t gltf_sampler_linear_mipmap_linear = 9987;
         } // namespace gltf
 
-        auto parse_sampler(const simdjson::dom::element& sampler) -> core::sampler_state
+        auto parse_sampler(const json_value& sampler) -> core::sampler_state
         {
             core::sampler_state state;
 
             uint64_t min_filter = 0;
             uint64_t mag_filter = 0;
 
-            if (sampler["magFilter"].get(mag_filter) != simdjson::error_code::SUCCESS)
+            if (!sampler["magFilter"].get(mag_filter))
             {
                 state.mag_filter = core::magnify_texture_filter::linear;
             }
@@ -357,7 +373,7 @@ namespace tempest::assets
                 }
             }
 
-            if (sampler["minFilter"].get(min_filter) != simdjson::error_code::SUCCESS)
+            if (!sampler["minFilter"].get(min_filter))
             {
                 state.min_filter = core::minify_texture_filter::linear;
             }
@@ -392,9 +408,9 @@ namespace tempest::assets
             return state;
         }
 
-        auto process_texture(const image_payload& img, optional<simdjson::dom::element> sampler,
-                             core::texture_registry* tex_reg, const flat_unordered_map<uint32_t, vector<byte>>& buffers,
-                             asset_database& asset_db, string_view source_path) -> guid
+        auto process_texture(const image_payload& img, optional<json_value> sampler, core::texture_registry* tex_reg,
+                             const flat_unordered_map<uint32_t, vector<byte>>& buffers, asset_database& asset_db,
+                             string_view source_path) -> guid
         {
             auto sampler_state = core::sampler_state{};
 
@@ -518,66 +534,64 @@ namespace tempest::assets
             inline const math::float4 default_base_color_factor = {1.0F, 1.0F, 1.0F, 1.0F};
         } // namespace gltf
 
-        auto extract_vec3(const simdjson::dom::object& obj, std::string_view key, const math::float3& default_value)
-            -> math::float3
+        auto extract_vec3(const json_value& obj, string_view key, const math::float3& default_value) -> math::float3
         {
-            auto arr = sjd::array{};
-            if (obj.at_key(key).get(arr) == simdjson::error_code::SUCCESS)
+            auto arr = json_array{};
+            if (obj[key].get(arr) && arr.size() >= 3)
             {
                 return math::float3{
-                    static_cast<float>(arr.at(0).get_double()),
-                    static_cast<float>(arr.at(1).get_double()),
-                    static_cast<float>(arr.at(2).get_double()),
+                    static_cast<float>(arr[0].as_number().value_or(default_value.x)),
+                    static_cast<float>(arr[1].as_number().value_or(default_value.y)),
+                    static_cast<float>(arr[2].as_number().value_or(default_value.z)),
                 };
             }
 
             return default_value;
         }
 
-        auto extract_vec4(const simdjson::dom::object& obj, std::string_view key, const math::float4& default_value)
-            -> math::float4
+        auto extract_vec4(const json_value& obj, string_view key, const math::float4& default_value) -> math::float4
         {
-            auto arr = sjd::array{};
-            if (obj.at_key(key).get(arr) == simdjson::error_code::SUCCESS)
+            auto arr = json_array{};
+            if (obj[key].get(arr) && arr.size() >= 4)
             {
                 return math::float4{
-                    static_cast<float>(arr.at(0).get_double()),
-                    static_cast<float>(arr.at(1).get_double()),
-                    static_cast<float>(arr.at(2).get_double()),
-                    static_cast<float>(arr.at(3).get_double()),
+                    static_cast<float>(arr[0].as_number().value_or(default_value.x)),
+                    static_cast<float>(arr[1].as_number().value_or(default_value.y)),
+                    static_cast<float>(arr[2].as_number().value_or(default_value.z)),
+                    static_cast<float>(arr[3].as_number().value_or(default_value.w)),
                 };
             }
 
             return default_value;
         }
 
-        auto extract_scalar(const simdjson::dom::object& obj, std::string_view key, float default_value) -> float
+        auto extract_scalar(const json_value& obj, string_view key, float default_value) -> float
         {
-            auto val = 0.0;
-            if (obj.at_key(key).get(val) == simdjson::error_code::SUCCESS)
+            auto num = obj[key].as_number();
+            if (num.has_value())
             {
-                return static_cast<float>(val);
+                return static_cast<float>(*num);
             }
 
             return default_value;
         }
 
-        auto extract_boolean(const simdjson::dom::object& obj, std::string_view key, bool default_value) -> bool
+        auto extract_boolean(const json_value& obj, string_view key, bool default_value) -> bool
         {
-            auto val = false;
-            if (obj.at_key(key).get(val) == simdjson::error_code::SUCCESS)
+            auto val = obj[key].as_bool();
+            if (val.has_value())
             {
-                return val;
+                return *val;
             }
 
             return default_value;
         }
 
-        auto process_base_material_model(const simdjson::dom::element& mat_json, core::material& result,
+        auto process_base_material_model(const json_value& mat_json, core::material& result,
                                          const flat_unordered_map<uint64_t, guid>& texture_guids) -> void
         {
-            auto pbr = sjd::object{};
-            if (mat_json["pbrMetallicRoughness"].get(pbr) == simdjson::error_code::SUCCESS)
+            auto pbr = json_object{};
+            if (mat_json["pbrMetallicRoughness"].get(pbr))
             {
                 result.set_vec4(core::material::base_color_factor_name,
                                 extract_vec4(pbr, "baseColorFactor", gltf::default_base_color_factor));
@@ -586,55 +600,72 @@ namespace tempest::assets
                 result.set_scalar(core::material::roughness_factor_name,
                                   extract_scalar(pbr, "roughnessFactor", gltf::gltf_default_roughness_factor));
 
-                auto base_color_texture = sjd::object{};
-                if (pbr["baseColorTexture"].get(base_color_texture) == simdjson::error_code::SUCCESS)
+                auto base_color_texture = json_object{};
+                if (pbr["baseColorTexture"].get(base_color_texture))
                 {
-                    result.set_texture(core::material::base_color_texture_name,
-                                       texture_guids.find(base_color_texture["index"].get_uint64().value())->second);
+                    uint64_t texture_index = 0;
+                    if (base_color_texture["index"].get(texture_index))
+                    {
+                        result.set_texture(core::material::base_color_texture_name,
+                                           texture_guids.find(texture_index)->second);
+                    }
                 }
 
-                auto metallic_roughness_texture = sjd::object{};
-                if (pbr["metallicRoughnessTexture"].get(metallic_roughness_texture) == simdjson::error_code::SUCCESS)
+                auto metallic_roughness_texture = json_object{};
+                if (pbr["metallicRoughnessTexture"].get(metallic_roughness_texture))
                 {
-                    result.set_texture(
-                        core::material::metallic_roughness_texture_name,
-                        texture_guids.find(metallic_roughness_texture["index"].get_uint64().value())->second);
+                    uint64_t texture_index = 0;
+                    if (metallic_roughness_texture["index"].get(texture_index))
+                    {
+                        result.set_texture(core::material::metallic_roughness_texture_name,
+                                           texture_guids.find(texture_index)->second);
+                    }
                 }
             }
 
-            auto normal_texture = sjd::object{};
-            if (auto error = mat_json["normalTexture"].get(normal_texture); error == simdjson::error_code::SUCCESS)
+            auto normal_texture = json_object{};
+            if (mat_json["normalTexture"].get(normal_texture))
             {
-                result.set_texture(core::material::normal_texture_name,
-                                   texture_guids.find(normal_texture["index"].get_uint64().value())->second);
+                uint64_t texture_index = 0;
+                if (normal_texture["index"].get(texture_index))
+                {
+                    result.set_texture(core::material::normal_texture_name, texture_guids.find(texture_index)->second);
+                }
                 result.set_scalar(core::material::normal_scale_name,
                                   extract_scalar(normal_texture, "scale", gltf::gltf_default_normal_scale));
             }
 
-            auto occlusion_texture = sjd::object{};
-            if (auto error = mat_json["occlusionTexture"].get(occlusion_texture);
-                error == simdjson::error_code::SUCCESS)
+            auto occlusion_texture = json_object{};
+            if (mat_json["occlusionTexture"].get(occlusion_texture))
             {
-                result.set_texture(core::material::occlusion_texture_name,
-                                   texture_guids.find(occlusion_texture["index"].get_uint64().value())->second);
+                uint64_t texture_index = 0;
+                if (occlusion_texture["index"].get(texture_index))
+                {
+                    result.set_texture(core::material::occlusion_texture_name,
+                                       texture_guids.find(texture_index)->second);
+                }
                 result.set_scalar(core::material::occlusion_strength_name,
                                   extract_scalar(occlusion_texture, "strength", gltf::gltf_default_occlusion_strength));
             }
 
-            auto emissive_texture = sjd::object{};
-            if (auto error = mat_json["emissiveTexture"].get(emissive_texture); error == simdjson::error_code::SUCCESS)
+            auto emissive_texture = json_object{};
+            if (mat_json["emissiveTexture"].get(emissive_texture))
             {
-                result.set_texture(core::material::emissive_texture_name,
-                                   texture_guids.find(emissive_texture["index"].get_uint64().value())->second);
+                uint64_t texture_index = 0;
+                if (emissive_texture["index"].get(texture_index))
+                {
+                    result.set_texture(core::material::emissive_texture_name,
+                                       texture_guids.find(texture_index)->second);
+                }
             }
 
             result.set_vec3(core::material::emissive_factor_name,
                             extract_vec3(mat_json, "emissiveFactor", gltf::default_emission_color));
 
-            auto alpha_mode = std::string_view{};
-            if (mat_json["alphaMode"].get(alpha_mode) == simdjson::error_code::SUCCESS)
+            auto alpha_mode = string_view{};
+            if (mat_json["alphaMode"].get(alpha_mode))
             {
-                result.set_string(core::material::alpha_mode_name, {alpha_mode.data(), alpha_mode.size()});
+                result.set_string(core::material::alpha_mode_name, string{alpha_mode.data(), alpha_mode.size()});
             }
             else
             {
@@ -646,14 +677,13 @@ namespace tempest::assets
             result.set_bool(core::material::double_sided_name, extract_boolean(mat_json, "doubleSided", false));
         }
 
-        auto process_khr_materials_tansmission(const simdjson::dom::object& extensions,
+        auto process_khr_materials_tansmission(const json_object& extensions,
                                                const flat_unordered_map<uint64_t, guid>& texture_guids,
                                                core::material& result) -> void
         {
             // Check if KHR_materials_transmission exists
-            auto khr_materials_transmission = sjd::object{};
-            if (extensions["KHR_materials_transmission"].get(khr_materials_transmission) ==
-                simdjson::error_code::SUCCESS)
+            auto khr_materials_transmission = json_object{};
+            if (extensions["KHR_materials_transmission"].get(khr_materials_transmission))
             {
                 result.set_string(core::material::alpha_mode_name, "TRANSMISSIVE");
 
@@ -661,23 +691,26 @@ namespace tempest::assets
                                   extract_scalar(khr_materials_transmission, "transmissionFactor",
                                                  gltf::gltf_default_transmission_factor));
 
-                sjd::object transmissive_texture;
-                if (khr_materials_transmission["transmissiveTexture"].get(transmissive_texture) ==
-                    simdjson::error_code::SUCCESS)
+                auto transmissive_texture = json_object{};
+                if (khr_materials_transmission["transmissiveTexture"].get(transmissive_texture))
                 {
-                    result.set_texture(core::material::transmissive_texture_name,
-                                       texture_guids.find(transmissive_texture["index"].get_uint64().value())->second);
+                    uint64_t texture_index = 0;
+                    if (transmissive_texture["index"].get(texture_index))
+                    {
+                        result.set_texture(core::material::transmissive_texture_name,
+                                           texture_guids.find(texture_index)->second);
+                    }
                 }
             }
         }
 
-        auto process_khr_materials_volume(const simdjson::dom::object& extensions,
+        auto process_khr_materials_volume(const json_object& extensions,
                                           const flat_unordered_map<uint64_t, guid>& texture_guids,
                                           core::material& result)
         {
             // Check if KHR_materials_volume exists
-            auto khr_materials_volume = sjd::object{};
-            if (extensions["KHR_materials_volume"].get(khr_materials_volume) == simdjson::error_code::SUCCESS)
+            auto khr_materials_volume = json_object{};
+            if (extensions["KHR_materials_volume"].get(khr_materials_volume))
             {
                 result.set_scalar(core::material::volume_thickness_factor_name,
                                   extract_scalar(khr_materials_volume, "thicknessFactor",
@@ -689,35 +722,39 @@ namespace tempest::assets
                     core::material::volume_attenuation_color_name,
                     extract_vec3(khr_materials_volume, "attenuationColor", gltf::default_thickness_attenuation_color));
 
-                sjd::object volume_texture;
-                if (khr_materials_volume["volumeTexture"].get(volume_texture) == simdjson::error_code::SUCCESS)
+                auto volume_texture = json_object{};
+                if (khr_materials_volume["volumeTexture"].get(volume_texture))
                 {
-                    result.set_texture(core::material::volume_thickness_texture_name,
-                                       texture_guids.find(volume_texture["index"].get_uint64().value())->second);
+                    uint64_t texture_index = 0;
+                    if (volume_texture["index"].get(texture_index))
+                    {
+                        result.set_texture(core::material::volume_thickness_texture_name,
+                                           texture_guids.find(texture_index)->second);
+                    }
                 }
             }
         }
 
-        auto process_material_extensions(const simdjson::dom::element& mat_json,
+        auto process_material_extensions(const json_value& mat_json,
                                          const flat_unordered_map<uint64_t, guid>& texture_guids,
                                          core::material& result)
         {
-            sjd::object extensions;
-            if (mat_json["extensions"].get(extensions) == simdjson::error_code::SUCCESS)
+            auto extensions = json_object{};
+            if (mat_json["extensions"].get(extensions))
             {
                 process_khr_materials_tansmission(extensions, texture_guids, result);
                 process_khr_materials_volume(extensions, texture_guids, result);
             }
         }
 
-        auto process_material(const simdjson::dom::element& mat,
-                              const flat_unordered_map<uint64_t, guid>& texture_guids, core::material_registry* mat_reg,
-                              asset_database& asset_db, string_view source_path) -> guid
+        auto process_material(const json_value& mat, const flat_unordered_map<uint64_t, guid>& texture_guids,
+                              core::material_registry* mat_reg, asset_database& asset_db, string_view source_path)
+            -> guid
         {
             auto material = core::material{};
 
-            auto name = std::string_view{};
-            if (auto error = mat["name"].get(name); error == simdjson::error_code::SUCCESS)
+            auto name = string_view{};
+            if (mat["name"].get(name))
             {
                 material.set_name({name.data(), name.size()});
             }
@@ -945,22 +982,20 @@ namespace tempest::assets
             }
         }
 
-        auto process_mesh(const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents,
-                          const simdjson::dom::element& prim, span<buffer_view_payload> views,
-                          span<accessor_payload> accessors, core::mesh_registry* mesh_reg, asset_database& asset_db,
-                          string_view source_path) -> mesh_process_result
+        auto process_mesh(const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents, const json_value& prim,
+                          span<buffer_view_payload> views, span<accessor_payload> accessors,
+                          core::mesh_registry* mesh_reg, asset_database& asset_db, string_view source_path)
+            -> mesh_process_result
         {
             mesh_process_result result;
 
             auto mesh = core::mesh{};
 
-            sjd::object attribs;
-            if (prim["attributes"].get(attribs) == simdjson::error_code::SUCCESS)
+            if (auto attribs = prim["attributes"].as_object(); attribs.has_value())
             {
-                if (auto positions = attribs["POSITION"].get_uint64();
-                    positions.error() == simdjson::error_code::SUCCESS)
+                if (auto positions = (*attribs)["POSITION"].as_uint64(); positions.has_value())
                 {
-                    auto accessor_idx = positions.value();
+                    auto accessor_idx = *positions;
                     const auto& accessor = accessors[accessor_idx];
                     const auto& view = views[accessor.buffer_view];
                     const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
@@ -968,9 +1003,9 @@ namespace tempest::assets
                     process_mesh_positions(buffer, accessor, view, mesh.vertices);
                 }
 
-                if (auto normals = attribs["NORMAL"].get_uint64(); normals.error() == simdjson::error_code::SUCCESS)
+                if (auto normals = (*attribs)["NORMAL"].as_uint64(); normals.has_value())
                 {
-                    auto accessor_idx = normals.value();
+                    auto accessor_idx = *normals;
                     const auto& accessor = accessors[accessor_idx];
                     const auto& view = views[accessor.buffer_view];
                     const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
@@ -979,9 +1014,9 @@ namespace tempest::assets
                     mesh.has_normals = true;
                 }
 
-                if (auto uvs = attribs["TEXCOORD_0"].get_uint64(); uvs.error() == simdjson::error_code::SUCCESS)
+                if (auto uvs = (*attribs)["TEXCOORD_0"].as_uint64(); uvs.has_value())
                 {
-                    auto accessor_idx = uvs.value();
+                    auto accessor_idx = *uvs;
                     const auto& accessor = accessors[accessor_idx];
                     const auto& view = views[accessor.buffer_view];
                     const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
@@ -989,9 +1024,9 @@ namespace tempest::assets
                     process_mesh_uv0(buffer, accessor, view, mesh.vertices);
                 }
 
-                if (auto tangents = attribs["TANGENT"].get_uint64(); tangents.error() == simdjson::error_code::SUCCESS)
+                if (auto tangents = (*attribs)["TANGENT"].as_uint64(); tangents.has_value())
                 {
-                    auto accessor_idx = tangents.value();
+                    auto accessor_idx = *tangents;
                     const auto& accessor = accessors[accessor_idx];
                     const auto& view = views[accessor.buffer_view];
                     const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
@@ -1000,9 +1035,9 @@ namespace tempest::assets
                     mesh.has_tangents = true;
                 }
 
-                if (auto colors = attribs["COLOR_0"].get_uint64(); colors.error() == simdjson::error_code::SUCCESS)
+                if (auto colors = (*attribs)["COLOR_0"].as_uint64(); colors.has_value())
                 {
-                    auto accessor_idx = colors.value();
+                    auto accessor_idx = *colors;
                     const auto& accessor = accessors[accessor_idx];
                     const auto& view = views[accessor.buffer_view];
                     const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
@@ -1013,9 +1048,9 @@ namespace tempest::assets
                 }
             }
 
-            if (auto indices = prim["indices"].get_uint64(); indices.error() == simdjson::error_code::SUCCESS)
+            if (auto indices = prim["indices"].as_uint64(); indices.has_value())
             {
-                auto accessor_idx = indices.value();
+                auto accessor_idx = *indices;
                 const auto& accessor = accessors[accessor_idx];
                 const auto& view = views[accessor.buffer_view];
                 const vector<byte>& buffer = buffer_contents.find(view.buffer_id)->second;
@@ -1043,9 +1078,9 @@ namespace tempest::assets
             asset_db.register_asset_with_guid(result.mesh_id, asset_type_id::of<core::mesh>(), source_path);
             asset_db.store_blob(result.mesh_id, mesh_blob);
 
-            if (auto material = prim["material"].get_int64(); material.error() == simdjson::error_code::SUCCESS)
+            if (auto material = prim["material"].as_int64(); material.has_value())
             {
-                result.material_idx = static_cast<int32_t>(material.value());
+                result.material_idx = static_cast<int32_t>(*material);
             }
 
             return result;
@@ -1058,11 +1093,11 @@ namespace tempest::assets
     {
     }
 
-    auto load_asset_metadata(const sjd::object& doc, ecs::archetype_registry& registry, ecs::entity ent,
+    auto load_asset_metadata(const json_object& doc, ecs::archetype_registry& registry, ecs::entity ent,
                              asset_database& asset_db) -> void
     {
-        auto asset = sjd::object{};
-        if (auto error = doc["asset"].get(asset); error == simdjson::SUCCESS)
+        auto asset = json_object{};
+        if (doc["asset"].get(asset))
         {
             asset_database::asset_metadata meta = get_metadata(asset);
             auto meta_id = asset_db.register_asset_metadata(meta);
@@ -1075,13 +1110,13 @@ namespace tempest::assets
         }
     }
 
-    auto load_buffer_contents(const sjd::object& doc, const optional<std::filesystem::path>& base_path)
+    auto load_buffer_contents(const json_object& doc, const optional<std::filesystem::path>& base_path)
         -> flat_unordered_map<uint32_t, vector<byte>>
     {
         auto buffer_contents = flat_unordered_map<uint32_t, vector<byte>>{};
 
-        auto buffers = sjd::array{};
-        if (auto error = doc["buffers"].get(buffers); error == simdjson::error_code::SUCCESS)
+        auto buffers = json_array{};
+        if (doc["buffers"].get(buffers))
         {
             auto buffer_id = 0U;
             for (const auto& buffer : buffers)
@@ -1095,13 +1130,13 @@ namespace tempest::assets
         return buffer_contents;
     }
 
-    auto load_image_contents(const sjd::object& doc, const optional<std::filesystem::path>& base_path)
+    auto load_image_contents(const json_object& doc, const optional<std::filesystem::path>& base_path)
         -> flat_unordered_map<uint32_t, image_payload>
     {
         auto image_contents = flat_unordered_map<uint32_t, image_payload>{};
 
-        auto images = sjd::array{};
-        if (auto error = doc["images"].get(images); error == simdjson::error_code::SUCCESS)
+        auto images = json_array{};
+        if (doc["images"].get(images))
         {
             auto image_id = 0U;
             for (const auto& img : images)
@@ -1115,27 +1150,31 @@ namespace tempest::assets
         return image_contents;
     }
 
-    auto process_textures(const sjd::object& doc, const flat_unordered_map<uint32_t, image_payload>& image_contents,
+    auto process_textures(const json_object& doc, const flat_unordered_map<uint32_t, image_payload>& image_contents,
                           const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents,
                           core::texture_registry* texture_registry, asset_database& asset_db, string_view source_path)
         -> flat_unordered_map<uint64_t, guid>
     {
         auto texture_guids = flat_unordered_map<uint64_t, guid>{};
-        sjd::array textures;
+        auto textures = json_array{};
 
-        if (auto error = doc["textures"].get(textures); error == simdjson::SUCCESS)
+        if (doc["textures"].get(textures))
         {
             auto texture_id = uint64_t{};
             for (const auto& tex : textures)
             {
-                const auto image_id = static_cast<uint32_t>(tex["source"].get_uint64().value());
+                const auto image_id = static_cast<uint32_t>(tex["source"].as_uint64().value_or(0));
 
-                auto sampler = optional<simdjson::dom::element>{nullopt};
+                auto sampler = optional<json_value>{nullopt};
 
                 auto sampler_id = uint64_t{};
-                if (tex["sampler"].get(sampler_id) == simdjson::error_code::SUCCESS)
+                if (tex["sampler"].get(sampler_id))
                 {
-                    sampler = doc.at_key("samplers").get_array().at(sampler_id).value();
+                    auto s = doc["samplers"][sampler_id];
+                    if (s.is_valid())
+                    {
+                        sampler = s;
+                    }
                 }
 
                 auto guid = process_texture(image_contents.find(image_id)->second, sampler, texture_registry,
@@ -1148,13 +1187,13 @@ namespace tempest::assets
         return texture_guids;
     }
 
-    auto process_materials(const sjd::object& doc, const flat_unordered_map<uint64_t, guid>& texture_guids,
+    auto process_materials(const json_object& doc, const flat_unordered_map<uint64_t, guid>& texture_guids,
                            core::material_registry* material_registry, asset_database& asset_db,
                            string_view source_path) -> flat_unordered_map<uint32_t, guid>
     {
         auto material_guids = flat_unordered_map<uint32_t, guid>{};
-        sjd::array materials;
-        if (auto error = doc["materials"].get(materials); error == simdjson::error_code::SUCCESS)
+        auto materials = json_array{};
+        if (doc["materials"].get(materials))
         {
             auto material_id = 0U;
             for (const auto& mat : materials)
@@ -1181,40 +1220,43 @@ namespace tempest::assets
         string name;
     };
 
-    auto process_meshes(const sjd::object& doc, const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents,
+    auto process_meshes(const json_object& doc, const flat_unordered_map<uint32_t, vector<byte>>& buffer_contents,
                         span<buffer_view_payload> buffer_views, span<accessor_payload> accessors,
                         const flat_unordered_map<uint32_t, guid>& material_guids, core::mesh_registry* mesh_registry,
                         asset_database& asset_db, string_view source_path)
         -> flat_unordered_map<uint32_t, mesh_processing_result>
     {
         auto mesh_primitives = flat_unordered_map<uint32_t, mesh_processing_result>{};
-        auto meshes = sjd::array{};
+        auto meshes = json_array{};
 
-        if (auto error = doc["meshes"].get(meshes); error == simdjson::SUCCESS)
+        if (doc["meshes"].get(meshes))
         {
             auto mesh_idx = 0U;
             for (const auto& mesh : meshes)
             {
                 auto primitives = vector<primitive_info>{};
 
-                for (const auto& prim : mesh["primitives"])
+                if (auto prims = mesh["primitives"].as_array(); prims.has_value())
                 {
-                    auto [mesh_id, material_idx] = process_mesh(buffer_contents, prim, buffer_views, accessors,
-                                                                mesh_registry, asset_db, source_path);
-
-                    auto mat_id = optional<guid>{};
-                    if (material_idx >= 0)
+                    for (const auto& prim : *prims)
                     {
-                        if (auto it = material_guids.find(material_idx); it != material_guids.end())
-                        {
-                            mat_id = it->second;
-                        }
-                    }
+                        auto [mesh_id, material_idx] = process_mesh(buffer_contents, prim, buffer_views, accessors,
+                                                                    mesh_registry, asset_db, source_path);
 
-                    primitives.push_back(primitive_info{
-                        .mesh_id = mesh_id,
-                        .material_id = mat_id,
-                    });
+                        auto mat_id = optional<guid>{};
+                        if (material_idx >= 0)
+                        {
+                            if (auto it = material_guids.find(material_idx); it != material_guids.end())
+                            {
+                                mat_id = it->second;
+                            }
+                        }
+
+                        primitives.push_back(primitive_info{
+                            .mesh_id = mesh_id,
+                            .material_id = mat_id,
+                        });
+                    }
                 }
 
                 auto result = mesh_processing_result{
@@ -1223,8 +1265,8 @@ namespace tempest::assets
                 };
 
                 // Get mesh name
-                std::string_view name;
-                if (auto mesh_error = mesh["name"].get(name); mesh_error == simdjson::SUCCESS)
+                string_view name;
+                if (mesh["name"].get(name))
                 {
                     result.name = {name.data(), name.size()};
                 }
@@ -1237,33 +1279,33 @@ namespace tempest::assets
         return mesh_primitives;
     }
 
-    auto extract_translation(const simdjson::dom::object& node) -> math::vec3<float>
+    auto extract_translation(const json_object& node) -> math::vec3<float>
     {
         auto translation = math::float3{0.0F, 0.0F, 0.0F};
 
-        sjd::array translation_json;
-        if (node["translation"].get(translation_json) == simdjson::error_code::SUCCESS)
+        auto translation_json = json_array{};
+        if (node["translation"].get(translation_json) && translation_json.size() >= 3)
         {
-            translation = math::vec3<float>{static_cast<float>(translation_json.at(0).get_double().value()),
-                                            static_cast<float>(translation_json.at(1).get_double().value()),
-                                            static_cast<float>(translation_json.at(2).get_double().value())};
+            translation = math::vec3<float>{static_cast<float>(translation_json[0].as_number().value_or(0.0)),
+                                            static_cast<float>(translation_json[1].as_number().value_or(0.0)),
+                                            static_cast<float>(translation_json[2].as_number().value_or(0.0))};
         }
 
         return translation;
     }
 
-    auto extract_rotation(const simdjson::dom::object& node) -> math::vec3<float>
+    auto extract_rotation(const json_object& node) -> math::vec3<float>
     {
         auto rotation = math::float3{0.0F, 0.0F, 0.0F};
 
-        auto rotation_json = sjd::array{};
-        if (node["rotation"].get(rotation_json) == simdjson::error_code::SUCCESS)
+        auto rotation_json = json_array{};
+        if (node["rotation"].get(rotation_json) && rotation_json.size() >= 4)
         {
             const auto quat_rot = math::quat<float>{
-                static_cast<float>(rotation_json.at(0).get_double().value()),
-                static_cast<float>(rotation_json.at(1).get_double().value()),
-                static_cast<float>(rotation_json.at(2).get_double().value()),
-                static_cast<float>(rotation_json.at(3).get_double().value()),
+                static_cast<float>(rotation_json[0].as_number().value_or(0.0)),
+                static_cast<float>(rotation_json[1].as_number().value_or(0.0)),
+                static_cast<float>(rotation_json[2].as_number().value_or(0.0)),
+                static_cast<float>(rotation_json[3].as_number().value_or(1.0)),
             };
 
             rotation = math::euler(quat_rot);
@@ -1272,46 +1314,46 @@ namespace tempest::assets
         return rotation;
     }
 
-    auto extract_scale(const simdjson::dom::object& node) -> math::vec3<float>
+    auto extract_scale(const json_object& node) -> math::vec3<float>
     {
-        auto scale_json = sjd::array{};
+        auto scale_json = json_array{};
         auto scale = math::float3{1.0F, 1.0F, 1.0F};
 
-        if (node["scale"].get(scale_json) == simdjson::error_code::SUCCESS)
+        if (node["scale"].get(scale_json) && scale_json.size() >= 3)
         {
             scale = {
-                static_cast<float>(scale_json.at(0).get_double().value()),
-                static_cast<float>(scale_json.at(1).get_double().value()),
-                static_cast<float>(scale_json.at(2).get_double().value()),
+                static_cast<float>(scale_json[0].as_number().value_or(1.0)),
+                static_cast<float>(scale_json[1].as_number().value_or(1.0)),
+                static_cast<float>(scale_json[2].as_number().value_or(1.0)),
             };
         }
 
         return scale;
     }
 
-    auto extract_transformation_matrix(const simdjson::dom::object& node, [[maybe_unused]] uint32_t node_id)
+    auto extract_transformation_matrix(const json_object& node, [[maybe_unused]] uint32_t node_id)
         -> optional<ecs::transform_component>
     {
-        auto matrix_json = sjd::array{};
-        if (node["matrix"].get(matrix_json) == simdjson::error_code::SUCCESS)
+        auto matrix_json = json_array{};
+        if (node["matrix"].get(matrix_json) && matrix_json.size() >= 16)
         {
             // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
-            auto transform_matrix = math::mat4<float>(static_cast<float>(matrix_json.at(0).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(1).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(2).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(3).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(4).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(5).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(6).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(7).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(8).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(9).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(10).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(11).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(12).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(13).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(14).get_double().value()),
-                                                      static_cast<float>(matrix_json.at(15).get_double().value()));
+            auto transform_matrix = math::mat4<float>(static_cast<float>(matrix_json[0].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[1].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[2].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[3].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[4].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[5].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[6].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[7].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[8].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[9].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[10].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[11].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[12].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[13].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[14].as_number().value_or(0.0)),
+                                                      static_cast<float>(matrix_json[15].as_number().value_or(0.0)));
             // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 
             auto translation_vec = math::vec3<float>{};
@@ -1334,7 +1376,7 @@ namespace tempest::assets
         return nullopt;
     }
 
-    auto build_entity_relationships(const sjd::array& nodes, ecs::archetype_registry& registry, ecs::entity root,
+    auto build_entity_relationships(const json_array& nodes, ecs::archetype_registry& registry, ecs::entity root,
                                     const flat_unordered_map<uint32_t, ecs::entity>& node_entities) -> void
     {
         // Apply parent child relationships
@@ -1343,12 +1385,12 @@ namespace tempest::assets
         {
             auto node_ent = node_entities.find(node_id)->second;
 
-            sjd::array children;
-            if (node["children"].get(children) == simdjson::error_code::SUCCESS)
+            auto children = json_array{};
+            if (node["children"].get(children))
             {
                 for (const auto& child : children)
                 {
-                    auto child_id = static_cast<uint32_t>(child.get_uint64().value());
+                    auto child_id = static_cast<uint32_t>(child.as_uint64().value_or(0));
                     auto child_ent = node_entities.find(child_id)->second;
 
                     ecs::create_parent_child_relationship(registry, node_ent, child_ent);
@@ -1370,12 +1412,12 @@ namespace tempest::assets
         }
     }
 
-    auto process_nodes(const sjd::object& doc,
+    auto process_nodes(const json_object& doc,
                        const flat_unordered_map<uint32_t, mesh_processing_result>& mesh_primitives,
                        ecs::archetype_registry& registry, ecs::entity root) -> void
     {
-        auto nodes = sjd::array{};
-        if (auto error = doc["nodes"].get(nodes); error == simdjson::error_code::SUCCESS)
+        auto nodes = json_array{};
+        if (doc["nodes"].get(nodes))
         {
             // Apply transformations to node, apply child parent relationships to mesh entities and nodes
             auto node_entities = flat_unordered_map<uint32_t, ecs::entity>{};
@@ -1385,7 +1427,7 @@ namespace tempest::assets
                 auto parent_ent = registry.create();
 
                 auto mesh_id = uint64_t{};
-                if (node["mesh"].get(mesh_id) == simdjson::error_code::SUCCESS)
+                if (node["mesh"].get(mesh_id))
                 {
                     auto mesh_prims = mesh_primitives.find(static_cast<uint32_t>(mesh_id));
                     if (mesh_prims != mesh_primitives.end())
@@ -1414,18 +1456,26 @@ namespace tempest::assets
                 }
 
                 // Get the transform
-                auto transform_opt = extract_transformation_matrix(node, node_id);
-                auto transform = transform_opt
-                                     .or_else([&]() -> optional<ecs::transform_component> {
-                                         auto transform = ecs::transform_component::identity();
-                                         transform.position(extract_translation(node));
-                                         transform.rotation(extract_rotation(node));
-                                         transform.scale(extract_scale(node));
-                                         return transform;
-                                     })
-                                     .value();
+                auto node_obj = node.as_object();
+                if (node_obj.has_value())
+                {
+                    auto transform_opt = extract_transformation_matrix(*node_obj, node_id);
+                    auto transform = transform_opt
+                                         .or_else([&]() -> optional<ecs::transform_component> {
+                                             auto transform = ecs::transform_component::identity();
+                                             transform.position(extract_translation(*node_obj));
+                                             transform.rotation(extract_rotation(*node_obj));
+                                             transform.scale(extract_scale(*node_obj));
+                                             return transform;
+                                         })
+                                         .value();
 
-                registry.assign(parent_ent, transform);
+                    registry.assign(parent_ent, transform);
+                }
+                else
+                {
+                    registry.assign(parent_ent, ecs::transform_component::identity());
+                }
                 registry.assign(parent_ent, prefab_tag);
 
                 node_entities.insert({node_id, parent_ent});
@@ -1439,17 +1489,21 @@ namespace tempest::assets
     auto gltf_importer::import(asset_database& asset_db, span<const byte> bytes, ecs::archetype_registry& registry,
                                optional<string_view> path) -> ecs::entity
     {
-        simdjson::dom::parser parser;
-        simdjson::padded_string padded(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-        auto parse_result = parser.parse(padded);
-
-        if (parse_result.error() != simdjson::error_code::SUCCESS)
+        auto alloc = system_allocator{};
+        auto doc_res = json_document::from_bytes(bytes, alloc);
+        if (!doc_res.has_value())
         {
             return ecs::null;
         }
 
+        auto doc_root = doc_res->root().as_object();
+        if (!doc_root.has_value())
+        {
+            return ecs::null;
+        }
+        const auto& doc = *doc_root;
+
         auto ent = registry.create();
-        auto doc = parse_result.get_object();
 
         optional<std::filesystem::path> base_path;
         if (path)
@@ -1461,23 +1515,23 @@ namespace tempest::assets
             }
         }
 
-        load_asset_metadata(doc.value(), registry, ent, asset_db);
+        load_asset_metadata(doc, registry, ent, asset_db);
 
-        auto buffer_contents = load_buffer_contents(doc.value(), base_path);
-        auto image_contents = load_image_contents(doc.value(), base_path);
-        auto buffer_views = read_buffer_views(doc.at_key("bufferViews"));
-        auto accessors = read_accessors(doc.at_key("accessors"));
+        auto buffer_contents = load_buffer_contents(doc, base_path);
+        auto image_contents = load_image_contents(doc, base_path);
+        auto buffer_views = read_buffer_views(doc["bufferViews"].as_array().value_or(json_array{}));
+        auto accessors = read_accessors(doc["accessors"].as_array().value_or(json_array{}));
         const auto source_path = path.has_value() ? path.value() : string_view{};
         auto texture_guids =
-            process_textures(doc.value(), image_contents, buffer_contents, _texture_reg, asset_db, source_path);
-        auto material_guids = process_materials(doc.value(), texture_guids, _material_reg, asset_db, source_path);
-        auto mesh_primitives = process_meshes(doc.value(), buffer_contents, buffer_views, accessors, material_guids,
-                                              _mesh_reg, asset_db, source_path);
+            process_textures(doc, image_contents, buffer_contents, _texture_reg, asset_db, source_path);
+        auto material_guids = process_materials(doc, texture_guids, _material_reg, asset_db, source_path);
+        auto mesh_primitives = process_meshes(doc, buffer_contents, buffer_views, accessors, material_guids, _mesh_reg,
+                                              asset_db, source_path);
 
-        process_nodes(doc.value(), mesh_primitives, registry, ent);
+        process_nodes(doc, mesh_primitives, registry, ent);
 
         // If there is only one child, merge it with the root entity
-        auto* ent_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(ent);
+        const auto* ent_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(ent);
         if (ent_rel != nullptr && ent_rel->first_child != ecs::tombstone)
         {
             // There exists at least one child
@@ -1490,7 +1544,7 @@ namespace tempest::assets
             {
                 // Copy components from parent to child
                 // Asset Metadata
-                auto* meta = registry.try_get<asset_metadata_component>(ent);
+                const auto* meta = registry.try_get<asset_metadata_component>(ent);
                 if (meta != nullptr)
                 {
                     registry.assign_or_replace(child, *meta);

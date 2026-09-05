@@ -23,7 +23,7 @@ namespace tempest
         inline constexpr bool is_reference_wrapper_v<reference_wrapper<T>> = true;
 
         template <typename C, typename T, typename O, typename... Args>
-        inline constexpr decltype(auto) invoke_member_pointer(T C::* member, O&& o, Args&&... args)
+        constexpr auto invoke_member_pointer(T C::* member, O&& o, Args&&... args) -> decltype(auto)
         {
             using object_t = remove_cvref_t<O>;
             constexpr bool is_member_func = tempest::is_function_v<T>;
@@ -66,7 +66,7 @@ namespace tempest
 
     template <typename Fn, typename... Args>
         requires is_invocable_v<Fn, Args...>
-    inline constexpr auto invoke(Fn&& fn, Args&&... args) noexcept(tempest::is_nothrow_invocable_v<Fn, Args...>)
+    constexpr auto invoke(Fn&& fn, Args&&... args) noexcept(tempest::is_nothrow_invocable_v<Fn, Args...>)
         -> tempest::invoke_result_t<Fn, Args...>
     {
         if constexpr (tempest::is_member_function_pointer_v<tempest::remove_cvref_t<Fn>>)
@@ -81,7 +81,7 @@ namespace tempest
 
     template <typename R, typename Fn, typename... Args>
         requires is_invocable_r_v<R, Fn, Args...>
-    inline constexpr auto invoke_r(Fn&& fn, Args&&... args) noexcept(tempest::is_nothrow_invocable_r_v<R, Fn, Args...>)
+    constexpr auto invoke_r(Fn&& fn, Args&&... args) noexcept(tempest::is_nothrow_invocable_r_v<R, Fn, Args...>)
         -> R
     {
         if constexpr (tempest::is_void_v<R>)

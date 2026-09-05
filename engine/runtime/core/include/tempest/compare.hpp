@@ -32,7 +32,7 @@ namespace tempest
     {
         struct unspec
         {
-            consteval unspec(unspec*) noexcept
+            consteval unspec(unspec* /*unused*/) noexcept
             {
             }
         };
@@ -53,19 +53,19 @@ namespace tempest
         static const partial_ordering greater;
         static const partial_ordering unordered;
 
-        friend constexpr bool operator==(partial_ordering, partial_ordering) noexcept = default;
-        friend constexpr bool operator==(partial_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<(partial_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator>(partial_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<=(partial_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator>=(partial_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<(partial_ordering, partial_ordering) noexcept;
-        friend constexpr bool operator>(partial_ordering, partial_ordering) noexcept;
-        friend constexpr bool operator<=(partial_ordering, partial_ordering) noexcept;
-        friend constexpr bool operator>=(partial_ordering, partial_ordering) noexcept;
+        friend constexpr auto operator==(partial_ordering, partial_ordering) noexcept -> bool = default;
+        friend constexpr auto operator==(partial_ordering /*p*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<(partial_ordering /*p*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator>(partial_ordering /*p*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<=(partial_ordering /*p*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator>=(partial_ordering /*p*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<(partial_ordering /*p*/, partial_ordering /*q*/) noexcept -> bool;
+        friend constexpr auto operator>(partial_ordering /*p*/, partial_ordering /*q*/) noexcept -> bool;
+        friend constexpr auto operator<=(partial_ordering /*p*/, partial_ordering /*q*/) noexcept -> bool;
+        friend constexpr auto operator>=(partial_ordering /*p*/, partial_ordering /*q*/) noexcept -> bool;
 
-        friend constexpr partial_ordering operator<=>(partial_ordering, detail::unspec) noexcept;
-        friend constexpr partial_ordering operator<=>(detail::unspec, partial_ordering) noexcept;
+        friend constexpr auto operator<=>(partial_ordering /*p*/, detail::unspec /*unused*/) noexcept -> partial_ordering;
+        friend constexpr auto operator<=>(detail::unspec /*unused*/, partial_ordering /*p*/) noexcept -> partial_ordering;
 
       private:
         friend class strong_ordering;
@@ -74,76 +74,76 @@ namespace tempest
         comparison_categories::type _value;
     };
 
-    inline constexpr partial_ordering::partial_ordering(comparison_categories::ordering o) noexcept
+    constexpr partial_ordering::partial_ordering(comparison_categories::ordering o) noexcept
         : _value{to_underlying(o)}
     {
     }
 
-    inline constexpr partial_ordering::partial_ordering(comparison_categories::no_order o) noexcept
+    constexpr partial_ordering::partial_ordering(comparison_categories::no_order o) noexcept
         : _value{to_underlying(o)}
     {
     }
 
-    inline constexpr bool operator==(partial_ordering p, detail::unspec) noexcept
+    constexpr auto operator==(partial_ordering p, detail::unspec /*unused*/) noexcept -> bool
     {
         return p._value == 0;
     }
 
-    inline constexpr bool operator<(partial_ordering p, detail::unspec) noexcept
+    constexpr auto operator<(partial_ordering p, detail::unspec /*unused*/) noexcept -> bool
     {
         return p._value < 0;
     }
 
-    inline constexpr bool operator>(partial_ordering p, detail::unspec) noexcept
+    constexpr auto operator>(partial_ordering p, detail::unspec /*unused*/) noexcept -> bool
     {
         return p._value > 0;
     }
 
-    inline constexpr bool operator<=(partial_ordering p, detail::unspec) noexcept
+    constexpr auto operator<=(partial_ordering p, detail::unspec /*unused*/) noexcept -> bool
     {
         return p._value <= 0;
     }
 
-    inline constexpr bool operator>=(partial_ordering p, detail::unspec) noexcept
+    constexpr auto operator>=(partial_ordering p, detail::unspec /*unused*/) noexcept -> bool
     {
         return p._value >= 0;
     }
 
-    inline constexpr bool operator<(partial_ordering p, partial_ordering q) noexcept
+    constexpr auto operator<(partial_ordering p, partial_ordering q) noexcept -> bool
     {
         return p._value < q._value;
     }
 
-    inline constexpr bool operator>(partial_ordering p, partial_ordering q) noexcept
+    constexpr auto operator>(partial_ordering p, partial_ordering q) noexcept -> bool
     {
         return p._value > q._value;
     }
 
-    inline constexpr bool operator<=(partial_ordering p, partial_ordering q) noexcept
+    constexpr auto operator<=(partial_ordering p, partial_ordering q) noexcept -> bool
     {
         return p._value <= q._value;
     }
 
-    inline constexpr bool operator>=(partial_ordering p, partial_ordering q) noexcept
+    constexpr auto operator>=(partial_ordering p, partial_ordering q) noexcept -> bool
     {
         return p._value >= q._value;
     }
 
-    inline constexpr partial_ordering operator<=>(partial_ordering p, detail::unspec) noexcept
+    constexpr auto operator<=>(partial_ordering p, detail::unspec /*unused*/) noexcept -> partial_ordering
     {
         return p;
     }
 
-    inline constexpr partial_ordering operator<=>(detail::unspec, partial_ordering p) noexcept
+    constexpr auto operator<=>(detail::unspec /*unused*/, partial_ordering p) noexcept -> partial_ordering
     {
-        if (p._value & 1)
+        if ((p._value & 1) != 0)
         {
             return partial_ordering(static_cast<comparison_categories::ordering>(-p._value));
         }
-        else
-        {
+        
+        
             return p;
-        }
+       
     }
 
     inline constexpr partial_ordering partial_ordering::less{comparison_categories::ordering::less};
@@ -162,18 +162,18 @@ namespace tempest
 
         constexpr operator partial_ordering() const noexcept;
 
-        friend constexpr bool operator==(weak_ordering, weak_ordering) noexcept = default;
-        friend constexpr bool operator==(weak_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<(weak_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator>(weak_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<=(weak_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator>=(weak_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<(weak_ordering, weak_ordering) noexcept;
-        friend constexpr bool operator>(weak_ordering, weak_ordering) noexcept;
-        friend constexpr bool operator<=(weak_ordering, weak_ordering) noexcept;
-        friend constexpr bool operator>=(weak_ordering, weak_ordering) noexcept;
-        friend constexpr weak_ordering operator<=>(weak_ordering, detail::unspec) noexcept;
-        friend constexpr weak_ordering operator<=>(detail::unspec, weak_ordering) noexcept;
+        friend constexpr auto operator==(weak_ordering, weak_ordering) noexcept -> bool = default;
+        friend constexpr auto operator==(weak_ordering /*w*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<(weak_ordering /*w*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator>(weak_ordering /*w*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<=(weak_ordering /*w*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator>=(weak_ordering /*w*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<(weak_ordering /*w*/, weak_ordering /*v*/) noexcept -> bool;
+        friend constexpr auto operator>(weak_ordering /*w*/, weak_ordering /*v*/) noexcept -> bool;
+        friend constexpr auto operator<=(weak_ordering /*w*/, weak_ordering /*v*/) noexcept -> bool;
+        friend constexpr auto operator>=(weak_ordering /*w*/, weak_ordering /*v*/) noexcept -> bool;
+        friend constexpr auto operator<=>(weak_ordering /*w*/, detail::unspec /*unused*/) noexcept -> weak_ordering;
+        friend constexpr auto operator<=>(detail::unspec /*unused*/, weak_ordering /*w*/) noexcept -> weak_ordering;
 
       private:
         friend class strong_ordering;
@@ -181,75 +181,75 @@ namespace tempest
         comparison_categories::type _value;
     };
 
-    inline constexpr weak_ordering::weak_ordering(comparison_categories::ordering o) noexcept : _value{to_underlying(o)}
+    constexpr weak_ordering::weak_ordering(comparison_categories::ordering o) noexcept : _value{to_underlying(o)}
     {
     }
 
-    inline constexpr weak_ordering::operator partial_ordering() const noexcept
+    constexpr weak_ordering::operator partial_ordering() const noexcept
     {
         return partial_ordering(static_cast<comparison_categories::ordering>(_value));
     }
 
-    inline constexpr bool operator==(weak_ordering w, detail::unspec) noexcept
+    constexpr auto operator==(weak_ordering w, detail::unspec /*unused*/) noexcept -> bool
     {
         return w._value == 0;
     }
 
-    inline constexpr bool operator<(weak_ordering w, detail::unspec) noexcept
+    constexpr auto operator<(weak_ordering w, detail::unspec /*unused*/) noexcept -> bool
     {
         return w._value < 0;
     }
 
-    inline constexpr bool operator>(weak_ordering w, detail::unspec) noexcept
+    constexpr auto operator>(weak_ordering w, detail::unspec /*unused*/) noexcept -> bool
     {
         return w._value > 0;
     }
 
-    inline constexpr bool operator<=(weak_ordering w, detail::unspec) noexcept
+    constexpr auto operator<=(weak_ordering w, detail::unspec /*unused*/) noexcept -> bool
     {
         return w._value <= 0;
     }
 
-    inline constexpr bool operator>=(weak_ordering w, detail::unspec) noexcept
+    constexpr auto operator>=(weak_ordering w, detail::unspec /*unused*/) noexcept -> bool
     {
         return w._value >= 0;
     }
 
-    inline constexpr bool operator<(weak_ordering w, weak_ordering v) noexcept
+    constexpr auto operator<(weak_ordering w, weak_ordering v) noexcept -> bool
     {
         return w._value < v._value;
     }
 
-    inline constexpr bool operator>(weak_ordering w, weak_ordering v) noexcept
+    constexpr auto operator>(weak_ordering w, weak_ordering v) noexcept -> bool
     {
         return w._value > v._value;
     }
 
-    inline constexpr bool operator<=(weak_ordering w, weak_ordering v) noexcept
+    constexpr auto operator<=(weak_ordering w, weak_ordering v) noexcept -> bool
     {
         return w._value <= v._value;
     }
 
-    inline constexpr bool operator>=(weak_ordering w, weak_ordering v) noexcept
+    constexpr auto operator>=(weak_ordering w, weak_ordering v) noexcept -> bool
     {
         return w._value >= v._value;
     }
 
-    inline constexpr weak_ordering operator<=>(weak_ordering w, detail::unspec) noexcept
+    constexpr auto operator<=>(weak_ordering w, detail::unspec /*unused*/) noexcept -> weak_ordering
     {
         return w;
     }
 
-    inline constexpr weak_ordering operator<=>(detail::unspec, weak_ordering w) noexcept
+    constexpr auto operator<=>(detail::unspec /*unused*/, weak_ordering w) noexcept -> weak_ordering
     {
-        if (w._value & 1)
+        if ((w._value & 1) != 0)
         {
             return weak_ordering(static_cast<comparison_categories::ordering>(-w._value));
         }
-        else
-        {
+        
+        
             return w;
-        }
+       
     }
 
     inline constexpr weak_ordering weak_ordering::less{comparison_categories::ordering::less};
@@ -269,98 +269,98 @@ namespace tempest
         constexpr operator weak_ordering() const noexcept;
         constexpr operator partial_ordering() const noexcept;
 
-        friend constexpr bool operator==(strong_ordering, strong_ordering) noexcept = default;
-        friend constexpr bool operator==(strong_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<(strong_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator>(strong_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<=(strong_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator>=(strong_ordering, detail::unspec) noexcept;
-        friend constexpr bool operator<(strong_ordering, strong_ordering) noexcept;
-        friend constexpr bool operator>(strong_ordering, strong_ordering) noexcept;
-        friend constexpr bool operator<=(strong_ordering, strong_ordering) noexcept;
-        friend constexpr bool operator>=(strong_ordering, strong_ordering) noexcept;
-        friend constexpr strong_ordering operator<=>(strong_ordering, detail::unspec) noexcept;
-        friend constexpr strong_ordering operator<=>(detail::unspec, strong_ordering) noexcept;
+        friend constexpr auto operator==(strong_ordering, strong_ordering) noexcept -> bool = default;
+        friend constexpr auto operator==(strong_ordering /*s*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<(strong_ordering /*s*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator>(strong_ordering /*s*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<=(strong_ordering /*s*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator>=(strong_ordering /*s*/, detail::unspec /*unused*/) noexcept -> bool;
+        friend constexpr auto operator<(strong_ordering /*s*/, strong_ordering /*t*/) noexcept -> bool;
+        friend constexpr auto operator>(strong_ordering /*s*/, strong_ordering /*t*/) noexcept -> bool;
+        friend constexpr auto operator<=(strong_ordering /*s*/, strong_ordering /*t*/) noexcept -> bool;
+        friend constexpr auto operator>=(strong_ordering /*s*/, strong_ordering /*t*/) noexcept -> bool;
+        friend constexpr auto operator<=>(strong_ordering /*s*/, detail::unspec /*unused*/) noexcept -> strong_ordering;
+        friend constexpr auto operator<=>(detail::unspec /*unused*/, strong_ordering /*s*/) noexcept -> strong_ordering;
 
       private:
         comparison_categories::type _value;
     };
 
-    inline constexpr strong_ordering::strong_ordering(comparison_categories::ordering o) noexcept
+    constexpr strong_ordering::strong_ordering(comparison_categories::ordering o) noexcept
         : _value{to_underlying(o)}
     {
     }
 
-    inline constexpr strong_ordering::operator weak_ordering() const noexcept
+    constexpr strong_ordering::operator weak_ordering() const noexcept
     {
         return weak_ordering(static_cast<comparison_categories::ordering>(_value));
     }
 
-    inline constexpr strong_ordering::operator partial_ordering() const noexcept
+    constexpr strong_ordering::operator partial_ordering() const noexcept
     {
         return partial_ordering(static_cast<comparison_categories::ordering>(_value));
     }
 
-    inline constexpr bool operator==(strong_ordering s, detail::unspec) noexcept
+    constexpr auto operator==(strong_ordering s, detail::unspec /*unused*/) noexcept -> bool
     {
         return s._value == 0;
     }
 
-    inline constexpr bool operator<(strong_ordering s, detail::unspec) noexcept
+    constexpr auto operator<(strong_ordering s, detail::unspec /*unused*/) noexcept -> bool
     {
         return s._value < 0;
     }
 
-    inline constexpr bool operator>(strong_ordering s, detail::unspec) noexcept
+    constexpr auto operator>(strong_ordering s, detail::unspec /*unused*/) noexcept -> bool
     {
         return s._value > 0;
     }
 
-    inline constexpr bool operator<=(strong_ordering s, detail::unspec) noexcept
+    constexpr auto operator<=(strong_ordering s, detail::unspec /*unused*/) noexcept -> bool
     {
         return s._value <= 0;
     }
 
-    inline constexpr bool operator>=(strong_ordering s, detail::unspec) noexcept
+    constexpr auto operator>=(strong_ordering s, detail::unspec /*unused*/) noexcept -> bool
     {
         return s._value >= 0;
     }
 
-    inline constexpr bool operator<(strong_ordering s, strong_ordering t) noexcept
+    constexpr auto operator<(strong_ordering s, strong_ordering t) noexcept -> bool
     {
         return s._value < t._value;
     }
 
-    inline constexpr bool operator>(strong_ordering s, strong_ordering t) noexcept
+    constexpr auto operator>(strong_ordering s, strong_ordering t) noexcept -> bool
     {
         return s._value > t._value;
     }
 
-    inline constexpr bool operator<=(strong_ordering s, strong_ordering t) noexcept
+    constexpr auto operator<=(strong_ordering s, strong_ordering t) noexcept -> bool
     {
         return s._value <= t._value;
     }
 
-    inline constexpr bool operator>=(strong_ordering s, strong_ordering t) noexcept
+    constexpr auto operator>=(strong_ordering s, strong_ordering t) noexcept -> bool
     {
         return s._value >= t._value;
     }
 
-    inline constexpr strong_ordering operator<=>(strong_ordering s, detail::unspec) noexcept
+    constexpr auto operator<=>(strong_ordering s, detail::unspec /*unused*/) noexcept -> strong_ordering
     {
         return s;
     }
 
-    inline constexpr strong_ordering operator<=>(detail::unspec, strong_ordering s) noexcept
+    constexpr auto operator<=>(detail::unspec /*unused*/, strong_ordering s) noexcept -> strong_ordering
     {
-        if (s._value & 1)
+        if ((s._value & 1) != 0)
         {
             return strong_ordering(static_cast<comparison_categories::ordering>(-s._value));
         }
-        else
-        {
+        
+        
             return s;
-        }
+       
     }
 
     inline constexpr strong_ordering strong_ordering::less{comparison_categories::ordering::less};
@@ -414,7 +414,7 @@ namespace tempest
     };
 
     template <typename... Ts>
-    using common_comparison_category_t = typename common_comparison_category<Ts...>::type;
+    using common_comparison_category_t = common_comparison_category<Ts...>::type;
 
     template <typename T, typename U = T>
     using compare_three_way_result_t =
@@ -465,7 +465,7 @@ namespace tempest
         using t_base = remove_cvref_t<T>;
         using u_base = remove_cvref_t<U>;
 
-        static constexpr strong_ordering compare(T t, U u) noexcept
+        static constexpr auto compare(T t, U u) noexcept -> strong_ordering
         {
             // If the same signedness
             // - If both types are the same size, compare directly.
@@ -482,14 +482,14 @@ namespace tempest
                     {
                         return strong_ordering::less;
                     }
-                    else if (t > u)
+                    if (t > u)
                     {
                         return strong_ordering::greater;
                     }
-                    else
-                    {
+                    
+                    
                         return strong_ordering::equal;
-                    }
+                   
                 }
                 else if constexpr (sizeof(t_base) > sizeof(u_base))
                 {
@@ -509,11 +509,11 @@ namespace tempest
                 {
                     return strong_ordering::less;
                 }
-                else
-                {
+                
+                
                     return three_way_comparer<make_unsigned_t<t_base>, u_base>::compare(
                         static_cast<make_unsigned_t<t_base>>(t), u);
-                }
+               
             }
             else
             {
@@ -522,11 +522,11 @@ namespace tempest
                 {
                     return strong_ordering::greater;
                 }
-                else
-                {
+                
+                
                     return three_way_comparer<t_base, make_unsigned_t<u_base>>::compare(
                         t, static_cast<make_unsigned_t<u_base>>(u));
-                }
+               
             }
         }
     };
@@ -535,27 +535,27 @@ namespace tempest
         requires is_pointer_v<remove_cvref_t<T>> && is_pointer_v<remove_cvref_t<U>>
     struct three_way_comparer<T, U>
     {
-        static constexpr strong_ordering compare(T t, U u) noexcept
+        static constexpr auto compare(T t, U u) noexcept -> strong_ordering
         {
             if (t < u)
             {
                 return strong_ordering::less;
             }
-            else if (t > u)
+            if (t > u)
             {
                 return strong_ordering::greater;
             }
-            else
-            {
+            
+            
                 return strong_ordering::equal;
-            }
+           
         }
     };
 
     template <floating_point T, floating_point U>
     struct three_way_comparer<T, U>
     {
-        static constexpr strong_ordering compare(T t, U u) noexcept
+        static constexpr auto compare(T t, U u) noexcept -> strong_ordering
         {
             // If the types are the same, compare directly.
             // Else promote the narrower type to the wider type and compare.
@@ -571,14 +571,14 @@ namespace tempest
                     {
                         return strong_ordering::less;
                     }
-                    else if (t > u)
+                    if (t > u)
                     {
                         return strong_ordering::greater;
                     }
-                    else
-                    {
+                    
+                    
                         return strong_ordering::equal;
-                    }
+                   
                 }
 
                 bool tsign = signbit(t);
@@ -643,32 +643,32 @@ namespace tempest
         using is_transparent = void;
     };
 
-    inline constexpr bool is_eq(partial_ordering cmp) noexcept
+    constexpr auto is_eq(partial_ordering cmp) noexcept -> bool
     {
         return cmp == partial_ordering::equivalent;
     }
 
-    inline constexpr bool is_neq(partial_ordering cmp) noexcept
+    constexpr auto is_neq(partial_ordering cmp) noexcept -> bool
     {
         return cmp != partial_ordering::equivalent;
     }
 
-    inline constexpr bool is_lt(partial_ordering cmp) noexcept
+    constexpr auto is_lt(partial_ordering cmp) noexcept -> bool
     {
         return cmp == partial_ordering::less;
     }
 
-    inline constexpr bool is_lteq(partial_ordering cmp) noexcept
+    constexpr auto is_lteq(partial_ordering cmp) noexcept -> bool
     {
         return cmp == partial_ordering::less || cmp == partial_ordering::equivalent;
     }
 
-    inline constexpr bool is_gt(partial_ordering cmp) noexcept
+    constexpr auto is_gt(partial_ordering cmp) noexcept -> bool
     {
         return cmp == partial_ordering::greater;
     }
 
-    inline constexpr bool is_gteq(partial_ordering cmp) noexcept
+    constexpr auto is_gteq(partial_ordering cmp) noexcept -> bool
     {
         return cmp == partial_ordering::greater || cmp == partial_ordering::equivalent;
     }

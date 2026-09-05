@@ -14,7 +14,7 @@ namespace tempest
         /// @param v Value to hash
         /// @return Hashed value
         TEMPEST_API
-        inline int64_t i64_hash(int64_t v) noexcept
+        inline auto i64_hash(int64_t v) noexcept -> int64_t
         {
             v = (v ^ (v >> 30)) * 0xbf58476d1ce4e5b9;
             v = (v ^ (v >> 27)) * 0x94d049bb133111eb;
@@ -27,7 +27,7 @@ namespace tempest
         /// @param v Value to hash
         /// @return Hashed value
         TEMPEST_API
-        inline uint64_t u64_hash(uint64_t v) noexcept
+        inline auto u64_hash(uint64_t v) noexcept -> uint64_t
         {
             v = (v ^ (v >> 30)) * 0xbf58476d1ce4e5b9;
             v = (v ^ (v >> 27)) * 0x94d049bb133111eb;
@@ -36,7 +36,7 @@ namespace tempest
         }
 
         TEMPEST_API
-        inline int64_t i8_hash(int8_t v) noexcept
+        inline auto i8_hash(int8_t v) noexcept -> int64_t
         {
             auto full_hash = i64_hash(v);
             auto masked_hash = full_hash & 0x1FFFFFFFFFFFFFF; // mask off the upper 7 bits
@@ -46,7 +46,7 @@ namespace tempest
         }
 
         TEMPEST_API
-        inline uint64_t u8_hash(uint8_t v) noexcept
+        inline auto u8_hash(uint8_t v) noexcept -> uint64_t
         {
             auto full_hash = u64_hash(v);
             auto masked_hash = full_hash & 0x1FFFFFFFFFFFFFF;  // mask off the upper 7 bits
@@ -56,31 +56,31 @@ namespace tempest
         }
 
         TEMPEST_API
-        inline int64_t i16_hash(int16_t v) noexcept
+        inline auto i16_hash(int16_t v) noexcept -> int64_t
         {
             return i64_hash(v);
         }
 
         TEMPEST_API
-        inline uint64_t u16_hash(uint16_t v) noexcept
+        inline auto u16_hash(uint16_t v) noexcept -> uint64_t
         {
             return u64_hash(v);
         }
 
         TEMPEST_API
-        inline int64_t i32_hash(int32_t v) noexcept
+        inline auto i32_hash(int32_t v) noexcept -> int64_t
         {
             return i64_hash(v);
         }
 
         TEMPEST_API
-        inline uint64_t u32_hash(uint32_t v) noexcept
+        inline auto u32_hash(uint32_t v) noexcept -> uint64_t
         {
             return u64_hash(v);
         }
 
         template <typename T>
-        inline uint32_t fnv1a32(const T* data, size_t sz) noexcept
+        inline auto fnv1a32(const T* data, size_t sz) noexcept -> uint32_t
         {
             constexpr uint32_t fnv_offset = 2166136261U;
             constexpr uint32_t fnv_prime = 16777619U;
@@ -96,7 +96,7 @@ namespace tempest
         }
 
         template <typename T>
-        inline uint64_t fnv1a64(const T* data, size_t sz) noexcept
+        inline auto fnv1a64(const T* data, size_t sz) noexcept -> uint64_t
         {
             constexpr uint64_t fnv_offset = 14695981039346656037ULL;
             constexpr uint64_t fnv_prime = 1099511628211ULL;
@@ -112,7 +112,7 @@ namespace tempest
         }
 
         template <typename T>
-        inline size_t fnv1a_auto(const T* data, size_t sz) noexcept
+        inline auto fnv1a_auto(const T* data, size_t sz) noexcept -> size_t
         {
             if constexpr (sizeof(size_t) == 4)
             {
@@ -139,7 +139,7 @@ namespace tempest
     template <>
     struct hash<int8_t>
     {
-        size_t operator()(int8_t key) const noexcept
+        auto operator()(int8_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::i8_hash(key));
         }
@@ -149,7 +149,7 @@ namespace tempest
     template <>
     struct hash<uint8_t>
     {
-        size_t operator()(uint8_t key) const noexcept
+        auto operator()(uint8_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::u8_hash(key));
         }
@@ -159,7 +159,7 @@ namespace tempest
     template <>
     struct hash<int16_t>
     {
-        size_t operator()(int16_t key) const noexcept
+        auto operator()(int16_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::i16_hash(key));
         }
@@ -169,7 +169,7 @@ namespace tempest
     template <>
     struct hash<uint16_t>
     {
-        size_t operator()(uint16_t key) const noexcept
+        auto operator()(uint16_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::u16_hash(key));
         }
@@ -179,7 +179,7 @@ namespace tempest
     template <>
     struct hash<int32_t>
     {
-        size_t operator()(int32_t key) const noexcept
+        auto operator()(int32_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::i32_hash(key));
         }
@@ -189,7 +189,7 @@ namespace tempest
     template <>
     struct hash<uint32_t>
     {
-        size_t operator()(uint32_t key) const noexcept
+        auto operator()(uint32_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::u32_hash(key));
         }
@@ -199,7 +199,7 @@ namespace tempest
     template <>
     struct hash<int64_t>
     {
-        size_t operator()(int64_t key) const noexcept
+        auto operator()(int64_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::i64_hash(key));
         }
@@ -209,7 +209,7 @@ namespace tempest
     template <>
     struct hash<uint64_t>
     {
-        size_t operator()(uint64_t key) const noexcept
+        auto operator()(uint64_t key) const noexcept -> size_t
         {
             return static_cast<size_t>(detail::u64_hash(key));
         }
@@ -219,9 +219,9 @@ namespace tempest
     template <>
     struct hash<float>
     {
-        size_t operator()(float key) const noexcept
+        auto operator()(float key) const noexcept -> size_t
         {
-            uint32_t uint_bytes = bit_cast<uint32_t>(key);
+            auto uint_bytes = bit_cast<uint32_t>(key);
             return static_cast<size_t>(detail::u32_hash(uint_bytes));
         }
     };
@@ -230,9 +230,9 @@ namespace tempest
     template <>
     struct hash<double>
     {
-        size_t operator()(double key) const noexcept
+        auto operator()(double key) const noexcept -> size_t
         {
-            uint64_t uint_bytes = bit_cast<uint64_t>(key);
+            auto uint_bytes = bit_cast<uint64_t>(key);
             return static_cast<size_t>(detail::u64_hash(uint_bytes));
         }
     };
@@ -241,7 +241,7 @@ namespace tempest
     template <typename T>
     struct hash<T*>
     {
-        size_t operator()(T* key) const noexcept
+        auto operator()(T* key) const noexcept -> size_t
         {
             if constexpr (sizeof(T*) == 4)
             {
@@ -258,7 +258,7 @@ namespace tempest
         requires is_enum_v<T>
     struct hash<T>
     {
-        size_t operator()(T key) const noexcept
+        auto operator()(T key) const noexcept -> size_t
         {
             using underlying = underlying_type_t<T>;
             return hash<underlying>()(static_cast<underlying>(key));
@@ -267,7 +267,7 @@ namespace tempest
 
     template <typename... Ts>
         requires(sizeof...(Ts) > 0)
-    inline size_t hash_combine(Ts... keys) noexcept
+    inline auto hash_combine(Ts... keys) noexcept -> size_t
     {
         size_t hv = 0;
         ((hv ^= hash<Ts>()(forward<Ts>(keys)) + 0x9e3779b9 + (hv << 6) + (hv >> 2)), ...);

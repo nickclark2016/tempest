@@ -1,16 +1,17 @@
+#include <tempest/algorithm.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/utility.hpp>
 
 #include <tlsf/tlsf.h>
 
 #include <cassert>
 #include <cstdlib>
-#include <utility>
 
 namespace tempest
 {
     namespace
     {
-        size_t align_memory(size_t sz, size_t align)
+        auto align_memory(size_t sz, size_t align) -> size_t
         {
             const auto _mask = align - 1;
             return (sz + _mask) & ~_mask;
@@ -35,7 +36,7 @@ namespace tempest
         release();
     }
 
-    stack_allocator& stack_allocator::operator=(stack_allocator&& rhs) noexcept
+    auto stack_allocator::operator=(stack_allocator&& rhs) noexcept -> stack_allocator&
     {
         if (&rhs == this) [[unlikely]]
         {
@@ -44,15 +45,15 @@ namespace tempest
 
         release();
 
-        std::swap(_buffer, rhs._buffer);
-        std::swap(_capacity, rhs._capacity);
-        std::swap(_allocated_bytes, rhs._allocated_bytes);
+        tempest::swap(_buffer, rhs._buffer);
+        tempest::swap(_capacity, rhs._capacity);
+        tempest::swap(_allocated_bytes, rhs._allocated_bytes);
 
         return *this;
     }
 
     // TODO: Investigate bump down allocation instead of bump up
-    void* stack_allocator::allocate(size_t size, size_t alignment, [[maybe_unused]] source_location loc)
+    auto stack_allocator::allocate(size_t size, size_t alignment, [[maybe_unused]] source_location loc) -> void*
     {
         if (size == 0)
         {
@@ -79,7 +80,7 @@ namespace tempest
         _allocated_bytes = size_at_ptr;
     }
 
-    size_t stack_allocator::get_marker() const noexcept
+    auto stack_allocator::get_marker() const noexcept -> size_t
     {
         return _allocated_bytes;
     }
@@ -95,7 +96,7 @@ namespace tempest
 
     void stack_allocator::release()
     {
-        if (_buffer)
+        if (_buffer != nullptr)
         {
             std::free(_buffer);
             _buffer = nullptr;
@@ -110,17 +111,19 @@ namespace tempest
     }
 
     heap_allocator::heap_allocator(size_t bytes)
-        : _memory{reinterpret_cast<byte*>(std::malloc(bytes))}, _allocated_size{0}, _max_size{bytes}
+        : _memory{reinterpret_cast<byte*>(std::malloc(bytes))}, _max_size{bytes}
     {
         _tlsf_handle = tlsf_create_with_pool(_memory, _max_size);
     }
 
     heap_allocator::heap_allocator(heap_allocator&& other) noexcept
-        : _tlsf_handle{std::move(other._tlsf_handle)}, _memory{std::move(other._memory)},
-          _allocated_size{std::move(other._allocated_size)}, _max_size{std::move(other._max_size)}
+        : _tlsf_handle{other._tlsf_handle}, _memory{other._memory}, _allocated_size{other._allocated_size},
+          _max_size{other._max_size}
     {
-        _tlsf_handle = nullptr;
-        _memory = nullptr;
+        other._tlsf_handle = nullptr;
+        other._memory = nullptr;
+        other._allocated_size = 0;
+        other._max_size = 0;
     }
 
     heap_allocator::~heap_allocator()
@@ -128,7 +131,7 @@ namespace tempest
         _release();
     }
 
-    heap_allocator& heap_allocator::operator=(heap_allocator&& rhs) noexcept
+    auto heap_allocator::operator=(heap_allocator&& rhs) noexcept -> heap_allocator&
     {
         if (&rhs == this) [[unlikely]]
         {
@@ -137,27 +140,28 @@ namespace tempest
 
         _release();
 
-        std::swap(_tlsf_handle, rhs._tlsf_handle);
-        std::swap(_memory, rhs._memory);
-        std::swap(_allocated_size, rhs._allocated_size);
-        std::swap(_max_size, rhs._max_size);
+        tempest::swap(_tlsf_handle, rhs._tlsf_handle);
+        tempest::swap(_memory, rhs._memory);
+        tempest::swap(_allocated_size, rhs._allocated_size);
+        tempest::swap(_max_size, rhs._max_size);
 
         return *this;
     }
 
-    void* heap_allocator::allocate(size_t size, [[maybe_unused]] size_t alignment, [[maybe_unused]] source_location loc)
+    auto heap_allocator::allocate(size_t size, [[maybe_unused]] size_t alignment, [[maybe_unused]] source_location loc)
+        -> void*
     {
         return tlsf_malloc(_tlsf_handle, size);
     }
 
     void heap_allocator::deallocate(void* ptr)
     {
-        return tlsf_free(_tlsf_handle, ptr);
+        tlsf_free(_tlsf_handle, ptr);
     }
 
     void heap_allocator::_release()
     {
-        if (_memory)
+        if (_memory != nullptr)
         {
             tlsf_destroy(_tlsf_handle);
             std::free(_memory);
@@ -167,7 +171,25 @@ namespace tempest
         }
     }
 
-    void* aligned_alloc(size_t n, size_t alignment)
+    auto system_allocator::allocate(size_t size, size_t alignment, [[maybe_unused]] source_location loc) -> void*
+    {
+        if (size == 0)
+        {
+            return nullptr;
+        }
+        alignment = max(alignment, sizeof(void*));
+        return aligned_alloc(size, alignment);
+    }
+
+    void system_allocator::deallocate(void* ptr)
+    {
+        if (ptr != nullptr)
+        {
+            aligned_free(ptr);
+        }
+    }
+
+    auto aligned_alloc(size_t n, size_t alignment) -> void*
     {
 #ifdef _MSC_VER
         return _aligned_malloc(n, alignment);

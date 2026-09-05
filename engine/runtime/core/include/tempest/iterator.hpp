@@ -27,7 +27,7 @@ namespace tempest
         requires requires { typename It::difference_type; }
     struct incrementable_traits<It>
     {
-        using difference_type = typename It::difference_type;
+        using difference_type = It::difference_type;
     };
 
     template <typename It>
@@ -40,7 +40,7 @@ namespace tempest
     };
 
     template <typename T>
-    using iter_difference_t = typename incrementable_traits<T>::difference_type;
+    using iter_difference_t = incrementable_traits<T>::difference_type;
 
     template <typename It>
     struct indirectly_readable_traits
@@ -70,7 +70,7 @@ namespace tempest
         requires requires { typename It::value_type; }
     struct indirectly_readable_traits<It>
     {
-        using value_type = typename It::value_type;
+        using value_type = It::value_type;
     };
 
     template <typename It>
@@ -172,7 +172,7 @@ namespace tempest
 
     template <typename It>
     concept random_access_iterator = bidirectional_iterator<It> && totally_ordered<It> &&
-                                     requires(It it, typename incrementable_traits<It>::difference_type n) {
+                                     requires(It it, incrementable_traits<It>::difference_type n) {
                                          { it += n } -> same_as<It&>;
                                          { it -= n } -> same_as<It&>;
                                          { it + n } -> same_as<It>;
@@ -206,7 +206,7 @@ namespace tempest
         template <typename T>
         struct pointer_type_impl<T, true, false>
         {
-            using type = typename T::pointer;
+            using type = T::pointer;
         };
 
         template <typename T>
@@ -218,7 +218,7 @@ namespace tempest
         template <typename T>
         struct pointer_type_impl<T, true, true>
         {
-            using type = typename T::pointer;
+            using type = T::pointer;
         };
 
         template <typename T>
@@ -228,7 +228,7 @@ namespace tempest
         };
 
         template <typename T>
-        using pointer_type = typename pointer_type_impl<T, has_pointer_type_test<T>, has_arrow_operator_test<T>>::type;
+        using pointer_type = pointer_type_impl<T, has_pointer_type_test<T>, has_arrow_operator_test<T>>::type;
 
         template <typename T, bool>
         struct reference_type_impl;
@@ -236,7 +236,7 @@ namespace tempest
         template <typename T>
         struct reference_type_impl<T, true>
         {
-            using type = typename T::reference;
+            using type = T::reference;
         };
 
         template <typename T>
@@ -246,20 +246,20 @@ namespace tempest
         };
 
         template <typename T>
-        using reference_type = typename reference_type_impl<T, has_reference_test<T>>::type;
+        using reference_type = reference_type_impl<T, has_reference_test<T>>::type;
     } // namespace detail
 
     template <typename It>
     struct iterator_traits
     {
-        using difference_type = typename incrementable_traits<It>::difference_type;
-        using value_type = typename indirectly_readable_traits<It>::value_type;
-        using pointer = typename detail::pointer_type<It>;
-        using reference = typename detail::reference_type<It>;
+        using difference_type = incrementable_traits<It>::difference_type;
+        using value_type = indirectly_readable_traits<It>::value_type;
+        using pointer = detail::pointer_type<It>;
+        using reference = detail::reference_type<It>;
     };
 
     template <input_iterator It, typename D>
-    inline constexpr void advance(It& it, D n)
+    constexpr void advance(It& it, D n)
     {
         if constexpr (contiguous_iterator<It>)
         {
@@ -285,21 +285,21 @@ namespace tempest
     }
 
     template <input_iterator It>
-    inline constexpr It next(It it, typename iterator_traits<It>::difference_type n = 1)
+    constexpr auto next(It it, typename iterator_traits<It>::difference_type n = 1) -> It
     {
         advance(it, n);
         return it;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr It prev(It it, typename iterator_traits<It>::difference_type n = 1)
+    constexpr auto prev(It it, typename iterator_traits<It>::difference_type n = 1) -> It
     {
         advance(it, -n);
         return it;
     }
 
     template <input_iterator It>
-    inline constexpr iter_difference_t<It> distance(It first, It last)
+    constexpr auto distance(It first, It last) -> iter_difference_t<It>
     {
         if constexpr (contiguous_iterator<It>)
         {
@@ -398,8 +398,8 @@ namespace tempest
         using iterator_type = It;
         using value_type = iter_value_t<It>;
         using difference_type = iter_difference_t<It>;
-        using pointer = typename iterator_traits<It>::pointer;
-        using reference = typename iterator_traits<It>::reference;
+        using pointer = iterator_traits<It>::pointer;
+        using reference = iterator_traits<It>::reference;
 
         constexpr reverse_iterator() noexcept = default;
         constexpr explicit reverse_iterator(It it) noexcept;
@@ -410,23 +410,23 @@ namespace tempest
 
         template <typename U>
             requires convertible_to<U, It>
-        constexpr reverse_iterator& operator=(const reverse_iterator<U>& other) noexcept;
+        constexpr auto operator=(const reverse_iterator<U>& other) noexcept -> reverse_iterator&;
 
-        constexpr iterator_type base() const noexcept;
+        constexpr auto base() const noexcept -> iterator_type;
 
-        constexpr reference operator[](difference_type n) const noexcept;
+        constexpr auto operator[](difference_type n) const noexcept -> reference;
 
-        constexpr reverse_iterator& operator++() noexcept;
-        constexpr reverse_iterator operator++(int) noexcept;
-        constexpr reverse_iterator& operator--() noexcept;
-        constexpr reverse_iterator operator--(int) noexcept;
-        constexpr reverse_iterator operator+(difference_type n) const noexcept;
-        constexpr reverse_iterator& operator+=(difference_type n) noexcept;
-        constexpr reverse_iterator operator-(difference_type n) const noexcept;
-        constexpr reverse_iterator& operator-=(difference_type n) noexcept;
+        constexpr auto operator++() noexcept -> reverse_iterator&;
+        constexpr auto operator++(int) noexcept -> reverse_iterator;
+        constexpr auto operator--() noexcept -> reverse_iterator&;
+        constexpr auto operator--(int) noexcept -> reverse_iterator;
+        constexpr auto operator+(difference_type n) const noexcept -> reverse_iterator;
+        constexpr auto operator+=(difference_type n) noexcept -> reverse_iterator&;
+        constexpr auto operator-(difference_type n) const noexcept -> reverse_iterator;
+        constexpr auto operator-=(difference_type n) noexcept -> reverse_iterator&;
 
-        constexpr reference operator*() const noexcept;
-        constexpr pointer operator->() const noexcept
+        constexpr auto operator*() const noexcept -> reference;
+        constexpr auto operator->() const noexcept -> pointer
             requires(is_pointer_v<It> || requires(const It it) { it.operator->(); });
 
       private:
@@ -434,14 +434,14 @@ namespace tempest
     };
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It>::reverse_iterator(It it) noexcept : _it(it)
+    constexpr reverse_iterator<It>::reverse_iterator(It it) noexcept : _it(it)
     {
     }
 
     template <bidirectional_iterator It>
     template <typename U>
         requires convertible_to<U, It>
-    inline constexpr reverse_iterator<It>::reverse_iterator(const reverse_iterator<U>& other) noexcept
+    constexpr reverse_iterator<It>::reverse_iterator(const reverse_iterator<U>& other) noexcept
         : _it(other.base())
     {
     }
@@ -449,34 +449,34 @@ namespace tempest
     template <bidirectional_iterator It>
     template <typename U>
         requires convertible_to<U, It>
-    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator=(const reverse_iterator<U>& other) noexcept
+    constexpr auto reverse_iterator<It>::operator=(const reverse_iterator<U>& other) noexcept -> reverse_iterator<It>&
     {
         _it = other.base();
         return *this;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr It reverse_iterator<It>::base() const noexcept
+    constexpr auto reverse_iterator<It>::base() const noexcept -> It
     {
         return _it;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr typename reverse_iterator<It>::reference reverse_iterator<It>::operator[](
-        difference_type n) const noexcept
+    constexpr auto reverse_iterator<It>::operator[](
+        difference_type n) const noexcept -> reverse_iterator<It>::reference
     {
         return *(*this + n);
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator++() noexcept
+    constexpr auto reverse_iterator<It>::operator++() noexcept -> reverse_iterator<It>&
     {
         --_it;
         return *this;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator++(int) noexcept
+    constexpr auto reverse_iterator<It>::operator++(int) noexcept -> reverse_iterator<It>
     {
         auto copy = *this;
         --_it;
@@ -484,14 +484,14 @@ namespace tempest
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator--() noexcept
+    constexpr auto reverse_iterator<It>::operator--() noexcept -> reverse_iterator<It>&
     {
         ++_it;
         return *this;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator--(int) noexcept
+    constexpr auto reverse_iterator<It>::operator--(int) noexcept -> reverse_iterator<It>
     {
         auto copy = *this;
         ++_it;
@@ -499,7 +499,7 @@ namespace tempest
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator+(difference_type n) const noexcept
+    constexpr auto reverse_iterator<It>::operator+(difference_type n) const noexcept -> reverse_iterator<It>
     {
         auto copy = *this;
         copy += n;
@@ -507,7 +507,7 @@ namespace tempest
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator+=(difference_type n) noexcept
+    constexpr auto reverse_iterator<It>::operator+=(difference_type n) noexcept -> reverse_iterator<It>&
     {
         if constexpr (random_access_iterator<It>)
         {
@@ -527,7 +527,7 @@ namespace tempest
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It> reverse_iterator<It>::operator-(difference_type n) const noexcept
+    constexpr auto reverse_iterator<It>::operator-(difference_type n) const noexcept -> reverse_iterator<It>
     {
         auto copy = *this;
         copy -= n;
@@ -535,7 +535,7 @@ namespace tempest
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It>& reverse_iterator<It>::operator-=(difference_type n) noexcept
+    constexpr auto reverse_iterator<It>::operator-=(difference_type n) noexcept -> reverse_iterator<It>&
     {
         if constexpr (random_access_iterator<It>)
         {
@@ -554,53 +554,53 @@ namespace tempest
     }
 
     template <bidirectional_iterator It>
-    inline constexpr typename reverse_iterator<It>::reference reverse_iterator<It>::operator*() const noexcept
+    constexpr auto reverse_iterator<It>::operator*() const noexcept -> reverse_iterator<It>::reference
     {
         auto copy = _it;
         return *--copy;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr typename reverse_iterator<It>::pointer reverse_iterator<It>::operator->() const noexcept
+    constexpr auto reverse_iterator<It>::operator->() const noexcept -> reverse_iterator<It>::pointer
         requires(is_pointer_v<It> || requires(const It it) { it.operator->(); })
     {
         return &this->operator*();
     }
 
     template <bidirectional_iterator It>
-    inline constexpr bool operator==(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept
+    constexpr auto operator==(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept -> bool
     {
         return lhs.base() == rhs.base();
     }
 
     template <bidirectional_iterator It>
-    inline constexpr bool operator!=(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept
+    constexpr auto operator!=(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept -> bool
     {
         return !(lhs == rhs);
     }
 
     template <bidirectional_iterator It>
-    inline constexpr auto operator<=>(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept
+    constexpr auto operator<=>(const reverse_iterator<It>& lhs, const reverse_iterator<It>& rhs) noexcept
     {
         return lhs.base() <=> rhs.base();
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It> operator+(typename reverse_iterator<It>::difference_type n,
-                                                    const reverse_iterator<It>& it) noexcept
+    constexpr auto operator+(typename reverse_iterator<It>::difference_type n,
+                                                    const reverse_iterator<It>& it) noexcept -> reverse_iterator<It>
     {
         return it + n;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It> operator-(typename reverse_iterator<It>::difference_type n,
-                                                    const reverse_iterator<It>& it) noexcept
+    constexpr auto operator-(typename reverse_iterator<It>::difference_type n,
+                                                    const reverse_iterator<It>& it) noexcept -> reverse_iterator<It>
     {
         return it - n;
     }
 
     template <bidirectional_iterator It>
-    inline constexpr reverse_iterator<It> make_reverse_iterator(It it) noexcept
+    constexpr auto make_reverse_iterator(It it) noexcept -> reverse_iterator<It>
     {
         return reverse_iterator<It>(it);
     }
@@ -639,13 +639,13 @@ namespace tempest
         {
         }
 
-        constexpr auto operator=(const typename Container::value_type& value) -> back_insert_iterator&
+        constexpr auto operator=(const Container::value_type& value) -> back_insert_iterator&
         {
             _container->push_back(value);
             return *this;
         }
 
-        constexpr auto operator=(typename Container::value_type&& value) -> back_insert_iterator&
+        constexpr auto operator=(Container::value_type&& value) -> back_insert_iterator&
         {
             _container->push_back(tempest::move(value));
             return *this;
@@ -693,13 +693,13 @@ namespace tempest
         {
         }
 
-        constexpr auto operator=(const typename Container::value_type& value) -> front_insert_iterator&
+        constexpr auto operator=(const Container::value_type& value) -> front_insert_iterator&
         {
             _container->push_front(value);
             return *this;
         }
 
-        constexpr auto operator=(typename Container::value_type&& value) -> front_insert_iterator&
+        constexpr auto operator=(Container::value_type&& value) -> front_insert_iterator&
         {
             _container->push_front(tempest::move(value));
             return *this;
@@ -742,19 +742,19 @@ namespace tempest
 
         constexpr insert_iterator() noexcept = default;
 
-        constexpr insert_iterator(Container& c, typename Container::iterator i) noexcept
+        constexpr insert_iterator(Container& c, Container::iterator i) noexcept
             : _container{__builtin_addressof(c)}, _iter{i}
         {
         }
 
-        constexpr auto operator=(const typename Container::value_type& value) -> insert_iterator&
+        constexpr auto operator=(const Container::value_type& value) -> insert_iterator&
         {
             _iter = _container->insert(_iter, value);
             ++_iter;
             return *this;
         }
 
-        constexpr auto operator=(typename Container::value_type&& value) -> insert_iterator&
+        constexpr auto operator=(Container::value_type&& value) -> insert_iterator&
         {
             _iter = _container->insert(_iter, tempest::move(value));
             ++_iter;
@@ -778,7 +778,7 @@ namespace tempest
 
       protected:
         Container* _container{nullptr};
-        typename Container::iterator _iter{};
+        Container::iterator _iter{};
     };
 
     template <typename Container>

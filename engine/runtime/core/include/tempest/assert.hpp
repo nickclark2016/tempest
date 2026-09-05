@@ -4,7 +4,7 @@
 #include <tempest/source_location.hpp>
 #include <tempest/unreachable.hpp>
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 
 namespace tempest::assertion::detail
 {
