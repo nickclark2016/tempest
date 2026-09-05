@@ -78,7 +78,7 @@ namespace tempest
             .api = rhi::graphics_api::vulkan,
         };
 
-        auto ctx_res = rhi::create_context(ctx_desc);
+        auto ctx_res = rhi::create_context(ctx_desc, _logger);
         if (ctx_res.has_value())
         {
             _rhi_context = tempest::move(ctx_res).value();
@@ -91,10 +91,12 @@ namespace tempest
 
         if (_device)
         {
+            constexpr uint32_t default_render_width = 1920;
+            constexpr uint32_t default_render_height = 1080;
             auto builder = render_system::renderer::builder{};
             builder.set_config(render_system::renderer_config{
-                .render_width = 1920,
-                .render_height = 1080,
+                .render_width = default_render_width,
+                .render_height = default_render_height,
                 .tonemapped_color_format = rhi::data_format::rgba8_srgb,
                 .pipeline_statistics = render_system::all_pipeline_statistics,
             });
@@ -181,20 +183,21 @@ namespace tempest
 
         const auto cur_fb_w = _window_manager.get_framebuffer_width(handle);
         const auto cur_fb_h = _window_manager.get_framebuffer_height(handle);
-        const auto w = (cur_fb_w > 0) ? cur_fb_w : desc.width;
-        const auto h = (cur_fb_h > 0) ? cur_fb_h : desc.height;
+        const auto surface_width = (cur_fb_w > 0) ? cur_fb_w : desc.width;
+        const auto surface_height = (cur_fb_h > 0) ? cur_fb_h : desc.height;
 
         if (_renderer)
         {
-            _renderer->register_surface(handle, raw_surf, w, h, selected_present_mode);
+            _renderer->register_surface(handle, raw_surf, surface_width, surface_height, selected_present_mode);
         }
 
-        _window_manager.register_resize_callback(handle, [this, handle](uint32_t rw, uint32_t rh) {
-            if (_renderer)
-            {
-                _renderer->resize_surface(handle, rw, rh);
-            }
-        });
+        _window_manager.register_resize_callback(
+            handle, [this, handle](uint32_t resize_width, uint32_t resize_height) -> void {
+                if (_renderer)
+                {
+                    _renderer->resize_surface(handle, resize_width, resize_height);
+                }
+            });
 
         _windows.push_back(window_context{
             .handle = handle,
@@ -255,8 +258,9 @@ namespace tempest
         }
         _logger.trace("Finished initialization callbacks");
 
+        constexpr double target_frames_per_second = 60.0;
         auto simulated_time = std::chrono::duration<double>(0.0);
-        auto delta_time = std::chrono::duration<double>(1.0 / 60.0);
+        auto delta_time = std::chrono::duration<double>(1.0 / target_frames_per_second);
 
         auto current_time = std::chrono::steady_clock::now();
         auto accumulator = std::chrono::duration<double>(0.0);
@@ -400,9 +404,9 @@ namespace tempest
 
     auto standalone_engine_context::get_render_surface(window_handle win) -> rhi::render_surface*
     {
-        for (auto& w : _windows)
+        for (auto& window : _windows)
         {
-            if (w.handle == win)
+            if (window.handle == win)
             {
                 return _renderer ? _renderer->get_render_surface(win) : nullptr;
             }
@@ -412,9 +416,9 @@ namespace tempest
 
     auto standalone_engine_context::get_render_surface(window_handle win) const -> const rhi::render_surface*
     {
-        for (const auto& w : _windows)
+        for (const auto& window : _windows)
         {
-            if (w.handle == win)
+            if (window.handle == win)
             {
                 return _renderer ? _renderer->get_render_surface(win) : nullptr;
             }
@@ -424,11 +428,11 @@ namespace tempest
 
     auto standalone_engine_context::get_raw_surface(window_handle win) const -> rhi::raw_surface_handle
     {
-        for (const auto& w : _windows)
+        for (const auto& window : _windows)
         {
-            if (w.handle == win)
+            if (window.handle == win)
             {
-                return w.raw_surface;
+                return window.raw_surface;
             }
         }
         return {};
@@ -446,7 +450,7 @@ namespace tempest
 
         _window_manager.poll_events();
 
-        for (auto it = _windows.begin(); it != _windows.end();)
+        for (auto *it = _windows.begin(); it != _windows.end();)
         {
             if (_window_manager.should_close(it->handle))
             {

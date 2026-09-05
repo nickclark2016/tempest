@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <tempest/logger.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 #include <tempest/vk/context.hpp>
@@ -18,11 +19,14 @@ namespace tempest::rhi::vk
 
         auto create_test_env() -> test_env
         {
+            static auto test_sink = stdout_log_sink{};
+            static auto test_log = logger{test_sink};
+
             auto ctx_desc = context_desc{};
             ctx_desc.application_name = "Tempest Execution Port Test";
             ctx_desc.api = graphics_api::vulkan;
 
-            auto result = vk::create_context(ctx_desc);
+            auto result = vk::create_context(ctx_desc, test_log);
             if (!result.has_value())
             {
                 return {};
@@ -42,6 +46,8 @@ namespace tempest::rhi::vk
             };
         }
     } // namespace
+
+    // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
     TEST(execution_port_test, get_execution_ports)
     {
@@ -114,7 +120,7 @@ namespace tempest::rhi::vk
         auto* upload_ptr = static_cast<uint32_t*>(upload_buffer.cpu_address);
         for (size_t i = 0; i < element_count; ++i)
         {
-            upload_ptr[i] = static_cast<uint32_t>(i * 1337 + 7);
+            upload_ptr[i] = static_cast<uint32_t>((i * 1337) + 7);
         }
 
         // Initialize readback buffer to 0
@@ -178,7 +184,7 @@ namespace tempest::rhi::vk
         // Verify readback data
         for (size_t i = 0; i < element_count; ++i)
         {
-            EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>(i * 1337 + 7));
+            EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>((i * 1337) + 7));
         }
 
         // Cleanup
@@ -214,7 +220,7 @@ namespace tempest::rhi::vk
         auto* upload_ptr = static_cast<uint32_t*>(upload_buffer.cpu_address);
         for (size_t i = 0; i < element_count; ++i)
         {
-            upload_ptr[i] = static_cast<uint32_t>(i * 31 + 101);
+            upload_ptr[i] = static_cast<uint32_t>((i * 31) + 101);
         }
 
         auto& transfer_port = dev->get_async_transfer_execution_port();
@@ -246,7 +252,7 @@ namespace tempest::rhi::vk
         auto* readback_ptr = static_cast<uint32_t*>(readback_buffer.cpu_address);
         for (size_t i = 0; i < element_count; ++i)
         {
-            EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>(i * 31 + 101));
+            EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>((i * 31) + 101));
         }
 
         dev->destroy_semaphore(timeline_sem);
@@ -267,9 +273,9 @@ namespace tempest::rhi::vk
         auto threads = vector<thread>{};
         threads.reserve(thread_count);
 
-        for (size_t t = 0; t < thread_count; ++t)
+        for (size_t thread_idx = 0; thread_idx < thread_count; ++thread_idx)
         {
-            threads.emplace_back([t, &dev]() {
+            threads.emplace_back([thread_idx, &dev]() -> void {
                 auto upload_desc = buffer_desc{
                     .size = buffer_byte_size,
                     .memory_usage = memory_usage::upload,
@@ -287,12 +293,12 @@ namespace tempest::rhi::vk
                 auto* upload_ptr = static_cast<uint32_t*>(upload_buffer.cpu_address);
                 for (size_t i = 0; i < element_count; ++i)
                 {
-                    upload_ptr[i] = static_cast<uint32_t>((t + 1) * 1000 + i);
+                    upload_ptr[i] = static_cast<uint32_t>(((thread_idx + 1) * 1000) + i);
                 }
 
                 auto& graphics_port = dev->get_graphics_execution_port();
-                auto& cmd =
-                    graphics_port.acquire_command_list(static_cast<uint32_t>(t), command_list_lifetime::transient);
+                auto& cmd = graphics_port.acquire_command_list(static_cast<uint32_t>(thread_idx),
+                                                               command_list_lifetime::transient);
 
                 cmd.begin();
                 auto copy_region = buffer_copy_region{
@@ -320,7 +326,7 @@ namespace tempest::rhi::vk
                 auto* readback_ptr = static_cast<uint32_t*>(readback_buffer.cpu_address);
                 for (size_t i = 0; i < element_count; ++i)
                 {
-                    EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>((t + 1) * 1000 + i));
+                    EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>(((thread_idx + 1) * 1000) + i));
                 }
 
                 dev->destroy_semaphore(timeline_sem);
@@ -329,9 +335,9 @@ namespace tempest::rhi::vk
             });
         }
 
-        for (auto& t : threads)
+        for (auto& worker_thread : threads)
         {
-            t.join();
+            worker_thread.join();
         }
     }
 
@@ -367,7 +373,7 @@ namespace tempest::rhi::vk
             auto* upload_ptr = static_cast<uint32_t*>(upload_buffer.cpu_address);
             for (size_t i = 0; i < element_count; ++i)
             {
-                upload_ptr[i] = static_cast<uint32_t>(iter * 100 + i);
+                upload_ptr[i] = static_cast<uint32_t>((iter * 100) + i);
             }
 
             auto& cmd = graphics_port.acquire_command_list(0, command_list_lifetime::transient);
@@ -404,7 +410,7 @@ namespace tempest::rhi::vk
         auto* readback_ptr = static_cast<uint32_t*>(readback_buffer.cpu_address);
         for (size_t i = 0; i < element_count; ++i)
         {
-            EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>(iterations * 100 + i));
+            EXPECT_EQ(readback_ptr[i], static_cast<uint32_t>(((iterations * 100)) + i));
         }
 
         dev->destroy_semaphore(timeline_sem);
@@ -448,14 +454,14 @@ namespace tempest::rhi::vk
         });
 
         auto upload_buf = dev->create_buffer(buffer_desc{
-            .size = src_w * src_h * 4,
+            .size = static_cast<uint64_t>(src_w) * src_h * 4,
             .memory_usage = memory_usage::upload,
             .usage = buffer_usage::transfer_src,
             .name = "BlitUploadBuffer",
         });
 
         auto* upload_ptr = static_cast<uint8_t*>(upload_buf.cpu_address);
-        for (size_t i = 0; i < src_w * src_h * 4; i += 4)
+        for (size_t i = 0; i < static_cast<size_t>(src_w) * src_h * 4; i += 4)
         {
             upload_ptr[i + 0] = 200;
             upload_ptr[i + 1] = 100;
@@ -464,7 +470,7 @@ namespace tempest::rhi::vk
         }
 
         auto readback_buf = dev->create_buffer(buffer_desc{
-            .size = dst_w * dst_h * 4,
+            .size = static_cast<uint64_t>(dst_w) * dst_h * 4,
             .memory_usage = memory_usage::readback,
             .usage = buffer_usage::transfer_dst,
             .name = "BlitReadbackBuffer",
@@ -478,8 +484,12 @@ namespace tempest::rhi::vk
         auto init_barriers = array<texture_barrier, 2>{
             texture_barrier{
                 .texture = src_tex,
-                .src = {.stages = pipeline_stage::top_of_pipe, .access = resource_access::none, .layout = image_layout::undefined},
-                .dst = {.stages = pipeline_stage::copy, .access = resource_access::write, .layout = image_layout::general},
+                .src = {.stages = pipeline_stage::top_of_pipe,
+                        .access = resource_access::none,
+                        .layout = image_layout::undefined},
+                .dst = {.stages = pipeline_stage::copy,
+                        .access = resource_access::write,
+                        .layout = image_layout::general},
                 .base_mip_level = 0,
                 .mip_level_count = 1,
                 .base_array_layer = 0,
@@ -487,8 +497,12 @@ namespace tempest::rhi::vk
             },
             texture_barrier{
                 .texture = dst_tex,
-                .src = {.stages = pipeline_stage::top_of_pipe, .access = resource_access::none, .layout = image_layout::undefined},
-                .dst = {.stages = pipeline_stage::blit, .access = resource_access::write, .layout = image_layout::general},
+                .src = {.stages = pipeline_stage::top_of_pipe,
+                        .access = resource_access::none,
+                        .layout = image_layout::undefined},
+                .dst = {.stages = pipeline_stage::blit,
+                        .access = resource_access::write,
+                        .layout = image_layout::general},
                 .base_mip_level = 0,
                 .mip_level_count = 1,
                 .base_array_layer = 0,
@@ -526,9 +540,11 @@ namespace tempest::rhi::vk
 
         auto blit_reg = texture_blit_region{
             .src_subresource = {.mip_level = 0, .base_array_layer = 0, .array_layer_count = 1},
-            .src_offsets = {offset_3d{0, 0, 0}, offset_3d{static_cast<int32_t>(src_w), static_cast<int32_t>(src_h), 1}},
+            .src_offsets = {offset_3d{.x = 0, .y = 0, .z = 0},
+                            offset_3d{.x = static_cast<int32_t>(src_w), .y = static_cast<int32_t>(src_h), .z = 1}},
             .dst_subresource = {.mip_level = 0, .base_array_layer = 0, .array_layer_count = 1},
-            .dst_offsets = {offset_3d{0, 0, 0}, offset_3d{static_cast<int32_t>(dst_w), static_cast<int32_t>(dst_h), 1}},
+            .dst_offsets = {offset_3d{.x = 0, .y = 0, .z = 0},
+                            offset_3d{.x = static_cast<int32_t>(dst_w), .y = static_cast<int32_t>(dst_h), .z = 1}},
         };
         cmd.blit_texture(src_tex, dst_tex, span<const texture_blit_region>{&blit_reg, 1}, filter_mode::linear);
 
@@ -588,4 +604,6 @@ namespace tempest::rhi::vk
         dev->destroy_texture(dst_tex);
         dev->destroy_texture(src_tex);
     }
+
+    // NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 } // namespace tempest::rhi::vk

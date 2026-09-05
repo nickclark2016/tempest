@@ -37,8 +37,8 @@ namespace tempest
         engine_context(engine_context&&) noexcept = delete;
         virtual ~engine_context() = default;
 
-        engine_context& operator=(const engine_context&) = delete;
-        engine_context& operator=(engine_context&&) noexcept = delete;
+        auto operator=(const engine_context&) -> engine_context& = delete;
+        auto operator=(engine_context&&) noexcept -> engine_context& = delete;
 
         /// \brief Registers a window with the engine, creating the necessary render surface and input routing.
         virtual auto register_window(window_desc desc, bool install_swapchain_blit = true)
@@ -112,7 +112,12 @@ namespace tempest
         };
 
         standalone_engine_context();
+        standalone_engine_context(const standalone_engine_context&) = delete;
+        standalone_engine_context(standalone_engine_context&&) noexcept = delete;
         ~standalone_engine_context() override;
+
+        auto operator=(const standalone_engine_context&) -> standalone_engine_context& = delete;
+        auto operator=(standalone_engine_context&&) noexcept -> standalone_engine_context& = delete;
 
         auto register_window(window_desc desc, bool install_swapchain_blit = true) -> window_registration_info override;
         auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void override;
@@ -178,6 +183,7 @@ namespace tempest
         }
 
       protected:
+        // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
         vector<unique_ptr<log_sink>> _log_sinks;
         logger _logger;
         profiler::profiler_session _profiler_session{};
@@ -205,6 +211,7 @@ namespace tempest
         std::chrono::duration<float> _delta_frame_time{0.0F};
 
         bool _should_close{false};
+        // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
         virtual auto _update_fixed(std::chrono::duration<float> delta_time) -> void;
         virtual auto _update_variable(std::chrono::duration<float> delta_time) -> void;

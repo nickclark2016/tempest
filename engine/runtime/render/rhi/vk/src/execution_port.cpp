@@ -16,9 +16,8 @@ namespace tempest::rhi::vk
                 return VK_FILTER_NEAREST;
             case filter_mode::linear:
                 return VK_FILTER_LINEAR;
-            default:
-                return VK_FILTER_LINEAR;
             }
+            return VK_FILTER_LINEAR;
         }
 
         auto infer_aspect_flags(VkFormat format) -> VkImageAspectFlags
@@ -42,6 +41,7 @@ namespace tempest::rhi::vk
             }
         }
 
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity)
         auto as_vulkan(enum_mask<pipeline_stage> stages) -> VkPipelineStageFlags2
         {
             auto flags = VkPipelineStageFlags2{0};
@@ -307,8 +307,8 @@ namespace tempest::rhi::vk
         }
     } // namespace
 
-    command_list::command_list(VkCommandBuffer command_buffer, const vkb::DispatchTable& dispatch_table,
-                               const vk::device& device, vkb::QueueType queue_type) noexcept
+    command_list::command_list(VkCommandBuffer command_buffer, const dispatch_table& dispatch_table,
+                               const vk::device& device, queue_type queue_type) noexcept
         : _command_buffer{command_buffer}, _dispatch_table{&dispatch_table}, _parent_device{&device},
           _queue_type{queue_type}
     {
@@ -326,7 +326,7 @@ namespace tempest::rhi::vk
         [[maybe_unused]] auto result = _dispatch_table->beginCommandBuffer(_command_buffer, &begin_info);
         TEMPEST_ASSERT(result == VK_SUCCESS);
 
-        if (_queue_type == vkb::QueueType::graphics || _queue_type == vkb::QueueType::compute)
+        if (_queue_type == queue_type::graphics || _queue_type == queue_type::compute)
         {
             auto binding_infos = array<VkDescriptorBufferBindingInfoEXT, 2>{
                 VkDescriptorBufferBindingInfoEXT{
@@ -349,7 +349,7 @@ namespace tempest::rhi::vk
             // Buffer index 0 is Samplers (Set 0 at offset 0)
             auto sampler_buffer_index = uint32_t{0};
             auto sampler_offset = VkDeviceSize{0};
-            if (_queue_type == vkb::QueueType::graphics)
+            if (_queue_type == queue_type::graphics)
             {
                 _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                                   _parent_device->get_global_pipeline_layout(), 0, 1,
@@ -363,7 +363,7 @@ namespace tempest::rhi::vk
             auto resource_buffer_indices = array<uint32_t, 2>{1, 1};
             auto resource_offsets =
                 array<VkDeviceSize, 2>{0, _parent_device->get_storage_image_descriptor_buffer_offset()};
-            if (_queue_type == vkb::QueueType::graphics)
+            if (_queue_type == queue_type::graphics)
             {
                 _dispatch_table->cmdSetDescriptorBufferOffsetsEXT(
                     _command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _parent_device->get_global_pipeline_layout(), 1,
@@ -926,6 +926,7 @@ namespace tempest::rhi::vk
         _dispatch_table->cmdCopyImageToBuffer2(_command_buffer, &copy_info);
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     auto command_list::blit_texture(texture_handle src_texture, texture_handle dst_texture,
                                     span<const texture_blit_region> regions, filter_mode filter) -> void
     {
@@ -1065,7 +1066,7 @@ namespace tempest::rhi::vk
         const auto qp_opt = _parent_device->get_query_pool(pool);
         if (qp_opt.has_value() && qp_opt->handle != VK_NULL_HANDLE)
         {
-            if (_queue_type == vkb::QueueType::transfer)
+            if (_queue_type == queue_type::transfer)
             {
                 if (_dispatch_table->fp_vkResetQueryPool != nullptr)
                 {
@@ -1085,7 +1086,7 @@ namespace tempest::rhi::vk
 
     auto command_list::begin_debug_region([[maybe_unused]] const debug_label& label) -> void
     {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
         if (_dispatch_table->fp_vkCmdBeginDebugUtilsLabelEXT == nullptr || label.name.empty())
         {
             return;
@@ -1097,13 +1098,14 @@ namespace tempest::rhi::vk
             .pLabelName = label.name.data(),
             .color = {label.color[0], label.color[1], label.color[2], label.color[3]},
         };
+
         _dispatch_table->cmdBeginDebugUtilsLabelEXT(_command_buffer, &label_info);
 #endif
     }
 
     auto command_list::end_debug_region() -> void
     {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
         if (_dispatch_table->fp_vkCmdEndDebugUtilsLabelEXT == nullptr)
         {
             return;
@@ -1115,7 +1117,7 @@ namespace tempest::rhi::vk
 
     auto command_list::insert_debug_marker([[maybe_unused]] const debug_label& label) -> void
     {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
         if (_dispatch_table->fp_vkCmdInsertDebugUtilsLabelEXT == nullptr || label.name.empty())
         {
             return;
@@ -1127,12 +1129,13 @@ namespace tempest::rhi::vk
             .pLabelName = label.name.data(),
             .color = {label.color[0], label.color[1], label.color[2], label.color[3]},
         };
+
         _dispatch_table->cmdInsertDebugUtilsLabelEXT(_command_buffer, &label_info);
 #endif
     }
 
-    execution_port::execution_port(vk::device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type,
-                                   VkQueue queue, vkb::DispatchTable dispatch_table)
+    execution_port::execution_port(vk::device& parent_device, uint32_t queue_family_index, queue_type queue_type,
+                                   VkQueue queue, dispatch_table dispatch_table)
         : _parent_device{&parent_device}, _queue_family_index{queue_family_index}, _queue_type{queue_type},
           _queue{queue}, _dispatch_table{dispatch_table}
     {
@@ -1140,17 +1143,17 @@ namespace tempest::rhi::vk
 
         if (_queue != VK_NULL_HANDLE)
         {
-            if (queue_type == vkb::QueueType::graphics)
+            if (queue_type == queue_type::graphics)
             {
                 _parent_device->set_object_name(reinterpret_cast<uint64_t>(_queue), VK_OBJECT_TYPE_QUEUE,
                                                 "Graphics Queue");
             }
-            else if (queue_type == vkb::QueueType::compute)
+            else if (queue_type == queue_type::compute)
             {
                 _parent_device->set_object_name(reinterpret_cast<uint64_t>(_queue), VK_OBJECT_TYPE_QUEUE,
                                                 "Async Compute Queue");
             }
-            else if (queue_type == vkb::QueueType::transfer)
+            else if (queue_type == queue_type::transfer)
             {
                 _parent_device->set_object_name(reinterpret_cast<uint64_t>(_queue), VK_OBJECT_TYPE_QUEUE,
                                                 "Async Transfer Queue");
@@ -1193,7 +1196,7 @@ namespace tempest::rhi::vk
 
         auto* slab_alloc = _slab_allocators[thread_id].get();
         auto current_timeline_val = uint64_t{0};
-        auto vk_sem = _parent_device->get_semaphore(_timeline_semaphore);
+        auto* vk_sem = _parent_device->get_semaphore(_timeline_semaphore);
         if (vk_sem != VK_NULL_HANDLE)
         {
             _dispatch_table.getSemaphoreCounterValue(vk_sem, &current_timeline_val);
@@ -1231,7 +1234,7 @@ namespace tempest::rhi::vk
         vk_wait_infos.reserve(wait_semaphores.size());
         for (const auto& wait_sp : wait_semaphores)
         {
-            auto vk_sem = _parent_device->get_semaphore(wait_sp.semaphore);
+            auto* vk_sem = _parent_device->get_semaphore(wait_sp.semaphore);
             vk_wait_infos.emplace_back(VkSemaphoreSubmitInfo{
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .pNext = nullptr,
@@ -1246,7 +1249,7 @@ namespace tempest::rhi::vk
         vk_signal_infos.reserve(signal_semaphores.size() + 1);
         for (const auto& sig_sp : signal_semaphores)
         {
-            auto vk_sem = _parent_device->get_semaphore(sig_sp.semaphore);
+            auto* vk_sem = _parent_device->get_semaphore(sig_sp.semaphore);
             vk_signal_infos.emplace_back(VkSemaphoreSubmitInfo{
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .pNext = nullptr,
@@ -1258,7 +1261,7 @@ namespace tempest::rhi::vk
         }
 
         // Always signal our internal timeline semaphore for slab tracking
-        auto internal_vk_sem = _parent_device->get_semaphore(_timeline_semaphore);
+        auto* internal_vk_sem = _parent_device->get_semaphore(_timeline_semaphore);
         if (internal_vk_sem != VK_NULL_HANDLE)
         {
             vk_signal_infos.emplace_back(VkSemaphoreSubmitInfo{
@@ -1314,7 +1317,7 @@ namespace tempest::rhi::vk
 
     auto execution_port::begin_debug_region([[maybe_unused]] const debug_label& label) -> void
     {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
         if (_dispatch_table.fp_vkQueueBeginDebugUtilsLabelEXT == nullptr || _queue == VK_NULL_HANDLE ||
             label.name.empty())
         {
@@ -1333,7 +1336,7 @@ namespace tempest::rhi::vk
 
     auto execution_port::end_debug_region() -> void
     {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
         if (_dispatch_table.fp_vkQueueEndDebugUtilsLabelEXT == nullptr || _queue == VK_NULL_HANDLE)
         {
             return;
@@ -1345,7 +1348,7 @@ namespace tempest::rhi::vk
 
     auto execution_port::insert_debug_marker([[maybe_unused]] const debug_label& label) -> void
     {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
         if (_dispatch_table.fp_vkQueueInsertDebugUtilsLabelEXT == nullptr || _queue == VK_NULL_HANDLE ||
             label.name.empty())
         {

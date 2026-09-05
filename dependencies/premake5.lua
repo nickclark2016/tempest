@@ -8,7 +8,6 @@ scoped.group('Vendor', function()
     include 'stb'
     include 'tinyexr'
     include 'tlsf'
-    include 'vk-bootstrap'
     include 'vma'
     include 'vulkan'
 

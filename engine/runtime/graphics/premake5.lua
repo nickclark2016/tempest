@@ -16,7 +16,7 @@ scoped.project('graphics', function()
         'include',
     }
 
-    uses { 'imgui', 'vk-bootstrap', 'vma', 'vulkan', 'rhi-vk' }
+    uses { 'imgui', 'vma', 'vulkan', 'rhi-vk' }
 
     scoped.filter({
         'options:shared-engine',
@@ -58,7 +58,6 @@ scoped.project('graphics', function()
 
         links {
             'graphics',
-            'vk-bootstrap',
             'vma',
         }
     end)

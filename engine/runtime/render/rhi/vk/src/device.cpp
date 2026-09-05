@@ -1,6 +1,6 @@
 #include <tempest/bit.hpp>
 #include <tempest/exception.hpp>
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
 #define VK_USE_PLATFORM_WIN32_KHR
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -218,9 +218,9 @@ namespace tempest::rhi::vk
             }
         }
 
-        auto as_vulkan(compare_op op) -> VkCompareOp
+        auto as_vulkan(compare_op operation) -> VkCompareOp
         {
-            switch (op)
+            switch (operation)
             {
             case compare_op::never:
                 return VK_COMPARE_OP_NEVER;
@@ -429,9 +429,9 @@ namespace tempest::rhi::vk
             return VK_BLEND_FACTOR_ZERO;
         }
 
-        auto as_vulkan(stencil_op op) noexcept -> VkStencilOp
+        auto as_vulkan(stencil_op operation) noexcept -> VkStencilOp
         {
-            switch (op)
+            switch (operation)
             {
             case stencil_op::keep:
                 return VK_STENCIL_OP_KEEP;
@@ -467,7 +467,7 @@ namespace tempest::rhi::vk
             return VK_IMAGE_LAYOUT_GENERAL;
         }
 
-        auto create_shader_module(const vkb::DispatchTable& dispatch_table, span<const byte> ir_code) -> VkShaderModule
+        auto create_shader_module(const dispatch_table& dispatch_table, span<const byte> ir_code) -> VkShaderModule
         {
             if (ir_code.empty() || (ir_code.size() % sizeof(uint32_t) != 0))
             {
@@ -482,7 +482,7 @@ namespace tempest::rhi::vk
                 .pCode = reinterpret_cast<const uint32_t*>(ir_code.data()),
             };
 
-            auto shader_module = VkShaderModule{VK_NULL_HANDLE};
+            auto* shader_module = VkShaderModule{VK_NULL_HANDLE};
             auto result = dispatch_table.createShaderModule(&module_ci, nullptr, &shader_module);
             if (result != VK_SUCCESS)
             {
@@ -492,11 +492,11 @@ namespace tempest::rhi::vk
         }
     } // namespace
 
-    auto device::create(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device dev, device_desc desc)
-        -> unique_ptr<rhi::device>
+    auto device::create(const native_instance& instance, const physical_device_info& physical_device,
+                        const native_device& dev, const device_desc& desc) -> unique_ptr<rhi::device>
     {
-        return unique_ptr<rhi::device>{new device{tempest::move(instance), tempest::move(physical_device),
-                                                  tempest::move(dev), tempest::move(desc)}};
+        return unique_ptr<rhi::device>{
+            new device{instance, tempest::move(physical_device), tempest::move(dev), tempest::move(desc)}};
     }
 
     device::~device()
@@ -615,7 +615,7 @@ namespace tempest::rhi::vk
             _allocator = VK_NULL_HANDLE;
         }
 
-        vkb::destroy_device(_device);
+        destroy_device(_device);
     }
 
     auto device::wait_idle() -> void
@@ -625,7 +625,7 @@ namespace tempest::rhi::vk
 
     auto device::wait_for_sync(host_sync_point sync_point) -> void
     {
-        auto sem = get_semaphore(sync_point.semaphore);
+        auto* sem = get_semaphore(sync_point.semaphore);
         if (sem != VK_NULL_HANDLE)
         {
             auto timeline_info = VkSemaphoreWaitInfo{
@@ -642,7 +642,7 @@ namespace tempest::rhi::vk
 
     auto device::get_semaphore_value(semaphore_handle semaphore) const -> uint64_t
     {
-        auto sem = get_semaphore(semaphore);
+        auto* sem = get_semaphore(semaphore);
         if (sem == VK_NULL_HANDLE)
         {
             return 0;
@@ -670,7 +670,7 @@ namespace tempest::rhi::vk
     auto device::create_raw_surface(native_wsi_handle native_window_handle)
         -> expected<raw_surface_handle, raw_surface_creation_error>
     {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
         auto surface_create_info = VkWin32SurfaceCreateInfoKHR{
             .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
             .pNext = nullptr,
@@ -735,7 +735,7 @@ namespace tempest::rhi::vk
     auto device::get_surface_capabilities(raw_surface_handle surface) -> surface_capabilities
     {
         auto* const vk_surface = get_raw_surface(surface)->handle;
-        auto vk_surface_caps = VkSurfaceCapabilitiesKHR{};
+        auto vk_surface_caps = VkSurfaceCapabilitiesKHR{}; // NOLINT(bugprone-invalid-enum-default-initialization)
         [[maybe_unused]] auto result = _instance_dispatch_table.getPhysicalDeviceSurfaceCapabilitiesKHR(
             _physical_device.physical_device, vk_surface, &vk_surface_caps);
         TEMPEST_ASSERT(result == VK_SUCCESS);
@@ -799,9 +799,9 @@ namespace tempest::rhi::vk
 
     auto device::create_render_surface(const render_surface_desc& desc) -> unique_ptr<rhi::render_surface>
     {
-        auto vk_raw_surface = get_raw_surface(desc.raw_surface)->handle;
+        auto* vk_raw_surface = get_raw_surface(desc.raw_surface)->handle;
 
-        auto old_vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
+        auto* old_vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
         if (desc.old_surface != nullptr)
         {
             const auto* const old_vk_surface = static_cast<const vk::render_surface*>(desc.old_surface);
@@ -833,7 +833,7 @@ namespace tempest::rhi::vk
             .oldSwapchain = old_vk_swapchain,
         };
 
-        auto vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
+        auto* vk_swapchain = VkSwapchainKHR{VK_NULL_HANDLE};
         const auto result = _dispatch_table.createSwapchainKHR(&vk_swapchain_ci, nullptr, &vk_swapchain);
         if (result != VK_SUCCESS)
         {
@@ -849,7 +849,7 @@ namespace tempest::rhi::vk
         auto attachments = vector<swapchain_attachment>{};
         attachments.reserve(image_count);
 
-        for (auto vk_image : swapchain_images)
+        for (auto* vk_image : swapchain_images)
         {
             auto tex = texture{
                 .handle = vk_image,
@@ -962,8 +962,8 @@ namespace tempest::rhi::vk
             .priority = 0.0F,
         };
 
-        auto vk_buffer = VkBuffer{VK_NULL_HANDLE};
-        auto allocation = VmaAllocation{VK_NULL_HANDLE};
+        auto* vk_buffer = VkBuffer{VK_NULL_HANDLE};
+        auto* allocation = VmaAllocation{VK_NULL_HANDLE};
         auto alloc_info = VmaAllocationInfo{};
 
         auto result = vmaCreateBuffer(_allocator, &buffer_ci, &alloc_ci, &vk_buffer, &allocation, &alloc_info);
@@ -973,7 +973,7 @@ namespace tempest::rhi::vk
         }
 
         auto gpu_address = uint64_t{0};
-        if (buffer_usage_flags & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+        if ((buffer_usage_flags & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0U)
         {
             auto bda_info = VkBufferDeviceAddressInfo{
                 .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -1070,8 +1070,8 @@ namespace tempest::rhi::vk
             .priority = 0.0F,
         };
 
-        auto vk_image = VkImage{VK_NULL_HANDLE};
-        auto allocation = VmaAllocation{VK_NULL_HANDLE};
+        auto* vk_image = VkImage{VK_NULL_HANDLE};
+        auto* allocation = VmaAllocation{VK_NULL_HANDLE};
         auto alloc_info = VmaAllocationInfo{};
 
         auto result = vmaCreateImage(_allocator, &image_ci, &alloc_ci, &vk_image, &allocation, &alloc_info);
@@ -1160,7 +1160,7 @@ namespace tempest::rhi::vk
             .subresourceRange = subresource_range,
         };
 
-        auto vk_view = VkImageView{VK_NULL_HANDLE};
+        auto* vk_view = VkImageView{VK_NULL_HANDLE};
         auto result = _dispatch_table.createImageView(&view_ci, nullptr, &vk_view);
         if (result != VK_SUCCESS)
         {
@@ -1203,7 +1203,7 @@ namespace tempest::rhi::vk
             .unnormalizedCoordinates = VK_FALSE,
         };
 
-        auto vk_sampler = VkSampler{VK_NULL_HANDLE};
+        auto* vk_sampler = VkSampler{VK_NULL_HANDLE};
         auto result = _dispatch_table.createSampler(&sampler_ci, nullptr, &vk_sampler);
         if (result != VK_SUCCESS)
         {
@@ -1226,6 +1226,7 @@ namespace tempest::rhi::vk
         };
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     auto device::create_graphics_pipeline(const graphics_pipeline_desc& desc) -> graphics_pipeline_handle
     {
         auto shader_modules = vector<VkShaderModule>{};
@@ -1235,24 +1236,24 @@ namespace tempest::rhi::vk
 
         for (const auto& sm_desc : desc.shader_modules)
         {
-            auto sm = create_shader_module(_dispatch_table, sm_desc.ir_code);
-            if (sm == VK_NULL_HANDLE)
+            auto* const shader_mod = create_shader_module(_dispatch_table, sm_desc.ir_code);
+            if (shader_mod == VK_NULL_HANDLE)
             {
-                for (auto mod : shader_modules)
+                for (auto* mod : shader_modules)
                 {
                     _dispatch_table.destroyShaderModule(mod, nullptr);
                 }
                 return {};
             }
-            shader_modules.push_back(sm);
+            shader_modules.push_back(shader_mod);
 
-            const auto entry_name = sm_desc.entry_point.empty() ? "main" : sm_desc.entry_point.data();
+            const auto* const entry_name = sm_desc.entry_point.empty() ? "main" : sm_desc.entry_point.data();
             stages.push_back(VkPipelineShaderStageCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
                 .stage = as_vulkan(sm_desc.stage),
-                .module = sm,
+                .module = shader_mod,
                 .pName = entry_name,
                 .pSpecializationInfo = nullptr,
             });
@@ -1332,13 +1333,13 @@ namespace tempest::rhi::vk
             .depthBiasEnable = desc.rasterization_state.depth_bias.has_value() ? VK_TRUE : VK_FALSE,
             .depthBiasConstantFactor = desc.rasterization_state.depth_bias.has_value()
                                            ? desc.rasterization_state.depth_bias->constant_factor
-                                           : 0.0f,
+                                           : 0.0F,
             .depthBiasClamp =
-                desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->clamp : 0.0f,
+                desc.rasterization_state.depth_bias.has_value() ? desc.rasterization_state.depth_bias->clamp : 0.0F,
             .depthBiasSlopeFactor = desc.rasterization_state.depth_bias.has_value()
                                         ? desc.rasterization_state.depth_bias->slope_factor
-                                        : 0.0f,
-            .lineWidth = 1.0f,
+                                        : 0.0F,
+            .lineWidth = 1.0F,
         };
 
         // Multisample state
@@ -1348,7 +1349,7 @@ namespace tempest::rhi::vk
             .flags = 0,
             .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
             .sampleShadingEnable = VK_FALSE,
-            .minSampleShading = 1.0f,
+            .minSampleShading = 1.0F,
             .pSampleMask = nullptr,
             .alphaToCoverageEnable = VK_FALSE,
             .alphaToOneEnable = VK_FALSE,
@@ -1389,9 +1390,9 @@ namespace tempest::rhi::vk
                       }
                     : VkStencilOpState{},
             .minDepthBounds =
-                desc.depth_stencil_state.depth_bounds.has_value() ? desc.depth_stencil_state.depth_bounds->min_depth : 0.0f,
+                desc.depth_stencil_state.depth_bounds.has_value() ? desc.depth_stencil_state.depth_bounds->min_depth : 0.0F,
             .maxDepthBounds =
-                desc.depth_stencil_state.depth_bounds.has_value() ? desc.depth_stencil_state.depth_bounds->max_depth : 1.0f,
+                desc.depth_stencil_state.depth_bounds.has_value() ? desc.depth_stencil_state.depth_bounds->max_depth : 1.0F,
         };
 
         // Blend State
@@ -1436,7 +1437,7 @@ namespace tempest::rhi::vk
             .logicOp = VK_LOGIC_OP_COPY,
             .attachmentCount = static_cast<uint32_t>(blend_attachments.size()),
             .pAttachments = blend_attachments.data(),
-            .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
+            .blendConstants = {0.0F, 0.0F, 0.0F, 0.0F},
         };
 
         // Dynamic states
@@ -1482,10 +1483,10 @@ namespace tempest::rhi::vk
             .basePipelineIndex = -1,
         };
 
-        auto vk_pipeline = VkPipeline{VK_NULL_HANDLE};
+        auto* vk_pipeline = VkPipeline{VK_NULL_HANDLE};
         auto result = _dispatch_table.createGraphicsPipelines(VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &vk_pipeline);
 
-        for (auto mod : shader_modules)
+        for (auto* mod : shader_modules)
         {
             _dispatch_table.destroyShaderModule(mod, nullptr);
         }
@@ -1511,13 +1512,13 @@ namespace tempest::rhi::vk
 
     auto device::create_compute_pipeline(const compute_pipeline_desc& desc) -> compute_pipeline_handle
     {
-        auto shader_module = create_shader_module(_dispatch_table, desc.shader_module.ir_code);
+        auto* shader_module = create_shader_module(_dispatch_table, desc.shader_module.ir_code);
         if (shader_module == VK_NULL_HANDLE)
         {
             return {};
         }
 
-        const auto entry_point =
+        const auto* const entry_point =
             desc.shader_module.entry_point.empty() ? "main" : desc.shader_module.entry_point.data();
 
         auto stage_ci = VkPipelineShaderStageCreateInfo{
@@ -1540,7 +1541,7 @@ namespace tempest::rhi::vk
             .basePipelineIndex = -1,
         };
 
-        auto vk_pipeline = VkPipeline{VK_NULL_HANDLE};
+        auto* vk_pipeline = VkPipeline{VK_NULL_HANDLE};
         auto result = _dispatch_table.createComputePipelines(VK_NULL_HANDLE, 1, &pipeline_ci, nullptr, &vk_pipeline);
 
         _dispatch_table.destroyShaderModule(shader_module, nullptr);
@@ -1572,7 +1573,7 @@ namespace tempest::rhi::vk
             .flags = VK_EVENT_CREATE_DEVICE_ONLY_BIT,
         };
 
-        auto vk_event = VkEvent{VK_NULL_HANDLE};
+        auto* vk_event = VkEvent{VK_NULL_HANDLE};
         auto result = _dispatch_table.createEvent(&event_ci, nullptr, &vk_event);
         if (result != VK_SUCCESS)
         {
@@ -1600,7 +1601,7 @@ namespace tempest::rhi::vk
             .flags = 0,
         };
 
-        auto vk_semaphore = VkSemaphore{VK_NULL_HANDLE};
+        auto* vk_semaphore = VkSemaphore{VK_NULL_HANDLE};
         auto result = _dispatch_table.createSemaphore(&sem_ci, nullptr, &vk_semaphore);
         if (result != VK_SUCCESS)
         {
@@ -1621,7 +1622,7 @@ namespace tempest::rhi::vk
             .flags = 0,
         };
 
-        auto vk_semaphore = VkSemaphore{VK_NULL_HANDLE};
+        auto* vk_semaphore = VkSemaphore{VK_NULL_HANDLE};
         auto result = _dispatch_table.createSemaphore(&sem_ci, nullptr, &vk_semaphore);
         if (result != VK_SUCCESS)
         {
@@ -1634,6 +1635,7 @@ namespace tempest::rhi::vk
         };
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     auto device::create_query_pool(const query_pool_desc& desc) -> query_pool_handle
     {
         auto vk_flags = VkQueryPipelineStatisticFlags{0};
@@ -1701,7 +1703,7 @@ namespace tempest::rhi::vk
             .pipelineStatistics = vk_flags,
         };
 
-        auto pool = VkQueryPool{VK_NULL_HANDLE};
+        auto* pool = VkQueryPool{VK_NULL_HANDLE};
         const auto result = _dispatch_table.createQueryPool(&pool_create_info, nullptr, &pool);
         if (result != VK_SUCCESS)
         {
@@ -1790,7 +1792,7 @@ namespace tempest::rhi::vk
 
     auto device::destroy_event(event_handle event) -> void
     {
-        auto vk_event = get_event(event);
+        auto* vk_event = get_event(event);
         if (vk_event != VK_NULL_HANDLE)
         {
             _dispatch_table.destroyEvent(vk_event, nullptr);
@@ -1800,7 +1802,7 @@ namespace tempest::rhi::vk
 
     auto device::destroy_semaphore(semaphore_handle semaphore) -> void
     {
-        auto vk_sem = get_semaphore(semaphore);
+        auto* vk_sem = get_semaphore(semaphore);
         if (vk_sem != VK_NULL_HANDLE)
         {
             _dispatch_table.destroySemaphore(vk_sem, nullptr);
@@ -1874,7 +1876,8 @@ namespace tempest::rhi::vk
 
     auto device::convert_gpu_timestamp_to_cpu_ns(uint64_t gpu_ticks) const noexcept -> uint64_t
     {
-        if (++_calibration_query_counter >= 180)
+        constexpr uint32_t calibration_interval_frames = 180;
+        if (++_calibration_query_counter >= calibration_interval_frames)
         {
             _calibration_query_counter = 0;
             _calibrator.calibrate(_dispatch_table, _device.device);
@@ -1884,11 +1887,11 @@ namespace tempest::rhi::vk
 
     namespace
     {
-        auto create_sampler_set_layout(vkb::Device& device, uint32_t implementation_max_samplers)
-            -> VkDescriptorSetLayout
+        auto create_sampler_set_layout(const native_device& dev, const physical_device_info& phys,
+                                       uint32_t implementation_max_samplers) -> VkDescriptorSetLayout
         {
-            const auto max_samplers = tempest::max(
-                device.physical_device.properties.limits.maxPerStageDescriptorSamplers, implementation_max_samplers);
+            const auto max_samplers =
+                tempest::max(phys.properties.limits.maxPerStageDescriptorSamplers, implementation_max_samplers);
 
             // Variable descriptor count for samplers
             auto sampler_binding_layout = VkDescriptorSetLayoutBinding{
@@ -1919,17 +1922,16 @@ namespace tempest::rhi::vk
 
             auto* layout = VkDescriptorSetLayout{VK_NULL_HANDLE};
             [[maybe_unused]] auto result =
-                device.make_table().createDescriptorSetLayout(&sampler_set_layout, nullptr, &layout);
+                dev.dispatch.createDescriptorSetLayout(&sampler_set_layout, nullptr, &layout);
             TEMPEST_ASSERT(result == VK_SUCCESS);
             return layout;
         }
 
-        auto create_sampled_image_set_layout(vkb::Device& device, uint32_t implementation_max_textures)
-            -> VkDescriptorSetLayout
+        auto create_sampled_image_set_layout(const native_device& dev, const physical_device_info& phys,
+                                             uint32_t implementation_max_textures) -> VkDescriptorSetLayout
         {
             const auto max_textures =
-                tempest::max(device.physical_device.properties.limits.maxPerStageDescriptorSampledImages,
-                             implementation_max_textures);
+                tempest::max(phys.properties.limits.maxPerStageDescriptorSampledImages, implementation_max_textures);
 
             // Variable descriptor count for images
             auto image_binding_layout = VkDescriptorSetLayoutBinding{
@@ -1959,18 +1961,16 @@ namespace tempest::rhi::vk
             };
 
             auto* layout = VkDescriptorSetLayout{VK_NULL_HANDLE};
-            [[maybe_unused]] auto result =
-                device.make_table().createDescriptorSetLayout(&image_set_layout, nullptr, &layout);
+            [[maybe_unused]] auto result = dev.dispatch.createDescriptorSetLayout(&image_set_layout, nullptr, &layout);
             TEMPEST_ASSERT(result == VK_SUCCESS);
             return layout;
         }
 
-        auto create_storage_image_set_layout(vkb::Device& device, uint32_t implementation_max_storage_images)
-            -> VkDescriptorSetLayout
+        auto create_storage_image_set_layout(const native_device& dev, const physical_device_info& phys,
+                                             uint32_t implementation_max_storage_images) -> VkDescriptorSetLayout
         {
-            const auto max_storage_images =
-                tempest::max(device.physical_device.properties.limits.maxPerStageDescriptorStorageImages,
-                             implementation_max_storage_images);
+            const auto max_storage_images = tempest::max(phys.properties.limits.maxPerStageDescriptorStorageImages,
+                                                         implementation_max_storage_images);
 
             // Variable descriptor count for images
             auto image_binding_layout = VkDescriptorSetLayoutBinding{
@@ -2000,13 +2000,12 @@ namespace tempest::rhi::vk
             };
 
             auto* layout = VkDescriptorSetLayout{VK_NULL_HANDLE};
-            [[maybe_unused]] auto result =
-                device.make_table().createDescriptorSetLayout(&image_set_layout, nullptr, &layout);
+            [[maybe_unused]] auto result = dev.dispatch.createDescriptorSetLayout(&image_set_layout, nullptr, &layout);
             TEMPEST_ASSERT(result == VK_SUCCESS);
             return layout;
         }
 
-        auto create_default_pipeline_layout(vkb::Device& device, VkDescriptorSetLayout sampler_set_layout,
+        auto create_default_pipeline_layout(const native_device& dev, VkDescriptorSetLayout sampler_set_layout,
                                             VkDescriptorSetLayout sampled_image_set_layout,
                                             VkDescriptorSetLayout storage_image_set_layout) -> VkPipelineLayout
         {
@@ -2016,10 +2015,11 @@ namespace tempest::rhi::vk
                 storage_image_set_layout,
             };
 
+            constexpr uint32_t default_push_constant_size = 128;
             auto push_constant_range = VkPushConstantRange{
                 .stageFlags = VK_SHADER_STAGE_ALL,
                 .offset = 0,
-                .size = 128,
+                .size = default_push_constant_size,
             };
 
             auto pipeline_layout_create_info = VkPipelineLayoutCreateInfo{
@@ -2034,42 +2034,27 @@ namespace tempest::rhi::vk
 
             auto* layout = VkPipelineLayout{VK_NULL_HANDLE};
             [[maybe_unused]] auto result =
-                device.make_table().createPipelineLayout(&pipeline_layout_create_info, nullptr, &layout);
+                dev.dispatch.createPipelineLayout(&pipeline_layout_create_info, nullptr, &layout);
             TEMPEST_ASSERT(result == VK_SUCCESS);
             return layout;
         }
     } // namespace
 
-    device::device(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device dev, device_desc desc)
+    device::device(const native_instance& instance, const physical_device_info& physical_device,
+                   const native_device& dev, const device_desc& desc)
         : _physical_device{tempest::move(physical_device)}, _device{tempest::move(dev)}, _desc{tempest::move(desc)},
-          _instance_dispatch_table{instance.make_table()}, _dispatch_table{_device.make_table()},
-          _storage_image_set_layout{create_storage_image_set_layout(_device, max_active_storage_images)},
-          _sampled_image_set_layout{create_sampled_image_set_layout(_device, max_active_textures)},
-          _sampler_set_layout{create_sampler_set_layout(_device, max_active_samplers)},
+          _instance_dispatch_table{instance.dispatch}, _dispatch_table{_device.dispatch},
+          _storage_image_set_layout{
+              create_storage_image_set_layout(_device, _physical_device, max_active_storage_images)},
+          _sampled_image_set_layout{create_sampled_image_set_layout(_device, _physical_device, max_active_textures)},
+          _sampler_set_layout{create_sampler_set_layout(_device, _physical_device, max_active_samplers)},
           _default_pipeline_layout{create_default_pipeline_layout(
               _device, _sampler_set_layout, _sampled_image_set_layout, _storage_image_set_layout)},
           _calibrator{_physical_device.properties.limits.timestampPeriod, _dispatch_table, _device.device}
     {
-#if defined(TEMPEST_PLATFORM_WINDOWS)
-        _instance_dispatch_table.fp_vkCreateWin32SurfaceKHR =
-            reinterpret_cast<void*>(_instance_dispatch_table.getInstanceProcAddr("vkCreateWin32SurfaceKHR"));
-        if (_instance_dispatch_table.fp_vkCreateWin32SurfaceKHR == nullptr)
-        {
-            tempest::terminate();
-        }
-#elif defined(TEMPEST_PLATFORM_LINUX)
-        _instance_dispatch_table.fp_vkCreateXlibSurfaceKHR =
-            reinterpret_cast<void*>(_instance_dispatch_table.getInstanceProcAddr("vkCreateXlibSurfaceKHR"));
-        if (_instance_dispatch_table.fp_vkCreateXlibSurfaceKHR == nullptr)
-        {
-            tempest::terminate();
-        }
-#endif
-
         auto vulkan_functions = VmaVulkanFunctions{
-            .vkGetInstanceProcAddr =
-                reinterpret_cast<PFN_vkGetInstanceProcAddr>(_instance_dispatch_table.fp_vkGetInstanceProcAddr),
-            .vkGetDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(_device.fp_vkGetDeviceProcAddr),
+            .vkGetInstanceProcAddr = _instance_dispatch_table.fp_vkGetInstanceProcAddr,
+            .vkGetDeviceProcAddr = _device.dispatch.fp_vkGetDeviceProcAddr,
         };
 
         auto allocator_create_info = VmaAllocatorCreateInfo{
@@ -2084,28 +2069,28 @@ namespace tempest::rhi::vk
         [[maybe_unused]] auto vma_result = vmaCreateAllocator(&allocator_create_info, &_allocator);
         TEMPEST_ASSERT(vma_result == VK_SUCCESS);
 
-        auto graphics_queue = _device.get_queue(vkb::QueueType::graphics);
-        auto graphics_queue_index = _device.get_queue_index(vkb::QueueType::graphics);
+        auto graphics_queue = _device.get_queue(queue_type::graphics);
+        auto graphics_queue_index = _device.get_queue_index(queue_type::graphics);
         if (graphics_queue && graphics_queue_index)
         {
             _graphics_execution_port = make_unique<execution_port>(
-                *this, graphics_queue_index.value(), vkb::QueueType::graphics, graphics_queue.value(), _dispatch_table);
+                *this, graphics_queue_index.value(), queue_type::graphics, graphics_queue.value(), _dispatch_table);
         }
 
-        auto compute_queue = _device.get_queue(vkb::QueueType::compute);
-        auto compute_queue_index = _device.get_queue_index(vkb::QueueType::compute);
+        auto compute_queue = _device.get_queue(queue_type::compute);
+        auto compute_queue_index = _device.get_queue_index(queue_type::compute);
         if (compute_queue && compute_queue_index)
         {
             _async_compute_execution_port = make_unique<execution_port>(
-                *this, compute_queue_index.value(), vkb::QueueType::compute, compute_queue.value(), _dispatch_table);
+                *this, compute_queue_index.value(), queue_type::compute, compute_queue.value(), _dispatch_table);
         }
 
-        auto transfer_queue = _device.get_queue(vkb::QueueType::transfer);
-        auto transfer_queue_index = _device.get_queue_index(vkb::QueueType::transfer);
+        auto transfer_queue = _device.get_queue(queue_type::transfer);
+        auto transfer_queue_index = _device.get_queue_index(queue_type::transfer);
         if (transfer_queue && transfer_queue_index)
         {
             _async_transfer_execution_port = make_unique<execution_port>(
-                *this, transfer_queue_index.value(), vkb::QueueType::transfer, transfer_queue.value(), _dispatch_table);
+                *this, transfer_queue_index.value(), queue_type::transfer, transfer_queue.value(), _dispatch_table);
         }
 
         if (!_calibrator.is_calibrated() && _graphics_execution_port)
@@ -2313,7 +2298,7 @@ namespace tempest::rhi::vk
                 _sampler_slots[descriptor.index].allocated = false;
                 _sampler_slots[descriptor.index].generation++;
                 _sampler_free_list.push_back(descriptor.index);
-                std::memset(_sampler_descriptor_buffer_ptr + descriptor.index * _sampler_descriptor_size, 0,
+                std::memset(_sampler_descriptor_buffer_ptr + (descriptor.index * _sampler_descriptor_size), 0,
                             _sampler_descriptor_size);
             }
             break;
@@ -2324,7 +2309,7 @@ namespace tempest::rhi::vk
                 _sampled_image_slots[descriptor.index].allocated = false;
                 _sampled_image_slots[descriptor.index].generation++;
                 _sampled_image_free_list.push_back(descriptor.index);
-                std::memset(_resource_descriptor_buffer_ptr + descriptor.index * _sampled_image_descriptor_size, 0,
+                std::memset(_resource_descriptor_buffer_ptr + (descriptor.index * _sampled_image_descriptor_size), 0,
                             _sampled_image_descriptor_size);
             }
             break;
@@ -2336,7 +2321,7 @@ namespace tempest::rhi::vk
                 _storage_image_slots[descriptor.index].generation++;
                 _storage_image_free_list.push_back(descriptor.index);
                 std::memset(_resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
-                                descriptor.index * _storage_image_descriptor_size,
+                                (descriptor.index * _storage_image_descriptor_size),
                             0, _storage_image_descriptor_size);
             }
             break;
@@ -2361,7 +2346,7 @@ namespace tempest::rhi::vk
                 },
         };
 
-        auto* dest_ptr = _sampler_descriptor_buffer_ptr + slot.index * _sampler_descriptor_size;
+        auto* dest_ptr = _sampler_descriptor_buffer_ptr + (slot.index * _sampler_descriptor_size);
         _dispatch_table.getDescriptorEXT(&get_info, _sampler_descriptor_size, dest_ptr);
     }
 
@@ -2390,7 +2375,7 @@ namespace tempest::rhi::vk
                 },
         };
 
-        auto* dest_ptr = _resource_descriptor_buffer_ptr + slot.index * _sampled_image_descriptor_size;
+        auto* dest_ptr = _resource_descriptor_buffer_ptr + (slot.index * _sampled_image_descriptor_size);
         _dispatch_table.getDescriptorEXT(&get_info, _sampled_image_descriptor_size, dest_ptr);
     }
 
@@ -2420,14 +2405,14 @@ namespace tempest::rhi::vk
         };
 
         auto* dest_ptr = _resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
-                         slot.index * _storage_image_descriptor_size;
+                         (slot.index * _storage_image_descriptor_size);
         _dispatch_table.getDescriptorEXT(&get_info, _storage_image_descriptor_size, dest_ptr);
     }
 
     auto device::set_object_name([[maybe_unused]] uint64_t object_handle, [[maybe_unused]] VkObjectType object_type,
                                  [[maybe_unused]] cstring_view name) const -> void
     {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
         if (_dispatch_table.fp_vkSetDebugUtilsObjectNameEXT == nullptr || name.empty() || object_handle == 0)
         {
             return;
@@ -2501,7 +2486,7 @@ namespace tempest::rhi::vk
 
     auto device::set_debug_name(event_handle handle, cstring_view name) -> void
     {
-        const auto evt = get_event(handle);
+        auto* const evt = get_event(handle);
         if (evt != VK_NULL_HANDLE)
         {
             set_object_name(reinterpret_cast<uint64_t>(evt), VK_OBJECT_TYPE_EVENT, name);
@@ -2510,7 +2495,7 @@ namespace tempest::rhi::vk
 
     auto device::set_debug_name(semaphore_handle handle, cstring_view name) -> void
     {
-        const auto sem = get_semaphore(handle);
+        auto* const sem = get_semaphore(handle);
         if (sem != VK_NULL_HANDLE)
         {
             set_object_name(reinterpret_cast<uint64_t>(sem), VK_OBJECT_TYPE_SEMAPHORE, name);
@@ -2519,10 +2504,10 @@ namespace tempest::rhi::vk
 
     auto device::set_debug_name(query_pool_handle handle, cstring_view name) -> void
     {
-        const auto qp = get_query_pool(handle);
-        if (qp.has_value() && qp->handle != VK_NULL_HANDLE)
+        const auto query_pool_opt = get_query_pool(handle);
+        if (query_pool_opt.has_value() && query_pool_opt->handle != VK_NULL_HANDLE)
         {
-            set_object_name(reinterpret_cast<uint64_t>(qp->handle), VK_OBJECT_TYPE_QUERY_POOL, name);
+            set_object_name(reinterpret_cast<uint64_t>(query_pool_opt->handle), VK_OBJECT_TYPE_QUERY_POOL, name);
         }
     }
 } // namespace tempest::rhi::vk

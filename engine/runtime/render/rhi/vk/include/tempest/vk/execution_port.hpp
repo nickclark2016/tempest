@@ -10,8 +10,7 @@
 #include <tempest/rhi.hpp>
 #include <tempest/vector.hpp>
 
-#include <VkBootstrap.h>
-#include <VkBootstrapDispatch.h>
+#include <tempest/vk/bootstrap.hpp>
 
 namespace tempest::rhi::vk
 {
@@ -22,8 +21,8 @@ namespace tempest::rhi::vk
     class TEMPEST_API command_list final : public rhi::command_list
     {
       public:
-        command_list(VkCommandBuffer command_buffer, const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                     vkb::QueueType queue_type = vkb::QueueType::graphics) noexcept;
+        command_list(VkCommandBuffer command_buffer, const dispatch_table& dispatch_table, const vk::device& device,
+                     queue_type queue_type = queue_type::graphics) noexcept;
         command_list(const command_list&) = delete;
         command_list(command_list&&) noexcept = delete;
 
@@ -123,9 +122,9 @@ namespace tempest::rhi::vk
         friend class execution_port;
 
         VkCommandBuffer _command_buffer;
-        const vkb::DispatchTable* _dispatch_table;
+        const dispatch_table* _dispatch_table;
         const vk::device* _parent_device;
-        vkb::QueueType _queue_type = vkb::QueueType::graphics;
+        queue_type _queue_type = queue_type::graphics;
     };
 
     /**
@@ -143,7 +142,8 @@ namespace tempest::rhi::vk
     {
       public:
         static constexpr size_t max_command_lists = N;
-        static constexpr size_t thread_id_sentinel = numeric_limits<uint32_t>::max();
+        static constexpr size_t thread_id_sentinel =
+            (tempest::numeric_limits<uint32_t>::max)(); // NOLINT(readability-redundant-parentheses)
 
         /**
          * @brief Constructs a command list slab with the specified dispatch table and queue family index. Allocates a
@@ -154,8 +154,8 @@ namespace tempest::rhi::vk
          * @param queue_family_index The index of the queue family to use for the command pool and command buffers.
          * @param queue_type The queue type (graphics, compute, transfer).
          */
-        command_list_slab(const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                          uint32_t queue_family_index, vkb::QueueType queue_type = vkb::QueueType::graphics)
+        command_list_slab(const dispatch_table& dispatch_table, const vk::device& device, uint32_t queue_family_index,
+                          queue_type queue_type = queue_type::graphics)
             : _dispatch_table{&dispatch_table}
         {
             auto command_pool_create_info = VkCommandPoolCreateInfo{
@@ -182,7 +182,7 @@ namespace tempest::rhi::vk
             result = dispatch_table.allocateCommandBuffers(&command_buffer_allocate_info, vk_cmd_buffers.data());
             TEMPEST_ASSERT(result == VK_SUCCESS);
 
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
             if (dispatch_table.fp_vkSetDebugUtilsObjectNameEXT != nullptr)
             {
                 const auto pool_name_info = VkDebugUtilsObjectNameInfoEXT{
@@ -198,7 +198,7 @@ namespace tempest::rhi::vk
 
             for (size_t i = 0; i < max_command_lists; ++i)
             {
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
                 if (dispatch_table.fp_vkSetDebugUtilsObjectNameEXT != nullptr)
                 {
                     const auto buf_name_info = VkDebugUtilsObjectNameInfoEXT{
@@ -302,7 +302,7 @@ namespace tempest::rhi::vk
         uint32_t _allocated_command_lists = 0;
         uint32_t _thread_id = thread_id_sentinel;
         uint64_t _submitted_timeline_value = 0;
-        const vkb::DispatchTable* _dispatch_table;
+        const dispatch_table* _dispatch_table;
     };
 
     /**
@@ -331,8 +331,8 @@ namespace tempest::rhi::vk
          * @param device The Vulkan device to use for command pool and command buffer allocation.
          * @param queue_family_index The index of the queue family to use for the command list slabs.
          */
-        command_list_slab_allocator(const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                                    uint32_t queue_family_index, vkb::QueueType queue_type = vkb::QueueType::graphics)
+        command_list_slab_allocator(const dispatch_table& dispatch_table, const vk::device& device,
+                                    uint32_t queue_family_index, queue_type queue_type = queue_type::graphics)
             : _dispatch_table{&dispatch_table}
         {
             for (size_t i = 0; i < slab_count; ++i)
@@ -404,7 +404,7 @@ namespace tempest::rhi::vk
       private:
         inplace_vector<command_list_slab<command_list_count>, slab_count> slabs;
         uint32_t current_slab_index = 0;
-        const vkb::DispatchTable* _dispatch_table = nullptr;
+        const dispatch_table* _dispatch_table = nullptr;
     };
 
     // Not thread safe, must be externally synchronized
@@ -419,9 +419,8 @@ namespace tempest::rhi::vk
         command_list_slab_allocator<transient_slab_count, transient_command_list_count> transient_allocator;
         command_list_slab_allocator<persistent_slab_count, persistent_command_list_count> persistent_allocator;
 
-        combined_command_list_slab_allocator(const vkb::DispatchTable& dispatch_table, const vk::device& device,
-                                             uint32_t queue_family_index,
-                                             vkb::QueueType queue_type = vkb::QueueType::graphics)
+        combined_command_list_slab_allocator(const dispatch_table& dispatch_table, const vk::device& device,
+                                             uint32_t queue_family_index, queue_type queue_type = queue_type::graphics)
             : transient_allocator(dispatch_table, device, queue_family_index, queue_type),
               persistent_allocator(dispatch_table, device, queue_family_index, queue_type)
         {
@@ -432,8 +431,8 @@ namespace tempest::rhi::vk
     class TEMPEST_API execution_port final : public rhi::execution_port
     {
       public:
-        execution_port(vk::device& parent_device, uint32_t queue_family_index, vkb::QueueType queue_type, VkQueue queue,
-                       vkb::DispatchTable dispatch_table);
+        execution_port(vk::device& parent_device, uint32_t queue_family_index, queue_type queue_type, VkQueue queue,
+                       dispatch_table dispatch_table);
         execution_port(const execution_port&) = delete;
         execution_port(execution_port&&) noexcept = delete;
         ~execution_port() override;
@@ -494,9 +493,9 @@ namespace tempest::rhi::vk
 
         vk::device* _parent_device{nullptr};
         uint32_t _queue_family_index;
-        vkb::QueueType _queue_type;
+        queue_type _queue_type;
         VkQueue _queue{VK_NULL_HANDLE};
-        vkb::DispatchTable _dispatch_table;
+        dispatch_table _dispatch_table;
 
         semaphore_handle _timeline_semaphore{};
         uint64_t _timeline_value{0};

@@ -71,7 +71,6 @@ scoped.project('rhi-examples', function()
 
     uses {
         'tempest',
-        'vk-bootstrap',
         'vulkan',
         'glfw',
     }

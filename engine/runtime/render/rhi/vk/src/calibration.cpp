@@ -13,6 +13,11 @@
 
 namespace tempest::rhi::vk
 {
+    namespace
+    {
+        constexpr auto nanoseconds_per_second = uint64_t{1'000'000'000ULL};
+    }
+
     timeline_calibrator::timeline_calibrator(float timestamp_period_ns) noexcept
         : _timestamp_period_ns{timestamp_period_ns > 0.0F ? timestamp_period_ns : 1.0F}, _gpu_to_cpu_offset_ns{0},
           _is_calibrated{false}, _is_hardware_calibrated{false},
@@ -26,7 +31,7 @@ namespace tempest::rhi::vk
     {
     }
 
-    timeline_calibrator::timeline_calibrator(float timestamp_period_ns, const vkb::DispatchTable& dispatch,
+    timeline_calibrator::timeline_calibrator(float timestamp_period_ns, const dispatch_table& dispatch,
                                              VkDevice device) noexcept
         : timeline_calibrator{timestamp_period_ns}
     {
@@ -36,7 +41,7 @@ namespace tempest::rhi::vk
     auto timeline_calibrator::query_cpu_timestamp_ns() noexcept -> uint64_t
     {
 #if defined(TEMPEST_PLATFORM_WINDOWS) || defined(_WIN32)
-        static const auto frequency = []() {
+        static const auto frequency = []() -> uint64_t {
             LARGE_INTEGER freq;
             QueryPerformanceFrequency(&freq);
             return static_cast<uint64_t>(freq.QuadPart);
@@ -44,11 +49,12 @@ namespace tempest::rhi::vk
         LARGE_INTEGER counter;
         QueryPerformanceCounter(&counter);
         const auto count = static_cast<uint64_t>(counter.QuadPart);
-        return (count / frequency) * 1'000'000'000ULL + ((count % frequency) * 1'000'000'000ULL) / frequency;
+        return ((count / frequency) * nanoseconds_per_second) +
+               (((count % frequency) * nanoseconds_per_second) / frequency);
 #elif defined(TEMPEST_PLATFORM_LINUX) || defined(__linux__)
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-        return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ULL + static_cast<uint64_t>(ts.tv_nsec);
+        return static_cast<uint64_t>(ts.tv_sec) * nanoseconds_per_second + static_cast<uint64_t>(ts.tv_nsec);
 #else
         return static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
@@ -56,7 +62,7 @@ namespace tempest::rhi::vk
 #endif
     }
 
-    auto timeline_calibrator::calibrate(const vkb::DispatchTable& dispatch, VkDevice device) noexcept -> bool
+    auto timeline_calibrator::calibrate(const dispatch_table& dispatch, VkDevice device) noexcept -> bool
     {
         if (dispatch.fp_vkGetCalibratedTimestampsEXT == nullptr && dispatch.fp_vkGetCalibratedTimestampsKHR == nullptr)
         {
@@ -95,13 +101,14 @@ namespace tempest::rhi::vk
         {
             auto host_ns = uint64_t{0};
 #if defined(TEMPEST_PLATFORM_WINDOWS) || defined(_WIN32)
-            static const auto frequency = []() {
+            static const auto frequency = []() -> uint64_t {
                 LARGE_INTEGER freq;
                 QueryPerformanceFrequency(&freq);
                 return static_cast<uint64_t>(freq.QuadPart);
             }();
             const auto count = timestamps[0];
-            host_ns = (count / frequency) * 1'000'000'000ULL + ((count % frequency) * 1'000'000'000ULL) / frequency;
+            host_ns = ((count / frequency) * nanoseconds_per_second) +
+                      (((count % frequency) * nanoseconds_per_second) / frequency);
 #else
             host_ns = timestamps[0];
 #endif
@@ -115,12 +122,13 @@ namespace tempest::rhi::vk
         return false;
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     auto timeline_calibrator::calibrate_fallback(uint64_t cpu_bracket_start_ns, uint64_t cpu_bracket_end_ns,
                                                  uint64_t gpu_ticks) noexcept -> void
     {
         const auto avg_cpu_ns = cpu_bracket_end_ns >= cpu_bracket_start_ns
-                                    ? cpu_bracket_start_ns + (cpu_bracket_end_ns - cpu_bracket_start_ns) / 2
-                                    : cpu_bracket_end_ns + (cpu_bracket_start_ns - cpu_bracket_end_ns) / 2;
+                                    ? cpu_bracket_start_ns + ((cpu_bracket_end_ns - cpu_bracket_start_ns) / 2)
+                                    : cpu_bracket_end_ns + ((cpu_bracket_start_ns - cpu_bracket_end_ns) / 2);
         const auto gpu_ns = gpu_ticks_to_ns(gpu_ticks);
         _gpu_to_cpu_offset_ns = static_cast<int64_t>(avg_cpu_ns) - static_cast<int64_t>(gpu_ns);
         _is_calibrated = true;

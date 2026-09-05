@@ -5,8 +5,7 @@
 #include <tempest/slot_map.hpp>
 #include <tempest/vk/calibration.hpp>
 
-#include <VkBootstrap.h>
-#include <VkBootstrapDispatch.h>
+#include <tempest/vk/bootstrap.hpp>
 #include <vk_mem_alloc.h>
 
 namespace tempest::rhi::vk
@@ -75,8 +74,8 @@ namespace tempest::rhi::vk
     class TEMPEST_API device final : public rhi::device
     {
       public:
-        static auto create(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device device,
-                           device_desc desc) -> unique_ptr<rhi::device>;
+        static auto create(const native_instance& instance, const physical_device_info& physical_device,
+                           const native_device& dev, const device_desc& desc) -> unique_ptr<rhi::device>;
 
         device(const device&) = delete;
         device(device&&) noexcept = delete;
@@ -299,17 +298,17 @@ namespace tempest::rhi::vk
         auto wait_for_sync(span<const host_sync_point> wait_values, uint64_t timeout_ns = ~0ULL) const
             -> expected<void, submit_error>;
 
-        [[nodiscard]] auto get_device() const noexcept -> const vkb::Device&
+        [[nodiscard]] auto get_device() const noexcept -> const native_device&
         {
             return _device;
         }
 
-        [[nodiscard]] auto get_physical_device() const noexcept -> const vkb::PhysicalDevice&
+        [[nodiscard]] auto get_physical_device() const noexcept -> const physical_device_info&
         {
             return _physical_device;
         }
 
-        [[nodiscard]] auto get_dispatch_table() const noexcept -> const vkb::DispatchTable&
+        [[nodiscard]] auto get_dispatch_table() const noexcept -> const dispatch_table&
         {
             return _dispatch_table;
         }
@@ -326,14 +325,15 @@ namespace tempest::rhi::vk
             bool allocated = false;
         };
 
-        device(vkb::Instance instance, vkb::PhysicalDevice physical_device, vkb::Device device, device_desc desc);
+        device(const native_instance& instance, const physical_device_info& physical_device, const native_device& dev,
+               const device_desc& desc);
 
-        vkb::PhysicalDevice _physical_device;
-        vkb::Device _device;
+        physical_device_info _physical_device;
+        native_device _device;
         device_desc _desc;
 
-        vkb::InstanceDispatchTable _instance_dispatch_table;
-        vkb::DispatchTable _dispatch_table;
+        instance_dispatch_table _instance_dispatch_table;
+        dispatch_table _dispatch_table;
         VmaAllocator _allocator = VK_NULL_HANDLE;
 
         slot_map<buffer> _buffers;

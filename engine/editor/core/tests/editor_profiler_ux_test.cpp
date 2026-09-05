@@ -5,6 +5,7 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/profiler/profiler.hpp>
@@ -30,11 +31,14 @@ namespace tempest::editor::tests
 
         auto create_test_env() -> test_env
         {
+            static auto test_sink = stdout_log_sink{};
+            static auto test_log = logger{&test_sink};
+
             auto ctx_desc = rhi::context_desc{};
             ctx_desc.application_name = "Editor Profiler UX Test";
             ctx_desc.api = rhi::graphics_api::vulkan;
 
-            auto result = rhi::vk::create_context(ctx_desc);
+            auto result = rhi::vk::create_context(ctx_desc, test_log);
             if (!result.has_value())
             {
                 return {};
@@ -94,8 +98,8 @@ namespace tempest::editor::tests
         ASSERT_NE(server, nullptr);
         EXPECT_TRUE(server->is_running());
         const auto bound_port = server->get_bound_port();
-        EXPECT_GE(bound_port, 8080u);
-        EXPECT_LE(bound_port, 8090u);
+        EXPECT_GE(bound_port, 8080U);
+        EXPECT_LE(bound_port, 8090U);
 
         const auto server_url = server->get_server_url();
         EXPECT_FALSE(server_url.empty());
@@ -115,7 +119,7 @@ namespace tempest::editor::tests
         engine_ctx.collect_and_broadcast_telemetry();
 
         // 3. Assert: Verify telemetry frame is non-empty and frame index increments
-        EXPECT_GT(engine_ctx.get_frame_index(), 0u);
+        EXPECT_GT(engine_ctx.get_frame_index(), 0U);
         const auto& frame = engine_ctx.get_last_telemetry_frame();
         EXPECT_EQ(frame.frame_index, engine_ctx.get_frame_index());
     }
@@ -219,7 +223,7 @@ namespace tempest::editor::tests
             ui_ctx.finish_ui_commands();
 
             // 3. Assert: Verify clean execution and valid frame telemetry
-            EXPECT_GT(engine_ctx.get_frame_index(), 0u);
+            EXPECT_GT(engine_ctx.get_frame_index(), 0U);
         }
 
         env.win_mgr.destroy_window(env.win);
@@ -339,10 +343,10 @@ namespace tempest::editor::tests
         engine_ctx.collect_and_broadcast_telemetry();
 
         // 3. Assert: Verify rolling stats and hot zones
-        EXPECT_EQ(engine_ctx.get_frame_index(), 1u);
-        EXPECT_GT(engine_ctx.get_rolling_fps(), 0.0f);
-        EXPECT_GT(engine_ctx.get_rolling_frame_time_ms(), 0.0f);
-        EXPECT_GT(engine_ctx.get_rolling_gpu_time_ms(), 0.0f);
+        EXPECT_EQ(engine_ctx.get_frame_index(), 1U);
+        EXPECT_GT(engine_ctx.get_rolling_fps(), 0.0F);
+        EXPECT_GT(engine_ctx.get_rolling_frame_time_ms(), 0.0F);
+        EXPECT_GT(engine_ctx.get_rolling_gpu_time_ms(), 0.0F);
 
         const auto gpu_hot = engine_ctx.get_top_gpu_hot_zones(5);
         // Verify submit envelope is filtered out
@@ -351,12 +355,12 @@ namespace tempest::editor::tests
             EXPECT_NE(z.name, "Graphics Submit");
             EXPECT_FALSE(profiler::is_gpu_submit_zone_name(z.name));
         }
-        ASSERT_GE(gpu_hot.size(), 2u);
+        ASSERT_GE(gpu_hot.size(), 2U);
         EXPECT_EQ(gpu_hot[0].name, "ForwardLightingPass");
         EXPECT_EQ(gpu_hot[1].name, "SkyboxPass");
 
         const auto cpu_hot = engine_ctx.get_top_cpu_hot_zones(5);
-        ASSERT_GE(cpu_hot.size(), 1u);
+        ASSERT_GE(cpu_hot.size(), 1U);
         EXPECT_EQ(cpu_hot[0].name, "Editor::PaintPass");
     }
 } // namespace tempest::editor::tests

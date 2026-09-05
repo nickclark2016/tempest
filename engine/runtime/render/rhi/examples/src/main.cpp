@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <tempest/array.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string_view.hpp>
@@ -14,7 +15,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #elif defined(TEMPEST_PLATFORM_LINUX)
@@ -189,7 +190,7 @@ namespace
     };
 } // namespace
 
-int main(int argc, char** argv)
+auto main(int argc, char** argv) -> int
 {
     auto parsed_opts = parse_args(argc, argv);
     if (!parsed_opts.has_value())
@@ -231,8 +232,8 @@ int main(int argc, char** argv)
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     auto title = "Tempest RHI - " + std::string(example_meta->name.data(), example_meta->name.size());
-    auto* window = glfwCreateWindow(static_cast<int>(opts.width), static_cast<int>(opts.height), title.c_str(),
-                                    nullptr, nullptr);
+    auto* window =
+        glfwCreateWindow(static_cast<int>(opts.width), static_cast<int>(opts.height), title.c_str(), nullptr, nullptr);
     if (window == nullptr)
     {
         std::cerr << "Failed to create GLFW window.\n";
@@ -241,6 +242,9 @@ int main(int argc, char** argv)
     }
 
     // 2. Create RHI Context and Device
+    auto log_sink = stdout_log_sink{};
+    auto log = logger{log_sink};
+
     auto ctx_desc = context_desc{
         .application_name = "Tempest RHI Examples",
         .version_major = 1,
@@ -250,7 +254,7 @@ int main(int argc, char** argv)
         .api = graphics_api::vulkan,
     };
 
-    auto ctx_res = vk::create_context(ctx_desc);
+    auto ctx_res = vk::create_context(ctx_desc, log);
     if (!ctx_res.has_value())
     {
         std::cerr << "Failed to create RHI context.\n";
@@ -280,7 +284,7 @@ int main(int argc, char** argv)
     }
 
     // 3. Create WSI Surface & Negotiate sRGB Swapchain Format
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
@@ -342,11 +346,10 @@ int main(int argc, char** argv)
     }
 
     std::cout << "Selected Surface Format: "
-              << (selected_surface_format->format == render_surface_format::bgra8_srgb   ? "BGRA8_SRGB"
-                  : selected_surface_format->format == render_surface_format::rgba8_srgb ? "RGBA8_SRGB"
-                  : selected_surface_format->format == render_surface_format::bgra8_unorm
-                      ? "BGRA8_UNORM"
-                      : "RGBA8_UNORM")
+              << (selected_surface_format->format == render_surface_format::bgra8_srgb    ? "BGRA8_SRGB"
+                  : selected_surface_format->format == render_surface_format::rgba8_srgb  ? "RGBA8_SRGB"
+                  : selected_surface_format->format == render_surface_format::bgra8_unorm ? "BGRA8_UNORM"
+                                                                                          : "RGBA8_UNORM")
               << " (sRGB Non-linear)\n";
 
     auto surf_desc = render_surface_desc{
@@ -423,8 +426,8 @@ int main(int argc, char** argv)
     {
         glfwPollEvents();
 
-        auto cur_w = int{0};
-        auto cur_h = int{0};
+        auto cur_w = 0;
+        auto cur_h = 0;
         glfwGetFramebufferSize(window, &cur_w, &cur_h);
 
         if (cur_w == 0 || cur_h == 0)
@@ -516,8 +519,8 @@ int main(int argc, char** argv)
                                                                .semaphore = render_sem,
                                                                .value = 0,
                                                            });
-        if (!present_res.has_value() && (present_res.error() == swapchain_error::out_of_date ||
-                                         present_res.error() == swapchain_error::suboptimal))
+        if (!present_res.has_value() &&
+            (present_res.error() == swapchain_error::out_of_date || present_res.error() == swapchain_error::suboptimal))
         {
             need_recreate = true;
         }

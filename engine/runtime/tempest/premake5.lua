@@ -134,7 +134,6 @@ scoped.project('tempest', function()
         'simdjson',
         'tinyexr',
         'tlsf',
-        'vk-bootstrap',
         'vma',
     }
 
@@ -196,7 +195,6 @@ scoped.project('tempest', function()
                 'simdjson',
                 'tinyexr',
                 'tlsf',
-                'vk-bootstrap',
                 'vma',
                 'rhi-vk',
            }

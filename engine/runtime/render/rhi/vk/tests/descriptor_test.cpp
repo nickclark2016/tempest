@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
+#include <tempest/array.hpp>
 #include <tempest/guid.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
@@ -30,11 +32,14 @@ namespace
 
     auto create_test_env() -> test_env
     {
+        static auto test_sink = stdout_log_sink{};
+        static auto test_log = logger{test_sink};
+
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Descriptor Test";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_log);
         if (!result.has_value())
         {
             return {};
@@ -55,6 +60,8 @@ namespace
     }
 } // namespace
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
 TEST(descriptor_test, descriptor_slot_lifecycle)
 {
     auto env = create_test_env();
@@ -62,28 +69,28 @@ TEST(descriptor_test, descriptor_slot_lifecycle)
     auto& dev = env.dev;
 
     // Allocate multiple sampler descriptors
-    auto s1 = dev->allocate_descriptor(descriptor_type::sampler);
-    auto s2 = dev->allocate_descriptor(descriptor_type::sampler);
-    EXPECT_NE(s1.index, s2.index);
+    auto sampler_slot_1 = dev->allocate_descriptor(descriptor_type::sampler);
+    auto sampler_slot_2 = dev->allocate_descriptor(descriptor_type::sampler);
+    EXPECT_NE(sampler_slot_1.index, sampler_slot_2.index);
 
     // Allocate multiple sampled image descriptors
-    auto t1 = dev->allocate_descriptor(descriptor_type::sampled_image);
-    auto t2 = dev->allocate_descriptor(descriptor_type::sampled_image);
-    EXPECT_NE(t1.index, t2.index);
+    auto texture_slot_1 = dev->allocate_descriptor(descriptor_type::sampled_image);
+    auto texture_slot_2 = dev->allocate_descriptor(descriptor_type::sampled_image);
+    EXPECT_NE(texture_slot_1.index, texture_slot_2.index);
 
     // Allocate multiple storage image descriptors
-    auto u1 = dev->allocate_descriptor(descriptor_type::storage_image);
-    auto u2 = dev->allocate_descriptor(descriptor_type::storage_image);
-    EXPECT_NE(u1.index, u2.index);
+    auto storage_slot_1 = dev->allocate_descriptor(descriptor_type::storage_image);
+    auto storage_slot_2 = dev->allocate_descriptor(descriptor_type::storage_image);
+    EXPECT_NE(storage_slot_1.index, storage_slot_2.index);
 
     // Free and reallocate
-    dev->free_descriptor(descriptor_type::sampler, s1);
-    auto s3 = dev->allocate_descriptor(descriptor_type::sampler);
-    EXPECT_EQ(s3.index, s1.index);
-    EXPECT_GT(s3.generation, s1.generation);
+    dev->free_descriptor(descriptor_type::sampler, sampler_slot_1);
+    auto sampler_slot_3 = dev->allocate_descriptor(descriptor_type::sampler);
+    EXPECT_EQ(sampler_slot_3.index, sampler_slot_1.index);
+    EXPECT_GT(sampler_slot_3.generation, sampler_slot_1.generation);
 
-    dev->free_descriptor(descriptor_type::sampled_image, t1);
-    dev->free_descriptor(descriptor_type::storage_image, u1);
+    dev->free_descriptor(descriptor_type::sampled_image, texture_slot_1);
+    dev->free_descriptor(descriptor_type::storage_image, storage_slot_1);
 }
 
 TEST(descriptor_test, bindless_storage_image_write)
@@ -120,7 +127,7 @@ TEST(descriptor_test, bindless_storage_image_write)
 
     // 3. Create readback buffer
     auto readback_desc = buffer_desc{
-        .size = width * height * 4,
+        .size = static_cast<uint64_t>(width) * height * 4,
         .memory_usage = memory_usage::readback,
         .usage = buffer_usage::transfer_dst,
         .name = "storage_readback_buffer",
@@ -239,7 +246,7 @@ TEST(descriptor_test, bindless_storage_image_write)
     dev->wait_for_sync(host_wait);
 
     // 6. Verify written values in readback buffer
-    auto readback_data = static_cast<const uint8_t*>(readback_buf.cpu_address);
+    const auto* readback_data = static_cast<const uint8_t*>(readback_buf.cpu_address);
     ASSERT_NE(readback_data, nullptr);
 
     // Pixel at (0, 0): r=0, g=0, b=0.75 (~191), a=1.0 (255)
@@ -270,7 +277,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     // (1,1) White (255, 255, 255, 255)
     constexpr uint32_t tex_w = 2;
     constexpr uint32_t tex_h = 2;
-    uint8_t tex_pixels[16] = {
+    auto tex_pixels = array<uint8_t, 16>{
         255, 0,   0,   255, // (0,0)
         0,   255, 0,   255, // (1,0)
         0,   0,   255, 255, // (0,1)
@@ -286,7 +293,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     auto upload_buf = dev->create_buffer(upload_desc);
     ASSERT_NE(upload_buf.handle, 0ULL);
     ASSERT_NE(upload_buf.cpu_address, nullptr);
-    std::memcpy(upload_buf.cpu_address, tex_pixels, sizeof(tex_pixels));
+    std::memcpy(upload_buf.cpu_address, tex_pixels.data(), sizeof(tex_pixels));
 
     auto tex_desc = texture_desc{
         .width = tex_w,
@@ -329,7 +336,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     constexpr uint32_t sample_w = 2;
     constexpr uint32_t sample_h = 2;
     auto out_desc = buffer_desc{
-        .size = sample_w * sample_h * sizeof(float) * 4,
+        .size = static_cast<uint64_t>(sample_w) * sample_h * sizeof(float) * 4,
         .memory_usage = memory_usage::readback,
         .usage = buffer_usage::storage_buffer | buffer_usage::device_address,
         .name = "sample_output_buf",
@@ -452,20 +459,20 @@ TEST(descriptor_test, bindless_sampled_image_read)
     dev->wait_for_sync(host_wait);
 
     // 6. Verify sampled floats in output buffer
-    auto out_data = static_cast<const float*>(out_buf.cpu_address);
+    const auto* out_data = static_cast<const float*>(out_buf.cpu_address);
     ASSERT_NE(out_data, nullptr);
 
     // Pixel (0,0) should be Red: (1.0, 0.0, 0.0, 1.0)
-    EXPECT_NEAR(out_data[0], 1.0f, 0.01f);
-    EXPECT_NEAR(out_data[1], 0.0f, 0.01f);
-    EXPECT_NEAR(out_data[2], 0.0f, 0.01f);
-    EXPECT_NEAR(out_data[3], 1.0f, 0.01f);
+    EXPECT_NEAR(out_data[0], 1.0F, 0.01F);
+    EXPECT_NEAR(out_data[1], 0.0F, 0.01F);
+    EXPECT_NEAR(out_data[2], 0.0F, 0.01F);
+    EXPECT_NEAR(out_data[3], 1.0F, 0.01F);
 
     // Pixel (1,0) should be Green: (0.0, 1.0, 0.0, 1.0)
-    EXPECT_NEAR(out_data[4], 0.0f, 0.01f);
-    EXPECT_NEAR(out_data[5], 1.0f, 0.01f);
-    EXPECT_NEAR(out_data[6], 0.0f, 0.01f);
-    EXPECT_NEAR(out_data[7], 1.0f, 0.01f);
+    EXPECT_NEAR(out_data[4], 0.0F, 0.01F);
+    EXPECT_NEAR(out_data[5], 1.0F, 0.01F);
+    EXPECT_NEAR(out_data[6], 0.0F, 0.01F);
+    EXPECT_NEAR(out_data[7], 1.0F, 0.01F);
 
     // Clean up
     dev->free_descriptor(descriptor_type::sampled_image, texture_slot);
@@ -478,3 +485,5 @@ TEST(descriptor_test, bindless_sampled_image_read)
     dev->destroy_buffer(out_buf);
     dev->destroy_semaphore(timeline_sem);
 }
+
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)

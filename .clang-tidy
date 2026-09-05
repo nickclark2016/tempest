@@ -1,0 +1,21 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  readability-*,
+  modernize-*,
+  portability-*,
+  cppcoreguidelines-*,
+  -readability-convert-member-functions-to-static,
+  -readability-make-member-function-const,
+  -cppcoreguidelines-pro-*,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-missing-std-forward
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'tempest/.*'
+FormatStyle: none
+ExtraArgs:
+  - -std=c++20
+...

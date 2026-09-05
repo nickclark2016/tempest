@@ -3,6 +3,7 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/guid.hpp>
 #include <tempest/int.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/ui.hpp>
@@ -26,11 +27,14 @@ namespace tempest::editor::tests
 
         auto create_test_env() -> test_env
         {
+            static auto test_sink = stdout_log_sink{};
+            static auto test_log = logger{&test_sink};
+
             auto ctx_desc = rhi::context_desc{};
             ctx_desc.application_name = "Tempest UI Context Test";
             ctx_desc.api = rhi::graphics_api::vulkan;
 
-            auto result = rhi::vk::create_context(ctx_desc);
+            auto result = rhi::vk::create_context(ctx_desc, test_log);
             if (!result.has_value())
             {
                 return {};
@@ -102,16 +106,16 @@ namespace tempest::editor::tests
             if (ImGui::Begin("Test Window"))
             {
                 ImGui::Text("Hello Tempest Editor");
-                auto s = ui::scalar("Scalar", 42.0f);
-                EXPECT_EQ(s, 42.0f);
-                auto f3 = ui::float3("Float3", math::float3(1.0f, 2.0f, 3.0f));
-                EXPECT_EQ(f3.x, 1.0f);
-                auto c3 = ui::color3("Color3", math::float3(0.5f, 0.5f, 0.5f));
-                EXPECT_EQ(c3.x, 0.5f);
+                auto s = ui::scalar("Scalar", 42.0F);
+                EXPECT_EQ(s, 42.0F);
+                auto f3 = ui::float3("Float3", math::float3(1.0F, 2.0F, 3.0F));
+                EXPECT_EQ(f3.x, 1.0F);
+                auto c3 = ui::color3("Color3", math::float3(0.5F, 0.5F, 0.5F));
+                EXPECT_EQ(c3.x, 0.5F);
                 auto di = ui::drag_integral("Integral", 10, 0, 100);
                 EXPECT_EQ(di, 10);
-                auto ds = ui::drag_scalar("DragScalar", 5.0f, 0.0f, 10.0f);
-                EXPECT_EQ(ds, 5.0f);
+                auto ds = ui::drag_scalar("DragScalar", 5.0F, 0.0F, 10.0F);
+                EXPECT_EQ(ds, 5.0F);
                 ui::centered_button("Button");
             }
             ImGui::End();
@@ -136,7 +140,7 @@ namespace tempest::editor::tests
                 .view = view,
                 .load_op = rhi::load_op::clear,
                 .store_op = rhi::store_op::store,
-                .clear_value = rhi::clear_color_value{0.0F, 0.0F, 0.0F, 1.0F},
+                .clear_value = rhi::clear_color_value{.r=0.0F, .g=0.0F, .b=0.0F, .a=1.0F},
             };
 
             auto& graphics_port = env.dev->get_graphics_execution_port();

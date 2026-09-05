@@ -25,7 +25,7 @@ scoped.project('rhi-vk', function()
     end)
 
     uses {
-        'vk-bootstrap',
+        'logger',
         'vulkan',
     }
 
@@ -51,8 +51,8 @@ scoped.project('rhi-vk', function()
 
     scoped.usage("PUBLIC", function()
         uses {
+            'logger:includedirs',
             'rhi-api',
-            'vk-bootstrap',
             'vma',
         }
     end)

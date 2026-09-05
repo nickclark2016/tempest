@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <tempest/array.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
 #include <tempest/vk/context.hpp>
@@ -37,11 +38,14 @@ namespace tempest::rhi::vk
 
         auto create_test_env() -> test_env
         {
+            static auto test_sink = stdout_log_sink{};
+            static auto test_log = logger{test_sink};
+
             auto ctx_desc = context_desc{};
             ctx_desc.application_name = "Tempest Pipeline Test";
             ctx_desc.api = graphics_api::vulkan;
 
-            auto result = vk::create_context(ctx_desc);
+            auto result = vk::create_context(ctx_desc, test_log);
             if (!result.has_value())
             {
                 return {};
@@ -76,6 +80,8 @@ namespace tempest::rhi::vk
             float a;
         };
     } // namespace
+
+    // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
     TEST(pipeline_test, compute_pipeline_bda_execution)
     {
@@ -225,7 +231,7 @@ namespace tempest::rhi::vk
         for (size_t i = 0; i < element_count; ++i)
         {
             auto in_val = static_cast<uint32_t>(i + 2);
-            EXPECT_EQ(readback_ptr[i], in_val * in_val + 1);
+            EXPECT_EQ(readback_ptr[i], (in_val * in_val) + 1);
         }
 
         // Cleanup
@@ -245,7 +251,7 @@ namespace tempest::rhi::vk
 
         constexpr uint32_t width = 64;
         constexpr uint32_t height = 64;
-        constexpr size_t buffer_byte_size = width * height * 4;
+        constexpr size_t buffer_byte_size = static_cast<size_t>(width) * height * 4;
 
         // Create target texture
         auto tex_desc = texture_desc{
@@ -337,23 +343,23 @@ namespace tempest::rhi::vk
             .store_op = store_op::store,
             .clear_value =
                 clear_color_value{
-                    .r = 0.2f,
-                    .g = 0.2f,
-                    .b = 0.2f,
-                    .a = 1.0f,
+                    .r = 0.2F,
+                    .g = 0.2F,
+                    .b = 0.2F,
+                    .a = 1.0F,
                 },
         };
 
         cmd.begin_render_pass(span<const color_attachment>{&color_att, 1}, nullopt, width, height);
-        cmd.set_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
+        cmd.set_viewport(0.0F, 0.0F, static_cast<float>(width), static_cast<float>(height), 0.0F, 1.0F);
         cmd.set_scissor(0, 0, width, height);
         cmd.bind_pipeline(pipe);
 
         auto tint = raster_push_constants{
-            .r = 1.0f,
-            .g = 1.0f,
-            .b = 1.0f,
-            .a = 1.0f,
+            .r = 1.0F,
+            .g = 1.0F,
+            .b = 1.0F,
+            .a = 1.0F,
         };
         cmd.push_constants(shader_stage::vertex, 0,
                            span<const byte>{reinterpret_cast<const byte*>(&tint), sizeof(tint)});
@@ -410,8 +416,8 @@ namespace tempest::rhi::vk
         dev->wait_for_sync(host_sync_point{.semaphore = timeline_sem, .value = 1});
 
         // Verify pixel data (center pixel around 32, 32 should have drawn triangle colors)
-        auto* pixels = static_cast<const uint8_t*>(readback_buffer.cpu_address);
-        size_t center_idx = (32 * width + 32) * 4;
+        const auto* pixels = static_cast<const uint8_t*>(readback_buffer.cpu_address);
+        size_t center_idx = static_cast<size_t>((32 * width) + 32) * 4;
         // Non-zero rendered color in the triangle interior
         EXPECT_GT(pixels[center_idx + 0] + pixels[center_idx + 1] + pixels[center_idx + 2], 0);
 
@@ -443,4 +449,6 @@ namespace tempest::rhi::vk
             dev->destroy_compute_pipeline(pipe);
         }
     }
+
+    // NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 } // namespace tempest::rhi::vk

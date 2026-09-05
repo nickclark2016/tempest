@@ -4,7 +4,7 @@
 #include <tempest/api.hpp>
 #include <tempest/int.hpp>
 
-#include <VkBootstrapDispatch.h>
+#include <tempest/vk/bootstrap.hpp>
 #include <vulkan/vulkan_core.h>
 
 namespace tempest::rhi::vk
@@ -14,10 +14,11 @@ namespace tempest::rhi::vk
       public:
         timeline_calibrator() = delete;
         explicit timeline_calibrator(float timestamp_period_ns) noexcept;
-        timeline_calibrator(float timestamp_period_ns, const vkb::DispatchTable& dispatch, VkDevice device) noexcept;
+        timeline_calibrator(float timestamp_period_ns, const dispatch_table& dispatch, VkDevice device) noexcept;
 
-        auto calibrate(const vkb::DispatchTable& dispatch, VkDevice device) noexcept -> bool;
+        auto calibrate(const dispatch_table& dispatch, VkDevice device) noexcept -> bool;
 
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
         auto calibrate_fallback(uint64_t cpu_bracket_start_ns, uint64_t cpu_bracket_end_ns, uint64_t gpu_ticks) noexcept
             -> void;
 
