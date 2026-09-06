@@ -1,7 +1,7 @@
 #include <tempest/frame_graph.hpp>
 
 #include <cstring>
-#include <random>
+#include <tempest/random.hpp>
 
 #include <tempest/archetype.hpp>
 #include <tempest/array.hpp>
@@ -836,9 +836,9 @@ namespace tempest::graphics
 
         // Populate the noise image and kernel
 
-        auto rd = std::random_device{};
-        auto generator = std::mt19937{rd()};
-        auto distribution = std::uniform_real_distribution{0.0f, 1.0f};
+        auto rd = random_device{};
+        auto generator = pcg32{rd()};
+        auto distribution = uniform_real_distribution{0.0f, 1.0f};
 
         auto noise_data = vector<short>(2 * noise_image_width * noise_image_height);
 

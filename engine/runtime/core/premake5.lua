@@ -54,6 +54,9 @@ scoped.project('core', function()
             defines {
                 'TEMPEST_WIN_THREADS',
             }
+            links {
+                'bcrypt',
+            }
         end)
 
         scoped.filter({
@@ -90,6 +93,14 @@ scoped.project('core', function()
             'tlsf',
             'yyjson',
         }
+
+        scoped.filter({
+            'system:windows'
+        }, function()
+            links {
+                'bcrypt',
+            }
+        end)
     end)
 end)
 

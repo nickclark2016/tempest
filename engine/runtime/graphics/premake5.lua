@@ -32,7 +32,6 @@ scoped.project('graphics', function()
             'core',
             'ecs',
             'logger',
-            'math',
             'rhi-api',
         }
 
