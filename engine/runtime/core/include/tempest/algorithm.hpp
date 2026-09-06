@@ -2,6 +2,7 @@
 #define tempest_core_algorithm_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/comparators.hpp>
 #include <tempest/compare.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/iterator.hpp>
@@ -14,10 +15,10 @@ namespace tempest
     struct loop_unroller
     {
         template <typename Fn>
-        static constexpr void evaluate(Fn f)
+        static constexpr void evaluate(Fn func)
         {
-            f(StartIdx);
-            loop_unroller<IdxType, StartIdx + StepSize, EndIdx, StepSize>::evaluate(f);
+            func(StartIdx);
+            loop_unroller<IdxType, StartIdx + StepSize, EndIdx, StepSize>::evaluate(func);
         }
     };
 
@@ -25,7 +26,7 @@ namespace tempest
     struct loop_unroller<IdxType, StartIdx, EndIdx, StepSize, false>
     {
         template <typename Fn>
-        static constexpr void evaluate([[maybe_unused]] Fn f)
+        static constexpr void evaluate([[maybe_unused]] Fn func)
         {
             // no op
             // loop does not continue, as loop function evaluated to false
@@ -33,26 +34,44 @@ namespace tempest
     };
 
     template <auto Start, auto End, auto StepSize, typename Fn>
-    constexpr void unroll_loop(Fn f)
+    constexpr void unroll_loop(Fn func)
     {
         static_assert(is_convertible_v<decltype(End), decltype(Start)>, "End cannot be converted to type of Start.");
         static_assert(is_convertible_v<decltype(StepSize), decltype(Start)>,
                       "StepSize cannot be converted to type of Start.");
         loop_unroller<decltype(Start), Start, static_cast<decltype(Start)>(End),
-                      static_cast<decltype(Start)>(StepSize)>::evaluate(f);
+                      static_cast<decltype(Start)>(StepSize)>::evaluate(func);
     }
 
+    // NOLINTBEGIN(bugprone-return-const-ref-from-parameter)
     template <typename T>
-    [[nodiscard]] constexpr auto clamp(const T& v, const T& lo, const T& hi) noexcept -> const T&
+    [[nodiscard]] constexpr auto clamp(const T& val, const T& low, const T& high) noexcept -> const T&
     {
-        return (v < lo) ? lo : (hi < v) ? hi : v;
+        if (val < low)
+        {
+            return low;
+        }
+        if (high < val)
+        {
+            return high;
+        }
+        return val;
     }
 
     template <typename T, typename Compare>
-    [[nodiscard]] constexpr auto clamp(const T& v, const T& lo, const T& hi, Compare comp) -> const T&
+    [[nodiscard]] constexpr auto clamp(const T& val, const T& low, const T& high, Compare comp) -> const T&
     {
-        return comp(v, lo) ? lo : comp(hi, v) ? hi : v;
+        if (comp(val, low))
+        {
+            return low;
+        }
+        if (comp(high, val))
+        {
+            return high;
+        }
+        return val;
     }
+    // NOLINTEND(bugprone-return-const-ref-from-parameter)
 
     [[nodiscard]] constexpr auto fast_mod(const integral auto value, const integral auto mod) noexcept -> integral auto
     {
@@ -60,27 +79,27 @@ namespace tempest
     }
 
     template <integral T>
-    [[nodiscard]] constexpr auto is_bit_set(T n, T k) noexcept -> bool
+    [[nodiscard]] constexpr auto is_bit_set(T number, T bit_index) noexcept -> bool
     {
-        return (n >> k) & static_cast<T>(1);
+        return (number >> bit_index) & static_cast<T>(1);
     }
 
     template <integral T>
-    [[nodiscard]] constexpr auto set_bit(T n, T k) noexcept -> T
+    [[nodiscard]] constexpr auto set_bit(T number, T bit_index) noexcept -> T
     {
-        return n | (static_cast<T>(1) << k);
+        return number | (static_cast<T>(1) << bit_index);
     }
 
     template <integral T>
-    [[nodiscard]] constexpr auto clear_bit(T n, T k) noexcept -> T
+    [[nodiscard]] constexpr auto clear_bit(T number, T bit_index) noexcept -> T
     {
-        return n & ~(static_cast<T>(1) << k);
+        return number & ~(static_cast<T>(1) << bit_index);
     }
 
     template <integral T>
-    [[nodiscard]] constexpr auto toggle_bit(T n, T k) noexcept -> T
+    [[nodiscard]] constexpr auto toggle_bit(T number, T bit_index) noexcept -> T
     {
-        return n ^ (static_cast<T>(1) << k);
+        return number ^ (static_cast<T>(1) << bit_index);
     }
 
     template <typename Iter, typename T>
@@ -286,29 +305,31 @@ namespace tempest
         return max_it;
     }
 
+    // NOLINTBEGIN(bugprone-return-const-ref-from-parameter)
     template <typename T>
-    constexpr auto min(const T& a, const T& b) -> const T&
+    constexpr auto min(const T& lhs, const T& rhs) -> const T&
     {
-        return (a < b) ? a : b;
+        return (lhs < rhs) ? lhs : rhs;
     }
 
     template <typename T, typename Compare>
-    constexpr auto min(const T& a, const T& b, Compare comp) -> const T&
+    constexpr auto min(const T& lhs, const T& rhs, Compare comp) -> const T&
     {
-        return comp(a, b) ? a : b;
+        return comp(lhs, rhs) ? lhs : rhs;
     }
 
     template <typename T>
-    constexpr auto max(const T& a, const T& b) -> const T&
+    constexpr auto max(const T& lhs, const T& rhs) -> const T&
     {
-        return (a > b) ? a : b;
+        return (lhs > rhs) ? lhs : rhs;
     }
 
     template <typename T, typename Compare>
-    constexpr auto max(const T& a, const T& b, Compare comp) -> const T&
+    constexpr auto max(const T& lhs, const T& rhs, Compare comp) -> const T&
     {
-        return comp(a, b) ? b : a;
+        return comp(lhs, rhs) ? rhs : lhs;
     }
+    // NOLINTEND(bugprone-return-const-ref-from-parameter)
 
     template <forward_iterator It>
     [[nodiscard]] constexpr auto minmax_element(It first, It last) -> pair<It, It>
@@ -374,13 +395,13 @@ namespace tempest
 
         while (count > 0)
         {
-            It it = first;
+            It current_it = first;
             auto step = count / 2;
-            tempest::advance(it, step);
+            tempest::advance(current_it, step);
 
-            if (*it < value)
+            if (*current_it < value)
             {
-                first = ++it;
+                first = ++current_it;
                 count -= step + 1;
             }
             else
@@ -400,13 +421,13 @@ namespace tempest
 
         while (count > 0)
         {
-            It it = first;
+            It current_it = first;
             auto step = count / 2;
-            tempest::advance(it, step);
+            tempest::advance(current_it, step);
 
-            if (comp(*it, value))
+            if (comp(*current_it, value))
             {
-                first = ++it;
+                first = ++current_it;
                 count -= step + 1;
             }
             else
@@ -426,13 +447,13 @@ namespace tempest
 
         while (count > 0)
         {
-            It it = first;
+            It current_it = first;
             auto step = count / 2;
-            tempest::advance(it, step);
+            tempest::advance(current_it, step);
 
-            if (!(value < *it))
+            if (!(value < *current_it))
             {
-                first = ++it;
+                first = ++current_it;
                 count -= step + 1;
             }
             else
@@ -452,13 +473,13 @@ namespace tempest
 
         while (count > 0)
         {
-            It it = first;
+            It current_it = first;
             auto step = count / 2;
-            tempest::advance(it, step);
+            tempest::advance(current_it, step);
 
-            if (!comp(value, *it))
+            if (!comp(value, *current_it))
             {
-                first = ++it;
+                first = ++current_it;
                 count -= step + 1;
             }
             else
@@ -511,19 +532,25 @@ namespace tempest
 
         while (!exhausted1 && !exhausted2)
         {
-            auto c = comp(*first1, *first2);
-            if (c != 0)
+            auto cmp_result = comp(*first1, *first2);
+            if (cmp_result != 0)
             {
-                return c;
+                return cmp_result;
             }
 
             exhausted1 = (++first1 == last1);
             exhausted2 = (++first2 == last2);
         }
 
-        return !exhausted1   ? tempest::strong_ordering::greater
-               : !exhausted2 ? tempest::strong_ordering::less
-                             : tempest::strong_ordering::equal;
+        if (!exhausted1)
+        {
+            return tempest::strong_ordering::greater;
+        }
+        if (!exhausted2)
+        {
+            return tempest::strong_ordering::less;
+        }
+        return tempest::strong_ordering::equal;
     }
 
     template <iterator It1, iterator It2>
@@ -571,17 +598,19 @@ namespace tempest
         return first;
     }
 
+    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
     template <forward_iterator It, typename T>
-    constexpr void replace(It first, It last, const T& old, const T& new_value)
+    constexpr void replace(It first, It last, const T& old_value, const T& new_value)
     {
         for (; first != last; ++first)
         {
-            if (*first == old)
+            if (*first == old_value)
             {
                 *first = new_value;
             }
         }
     }
+    // NOLINTEND(bugprone-easily-swappable-parameters)
 
     template <forward_iterator It, typename Compare, typename T>
     constexpr void replace_if(It first, It last, Compare comp, const T& new_value)
@@ -596,21 +625,21 @@ namespace tempest
     }
 
     template <input_iterator InputIt, typename UnaryPred>
-    constexpr auto all_of(InputIt begin, InputIt end, UnaryPred p) -> bool
+    constexpr auto all_of(InputIt begin, InputIt end, UnaryPred predicate) -> bool
     {
-        return find_if_not(begin, end, p) == end;
+        return find_if_not(begin, end, predicate) == end;
     }
 
     template <input_iterator InputIt, typename UnaryPred>
-    constexpr auto any_of(InputIt begin, InputIt end, UnaryPred p) -> bool
+    constexpr auto any_of(InputIt begin, InputIt end, UnaryPred predicate) -> bool
     {
-        return find_if(begin, end, p) != end;
+        return find_if(begin, end, predicate) != end;
     }
 
     template <input_iterator InputIt, typename UnaryPred>
-    constexpr auto none_of(InputIt begin, InputIt end, UnaryPred p) -> bool
+    constexpr auto none_of(InputIt begin, InputIt end, UnaryPred predicate) -> bool
     {
-        return find_if(begin, end, p) == end;
+        return find_if(begin, end, predicate) == end;
     }
 
     namespace detail
@@ -623,16 +652,19 @@ namespace tempest
                 return;
             }
 
-            for (auto i = first + 1; i != last; ++i)
+            for (auto iter = first + 1; iter != last; ++iter)
             {
-                auto val = tempest::move(*i);
-                auto j = i;
-                while (j != first && comp(val, *(j - 1)))
+                if (comp(*iter, *(iter - 1)))
                 {
-                    *j = tempest::move(*(j - 1));
-                    --j;
+                    auto val = tempest::move(*iter);
+                    auto current = iter;
+                    do
+                    {
+                        *current = tempest::move(*(current - 1));
+                        --current;
+                    } while (current != first && comp(val, *(current - 1)));
+                    *current = tempest::move(val);
                 }
-                *j = tempest::move(val);
             }
         }
 
@@ -640,6 +672,7 @@ namespace tempest
         constexpr void sift_down(RandomIt first, iter_difference_t<RandomIt> root, iter_difference_t<RandomIt> len,
                                  Compare comp)
         {
+            auto val = tempest::move(*(first + root));
             while (2 * root + 1 < len)
             {
                 auto child = 2 * root + 1;
@@ -647,16 +680,17 @@ namespace tempest
                 {
                     ++child;
                 }
-                if (comp(*(first + root), *(first + child)))
+                if (comp(val, *(first + child)))
                 {
-                    tempest::swap(*(first + root), *(first + child));
+                    *(first + root) = tempest::move(*(first + child));
                     root = child;
                 }
                 else
                 {
-                    return;
+                    break;
                 }
             }
+            *(first + root) = tempest::move(val);
         }
 
         template <random_access_iterator RandomIt, typename Compare>
@@ -669,45 +703,46 @@ namespace tempest
                 return;
             }
 
-            for (diff_t i = (len - 2) / 2; i >= 0; --i)
+            for (diff_t parent_idx = (len - 2) / 2; parent_idx >= 0; --parent_idx)
             {
-                sift_down(first, i, len, comp);
-                if (i == 0)
+                sift_down(first, parent_idx, len, comp);
+                if (parent_idx == 0)
                 {
                     break;
                 }
             }
 
-            for (diff_t i = len - 1; i > 0; --i)
+            for (diff_t end_idx = len - 1; end_idx > 0; --end_idx)
             {
-                tempest::swap(*first, *(first + i));
-                sift_down(first, diff_t{0}, i, comp);
+                tempest::swap(*first, *(first + end_idx));
+                sift_down(first, diff_t{0}, end_idx, comp);
             }
         }
 
         template <random_access_iterator RandomIt, typename Compare>
-        constexpr auto median_of_three(RandomIt a, RandomIt b, RandomIt c, Compare comp) -> RandomIt
+        constexpr auto median_of_three(RandomIt first_it, RandomIt mid_it, RandomIt last_it, Compare comp) -> RandomIt
         {
-            if (comp(*a, *b))
+            if (comp(*first_it, *mid_it))
             {
-                if (comp(*b, *c))
+                if (comp(*mid_it, *last_it))
                 {
-                    return b;
+                    return mid_it;
                 }
-                return comp(*a, *c) ? c : a;
+                return comp(*first_it, *last_it) ? last_it : first_it;
             }
-            if (comp(*a, *c))
+            if (comp(*first_it, *last_it))
             {
-                return a;
+                return first_it;
             }
-            return comp(*b, *c) ? c : b;
+            return comp(*mid_it, *last_it) ? last_it : mid_it;
         }
 
         template <random_access_iterator RandomIt, typename Compare>
         constexpr void introsort_loop(RandomIt first, RandomIt last, iter_difference_t<RandomIt> depth_limit,
                                       Compare comp)
         {
-            while (last - first > 16)
+            constexpr iter_difference_t<RandomIt> insertion_sort_threshold = 16;
+            while (last - first > insertion_sort_threshold)
             {
                 if (depth_limit == 0)
                 {
@@ -720,38 +755,40 @@ namespace tempest
                 auto pivot_it = median_of_three(first, mid, last - 1, comp);
                 tempest::swap(*pivot_it, *(last - 1));
 
-                auto i = first;
-                auto j = last - 2;
+                const auto& pivot = *(last - 1);
+
+                auto left_it = first;
+                auto right_it = last - 2;
 
                 while (true)
                 {
-                    while (i <= j && comp(*i, *(last - 1)))
+                    while (left_it <= right_it && comp(*left_it, pivot))
                     {
-                        ++i;
+                        ++left_it;
                     }
-                    while (i <= j && comp(*(last - 1), *j))
+                    while (left_it <= right_it && comp(pivot, *right_it))
                     {
-                        --j;
+                        --right_it;
                     }
-                    if (i >= j)
+                    if (left_it >= right_it)
                     {
                         break;
                     }
-                    tempest::swap(*i, *j);
-                    ++i;
-                    --j;
+                    tempest::swap(*left_it, *right_it);
+                    ++left_it;
+                    --right_it;
                 }
-                tempest::swap(*i, *(last - 1));
+                tempest::swap(*left_it, *(last - 1));
 
-                if (i - first < last - (i + 1))
+                if (left_it - first < last - (left_it + 1))
                 {
-                    introsort_loop(first, i, depth_limit, comp);
-                    first = i + 1;
+                    introsort_loop(first, left_it, depth_limit, comp);
+                    first = left_it + 1;
                 }
                 else
                 {
-                    introsort_loop(i + 1, last, depth_limit, comp);
-                    last = i;
+                    introsort_loop(left_it + 1, last, depth_limit, comp);
+                    last = left_it;
                 }
             }
             insertion_sort(first, last, comp);
@@ -775,7 +812,7 @@ namespace tempest
 
         using diff_t = iter_difference_t<RandomIt>;
         auto depth_limit = diff_t{0};
-        for (auto temp = count; temp > 0; temp >>= 1)
+        for (auto temp = count >> 1; temp > 0; temp >>= 1)
         {
             ++depth_limit;
         }
@@ -791,7 +828,7 @@ namespace tempest
     template <random_access_iterator RandomIt>
     constexpr void sort(RandomIt first, RandomIt last)
     {
-        tempest::sort(first, last, [](const auto& lhs, const auto& rhs) { return lhs < rhs; });
+        tempest::sort(first, last, tempest::less<>{});
     }
 } // namespace tempest
 

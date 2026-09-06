@@ -2,6 +2,7 @@
 #define tempest_core_functional_hpp
 
 #include <tempest/api.hpp>
+#include <tempest/comparators.hpp>
 #include <tempest/invoke.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/meta.hpp>
@@ -613,96 +614,6 @@ namespace tempest
     inline bool operator!=(nullptr_t, const function<R(Args...)>& rhs) noexcept
     {
         return static_cast<bool>(rhs);
-    }
-
-    template <typename T = void>
-    struct equal_to;
-
-    template <typename T = void>
-    struct not_equal_to;
-
-    template <typename T = void>
-    struct greater;
-
-    template <typename T = void>
-    struct less;
-
-    template <typename T = void>
-    struct greater_equal;
-
-    template <typename T = void>
-    struct less_equal;
-
-    template <typename T>
-    struct equal_to
-    {
-        constexpr bool operator()(const T& lhs, const T& rhs) const;
-    };
-
-    template <typename T>
-    struct not_equal_to
-    {
-        constexpr bool operator()(const T& lhs, const T& rhs) const;
-    };
-
-    template <typename T>
-    struct greater
-    {
-        constexpr bool operator()(const T& lhs, const T& rhs) const;
-    };
-
-    template <typename T>
-    struct less
-    {
-        constexpr bool operator()(const T& lhs, const T& rhs) const;
-    };
-
-    template <typename T>
-    struct greater_equal
-    {
-        constexpr bool operator()(const T& lhs, const T& rhs) const;
-    };
-
-    template <typename T>
-    struct less_equal
-    {
-        constexpr bool operator()(const T& lhs, const T& rhs) const;
-    };
-
-    template <typename T>
-    inline constexpr bool equal_to<T>::operator()(const T& lhs, const T& rhs) const
-    {
-        return lhs == rhs;
-    }
-
-    template <typename T>
-    inline constexpr bool not_equal_to<T>::operator()(const T& lhs, const T& rhs) const
-    {
-        return lhs != rhs;
-    }
-
-    template <typename T>
-    inline constexpr bool greater<T>::operator()(const T& lhs, const T& rhs) const
-    {
-        return lhs > rhs;
-    }
-
-    template <typename T>
-    inline constexpr bool less<T>::operator()(const T& lhs, const T& rhs) const
-    {
-        return lhs < rhs;
-    }
-
-    template <typename T>
-    inline constexpr bool greater_equal<T>::operator()(const T& lhs, const T& rhs) const
-    {
-        return lhs >= rhs;
-    }
-
-    template <typename T>
-    inline constexpr bool less_equal<T>::operator()(const T& lhs, const T& rhs) const
-    {
-        return lhs <= rhs;
     }
 
     template <typename T = void>
