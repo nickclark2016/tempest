@@ -15,7 +15,7 @@
 #include <VkBootstrap.h>
 #include <vk_mem_alloc.h>
 
-#include <queue>
+#include <tempest/queue.hpp>
 #include <vulkan/vulkan_core.h>
 
 #if TEMPEST_ENABLE_AFTERMATH
@@ -332,7 +332,7 @@ namespace tempest::rhi::vk
         void release_resource(delete_resource res);
         void destroy();
 
-        std::queue<delete_resource> dq{};
+        queue<delete_resource> dq{};
     };
 
     struct TEMPEST_API descriptor_set

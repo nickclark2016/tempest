@@ -30,14 +30,14 @@ namespace tempest::graphics
 {
     namespace
     {
-        auto calculate_view_matrix(const ecs::transform_component& tx)
+        auto calculate_view_matrix(const ecs::transform_component& transform)
         {
-            const auto position = tx.position();
-            const auto rotation = math::fquat(tx.rotation());
+            const auto position = transform.position();
+            const auto rotation = math::fquat(transform.rotation());
             const auto forward = math::extract_forward(rotation);
-            const auto up = math::float3(0, 1, 0);
+            const auto up_vector = math::float3(0, 1, 0);
 
-            return math::look_at(position, position + forward, up);
+            return math::look_at(position, position + forward, up_vector);
         }
     } // namespace
 
@@ -116,8 +116,8 @@ namespace tempest::graphics
         _executor->execute();
     }
 
-    void pbr_frame_graph::upload_objects_sync(span<const ecs::entity> entities,
-                                              const core::mesh_registry& meshes, const core::texture_registry& textures,
+    void pbr_frame_graph::upload_objects_sync(span<const ecs::entity> entities, const core::mesh_registry& meshes,
+                                              const core::texture_registry& textures,
                                               const core::material_registry& materials)
     {
         // Wait for the device to idle for synchronous upload
@@ -716,27 +716,25 @@ namespace tempest::graphics
         // 1: RW Hi-Z Map
         // 2: Linear Sampler
 
-        auto hiz_descriptor_set_bindings = vector(
-            tempest::init_list,
-            rhi::descriptor_binding_layout{
-                .binding_index = 0,
-                .type = rhi::descriptor_type::sampled_image,
-                .count = 1,
-                .stages = make_enum_mask(rhi::shader_stage::compute),
-            },
-            rhi::descriptor_binding_layout{
-                .binding_index = 1,
-                .type = rhi::descriptor_type::sampler,
-                .count = 1,
-                .stages = make_enum_mask(rhi::shader_stage::compute),
-            },
-            rhi::descriptor_binding_layout{
-                .binding_index = 2,
-                .type = rhi::descriptor_type::storage_image,
-                .count = 6,
-                .stages = make_enum_mask(rhi::shader_stage::compute),
-            }
-        );
+        auto hiz_descriptor_set_bindings = vector(tempest::init_list,
+                                                  rhi::descriptor_binding_layout{
+                                                      .binding_index = 0,
+                                                      .type = rhi::descriptor_type::sampled_image,
+                                                      .count = 1,
+                                                      .stages = make_enum_mask(rhi::shader_stage::compute),
+                                                  },
+                                                  rhi::descriptor_binding_layout{
+                                                      .binding_index = 1,
+                                                      .type = rhi::descriptor_type::sampler,
+                                                      .count = 1,
+                                                      .stages = make_enum_mask(rhi::shader_stage::compute),
+                                                  },
+                                                  rhi::descriptor_binding_layout{
+                                                      .binding_index = 2,
+                                                      .type = rhi::descriptor_type::storage_image,
+                                                      .count = 6,
+                                                      .stages = make_enum_mask(rhi::shader_stage::compute),
+                                                  });
 
         // Push Constants
         // 0: [0, sizeof(hi_z_constants)] - Hi-Z Constants
@@ -3208,7 +3206,8 @@ namespace tempest::graphics
                 .inv_proj = active_cam->inv_proj,
                 .view = active_cam->view,
                 .inv_view = active_cam->inv_view,
-                .position = math::vec3<float>{active_cam->eye_position.x, active_cam->eye_position.y, active_cam->eye_position.z},
+                .position = math::vec3<float>{active_cam->eye_position.x, active_cam->eye_position.y,
+                                              active_cam->eye_position.z},
             };
         }
         scene_constants_data.ambient_light_color = math::vec3<float>(253, 242, 200) / 255.0f * 0.15F;
@@ -4046,7 +4045,9 @@ namespace tempest::graphics
         auto staging_buffer_bytes = self->_device->map_buffer(
             self->_executor->get_buffer(self->_global_resources.graph_per_frame_staging_buffer));
 
-        auto camera = self->_inputs.camera_sys ? self->_inputs.camera_sys->get_active_camera_entity().value_or(ecs::entity{ecs::tombstone}) : ecs::entity{ecs::tombstone};
+        auto camera = self->_inputs.camera_sys
+                          ? self->_inputs.camera_sys->get_active_camera_entity().value_or(ecs::entity{ecs::tombstone})
+                          : ecs::entity{ecs::tombstone};
         const auto* const camera_data = self->_inputs.entity_registry->try_get<camera_component>(camera);
         const auto* const camera_transform = self->_inputs.entity_registry->try_get<ecs::transform_component>(camera);
 
@@ -5484,7 +5485,7 @@ namespace tempest::graphics
 
     namespace
     {
-        rhi::image_format convert_format(core::texture_format fmt)
+        auto convert_format(core::texture_format fmt) -> rhi::image_format
         {
             switch (fmt)
             {
@@ -5881,8 +5882,9 @@ namespace tempest::graphics
 
     namespace
     {
-        array<math::float3, 8> compute_frustum_corners_ws(const math::float4x4& inv_view_proj, float last_split_dist,
-                                                          float split_dist)
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+        auto compute_frustum_corners_ws(const math::float4x4& inv_view_proj, float last_split_dist, float split_dist)
+            -> array<math::float3, 8>
         {
             auto result = array<math::float3, 8>{
                 math::float3(-1.0f, 1.0f, 0.0f),  math::float3(1.0f, 1.0f, 0.0f),   math::float3(1.0f, -1.0f, 0.0f),
@@ -5897,7 +5899,7 @@ namespace tempest::graphics
                 corner = math::float3(corner_ws_h.x, corner_ws_h.y, corner_ws_h.z) / corner_ws_h.w;
             }
 
-            for (auto idx = 0u; idx < 4; ++idx)
+            for (auto idx = 0U; idx < 4; ++idx)
             {
                 const auto dist = result[idx + 4] - result[idx];
                 result[idx + 4] = result[idx] + dist * split_dist;
@@ -5907,23 +5909,28 @@ namespace tempest::graphics
             return result;
         }
 
-        math::mat4<float> ortho_reversed_z(float left, float right, float bottom, float top, float z_near, float z_far)
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+        auto ortho_reversed_z(float left, float right, float bottom, float top, float z_near, float z_far)
+            -> math::mat4<float>
         {
-            const auto sx = 2.0f / (right - left);
-            const auto sy = 2.0f / (top - bottom);
-            const auto sz = -1.0f / (z_far - z_near); // Reverses depth direction
+            // NOLINTBEGIN(readability-identifier-length)
+            const auto sx = 2.0F / (right - left);
+            const auto sy = 2.0F / (top - bottom);
+            const auto sz = -1.0F / (z_far - z_near); // Reverses depth direction
 
             const auto tx = -(right + left) / (right - left);
             const auto ty = -(top + bottom) / (top - bottom);
             const auto tz = z_far / (z_far - z_near); // Maps near to 1.0, far to 0.0
+            // NOLINTEND(readability-identifier-length)
 
             return math::mat4<float>{sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, tx, ty, tz, 1};
         }
 
-        float snap_to_grid(float value, float grid_size)
+        auto snap_to_grid(float value, float grid_size) -> float
         {
             // Add 0.5f to ensure proper rounding dealing with pixel centers
-            return std::floor(value / grid_size + 0.5f) * grid_size;
+            // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+            return std::floor((value / grid_size) + 0.5F) * grid_size;
         }
     } // namespace
 
