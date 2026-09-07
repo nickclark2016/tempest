@@ -28,7 +28,7 @@ namespace tempest::editor::tests
         auto create_test_env() -> test_env
         {
             static auto test_sink = stdout_log_sink{};
-            static auto test_log = logger{&test_sink};
+            static auto test_log = logger{test_sink};
 
             auto ctx_desc = rhi::context_desc{};
             ctx_desc.application_name = "Tempest UI Context Test";

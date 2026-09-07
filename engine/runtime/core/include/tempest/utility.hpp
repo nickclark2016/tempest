@@ -19,8 +19,8 @@ namespace tempest
     struct tuple_element;
 
     template <typename T>
-    constexpr auto
-    move_if_noexcept(T& t) noexcept -> conditional_t<is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>, T&&, const T&>
+    constexpr auto move_if_noexcept(T& t) noexcept
+        -> conditional_t<is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>, T&&, const T&>
     {
         if constexpr (is_nothrow_move_constructible_v<T> || !is_copy_constructible_v<T>)
         {
@@ -38,8 +38,7 @@ namespace tempest
     /// @param b Second object to swap.
     template <typename T>
         requires(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
-    constexpr void swap(T& a,
-                               T& b) noexcept(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
+    constexpr void swap(T& a, T& b) noexcept(is_nothrow_move_constructible_v<T> && is_nothrow_move_assignable_v<T>)
     {
         T temp = move(a);
         a = move(b);
@@ -206,8 +205,7 @@ namespace tempest
     }
 
     template <typename T1, typename T2>
-    constexpr void pair<T1, T2>::swap(pair& other) noexcept(is_nothrow_swappable_v<T1> &&
-                                                                   is_nothrow_swappable_v<T2>)
+    constexpr void pair<T1, T2>::swap(pair& other) noexcept(is_nothrow_swappable_v<T1> && is_nothrow_swappable_v<T2>)
     {
         swap(first, other.first);
         swap(second, other.second);
@@ -518,5 +516,74 @@ namespace tempest
     };
 
     inline constexpr init_list_t init_list{};
+
+    // Safe integer comparisons
+    template <integral T, integral U>
+    [[nodiscard]] constexpr auto cmp_equal(T lhs, U rhs) noexcept -> bool
+    {
+        using UT = make_unsigned_t<T>;
+        using UU = make_unsigned_t<U>;
+        if constexpr (is_signed_v<T> == is_signed_v<U>)
+        {
+            return lhs == rhs;
+        }
+        else if constexpr (is_signed_v<T>)
+        {
+            return lhs >= 0 && static_cast<UT>(lhs) == static_cast<UU>(rhs);
+        }
+        else
+        {
+            return rhs >= 0 && static_cast<UT>(lhs) == static_cast<UU>(rhs);
+        }
+    }
+
+    template <integral T, integral U>
+    [[nodiscard]] constexpr auto cmp_not_equal(T lhs, U rhs) noexcept -> bool
+    {
+        return !cmp_equal(lhs, rhs);
+    }
+
+    template <integral T, integral U>
+    [[nodiscard]] constexpr auto cmp_less(T lhs, U rhs) noexcept -> bool
+    {
+        using UT = make_unsigned_t<T>;
+        using UU = make_unsigned_t<U>;
+        if constexpr (is_signed_v<T> == is_signed_v<U>)
+        {
+            return lhs < rhs;
+        }
+        else if constexpr (is_signed_v<T>)
+        {
+            return lhs < 0 || static_cast<UT>(lhs) < static_cast<UU>(rhs);
+        }
+        else
+        {
+            return rhs >= 0 && static_cast<UT>(lhs) < static_cast<UU>(rhs);
+        }
+    }
+
+    template <integral T, integral U>
+    [[nodiscard]] constexpr auto cmp_greater(T lhs, U rhs) noexcept -> bool
+    {
+        return cmp_less(rhs, lhs);
+    }
+
+    template <integral T, integral U>
+    [[nodiscard]] constexpr auto cmp_less_equal(T lhs, U rhs) noexcept -> bool
+    {
+        return !cmp_greater(lhs, rhs);
+    }
+
+    template <integral T, integral U>
+    [[nodiscard]] constexpr auto cmp_greater_equal(T lhs, U rhs) noexcept -> bool
+    {
+        return !cmp_less(lhs, rhs);
+    }
+
+    template <integral R, integral T>
+    [[nodiscard]] constexpr auto in_range(T val) noexcept -> bool
+    {
+        return cmp_greater_equal(val, numeric_limits<R>::min()) && cmp_less_equal(val, numeric_limits<R>::max());
+    }
 } // namespace tempest
 #endif // tempest_core_utility_hpp
