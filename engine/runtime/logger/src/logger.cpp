@@ -1,6 +1,7 @@
 #include <tempest/logger.hpp>
 
-#include <iostream>
+#include <tempest/format.hpp>
+#include <tempest/print.hpp>
 
 namespace tempest
 {
@@ -49,10 +50,6 @@ namespace tempest
     void stdout_log_sink::do_log(log_level level, string_view message, source_location location)
     {
         const auto level_str = log_level_to_string(level);
-        std::cout << "[";
-        std::cout.write(level_str.data(), static_cast<std::streamsize>(level_str.size()));
-        std::cout << "]: ";
-        std::cout.write(message.data(), static_cast<std::streamsize>(message.size()));
 
         // In the file location, ignore leading leading dots and slashes to improve readability
         auto file_name = string_view(location.file_name());
@@ -65,7 +62,8 @@ namespace tempest
             }
         }
 
-        std::cout << " (" << file_name.data() << ":" << location.line() << ")\n";
+        auto line = format("[{}]: {} ({}:{})\n", level_str, message, file_name, location.line());
+        write_stdout(line);
     }
 
     void mt_stdout_log_sink::do_log(log_level level, string_view message, source_location location)

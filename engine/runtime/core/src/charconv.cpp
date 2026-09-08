@@ -5,6 +5,15 @@
 #include <tempest/limits.hpp>
 #include <tempest/math.hpp>
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#else
+#include <errno.h>
+#include <iconv.h>
+#include <stdio.h>
+#endif
+
 namespace tempest
 {
     namespace
@@ -543,5 +552,87 @@ namespace tempest
     auto to_chars(char* first, char* last, double value, chars_format fmt, int precision) noexcept -> to_chars_result
     {
         return detail::to_chars_f64(first, last, value, fmt, precision);
+    }
+
+    auto convert_wide_to_narrow(tempest::wstring_view wide_str) -> string
+    {
+        tempest::string result;
+
+#ifdef _WIN32
+        const auto size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_str.data(), static_cast<int>(wide_str.size()),
+                                                     nullptr, 0, nullptr, nullptr);
+        result.resize(static_cast<size_t>(size_needed), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, wide_str.data(), static_cast<int>(wide_str.size()), result.data(),
+                            static_cast<int>(size_needed), nullptr, nullptr);
+#else
+        auto conv_desc = iconv_open("UTF-8", "WCHAR_T");
+        if (conv_desc == bit_cast<iconv_t>(-1ll))
+        {
+            perror("iconv_open failed");
+            return result;
+        }
+
+        auto in_bytes = wide_str.size() * sizeof(wchar_t);
+        const auto out_bytes = in_bytes * 4 + 1;
+        result.resize(out_bytes, '\0');
+
+        char* in_buf = const_cast<char*>(reinterpret_cast<const char*>(wide_str.data()));
+        char* out_buf = result.data();
+
+        auto bytes_left = out_bytes;
+
+        const auto res = iconv(conv_desc, &in_buf, &in_bytes, &out_buf, &bytes_left);
+        if (res == static_cast<size_t>(-1))
+        {
+            perror("iconv failed");
+            iconv_close(conv_desc);
+            return string();
+        }
+
+        iconv_close(conv_desc);
+        result.resize(out_bytes - bytes_left);
+#endif
+
+        return result;
+    }
+
+    auto convert_narrow_to_wide(tempest::string_view narrow_str) -> wstring
+    {
+        wstring result;
+#ifdef _WIN32
+        const auto size_needed =
+            MultiByteToWideChar(CP_UTF8, 0, narrow_str.data(), static_cast<int>(narrow_str.size()), nullptr, 0);
+        result.resize(static_cast<size_t>(size_needed), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, narrow_str.data(), static_cast<int>(narrow_str.size()), result.data(),
+                            static_cast<int>(size_needed));
+#else
+        auto conv_desc = iconv_open("WCHAR_T", "UTF-8");
+        if (conv_desc == bit_cast<iconv_t>(-1ll))
+        {
+            perror("iconv_open failed");
+            return result;
+        }
+
+        auto in_bytes = narrow_str.size();
+        const auto out_bytes = in_bytes * sizeof(wchar_t);
+        result.resize(out_bytes / sizeof(wchar_t), L'\0');
+
+        char* in_buf = const_cast<char*>(narrow_str.data());
+        char* out_buf = reinterpret_cast<char*>(result.data());
+
+        auto bytes_left = out_bytes;
+
+        const auto res = iconv(conv_desc, &in_buf, &in_bytes, &out_buf, &bytes_left);
+        if (res == static_cast<size_t>(-1))
+        {
+            perror("iconv failed");
+            iconv_close(conv_desc);
+            return wstring();
+        }
+
+        iconv_close(conv_desc);
+        result.resize((out_bytes - bytes_left) / sizeof(wchar_t));
+#endif
+        return result;
     }
 } // namespace tempest

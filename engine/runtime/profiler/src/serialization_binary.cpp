@@ -4,8 +4,7 @@
 #include <miniz/miniz.h>
 
 #include <cstring>
-#include <fstream>
-#include <string>
+#include <tempest/files.hpp>
 
 namespace tempest::profiler
 {
@@ -406,7 +405,7 @@ namespace tempest::profiler
                 {
                     auto m_ts = uint64_t{0};
                     auto m_name_id = uint32_t{0};
-                    auto m_val = double{0.0};
+                    auto m_val = 0.0;
                     auto m_unit_raw = uint8_t{0};
 
                     if (!reader.read(m_ts) || !reader.read(m_name_id) || !reader.read(m_val) ||
@@ -501,7 +500,7 @@ namespace tempest::profiler
             {
                 auto s_ts = uint64_t{0};
                 auto s_name_id = uint32_t{0};
-                auto s_val = double{0.0};
+                auto s_val = 0.0;
                 auto s_unit_raw = uint8_t{0};
 
                 if (!reader.read(s_ts) || !reader.read(s_name_id) || !reader.read(s_val) || !reader.read(s_unit_raw))
@@ -532,14 +531,7 @@ namespace tempest::profiler
     auto save_binary_capture(const capture_session_data& data, string_view file_path) -> expected<void, capture_error>
     {
         const auto buf = serialize_binary_to_buffer(data);
-        auto file = std::ofstream(std::string(file_path.data(), file_path.size()), std::ios::binary);
-        if (!file.is_open())
-        {
-            return unexpected(capture_error::io_error);
-        }
-
-        file.write(reinterpret_cast<const char*>(buf.data()), static_cast<std::streamsize>(buf.size()));
-        if (!file.good())
+        if (!write_file_from_bytes(file_path, span<const byte>{buf.data(), buf.size()}))
         {
             return unexpected(capture_error::io_error);
         }
@@ -549,24 +541,12 @@ namespace tempest::profiler
 
     auto load_binary_capture(string_view file_path) -> expected<capture_session_data, capture_error>
     {
-        auto file = std::ifstream(std::string(file_path.data(), file_path.size()), std::ios::binary | std::ios::ate);
-        if (!file.is_open())
+        auto file_data = read_file_to_vector(file_path);
+        if (!file_data)
         {
             return unexpected(capture_error::io_error);
         }
 
-        const auto file_size = static_cast<size_t>(file.tellg());
-        file.seekg(0, std::ios::beg);
-
-        auto buf = vector<byte>{};
-        buf.resize(file_size);
-        file.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(file_size));
-
-        if (!file.good() && file_size > 0)
-        {
-            return unexpected(capture_error::io_error);
-        }
-
-        return deserialize_binary_from_buffer(span<const byte>{buf.data(), buf.size()});
+        return deserialize_binary_from_buffer(span<const byte>{file_data->data(), file_data->size()});
     }
 } // namespace tempest::profiler

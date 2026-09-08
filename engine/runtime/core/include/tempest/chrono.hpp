@@ -542,63 +542,63 @@ namespace tempest
 
     inline namespace chrono_literals
     {
-        constexpr auto operator""ns(unsigned long long val) noexcept -> chrono::nanoseconds
+        constexpr auto operator""_ns(unsigned long long val) noexcept -> chrono::nanoseconds
         {
             return chrono::nanoseconds(static_cast<int64_t>(val));
         }
 
-        constexpr auto operator""us(unsigned long long val) noexcept -> chrono::microseconds
+        constexpr auto operator""_us(unsigned long long val) noexcept -> chrono::microseconds
         {
             return chrono::microseconds(static_cast<int64_t>(val));
         }
 
-        constexpr auto operator""ms(unsigned long long val) noexcept -> chrono::milliseconds
+        constexpr auto operator""_ms(unsigned long long val) noexcept -> chrono::milliseconds
         {
             return chrono::milliseconds(static_cast<int64_t>(val));
         }
 
-        constexpr auto operator""s(unsigned long long val) noexcept -> chrono::seconds
+        constexpr auto operator""_s(unsigned long long val) noexcept -> chrono::seconds
         {
             return chrono::seconds(static_cast<int64_t>(val));
         }
 
-        constexpr auto operator""min(unsigned long long val) noexcept -> chrono::minutes
+        constexpr auto operator""_min(unsigned long long val) noexcept -> chrono::minutes
         {
             return chrono::minutes(static_cast<int64_t>(val));
         }
 
-        constexpr auto operator""h(unsigned long long val) noexcept -> chrono::hours
+        constexpr auto operator""_h(unsigned long long val) noexcept -> chrono::hours
         {
             return chrono::hours(static_cast<int64_t>(val));
         }
 
-        constexpr auto operator""ns(long double val) noexcept -> chrono::duration<long double, nano>
+        constexpr auto operator""_ns(long double val) noexcept -> chrono::duration<long double, nano>
         {
             return chrono::duration<long double, nano>(val);
         }
 
-        constexpr auto operator""us(long double val) noexcept -> chrono::duration<long double, micro>
+        constexpr auto operator""_us(long double val) noexcept -> chrono::duration<long double, micro>
         {
             return chrono::duration<long double, micro>(val);
         }
 
-        constexpr auto operator""ms(long double val) noexcept -> chrono::duration<long double, milli>
+        constexpr auto operator""_ms(long double val) noexcept -> chrono::duration<long double, milli>
         {
             return chrono::duration<long double, milli>(val);
         }
 
-        constexpr auto operator""s(long double val) noexcept -> chrono::duration<long double>
+        constexpr auto operator""_s(long double val) noexcept -> chrono::duration<long double>
         {
             return chrono::duration<long double>(val);
         }
 
-        constexpr auto operator""min(long double val) noexcept
+        constexpr auto operator""_min(long double val) noexcept
             -> chrono::duration<long double, ratio<chrono::detail::seconds_per_minute>>
         {
             return chrono::duration<long double, ratio<chrono::detail::seconds_per_minute>>(val);
         }
 
-        constexpr auto operator""h(long double val) noexcept
+        constexpr auto operator""_h(long double val) noexcept
             -> chrono::duration<long double, ratio<chrono::detail::seconds_per_hour>>
         {
             return chrono::duration<long double, ratio<chrono::detail::seconds_per_hour>>(val);

@@ -1,8 +1,9 @@
 #include <array>
-#include <fstream>
-#include <iomanip>
 #include <string>
 
+#include <tempest/files.hpp>
+#include <tempest/format.hpp>
+#include <tempest/utility.hpp>
 #include <tempest/vk/aftermath/gpu_crash_tracker.hpp>
 
 namespace tempest::rhi::vk::aftermath
@@ -17,18 +18,14 @@ namespace tempest::rhi::vk::aftermath
 
     bool shader_database::_read_file(const char* file_name, std::vector<uint8_t>& data)
     {
-        std::ifstream file_stream(file_name, std::ios::in | std::ios::binary);
-        if (!file_stream)
+        auto file_bytes = read_file_to_vector(file_name);
+        if (!file_bytes)
         {
             return false;
         }
 
-        file_stream.seekg(0, std::ios::end);
-        data.resize(file_stream.tellg());
-        file_stream.seekg(0, std::ios::beg);
-        file_stream.read(reinterpret_cast<char*>(data.data()), data.size());
-        file_stream.close();
-
+        data.resize(file_bytes->size());
+        tempest::memcpy(data.data(), file_bytes->data(), file_bytes->size());
         return true;
     }
 
@@ -177,12 +174,9 @@ namespace tempest::rhi::vk::aftermath
             std::string(application_name.data()) + "-" + std::to_string(base_info.pid) + "-" + std::to_string(++count);
 
         const std::string crash_dump_file_name = base_file_name + ".nv-gpudmp";
-        std::ofstream dump_file(crash_dump_file_name, std::ios::out | std::ios::binary);
-        if (dump_file)
-        {
-            dump_file.write((const char*)gpu_crash_dump, gpu_crash_dump_size);
-            dump_file.close();
-        }
+        write_file_from_bytes(
+            crash_dump_file_name,
+            span<const byte>{reinterpret_cast<const byte*>(gpu_crash_dump), gpu_crash_dump_size});
 
         uint32_t json_size = 0;
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_GenerateJSON(
@@ -194,11 +188,11 @@ namespace tempest::rhi::vk::aftermath
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_GetJSON(decoder, uint32_t(json.size()), json.data()));
 
         const std::string json_file_name = crash_dump_file_name + ".json";
-        std::ofstream json_file(json_file_name, std::ios::out | std::ios::binary);
-        if (json_file)
+        if (json.size() > 1)
         {
-            json_file.write(json.data(), json.size() - 1);
-            json_file.close();
+            write_file_from_bytes(
+                json_file_name,
+                span<const byte>{reinterpret_cast<const byte*>(json.data()), json.size() - 1});
         }
 
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_DestroyDecoder(decoder));
@@ -208,13 +202,10 @@ namespace tempest::rhi::vk::aftermath
                                                              const void* shader_debug_info,
                                                              const uint32_t shader_debug_info_size)
     {
-        const std::string file_path = "shader-" + std::to_string(identifier) + ".nvdbg";
-
-        std::ofstream file(file_path, std::ios::out | std::ios::binary);
-        if (file)
-        {
-            file.write((const char*)shader_debug_info, shader_debug_info_size);
-        }
+        const auto file_path = format("shader-{}.nvdbg", to_string(identifier));
+        write_file_from_bytes(
+            file_path,
+            span<const byte>{reinterpret_cast<const byte*>(shader_debug_info), shader_debug_info_size});
     }
 
     void gpu_crash_tracker::_on_shader_debug_info_lookup(const GFSDK_Aftermath_ShaderDebugInfoIdentifier& identifier,

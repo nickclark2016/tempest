@@ -1,6 +1,7 @@
 #include <tempest/filesystem.hpp>
 
 #include <tempest/algorithm.hpp>
+#include <tempest/charconv.hpp>
 #include <tempest/utility.hpp>
 
 #ifdef _WIN32
@@ -38,18 +39,18 @@ namespace tempest::filesystem
         constexpr T colon = static_cast<T>(':');
 
         template <typename T>
-        constexpr auto is_letter = [](T ch) {
+        constexpr auto is_letter = [](T ch) -> auto {
             return (ch >= static_cast<T>('A') && ch <= static_cast<T>('Z')) ||
                    (ch >= static_cast<T>('a') && ch <= static_cast<T>('z'));
         };
 
         template <typename T>
-        constexpr auto is_slash = [](T ch) { return ch == forward_slash<T> || ch == back_slash<T>; };
+        constexpr auto is_slash = [](T ch) -> auto { return ch == forward_slash<T> || ch == back_slash<T>; };
     } // namespace
 
     namespace detail
     {
-        string convert_wide_to_narrow(tempest::wstring_view wide_str)
+        auto convert_wide_to_narrow(tempest::wstring_view wide_str) -> string
         {
             tempest::string result;
 
@@ -93,7 +94,7 @@ namespace tempest::filesystem
             return result;
         }
 
-        wstring convert_narrow_to_wide(tempest::string_view narrow_str)
+        auto convert_narrow_to_wide(tempest::string_view narrow_str) -> wstring
         {
             wstring result;
 #ifdef _WIN32
@@ -133,7 +134,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr int compare_slash_insensitive(basic_string_view<T> lhs, basic_string_view<T> rhs)
+        constexpr auto compare_slash_insensitive(basic_string_view<T> lhs, basic_string_view<T> rhs) -> int
         {
             const auto compare_len = tempest::min(lhs.size(), rhs.size());
             for (size_t i = 0; i < compare_len; ++i)
@@ -152,7 +153,7 @@ namespace tempest::filesystem
             {
                 return -1;
             }
-            else if (lhs.size() > rhs.size())
+            if (lhs.size() > rhs.size())
             {
                 return 1;
             }
@@ -163,7 +164,7 @@ namespace tempest::filesystem
     namespace
     {
         template <character_type T>
-        basic_string_view<T> get_root_name(basic_string_view<T> path)
+        auto get_root_name(basic_string_view<T> path) -> basic_string_view<T>
         {
             // Detect UNC paths
             if (path.size() >= 2 && is_slash<T>(path[0]) && path[0] == path[1])
@@ -216,7 +217,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_root_name(basic_string_view<T> path)
+        constexpr auto has_root_name(basic_string_view<T> path) -> bool
         {
             // Check for UNC paths
             if (path.size() >= 2 && is_slash<T>(path[0]) && path[0] == path[1])
@@ -263,7 +264,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        basic_string_view<T> get_root_directory(basic_string_view<T> path)
+        auto get_root_directory(basic_string_view<T> path) -> basic_string_view<T>
         {
             // Detect UNC paths
             if (path.size() >= 2 && is_slash<T>(path[0]) && path[0] == path[1])
@@ -308,7 +309,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_root_directory(basic_string_view<T> path)
+        constexpr auto has_root_directory(basic_string_view<T> path) -> bool
         {
             // Detect UNC paths
             if (path.size() >= 2 && is_slash<T>(path[0]) && path[0] == path[1])
@@ -325,22 +326,13 @@ namespace tempest::filesystem
                     ++idx;
                 }
 
-                if (idx < path.size() && is_slash<T>(path[idx]))
-                {
-                    return true;
-                }
-
-                return false; // Host is malformed
+                return static_cast<bool>(idx < path.size() && is_slash<T>(path[idx])); // Host is malformed
             }
 
             if (path.size() >= 2 && is_letter<T>(path[0]) && path[1] == colon<T>)
             {
                 size_t idx = 2;
-                if (idx < path.size() && is_slash<T>(path[idx]))
-                {
-                    return true;
-                }
-                return false;
+                return static_cast<bool>(idx < path.size() && is_slash<T>(path[idx]));
             }
 
             // Handle posix root-only absolute path
@@ -348,7 +340,7 @@ namespace tempest::filesystem
         }
 
         template <typename T>
-        basic_string_view<T> get_root_path(basic_string_view<T> path)
+        auto get_root_path(basic_string_view<T> path) -> basic_string_view<T>
         {
             if (path.size() >= 2 && is_slash<T>(path[0]) && path[0] == path[1])
             {
@@ -427,7 +419,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_root_path(basic_string_view<T> path)
+        constexpr auto has_root_path(basic_string_view<T> path) -> bool
         {
             if (path.size() >= 2 && is_slash<T>(path[0]) && path[0] == path[1])
             {
@@ -473,7 +465,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr basic_string_view<T> get_relative_path(basic_string_view<T> path)
+        constexpr auto get_relative_path(basic_string_view<T> path) -> basic_string_view<T>
         {
             auto root_name = get_root_path<T>(path);
             if (root_name.empty())
@@ -486,7 +478,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_relative_path(basic_string_view<T> path)
+        constexpr auto has_relative_path(basic_string_view<T> path) -> bool
         {
             if (path.empty())
             {
@@ -512,7 +504,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr basic_string_view<T> get_parent_path(basic_string_view<T> path)
+        constexpr auto get_parent_path(basic_string_view<T> path) -> basic_string_view<T>
         {
             if (path.empty())
             {
@@ -551,15 +543,15 @@ namespace tempest::filesystem
             // Check for UNC paths
             if (path.size() >= 5 && is_slash<T>(path[0]) && is_slash<T>(path[1]))
             {
-                const auto first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
+                const auto *const first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
                                                        tempest::end(slashes<T>));
                 if (first != path.end())
                 {
-                    const auto second =
+                    const auto *const second =
                         search_first_not_of(first, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (second != path.end())
                     {
-                        const auto third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
+                        const auto *const third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
                                                                tempest::end(slashes<T>));
                         if (third == path.end() || third > path.begin() + end)
                         {
@@ -570,7 +562,7 @@ namespace tempest::filesystem
             }
 
             // Get the last slash iterator
-            const auto last_slash = tempest::search_last_of(path.begin(), path.begin() + end,
+            const auto *const last_slash = tempest::search_last_of(path.begin(), path.begin() + end,
                                                             tempest::begin(slashes<T>), tempest::end(slashes<T>));
             if (last_slash == path.begin() + end)
             {
@@ -586,7 +578,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_parent_path(basic_string_view<T> path)
+        constexpr auto has_parent_path(basic_string_view<T> path) -> bool
         {
             if (path.empty())
             {
@@ -625,15 +617,15 @@ namespace tempest::filesystem
             // Check for UNC paths
             if (path.size() >= 5 && is_slash<T>(path[0]) && is_slash<T>(path[1]))
             {
-                const auto first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
+                const auto *const first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
                                                        tempest::end(slashes<T>));
                 if (first != path.end())
                 {
-                    const auto second =
+                    const auto *const second =
                         search_first_not_of(first, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (second != path.end())
                     {
-                        const auto third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
+                        const auto *const third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
                                                                tempest::end(slashes<T>));
                         if (third == path.end() || third > path.begin() + end)
                         {
@@ -644,7 +636,7 @@ namespace tempest::filesystem
             }
 
             // Get the last slash iterator
-            const auto last_slash = tempest::search_last_of(path.begin(), path.begin() + end,
+            const auto *const last_slash = tempest::search_last_of(path.begin(), path.begin() + end,
                                                             tempest::begin(slashes<T>), tempest::end(slashes<T>));
             if (last_slash == path.begin() + end)
             {
@@ -660,7 +652,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr basic_string_view<T> get_filename(basic_string_view<T> path)
+        constexpr auto get_filename(basic_string_view<T> path) -> basic_string_view<T>
         {
             if (path.empty())
             {
@@ -689,11 +681,11 @@ namespace tempest::filesystem
             // Handle UNC detection
             if (trimmed.size() >= 2 && is_slash<T>(trimmed[0]) && trimmed[0] == trimmed[1])
             {
-                auto pos =
+                const auto *pos =
                     search_first_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                 if (pos != trimmed.end())
                 {
-                    auto next_slash =
+                    const auto *next_slash =
                         search_first_of(pos + 1, trimmed.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (next_slash == trimmed.end())
                     {
@@ -702,7 +694,7 @@ namespace tempest::filesystem
                 }
             }
 
-            auto pos =
+            const auto *pos =
                 search_last_of(trimmed.begin(), trimmed.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
             if (pos == trimmed.end())
             {
@@ -713,7 +705,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_filename(basic_string_view<T> path)
+        constexpr auto has_filename(basic_string_view<T> path) -> bool
         {
             if (path.empty())
             {
@@ -742,11 +734,11 @@ namespace tempest::filesystem
             // Handle UNC detection
             if (trimmed.size() >= 2 && is_slash<T>(trimmed[0]) && trimmed[0] == trimmed[1])
             {
-                auto pos =
+                const auto *pos =
                     search_first_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                 if (pos != trimmed.end())
                 {
-                    auto next_slash =
+                    const auto *next_slash =
                         search_first_of(pos + 1, trimmed.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (next_slash == trimmed.end())
                     {
@@ -759,7 +751,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr basic_string_view<T> get_stem(basic_string_view<T> path)
+        constexpr auto get_stem(basic_string_view<T> path) -> basic_string_view<T>
         {
             auto filename = get_filename<T>(path);
             if (filename.empty())
@@ -768,7 +760,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            auto last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end())
             {
                 return filename; // No dot found, return the entire filename
@@ -785,7 +777,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_stem(basic_string_view<T> path)
+        constexpr auto has_stem(basic_string_view<T> path) -> bool
         {
             auto filename = get_filename<T>(path);
             if (filename.empty())
@@ -794,7 +786,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            auto last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end())
             {
                 return true; // No dot found, stem exists
@@ -804,7 +796,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr basic_string_view<T> get_extension(basic_string_view<T> path)
+        constexpr auto get_extension(basic_string_view<T> path) -> basic_string_view<T>
         {
             auto filename = get_filename<T>(path);
             if (filename.empty())
@@ -813,7 +805,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            auto last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end() || last_dot == filename.begin())
             {
                 return {}; // No extension found or the dot is the first character
@@ -825,7 +817,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr bool has_extension(basic_string_view<T> path)
+        constexpr auto has_extension(basic_string_view<T> path) -> bool
         {
             auto filename = get_filename<T>(path);
             if (filename.empty())
@@ -834,7 +826,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            auto last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end() || last_dot == filename.begin())
             {
                 return false; // No extension found or the dot is the first character
@@ -844,7 +836,7 @@ namespace tempest::filesystem
         }
 
         template <character_type T>
-        constexpr T detect_path_separator(basic_string_view<T> path)
+        constexpr auto detect_path_separator(basic_string_view<T> path) -> T
         {
             if (path.empty())
             {
@@ -874,19 +866,18 @@ namespace tempest::filesystem
             {
                 return forward_slash<T>;
             }
-            else if (back_slash_count > 0 && forward_slash_count == 0)
+            if (back_slash_count > 0 && forward_slash_count == 0)
             {
                 return back_slash<T>;
             }
-            else
-            {
-                return path::preferred_separator; // Default to preferred separator
-            }
+            
+                            return path::preferred_separator; // Default to preferred separator
+           
         }
     } // namespace
 
     path_iterator::path_iterator() noexcept
-        : _full{}, _offset{numeric_limits<size_t>::max()}, _length{numeric_limits<size_t>::max()}
+        :  _offset{numeric_limits<size_t>::max()}, _length{numeric_limits<size_t>::max()}
     {
     }
 
@@ -916,7 +907,7 @@ namespace tempest::filesystem
         _length = next_slash - _offset;
     }
 
-    path_iterator& path_iterator::operator++()
+    auto path_iterator::operator++() -> path_iterator&
     {
         if (_offset == numeric_limits<size_t>::max())
         {
@@ -950,61 +941,61 @@ namespace tempest::filesystem
         return *this;
     }
 
-    path_iterator path_iterator::operator++(int)
+    auto path_iterator::operator++(int) -> path_iterator
     {
         auto copy = *this;
         ++(*this);
         return copy;
     }
 
-    typename path_iterator::value_type path_iterator::operator*() const noexcept
+    auto path_iterator::operator*() const noexcept -> path_iterator::value_type
     {
         return substr(_full, _offset, _length);
     }
 
-    path& path::assign(const path& p)
+    auto path::assign(const path& p) -> path&
     {
         _path = p._path;
         return *this;
     }
 
-    path& path::assign(path&& p) noexcept
+    auto path::assign(path&& p) noexcept -> path&
     {
         _path = tempest::move(p._path);
         return *this;
     }
 
-    path& path::assign(string_type&& p) noexcept
+    auto path::assign(string_type&& p) noexcept -> path&
     {
         _path = tempest::move(p);
         return *this;
     }
 
-    path& path::operator+=(const path& p)
+    auto path::operator+=(const path& p) -> path&
     {
         _path.append(p._path);
         return *this;
     }
 
-    path& path::operator+=(const string_type& p)
+    auto path::operator+=(const string_type& p) -> path&
     {
         _path.append(p);
         return *this;
     }
 
-    path& path::operator+=(basic_string_view<value_type> p)
+    auto path::operator+=(basic_string_view<value_type> p) -> path&
     {
         _path.append(p.data(), p.size());
         return *this;
     }
 
-    path& path::operator+=(const value_type* p)
+    auto path::operator+=(const value_type* p) -> path&
     {
         _path.append(p);
         return *this;
     }
 
-    path& path::operator+=(value_type ch)
+    auto path::operator+=(value_type ch) -> path&
     {
         _path.push_back(ch);
         return *this;
@@ -1015,7 +1006,7 @@ namespace tempest::filesystem
         _path = string_type{};
     }
 
-    path& path::make_preferred()
+    auto path::make_preferred() -> path&
     {
         for (auto& c : _path)
         {
@@ -1028,7 +1019,7 @@ namespace tempest::filesystem
         return *this;
     }
 
-    path& path::remove_filename()
+    auto path::remove_filename() -> path&
     {
         // From the end of the path, find the last non-slash character
         // If the end of the path is a slash character, this is a no op
@@ -1052,14 +1043,14 @@ namespace tempest::filesystem
         return *this;
     }
 
-    path& path::replace_filename(const path& replacement)
+    auto path::replace_filename(const path& replacement) -> path&
     {
         remove_filename();
         append(basic_string_view<value_type>(replacement.native()));
         return *this;
     }
 
-    path& path::replace_extension(const path& replacement)
+    auto path::replace_extension(const path& replacement) -> path&
     {
         // Replacement logic
         // If this ends with an extension
@@ -1097,7 +1088,7 @@ namespace tempest::filesystem
                 }
                 return *this;
             }
-            else if (dot<value_type> == *it)
+            if (dot<value_type> == *it)
             {
                 // Found an extension
                 if (replacement.empty())
@@ -1131,12 +1122,12 @@ namespace tempest::filesystem
         tempest::swap(_path, other._path);
     }
 
-    const path::value_type* path::c_str() const noexcept
+    auto path::c_str() const noexcept -> const path::value_type*
     {
         return _path.c_str();
     }
 
-    const path::string_type& path::native() const noexcept
+    auto path::native() const noexcept -> const path::string_type&
     {
         return _path;
     }
@@ -1146,7 +1137,7 @@ namespace tempest::filesystem
         return _path;
     }
 
-    tempest::string path::string() const
+    auto path::string() const -> tempest::string
     {
 #ifdef _WIN32
         return detail::convert_wide_to_narrow(_path);
@@ -1155,7 +1146,7 @@ namespace tempest::filesystem
 #endif
     }
 
-    tempest::wstring path::wstring() const
+    auto path::wstring() const -> tempest::wstring
     {
 #ifdef _WIN32
         return _path;
@@ -1164,144 +1155,144 @@ namespace tempest::filesystem
 #endif
     }
 
-    tempest::string path::generic_string() const
+    auto path::generic_string() const -> tempest::string
     {
         auto str = string();
         replace(str.begin(), str.end(), '\\', '/');
         return str;
     }
 
-    tempest::wstring path::generic_wstring() const
+    auto path::generic_wstring() const -> tempest::wstring
     {
         auto wstr = wstring();
         replace(wstr.begin(), wstr.end(), L'\\', L'/');
         return wstr;
     }
 
-    path path::root_name() const
+    auto path::root_name() const -> path
     {
         path p = get_root_name<value_type>(_path);
         return p;
     }
 
-    path path::root_directory() const
+    auto path::root_directory() const -> path
     {
         path p = get_root_directory<value_type>(_path);
         return p;
     }
 
-    path path::root_path() const
+    auto path::root_path() const -> path
     {
         path p = get_root_path<value_type>(_path);
         return p;
     }
 
-    path path::relative_path() const
+    auto path::relative_path() const -> path
     {
         path p = get_relative_path<value_type>(_path);
         return p;
     }
 
-    path path::parent_path() const
+    auto path::parent_path() const -> path
     {
         path p = get_parent_path<value_type>(_path);
         return p;
     }
 
-    path path::filename() const
+    auto path::filename() const -> path
     {
         path p = get_filename<value_type>(_path);
         return p;
     }
 
-    path path::stem() const
+    auto path::stem() const -> path
     {
         path p = get_stem<value_type>(_path);
         return p;
     }
 
-    path path::extension() const
+    auto path::extension() const -> path
     {
         path p = get_extension<value_type>(_path);
         return p;
     }
 
-    bool path::empty() const
+    auto path::empty() const -> bool
     {
         return _path.empty();
     }
 
-    bool path::has_root_path() const
+    auto path::has_root_path() const -> bool
     {
         return ::tempest::filesystem::has_root_path<value_type>(_path);
     }
 
-    bool path::has_root_name() const
+    auto path::has_root_name() const -> bool
     {
         return ::tempest::filesystem::has_root_name<value_type>(_path);
     }
 
-    bool path::has_root_directory() const
+    auto path::has_root_directory() const -> bool
     {
         return ::tempest::filesystem::has_root_directory<value_type>(_path);
     }
 
-    bool path::has_relative_path() const
+    auto path::has_relative_path() const -> bool
     {
         return ::tempest::filesystem::has_relative_path<value_type>(_path);
     }
 
-    bool path::has_parent_path() const
+    auto path::has_parent_path() const -> bool
     {
         return ::tempest::filesystem::has_parent_path<value_type>(_path);
     }
 
-    bool path::has_filename() const
+    auto path::has_filename() const -> bool
     {
         return ::tempest::filesystem::has_filename<value_type>(_path);
     }
 
-    bool path::has_stem() const
+    auto path::has_stem() const -> bool
     {
         return ::tempest::filesystem::has_stem<value_type>(_path);
     }
 
-    bool path::has_extension() const
+    auto path::has_extension() const -> bool
     {
         return ::tempest::filesystem::has_extension<value_type>(_path);
     }
 
-    bool path::is_absolute() const
+    auto path::is_absolute() const -> bool
     {
         return has_root_path();
     }
 
-    bool path::is_relative() const
+    auto path::is_relative() const -> bool
     {
         return !is_absolute();
     }
 
-    typename path::iterator path::begin() const
+    auto path::begin() const -> path::iterator
     {
         return iterator(_path);
     }
 
-    typename path::const_iterator path::cbegin() const
+    auto path::cbegin() const -> path::const_iterator
     {
         return const_iterator(_path);
     }
 
-    typename path::iterator path::end() const
+    auto path::end() const -> path::iterator
     {
-        return iterator();
+        return {};
     }
 
-    typename path::const_iterator path::cend() const
+    auto path::cend() const -> path::const_iterator
     {
-        return const_iterator();
+        return {};
     }
 
-    path& path::_append(const path& p)
+    auto path::_append(const path& p) -> path&
     {
         if (p.empty())
         {
@@ -1354,32 +1345,32 @@ namespace tempest::filesystem
         return *this;
     }
 
-    bool operator==(const path& lhs, const path& rhs) noexcept
+    auto operator==(const path& lhs, const path& rhs) noexcept -> bool
     {
         return detail::compare_slash_insensitive<path::value_type>(lhs.native(), rhs.native()) == 0;
     }
 
-    bool operator!=(const path& lhs, const path& rhs) noexcept
+    auto operator!=(const path& lhs, const path& rhs) noexcept -> bool
     {
         return !(lhs == rhs);
     }
 
-    bool operator<(const path& lhs, const path& rhs) noexcept
+    auto operator<(const path& lhs, const path& rhs) noexcept -> bool
     {
         return detail::compare_slash_insensitive<path::value_type>(lhs.native(), rhs.native()) < 0;
     }
 
-    bool operator<=(const path& lhs, const path& rhs) noexcept
+    auto operator<=(const path& lhs, const path& rhs) noexcept -> bool
     {
         return detail::compare_slash_insensitive<path::value_type>(lhs.native(), rhs.native()) <= 0;
     }
 
-    bool operator>(const path& lhs, const path& rhs) noexcept
+    auto operator>(const path& lhs, const path& rhs) noexcept -> bool
     {
         return detail::compare_slash_insensitive<path::value_type>(lhs.native(), rhs.native()) > 0;
     }
 
-    bool operator>=(const path& lhs, const path& rhs) noexcept
+    auto operator>=(const path& lhs, const path& rhs) noexcept -> bool
     {
         return detail::compare_slash_insensitive<path::value_type>(lhs.native(), rhs.native()) >= 0;
     }
@@ -1392,92 +1383,92 @@ namespace tempest::filesystem
     {
     }
 
-    bool is_block_file(const file_status& status)
+    auto is_block_file(const file_status& status) -> bool
     {
         return status.type() == file_type::block;
     }
 
-    bool is_block_file(const path& p)
+    auto is_block_file(const path& p) -> bool
     {
         return is_block_file(status(p));
     }
 
-    bool is_character_file(const file_status& status)
+    auto is_character_file(const file_status& status) -> bool
     {
         return status.type() == file_type::character;
     }
 
-    bool is_character_file(const path& p)
+    auto is_character_file(const path& p) -> bool
     {
         return is_character_file(status(p));
     }
 
-    bool is_directory(const file_status& status)
+    auto is_directory(const file_status& status) -> bool
     {
         return status.type() == file_type::directory;
     }
 
-    bool is_directory(const path& p)
+    auto is_directory(const path& p) -> bool
     {
         return is_directory(status(p));
     }
 
-    bool is_empty(const path& p)
+    auto is_empty(const path& p) -> bool
     {
         return p.empty() || (p.has_root_path() && p.relative_path().empty());
     }
 
-    bool is_fifo(const file_status& status)
+    auto is_fifo(const file_status& status) -> bool
     {
         return status.type() == file_type::fifo;
     }
 
-    bool is_fifo(const path& p)
+    auto is_fifo(const path& p) -> bool
     {
         return is_fifo(status(p));
     }
 
-    bool is_other(const file_status& status)
+    auto is_other(const file_status& status) -> bool
     {
         return exists(status) && !is_regular_file(status) && !is_directory(status) && !is_symlink(status);
     }
 
-    bool is_other(const path& p)
+    auto is_other(const path& p) -> bool
     {
         return is_other(status(p));
     }
 
-    bool is_regular_file(const file_status& status)
+    auto is_regular_file(const file_status& status) -> bool
     {
         return status.type() == file_type::regular;
     }
 
-    bool is_regular_file(const path& p)
+    auto is_regular_file(const path& p) -> bool
     {
         return is_regular_file(status(p));
     }
 
-    bool is_socket(const file_status& status)
+    auto is_socket(const file_status& status) -> bool
     {
         return status.type() == file_type::socket;
     }
 
-    bool is_socket(const path& p)
+    auto is_socket(const path& p) -> bool
     {
         return is_socket(status(p));
     }
 
-    bool is_symlink(const file_status& status)
+    auto is_symlink(const file_status& status) -> bool
     {
         return status.type() == file_type::symlink;
     }
 
-    bool is_symlink(const path& p)
+    auto is_symlink(const path& p) -> bool
     {
         return is_symlink(symlink_status(p));
     }
 
-    bool status_known(const file_status& status)
+    auto status_known(const file_status& status) -> bool
     {
         return status.type() != file_type::none;
     }
@@ -1486,7 +1477,7 @@ namespace tempest::filesystem
     {
 #ifdef _WIN32
         // https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_reparse_data_buffer
-        typedef struct _REPARSE_DATA_BUFFER
+        using REPARSE_DATA_BUFFER = struct REPARSE_DATA_BUFFER
         {
             ULONG ReparseTag;
             USHORT ReparseDataLength;
@@ -1514,9 +1505,10 @@ namespace tempest::filesystem
                     UCHAR DataBuffer[1];
                 } GenericReparseBuffer;
             } DUMMYUNIONNAME;
-        } REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+        };
+using PREPARSE_DATA_BUFFER = REPARSE_DATA_BUFFER*;
 
-        path::string_type follow_symlink(const path::string_type& p)
+        auto follow_symlink(const path::string_type& p) -> path::string_type
         {
             HANDLE h = CreateFileW(p.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                                    OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
@@ -1532,61 +1524,61 @@ namespace tempest::filesystem
                                       static_cast<DWORD>(buf.size()), &bytes_returned, nullptr);
             CloseHandle(h);
 
-            if (!ok)
+            if (ok == 0)
             {
                 return path::string_type{};
             }
 
-            auto rdb = reinterpret_cast<REPARSE_DATA_BUFFER*>(buf.data());
+            auto *rdb = reinterpret_cast<REPARSE_DATA_BUFFER*>(buf.data());
 
             if (rdb->ReparseTag == IO_REPARSE_TAG_SYMLINK)
             {
                 auto& symlink = rdb->SymbolicLinkReparseBuffer;
-                return path::string_type(symlink.PathBuffer + symlink.PrintNameOffset / sizeof(WCHAR),
+                return path::string_type(symlink.PathBuffer + (symlink.PrintNameOffset / sizeof(WCHAR)),
                                          symlink.PrintNameLength / sizeof(WCHAR));
             }
 
             if (rdb->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT)
             {
                 auto& mount_point = rdb->MountPointReparseBuffer;
-                return path::string_type(mount_point.PathBuffer + mount_point.PrintNameOffset / sizeof(WCHAR),
+                return path::string_type(mount_point.PathBuffer + (mount_point.PrintNameOffset / sizeof(WCHAR)),
                                          mount_point.PrintNameLength / sizeof(WCHAR));
             }
 
             return p;
         }
 
-        file_type file_type_from_attributes(DWORD dwFileAttributes)
+        auto file_type_from_attributes(DWORD dwFileAttributes) -> file_type
         {
-            if (dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+            if ((dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0U)
             {
                 return file_type::symlink;
             }
-            if (dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            if ((dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0U)
             {
                 return file_type::directory;
             }
-            if (dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
+            if ((dwFileAttributes & FILE_ATTRIBUTE_DEVICE) != 0U)
             {
                 return file_type::character;
             }
             return file_type::regular;
         }
 
-        enum_mask<permissions> get_permissions(DWORD attributes)
+        auto get_permissions(DWORD attributes) -> enum_mask<permissions>
         {
             if (attributes == INVALID_FILE_ATTRIBUTES)
             {
-                return enum_mask(permissions::unknown);
+                return {permissions::unknown};
             }
 
-            if (attributes & FILE_ATTRIBUTE_READONLY)
+            if ((attributes & FILE_ATTRIBUTE_READONLY) != 0U)
             {
                 return enum_mask(permissions::all) &
                        ~(permissions::owner_write | permissions::group_write | permissions::others_write);
             }
 
-            return enum_mask(permissions::all);
+            return {permissions::all};
         }
 #else
         file_type model_to_file_type(mode_t mode)
@@ -1663,11 +1655,11 @@ namespace tempest::filesystem
 #endif
     } // namespace
 
-    file_status status(const path& p)
+    auto status(const path& p) -> file_status
     {
 #ifdef _WIN32
         WIN32_FILE_ATTRIBUTE_DATA file_info;
-        if (!GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info))
+        if (GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info) == 0)
         {
             const auto err = GetLastError();
             if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
@@ -1677,7 +1669,7 @@ namespace tempest::filesystem
             return file_status(file_type::unknown);
         }
 
-        if (file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        if ((file_info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0U)
         {
             auto native_path = path(follow_symlink(p.native()));
             if (native_path.is_relative())
@@ -1695,11 +1687,11 @@ namespace tempest::filesystem
 #endif
     }
 
-    file_status symlink_status(const path& p)
+    auto symlink_status(const path& p) -> file_status
     {
 #ifdef _WIN32
         WIN32_FILE_ATTRIBUTE_DATA file_info;
-        if (!GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info))
+        if (GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info) == 0)
         {
             const auto err = GetLastError();
             if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
@@ -1717,29 +1709,29 @@ namespace tempest::filesystem
 #endif
     }
 
-    bool exists(const file_status& status)
+    auto exists(const file_status& status) -> bool
     {
         return status.type() != file_type::not_found && status_known(status);
     }
 
-    bool exists(const path& p)
+    auto exists(const path& p) -> bool
     {
         return exists(status(p));
     }
 
-    path current_path()
+    auto current_path() -> path
     {
 #ifdef _WIN32
         DWORD size = GetCurrentDirectoryW(0, nullptr);
         if (size == 0)
         {
-            return path();
+            return {};
         }
 
         vector<wchar_t> buffer(size);
         if (GetCurrentDirectoryW(size, buffer.data()) == 0)
         {
-            return path();
+            return {};
         }
         return path(path::string_type(buffer.data()));
 #else
@@ -1761,19 +1753,71 @@ namespace tempest::filesystem
 #endif
     }
 
+    auto temp_directory_path() -> path
+    {
+#ifdef _WIN32
+        wchar_t buffer[MAX_PATH + 1];
+        const auto written = GetTempPathW(MAX_PATH + 1, buffer);
+        if (written == 0 || written > MAX_PATH + 1)
+        {
+            return {};
+        }
+        return path(path::string_type(buffer, written));
+#else
+        const char* tmp = getenv("TMPDIR");
+        if (tmp == nullptr)
+        {
+            tmp = getenv("TMP");
+        }
+        if (tmp == nullptr)
+        {
+            tmp = getenv("TEMP");
+        }
+        if (tmp == nullptr)
+        {
+            tmp = getenv("TEMPDIR");
+        }
+        if (tmp == nullptr)
+        {
+            tmp = "/tmp";
+        }
+        return path(tmp);
+#endif
+    }
+
+    auto remove(const path& p) -> bool
+    {
+#ifdef _WIN32
+        const auto attrs = GetFileAttributesW(p.native().c_str());
+        if (attrs == INVALID_FILE_ATTRIBUTES)
+        {
+            return false;
+        }
+
+        if ((attrs & FILE_ATTRIBUTE_DIRECTORY) != 0)
+        {
+            return RemoveDirectoryW(p.native().c_str()) != 0;
+        }
+
+        return DeleteFileW(p.native().c_str()) != 0;
+#else
+        return ::remove(p.native().c_str()) == 0;
+#endif
+    }
+
     directory_entry::directory_entry(const filesystem::path& p)
         : _path{p}, _status{filesystem::status(p)}, _symlink_status{filesystem::symlink_status(p)},
           _file_size{filesystem::file_size(p)}
     {
     }
 
-    directory_entry::directory_entry(const filesystem::path& p, file_status status, file_status symlink_status,
+    directory_entry::directory_entry(filesystem::path p, file_status status, file_status symlink_status,
                                      size_t file_size)
-        : _path{p}, _status{status}, _symlink_status{symlink_status}, _file_size{file_size}
+        : _path{tempest::move(p)}, _status{status}, _symlink_status{symlink_status}, _file_size{file_size}
     {
     }
 
-    const filesystem::path& directory_entry::path() const noexcept
+    auto directory_entry::path() const noexcept -> const filesystem::path&
     {
         return _path;
     }
@@ -1783,62 +1827,62 @@ namespace tempest::filesystem
         return _path;
     }
 
-    bool directory_entry::exists() const
+    auto directory_entry::exists() const -> bool
     {
         return filesystem::exists(_status);
     }
 
-    bool directory_entry::is_block_file() const
+    auto directory_entry::is_block_file() const -> bool
     {
         return filesystem::is_block_file(_status);
     }
 
-    bool directory_entry::is_character_file() const
+    auto directory_entry::is_character_file() const -> bool
     {
         return filesystem::is_character_file(_status);
     }
 
-    bool directory_entry::is_directory() const
+    auto directory_entry::is_directory() const -> bool
     {
         return filesystem::is_directory(_status);
     }
 
-    bool directory_entry::is_fifo() const
+    auto directory_entry::is_fifo() const -> bool
     {
         return filesystem::is_fifo(_status);
     }
 
-    bool directory_entry::is_other() const
+    auto directory_entry::is_other() const -> bool
     {
         return filesystem::is_other(_status);
     }
 
-    bool directory_entry::is_regular_file() const
+    auto directory_entry::is_regular_file() const -> bool
     {
         return filesystem::is_regular_file(_status);
     }
 
-    bool directory_entry::is_socket() const
+    auto directory_entry::is_socket() const -> bool
     {
         return filesystem::is_socket(_status);
     }
 
-    bool directory_entry::is_symlink() const
+    auto directory_entry::is_symlink() const -> bool
     {
         return filesystem::is_symlink(_symlink_status);
     }
 
-    file_status directory_entry::status() const
+    auto directory_entry::status() const -> file_status
     {
         return _status;
     }
 
-    file_status directory_entry::symlink_status() const
+    auto directory_entry::symlink_status() const -> file_status
     {
         return _symlink_status;
     }
 
-    size_t directory_entry::file_size() const
+    auto directory_entry::file_size() const -> size_t
     {
         return _file_size;
     }
@@ -1854,7 +1898,7 @@ namespace tempest::filesystem
 #ifdef _WIN32
         const auto search_path = p / "*";
         auto find_data = WIN32_FIND_DATAW{};
-        const auto h_find = FindFirstFileW(search_path.c_str(), &find_data);
+        auto *const h_find = FindFirstFileW(search_path.c_str(), &find_data);
         if (h_find == INVALID_HANDLE_VALUE)
         {
             _index = 0;
@@ -1869,7 +1913,7 @@ namespace tempest::filesystem
                 const auto entry_path = p / name;
                 const auto perms = get_permissions(find_data.dwFileAttributes);
 
-                if (find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+                if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0U)
                 {
                     const auto sym_status = file_status(file_type::symlink, perms);
                     const auto target_status = filesystem::status(entry_path);
@@ -1877,12 +1921,12 @@ namespace tempest::filesystem
                                                                                : static_cast<size_t>(-1);
                     _entries.emplace_back(entry_path, target_status, sym_status, sz);
                 }
-                else if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                else if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0U)
                 {
                     const auto dir_status = file_status(file_type::directory, perms);
                     _entries.emplace_back(entry_path, dir_status, dir_status, static_cast<size_t>(-1));
                 }
-                else if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
+                else if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DEVICE) != 0U)
                 {
                     const auto dev_status = file_status(file_type::character, perms);
                     _entries.emplace_back(entry_path, dev_status, dev_status, static_cast<size_t>(-1));
@@ -1894,7 +1938,7 @@ namespace tempest::filesystem
                     _entries.emplace_back(entry_path, reg_status, reg_status, static_cast<size_t>(sz));
                 }
             }
-        } while (FindNextFileW(h_find, &find_data));
+        } while (FindNextFileW(h_find, &find_data) != 0);
 
         FindClose(h_find);
 #else
@@ -1966,31 +2010,31 @@ namespace tempest::filesystem
 #endif
     }
 
-    const directory_entry& directory_iterator::operator*() const
+    auto directory_iterator::operator*() const -> const directory_entry&
     {
         return _entries[_index];
     }
 
-    const directory_entry* directory_iterator::operator->() const
+    auto directory_iterator::operator->() const -> const directory_entry*
     {
         return &_entries[_index];
     }
 
-    directory_iterator& directory_iterator::operator++()
+    auto directory_iterator::operator++() -> directory_iterator&
     {
         ++_index;
         return *this;
     }
 
-    size_t file_size(const path& p)
+    auto file_size(const path& p) -> size_t
     {
 #ifdef _WIN32
         auto file_info = WIN32_FILE_ATTRIBUTE_DATA{};
-        if (!GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info))
+        if (GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info) == 0)
         {
             return static_cast<size_t>(-1); // Unable to get attributes
         }
-        if (file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        if ((file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0U)
         {
             return static_cast<size_t>(-1); // It's a directory, not a file
         }
@@ -2013,12 +2057,12 @@ namespace tempest::filesystem
 #endif
     }
 
-    path relative(const path& p)
+    auto relative(const path& p) -> path
     {
         return relative(p, current_path());
     }
 
-    path relative(const path& p, const path& base)
+    auto relative(const path& p, const path& base) -> path
     {
         if (p.is_absolute() != base.is_absolute() || p.root_name() != base.root_name())
         {

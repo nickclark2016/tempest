@@ -1,52 +1,65 @@
 #ifndef tempest_rhi_vk_aftermath_helpers_hpp
 #define tempest_rhi_vk_aftermath_helpers_hpp
 
-#include <iomanip>
-#include <string>
-#include <sstream>
+#include <tempest/format.hpp>
+#include <tempest/string.hpp>
 
-#include <vulkan/vulkan.hpp>
 #include <GFSDK_Aftermath.h>
 #include <GFSDK_Aftermath_GpuCrashDump.h>
 #include <GFSDK_Aftermath_GpuCrashDumpDecoding.h>
+#include <vulkan/vulkan.hpp>
 
 //*********************************************************
-// Some std::to_string overloads for some Nsight Aftermath
+// Some to_string overloads for some Nsight Aftermath
 // API types.
 //
 
-namespace std
+namespace tempest::rhi::vk::aftermath
 {
-    template<typename T>
-    inline std::string to_hex_string(T n)
+    template <typename T>
+    inline auto to_hex_string(T n) -> tempest::string
     {
-        std::stringstream stream;
-        stream << std::setfill('0') << std::setw(2 * sizeof(T)) << std::hex << n;
-        return stream.str();
+        if constexpr (sizeof(T) == 8)
+        {
+            return tempest::format("{:016x}", static_cast<uint64_t>(n));
+        }
+        else if constexpr (sizeof(T) == 4)
+        {
+            return tempest::format("{:08x}", static_cast<uint32_t>(n));
+        }
+        else if constexpr (sizeof(T) == 2)
+        {
+            return tempest::format("{:04x}", static_cast<uint16_t>(n));
+        }
+        else
+        {
+            return tempest::format("{:02x}", static_cast<uint8_t>(n));
+        }
     }
 
-    inline std::string to_string(GFSDK_Aftermath_Result result)
+    inline auto to_string(GFSDK_Aftermath_Result result) -> tempest::string
     {
-        return std::string("0x") + to_hex_string(static_cast<uint32_t>(result));
+        return tempest::format("{:#x}", static_cast<uint32_t>(result));
     }
 
-    inline std::string to_string(const GFSDK_Aftermath_ShaderDebugInfoIdentifier& identifier)
+    inline auto to_string(const GFSDK_Aftermath_ShaderDebugInfoIdentifier& identifier) -> tempest::string
     {
-        return to_hex_string(identifier.id[0]) + "-" + to_hex_string(identifier.id[1]);
+        return tempest::format("{}-{}", to_hex_string(identifier.id[0]), to_hex_string(identifier.id[1]));
     }
 
-    inline std::string to_string(const GFSDK_Aftermath_ShaderBinaryHash& hash)
+    inline auto to_string(const GFSDK_Aftermath_ShaderBinaryHash& hash) -> tempest::string
     {
         return to_hex_string(hash.hash);
     }
-} // namespace std
+} // namespace tempest::rhi::vk::aftermath
 
 //*********************************************************
 // Helper for comparing shader hashes and debug info identifier.
 //
 
 // Helper for comparing GFSDK_Aftermath_ShaderDebugInfoIdentifier.
-inline bool operator<(const GFSDK_Aftermath_ShaderDebugInfoIdentifier& lhs, const GFSDK_Aftermath_ShaderDebugInfoIdentifier& rhs)
+inline bool operator<(const GFSDK_Aftermath_ShaderDebugInfoIdentifier& lhs,
+                      const GFSDK_Aftermath_ShaderDebugInfoIdentifier& rhs)
 {
     if (lhs.id[0] == rhs.id[0])
     {
@@ -71,14 +84,14 @@ inline bool operator<(const GFSDK_Aftermath_ShaderDebugName& lhs, const GFSDK_Af
 // Helper for checking Nsight Aftermath failures.
 //
 
-inline std::string AftermathErrorMessage(GFSDK_Aftermath_Result result)
+inline auto AftermathErrorMessage(GFSDK_Aftermath_Result result) -> tempest::string
 {
     switch (result)
     {
     case GFSDK_Aftermath_Result_FAIL_DriverVersionNotSupported:
         return "Unsupported driver version - requires an NVIDIA R495 display driver or newer.";
     default:
-        return "Aftermath Error 0x" + std::to_hex_string(result);
+        return tempest::format("Aftermath Error {:#x}", static_cast<uint32_t>(result));
     }
 }
 

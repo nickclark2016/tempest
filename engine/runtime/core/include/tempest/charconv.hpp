@@ -3,6 +3,8 @@
 
 #include <tempest/api.hpp>
 #include <tempest/int.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/type_traits.hpp>
 
 namespace tempest
@@ -110,6 +112,12 @@ namespace tempest
     /// @brief Converts a 64-bit double to a character sequence using specified format and precision.
     TEMPEST_API auto to_chars(char* first, char* last, double value, chars_format fmt, int precision) noexcept
         -> to_chars_result;
+
+    /// @brief Converts a wide string to a narrow UTF-8 string.
+    [[nodiscard]] TEMPEST_API auto convert_wide_to_narrow(tempest::wstring_view wide_str) -> string;
+
+    /// @brief Converts a narrow UTF-8 string to a wide string.
+    [[nodiscard]] TEMPEST_API auto convert_narrow_to_wide(tempest::string_view narrow_str) -> wstring;
 
 } // namespace tempest
 

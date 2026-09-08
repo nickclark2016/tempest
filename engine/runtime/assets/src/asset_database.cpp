@@ -5,9 +5,9 @@
 #include <tempest/filesystem.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/serial.hpp>
+#include <tempest/utility.hpp>
 
 #include <filesystem>
-#include <fstream>
 
 namespace tempest::assets
 {
@@ -51,8 +51,8 @@ namespace tempest::assets
         struct parsed_alias
         {
             bool is_aliased{false};
-            string_view alias{};
-            string_view subpath{};
+            string_view alias;
+            string_view subpath;
         };
 
         auto parse_alias(string_view path) -> parsed_alias
@@ -83,19 +83,17 @@ namespace tempest::assets
                         .subpath = subpath,
                     };
                 }
-                else
+
+                auto alias = tempest::substr(path, 1, path.size() - 1);
+                if (alias.empty())
                 {
-                    auto alias = tempest::substr(path, 1, path.size() - 1);
-                    if (alias.empty())
-                    {
-                        return parsed_alias{.is_aliased = false};
-                    }
-                    return parsed_alias{
-                        .is_aliased = true,
-                        .alias = alias,
-                        .subpath = string_view{},
-                    };
+                    return parsed_alias{.is_aliased = false};
                 }
+                return parsed_alias{
+                    .is_aliased = true,
+                    .alias = alias,
+                    .subpath = string_view{},
+                };
             }
             return parsed_alias{.is_aliased = false};
         }
@@ -236,9 +234,10 @@ namespace tempest::assets
             uint32_t w[64];
             for (size_t i = 0; i < 16; ++i)
             {
-                w[i] = (static_cast<uint32_t>(block[i * 4 + 0]) << 24) |
-                       (static_cast<uint32_t>(block[i * 4 + 1]) << 16) |
-                       (static_cast<uint32_t>(block[i * 4 + 2]) << 8) | (static_cast<uint32_t>(block[i * 4 + 3]) << 0);
+                w[i] = (static_cast<uint32_t>(block[(i * 4) + 0]) << 24) |
+                       (static_cast<uint32_t>(block[(i * 4) + 1]) << 16) |
+                       (static_cast<uint32_t>(block[(i * 4) + 2]) << 8) |
+                       (static_cast<uint32_t>(block[(i * 4) + 3]) << 0);
             }
             for (size_t i = 16; i < 64; ++i)
             {
@@ -361,9 +360,9 @@ namespace tempest::assets
             len -= 64;
         }
 
-        for (size_t b = 0; b < 64; ++b)
+        for (unsigned char& b : block)
         {
-            block[b] = 0;
+            b = 0;
         }
         if (len > 0)
         {
@@ -374,9 +373,9 @@ namespace tempest::assets
         if (len >= 56)
         {
             sha256_transform(state, block);
-            for (size_t b = 0; b < 64; ++b)
+            for (unsigned char& b : block)
             {
-                block[b] = 0;
+                b = 0;
             }
         }
 
@@ -390,10 +389,10 @@ namespace tempest::assets
         content_hash result;
         for (size_t j = 0; j < 8; ++j)
         {
-            result.data[j * 4 + 0] = static_cast<byte>((state[j] >> 24) & 0xFF);
-            result.data[j * 4 + 1] = static_cast<byte>((state[j] >> 16) & 0xFF);
-            result.data[j * 4 + 2] = static_cast<byte>((state[j] >> 8) & 0xFF);
-            result.data[j * 4 + 3] = static_cast<byte>((state[j] >> 0) & 0xFF);
+            result.data[(j * 4) + 0] = static_cast<byte>((state[j] >> 24) & 0xFF);
+            result.data[(j * 4) + 1] = static_cast<byte>((state[j] >> 16) & 0xFF);
+            result.data[(j * 4) + 2] = static_cast<byte>((state[j] >> 8) & 0xFF);
+            result.data[(j * 4) + 3] = static_cast<byte>((state[j] >> 0) & 0xFF);
         }
         return result;
     }
@@ -440,26 +439,30 @@ namespace tempest::assets
         _dirty = false;
 
         // Try to read existing database file
-        auto file = std::ifstream(string(db_path).c_str(), std::ios::binary);
-        if (!file.is_open())
+        auto file_bytes = read_file_to_vector(db_path);
+        if (!file_bytes || file_bytes->size() < sizeof(serialization::binary_header))
         {
             return;
         }
 
         // Read binary header
         auto header = serialization::binary_header{};
-        file.read(reinterpret_cast<char*>(&header), sizeof(header));
-        if (!file || header.magic != db_magic || header.version != db_version)
+        tempest::memcpy(&header, file_bytes->data(), sizeof(header));
+        if (header.magic != db_magic || header.version != db_version)
         {
             return;
         }
 
         // Read the rest of the file into a buffer
         const auto data_size = static_cast<size_t>(header.data_length);
+        if (file_bytes->size() < sizeof(header) + data_size)
+        {
+            return;
+        }
+
         auto buffer = vector<byte>{};
         unsafe::resize_no_init(buffer, data_size);
-        file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(data_size));
-        file.close();
+        tempest::memcpy(buffer.data(), file_bytes->data() + sizeof(header), data_size);
 
         serialization::binary_archive archive;
         archive.write(tempest::move(buffer));
@@ -584,9 +587,9 @@ namespace tempest::assets
 
         // Write type registry section
         uint64_t num_types = 0;
-        _type_reg->for_each([&num_types](const type_entry&) { ++num_types; });
+        _type_reg->for_each([&num_types](const type_entry&) -> void { ++num_types; });
         serialization::serializer<serialization::binary_archive, uint64_t>::serialize(archive, num_types);
-        _type_reg->for_each([&archive](const type_entry& entry) {
+        _type_reg->for_each([&archive](const type_entry& entry) -> void {
             serialization::serializer<serialization::binary_archive, uint64_t>::serialize(
                 archive, static_cast<uint64_t>(entry.id.hash()));
             serialization::serializer<serialization::binary_archive, string>::serialize(archive, entry.canonical_name);
@@ -648,7 +651,6 @@ namespace tempest::assets
         // The archive's internal buffer holds all our written data.
         // We'll compute data_length based on what we know we wrote.
         // For now, re-serialize into a separate buffer to get the bytes.
-
         // Actually, the binary_archive accumulates writes in its internal buffer.
         // We need access to the raw buffer. Let's read everything back.
         // The archive allows read of all data that was written.
@@ -656,18 +658,14 @@ namespace tempest::assets
         auto total_size = archive.written_size();
         header.data_length = total_size;
 
-        std::ofstream file(_db_path.c_str(), std::ios::binary);
-        if (!file.is_open())
-        {
-            return false;
-        }
-
-        file.write(reinterpret_cast<const char*>(&header), sizeof(header));
         auto all_data = archive.read(total_size);
-        file.write(reinterpret_cast<const char*>(all_data.data()), static_cast<std::streamsize>(all_data.size()));
-        file.close();
+        auto combined = vector<byte>{};
+        combined.reserve(sizeof(header) + all_data.size());
+        const auto* header_bytes = reinterpret_cast<const byte*>(&header);
+        combined.insert(combined.end(), header_bytes, header_bytes + sizeof(header));
+        combined.insert(combined.end(), all_data.begin(), all_data.end());
 
-        return true;
+        return write_file_from_bytes(_db_path, combined).has_value();
     }
 
     auto asset_database::load(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity
@@ -866,7 +864,7 @@ namespace tempest::assets
     auto asset_database::unmount_root(string_view root_path) -> void
     {
         auto normalized = normalize_path_str(root_path);
-        for (auto it = _mount_roots.begin(); it != _mount_roots.end(); ++it)
+        for (auto* it = _mount_roots.begin(); it != _mount_roots.end(); ++it)
         {
             if (it->path == normalized)
             {
@@ -1536,7 +1534,8 @@ namespace tempest::assets
                 auto resolved = resolve_disk_path(src->source_path);
                 auto disk_to_read = resolved.has_value() ? resolved.value() : string(normalized);
                 src->last_modified_time = get_file_last_write_time(disk_to_read);
-                auto bytes = core::read_bytes(string_view{disk_to_read.c_str(), disk_to_read.size()});
+                auto bytes = read_file_to_vector(string_view{disk_to_read.c_str(), disk_to_read.size()})
+                                 .value_or(vector<byte>{});
 
                 if (!bytes.empty())
                 {
@@ -1699,7 +1698,8 @@ namespace tempest::assets
                 }
 
                 // Modified offline or not yet cached
-                auto bytes = core::read_bytes(string_view{disk_path->c_str(), disk_path->size()});
+                auto bytes =
+                    read_file_to_vector(string_view{disk_path->c_str(), disk_path->size()}).value_or(vector<byte>{});
                 if (!bytes.empty())
                 {
                     auto* mutable_this = const_cast<asset_database*>(this);
@@ -1881,7 +1881,7 @@ namespace tempest::assets
         return root;
     }
 
-    ecs::entity asset_database::_load_via_import(string_view source_path, ecs::archetype_registry& registry)
+    auto asset_database::_load_via_import(string_view source_path, ecs::archetype_registry& registry) -> ecs::entity
     {
         const auto* extension_it = search_last_of(source_path, '.');
         if (extension_it == source_path.end())
@@ -1911,7 +1911,7 @@ namespace tempest::assets
         if (disk_p.has_value())
         {
             src.last_modified_time = get_file_last_write_time(disk_p.value());
-            auto bytes = core::read_bytes(string_view{disk_p->c_str(), disk_p->size()});
+            auto bytes = read_file_to_vector(string_view{disk_p->c_str(), disk_p->size()}).value_or(vector<byte>{});
             if (!bytes.empty())
             {
                 src.source_hash = content_hash::compute(span<const byte>{bytes.data(), bytes.size()});
@@ -1939,19 +1939,19 @@ namespace tempest::assets
             flat_unordered_map<ecs::entity, size_t> entity_to_index;
 
             function<void(ecs::entity)> collect;
-            collect = [&](ecs::entity entity) {
+            collect = [&](ecs::entity entity) -> void {
                 auto idx = all_entities.size();
                 all_entities.push_back(entity);
                 entity_to_index.insert({entity, idx});
 
-                auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(entity);
+                const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;
                     while (child != ecs::tombstone)
                     {
                         collect(child);
-                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
+                        const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
                         child = child_rel->next_sibling;
                     }
                 }
@@ -1962,9 +1962,8 @@ namespace tempest::assets
             entity_hierarchy hierarchy;
             hierarchy.root_index = 0;
 
-            for (size_t i = 0; i < all_entities.size(); ++i)
+            for (auto entity : all_entities)
             {
-                auto entity = all_entities[i];
                 entity_hierarchy::entity_record record;
 
                 // Serialize components using registered handlers
@@ -1978,14 +1977,14 @@ namespace tempest::assets
                 }
 
                 // Record child indices
-                auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(entity);
+                const auto* rel = registry.try_get<ecs::relationship_component<ecs::entity>>(entity);
                 if (rel != nullptr && rel->first_child != ecs::tombstone)
                 {
                     auto child = rel->first_child;
                     while (child != ecs::tombstone)
                     {
                         record.child_indices.push_back(entity_to_index[child]);
-                        auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
+                        const auto* child_rel = registry.try_get<ecs::relationship_component<ecs::entity>>(child);
                         child = child_rel->next_sibling;
                     }
                 }
@@ -2019,7 +2018,7 @@ namespace tempest::assets
         return ent;
     }
 
-    source_entry& asset_database::_get_or_create_source(string_view source_path)
+    auto asset_database::_get_or_create_source(string_view source_path) -> source_entry&
     {
         auto normalized = normalize_path_str(source_path);
         auto iter = _source_path_to_index.find(normalized);

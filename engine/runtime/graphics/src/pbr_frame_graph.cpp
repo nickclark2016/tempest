@@ -30,6 +30,11 @@ namespace tempest::graphics
 {
     namespace
     {
+        auto load_shader_bytes(string_view path) -> vector<byte>
+        {
+            return read_file_to_vector(path).value_or(vector<byte>{});
+        }
+
         auto calculate_view_matrix(const ecs::transform_component& transform)
         {
             const auto position = transform.position();
@@ -588,8 +593,8 @@ namespace tempest::graphics
         auto pipeline_layout =
             _device->create_pipeline_layout({.descriptor_set_layouts = descriptor_set_layouts, .push_constants = {}});
 
-        auto vert_source = core::read_bytes("assets/shaders/zprepass.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/zprepass.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/zprepass.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/zprepass.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
         color_formats.push_back(rhi::image_format::rg16_float);
@@ -757,7 +762,7 @@ namespace tempest::graphics
             .push_constants = tempest::move(push_constants),
         });
 
-        auto compute_shader_source = core::read_bytes("assets/shaders/hzb.comp.spv");
+        auto compute_shader_source = load_shader_bytes("assets/shaders/hzb.comp.spv");
 
         auto pipeline = _device->create_compute_pipeline({
             .compute_shader = tempest::move(compute_shader_source),
@@ -1018,8 +1023,8 @@ namespace tempest::graphics
             .push_constants = {},
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/ssao.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/ssao.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/ssao.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/ssao.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
         color_formats.push_back(rhi::image_format::r16_unorm);
@@ -1189,8 +1194,8 @@ namespace tempest::graphics
             .push_constants = {},
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/ssao_blur.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/ssao_blur.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/ssao_blur.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/ssao_blur.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
         color_formats.push_back(rhi::image_format::r16_unorm);
@@ -1322,7 +1327,7 @@ namespace tempest::graphics
             .push_constants = push_constants,
         });
 
-        auto comp_source = core::read_bytes("assets/shaders/build_cluster_grid.comp.spv");
+        auto comp_source = load_shader_bytes("assets/shaders/build_cluster_grid.comp.spv");
 
         auto pipeline_desc = rhi::compute_pipeline_desc{
             .compute_shader = tempest::move(comp_source),
@@ -1448,7 +1453,7 @@ namespace tempest::graphics
             .push_constants = push_constants,
         });
 
-        auto comp_source = core::read_bytes("assets/shaders/cull_lights.comp.spv");
+        auto comp_source = load_shader_bytes("assets/shaders/cull_lights.comp.spv");
 
         auto pipeline_desc = rhi::compute_pipeline_desc{
             .compute_shader = tempest::move(comp_source),
@@ -1626,8 +1631,8 @@ namespace tempest::graphics
             .push_constants = push_constants,
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/directional_shadow_map.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/directional_shadow_map.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/directional_shadow_map.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/directional_shadow_map.frag.spv");
 
         auto pipeline_desc = rhi::graphics_pipeline_desc{
             .color_attachment_formats = {},
@@ -1795,8 +1800,8 @@ namespace tempest::graphics
             .push_constants = {},
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/skybox.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/skybox.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/skybox.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/skybox.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
         color_formats.push_back(_cfg.hdr_color_format);
@@ -2028,8 +2033,8 @@ namespace tempest::graphics
             .push_constants = {},
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/pbr.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/pbr.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/pbr.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/pbr.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
         color_formats.push_back(_cfg.hdr_color_format);
@@ -2406,8 +2411,8 @@ namespace tempest::graphics
             .alpha_blend_op = rhi::blend_op::add,
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/pbr_oit_gather.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/pbr_oit_gather.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/pbr_oit_gather.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/pbr_oit_gather.frag.spv");
 
         auto pipeline_desc = rhi::graphics_pipeline_desc{
             .color_attachment_formats = color_formats,
@@ -2747,8 +2752,8 @@ namespace tempest::graphics
             .alpha_blend_op = rhi::blend_op::add,
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/pbr_oit_resolve.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/pbr_oit_resolve.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/pbr_oit_resolve.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/pbr_oit_resolve.frag.spv");
 
         auto pipeline_desc = rhi::graphics_pipeline_desc{
             .color_attachment_formats = color_formats,
@@ -2949,8 +2954,8 @@ namespace tempest::graphics
             .push_constants = {},
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/pbr_oit_blend.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/pbr_oit_blend.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/pbr_oit_blend.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/pbr_oit_blend.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
         color_formats.push_back(_cfg.hdr_color_format);
@@ -3092,8 +3097,8 @@ namespace tempest::graphics
             .push_constants = {},
         });
 
-        auto vert_source = core::read_bytes("assets/shaders/tonemap.vert.spv");
-        auto frag_source = core::read_bytes("assets/shaders/tonemap.frag.spv");
+        auto vert_source = load_shader_bytes("assets/shaders/tonemap.vert.spv");
+        auto frag_source = load_shader_bytes("assets/shaders/tonemap.frag.spv");
 
         auto color_formats = vector<rhi::image_format>();
         color_formats.push_back(_cfg.tonemapped_color_format);

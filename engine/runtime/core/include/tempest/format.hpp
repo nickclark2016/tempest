@@ -501,7 +501,7 @@ namespace tempest
     //=========================================================================
 
     template <>
-    struct tempest::formatter<bool>
+    struct formatter<bool>
     {
         template <typename FormatContext>
         static auto format(bool val, FormatContext& ctx) -> void

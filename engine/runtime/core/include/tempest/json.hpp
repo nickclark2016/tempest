@@ -35,8 +35,8 @@ namespace tempest
         constexpr explicit json_value(const yyjson_val* val) noexcept : _val{val}
         {
         }
-        constexpr json_value(const json_object& obj) noexcept;
-        constexpr json_value(const json_array& arr) noexcept;
+        json_value(const json_object& obj) noexcept;
+        json_value(const json_array& arr) noexcept;
 
         [[nodiscard]] auto is_valid() const noexcept -> bool
         {
@@ -262,11 +262,11 @@ namespace tempest
         const yyjson_val* _val{nullptr};
     };
 
-    constexpr json_value::json_value(const json_object& obj) noexcept : _val{obj.raw()}
+    inline json_value::json_value(const json_object& obj) noexcept : _val{obj.raw()}
     {
     }
 
-    constexpr json_value::json_value(const json_array& arr) noexcept : _val{arr.raw()}
+    inline json_value::json_value(const json_array& arr) noexcept : _val{arr.raw()}
     {
     }
 

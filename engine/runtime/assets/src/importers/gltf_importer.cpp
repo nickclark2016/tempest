@@ -146,11 +146,13 @@ namespace tempest::assets
                     if (dir)
                     {
                         auto full_path = (*dir / uri_sv).string();
-                        data = core::read_bytes({full_path.c_str(), full_path.size()});
+                        data = read_file_to_vector(
+                                   tempest::filesystem::path{string_view{full_path.c_str(), full_path.size()}})
+                                   .value_or(vector<byte>{});
                     }
                     else
                     {
-                        data = core::read_bytes({uri.data(), uri.size()});
+                        data = read_file_to_vector(tempest::filesystem::path{uri}).value_or(vector<byte>{});
                     }
                 }
             }
@@ -183,12 +185,14 @@ namespace tempest::assets
                     if (dir)
                     {
                         auto full_path = (*dir / uri_sv).string();
-                        payload.data = core::read_bytes({full_path.c_str(), full_path.size()});
+                        payload.data = read_file_to_vector(
+                                           tempest::filesystem::path{string_view{full_path.c_str(), full_path.size()}})
+                                           .value_or(vector<byte>{});
                         payload.file_path = {full_path.c_str(), full_path.size()};
                     }
                     else
                     {
-                        payload.data = core::read_bytes({uri.data(), uri.size()});
+                        payload.data = read_file_to_vector(tempest::filesystem::path{uri}).value_or(vector<byte>{});
                         payload.file_path = string{uri.data(), uri.size()};
                     }
                 }

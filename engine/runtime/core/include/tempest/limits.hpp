@@ -86,7 +86,7 @@ namespace tempest
                 }
                 else
                 {
-                    return ~T(0);
+                    return static_cast<T>(~T(0));
                 }
             }
 
@@ -328,6 +328,22 @@ namespace tempest
             return detail::long_double_round_error_val;
         }
 
+#ifdef _MSC_VER
+        static constexpr auto infinity() noexcept -> long double
+        {
+            return __builtin_huge_val();
+        }
+
+        static constexpr auto quiet_NaN() noexcept -> long double
+        {
+            return __builtin_nan("");
+        }
+
+        static constexpr auto signaling_NaN() noexcept -> long double
+        {
+            return __builtin_nans("");
+        }
+#else
         static constexpr auto infinity() noexcept -> long double
         {
             return __builtin_huge_vall();
@@ -342,6 +358,7 @@ namespace tempest
         {
             return __builtin_nansl("");
         }
+#endif
     };
 } // namespace tempest
 

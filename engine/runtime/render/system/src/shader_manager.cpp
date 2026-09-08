@@ -34,7 +34,7 @@ namespace tempest::render_system
         other._asset_db = nullptr;
     }
 
-    shader_manager& shader_manager::operator=(shader_manager&& other) noexcept
+    auto shader_manager::operator=(shader_manager&& other) noexcept -> shader_manager&
     {
         if (this != &other)
         {
@@ -120,7 +120,8 @@ namespace tempest::render_system
             if (resolved.has_value())
             {
                 auto disk_str = resolved->generic_string();
-                return core::read_bytes(string_view{disk_str.c_str(), disk_str.size()});
+                return read_file_to_vector(tempest::filesystem::path{string_view{disk_str.c_str(), disk_str.size()}})
+                    .value_or(vector<byte>{});
             }
         }
 
@@ -208,7 +209,7 @@ namespace tempest::render_system
                                                    shader_module_handle override_handle)
         -> rhi::graphics_pipeline_handle
     {
-        if (!_device)
+        if (_device == nullptr)
         {
             return {};
         }
@@ -271,7 +272,7 @@ namespace tempest::render_system
     auto shader_manager::compile_compute_pipeline(const compute_pipeline_record& rec, span<const byte> override_bytes)
         -> rhi::compute_pipeline_handle
     {
-        if (!_device || rec.module.id == 0 || rec.module.id >= _modules.size())
+        if ((_device == nullptr) || rec.module.id == 0 || rec.module.id >= _modules.size())
         {
             return {};
         }
@@ -423,7 +424,7 @@ namespace tempest::render_system
     void shader_manager::enqueue_pipeline_retirement(rhi::graphics_pipeline_handle gfx,
                                                      rhi::compute_pipeline_handle comp)
     {
-        if (!_device || (gfx.handle == 0 && comp.handle == 0))
+        if ((_device == nullptr) || (gfx.handle == 0 && comp.handle == 0))
         {
             return;
         }
@@ -587,12 +588,12 @@ namespace tempest::render_system
 
     void shader_manager::process_deferred_retirements()
     {
-        if (!_device)
+        if (_device == nullptr)
         {
             return;
         }
 
-        for (auto it = _retired_pipelines.begin(); it != _retired_pipelines.end();)
+        for (auto *it = _retired_pipelines.begin(); it != _retired_pipelines.end();)
         {
             bool all_queues_completed = true;
             for (const auto& sync_point : it->required_sync_points)
@@ -629,7 +630,7 @@ namespace tempest::render_system
 
     void shader_manager::release_all()
     {
-        if (_device)
+        if (_device != nullptr)
         {
             for (const auto& it : _retired_pipelines)
             {
@@ -707,7 +708,8 @@ namespace tempest::render_system
         if (resolved.has_value())
         {
             auto path_str = resolved->string();
-            auto bytes = core::read_bytes(string_view{path_str.c_str(), path_str.size()});
+            auto bytes = read_file_to_vector(tempest::filesystem::path{string_view{path_str.c_str(), path_str.size()}})
+                             .value_or(vector<byte>{});
             if (!bytes.empty())
             {
                 _legacy_bytecode_cache[key] = bytes;
@@ -755,7 +757,7 @@ namespace tempest::render_system
             return get_rhi_pipeline(it->second);
         }
 
-        if (!_device)
+        if (_device == nullptr)
         {
             return {};
         }
@@ -784,7 +786,7 @@ namespace tempest::render_system
             return get_rhi_pipeline(it->second);
         }
 
-        if (!_device)
+        if (_device == nullptr)
         {
             return {};
         }

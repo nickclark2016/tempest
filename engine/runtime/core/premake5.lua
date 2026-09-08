@@ -54,9 +54,6 @@ scoped.project('core', function()
             defines {
                 'TEMPEST_WIN_THREADS',
             }
-            links {
-                'bcrypt',
-            }
         end)
 
         scoped.filter({
@@ -95,7 +92,8 @@ scoped.project('core', function()
         }
 
         scoped.filter({
-            'system:windows'
+            'system:windows',
+            'toolset:not msc*'
         }, function()
             links {
                 'bcrypt',

@@ -1,18 +1,19 @@
 #include <tempest/filesystem.hpp>
 
+#include <tempest/charconv.hpp>
 #include <gtest/gtest.h>
 
 namespace fs = tempest::filesystem;
 
-TEST(path_detail, convert_wide_to_narrow)
+TEST(charconv, convert_wide_to_narrow)
 {
-    auto narrow_str = fs::detail::convert_wide_to_narrow(L"Hello World");
+    auto narrow_str = tempest::convert_wide_to_narrow(L"Hello World");
     EXPECT_EQ(narrow_str, "Hello World");
 }
 
-TEST(path_detail, convert_narrow_to_wide)
+TEST(charconv, convert_narrow_to_wide)
 {
-    auto wide_str = fs::detail::convert_narrow_to_wide("Hello World");
+    auto wide_str = tempest::convert_narrow_to_wide("Hello World");
     EXPECT_EQ(wide_str, L"Hello World");
 }
 
@@ -494,8 +495,8 @@ TEST(path, append)
     fs::path win_style_left_root = fs::path("C:\\hello").append("world");
     fs::path win_style_right_root = fs::path("hello").append("C:\\world");
     fs::path win_style_both_roots = fs::path("C:\\hello").append("C:\\world");
-    fs::path win_style_unc_left = fs::path("\\\\server\\share").append("file.txt");
-    fs::path win_style_unc_right = fs::path("file.txt").append("\\\\server\\share");
+    fs::path win_style_unc_left = fs::path(R"(\\server\share)").append("file.txt");
+    fs::path win_style_unc_right = fs::path("file.txt").append(R"(\\server\share)");
     fs::path unix_style_left_root = fs::path("/hello").append("world");
     fs::path unix_style_right_root = fs::path("hello").append("/world");
     fs::path unix_style_both_roots = fs::path("/hello").append("/world");
@@ -602,7 +603,7 @@ TEST(path, remove_filename)
     fs::path only_filename = fs::path("HelloWorld");
     fs::path win_root = fs::path("C:\\");
     fs::path unix_root = fs::path("/");
-    fs::path win_style_path = fs::path("C:\\Users\\User\\Documents\\file.txt");
+    fs::path win_style_path = fs::path(R"(C:\Users\User\Documents\file.txt)");
     fs::path unix_style_path = fs::path("/home/user/documents/file.txt");
 
     only_filename.remove_filename();
@@ -761,7 +762,7 @@ TEST(directory_iterator, traverse_current_directory)
         EXPECT_TRUE(entry.exists());
     }
 
-    EXPECT_GT(count, 0u);
+    EXPECT_GT(count, 0U);
 }
 
 /// @brief Tests that constructing an iterator on an invalid or non-existent path produces an empty range.
@@ -805,7 +806,7 @@ TEST(directory_iterator, cached_attributes_match_standalone_queries)
 #endif
     }
 
-    EXPECT_GT(count, 0u);
+    EXPECT_GT(count, 0U);
 }
 
 // ============================================================================
