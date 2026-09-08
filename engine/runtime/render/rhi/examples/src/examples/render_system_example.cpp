@@ -1,7 +1,6 @@
 #include "render_system_example.hpp"
 
-#include <cmath>
-#include <filesystem>
+#include <tempest/filesystem.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/default_importers.hpp>
 #include <tempest/math_utils.hpp>
@@ -17,7 +16,7 @@ namespace tempest::rhi::examples
 
             auto add_face = [&](math::vec3<float> normal, math::vec3<float> tangent, math::vec3<float> v0,
                                 math::vec3<float> v1, math::vec3<float> v2, math::vec3<float> v3,
-                                math::vec4<float> color) {
+                                math::vec4<float> color) -> void {
                 const auto base_idx = static_cast<uint32_t>(m.vertices.size());
                 m.vertices.push_back(core::vertex{.position = v0,
                                                   .uv = {0.0F, 0.0F},
@@ -193,10 +192,10 @@ namespace tempest::rhi::examples
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
 
-        const auto model_path = (_model == scene_model::chess)
+        const auto *const model_path = (_model == scene_model::chess)
                                     ? "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf"
                                     : "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
-        if (std::filesystem::exists(model_path))
+        if (filesystem::exists(model_path))
         {
             auto prefab_root = asset_db.load(model_path, _registry);
             if (prefab_root != ecs::tombstone)
@@ -235,7 +234,7 @@ namespace tempest::rhi::examples
                     const auto roughness = math::clamp(static_cast<float>(j + 2) / 4.0F, 0.05F, 1.0F);
 
                     cube_mat.set_vec4(core::material::base_color_factor_name,
-                                      {0.9F * (1.0F - metallic), 0.7F, 0.2F + 0.8F * metallic, 1.0F});
+                                      {0.9F * (1.0F - metallic), 0.7F, 0.2F + (0.8F * metallic), 1.0F});
                     cube_mat.set_scalar(core::material::metallic_factor_name, metallic);
                     cube_mat.set_scalar(core::material::roughness_factor_name, roughness);
                     auto cube_mat_id = _materials.register_material(tempest::move(cube_mat));
@@ -279,9 +278,9 @@ namespace tempest::rhi::examples
             // Orbit Camera around Sponza interior
             if (_camera_entity != ecs::tombstone)
             {
-                const auto cam_x = std::sin(_time * 0.3F) * 5.0F;
-                const auto cam_z = -std::cos(_time * 0.3F) * 4.0F;
-                const auto yaw = std::atan2(-cam_x, -cam_z);
+                const auto cam_x = math::sin(_time * 0.3F) * 5.0F;
+                const auto cam_z = -math::cos(_time * 0.3F) * 4.0F;
+                const auto yaw = math::atan2(-cam_x, -cam_z);
 
                 auto tx = _registry.get<ecs::transform_component>(_camera_entity);
                 tx.position({cam_x, 1.8F, cam_z});

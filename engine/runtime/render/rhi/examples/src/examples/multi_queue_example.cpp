@@ -1,10 +1,8 @@
 #include "multi_queue_example.hpp"
 
-#include <cmath>
-#include <cstring>
-#include <stdint.h> // for uint32_t for shaders
 #include <tempest/array.hpp>
 #include <tempest/span.hpp>
+#include <tempest/utility.hpp>
 
 namespace shaders::triangle
 {
@@ -19,13 +17,12 @@ namespace shaders::triangle
     } // namespace fs
 } // namespace shaders::triangle
 
-namespace shaders::animate
-{
-    namespace cs
+
+    namespace shaders::animate::cs
     {
 #include <animate.comp.h>
-    } // namespace cs
-} // namespace shaders::animate
+    } // namespace shaders::animate::cs
+
 
 namespace tempest::rhi::examples
 {
@@ -62,17 +59,17 @@ namespace tempest::rhi::examples
         // 3-blade symmetric star geometry (9 vertices, 3 triangles)
         constexpr auto template_positions = array<vec2, 9>{
             // Blade 1 (Top)
-            vec2{0.0F, -0.65F},
-            vec2{0.22F, -0.05F},
-            vec2{-0.22F, -0.05F},
+            vec2{.x=0.0F, .y=-0.65F},
+            vec2{.x=0.22F, .y=-0.05F},
+            vec2{.x=-0.22F, .y=-0.05F},
             // Blade 2 (Bottom-Right)
-            vec2{0.56F, 0.35F},
-            vec2{0.05F, 0.25F},
-            vec2{0.18F, -0.15F},
+            vec2{.x=0.56F, .y=0.35F},
+            vec2{.x=0.05F, .y=0.25F},
+            vec2{.x=0.18F, .y=-0.15F},
             // Blade 3 (Bottom-Left)
-            vec2{-0.56F, 0.35F},
-            vec2{-0.18F, -0.15F},
-            vec2{-0.05F, 0.25F},
+            vec2{.x=-0.56F, .y=0.35F},
+            vec2{.x=-0.18F, .y=-0.15F},
+            vec2{.x=-0.05F, .y=0.25F},
         };
 
         constexpr auto indices = array<uint16_t, 9>{
@@ -96,7 +93,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_staging_buffer.cpu_address, template_positions.data(), sizeof(template_positions));
+        tempest::memcpy(_staging_buffer.cpu_address, template_positions.data(), sizeof(template_positions));
 
         // 2. Create GPU Base Positions Buffer (Transfer Destination)
         const auto base_pos_desc = buffer_desc{
@@ -149,7 +146,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
+        tempest::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
 
         // 6. Initialize Render Graph
         _render_graph = make_unique<render_graph::render_graph>(1920, 1080);
@@ -232,7 +229,7 @@ namespace tempest::rhi::examples
 
     auto multi_queue_example::render(const frame_render_info& info) -> void
     {
-        if (!_device || !_render_graph)
+        if ((_device == nullptr) || !_render_graph)
         {
             return;
         }
@@ -253,7 +250,7 @@ namespace tempest::rhi::examples
 
         const auto& transfer_pass = _render_graph->add_transfer_pass<transfer_pass_data>(
             "AsyncGeometryUploadPass",
-            [this](render_graph::pass_builder& builder, transfer_pass_data& data) {
+            [this](render_graph::pass_builder& builder, transfer_pass_data& data) -> void {
                 const auto stg = builder.import_buffer(_staging_buffer);
                 const auto dst = builder.import_buffer(_base_positions_buffer);
                 data.staging = builder.read(stg, rhi::pipeline_stage::copy, rhi::resource_access::read);
@@ -261,7 +258,7 @@ namespace tempest::rhi::examples
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const transfer_pass_data& data,
-                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) -> void {
                 const auto copy_region = buffer_copy_region{
                     .src_offset = 0,
                     .dst_offset = 0,
@@ -280,7 +277,7 @@ namespace tempest::rhi::examples
 
         const auto& compute_pass = _render_graph->add_compute_pass<compute_pass_data>(
             "AsyncVertexAnimatePass",
-            [this, &transfer_pass](render_graph::pass_builder& builder, compute_pass_data& data) {
+            [this, &transfer_pass](render_graph::pass_builder& builder, compute_pass_data& data) -> void {
                 data.input_pos =
                     builder.read(transfer_pass.base_pos, rhi::pipeline_stage::compute, rhi::resource_access::read);
                 const auto dyn_pos = builder.import_buffer(_dynamic_positions_buffer);
@@ -290,7 +287,7 @@ namespace tempest::rhi::examples
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const compute_pass_data& data,
-                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) -> void {
                 pass_cmd.bind_pipeline(_compute_pipeline);
                 const auto anim_constants = animate_push_constants{
                     .input_positions_address = _base_positions_buffer.gpu_address,
@@ -314,7 +311,7 @@ namespace tempest::rhi::examples
 
         _render_graph->add_graphics_pass<raster_pass_data>(
             "StarRasterPass",
-            [this, &compute_pass, sc_tex](render_graph::pass_builder& builder, raster_pass_data& data) {
+            [this, &compute_pass, sc_tex](render_graph::pass_builder& builder, raster_pass_data& data) -> void {
                 data.pos =
                     builder.read(compute_pass.output_pos, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 data.col =
@@ -323,12 +320,12 @@ namespace tempest::rhi::examples
                                                                   .texture = sc_tex,
                                                                   .load_op = rhi::load_op::clear,
                                                                   .store_op = rhi::store_op::store,
-                                                                  .clear_value = {0.05F, 0.05F, 0.05F, 1.0F},
+                                                                  .clear_value = {.r=0.05F, .g=0.05F, .b=0.05F, .a=1.0F},
                                                               });
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const raster_pass_data& data,
-                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) -> void {
                 pass_cmd.bind_pipeline(_graphics_pipeline);
                 pass_cmd.bind_index_buffer(_index_buffer, index_type::uint16, 0);
 

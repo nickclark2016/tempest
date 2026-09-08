@@ -1,6 +1,5 @@
 #include <tempest/render_system/passes/depth_prepass.hpp>
 
-#include <iostream>
 #include <tempest/array.hpp>
 
 namespace tempest::render_system
@@ -42,7 +41,7 @@ namespace tempest::render_system
         return graph.add_graphics_pass<depth_prepass_data>(
             "DepthPrepass",
             [&pool, depth_tex, draw_count, draw_offset, pipeline_stats](render_graph::pass_builder& builder,
-                                                                        depth_prepass_data& data) {
+                                                                        depth_prepass_data& data) -> void {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
@@ -76,7 +75,7 @@ namespace tempest::render_system
             },
             [&pool, &shaders, pipe](const depth_prepass_data& data,
                                     [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                                    rhi::command_list& pass_cmd) {
+                                    rhi::command_list& pass_cmd) -> void {
                 if (data.draw_count == 0)
                 {
                     return;
@@ -102,7 +101,7 @@ namespace tempest::render_system
                                         span<const byte>{reinterpret_cast<const byte*>(&constants), sizeof(constants)});
 
                 const auto byte_offset = pool.get_draw_commands_buffer_offset() +
-                                         static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command);
+                                         (static_cast<uint64_t>(data.draw_offset) * sizeof(indexed_indirect_command));
                 pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, data.draw_count,
                                                sizeof(indexed_indirect_command));
             });

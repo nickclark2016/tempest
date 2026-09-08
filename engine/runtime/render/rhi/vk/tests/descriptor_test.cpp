@@ -7,7 +7,7 @@
 #include <tempest/vector.hpp>
 #include <tempest/vk/context.hpp>
 
-#include <cstring>
+#include <tempest/utility.hpp>
 
 namespace test_bindless_sample
 {
@@ -293,7 +293,7 @@ TEST(descriptor_test, bindless_sampled_image_read)
     auto upload_buf = dev->create_buffer(upload_desc);
     ASSERT_NE(upload_buf.handle, 0ULL);
     ASSERT_NE(upload_buf.cpu_address, nullptr);
-    std::memcpy(upload_buf.cpu_address, tex_pixels.data(), sizeof(tex_pixels));
+    tempest::memcpy(upload_buf.cpu_address, tex_pixels.data(), sizeof(tex_pixels));
 
     auto tex_desc = texture_desc{
         .width = tex_w,

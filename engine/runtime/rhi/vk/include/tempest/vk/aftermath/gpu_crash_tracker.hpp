@@ -1,9 +1,13 @@
 #ifndef tempest_rhi_vk_aftermath_gpu_crash_tracker_hpp
 #define tempest_rhi_vk_aftermath_gpu_crash_tracker_hpp
 
-#include <map>
-#include <mutex>
-#include <vector>
+#include <tempest/array.hpp>
+#include <tempest/flat_map.hpp>
+#include <tempest/int.hpp>
+#include <tempest/mutex.hpp>
+#include <tempest/span.hpp>
+#include <tempest/string.hpp>
+#include <tempest/vector.hpp>
 
 #include "helpers.hpp"
 
@@ -19,23 +23,23 @@ namespace tempest::rhi::vk::aftermath
         ~shader_database();
 
         bool find_shader_binary(const GFSDK_Aftermath_ShaderBinaryHash& shader_hash,
-                                std::vector<uint8_t>& shader) const;
+                                tempest::vector<uint8_t>& shader) const;
 
-        void add_shader_binary(std::span<std::uint8_t> data);
+        void add_shader_binary(tempest::span<uint8_t> data);
 
       private:
         void _add_shader_binary(const char* shader_file_path);
 
-        static bool _read_file(const char* filename, std::vector<uint8_t>& data);
+        static bool _read_file(const char* filename, tempest::vector<uint8_t>& data);
 
-        std::map<GFSDK_Aftermath_ShaderBinaryHash, std::vector<uint8_t>> _shader_binaries;
+        tempest::flat_map<GFSDK_Aftermath_ShaderBinaryHash, tempest::vector<uint8_t>> _shader_binaries;
     };
 
     class gpu_crash_tracker
     {
       public:
         static constexpr size_t marker_frame_history = 4;
-        typedef std::array<std::map<uint64_t, std::string>, marker_frame_history> marker_map;
+        using marker_map = tempest::array<tempest::flat_map<uint64_t, tempest::string>, marker_frame_history>;
 
         gpu_crash_tracker(const marker_map& markers);
         ~gpu_crash_tracker();
@@ -77,8 +81,8 @@ namespace tempest::rhi::vk::aftermath
                                                               void* user_data);
 
         bool _initialized;
-        mutable std::mutex _mutex;
-        std::map<GFSDK_Aftermath_ShaderDebugInfoIdentifier, std::vector<uint8_t>> _shader_debug_info;
+        mutable tempest::mutex _mutex;
+        tempest::flat_map<GFSDK_Aftermath_ShaderDebugInfoIdentifier, tempest::vector<uint8_t>> _shader_debug_info;
         shader_database _shader_database;
         const marker_map& _marker_map;
     };

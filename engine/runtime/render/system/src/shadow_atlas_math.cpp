@@ -1,8 +1,8 @@
 #include <tempest/render_system/shadow_atlas_math.hpp>
 
-#include <bit>
-#include <cmath>
+#include <tempest/math_utils.hpp>
 #include <tempest/algorithm.hpp>
+#include <tempest/bit.hpp>
 
 namespace tempest::render_system
 {
@@ -33,8 +33,8 @@ namespace tempest::render_system
             return 0;
         }
 
-        const auto cols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(num_cascades))));
-        const auto rows = static_cast<uint32_t>(std::ceil(static_cast<float>(num_cascades) / static_cast<float>(cols)));
+        const auto cols = static_cast<uint32_t>(math::ceil(math::sqrt(static_cast<float>(num_cascades))));
+        const auto rows = static_cast<uint32_t>(math::ceil(static_cast<float>(num_cascades) / static_cast<float>(cols)));
 
         const auto max_tile_w = max_atlas_dim / cols;
         const auto max_tile_h = max_atlas_dim / rows;
@@ -52,7 +52,7 @@ namespace tempest::render_system
             return 0;
         }
 
-        return std::bit_floor(available_res);
+        return tempest::bit_floor(available_res);
     }
 
     auto calculate_directional_shadow_atlas_plan(uint32_t cascade_res, uint32_t num_cascades, uint32_t max_atlas_dim,
@@ -69,8 +69,8 @@ namespace tempest::render_system
         }
 
         const auto effective_max_dim = max_atlas_dim > 0 ? max_atlas_dim : 8192U;
-        const auto cols = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(num_cascades))));
-        const auto rows = static_cast<uint32_t>(std::ceil(static_cast<float>(num_cascades) / static_cast<float>(cols)));
+        const auto cols = static_cast<uint32_t>(math::ceil(math::sqrt(static_cast<float>(num_cascades))));
+        const auto rows = static_cast<uint32_t>(math::ceil(static_cast<float>(num_cascades) / static_cast<float>(cols)));
 
         const auto total_pad = padding * 2;
         auto effective_res = cascade_res;
@@ -94,8 +94,8 @@ namespace tempest::render_system
         const auto final_req_w = cols * final_padded_tile;
         const auto final_req_h = rows * final_padded_tile;
 
-        auto atlas_w = std::bit_ceil(tempest::max(512U, final_req_w));
-        auto atlas_h = std::bit_ceil(tempest::max(512U, final_req_h));
+        auto atlas_w = tempest::bit_ceil(tempest::max(512U, final_req_w));
+        auto atlas_h = tempest::bit_ceil(tempest::max(512U, final_req_h));
 
         atlas_w = tempest::min(atlas_w, effective_max_dim);
         atlas_h = tempest::min(atlas_h, effective_max_dim);

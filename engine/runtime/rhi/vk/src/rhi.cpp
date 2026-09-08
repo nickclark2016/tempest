@@ -1,6 +1,6 @@
-#include <format>
 #include <iostream>
 #include <tempest/flat_unordered_map.hpp>
+#include <tempest/format.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/optional.hpp>
@@ -12,7 +12,6 @@
 #include "window.hpp"
 
 #include <exception>
-#include <format>
 #include <vulkan/vulkan_core.h>
 
 namespace tempest::rhi::vk
@@ -28,27 +27,27 @@ namespace tempest::rhi::vk
 
             if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
-                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                const auto msg = tempest::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
                 log->error({msg.cbegin(), msg.cend()});
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
             {
-                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                const auto msg = tempest::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
                 log->warn({msg.cbegin(), msg.cend()});
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
             {
-                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                const auto msg = tempest::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
                 log->info({msg.cbegin(), msg.cend()});
             }
             else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
             {
-                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                const auto msg = tempest::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
                 log->debug({msg.cbegin(), msg.cend()});
             }
             else
             {
-                const auto msg = std::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
+                const auto msg = tempest::format("Vulkan Validation Message: {}", pCallbackData->pMessage);
                 log->debug({msg.cbegin(), msg.cend()});
             }
 
@@ -1489,7 +1488,7 @@ namespace tempest::rhi::vk
 
         _is_debug_device = _vkb_instance->debug_messenger != nullptr;
 
-#if defined(TEMPEST_DEBUG_SHADERS)
+#ifdef TEMPEST_DEBUG_SHADERS
         _can_name = true;
 #else
         _can_name = false;
@@ -1757,7 +1756,7 @@ namespace tempest::rhi::vk
         if (!desc.name.empty())
         {
             name_object(VK_OBJECT_TYPE_IMAGE, img.image, desc.name.c_str());
-            auto view_name = std::format("{} View", desc.name.c_str());
+            auto view_name = tempest::format("{} View", desc.name.c_str());
             name_object(VK_OBJECT_TYPE_IMAGE_VIEW, img.image_view, view_name.c_str());
         }
 
@@ -2163,10 +2162,10 @@ namespace tempest::rhi::vk
         VkViewport default_vp = {
             .x = 0,
             .y = 0,
-            .width = 1.0f,
-            .height = 1.0f,
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
+            .width = 1.0F,
+            .height = 1.0F,
+            .minDepth = 0.0F,
+            .maxDepth = 1.0F,
         };
 
         VkRect2D default_scissor = {
@@ -3027,7 +3026,8 @@ namespace tempest::rhi::vk
 
         if (usage & rhi::buffer_usage::constant)
         {
-            alignment = std::lcm(alignment, _vkb_device.physical_device.properties.limits.minUniformBufferOffsetAlignment);
+            alignment =
+                std::lcm(alignment, _vkb_device.physical_device.properties.limits.minUniformBufferOffsetAlignment);
         }
 
         if (usage & rhi::buffer_usage::structured)
@@ -3147,7 +3147,7 @@ namespace tempest::rhi::vk
                 .format = VK_FORMAT_UNDEFINED,
             };
 
-            const auto desc_data = [&]() {
+            const auto desc_data = [&]() -> void {
                 switch (write.type)
                 {
                 case rhi::descriptor_type::constant_buffer:
@@ -3201,7 +3201,7 @@ namespace tempest::rhi::vk
                     .imageLayout = to_vulkan(write.images[i].layout),
                 };
 
-                const auto desc_data = [&]() {
+                const auto desc_data = [&]() -> void {
                     switch (write.type)
                     {
                     case rhi::descriptor_type::sampled_image:
@@ -5146,7 +5146,7 @@ namespace tempest::rhi::vk
             .set_engine_version(0, 1, 0)
             .require_api_version(1, 3, 0);
 
-#if defined(TEMPEST_ENABLE_VALIDATION_LAYERS)
+#ifdef TEMPEST_ENABLE_VALIDATION_LAYERS
         bldr.request_validation_layers(true)
             .set_debug_callback(debug_callback)
             .set_debug_callback_user_data_pointer(log)
@@ -5163,7 +5163,7 @@ namespace tempest::rhi::vk
 #endif
 #endif
 
-#if defined(TEMPEST_DEBUG_SHADERS)
+#ifdef TEMPEST_DEBUG_SHADERS
         bldr.enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 

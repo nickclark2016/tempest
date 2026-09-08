@@ -1,6 +1,5 @@
 #include <tempest/render_system/shader_manager.hpp>
 
-#include <filesystem>
 #include <tempest/files.hpp>
 
 namespace tempest::render_system
@@ -56,7 +55,8 @@ namespace tempest::render_system
         return *this;
     }
 
-    auto shader_manager::resolve_path(const std::filesystem::path& input_path) const -> optional<std::filesystem::path>
+    auto shader_manager::resolve_path(const tempest::filesystem::path& input_path) const
+        -> optional<tempest::filesystem::path>
     {
         auto path_str = input_path.generic_string();
         if (_asset_db != nullptr)
@@ -64,7 +64,7 @@ namespace tempest::render_system
             auto resolved = _asset_db->resolve_disk_path(string_view{path_str.c_str(), path_str.size()});
             if (resolved.has_value())
             {
-                return std::filesystem::path(resolved->c_str());
+                return tempest::filesystem::path(resolved->c_str());
             }
 
             const auto* asset = _asset_db->find_asset(string_view{path_str.c_str(), path_str.size()});
@@ -76,15 +76,15 @@ namespace tempest::render_system
                     auto disk = _asset_db->resolve_disk_path(src->source_path);
                     if (disk.has_value())
                     {
-                        return std::filesystem::path(disk->c_str());
+                        return tempest::filesystem::path(disk->c_str());
                     }
                 }
             }
         }
 
-        if (std::filesystem::exists(input_path))
+        if (tempest::filesystem::exists(input_path))
         {
-            return std::filesystem::weakly_canonical(input_path);
+            return tempest::filesystem::weakly_canonical(input_path);
         }
 
         return nullopt;
@@ -130,7 +130,7 @@ namespace tempest::render_system
 
     auto shader_manager::register_shader_module(const shader_module_create_info& info) -> shader_module_handle
     {
-        auto canonical = optional<std::filesystem::path>{};
+        auto canonical = optional<tempest::filesystem::path>{};
         if (info.disk_location.has_value())
         {
             canonical = resolve_path(*info.disk_location);
@@ -200,7 +200,7 @@ namespace tempest::render_system
         return register_shader_module(shader_module_create_info{
             .stage = stage,
             .entry_point = entry_point,
-            .disk_location = std::filesystem::path(std::string(filename.data(), filename.size())),
+            .disk_location = tempest::filesystem::path{filename},
             .initial_bytes = {},
         });
     }
@@ -532,7 +532,7 @@ namespace tempest::render_system
         return update_shader_module_bytes(handle, span<const byte>{bytes.data(), bytes.size()});
     }
 
-    auto shader_manager::notify_file_changed(const std::filesystem::path& path) -> bool
+    auto shader_manager::notify_file_changed(const tempest::filesystem::path& path) -> bool
     {
         auto path_str = path.generic_string();
         if (_asset_db != nullptr)
@@ -541,8 +541,8 @@ namespace tempest::render_system
         }
 
         const auto filename = path.filename().string();
-        const auto canonical = std::filesystem::exists(path)
-                                   ? optional<std::filesystem::path>{std::filesystem::weakly_canonical(path)}
+        const auto canonical = tempest::filesystem::exists(path)
+                                   ? optional<tempest::filesystem::path>{tempest::filesystem::weakly_canonical(path)}
                                    : nullopt;
 
         bool any_reloaded = false;
@@ -593,7 +593,7 @@ namespace tempest::render_system
             return;
         }
 
-        for (auto *it = _retired_pipelines.begin(); it != _retired_pipelines.end();)
+        for (auto* it = _retired_pipelines.begin(); it != _retired_pipelines.end();)
         {
             bool all_queues_completed = true;
             for (const auto& sync_point : it->required_sync_points)
@@ -703,13 +703,10 @@ namespace tempest::render_system
             }
         }
 
-        auto resolved =
-            resolve_path(std::filesystem::path(std::string(shader_filename.data(), shader_filename.size())));
+        auto resolved = resolve_path(tempest::filesystem::path{shader_filename});
         if (resolved.has_value())
         {
-            auto path_str = resolved->string();
-            auto bytes = read_file_to_vector(tempest::filesystem::path{string_view{path_str.c_str(), path_str.size()}})
-                             .value_or(vector<byte>{});
+            auto bytes = read_file_to_vector(*resolved).value_or(vector<byte>{});
             if (!bytes.empty())
             {
                 _legacy_bytecode_cache[key] = bytes;

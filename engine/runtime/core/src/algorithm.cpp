@@ -8,4 +8,9 @@ namespace tempest::detail
     {
         std::memcpy(dest, src, count);
     }
-}
+
+    auto compare_bytes(const void* lhs, const void* rhs, size_t count) -> int
+    {
+        return std::memcmp(lhs, rhs, count);
+    }
+} // namespace tempest::detail

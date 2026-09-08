@@ -13,7 +13,7 @@
 #include <tempest/vk/bootstrap.hpp>
 #include <tempest/vk/device.hpp>
 
-#include <cstring>
+#include <tempest/utility.hpp>
 #include <vulkan/vulkan_core.h>
 
 namespace tempest::rhi::vk
@@ -96,8 +96,8 @@ namespace tempest::rhi::vk
 
             static_assert(sizeof(dev_desc.device_uuid) == sizeof(physical_device_id_props.deviceUUID),
                           "Device UUID size mismatch");
-            std::memcpy(dev_desc.device_uuid.data.data(), physical_device_id_props.deviceUUID,
-                        sizeof(dev_desc.device_uuid));
+            tempest::memcpy(dev_desc.device_uuid.data.data(), physical_device_id_props.deviceUUID,
+                            sizeof(dev_desc.device_uuid));
 
             // Check extensions
             dev_desc.features.ray_query = physical_device.has_extension(VK_KHR_RAY_QUERY_EXTENSION_NAME);
@@ -188,8 +188,8 @@ namespace tempest::rhi::vk
 
                 _instance.dispatch.getPhysicalDeviceProperties2(phys_dev.physical_device, &physical_device_props2);
 
-                return std::memcmp(physical_device_id_props.deviceUUID, device_uuid.data.data(), sizeof(device_uuid)) ==
-                       0;
+                return tempest::detail::compare_bytes(device_uuid.data.data(), physical_device_id_props.deviceUUID,
+                                                      device_uuid.data.size()) == 0;
             });
 
         if (physical_device_iter == _physical_devices.end())

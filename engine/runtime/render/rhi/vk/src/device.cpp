@@ -1,5 +1,6 @@
 #include <tempest/bit.hpp>
 #include <tempest/exception.hpp>
+#include <tempest/utility.hpp>
 #ifdef TEMPEST_PLATFORM_WINDOWS
 #define VK_USE_PLATFORM_WIN32_KHR
 #define WIN32_LEAN_AND_MEAN
@@ -2176,7 +2177,7 @@ namespace tempest::rhi::vk
                             &_sampler_descriptor_allocation, &sampler_alloc_info);
         TEMPEST_ASSERT(s_res == VK_SUCCESS);
         _sampler_descriptor_buffer_ptr = static_cast<byte*>(sampler_alloc_info.pMappedData);
-        std::memset(_sampler_descriptor_buffer_ptr, 0, sampler_buffer_size);
+        tempest::memset(_sampler_descriptor_buffer_ptr, 0, sampler_buffer_size);
 
         auto sampler_bda_info = VkBufferDeviceAddressInfo{
             .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -2204,7 +2205,7 @@ namespace tempest::rhi::vk
                             &_resource_descriptor_allocation, &resource_alloc_info);
         TEMPEST_ASSERT(r_res == VK_SUCCESS);
         _resource_descriptor_buffer_ptr = static_cast<byte*>(resource_alloc_info.pMappedData);
-        std::memset(_resource_descriptor_buffer_ptr, 0, resource_buffer_size);
+        tempest::memset(_resource_descriptor_buffer_ptr, 0, resource_buffer_size);
 
         auto resource_bda_info = VkBufferDeviceAddressInfo{
             .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -2298,8 +2299,8 @@ namespace tempest::rhi::vk
                 _sampler_slots[descriptor.index].allocated = false;
                 _sampler_slots[descriptor.index].generation++;
                 _sampler_free_list.push_back(descriptor.index);
-                std::memset(_sampler_descriptor_buffer_ptr + (descriptor.index * _sampler_descriptor_size), 0,
-                            _sampler_descriptor_size);
+                tempest::memset(_sampler_descriptor_buffer_ptr + (descriptor.index * _sampler_descriptor_size), 0,
+                                _sampler_descriptor_size);
             }
             break;
         case descriptor_type::sampled_image:
@@ -2309,8 +2310,8 @@ namespace tempest::rhi::vk
                 _sampled_image_slots[descriptor.index].allocated = false;
                 _sampled_image_slots[descriptor.index].generation++;
                 _sampled_image_free_list.push_back(descriptor.index);
-                std::memset(_resource_descriptor_buffer_ptr + (descriptor.index * _sampled_image_descriptor_size), 0,
-                            _sampled_image_descriptor_size);
+                tempest::memset(_resource_descriptor_buffer_ptr + (descriptor.index * _sampled_image_descriptor_size),
+                                0, _sampled_image_descriptor_size);
             }
             break;
         case descriptor_type::storage_image:
@@ -2320,9 +2321,9 @@ namespace tempest::rhi::vk
                 _storage_image_slots[descriptor.index].allocated = false;
                 _storage_image_slots[descriptor.index].generation++;
                 _storage_image_free_list.push_back(descriptor.index);
-                std::memset(_resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
-                                (descriptor.index * _storage_image_descriptor_size),
-                            0, _storage_image_descriptor_size);
+                tempest::memset(_resource_descriptor_buffer_ptr + _storage_image_buffer_offset +
+                                    (descriptor.index * _storage_image_descriptor_size),
+                                0, _storage_image_descriptor_size);
             }
             break;
         }

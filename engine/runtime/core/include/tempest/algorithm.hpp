@@ -125,6 +125,9 @@ namespace tempest
     {
         TEMPEST_API
         void copy_bytes(const void* src, void* dest, size_t count);
+
+        TEMPEST_API
+        auto compare_bytes(const void* lhs, const void* rhs, size_t count) -> int;
     } // namespace detail
 
     template <input_iterator InputIt, output_iterator<typename InputIt::value_type> OutputIt>

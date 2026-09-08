@@ -1,7 +1,6 @@
 #include "clustered_forward_example.hpp"
 
-#include <cmath>
-#include <filesystem>
+#include <tempest/filesystem.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/default_importers.hpp>
 #include <tempest/math_utils.hpp>
@@ -19,7 +18,7 @@ namespace tempest::rhi::examples
             const auto hz = half_extents.z;
 
             auto add_face = [&](math::vec3<float> normal, math::vec3<float> tangent, math::vec3<float> v0,
-                                math::vec3<float> v1, math::vec3<float> v2, math::vec3<float> v3) {
+                                math::vec3<float> v1, math::vec3<float> v2, math::vec3<float> v3) -> void {
                 const auto base_idx = static_cast<uint32_t>(m.vertices.size());
                 m.vertices.push_back(core::vertex{.position = v0,
                                                   .uv = {0.0F, 0.0F},
@@ -181,8 +180,8 @@ namespace tempest::rhi::examples
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &_meshes, &_textures, &_materials);
 
-        const auto model_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
-        if (std::filesystem::exists(model_path))
+        const auto *const model_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+        if (filesystem::exists(model_path))
         {
             auto prefab_root = asset_db.load(model_path, _registry);
             if (prefab_root != ecs::tombstone)
@@ -340,8 +339,8 @@ namespace tempest::rhi::examples
                     {1.0F, 0.38F, 0.22F}, // Warm Coral
                 };
                 color = ground_palette[i % 4];
-                range = 4.0F + static_cast<float>(i % 5) * 0.6F;
-                intensity = 20.0F + static_cast<float>(i % 3) * 5.0F;
+                range = 4.0F + (static_cast<float>(i % 5) * 0.6F);
+                intensity = 20.0F + (static_cast<float>(i % 3) * 5.0F);
             }
             else if (i < 96)
             {
@@ -353,8 +352,8 @@ namespace tempest::rhi::examples
                     {0.25F, 0.85F, 1.0F},  // Azure
                 };
                 color = mez_palette[(i - 50) % 4];
-                range = 3.5F + static_cast<float>((i - 50) % 4) * 0.6F;
-                intensity = 18.0F + static_cast<float>((i - 50) % 4) * 4.0F;
+                range = 3.5F + (static_cast<float>((i - 50) % 4) * 0.6F);
+                intensity = 18.0F + (static_cast<float>((i - 50) % 4) * 4.0F);
             }
             else
             {
@@ -366,8 +365,8 @@ namespace tempest::rhi::examples
                     {0.20F, 0.95F, 0.35F}, // Emerald
                 };
                 color = arch_palette[(i - 96) % 4];
-                range = 4.5F + static_cast<float>((i - 96) % 4) * 0.7F;
-                intensity = 24.0F + static_cast<float>((i - 96) % 3) * 5.0F;
+                range = 4.5F + (static_cast<float>((i - 96) % 4) * 0.7F);
+                intensity = 24.0F + (static_cast<float>((i - 96) % 3) * 5.0F);
             }
 
             _registry.assign(light_ent, render_system::point_light_component{
@@ -406,38 +405,38 @@ namespace tempest::rhi::examples
             if (i < 50)
             {
                 // Ground tier: Lissajous orbit winding along length of atrium and side aisles
-                const auto t = _time * 0.7F + phase;
+                const auto t = (_time * 0.7F) + phase;
                 const auto is_side_aisle = (i % 2 == 1);
                 const auto side_sign = ((i / 2) % 2 == 0) ? 1.0F : -1.0F;
 
                 const auto z_val =
-                    is_side_aisle ? side_sign * (3.0F + std::sin(t * 0.9F) * 0.8F) : std::sin(t * 0.8F) * 1.5F;
+                    is_side_aisle ? side_sign * (3.0F + (math::sin(t * 0.9F) * 0.8F)) : math::sin(t * 0.8F) * 1.5F;
 
                 pos = math::vec3<float>{
-                    std::sin(t * 0.5F + fi * 0.12F) * 9.5F,
-                    0.8F + std::abs(std::sin(t * 1.3F)) * 2.2F,
+                    math::sin((t * 0.5F) + (fi * 0.12F)) * 9.5F,
+                    0.8F + (tempest::abs(math::sin(t * 1.3F)) * 2.2F),
                     z_val,
                 };
             }
             else if (i < 96)
             {
                 // Mezzanine tier: Harmonic orbits traversing upper galleries
-                const auto t = _time * 0.6F + phase;
+                const auto t = (_time * 0.6F) + phase;
                 const auto side_sign = (i % 2 == 0) ? 1.0F : -1.0F;
                 pos = math::vec3<float>{
-                    std::cos(t * 0.45F + fi * 0.15F) * 9.0F,
-                    4.8F + std::sin(t * 1.1F) * 1.2F,
-                    side_sign * (2.8F + std::sin(t * 0.8F) * 0.8F),
+                    math::cos((t * 0.45F) + (fi * 0.15F)) * 9.0F,
+                    4.8F + (math::sin(t * 1.1F) * 1.2F),
+                    side_sign * (2.8F + (math::sin(t * 0.8F) * 0.8F)),
                 };
             }
             else
             {
                 // High arch tier: Swinging across the upper atrium vault
-                const auto t = _time * 0.85F + phase;
+                const auto t = (_time * 0.85F) + phase;
                 pos = math::vec3<float>{
-                    std::sin(t * 0.6F + fi * 0.2F) * 8.0F,
-                    6.6F + std::abs(std::sin(t * 1.4F)) * 1.0F,
-                    std::cos(t * 0.7F) * 1.6F,
+                    math::sin((t * 0.6F) + (fi * 0.2F)) * 8.0F,
+                    6.6F + (tempest::abs(math::sin(t * 1.4F)) * 1.0F),
+                    math::cos(t * 0.7F) * 1.6F,
                 };
             }
 
@@ -449,25 +448,25 @@ namespace tempest::rhi::examples
         if (_camera_entity != ecs::tombstone)
         {
             const auto t = _time * 0.15F;
-            const auto cam_x = std::sin(t) * 8.0F;
+            const auto cam_x = math::sin(t) * 8.0F;
             // Oscillate altitude smoothly between ground eye-level (1.6m) and mezzanine (5.4m)
-            const auto cam_y = 1.6F + 3.8F * (0.5F + 0.5F * std::sin(t * 0.5F));
+            const auto cam_y = 1.6F + (3.8F * (0.5F + (0.5F * math::sin(t * 0.5F))));
             // Weave down central aisle, staying safely within open space (|Z| <= 1.2m)
-            const auto cam_z = std::sin(t * 2.0F) * 1.2F;
+            const auto cam_z = math::sin(t * 2.0F) * 1.2F;
 
             // Look target placed dynamically along camera trajectory
             const auto target_t = t + 0.35F;
-            const auto target_x = std::sin(target_t) * 6.5F;
-            const auto target_y = cam_y * 0.7F + 1.2F;
-            const auto target_z = std::sin(target_t * 2.0F) * 0.6F;
+            const auto target_x = math::sin(target_t) * 6.5F;
+            const auto target_y = (cam_y * 0.7F) + 1.2F;
+            const auto target_z = math::sin(target_t * 2.0F) * 0.6F;
 
             const auto dir_x = target_x - cam_x;
             const auto dir_y = target_y - cam_y;
             const auto dir_z = target_z - cam_z;
-            const auto len_xz = std::sqrt(dir_x * dir_x + dir_z * dir_z);
+            const auto len_xz = math::sqrt((dir_x * dir_x) + (dir_z * dir_z));
 
-            const auto yaw = std::atan2(-dir_x, -dir_z);
-            const auto pitch = std::atan2(-dir_y, len_xz);
+            const auto yaw = math::atan2(-dir_x, -dir_z);
+            const auto pitch = math::atan2(-dir_y, len_xz);
 
             auto tx = _registry.get<ecs::transform_component>(_camera_entity);
             tx.position({cam_x, cam_y, cam_z});

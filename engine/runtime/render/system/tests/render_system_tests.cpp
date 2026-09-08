@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 
-#include <filesystem>
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/default_importers.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/passes/depth_prepass.hpp>
@@ -436,8 +436,8 @@ namespace tempest::render_system::tests
             auto asset_db = assets::asset_database{&asset_type_reg};
             assets::register_default_importers(asset_db, &meshes, &textures, &materials);
 
-            const auto *const sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
-            if (std::filesystem::exists(sponza_path))
+            const auto* const sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+            if (filesystem::exists(sponza_path))
             {
                 [[maybe_unused]] auto prefab_root = asset_db.load(sponza_path, registry);
             }
@@ -927,7 +927,7 @@ namespace tempest::render_system::tests
         EXPECT_NE(reloaded_rhi2.handle, 0ULL);
 
         // Notify file changed triggers surgical reload
-        auto notify_ok = shaders.notify_file_changed(std::filesystem::path("pbr.frag.spv"));
+        auto notify_ok = shaders.notify_file_changed(tempest::filesystem::path("pbr.frag.spv"));
         EXPECT_TRUE(notify_ok);
 
         // Drain retired pipelines
@@ -1079,12 +1079,13 @@ namespace tempest::render_system::tests
             // Validate the mapped GPU buffers for the active frame slot
             auto& pool = rend->get_resource_pool();
             const auto slot = pool.get_frame_slot();
-            const auto* cmds = static_cast<const indexed_indirect_command*>(pool.get_draw_commands_buffer().cpu_address) +
-                         (slot * pool.get_config().max_draw_command_count);
+            const auto* cmds =
+                static_cast<const indexed_indirect_command*>(pool.get_draw_commands_buffer().cpu_address) +
+                (slot * pool.get_config().max_draw_command_count);
             const auto* instances = static_cast<const uint32_t*>(pool.get_instance_buffer().cpu_address) +
-                              (slot * pool.get_config().max_instance_count);
+                                    (slot * pool.get_config().max_instance_count);
             const auto* objects = static_cast<const object_payload*>(pool.get_object_buffer().cpu_address) +
-                            (slot * pool.get_config().max_object_count);
+                                  (slot * pool.get_config().max_object_count);
 
             ASSERT_NE(cmds, nullptr);
             ASSERT_NE(instances, nullptr);
@@ -1382,7 +1383,7 @@ namespace tempest::render_system::tests
         EXPECT_FLOAT_EQ(shadow_data.cascades[3].split_depth, 150.0F);
 
         // Validate UV offsets and scales in the atlas
-        for (const auto & cascade : shadow_data.cascades)
+        for (const auto& cascade : shadow_data.cascades)
         {
             const auto& uv = cascade.uv_offset_scale;
             EXPECT_GE(uv.x, 0.0F);
@@ -1787,7 +1788,7 @@ namespace tempest::render_system::tests
             ASSERT_NE(shadow_data, nullptr);
             EXPECT_EQ(shadow_data->cascade_count, 4U);
 
-            for (const auto & cascade : shadow_data->cascades)
+            for (const auto& cascade : shadow_data->cascades)
             {
                 const auto& uv = cascade.uv_offset_scale;
                 EXPECT_GE(uv.x, 0.0F);
@@ -2316,8 +2317,8 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<gather_sink_data>(
             "GatherSinkPass",
-            [m = gather_data.moments_texture,
-             z = gather_data.zeroth_moment_texture](render_graph::pass_builder& builder, gather_sink_data& data) -> void {
+            [m = gather_data.moments_texture, z = gather_data.zeroth_moment_texture](
+                render_graph::pass_builder& builder, gather_sink_data& data) -> void {
                 data.moments = builder.read(m, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                             rhi::image_layout::general);
                 data.zeroth = builder.read(z, rhi::pipeline_stage::fragment, rhi::resource_access::read,
@@ -2559,8 +2560,8 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<gather_sink_data>(
             "GatherSinkPass",
-            [m = gather_data.moments_texture,
-             z = gather_data.zeroth_moment_texture](render_graph::pass_builder& builder, gather_sink_data& data) -> void {
+            [m = gather_data.moments_texture, z = gather_data.zeroth_moment_texture](
+                render_graph::pass_builder& builder, gather_sink_data& data) -> void {
                 data.moments = builder.read(m, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                             rhi::image_layout::general);
                 data.zeroth = builder.read(z, rhi::pipeline_stage::fragment, rhi::resource_access::read,
@@ -3840,9 +3841,9 @@ namespace tempest::render_system::tests
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &meshes, &textures, &materials);
 
-        const auto *const chess_path = "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
+        const auto* const chess_path = "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
 
-        if (std::filesystem::exists(chess_path))
+        if (filesystem::exists(chess_path))
         {
             auto prefab_root = asset_db.load(chess_path, registry);
             ASSERT_TRUE(prefab_root != ecs::tombstone);
@@ -4769,8 +4770,8 @@ namespace tempest::render_system::tests
 
             auto slot = rend->get_resource_pool().get_frame_slot();
             const auto* scene = static_cast<const scene_constants*>(
-                              rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
-                          slot;
+                                    rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
+                                slot;
             ASSERT_NE(scene, nullptr);
             // Override camera takes precedence!
             EXPECT_FLOAT_EQ(scene->camera_position.y, 5.0F);

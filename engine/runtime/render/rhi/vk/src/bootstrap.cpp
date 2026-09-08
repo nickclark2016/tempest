@@ -1,11 +1,10 @@
-#include <algorithm>
 #include <tempest/vk/bootstrap.hpp>
 
 #include <tempest/algorithm.hpp>
 #include <tempest/assert.hpp>
 #include <tempest/logger.hpp>
 
-#include <cstring>
+#include <tempest/string_view.hpp>
 
 #if defined(TEMPEST_PLATFORM_WINDOWS) || defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -328,15 +327,14 @@ namespace tempest::rhi::vk
         }
 
         const auto has_layer = [&available_layers](const char* name) -> bool {
-            return std::ranges::any_of(available_layers, [name](const auto& layer) -> auto {
-                return std::strcmp(layer.layerName, name) == 0;
-            });
+            return tempest::any_of(available_layers.begin(), available_layers.end(),
+                                   [name](const auto& layer) -> auto { return string_view{layer.layerName} == name; });
         };
 
         const auto has_extension = [&available_extensions](const char* name) -> bool {
-            return std::ranges::any_of(available_extensions, [name](const auto& extension) -> auto {
-                return std::strcmp(extension.extensionName, name) == 0;
-            });
+            return tempest::any_of(
+                available_extensions.begin(), available_extensions.end(),
+                [name](const auto& extension) -> auto { return string_view{extension.extensionName} == name; });
         };
 
         auto enabled_layers = vector<const char*>{};
@@ -515,8 +513,8 @@ namespace tempest::rhi::vk
             }
 
             auto dev_has_ext = [&supported_extensions](string_view name) -> bool {
-                return std::ranges::any_of(supported_extensions,
-                                           [name](const auto& ext) -> auto { return string_view{ext} == name; });
+                return tempest::any_of(supported_extensions.begin(), supported_extensions.end(),
+                                       [name](const auto& ext) -> auto { return string_view{ext} == name; });
             };
 
             if (!dev_has_ext(VK_KHR_SWAPCHAIN_EXTENSION_NAME) ||
@@ -578,9 +576,10 @@ namespace tempest::rhi::vk
                                                                       queue_families.data());
 
             // Check for graphics queue
-            const auto has_graphics = std::ranges::any_of(queue_families, [](const auto& queue_family) -> auto {
-                return (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
-            });
+            const auto has_graphics =
+                tempest::any_of(queue_families.begin(), queue_families.end(), [](const auto& queue_family) -> auto {
+                    return (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
+                });
 
             if (!has_graphics)
             {
@@ -610,24 +609,25 @@ namespace tempest::rhi::vk
         constexpr int integrated_gpu_score = 500;
         constexpr int virtual_gpu_score = 250;
         constexpr int cpu_score = 100;
-        std::ranges::sort(valid_devices, [](const physical_device_info& lhs, const physical_device_info& rhs) -> bool {
-            auto score = [](VkPhysicalDeviceType type) -> int {
-                switch (type)
-                {
-                case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-                    return discrete_gpu_score;
-                case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-                    return integrated_gpu_score;
-                case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-                    return virtual_gpu_score;
-                case VK_PHYSICAL_DEVICE_TYPE_CPU:
-                    return cpu_score;
-                default:
-                    return 0;
-                }
-            };
-            return score(lhs.properties.deviceType) > score(rhs.properties.deviceType);
-        });
+        tempest::sort(valid_devices.begin(), valid_devices.end(),
+                      [](const physical_device_info& lhs, const physical_device_info& rhs) -> bool {
+                          auto score = [](VkPhysicalDeviceType type) -> int {
+                              switch (type)
+                              {
+                              case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                                  return discrete_gpu_score;
+                              case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                                  return integrated_gpu_score;
+                              case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                                  return virtual_gpu_score;
+                              case VK_PHYSICAL_DEVICE_TYPE_CPU:
+                                  return cpu_score;
+                              default:
+                                  return 0;
+                              }
+                          };
+                          return score(lhs.properties.deviceType) > score(rhs.properties.deviceType);
+                      });
 
         return valid_devices;
     }

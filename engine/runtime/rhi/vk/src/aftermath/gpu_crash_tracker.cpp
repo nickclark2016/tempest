@@ -1,10 +1,15 @@
-#include <array>
-#include <string>
-
-#include <tempest/files.hpp>
-#include <tempest/format.hpp>
-#include <tempest/utility.hpp>
 #include <tempest/vk/aftermath/gpu_crash_tracker.hpp>
+
+#include <tempest/array.hpp>
+#include <tempest/files.hpp>
+#include <tempest/flat_map.hpp>
+#include <tempest/format.hpp>
+#include <tempest/int.hpp>
+#include <tempest/mutex.hpp>
+#include <tempest/span.hpp>
+#include <tempest/string.hpp>
+#include <tempest/utility.hpp>
+#include <tempest/vector.hpp>
 
 namespace tempest::rhi::vk::aftermath
 {
@@ -16,7 +21,7 @@ namespace tempest::rhi::vk::aftermath
     {
     }
 
-    bool shader_database::_read_file(const char* file_name, std::vector<uint8_t>& data)
+    bool shader_database::_read_file(const char* file_name, tempest::vector<uint8_t>& data)
     {
         auto file_bytes = read_file_to_vector(file_name);
         if (!file_bytes)
@@ -31,7 +36,7 @@ namespace tempest::rhi::vk::aftermath
 
     void shader_database::_add_shader_binary(const char* shader_file_hash)
     {
-        std::vector<uint8_t> data;
+        tempest::vector<uint8_t> data;
         if (!_read_file(shader_file_hash, data))
         {
             return;
@@ -49,7 +54,7 @@ namespace tempest::rhi::vk::aftermath
     }
 
     bool shader_database::find_shader_binary(const GFSDK_Aftermath_ShaderBinaryHash& shader_hash,
-                                             std::vector<uint8_t>& shader) const
+                                             tempest::vector<uint8_t>& shader) const
     {
         auto iter_shader = _shader_binaries.find(shader_hash);
         if (iter_shader == _shader_binaries.end())
@@ -61,7 +66,7 @@ namespace tempest::rhi::vk::aftermath
         return true;
     }
 
-    void shader_database::add_shader_binary(std::span<std::uint8_t> data)
+    void shader_database::add_shader_binary(tempest::span<uint8_t> data)
     {
         const GFSDK_Aftermath_SpirvCode shader{
             .pData = data.data(),
@@ -71,7 +76,7 @@ namespace tempest::rhi::vk::aftermath
         GFSDK_Aftermath_ShaderBinaryHash shader_hash;
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GetShaderHashSpirv(GFSDK_Aftermath_Version_API, &shader, &shader_hash));
 
-        _shader_binaries[shader_hash] = std::vector<uint8_t>{data.begin(), data.end()};
+        _shader_binaries[shader_hash] = tempest::vector<uint8_t>{data.begin(), data.end()};
     }
 
     gpu_crash_tracker::gpu_crash_tracker(const marker_map& marker_map)
@@ -105,19 +110,20 @@ namespace tempest::rhi::vk::aftermath
     // Handler for GPU crash dump callbacks from Nsight Aftermath
     void gpu_crash_tracker::_on_crash_dump(const void* gpu_crash_dump, const uint32_t gpu_crash_dump_size)
     {
-        std::lock_guard<std::mutex> lock(_mutex);
+        tempest::lock_guard<tempest::mutex> lock(_mutex);
         _write_gpu_crash_dump_to_file(gpu_crash_dump, gpu_crash_dump_size);
     }
 
     void gpu_crash_tracker::_on_shader_debug_info(const void* shader_debug_info, const uint32_t shader_debug_info_size)
     {
-        std::lock_guard<std::mutex> lock(_mutex);
+        tempest::lock_guard<tempest::mutex> lock(_mutex);
 
         GFSDK_Aftermath_ShaderDebugInfoIdentifier identifier = {};
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GetShaderDebugInfoIdentifier(
             GFSDK_Aftermath_Version_API, shader_debug_info, shader_debug_info_size, &identifier));
 
-        std::vector<uint8_t> data((uint8_t*)shader_debug_info, (uint8_t*)shader_debug_info + shader_debug_info_size);
+        tempest::vector<uint8_t> data((uint8_t*)shader_debug_info,
+                                      (uint8_t*)shader_debug_info + shader_debug_info_size);
         _shader_debug_info[identifier].swap(data);
 
         _write_shader_debug_info_to_file(identifier, shader_debug_info, shader_debug_info_size);
@@ -163,20 +169,18 @@ namespace tempest::rhi::vk::aftermath
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_GetDescriptionSize(
             decoder, GFSDK_Aftermath_GpuCrashDumpDescriptionKey_ApplicationName, &application_name_length));
 
-        std::vector<char> application_name(application_name_length, '\0');
+        tempest::vector<char> application_name(application_name_length, '\0');
 
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_GetDescription(
             decoder, GFSDK_Aftermath_GpuCrashDumpDescriptionKey_ApplicationName, uint32_t(application_name.size()),
             application_name.data()));
 
         static int count = 0;
-        const std::string base_file_name =
-            std::string(application_name.data()) + "-" + std::to_string(base_info.pid) + "-" + std::to_string(++count);
+        const auto base_file_name = tempest::format("{}-{}-{}", application_name.data(), base_info.pid, ++count);
 
-        const std::string crash_dump_file_name = base_file_name + ".nv-gpudmp";
-        write_file_from_bytes(
-            crash_dump_file_name,
-            span<const byte>{reinterpret_cast<const byte*>(gpu_crash_dump), gpu_crash_dump_size});
+        const auto crash_dump_file_name = base_file_name + ".nv-gpudmp";
+        write_file_from_bytes(crash_dump_file_name,
+                              span<const byte>{reinterpret_cast<const byte*>(gpu_crash_dump), gpu_crash_dump_size});
 
         uint32_t json_size = 0;
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_GenerateJSON(
@@ -184,15 +188,14 @@ namespace tempest::rhi::vk::aftermath
             _shader_debug_info_lookup_callback, _shader_lookup_callback, _shader_source_debug_info_lookup_callback,
             this, &json_size));
 
-        std::vector<char> json(json_size);
+        tempest::vector<char> json(json_size);
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_GetJSON(decoder, uint32_t(json.size()), json.data()));
 
-        const std::string json_file_name = crash_dump_file_name + ".json";
+        const auto json_file_name = crash_dump_file_name + ".json";
         if (json.size() > 1)
         {
-            write_file_from_bytes(
-                json_file_name,
-                span<const byte>{reinterpret_cast<const byte*>(json.data()), json.size() - 1});
+            write_file_from_bytes(json_file_name,
+                                  span<const byte>{reinterpret_cast<const byte*>(json.data()), json.size() - 1});
         }
 
         AFTERMATH_CHECK_ERROR(GFSDK_Aftermath_GpuCrashDump_DestroyDecoder(decoder));
@@ -202,10 +205,9 @@ namespace tempest::rhi::vk::aftermath
                                                              const void* shader_debug_info,
                                                              const uint32_t shader_debug_info_size)
     {
-        const auto file_path = format("shader-{}.nvdbg", to_string(identifier));
+        const auto file_path = tempest::format("shader-{}.nvdbg", to_string(identifier));
         write_file_from_bytes(
-            file_path,
-            span<const byte>{reinterpret_cast<const byte*>(shader_debug_info), shader_debug_info_size});
+            file_path, span<const byte>{reinterpret_cast<const byte*>(shader_debug_info), shader_debug_info_size});
     }
 
     void gpu_crash_tracker::_on_shader_debug_info_lookup(const GFSDK_Aftermath_ShaderDebugInfoIdentifier& identifier,
@@ -223,7 +225,7 @@ namespace tempest::rhi::vk::aftermath
     void gpu_crash_tracker::_on_shader_lookup(const GFSDK_Aftermath_ShaderBinaryHash& shader_hash,
                                               PFN_GFSDK_Aftermath_SetData set_shader_binary) const
     {
-        std::vector<uint8_t> shader_binary;
+        tempest::vector<uint8_t> shader_binary;
         if (!_shader_database.find_shader_binary(shader_hash, shader_binary))
         {
             return;

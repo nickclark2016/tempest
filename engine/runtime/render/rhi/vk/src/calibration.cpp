@@ -8,7 +8,7 @@
 #elif defined(TEMPEST_PLATFORM_LINUX) || defined(__linux__)
 #include <time.h>
 #else
-#include <chrono>
+#include <tempest/chrono.hpp>
 #endif
 
 namespace tempest::rhi::vk
@@ -56,9 +56,9 @@ namespace tempest::rhi::vk
         clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
         return static_cast<uint64_t>(ts.tv_sec) * nanoseconds_per_second + static_cast<uint64_t>(ts.tv_nsec);
 #else
-        return static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-                .count());
+        return static_cast<uint64_t>(tempest::chrono::duration_cast<tempest::chrono::nanoseconds>(
+                                         tempest::chrono::steady_clock::now().time_since_epoch())
+                                         .count());
 #endif
     }
 

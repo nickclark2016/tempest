@@ -511,6 +511,9 @@ namespace tempest
     TEMPEST_API
     auto memcpy(void* dst, const void* src, size_t count) noexcept -> void*;
 
+    TEMPEST_API
+    auto memset(void* dst, int ch, size_t count) noexcept -> void*;
+
     struct TEMPEST_API init_list_t
     {
     };
