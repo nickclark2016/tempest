@@ -75,7 +75,7 @@ namespace tempest
 
             // Reference wrapper
             template <typename U>
-            constexpr tuple_val(const const reference_wrapper<U>&& u) : val{u.get()} {};
+            constexpr tuple_val(const reference_wrapper<U>&& u) : val{u.get()} {};
 
             T& val;
         };
