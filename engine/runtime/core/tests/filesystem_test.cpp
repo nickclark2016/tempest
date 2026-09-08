@@ -1,7 +1,7 @@
 #include <tempest/filesystem.hpp>
 
-#include <tempest/charconv.hpp>
 #include <gtest/gtest.h>
+#include <tempest/charconv.hpp>
 
 namespace fs = tempest::filesystem;
 
@@ -846,4 +846,120 @@ TEST(filesystem_status, symlink_status_equality)
 
     // 3. Assert - For non-symlink directories, status and symlink_status match
     EXPECT_EQ(direct_status.type(), sym_status.type());
+}
+
+// ============================================================================
+// Filesystem Path Resolution & Metadata Tests (canonical, weakly_canonical, last_write_time)
+// ============================================================================
+
+/// @brief Tests that last_write_time on an existing path returns a non-zero time point.
+TEST(filesystem_metadata, last_write_time_existing_directory)
+{
+    // 1. Setup: get current working directory
+    auto cwd = fs::current_path();
+
+    // 2. Act: read last write time
+    auto lwt = fs::last_write_time(cwd);
+
+    // 3. Assert: last write time is valid and non-zero
+    EXPECT_GT(lwt.time_since_epoch().count(), 0LL);
+}
+
+/// @brief Tests that last_write_time on a non-existent path returns a default zero time point.
+TEST(filesystem_metadata, last_write_time_non_existent)
+{
+    // 1. Setup: define non-existent path
+    auto non_existent = fs::path{"__non_existent_file_metadata_test_12345.tmp"};
+
+    // 2. Act: read last write time
+    auto lwt = fs::last_write_time(non_existent);
+
+    // 3. Assert: last write time is epoch (count is 0)
+    EXPECT_EQ(lwt.time_since_epoch().count(), 0LL);
+}
+
+/// @brief Tests that canonical resolves '.' to an absolute path matching current_path.
+TEST(filesystem_canonical, resolve_dot_to_current_path)
+{
+    // 1. Setup: get current working directory
+    auto cwd = fs::current_path();
+
+    // 2. Act: canonicalize "."
+    auto resolved = fs::canonical(fs::path{"."});
+
+    // 3. Assert: matches cwd and is absolute
+    EXPECT_TRUE(resolved.is_absolute());
+    EXPECT_EQ(resolved, cwd);
+}
+
+/// @brief Tests that canonical returns the input path unchanged when the path does not exist.
+TEST(filesystem_canonical, non_existent_returns_input_path)
+{
+    // 1. Setup: non-existent path
+    auto non_existent = fs::path{"__non_existent_file_canonical_test_12345.tmp"};
+
+    // 2. Act: canonicalize non-existent path
+    auto resolved = fs::canonical(non_existent);
+
+    // 3. Assert: returns original path
+    EXPECT_EQ(resolved, non_existent);
+}
+
+/// @brief Tests that weakly_canonical on an existing path returns the exact same result as canonical.
+TEST(filesystem_weakly_canonical, existing_path_matches_canonical)
+{
+    // 1. Setup: current working directory
+    auto cwd = fs::current_path();
+
+    // 2. Act: compute weakly_canonical and canonical
+    auto weakly = fs::weakly_canonical(cwd);
+    auto canon = fs::canonical(cwd);
+
+    // 3. Assert: results match and are absolute
+    EXPECT_TRUE(weakly.is_absolute());
+    EXPECT_EQ(weakly, canon);
+}
+
+/// @brief Tests that weakly_canonical on an empty path returns an empty path.
+TEST(filesystem_weakly_canonical, empty_path_returns_empty)
+{
+    // 1. Setup: empty path
+    auto empty_path = fs::path{};
+
+    // 2. Act: compute weakly_canonical
+    auto resolved = fs::weakly_canonical(empty_path);
+
+    // 3. Assert: result is empty
+    EXPECT_TRUE(resolved.empty());
+}
+
+/// @brief Tests that weakly_canonical resolves existing parent prefixes and appends non-existent child elements.
+TEST(filesystem_weakly_canonical, resolves_parent_prefix_and_appends_non_existent_elements)
+{
+    // 1. Setup: construct a path with existing cwd prefix and non-existent child directories
+    auto cwd = fs::current_path();
+    auto non_existent_subpath = cwd / "__non_existent_dir_alpha" / "sub_beta" / "file.txt";
+
+    // 2. Act: resolve weakly canonical path
+    auto resolved = fs::weakly_canonical(non_existent_subpath);
+
+    // 3. Assert: canonical cwd is prepended to non-existent tail
+    auto expected = fs::canonical(cwd) / "__non_existent_dir_alpha" / "sub_beta" / "file.txt";
+    EXPECT_TRUE(resolved.is_absolute());
+    EXPECT_EQ(resolved, expected);
+}
+
+/// @brief Tests that weakly_canonical on a relative non-existent path roots to canonical current_path.
+TEST(filesystem_weakly_canonical, relative_non_existent_roots_to_current_path)
+{
+    // 1. Setup: relative non-existent path
+    auto rel_path = fs::path{"__non_existent_rel_dir"} / "file.txt";
+
+    // 2. Act: resolve weakly canonical path
+    auto resolved = fs::weakly_canonical(rel_path);
+
+    // 3. Assert: rooted to canonical current working directory
+    auto expected = fs::canonical(fs::current_path()) / "__non_existent_rel_dir" / "file.txt";
+    EXPECT_TRUE(resolved.is_absolute());
+    EXPECT_EQ(resolved, expected);
 }

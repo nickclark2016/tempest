@@ -15,6 +15,7 @@
 #include <iconv.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -543,16 +544,16 @@ namespace tempest::filesystem
             // Check for UNC paths
             if (path.size() >= 5 && is_slash<T>(path[0]) && is_slash<T>(path[1]))
             {
-                const auto *const first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
-                                                       tempest::end(slashes<T>));
+                const auto* const first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
+                                                              tempest::end(slashes<T>));
                 if (first != path.end())
                 {
-                    const auto *const second =
+                    const auto* const second =
                         search_first_not_of(first, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (second != path.end())
                     {
-                        const auto *const third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
-                                                               tempest::end(slashes<T>));
+                        const auto* const third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
+                                                                      tempest::end(slashes<T>));
                         if (third == path.end() || third > path.begin() + end)
                         {
                             return {}; // No parent path for UNC root
@@ -562,8 +563,8 @@ namespace tempest::filesystem
             }
 
             // Get the last slash iterator
-            const auto *const last_slash = tempest::search_last_of(path.begin(), path.begin() + end,
-                                                            tempest::begin(slashes<T>), tempest::end(slashes<T>));
+            const auto* const last_slash = tempest::search_last_of(
+                path.begin(), path.begin() + end, tempest::begin(slashes<T>), tempest::end(slashes<T>));
             if (last_slash == path.begin() + end)
             {
                 return {};
@@ -617,16 +618,16 @@ namespace tempest::filesystem
             // Check for UNC paths
             if (path.size() >= 5 && is_slash<T>(path[0]) && is_slash<T>(path[1]))
             {
-                const auto *const first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
-                                                       tempest::end(slashes<T>));
+                const auto* const first = search_first_not_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>),
+                                                              tempest::end(slashes<T>));
                 if (first != path.end())
                 {
-                    const auto *const second =
+                    const auto* const second =
                         search_first_not_of(first, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (second != path.end())
                     {
-                        const auto *const third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
-                                                               tempest::end(slashes<T>));
+                        const auto* const third = search_first_not_of(second, path.end(), tempest::begin(slashes<T>),
+                                                                      tempest::end(slashes<T>));
                         if (third == path.end() || third > path.begin() + end)
                         {
                             return false; // No parent path for UNC root
@@ -636,8 +637,8 @@ namespace tempest::filesystem
             }
 
             // Get the last slash iterator
-            const auto *const last_slash = tempest::search_last_of(path.begin(), path.begin() + end,
-                                                            tempest::begin(slashes<T>), tempest::end(slashes<T>));
+            const auto* const last_slash = tempest::search_last_of(
+                path.begin(), path.begin() + end, tempest::begin(slashes<T>), tempest::end(slashes<T>));
             if (last_slash == path.begin() + end)
             {
                 return false;
@@ -681,11 +682,11 @@ namespace tempest::filesystem
             // Handle UNC detection
             if (trimmed.size() >= 2 && is_slash<T>(trimmed[0]) && trimmed[0] == trimmed[1])
             {
-                const auto *pos =
+                const auto* pos =
                     search_first_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                 if (pos != trimmed.end())
                 {
-                    const auto *next_slash =
+                    const auto* next_slash =
                         search_first_of(pos + 1, trimmed.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (next_slash == trimmed.end())
                     {
@@ -694,7 +695,7 @@ namespace tempest::filesystem
                 }
             }
 
-            const auto *pos =
+            const auto* pos =
                 search_last_of(trimmed.begin(), trimmed.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
             if (pos == trimmed.end())
             {
@@ -734,11 +735,11 @@ namespace tempest::filesystem
             // Handle UNC detection
             if (trimmed.size() >= 2 && is_slash<T>(trimmed[0]) && trimmed[0] == trimmed[1])
             {
-                const auto *pos =
+                const auto* pos =
                     search_first_of(path.begin() + 2, path.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                 if (pos != trimmed.end())
                 {
-                    const auto *next_slash =
+                    const auto* next_slash =
                         search_first_of(pos + 1, trimmed.end(), tempest::begin(slashes<T>), tempest::end(slashes<T>));
                     if (next_slash == trimmed.end())
                     {
@@ -760,7 +761,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto* last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end())
             {
                 return filename; // No dot found, return the entire filename
@@ -786,7 +787,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto* last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end())
             {
                 return true; // No dot found, stem exists
@@ -805,7 +806,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto* last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end() || last_dot == filename.begin())
             {
                 return {}; // No extension found or the dot is the first character
@@ -826,7 +827,7 @@ namespace tempest::filesystem
             }
 
             // Find the last dot in the filename
-            const auto *last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
+            const auto* last_dot = search_last_of(filename.begin(), filename.end(), dot<T>);
             if (last_dot == filename.end() || last_dot == filename.begin())
             {
                 return false; // No extension found or the dot is the first character
@@ -870,14 +871,13 @@ namespace tempest::filesystem
             {
                 return back_slash<T>;
             }
-            
-                            return path::preferred_separator; // Default to preferred separator
-           
+
+            return path::preferred_separator; // Default to preferred separator
         }
     } // namespace
 
     path_iterator::path_iterator() noexcept
-        :  _offset{numeric_limits<size_t>::max()}, _length{numeric_limits<size_t>::max()}
+        : _offset{numeric_limits<size_t>::max()}, _length{numeric_limits<size_t>::max()}
     {
     }
 
@@ -1506,7 +1506,7 @@ namespace tempest::filesystem
                 } GenericReparseBuffer;
             } DUMMYUNIONNAME;
         };
-using PREPARSE_DATA_BUFFER = REPARSE_DATA_BUFFER*;
+        using PREPARSE_DATA_BUFFER = REPARSE_DATA_BUFFER*;
 
         auto follow_symlink(const path::string_type& p) -> path::string_type
         {
@@ -1529,7 +1529,7 @@ using PREPARSE_DATA_BUFFER = REPARSE_DATA_BUFFER*;
                 return path::string_type{};
             }
 
-            auto *rdb = reinterpret_cast<REPARSE_DATA_BUFFER*>(buf.data());
+            auto* rdb = reinterpret_cast<REPARSE_DATA_BUFFER*>(buf.data());
 
             if (rdb->ReparseTag == IO_REPARSE_TAG_SYMLINK)
             {
@@ -1898,7 +1898,7 @@ using PREPARSE_DATA_BUFFER = REPARSE_DATA_BUFFER*;
 #ifdef _WIN32
         const auto search_path = p / "*";
         auto find_data = WIN32_FIND_DATAW{};
-        auto *const h_find = FindFirstFileW(search_path.c_str(), &find_data);
+        auto* const h_find = FindFirstFileW(search_path.c_str(), &find_data);
         if (h_find == INVALID_HANDLE_VALUE)
         {
             _index = 0;
@@ -2055,6 +2055,151 @@ using PREPARSE_DATA_BUFFER = REPARSE_DATA_BUFFER*;
         }
         return static_cast<size_t>(file_stat.st_size);
 #endif
+    }
+
+    auto last_write_time(const path& p) -> file_time_type
+    {
+#ifdef _WIN32
+        auto file_info = WIN32_FILE_ATTRIBUTE_DATA{};
+        if (GetFileAttributesExW(p.native().c_str(), GetFileExInfoStandard, &file_info) == 0)
+        {
+            return file_time_type{};
+        }
+
+        auto file_time = (static_cast<uint64_t>(file_info.ftLastWriteTime.dwHighDateTime) << 32) |
+                         static_cast<uint64_t>(file_info.ftLastWriteTime.dwLowDateTime);
+
+        constexpr auto windows_to_unix_epoch_offset = 116444736000000000ULL;
+        auto intervals_since_epoch = static_cast<int64_t>(file_time - windows_to_unix_epoch_offset);
+        auto nanos = intervals_since_epoch * 100LL;
+
+        return file_time_type(chrono::nanoseconds(nanos));
+#else
+        struct stat file_stat;
+        if (stat(p.native().c_str(), &file_stat) != 0)
+        {
+            return file_time_type{};
+        }
+
+#if defined(__APPLE__)
+        auto nanos = static_cast<int64_t>(file_stat.st_mtimespec.tv_sec) * 1000000000LL +
+                     static_cast<int64_t>(file_stat.st_mtimespec.tv_nsec);
+#elif (defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE >= 200809L)) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
+        auto nanos = static_cast<int64_t>(file_stat.st_mtim.tv_sec) * 1000000000LL +
+                     static_cast<int64_t>(file_stat.st_mtim.tv_nsec);
+#else
+        auto nanos = static_cast<int64_t>(file_stat.st_mtime) * 1000000000LL;
+#endif
+
+        return file_time_type(chrono::nanoseconds(nanos));
+#endif
+    }
+
+    auto canonical(const path& p) -> path
+    {
+        if (!exists(p))
+        {
+            return p;
+        }
+
+#ifdef _WIN32
+        auto length = GetFullPathNameW(p.native().c_str(), 0, nullptr, nullptr);
+        if (length == 0)
+        {
+            return p;
+        }
+
+        auto buffer = vector<wchar_t>(length);
+        if (GetFullPathNameW(p.native().c_str(), length, buffer.data(), nullptr) == 0)
+        {
+            return p;
+        }
+
+        auto result = path(path::string_type(buffer.data()));
+        result.make_preferred();
+        return result;
+#else
+        auto buffer = vector<char>(PATH_MAX);
+        if (realpath(p.native().c_str(), buffer.data()) == nullptr)
+        {
+            return p;
+        }
+
+        return path(path::string_type(buffer.data()));
+#endif
+    }
+
+    auto weakly_canonical(const path& p) -> path
+    {
+        if (p.empty())
+        {
+            return p;
+        }
+
+        if (exists(p))
+        {
+            return canonical(p);
+        }
+
+        auto current = p.parent_path();
+        auto elements = vector<path>();
+        if (!p.filename().empty())
+        {
+            elements.push_back(p.filename());
+        }
+
+        while (!current.empty() && !exists(current))
+        {
+            auto fn = current.filename();
+            if (!fn.empty())
+            {
+                elements.push_back(fn);
+                current = current.parent_path();
+            }
+            else
+            {
+                elements.push_back(current);
+                current.clear();
+                break;
+            }
+        }
+
+        auto result = path{};
+        if (!current.empty() && exists(current))
+        {
+            result = canonical(current);
+        }
+        else if (!p.is_absolute())
+        {
+            result = canonical(current_path());
+        }
+
+        for (size_t i = elements.size(); i > 0; --i)
+        {
+            const auto& elem = elements[i - 1];
+            if (elem.empty() || elem.string() == ".")
+            {
+                continue;
+            }
+            if (elem.string() == "..")
+            {
+                if (result.has_relative_path() || result.has_filename())
+                {
+                    result = result.parent_path();
+                }
+                else
+                {
+                    result /= elem;
+                }
+            }
+            else
+            {
+                result /= elem;
+            }
+        }
+
+        result.make_preferred();
+        return result;
     }
 
     auto relative(const path& p) -> path

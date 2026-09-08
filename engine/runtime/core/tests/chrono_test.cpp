@@ -562,14 +562,14 @@ TEST(chrono_literals_test, duration_literals)
     using namespace tempest::chrono_literals;
 
     // 1. Setup & Act: integer duration literals with named constants
-    constexpr auto zero_s = 0s;
-    constexpr auto zero_ms = 0ms;
-    constexpr auto nanos = 500ns;
-    constexpr auto micros = 400us;
-    constexpr auto millis = 300ms;
-    constexpr auto secs = 2s;
-    constexpr auto mins = 5min;
-    constexpr auto hours = 1h;
+    constexpr auto zero_s = 0_s;
+    constexpr auto zero_ms = 0_ms;
+    constexpr auto nanos = 500_ns;
+    constexpr auto micros = 400_us;
+    constexpr auto millis = 300_ms;
+    constexpr auto secs = 2_s;
+    constexpr auto mins = 5_min;
+    constexpr auto hours = 1_h;
 
     constexpr auto expected_nanos_count = 500;
     constexpr auto expected_micros_count = 400;
@@ -587,10 +587,10 @@ TEST(chrono_literals_test, duration_literals)
     EXPECT_EQ(hours.count(), 1);
 
     // 3. Setup & Act: floating-point duration literals
-    constexpr auto f_secs = 1.5s;
-    constexpr auto f_millis = 2.5ms;
-    constexpr auto f_micros = 3.5us;
-    constexpr auto f_nanos = 4.5ns;
+    constexpr auto f_secs = 1.5_s;
+    constexpr auto f_millis = 2.5_ms;
+    constexpr auto f_micros = 3.5_us;
+    constexpr auto f_nanos = 4.5_ns;
 
     constexpr auto expected_f_secs_val = 1.5;
     constexpr auto expected_f_millis_val = 2.5;
@@ -604,20 +604,20 @@ TEST(chrono_literals_test, duration_literals)
     EXPECT_DOUBLE_EQ(static_cast<double>(f_nanos.count()), expected_f_nanos_val);
 
     // 5. Assert: literal arithmetic and equivalence
-    constexpr auto thousand_ms = 1000ms;
-    constexpr auto sixty_secs = 60s;
-    constexpr auto sixty_mins = 60min;
-    constexpr auto twenty_four_hours = 24h;
-    constexpr auto fourteen_forty_mins = 1440min;
-    constexpr auto eighty_six_four_hundred_secs = 86400s;
-    constexpr auto one_million_nanos = 1000000ns;
+    constexpr auto thousand_ms = 1000_ms;
+    constexpr auto sixty_secs = 60_s;
+    constexpr auto sixty_mins = 60_min;
+    constexpr auto twenty_four_hours = 24_h;
+    constexpr auto fourteen_forty_mins = 1440_min;
+    constexpr auto eighty_six_four_hundred_secs = 86400_s;
+    constexpr auto one_million_nanos = 1000000_ns;
 
-    EXPECT_EQ(thousand_ms, 1s);
-    EXPECT_EQ(sixty_secs, 1min);
-    EXPECT_EQ(sixty_mins, 1h);
+    EXPECT_EQ(thousand_ms, 1_s);
+    EXPECT_EQ(sixty_secs, 1_min);
+    EXPECT_EQ(sixty_mins, 1_h);
     EXPECT_EQ(twenty_four_hours, fourteen_forty_mins);
     EXPECT_EQ(fourteen_forty_mins, eighty_six_four_hundred_secs);
-    EXPECT_EQ(one_million_nanos, 1ms);
+    EXPECT_EQ(one_million_nanos, 1_ms);
 }
 
 /// @brief Tests that literals can be resolved through tempest::literals and tempest::chrono.
@@ -626,7 +626,7 @@ TEST(chrono_literals_test, namespace_resolution)
     // 1. Act & Assert: tempest::literals
     {
         using namespace tempest::literals;
-        constexpr auto dur_hundred_ms = 100ms;
+        constexpr auto dur_hundred_ms = 100_ms;
         constexpr auto expected_hundred = 100;
         auto dur = dur_hundred_ms;
         EXPECT_EQ(dur.count(), expected_hundred);
@@ -635,7 +635,7 @@ TEST(chrono_literals_test, namespace_resolution)
     // 2. Act & Assert: tempest::chrono
     {
         using namespace tempest::chrono;
-        constexpr auto dur_fifty_s = 50s;
+        constexpr auto dur_fifty_s = 50_s;
         constexpr auto expected_fifty = 50;
         auto dur = dur_fifty_s;
         EXPECT_EQ(dur.count(), expected_fifty);

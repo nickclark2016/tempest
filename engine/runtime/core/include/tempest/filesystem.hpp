@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/charconv.hpp>
+#include <tempest/chrono.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/enum.hpp>
 #include <tempest/iterator.hpp>
@@ -202,10 +203,20 @@ namespace tempest::filesystem
             return *this;
         }
 
+        auto append(const path& p) -> path&
+        {
+            return _append(p);
+        }
+
         template <detail::path_source_type T>
         auto append(const T& p) -> path&
         {
             return _append(path(p));
+        }
+
+        auto operator/=(const path& p) -> path&
+        {
+            return _append(p);
         }
 
         template <detail::path_source_type T>
@@ -420,6 +431,12 @@ namespace tempest::filesystem
     TEMPEST_API auto remove(const path& p) -> bool;
 
     [[nodiscard]] TEMPEST_API auto file_size(const path& p) -> size_t;
+
+    using file_time_type = chrono::time_point<chrono::system_clock, chrono::nanoseconds>;
+
+    [[nodiscard]] TEMPEST_API auto last_write_time(const path& p) -> file_time_type;
+    [[nodiscard]] TEMPEST_API auto canonical(const path& p) -> path;
+    [[nodiscard]] TEMPEST_API auto weakly_canonical(const path& p) -> path;
 
     class TEMPEST_API directory_entry
     {
