@@ -7,8 +7,6 @@
 #include <tempest/serial.hpp>
 #include <tempest/utility.hpp>
 
-#include <filesystem>
-
 namespace tempest::assets
 {
     namespace
@@ -22,13 +20,7 @@ namespace tempest::assets
             {
                 return 0;
             }
-            std::error_code ec;
-            auto ftime = std::filesystem::last_write_time(
-                std::filesystem::path(std::string(disk_path.data(), disk_path.size())), ec);
-            if (ec)
-            {
-                return 0;
-            }
+            auto ftime = tempest::filesystem::last_write_time(tempest::filesystem::path(disk_path));
             return static_cast<uint64_t>(ftime.time_since_epoch().count());
         }
 

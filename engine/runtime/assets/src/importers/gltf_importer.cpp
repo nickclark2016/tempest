@@ -17,9 +17,10 @@
 #include <tempest/vec3.hpp>
 #include <tempest/vertex.hpp>
 
-#include <filesystem>
+#include <tempest/filesystem.hpp>
 
 #include <cmath>
+#include <string_view>
 #include <tempest/json.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -123,7 +124,7 @@ namespace tempest::assets
             return decoded_data;
         }
 
-        auto read_buffer(const json_value& buffer, const optional<std::filesystem::path>& dir) -> vector<byte>
+        auto read_buffer(const json_value& buffer, const optional<tempest::filesystem::path>& dir) -> vector<byte>
         {
             vector<byte> data;
 
@@ -145,10 +146,8 @@ namespace tempest::assets
                 {
                     if (dir)
                     {
-                        auto full_path = (*dir / uri_sv).string();
-                        data = read_file_to_vector(
-                                   tempest::filesystem::path{string_view{full_path.c_str(), full_path.size()}})
-                                   .value_or(vector<byte>{});
+                        auto full_path = *dir / tempest::filesystem::path{uri};
+                        data = read_file_to_vector(full_path).value_or(vector<byte>{});
                     }
                     else
                     {
@@ -160,7 +159,7 @@ namespace tempest::assets
             return data;
         }
 
-        auto read_image(const json_value& img, const optional<std::filesystem::path>& dir) -> image_payload
+        auto read_image(const json_value& img, const optional<tempest::filesystem::path>& dir) -> image_payload
         {
             image_payload payload;
 
@@ -184,11 +183,9 @@ namespace tempest::assets
                 {
                     if (dir)
                     {
-                        auto full_path = (*dir / uri_sv).string();
-                        payload.data = read_file_to_vector(
-                                           tempest::filesystem::path{string_view{full_path.c_str(), full_path.size()}})
-                                           .value_or(vector<byte>{});
-                        payload.file_path = {full_path.c_str(), full_path.size()};
+                        auto full_path = *dir / tempest::filesystem::path{uri};
+                        payload.data = read_file_to_vector(full_path).value_or(vector<byte>{});
+                        payload.file_path = full_path.string();
                     }
                     else
                     {
@@ -499,7 +496,7 @@ namespace tempest::assets
 
             if (img.name.empty())
             {
-                auto path = std::filesystem::path(img.file_path.c_str()).stem();
+                auto path = tempest::filesystem::path(img.file_path.c_str()).stem();
                 tex.name = path.string().c_str();
             }
             else
@@ -1114,7 +1111,7 @@ namespace tempest::assets
         }
     }
 
-    auto load_buffer_contents(const json_object& doc, const optional<std::filesystem::path>& base_path)
+    auto load_buffer_contents(const json_object& doc, const optional<tempest::filesystem::path>& base_path)
         -> flat_unordered_map<uint32_t, vector<byte>>
     {
         auto buffer_contents = flat_unordered_map<uint32_t, vector<byte>>{};
@@ -1134,7 +1131,7 @@ namespace tempest::assets
         return buffer_contents;
     }
 
-    auto load_image_contents(const json_object& doc, const optional<std::filesystem::path>& base_path)
+    auto load_image_contents(const json_object& doc, const optional<tempest::filesystem::path>& base_path)
         -> flat_unordered_map<uint32_t, image_payload>
     {
         auto image_contents = flat_unordered_map<uint32_t, image_payload>{};
@@ -1509,10 +1506,10 @@ namespace tempest::assets
 
         auto ent = registry.create();
 
-        optional<std::filesystem::path> base_path;
+        optional<tempest::filesystem::path> base_path;
         if (path)
         {
-            auto file_path = std::filesystem::path(path->data());
+            auto file_path = tempest::filesystem::path(path->data());
             if (file_path.has_parent_path())
             {
                 base_path = file_path.parent_path();
