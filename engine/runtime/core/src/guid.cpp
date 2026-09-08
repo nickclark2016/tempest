@@ -1,6 +1,6 @@
 #include <tempest/guid.hpp>
 
-#include <format>
+#include <tempest/format.hpp>
 #include <tempest/random.hpp>
 
 namespace tempest
@@ -45,7 +45,7 @@ namespace tempest
                 str += '-';
             }
 
-            auto hex = std::format("{:02X}", static_cast<unsigned char>(uid.data[i]));
+            auto hex = tempest::format("{:02X}", static_cast<unsigned char>(uid.data[i]));
             str += hex.c_str();
         }
 

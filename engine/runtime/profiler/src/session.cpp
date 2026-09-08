@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <tempest/int.hpp>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -12,15 +12,15 @@
 #include <pthread.h>
 #include <time.h>
 #else
-#include <chrono>
+#include <tempest/chrono.hpp>
 #endif
 
 namespace
 {
     auto get_timestamp_ns() noexcept -> tempest::uint64_t
     {
-#if defined(_WIN32)
-        static const auto frequency = []() {
+#ifdef _WIN32
+        static const auto frequency = []() -> tempest::uint64_t {
             LARGE_INTEGER freq;
             QueryPerformanceFrequency(&freq);
             return static_cast<tempest::uint64_t>(freq.QuadPart);
@@ -28,15 +28,16 @@ namespace
         LARGE_INTEGER counter;
         QueryPerformanceCounter(&counter);
         auto count = static_cast<tempest::uint64_t>(counter.QuadPart);
-        return (count / frequency) * 1'000'000'000ULL + ((count % frequency) * 1'000'000'000ULL) / frequency;
+        return ((count / frequency) * 1'000'000'000ULL) + (((count % frequency) * 1'000'000'000ULL) / frequency);
 #elif defined(__linux__)
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        return static_cast<tempest::uint64_t>(ts.tv_sec) * 1'000'000'000ULL + static_cast<tempest::uint64_t>(ts.tv_nsec);
+        return static_cast<tempest::uint64_t>(ts.tv_sec) * 1'000'000'000ULL +
+               static_cast<tempest::uint64_t>(ts.tv_nsec);
 #else
-        return static_cast<tempest::uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-                .count());
+        return static_cast<tempest::uint64_t>(tempest::chrono::duration_cast<tempest::chrono::nanoseconds>(
+                                                  tempest::chrono::steady_clock::now().time_since_epoch())
+                                                  .count());
 #endif
     }
 } // namespace
@@ -80,32 +81,32 @@ namespace tempest::profiler
 
     auto event_chunk::zones() const noexcept -> span<const zone_record>
     {
-        return span<const zone_record>(_zones.data(), _zones.size());
+        return {_zones.data(), _zones.size()};
     }
 
     auto event_chunk::markers() const noexcept -> span<const marker_record>
     {
-        return span<const marker_record>(_markers.data(), _markers.size());
+        return {_markers.data(), _markers.size()};
     }
 
     auto event_chunk::metrics() const noexcept -> span<const metric_record>
     {
-        return span<const metric_record>(_metrics.data(), _metrics.size());
+        return {_metrics.data(), _metrics.size()};
     }
 
     auto event_chunk::zones() noexcept -> span<zone_record>
     {
-        return span<zone_record>(_zones.data(), _zones.size());
+        return {_zones.data(), _zones.size()};
     }
 
     auto event_chunk::markers() noexcept -> span<marker_record>
     {
-        return span<marker_record>(_markers.data(), _markers.size());
+        return {_markers.data(), _markers.size()};
     }
 
     auto event_chunk::metrics() noexcept -> span<metric_record>
     {
-        return span<metric_record>(_metrics.data(), _metrics.size());
+        return {_metrics.data(), _metrics.size()};
     }
 
     auto event_chunk::empty() const noexcept -> bool
@@ -307,7 +308,7 @@ namespace tempest::profiler
     auto thread_profiler_context::get_thread_name() const noexcept -> string_view
     {
         lock_guard guard(_mutex);
-        return string_view(_thread_name.data(), _thread_name.size());
+        return {_thread_name.data(), _thread_name.size()};
     }
 
     auto thread_profiler_context::get_thread_id() const noexcept -> uint64_t
@@ -499,7 +500,7 @@ namespace tempest::profiler
     auto profiler_session::_query_native_thread_name(uint64_t tid) -> string
     {
         auto name = string{};
-#if defined(_WIN32)
+#ifdef _WIN32
         PWSTR desc = nullptr;
         auto hr = GetThreadDescription(GetCurrentThread(), &desc);
         if (SUCCEEDED(hr) && desc != nullptr && desc[0] != L'\0')

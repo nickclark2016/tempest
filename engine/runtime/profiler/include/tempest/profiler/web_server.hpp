@@ -13,7 +13,7 @@
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 
-#include <chrono>
+#include <tempest/chrono.hpp>
 
 namespace tempest::profiler
 {
@@ -32,9 +32,9 @@ namespace tempest::profiler
         ~web_server();
 
         web_server(const web_server&) = delete;
-        web_server& operator=(const web_server&) = delete;
+        auto operator=(const web_server&) -> web_server& = delete;
         web_server(web_server&&) noexcept = delete;
-        web_server& operator=(web_server&&) noexcept = delete;
+        auto operator=(web_server&&) noexcept -> web_server& = delete;
 
         auto start() -> void;
         auto stop() -> void;
@@ -59,14 +59,14 @@ namespace tempest::profiler
         struct pending_connection
         {
             int64_t socket{-1};
-            std::chrono::steady_clock::time_point connected_at{};
-            string rx_buffer{};
+            chrono::steady_clock::time_point connected_at;
+            string rx_buffer;
         };
 
         struct websocket_client
         {
             int64_t socket{-1};
-            vector<byte> rx_buffer{};
+            vector<byte> rx_buffer;
         };
 
         profiler_session& _session;
@@ -74,11 +74,11 @@ namespace tempest::profiler
         atomic<bool> _running{false};
         atomic<uint16_t> _bound_port{0};
         atomic<int64_t> _server_socket{-1};
-        thread _worker_thread{};
+        thread _worker_thread;
 
-        vector<pending_connection> _pending_clients{};
-        vector<websocket_client> _ws_clients{};
-        mutable mutex _clients_mutex{};
+        vector<pending_connection> _pending_clients;
+        vector<websocket_client> _ws_clients;
+        mutable mutex _clients_mutex;
     };
 } // namespace tempest::profiler
 

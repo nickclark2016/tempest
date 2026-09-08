@@ -15,7 +15,7 @@
 #include <tempest/vector.hpp>
 #include <tempest/window_manager.hpp>
 
-#include <chrono>
+#include <tempest/chrono.hpp>
 
 namespace tempest
 {
@@ -52,11 +52,11 @@ namespace tempest
 
         /// \brief Registers a callback to be executed on fixed update.
         virtual auto register_on_fixed_update_callback(
-            function<void(engine_context&, std::chrono::duration<float>)> callback) -> void = 0;
+            function<void(engine_context&, chrono::duration<float>)> callback) -> void = 0;
 
         /// \brief Registers a callback to be executed on variable update.
         virtual auto register_on_variable_update_callback(
-            function<void(engine_context&, std::chrono::duration<float>)> callback) -> void = 0;
+            function<void(engine_context&, chrono::duration<float>)> callback) -> void = 0;
 
         /// \brief Runs the engine, executing the main loop and processing events.
         virtual auto run() -> void = 0;
@@ -122,10 +122,10 @@ namespace tempest
         auto register_window(window_desc desc, bool install_swapchain_blit = true) -> window_registration_info override;
         auto register_on_initialize_callback(function<void(engine_context&)> callback) -> void override;
         auto register_on_close_callback(function<void(engine_context&)> callback) -> void override;
-        auto register_on_fixed_update_callback(function<void(engine_context&, std::chrono::duration<float>)> callback)
+        auto register_on_fixed_update_callback(function<void(engine_context&, chrono::duration<float>)> callback)
             -> void override;
-        auto register_on_variable_update_callback(
-            function<void(engine_context&, std::chrono::duration<float>)> callback) -> void override;
+        auto register_on_variable_update_callback(function<void(engine_context&, chrono::duration<float>)> callback)
+            -> void override;
 
         auto run() -> void override;
 
@@ -204,17 +204,17 @@ namespace tempest
         vector<window_context> _windows;
         vector<function<void(engine_context&)>> _on_initialize_callbacks;
         vector<function<void(engine_context&)>> _on_close_callbacks;
-        vector<function<void(engine_context&, std::chrono::duration<float>)>> _on_fixed_update_callbacks;
-        vector<function<void(engine_context&, std::chrono::duration<float>)>> _on_variable_update_callbacks;
+        vector<function<void(engine_context&, chrono::duration<float>)>> _on_fixed_update_callbacks;
+        vector<function<void(engine_context&, chrono::duration<float>)>> _on_variable_update_callbacks;
 
-        std::chrono::steady_clock::time_point _last_frame_time;
-        std::chrono::duration<float> _delta_frame_time{0.0F};
+        chrono::steady_clock::time_point _last_frame_time;
+        chrono::duration<float> _delta_frame_time{0.0F};
 
         bool _should_close{false};
         // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
-        virtual auto _update_fixed(std::chrono::duration<float> delta_time) -> void;
-        virtual auto _update_variable(std::chrono::duration<float> delta_time) -> void;
+        virtual auto _update_fixed(chrono::duration<float> delta_time) -> void;
+        virtual auto _update_variable(chrono::duration<float> delta_time) -> void;
         virtual auto _render_frame() -> void;
     };
 } // namespace tempest

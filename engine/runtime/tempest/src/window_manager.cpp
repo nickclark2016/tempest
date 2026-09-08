@@ -4,13 +4,13 @@
 #include <tempest/memory.hpp>
 #include <tempest/vector.hpp>
 
-#include <atomic>
 #include <cstdio>
+#include <tempest/atomic.hpp>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #include <windows.h>
@@ -23,7 +23,7 @@ namespace tempest
 {
     namespace
     {
-        std::atomic<uint32_t> g_glfw_ref_count{0};
+        atomic<uint32_t> g_glfw_ref_count{0};
 
         void init_glfw()
         {
@@ -308,18 +308,24 @@ namespace tempest
         auto translate_glfw_modifiers(int mods) noexcept -> enum_mask<core::key_modifier>
         {
             auto res = core::key_modifier::none;
-            if ((mods & GLFW_MOD_SHIFT) != 0)
+            if ((mods & GLFW_MOD_SHIFT) != 0) {
                 res = res | core::key_modifier::shift;
-            if ((mods & GLFW_MOD_CONTROL) != 0)
+}
+            if ((mods & GLFW_MOD_CONTROL) != 0) {
                 res = res | core::key_modifier::control;
-            if ((mods & GLFW_MOD_ALT) != 0)
+}
+            if ((mods & GLFW_MOD_ALT) != 0) {
                 res = res | core::key_modifier::alt;
-            if ((mods & GLFW_MOD_SUPER) != 0)
+}
+            if ((mods & GLFW_MOD_SUPER) != 0) {
                 res = res | core::key_modifier::super;
-            if ((mods & GLFW_MOD_CAPS_LOCK) != 0)
+}
+            if ((mods & GLFW_MOD_CAPS_LOCK) != 0) {
                 res = res | core::key_modifier::caps_lock;
-            if ((mods & GLFW_MOD_NUM_LOCK) != 0)
+}
+            if ((mods & GLFW_MOD_NUM_LOCK) != 0) {
                 res = res | core::key_modifier::num_lock;
+}
             return make_enum_mask(res);
         }
 
@@ -389,8 +395,9 @@ namespace tempest
 
         auto find_window(window_handle win) -> window_data*
         {
-            if (!win.is_valid())
+            if (!win.is_valid()) {
                 return nullptr;
+}
             for (auto& data : windows)
             {
                 if (data && data->handle == win)
@@ -401,10 +408,11 @@ namespace tempest
             return nullptr;
         }
 
-        auto find_window(window_handle win) const -> const window_data*
+        [[nodiscard]] auto find_window(window_handle win) const -> const window_data*
         {
-            if (!win.is_valid())
+            if (!win.is_valid()) {
                 return nullptr;
+}
             for (const auto& data : windows)
             {
                 if (data && data->handle == win)
@@ -427,7 +435,7 @@ namespace tempest
         {
             for (auto& data : _impl->windows)
             {
-                if (data && data->window)
+                if (data && (data->window != nullptr))
                 {
                     glfwSetWindowUserPointer(data->window, nullptr);
                     glfwDestroyWindow(data->window);
@@ -467,10 +475,11 @@ namespace tempest
 
         // Keyboard callback
         glfwSetKeyCallback(native_win,
-                           [](GLFWwindow* win, int key, [[maybe_unused]] int scancode, int action, int mods) {
+                           [](GLFWwindow* win, int key, [[maybe_unused]] int scancode, int action, int mods) -> void {
                                auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-                               if (!win_data)
+                               if (!win_data) {
                                    return;
+}
 
                                auto state = core::key_state{
                                    .k = translate_glfw_key(key),
@@ -486,10 +495,11 @@ namespace tempest
                            });
 
         // Mouse button callback
-        glfwSetMouseButtonCallback(native_win, [](GLFWwindow* win, int button, int action, [[maybe_unused]] int mods) {
+        glfwSetMouseButtonCallback(native_win, [](GLFWwindow* win, int button, int action, [[maybe_unused]] int mods) -> void {
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-            if (!win_data)
+            if (!win_data) {
                 return;
+}
 
             auto state = core::mouse_button_state{
                 .button = translate_glfw_mouse_button(button),
@@ -504,10 +514,11 @@ namespace tempest
         });
 
         // Cursor pos callback
-        glfwSetCursorPosCallback(native_win, [](GLFWwindow* win, double xpos, double ypos) {
+        glfwSetCursorPosCallback(native_win, [](GLFWwindow* win, double xpos, double ypos) -> void {
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-            if (!win_data)
+            if (!win_data) {
                 return;
+}
 
             win_data->mouse.set_position(static_cast<float>(xpos), static_cast<float>(ypos));
             if (win_data->cursor_pos_callback)
@@ -517,10 +528,11 @@ namespace tempest
         });
 
         // Scroll callback
-        glfwSetScrollCallback(native_win, [](GLFWwindow* win, double xoffset, double yoffset) {
+        glfwSetScrollCallback(native_win, [](GLFWwindow* win, double xoffset, double yoffset) -> void {
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-            if (!win_data)
+            if (!win_data) {
                 return;
+}
 
             win_data->mouse.set_scroll(static_cast<float>(xoffset), static_cast<float>(yoffset));
             if (win_data->scroll_callback)
@@ -530,10 +542,11 @@ namespace tempest
         });
 
         // Resize / Framebuffer size callback
-        glfwSetFramebufferSizeCallback(native_win, [](GLFWwindow* win, int width, int height) {
+        glfwSetFramebufferSizeCallback(native_win, [](GLFWwindow* win, int width, int height) -> void {
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-            if (!win_data)
+            if (!win_data) {
                 return;
+}
 
             win_data->width = static_cast<uint32_t>(width);
             win_data->height = static_cast<uint32_t>(height);
@@ -544,10 +557,11 @@ namespace tempest
         });
 
         // Character input callback
-        glfwSetCharCallback(native_win, [](GLFWwindow* win, unsigned int codepoint) {
+        glfwSetCharCallback(native_win, [](GLFWwindow* win, unsigned int codepoint) -> void {
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-            if (!win_data)
+            if (!win_data) {
                 return;
+}
 
             if (win_data->char_callback)
             {
@@ -556,10 +570,11 @@ namespace tempest
         });
 
         // Window focus callback
-        glfwSetWindowFocusCallback(native_win, [](GLFWwindow* win, int focused) {
+        glfwSetWindowFocusCallback(native_win, [](GLFWwindow* win, int focused) -> void {
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-            if (!win_data)
+            if (!win_data) {
                 return;
+}
 
             if (win_data->focus_callback)
             {
@@ -568,10 +583,11 @@ namespace tempest
         });
 
         // Close callback
-        glfwSetWindowCloseCallback(native_win, [](GLFWwindow* win) {
+        glfwSetWindowCloseCallback(native_win, [](GLFWwindow* win) -> void {
             auto* win_data = static_cast<window_data*>(glfwGetWindowUserPointer(win));
-            if (!win_data)
+            if (!win_data) {
                 return;
+}
 
             if (win_data->close_callback)
             {
@@ -585,14 +601,15 @@ namespace tempest
 
     auto window_manager::destroy_window(window_handle win) -> void
     {
-        if (!win.is_valid() || !_impl)
+        if (!win.is_valid() || !_impl) {
             return;
+}
 
-        for (auto it = _impl->windows.begin(); it != _impl->windows.end(); ++it)
+        for (auto *it = _impl->windows.begin(); it != _impl->windows.end(); ++it)
         {
             if ((*it)->handle == win)
             {
-                if ((*it)->window)
+                if ((*it)->window != nullptr)
                 {
                     glfwSetWindowUserPointer((*it)->window, nullptr);
                     glfwDestroyWindow((*it)->window);
@@ -607,12 +624,12 @@ namespace tempest
     auto window_manager::get_native_wsi_handle(window_handle win) const -> rhi::native_wsi_handle
     {
         auto* data = _impl->find_window(win);
-        if (!data || !data->window)
+        if ((data == nullptr) || (data->window == nullptr))
         {
             return {};
         }
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
         return rhi::native_wsi_handle{
             .display = static_cast<void*>(GetModuleHandle(nullptr)),
             .window = static_cast<void*>(glfwGetWin32Window(data->window)),
@@ -630,8 +647,9 @@ namespace tempest
     auto window_manager::get_width(window_handle win) const -> uint32_t
     {
         auto* data = _impl->find_window(win);
-        if (!data || !data->window)
+        if ((data == nullptr) || (data->window == nullptr)) {
             return 0;
+}
         auto w = 0;
         auto h = 0;
         glfwGetWindowSize(data->window, &w, &h);
@@ -641,8 +659,9 @@ namespace tempest
     auto window_manager::get_height(window_handle win) const -> uint32_t
     {
         auto* data = _impl->find_window(win);
-        if (!data || !data->window)
+        if ((data == nullptr) || (data->window == nullptr)) {
             return 0;
+}
         auto w = 0;
         auto h = 0;
         glfwGetWindowSize(data->window, &w, &h);
@@ -652,8 +671,9 @@ namespace tempest
     auto window_manager::get_framebuffer_width(window_handle win) const -> uint32_t
     {
         auto* data = _impl->find_window(win);
-        if (!data || !data->window)
+        if ((data == nullptr) || (data->window == nullptr)) {
             return 0;
+}
         auto w = 0;
         auto h = 0;
         glfwGetFramebufferSize(data->window, &w, &h);
@@ -663,8 +683,9 @@ namespace tempest
     auto window_manager::get_framebuffer_height(window_handle win) const -> uint32_t
     {
         auto* data = _impl->find_window(win);
-        if (!data || !data->window)
+        if ((data == nullptr) || (data->window == nullptr)) {
             return 0;
+}
         auto w = 0;
         auto h = 0;
         glfwGetFramebufferSize(data->window, &w, &h);
@@ -674,15 +695,16 @@ namespace tempest
     auto window_manager::should_close(window_handle win) const -> bool
     {
         auto* data = _impl->find_window(win);
-        if (!data || !data->window)
+        if ((data == nullptr) || (data->window == nullptr)) {
             return true;
+}
         return glfwWindowShouldClose(data->window) == GLFW_TRUE;
     }
 
     auto window_manager::set_should_close(window_handle win, bool close) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data && data->window)
+        if ((data != nullptr) && (data->window != nullptr))
         {
             glfwSetWindowShouldClose(data->window, close ? GLFW_TRUE : GLFW_FALSE);
         }
@@ -696,8 +718,9 @@ namespace tempest
     auto window_manager::set_cursor_mode(window_handle win, cursor_mode mode) -> void
     {
         auto* data = _impl->find_window(win);
-        if (!data || !data->window)
+        if ((data == nullptr) || (data->window == nullptr)) {
             return;
+}
 
         data->current_cursor_mode = mode;
         switch (mode)
@@ -720,19 +743,19 @@ namespace tempest
     auto window_manager::get_cursor_mode(window_handle win) const -> cursor_mode
     {
         auto* data = _impl->find_window(win);
-        return data ? data->current_cursor_mode : cursor_mode::normal;
+        return (data != nullptr) ? data->current_cursor_mode : cursor_mode::normal;
     }
 
     auto window_manager::is_cursor_disabled(window_handle win) const -> bool
     {
         auto* data = _impl->find_window(win);
-        return data ? (data->current_cursor_mode == cursor_mode::disabled) : false;
+        return (data != nullptr) ? (data->current_cursor_mode == cursor_mode::disabled) : false;
     }
 
     auto window_manager::get_keyboard(window_handle win) -> core::keyboard&
     {
         auto* data = _impl->find_window(win);
-        if (!data)
+        if (data == nullptr)
         {
             static auto dummy_keyboard = core::keyboard{};
             return dummy_keyboard;
@@ -743,7 +766,7 @@ namespace tempest
     auto window_manager::get_keyboard(window_handle win) const -> const core::keyboard&
     {
         auto* data = _impl->find_window(win);
-        if (!data)
+        if (data == nullptr)
         {
             static const auto dummy_keyboard = core::keyboard{};
             return dummy_keyboard;
@@ -754,7 +777,7 @@ namespace tempest
     auto window_manager::get_mouse(window_handle win) -> core::mouse&
     {
         auto* data = _impl->find_window(win);
-        if (!data)
+        if (data == nullptr)
         {
             static auto dummy_mouse = core::mouse{};
             return dummy_mouse;
@@ -765,7 +788,7 @@ namespace tempest
     auto window_manager::get_mouse(window_handle win) const -> const core::mouse&
     {
         auto* data = _impl->find_window(win);
-        if (!data)
+        if (data == nullptr)
         {
             static const auto dummy_mouse = core::mouse{};
             return dummy_mouse;
@@ -776,8 +799,9 @@ namespace tempest
     auto window_manager::get_input_group(window_handle win) -> core::input_group
     {
         auto* data = _impl->find_window(win);
-        if (!data)
+        if (data == nullptr) {
             return {};
+}
         return core::input_group{
             .kb = &data->keyboard,
             .ms = &data->mouse,
@@ -787,7 +811,7 @@ namespace tempest
     auto window_manager::register_key_callback(window_handle win, function<void(core::key_state)> cb) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->key_callback = tempest::move(cb);
         }
@@ -796,7 +820,7 @@ namespace tempest
     auto window_manager::register_char_callback(window_handle win, function<void(uint32_t)> cb) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->char_callback = tempest::move(cb);
         }
@@ -806,7 +830,7 @@ namespace tempest
         -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->mouse_button_callback = tempest::move(cb);
         }
@@ -815,7 +839,7 @@ namespace tempest
     auto window_manager::register_cursor_pos_callback(window_handle win, function<void(float, float)> cb) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->cursor_pos_callback = tempest::move(cb);
         }
@@ -824,7 +848,7 @@ namespace tempest
     auto window_manager::register_scroll_callback(window_handle win, function<void(float, float)> cb) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->scroll_callback = tempest::move(cb);
         }
@@ -833,7 +857,7 @@ namespace tempest
     auto window_manager::register_resize_callback(window_handle win, function<void(uint32_t, uint32_t)> cb) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->resize_callback = tempest::move(cb);
         }
@@ -842,7 +866,7 @@ namespace tempest
     auto window_manager::register_focus_callback(window_handle win, function<void(bool)> cb) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->focus_callback = tempest::move(cb);
         }
@@ -851,7 +875,7 @@ namespace tempest
     auto window_manager::register_close_callback(window_handle win, function<void()> cb) -> void
     {
         auto* data = _impl->find_window(win);
-        if (data)
+        if (data != nullptr)
         {
             data->close_callback = tempest::move(cb);
         }

@@ -6,7 +6,7 @@
 #include <tempest/limits.hpp>
 #include <tempest/unit.hpp>
 
-#include <cmath>
+#include <tempest/math_utils.hpp>
 
 namespace tempest::units
 {
@@ -100,7 +100,7 @@ namespace tempest::units
             static constexpr T channel_to_canonical(T x)
             {
                 const auto val = static_cast<double>(x);
-                const auto result = val <= 0.0405 ? (val / 12.92) : std::pow((val + 0.055) / 1.055, 2.4);
+                const auto result = val <= 0.0405 ? (val / 12.92) : tempest::math::pow((val + 0.055) / 1.055, 2.4);
                 return static_cast<T>(result);
             }
 
@@ -108,7 +108,8 @@ namespace tempest::units
             static constexpr T channel_from_canonical(T x)
             {
                 const auto value = static_cast<double>(x);
-                const auto result = value <= 0.0031308 ? (value * 12.92) : 1.055 * (std::pow(value, 1.0 / 2.4) - 0.055);
+                const auto result =
+                    value <= 0.0031308 ? (value * 12.92) : 1.055 * (tempest::math::pow(value, 1.0 / 2.4) - 0.055);
                 return static_cast<T>(result);
             }
         };

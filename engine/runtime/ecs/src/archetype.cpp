@@ -1,5 +1,4 @@
 #include "tempest/ecs_events.hpp"
-#include <algorithm>
 #include <tempest/archetype.hpp>
 
 #include <tempest/algorithm.hpp>
@@ -13,7 +12,7 @@
 namespace tempest::ecs
 {
     basic_archetype_storage::basic_archetype_storage(basic_archetype_type_info info, size_t initial_capacity)
-        : _storage{info}, _data{nullptr}, _size{info.size * initial_capacity}
+        : _storage{info}, _size{info.size * initial_capacity}
     {
         reserve(initial_capacity);
     }
@@ -90,7 +89,7 @@ namespace tempest::ecs
     }
 
     basic_archetype::basic_archetype(span<const basic_archetype_type_info> fields)
-        : _element_count{0}, _element_capacity{0}, _first_free_element{0}
+
     {
         _storage.reserve(fields.size());
 
@@ -335,8 +334,8 @@ namespace tempest::ecs
             // Ensure self component exists
             new_types.push_back(create_archetype_type_info<self_component>());
 
-            std::ranges::sort(new_types,
-                              [](const auto& lhs, const auto& rhs) -> auto { return lhs.index < rhs.index; });
+            tempest::sort(new_types.begin(), new_types.end(),
+                          [](const auto& lhs, const auto& rhs) -> auto { return lhs.index < rhs.index; });
 
             _archetypes.emplace_back(new_types);
             _hashes.push_back(hash);

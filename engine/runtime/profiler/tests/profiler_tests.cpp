@@ -1,4 +1,5 @@
 #include <tempest/algorithm.hpp>
+#include <tempest/chrono.hpp>
 #include <tempest/profiler/profiler.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
@@ -2177,8 +2178,8 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         ASSERT_TRUE(client.send_all(unmasked_frame.data(), unmasked_frame.size()));
 
         // Client must be disconnected by server
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-        while (server.connected_client_count() > 0 && std::chrono::steady_clock::now() < deadline)
+        const auto deadline = tempest::chrono::steady_clock::now() + tempest::chrono::milliseconds(500);
+        while (server.connected_client_count() > 0 && tempest::chrono::steady_clock::now() < deadline)
         {
             tempest::this_thread::yield();
         }

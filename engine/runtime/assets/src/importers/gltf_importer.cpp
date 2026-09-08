@@ -1,12 +1,12 @@
 #include "gltf_importer.hpp"
 
-#include <cstdint>
 #include <tempest/algorithm.hpp>
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/asset_serializers.hpp>
 #include <tempest/asset_type_id.hpp>
 #include <tempest/files.hpp>
+#include <tempest/int.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/material.hpp>
 #include <tempest/relationship_component.hpp>
@@ -20,8 +20,8 @@
 #include <tempest/filesystem.hpp>
 
 #include <cmath>
-#include <string_view>
 #include <tempest/json.hpp>
+#include <tempest/string_view.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -137,8 +137,7 @@ namespace tempest::assets
             string_view uri;
             if (buffer["uri"].get(uri))
             {
-                auto uri_sv = std::string_view{uri.data(), uri.size()};
-                if (uri_sv.starts_with("data:"))
+                if (tempest::starts_with(uri, "data:"))
                 {
                     data = parse_base64({reinterpret_cast<const byte*>(uri.data()), uri.size()});
                 }
@@ -164,17 +163,17 @@ namespace tempest::assets
             image_payload payload;
 
             string_view uri;
-            uint64_t buffer_view_index = ~static_cast<std::uint64_t>(0);
+            uint64_t buffer_view_index = ~uint64_t{0};
             if (img["uri"].get(uri))
             {
-                auto uri_sv = std::string_view{uri.data(), uri.size()};
-                if (uri_sv.starts_with("data:"))
+                if (tempest::starts_with(uri, "data:"))
                 {
                     // Extract mime type
-                    if (auto mime_type = uri_sv.find("image/"); mime_type != std::string_view::npos)
+                    const auto *mime_it = tempest::search(uri, string_view{"image/"});
+                    if (mime_it != uri.end())
                     {
-                        auto mime_end = uri_sv.find_first_of(";,", mime_type);
-                        payload.mime_type = string{uri.data() + mime_type, mime_end - mime_type};
+                        const auto *mime_end = tempest::search_first_of(string_view{mime_it, uri.end()}, string_view{";,"});
+                        payload.mime_type = string{mime_it, mime_end};
                     }
 
                     payload.data = parse_base64({reinterpret_cast<const byte*>(uri.data()), uri.size()});

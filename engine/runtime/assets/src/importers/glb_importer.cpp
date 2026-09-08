@@ -1,6 +1,6 @@
 #include "glb_importer.hpp"
 
-#include <stdexcept>
+#include <tempest/archetype.hpp>
 #include <tempest/int.hpp>
 
 namespace tempest::assets
@@ -36,11 +36,10 @@ namespace tempest::assets
     {
     }
 
-    auto glb_importer::import([[maybe_unused]] asset_database& asset_db,
-                                               [[maybe_unused]] span<const byte> bytes,
-                                               [[maybe_unused]] ecs::archetype_registry& registry,
-                                               [[maybe_unused]] optional<string_view> path) -> ecs::entity
+    auto glb_importer::import([[maybe_unused]] asset_database& asset_db, [[maybe_unused]] span<const byte> bytes,
+                              [[maybe_unused]] ecs::archetype_registry& registry,
+                              [[maybe_unused]] optional<string_view> path) -> ecs::entity
     {
-        throw std::runtime_error("GLB import not implemented yet.");
+        return ecs::null;
     }
 } // namespace tempest::assets

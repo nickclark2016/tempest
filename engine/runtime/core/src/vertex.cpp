@@ -37,9 +37,9 @@ namespace tempest::core
         // for each face, add the face normal to each contributing vertex
         for (size_t i = 0; i < num_triangles(); ++i)
         {
-            auto& v0 = (*this)[3 * i + 0];
-            auto& v1 = (*this)[3 * i + 1];
-            auto& v2 = (*this)[3 * i + 2];
+            auto& v0 = (*this)[(3 * i) + 0];
+            auto& v1 = (*this)[(3 * i) + 1];
+            auto& v2 = (*this)[(3 * i) + 2];
 
             const auto edge0 = v1.position - v0.position;
             const auto edge1 = v2.position - v0.position;
@@ -79,9 +79,9 @@ namespace tempest::core
 
         for (size_t i = 0; i < num_triangles(); ++i)
         {
-            auto&& [v0, idx0] = get_tri_and_ind(3 * i + 0);
-            auto&& [v1, idx1] = get_tri_and_ind(3 * i + 1);
-            auto&& [v2, idx2] = get_tri_and_ind(3 * i + 2);
+            auto&& [v0, idx0] = get_tri_and_ind((3 * i) + 0);
+            auto&& [v1, idx1] = get_tri_and_ind((3 * i) + 1);
+            auto&& [v2, idx2] = get_tri_and_ind((3 * i) + 2);
 
             // Edge vectors
             const auto edge1 = v1.position - v0.position;
@@ -93,7 +93,7 @@ namespace tempest::core
             const auto t1 = v1.uv.y - v0.uv.y;
             const auto t2 = v2.uv.y - v0.uv.y;
 
-            const auto denom = s1 * t2 - s2 * t1;
+            const auto denom = (s1 * t2) - (s2 * t1);
 
             auto sdir = math::vec3<float>{};
             auto tdir = math::vec3<float>{};
@@ -160,7 +160,7 @@ namespace tempest::core
         has_tangents = true;
     }
 
-    bool mesh::validate() const
+    auto mesh::validate() const -> bool
     {
         if (!indices.empty())
         {
@@ -171,7 +171,7 @@ namespace tempest::core
         return true;
     }
 
-    vertex& mesh::operator[](size_t idx) noexcept
+    auto mesh::operator[](size_t idx) noexcept -> vertex&
     {
         if (indices.empty())
         {
@@ -180,7 +180,7 @@ namespace tempest::core
         return vertices[indices[idx]];
     }
 
-    const vertex& mesh::operator[](size_t idx) const noexcept
+    auto mesh::operator[](size_t idx) const noexcept -> const vertex&
     {
         if (indices.empty())
         {
@@ -189,7 +189,7 @@ namespace tempest::core
         return vertices[indices[idx]];
     }
 
-    tuple<vertex&, uint32_t> mesh::get_tri_and_ind(size_t idx) noexcept
+    auto mesh::get_tri_and_ind(size_t idx) noexcept -> tuple<vertex&, uint32_t>
     {
         if (indices.empty())
         {
@@ -199,7 +199,7 @@ namespace tempest::core
         return make_tuple(ref(vertices[index]), index);
     }
 
-    tuple<const vertex&, uint32_t> mesh::get_tri_and_ind(size_t idx) const noexcept
+    auto mesh::get_tri_and_ind(size_t idx) const noexcept -> tuple<const vertex&, uint32_t>
     {
         if (indices.empty())
         {
@@ -209,21 +209,21 @@ namespace tempest::core
         return make_tuple(cref(vertices[index]), index);
     }
 
-    size_t mesh::num_triangles() const noexcept
+    auto mesh::num_triangles() const noexcept -> size_t
     {
         return indices.empty() ? vertices.size() / 3 : indices.size() / 3;
     }
 
-    guid mesh_registry::register_mesh(mesh&& m)
+    auto mesh_registry::register_mesh(mesh&& m) -> guid
     {
         guid g = guid::generate_random_guid();
         _meshes[g] = tempest::move(m);
         return g;
     }
 
-    bool mesh_registry::register_mesh_with_id(const guid& id, mesh&& m)
+    auto mesh_registry::register_mesh_with_id(const guid& id, mesh&& m) -> bool
     {
-        if (_meshes.find(id) == _meshes.end())
+        if (!_meshes.contains(id))
         {
             _meshes[id] = tempest::move(m);
             return true;
@@ -231,7 +231,7 @@ namespace tempest::core
         return false;
     }
 
-    bool mesh_registry::remove_mesh(const guid& g)
+    auto mesh_registry::remove_mesh(const guid& g) -> bool
     {
         if (auto it = _meshes.find(g); it != _meshes.end())
         {
@@ -241,7 +241,7 @@ namespace tempest::core
         return false;
     }
 
-    optional<mesh&> mesh_registry::find(const guid& g)
+    auto mesh_registry::find(const guid& g) -> optional<mesh&>
     {
         if (auto it = _meshes.find(g); it != _meshes.end())
         {
@@ -250,7 +250,7 @@ namespace tempest::core
         return none();
     }
 
-    optional<const mesh&> mesh_registry::find(const guid& g) const
+    auto mesh_registry::find(const guid& g) const -> optional<const mesh&>
     {
         if (auto it = _meshes.find(g); it != _meshes.end())
         {

@@ -75,7 +75,7 @@ namespace tempest
 
             // Reference wrapper
             template <typename U>
-            constexpr tuple_val(reference_wrapper<U> u) : val{u.get()} {};
+            constexpr tuple_val(const const reference_wrapper<U>&& u) : val{u.get()} {};
 
             T& val;
         };
@@ -86,12 +86,13 @@ namespace tempest
             constexpr tuple_impl() noexcept = default;
             constexpr tuple_impl(const tuple_impl&) = default;
 
-            template <typename Tag, enable_if_t<is_same_v<Tag, exact_args_tag>, int> = 0>
-            constexpr tuple_impl(Tag) noexcept
+            template <typename Tag>
+            constexpr tuple_impl(Tag /*unused*/) noexcept
+                requires(is_same_v<Tag, exact_args_tag>)
             {
             }
 
-            constexpr tuple_impl& operator=(const tuple_impl&) = default;
+            constexpr auto operator=(const tuple_impl&) -> tuple_impl& = default;
         };
 
         template <typename Head, typename... Rest>
@@ -104,34 +105,34 @@ namespace tempest
 
             constexpr tuple_impl() = default;
 
-            template <typename Tag, typename H, typename... R, enable_if_t<is_same_v<Tag, exact_args_tag>, int> = 0>
-            constexpr tuple_impl(Tag, H&& head, R&&... rest)
+            template <typename Tag, typename H, typename... R>
+            constexpr tuple_impl(Tag /*unused*/, H&& head, R&&... rest)
+                requires(is_same_v<Tag, exact_args_tag>)
                 : base{exact_args_tag{}, tempest::forward_like<Rest>(rest)...}, value{tempest::forward_like<Head>(head)}
             {
             }
 
-            template <typename type2 = type,
-                      enable_if_t<tuple_constructible_v<tuple_impl, const type2&, const Rest&...>, int> = 0>
+            template <typename type2 = type>
             constexpr tuple_impl(const type& head, const Rest&... rest)
+                requires(tuple_constructible_v<tuple_impl, const type2&, const Rest&...>)
                 : tuple_impl(exact_args_tag{}, tempest::forward_like<Rest>(rest)...), value{head}
             {
             }
 
-            template <typename H, typename... R,
-                      enable_if_t<conjunction_v<tuple_perfect_forwarding<tuple_impl, H, Rest...>,
-                                                tuple_constructible<tuple_impl, H, Rest...>>,
-                                  int> = 0>
+            template <typename H, typename... R>
             constexpr tuple_impl(H&& head, R&&... rest)
+                requires(conjunction_v<tuple_perfect_forwarding<tuple_impl, H, Rest...>,
+                                       tuple_constructible<tuple_impl, H, Rest...>>)
                 : tuple_impl(exact_args_tag{}, tempest::forward_like<H>(head), tempest::forward_like<R>(rest)...)
             {
             }
 
-            inline constexpr base& rest() noexcept
+            constexpr auto rest() noexcept -> base&
             {
                 return *this;
             }
 
-            inline constexpr const base& rest() const noexcept
+            [[nodiscard]] constexpr auto rest() const noexcept -> const base&
             {
                 return *this;
             }
@@ -155,7 +156,7 @@ namespace tempest
         {
           public:
             template <typename... Ts>
-            static auto& get(tuple_impl<Ts...>& t) noexcept
+            static auto get(tuple_impl<Ts...>& t) noexcept -> auto&
             {
                 static_assert(I < sizeof...(Ts), "Index out of bounds.");
                 if constexpr (I == 0)
@@ -169,7 +170,7 @@ namespace tempest
             }
 
             template <typename... Ts>
-            static auto&& get(tuple_impl<Ts...>&& t) noexcept
+            static auto get(tuple_impl<Ts...>&& t) noexcept -> auto&&
             {
                 static_assert(I < sizeof...(Ts), "Index out of bounds.");
                 if constexpr (I == 0)
@@ -188,7 +189,7 @@ namespace tempest
         {
           public:
             template <typename... Ts>
-            static const auto& get(const tuple_impl<Ts...>& t) noexcept
+            static auto get(const tuple_impl<Ts...>& t) noexcept -> const auto&
             {
                 static_assert(I < sizeof...(Ts), "Index out of bounds.");
                 if constexpr (I == 0)
@@ -202,7 +203,7 @@ namespace tempest
             }
 
             template <typename... Ts>
-            static const auto&& get(const tuple_impl<Ts...>&& t) noexcept
+            static auto get(const tuple_impl<Ts...>&& t) noexcept -> const auto&&
             {
                 static_assert(I < sizeof...(Ts), "Index out of bounds.");
                 if constexpr (I == 0)
@@ -235,11 +236,11 @@ namespace tempest
         };
 
         template <typename T>
-        using unwrapped_decay_t = typename unwrap_reference_wrapper<decay_t<T>>::type;
+        using unwrapped_decay_t = unwrap_reference_wrapper<decay_t<T>>::type;
     } // namespace detail
 
     template <typename... Ts>
-    inline constexpr tuple<detail::unwrapped_decay_t<Ts>...> make_tuple(Ts&&... ts)
+    constexpr auto make_tuple(Ts&&... ts) -> tuple<detail::unwrapped_decay_t<Ts>...>
     {
         using res = tuple<detail::unwrapped_decay_t<Ts>...>;
 
@@ -279,6 +280,11 @@ namespace tempest
     {
     };
 
+    template <typename... Ts>
+    struct tuple_size<const tuple<Ts...>> : integral_constant<size_t, sizeof...(Ts)>
+    {
+    };
+
     template <typename T>
     inline constexpr size_t tuple_size_v = tuple_size<T>::value;
 
@@ -298,53 +304,53 @@ namespace tempest
 
         ~tuple() = default;
 
-        tuple& operator=(const tuple&) = default;
-        tuple& operator=(tuple&&) noexcept = default;
+        auto operator=(const tuple&) -> tuple& = default;
+        auto operator=(tuple&&) noexcept -> tuple& = default;
     };
 
     template <typename... Ts>
-    inline constexpr tuple<Ts...>::tuple(const Ts&... ts) : detail::tuple_impl<Ts...>{tempest::forward<const Ts>(ts)...}
+    constexpr tuple<Ts...>::tuple(const Ts&... ts) : detail::tuple_impl<Ts...>{tempest::forward<const Ts>(ts)...}
     {
     }
 
     template <typename... Ts>
     template <typename... Us>
-    inline constexpr tuple<Ts...>::tuple(Us&&... us) : detail::tuple_impl<Ts...>{tempest::forward_like<Us>(us)...}
+    constexpr tuple<Ts...>::tuple(Us&&... us) : detail::tuple_impl<Ts...>{tempest::forward_like<Us>(us)...}
     {
     }
 
     template <typename... Ts>
-    tuple<Ts&...> tie(Ts&... ts) noexcept
+    auto tie(Ts&... ts) noexcept -> tuple<Ts&...>
     {
         return tuple<Ts&...>(ts...);
     }
 
     template <typename... Ts>
-    tuple<Ts&&...> forward_as_tuple(Ts&&... ts) noexcept
+    auto forward_as_tuple(Ts&&... ts) noexcept -> tuple<Ts&&...>
     {
         return tuple<Ts&&...>(tempest::forward<Ts>(ts)...);
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr decltype(auto) get(tuple<Ts...>& t) noexcept
+    constexpr auto get(tuple<Ts...>& t) noexcept -> decltype(auto)
     {
         return detail::tuple_get_helper<false, I>::get(t);
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr decltype(auto) get(const tuple<Ts...>& t) noexcept
+    constexpr auto get(const tuple<Ts...>& t) noexcept -> decltype(auto)
     {
         return detail::tuple_get_helper<true, I>::get(t);
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr decltype(auto) get(tuple<Ts...>&& t) noexcept
+    constexpr auto get(tuple<Ts...>&& t) noexcept -> decltype(auto)
     {
         return detail::tuple_get_helper<false, I>::get(t);
     }
 
     template <size_t I, typename... Ts>
-    inline constexpr decltype(auto) get(const tuple<Ts...>&& t) noexcept
+    constexpr auto get(const tuple<Ts...>&& t) noexcept -> decltype(auto)
     {
         return detail::tuple_get_helper<true, I>::get(t);
     }
@@ -387,7 +393,7 @@ namespace tempest
     } // namespace detail
 
     template <typename T, typename... Ts>
-    inline constexpr T& get(tuple<Ts...>& t) noexcept
+    constexpr auto get(tuple<Ts...>& t) noexcept -> T&
     {
         static_assert(detail::all_different<Ts...>, "Duplicate types in tuple.");
         static_assert(detail::index_of_type_v<T, Ts...> < sizeof...(Ts), "Type not found in tuple.");
@@ -395,7 +401,7 @@ namespace tempest
     }
 
     template <typename T, typename... Ts>
-    inline constexpr const T& get(const tuple<Ts...>& t) noexcept
+    constexpr auto get(const tuple<Ts...>& t) noexcept -> const T&
     {
         static_assert(detail::all_different<Ts...>, "Duplicate types in tuple.");
         static_assert(detail::index_of_type_v<T, Ts...> < sizeof...(Ts), "Type not found in tuple.");
@@ -403,7 +409,7 @@ namespace tempest
     }
 
     template <typename T, typename... Ts>
-    inline constexpr T&& get(tuple<Ts...>&& t) noexcept
+    constexpr auto get(tuple<Ts...>&& t) noexcept -> T&&
     {
         static_assert(detail::all_different<Ts...>, "Duplicate types in tuple.");
         static_assert(detail::index_of_type_v<T, Ts...> < sizeof...(Ts), "Type not found in tuple.");
@@ -411,7 +417,7 @@ namespace tempest
     }
 
     template <typename T, typename... Ts>
-    inline constexpr const T&& get(const tuple<Ts...>&& t) noexcept
+    constexpr auto get(const tuple<Ts...>&& t) noexcept -> const T&&
     {
         static_assert(detail::all_different<Ts...>, "Duplicate types in tuple.");
         static_assert(detail::index_of_type_v<T, Ts...> < sizeof...(Ts), "Type not found in tuple.");
@@ -421,14 +427,14 @@ namespace tempest
     namespace detail
     {
         template <typename Fn, typename Tuple, size_t... Is>
-        constexpr decltype(auto) apply_impl(Fn&& fn, Tuple&& tuple, index_sequence<Is...>)
+        constexpr auto apply_impl(Fn&& fn, Tuple&& tuple, index_sequence<Is...> /*unused*/) -> decltype(auto)
         {
             return tempest::invoke(tempest::forward<Fn>(fn), get<Is>(tempest::forward<Tuple>(tuple))...);
         }
     } // namespace detail
 
     template <typename Fn, typename Tuple>
-    constexpr decltype(auto) apply(Fn&& fn, Tuple&& tuple)
+    constexpr auto apply(Fn&& fn, Tuple&& tuple) -> decltype(auto)
     {
         return detail::apply_impl(tempest::forward<Fn>(fn), tempest::forward<Tuple>(tuple),
                                   tempest::make_index_sequence<tuple_size_v<decay_t<Tuple>>>{});
@@ -449,10 +455,21 @@ namespace std
     {
     };
 
+    template <typename... Ts>
+    struct tuple_size<const tempest::tuple<Ts...>> : tempest::tuple_size<const tempest::tuple<Ts...>>
+    {
+    };
+
     template <size_t I, typename... Ts>
     struct tuple_element<I, tempest::tuple<Ts...>>
     {
-        using type = typename tempest::tuple_element<I, tempest::tuple<Ts...>>::type;
+        using type = tempest::tuple_element<I, tempest::tuple<Ts...>>::type;
+    };
+
+    template <size_t I, typename... Ts>
+    struct tuple_element<I, const tempest::tuple<Ts...>>
+    {
+        using type = tempest::tuple_element<I, const tempest::tuple<Ts...>>::type;
     };
 } // namespace std
 

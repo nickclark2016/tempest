@@ -2,21 +2,32 @@
 #define tempest_math_math_utils_hpp__
 
 #include <tempest/algorithm.hpp>
-#include <tempest/api.hpp>
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
+#include <tempest/math.hpp>
 #include <tempest/type_traits.hpp>
 
 #if defined(_MSC_VER) && !defined(__clang__)
 #include <math.h>
 #endif
 
+namespace tempest
+{
+    constexpr auto is_finite(floating_point auto x) noexcept -> bool
+    {
+        return isfinite(x);
+    }
+} // namespace tempest
+
 namespace tempest::math
 {
+    using tempest::abs;
+    using tempest::is_finite;
+    using tempest::isfinite;
     namespace constants
     {
         template <typename T>
-        constexpr T pi = static_cast<T>(3.14159265358979323846);
+        constexpr T pi = static_cast<T>(3.1415926535897932384626433832795028841971693993751058209749445923078164062L);
 
         template <typename T>
         constexpr T half_pi = pi<T> / static_cast<T>(2);
@@ -372,42 +383,41 @@ namespace tempest::math
     using tempest::min;
 
     template <typename T>
-    inline constexpr auto as_radians(const T degrees) noexcept -> T
+    constexpr auto as_radians(const T degrees) noexcept -> T
     {
         constexpr auto half_circle = static_cast<T>(180);
         return degrees / half_circle * constants::pi<T>;
     }
 
     template <typename T>
-    inline constexpr auto as_degrees(const T radians) noexcept -> T
+    constexpr auto as_degrees(const T radians) noexcept -> T
     {
         constexpr auto pi_rad = constants::inv_pi<T>;
         return radians * pi_rad * static_cast<T>(180);
     }
 
     template <typename T>
-    inline constexpr auto inverse_lerp(const T value, const T low, const T high) noexcept -> T
+    constexpr auto inverse_lerp(const T value, const T low, const T high) noexcept -> T
     {
         return (value - low) / (high - low);
     }
 
     template <typename T>
-    inline constexpr auto lerp(const T low, const T high, const T t) noexcept -> T
+    constexpr auto lerp(const T low, const T high, const T t) noexcept -> T
     {
         return low + t * (high - low);
     }
 
     template <typename T>
-    inline constexpr auto reproject(const T value, const T old_min, const T old_max,
-                                    const T new_min = static_cast<T>(-1), const T new_max = static_cast<T>(1)) noexcept
-        -> T
+    constexpr auto reproject(const T value, const T old_min, const T old_max, const T new_min = static_cast<T>(-1),
+                             const T new_max = static_cast<T>(1)) noexcept -> T
     {
         const auto t = inverse_lerp(value, old_min, old_max);
         return lerp(new_min, new_max, t);
     }
 
     template <typename T, typename U = T>
-    inline constexpr auto div_ceil(T x, U y) noexcept -> T
+    constexpr auto div_ceil(T x, U y) noexcept -> T
     {
         if (x != 0)
         {
@@ -417,7 +427,7 @@ namespace tempest::math
     }
 
     template <typename T, typename U = T>
-    inline constexpr auto round_to_next_multiple(T x, U y) noexcept -> T
+    constexpr auto round_to_next_multiple(T x, U y) noexcept -> T
     {
         if (y == 0)
         {

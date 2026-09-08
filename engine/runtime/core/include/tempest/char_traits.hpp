@@ -8,8 +8,8 @@
 #include <tempest/iterator.hpp>
 #include <tempest/span.hpp>
 #include <tempest/type_traits.hpp>
+#include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
-#include <utility>
 
 namespace tempest
 {
@@ -137,8 +137,8 @@ namespace tempest
         return a < b;
     }
 
-    constexpr auto char_traits<char>::move(char_type* dest, const char_type* src,
-                                                                           size_t count) -> char_traits<char>::char_type*
+    constexpr auto char_traits<char>::move(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<char>::char_type*
     {
         // For constant expressions, we need to fall back to a less efficient implementation to correctly handle
         // overlapping regions of memory.
@@ -163,22 +163,20 @@ namespace tempest
                 }
                 return dest;
             }
-            
-            
-                for (size_t i = count; i != 0; --i)
-                {
-                    dest[i - 1] = src[i - 1];
-                }
-                return dest;
-           
+
+            for (size_t i = count; i != 0; --i)
+            {
+                dest[i - 1] = src[i - 1];
+            }
+            return dest;
         }
 
         (void)memmove(dest, src, count);
         return dest;
     }
 
-    constexpr auto char_traits<char>::copy(char_type* dest, const char_type* src,
-                                                                           size_t count) -> char_traits<char>::char_type*
+    constexpr auto char_traits<char>::copy(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<char>::char_type*
     {
         // Assume: No overlapping regions
         for (size_t i = 0; i < count; ++i)
@@ -213,8 +211,8 @@ namespace tempest
         return len;
     }
 
-    constexpr auto char_traits<char>::find(const char_type* ptr, size_t count,
-                                                                                 const char_type& ch) -> const char_traits<char>::char_type*
+    constexpr auto char_traits<char>::find(const char_type* ptr, size_t count, const char_type& ch)
+        -> const char_traits<char>::char_type*
     {
         for (size_t i = 0; i < count; ++i)
         {
@@ -277,8 +275,8 @@ namespace tempest
         return a < b;
     }
 
-    constexpr auto char_traits<wchar_t>::move(char_type* dest, const char_type* src,
-                                                                                 size_t count) -> char_traits<wchar_t>::char_type*
+    constexpr auto char_traits<wchar_t>::move(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<wchar_t>::char_type*
     {
         // For constant expressions, we need to fall back to a less efficient implementation to correctly handle
         // overlapping regions of memory.
@@ -303,22 +301,20 @@ namespace tempest
                 }
                 return dest;
             }
-            
-            
-                for (size_t i = count; i != 0; --i)
-                {
-                    dest[i - 1] = src[i - 1];
-                }
-                return dest;
-           
+
+            for (size_t i = count; i != 0; --i)
+            {
+                dest[i - 1] = src[i - 1];
+            }
+            return dest;
         }
 
         (void)memmove(dest, src, count * sizeof(wchar_t));
         return dest;
     }
 
-    constexpr auto char_traits<wchar_t>::copy(char_type* dest, const char_type* src,
-                                                                                 size_t count) -> char_traits<wchar_t>::char_type*
+    constexpr auto char_traits<wchar_t>::copy(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<wchar_t>::char_type*
     {
         // Assume: No overlapping regions
         for (size_t i = 0; i < count; ++i)
@@ -351,9 +347,8 @@ namespace tempest
         return len;
     }
 
-    constexpr auto char_traits<wchar_t>::find(const char_type* ptr,
-                                                                                       size_t count,
-                                                                                       const char_type& ch) -> const char_traits<wchar_t>::char_type*
+    constexpr auto char_traits<wchar_t>::find(const char_type* ptr, size_t count, const char_type& ch)
+        -> const char_traits<wchar_t>::char_type*
     {
         for (size_t i = 0; i < count; ++i)
         {
@@ -388,8 +383,8 @@ namespace tempest
     namespace detail
     {
         template <typename CharT, typename Traits>
-        constexpr auto bad_character_heuristic(const CharT* str, size_t size,
-                                                                    span<typename Traits::int_type> table) -> Traits::int_type
+        constexpr auto bad_character_heuristic(const CharT* str, size_t size, span<typename Traits::int_type> table)
+            -> Traits::int_type
         {
             for (auto& entry : table)
             {
@@ -414,7 +409,7 @@ namespace tempest
 
         template <typename CharT, typename Traits>
         constexpr auto reverse_bad_character_heuristic(const CharT* str, size_t size,
-                                                                            span<typename Traits::int_type> table) -> Traits::int_type
+                                                       span<typename Traits::int_type> table) -> Traits::int_type
         {
             for (auto& entry : table)
             {
@@ -438,12 +433,12 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr auto boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern,
-                                                  size_t pattern_len, span<typename Traits::int_type> bad_char_table) -> const CharT*
+        constexpr auto boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len,
+                                          span<typename Traits::int_type> bad_char_table) -> const CharT*
         {
             auto min_value = bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
 
-            for (ptrdiff_t s = 0; std::cmp_less_equal(s ,str_len - pattern_len);)
+            for (ptrdiff_t s = 0; tempest::cmp_less_equal(s, str_len - pattern_len);)
             {
                 ptrdiff_t p = static_cast<ptrdiff_t>(pattern_len) - 1;
 
@@ -473,8 +468,8 @@ namespace tempest
 
         template <typename CharT, typename Traits>
         constexpr auto reverse_boyer_more_helper(const CharT* str, size_t str_len, const CharT* pattern,
-                                                         size_t pattern_len,
-                                                         span<typename Traits::int_type> bad_char_table) -> const CharT*
+                                                 size_t pattern_len, span<typename Traits::int_type> bad_char_table)
+            -> const CharT*
         {
             auto s_pattern_len = static_cast<ptrdiff_t>(pattern_len);
             auto min_value = reverse_bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
@@ -508,7 +503,8 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr auto boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len) -> const CharT*
+        constexpr auto boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+            -> const CharT*
         {
             if constexpr (sizeof(CharT) == 1)
             {
@@ -527,8 +523,8 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr auto reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern,
-                                                   size_t pattern_len) -> const CharT*
+        constexpr auto reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+            -> const CharT*
         {
             if constexpr (sizeof(CharT) == 1)
             {

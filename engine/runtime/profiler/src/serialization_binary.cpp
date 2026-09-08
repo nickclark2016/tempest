@@ -3,7 +3,7 @@
 
 #include <miniz/miniz.h>
 
-#include <cstring>
+#include <tempest/algorithm.hpp>
 #include <tempest/files.hpp>
 
 namespace tempest::profiler
@@ -61,7 +61,7 @@ namespace tempest::profiler
                 {
                     return false;
                 }
-                std::memcpy(&val, data.data() + cursor, sizeof(T));
+                tempest::memcpy(&val, data.data() + cursor, sizeof(T));
                 cursor += sizeof(T);
                 return true;
             }
@@ -72,7 +72,7 @@ namespace tempest::profiler
                 {
                     return false;
                 }
-                std::memcpy(dest, data.data() + cursor, size);
+                tempest::memcpy(dest, data.data() + cursor, size);
                 cursor += size;
                 return true;
             }
@@ -249,7 +249,7 @@ namespace tempest::profiler
         }
 
         auto header = tprof_header{};
-        std::memcpy(&header, buffer.data(), sizeof(tprof_header));
+        tempest::memcpy(&header, buffer.data(), sizeof(tprof_header));
 
         if (header.magic[0] != magic_bytes[0] || header.magic[1] != magic_bytes[1] ||
             header.magic[2] != magic_bytes[2] || header.magic[3] != magic_bytes[3])
