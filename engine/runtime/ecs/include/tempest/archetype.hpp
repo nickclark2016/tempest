@@ -306,16 +306,15 @@ namespace tempest::ecs
         };
 
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::basic_entity_store_iterator(T* chunks,
-                                                                                                    size_t index,
-                                                                                                    size_t end) noexcept
+        constexpr basic_entity_store_iterator<T, EPC, EPB, BPC>::basic_entity_store_iterator(T* chunks, size_t index,
+                                                                                             size_t end) noexcept
             : chunks{chunks}, index{index}, end{end}
         {
         }
 
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        constexpr auto basic_entity_store_iterator<
-            T, EPC, EPB, BPC>::operator*() const noexcept -> basic_entity_store_iterator<T, EPC, EPB, BPC>::value_type
+        constexpr auto basic_entity_store_iterator<T, EPC, EPB, BPC>::operator*() const noexcept
+            -> basic_entity_store_iterator<T, EPC, EPB, BPC>::value_type
         {
             auto chunk_index = index / entities_per_chunk;
             auto chunk_offset = index % entities_per_chunk;
@@ -327,8 +326,8 @@ namespace tempest::ecs
         }
 
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        constexpr auto basic_entity_store_iterator<
-            T, EPC, EPB, BPC>::operator++() noexcept -> basic_entity_store_iterator<T, EPC, EPB, BPC>&
+        constexpr auto basic_entity_store_iterator<T, EPC, EPB, BPC>::operator++() noexcept
+            -> basic_entity_store_iterator<T, EPC, EPB, BPC>&
         {
             ++index;
 
@@ -353,8 +352,8 @@ namespace tempest::ecs
         }
 
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        constexpr auto basic_entity_store_iterator<
-            T, EPC, EPB, BPC>::operator++(int) noexcept -> basic_entity_store_iterator<T, EPC, EPB, BPC>
+        constexpr auto basic_entity_store_iterator<T, EPC, EPB, BPC>::operator++(int) noexcept
+            -> basic_entity_store_iterator<T, EPC, EPB, BPC>
         {
             auto self = *this;
             ++(*this);
@@ -362,8 +361,8 @@ namespace tempest::ecs
         }
 
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        constexpr auto basic_entity_store_iterator<
-            T, EPC, EPB, BPC>::operator--() noexcept -> basic_entity_store_iterator<T, EPC, EPB, BPC>&
+        constexpr auto basic_entity_store_iterator<T, EPC, EPB, BPC>::operator--() noexcept
+            -> basic_entity_store_iterator<T, EPC, EPB, BPC>&
         {
             while (index > 0)
             {
@@ -385,8 +384,8 @@ namespace tempest::ecs
         }
 
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        constexpr auto basic_entity_store_iterator<
-            T, EPC, EPB, BPC>::operator--(int) noexcept -> basic_entity_store_iterator<T, EPC, EPB, BPC>
+        constexpr auto basic_entity_store_iterator<T, EPC, EPB, BPC>::operator--(int) noexcept
+            -> basic_entity_store_iterator<T, EPC, EPB, BPC>
         {
             auto self = *this;
             --(*this);
@@ -409,9 +408,9 @@ namespace tempest::ecs
          * @return true if the iterators point to the same index, false otherwise.
          */
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        [[nodiscard]] constexpr auto operator==(
-            const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
-            const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept -> bool
+        [[nodiscard]] constexpr auto operator==(const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
+                                                const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept
+            -> bool
         {
             return lhs.index == rhs.index;
         }
@@ -432,9 +431,8 @@ namespace tempest::ecs
          * @return strong_ordering representing the comparison result of the indices.
          */
         template <typename T, size_t EPC, size_t EPB, size_t BPC>
-        [[nodiscard]] constexpr auto operator<=>(
-            const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
-            const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept
+        [[nodiscard]] constexpr auto operator<=>(const basic_entity_store_iterator<T, EPC, EPB, BPC>& lhs,
+                                                 const basic_entity_store_iterator<T, EPC, EPB, BPC>& rhs) noexcept
         {
             return lhs.index <=> rhs.index;
         }
@@ -445,7 +443,7 @@ namespace tempest::ecs
     {
       public:
         static constexpr size_t entities_per_chunk = N;
-        static constexpr size_t entities_per_block = sizeof(O) * CHAR_BIT;
+        static constexpr size_t entities_per_block = sizeof(O) * char_bit;
         static constexpr size_t blocks_per_chunk = entities_per_chunk / entities_per_block;
 
         struct block
@@ -536,7 +534,8 @@ namespace tempest::ecs
                     if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
                     {
                         return iterator(_chunks.data(),
-                                        (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) + block_offset,
+                                        (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) +
+                                            block_offset,
                                         capacity());
                     }
                 }
@@ -556,9 +555,10 @@ namespace tempest::ecs
                 {
                     if (tempest::is_bit_set(_chunks[chunk_idx].blocks[block_idx].occupancy, block_offset))
                     {
-                        return const_iterator(
-                            _chunks.data(),
-                            (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) + block_offset, capacity());
+                        return const_iterator(_chunks.data(),
+                                              (chunk_idx * entities_per_chunk) + (block_idx * entities_per_block) +
+                                                  block_offset,
+                                              capacity());
                     }
                 }
             }
@@ -773,8 +773,8 @@ namespace tempest::ecs
             }
 
             template <typename Args, size_t... Is>
-            static auto iterate(auto arch_index, auto storage_index_fetcher,
-                                                        index_sequence<Is...> /*unused*/) -> array<size_t, sizeof...(Is)>
+            static auto iterate(auto arch_index, auto storage_index_fetcher, index_sequence<Is...> /*unused*/)
+                -> array<size_t, sizeof...(Is)>
             {
                 return array<size_t, sizeof...(Is)>{
                     index<typename core::type_list_type_at<Is, Args>::type>(arch_index, storage_index_fetcher)...,
@@ -824,14 +824,14 @@ namespace tempest::ecs
         }
 
         friend auto operator==(const basic_archetype_with_components_iter& lhs,
-                                      const basic_archetype_with_components_iter& rhs) -> bool
+                               const basic_archetype_with_components_iter& rhs) -> bool
         {
             return lhs._parent == rhs._parent && lhs._archetype_index == rhs._archetype_index &&
                    lhs._entity_index == rhs._entity_index;
         }
 
         friend auto operator!=(const basic_archetype_with_components_iter& lhs,
-                                      const basic_archetype_with_components_iter& rhs) -> bool
+                               const basic_archetype_with_components_iter& rhs) -> bool
         {
             return lhs._entity_index != rhs._entity_index || lhs._archetype_index != rhs._archetype_index ||
                    lhs._parent != rhs._parent;
@@ -848,9 +848,8 @@ namespace tempest::ecs
         size_t _entity_index;
 
         template <size_t... Is>
-        auto _deref_const(const auto& archetype,
-                                                                span<const size_t> argument_indices,
-                                                                index_sequence<Is...> /*unused*/) const -> tuple<add_const_t<remove_cvref_t<Ts>>&...>
+        auto _deref_const(const auto& archetype, span<const size_t> argument_indices,
+                          index_sequence<Is...> /*unused*/) const -> tuple<add_const_t<remove_cvref_t<Ts>>&...>
         {
             return make_tuple(tempest::cref(*reinterpret_cast<add_const_t<remove_cvref_t<Ts>>*>(
                 archetype.element_at(_entity_index, argument_indices[Is])))...);
@@ -1034,7 +1033,8 @@ namespace tempest::ecs
 
     template <typename... Ts>
         requires((is_trivially_copyable_v<Ts> && is_trivially_destructible_v<Ts>) && ...) && (sizeof...(Ts) > 0)
-    inline auto basic_archetype_registry::create_initialized(Ts&&... components) -> basic_archetype_registry::entity_type
+    inline auto basic_archetype_registry::create_initialized(Ts&&... components)
+        -> basic_archetype_registry::entity_type
     {
         auto entity = create<Ts...>();
         (assign<Ts>(entity, tempest::forward<Ts>(components)), ...);
@@ -1042,8 +1042,8 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline auto basic_archetype_registry::assign(
-        basic_archetype_registry::entity_type entity, T&& component) -> const remove_cvref_t<T>&
+    inline auto basic_archetype_registry::assign(basic_archetype_registry::entity_type entity, T&& component)
+        -> const remove_cvref_t<T>&
     {
         using component_type = remove_cvref_t<T>;
 
@@ -1113,7 +1113,7 @@ namespace tempest::ecs
                 auto existing_component_index = _index_of_component_in_archetype(existing_arch_index, storage_index);
                 auto new_component_index = _index_of_component_in_archetype(target_archetype_index, storage_index);
 
-                auto *existing_data =
+                auto* existing_data =
                     existing_arch.element_at(archetype_key_iter->second.archetype_key, existing_component_index);
                 auto new_data = target_arch.element_at(target_arch_key, new_component_index);
 
@@ -1152,8 +1152,8 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline auto basic_archetype_registry::replace(
-        basic_archetype_registry::entity_type entity, T&& value) -> const remove_cvref_t<T>&
+    inline auto basic_archetype_registry::replace(basic_archetype_registry::entity_type entity, T&& value)
+        -> const remove_cvref_t<T>&
     {
         using component_type = remove_cvref_t<T>;
         static const basic_archetype_type_info type_info = create_archetype_type_info<component_type>();
@@ -1180,8 +1180,8 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline auto basic_archetype_registry::assign_or_replace(
-        basic_archetype_registry::entity_type entity, T&& value) -> const remove_cvref_t<T>&
+    inline auto basic_archetype_registry::assign_or_replace(basic_archetype_registry::entity_type entity, T&& value)
+        -> const remove_cvref_t<T>&
     {
         if (has<T>(entity))
         {
@@ -1300,8 +1300,8 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline auto basic_archetype_registry::get(
-        basic_archetype_registry::entity_type entity) const -> const remove_cvref_t<T>&
+    inline auto basic_archetype_registry::get(basic_archetype_registry::entity_type entity) const
+        -> const remove_cvref_t<T>&
     {
         using component_type = remove_cvref_t<T>;
         static const auto type_info = create_archetype_type_info<component_type>();
@@ -1315,8 +1315,8 @@ namespace tempest::ecs
     }
 
     template <typename T>
-    inline auto basic_archetype_registry::try_get(
-        basic_archetype_registry::entity_type entity) const noexcept -> const remove_cvref_t<T>*
+    inline auto basic_archetype_registry::try_get(basic_archetype_registry::entity_type entity) const noexcept
+        -> const remove_cvref_t<T>*
     {
         using component_type = remove_cvref_t<T>;
         static const auto type_info = create_archetype_type_info<component_type>();
@@ -1341,9 +1341,10 @@ namespace tempest::ecs
     {
         auto key = _entity_archetype_mapping[entity];
         auto len = _archetypes[key.archetype_index].storages().size();
-        return (static_cast<bool>(((_index_of_component_in_archetype(key.archetype_index,
-                                                   create_archetype_type_info<remove_cvref_t<Ts>>().index) != len) &&
-                 ...)));
+        return (static_cast<bool>(
+            ((_index_of_component_in_archetype(key.archetype_index,
+                                               create_archetype_type_info<remove_cvref_t<Ts>>().index) != len) &&
+             ...)));
     }
 
     inline auto basic_archetype_registry::size() const noexcept -> size_t
@@ -1356,8 +1357,8 @@ namespace tempest::ecs
         return _entities.is_valid(entity);
     }
 
-    inline auto basic_archetype_registry::_index_of_component_in_archetype(size_t arch_index,
-                                                                             size_t component_id) const -> size_t
+    inline auto basic_archetype_registry::_index_of_component_in_archetype(size_t arch_index, size_t component_id) const
+        -> size_t
     {
         size_t result = 0;
 
@@ -1484,15 +1485,17 @@ namespace tempest::ecs
     {
     }
 
-    inline auto basic_archetype_entity_hierarchy_iterator::
-    operator*() const noexcept -> basic_archetype_entity_hierarchy_iterator::value_type
+    inline auto basic_archetype_entity_hierarchy_iterator::operator*() const noexcept
+        -> basic_archetype_entity_hierarchy_iterator::value_type
     {
         return _current;
     }
 
-    inline auto basic_archetype_entity_hierarchy_iterator::operator++() noexcept -> basic_archetype_entity_hierarchy_iterator&
+    inline auto basic_archetype_entity_hierarchy_iterator::operator++() noexcept
+        -> basic_archetype_entity_hierarchy_iterator&
     {
-        const auto *rel_comp = _registry->try_get<relationship_component<basic_archetype_registry::entity_type>>(_current);
+        const auto* rel_comp =
+            _registry->try_get<relationship_component<basic_archetype_registry::entity_type>>(_current);
         if (rel_comp == nullptr)
         {
             _current = tombstone;
@@ -1522,7 +1525,7 @@ namespace tempest::ecs
                 return *this;
             }
 
-            const auto *parent_rel_comp =
+            const auto* parent_rel_comp =
                 _registry->try_get<relationship_component<basic_archetype_registry::entity_type>>(rel_comp->parent);
 
             if (parent_rel_comp == nullptr) [[unlikely]]
@@ -1543,7 +1546,8 @@ namespace tempest::ecs
         tempest::unreachable();
     }
 
-    inline auto basic_archetype_entity_hierarchy_iterator::operator++(int) noexcept -> basic_archetype_entity_hierarchy_iterator
+    inline auto basic_archetype_entity_hierarchy_iterator::operator++(int) noexcept
+        -> basic_archetype_entity_hierarchy_iterator
     {
         auto copy = *this;
         ++(*this);
@@ -1590,38 +1594,37 @@ namespace tempest::ecs
     {
     }
 
-    inline auto basic_archetype_entity_hierarchy_view::
-        begin() noexcept -> basic_archetype_entity_hierarchy_view::iterator
+    inline auto basic_archetype_entity_hierarchy_view::begin() noexcept
+        -> basic_archetype_entity_hierarchy_view::iterator
     {
         return {*_registry, _root, 0};
     }
 
-    inline auto basic_archetype_entity_hierarchy_view::begin()
-        const noexcept -> basic_archetype_entity_hierarchy_view::const_iterator
+    inline auto basic_archetype_entity_hierarchy_view::begin() const noexcept
+        -> basic_archetype_entity_hierarchy_view::const_iterator
     {
         return {*_registry, _root, 0};
     }
 
-    inline auto basic_archetype_entity_hierarchy_view::
-        cbegin() const noexcept -> basic_archetype_entity_hierarchy_view::const_iterator
+    inline auto basic_archetype_entity_hierarchy_view::cbegin() const noexcept
+        -> basic_archetype_entity_hierarchy_view::const_iterator
     {
         return {*_registry, _root, 0};
     }
 
-    inline auto basic_archetype_entity_hierarchy_view::
-        end() noexcept -> basic_archetype_entity_hierarchy_view::iterator
+    inline auto basic_archetype_entity_hierarchy_view::end() noexcept -> basic_archetype_entity_hierarchy_view::iterator
     {
         return {*_registry, tombstone, 0};
     }
 
-    inline auto basic_archetype_entity_hierarchy_view::end()
-        const noexcept -> basic_archetype_entity_hierarchy_view::const_iterator
+    inline auto basic_archetype_entity_hierarchy_view::end() const noexcept
+        -> basic_archetype_entity_hierarchy_view::const_iterator
     {
         return {*_registry, tombstone, 0};
     }
 
-    inline auto basic_archetype_entity_hierarchy_view::cend()
-        const noexcept -> basic_archetype_entity_hierarchy_view::const_iterator
+    inline auto basic_archetype_entity_hierarchy_view::cend() const noexcept
+        -> basic_archetype_entity_hierarchy_view::const_iterator
     {
         return {*_registry, tombstone, 0};
     }
@@ -1651,15 +1654,16 @@ namespace tempest::ecs
     {
     }
 
-    inline auto basic_archetype_entity_ancestor_iterator::
-    operator*() const noexcept -> basic_archetype_entity_ancestor_iterator::value_type
+    inline auto basic_archetype_entity_ancestor_iterator::operator*() const noexcept
+        -> basic_archetype_entity_ancestor_iterator::value_type
     {
         return _current;
     }
 
-    inline auto basic_archetype_entity_ancestor_iterator::operator++() noexcept -> basic_archetype_entity_ancestor_iterator&
+    inline auto basic_archetype_entity_ancestor_iterator::operator++() noexcept
+        -> basic_archetype_entity_ancestor_iterator&
     {
-        const auto *rel_comp =
+        const auto* rel_comp =
             _registry->template try_get<relationship_component<basic_archetype_registry::entity_type>>(_current);
 
         if (rel_comp == nullptr)
@@ -1672,7 +1676,8 @@ namespace tempest::ecs
         return *this;
     }
 
-    inline auto basic_archetype_entity_ancestor_iterator::operator++(int) noexcept -> basic_archetype_entity_ancestor_iterator
+    inline auto basic_archetype_entity_ancestor_iterator::operator++(int) noexcept
+        -> basic_archetype_entity_ancestor_iterator
     {
         auto copy = *this;
         ++(*this);
@@ -1716,20 +1721,19 @@ namespace tempest::ecs
     {
     }
 
-    inline auto basic_archetype_entity_ancestor_view::
-        begin() noexcept -> basic_archetype_entity_ancestor_view::iterator
+    inline auto basic_archetype_entity_ancestor_view::begin() noexcept -> basic_archetype_entity_ancestor_view::iterator
     {
         return {*_registry, _root};
     }
 
-    inline auto basic_archetype_entity_ancestor_view::begin()
-        const noexcept -> basic_archetype_entity_ancestor_view::const_iterator
+    inline auto basic_archetype_entity_ancestor_view::begin() const noexcept
+        -> basic_archetype_entity_ancestor_view::const_iterator
     {
         return {*_registry, _root};
     }
 
-    inline auto basic_archetype_entity_ancestor_view::cbegin()
-        const noexcept -> basic_archetype_entity_ancestor_view::const_iterator
+    inline auto basic_archetype_entity_ancestor_view::cbegin() const noexcept
+        -> basic_archetype_entity_ancestor_view::const_iterator
     {
         return {*_registry, _root};
     }
@@ -1739,14 +1743,14 @@ namespace tempest::ecs
         return {*_registry, tombstone};
     }
 
-    inline auto basic_archetype_entity_ancestor_view::end()
-        const noexcept -> basic_archetype_entity_ancestor_view::const_iterator
+    inline auto basic_archetype_entity_ancestor_view::end() const noexcept
+        -> basic_archetype_entity_ancestor_view::const_iterator
     {
         return {*_registry, tombstone};
     }
 
-    inline auto basic_archetype_entity_ancestor_view::cend()
-        const noexcept -> basic_archetype_entity_ancestor_view::const_iterator
+    inline auto basic_archetype_entity_ancestor_view::cend() const noexcept
+        -> basic_archetype_entity_ancestor_view::const_iterator
     {
         return {*_registry, tombstone};
     }

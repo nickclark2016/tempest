@@ -14,9 +14,8 @@ namespace tempest
                                       const char* file = __builtin_FILE(),
                                       const char* func = __builtin_FUNCSIG()) noexcept -> source_location;
 #elif defined(__GNUC__) || defined(__clang__)
-        static consteval auto current(uint32_t line = __builtin_LINE(), uint32_t column = __builtin_COLUMN(),
-                                      const char* file = __builtin_FILE(),
-                                      const char* func = __builtin_FUNCTION()) noexcept -> source_location;
+        static consteval auto current(decltype(__builtin_source_location()) ptr = __builtin_source_location()) noexcept
+            -> source_location;
 #else
 #error "Unsupported compiler."
 #endif
@@ -41,6 +40,7 @@ namespace tempest
         impl _impl;
     };
 
+#if defined(_MSC_VER)
     consteval auto source_location::current(const uint32_t line, const uint32_t column, const char* file,
                                             const char* func) noexcept -> source_location
     {
@@ -51,6 +51,26 @@ namespace tempest
         loc._impl._column = column;
         return loc;
     }
+#elif defined(__GNUC__) || defined(__clang__)
+    consteval auto source_location::current(decltype(__builtin_source_location()) ptr) noexcept -> source_location
+    {
+        struct __builtin_source_location_layout
+        {
+            const char* _file_name;
+            const char* _function_name;
+            unsigned int _line;
+            unsigned int _column;
+        };
+
+        const auto* data = static_cast<const __builtin_source_location_layout*>(ptr);
+        source_location loc;
+        loc._impl._file = data->_file_name;
+        loc._impl._function = data->_function_name;
+        loc._impl._line = data->_line;
+        loc._impl._column = data->_column;
+        return loc;
+    }
+#endif
 
     constexpr auto source_location::file_name() const noexcept -> const char*
     {

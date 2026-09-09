@@ -87,6 +87,9 @@ namespace tempest
     /// @brief Maximum-width unsigned integer type.
     using uintmax_t = uint64_t;
 
+    /// @brief Number of bits in a byte.
+    inline constexpr size_t char_bit = 8;
+
     /// @brief Integer type representing a byte as specified by the C++ language standard.
     enum class byte : unsigned char
     {
