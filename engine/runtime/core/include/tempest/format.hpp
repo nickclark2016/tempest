@@ -523,7 +523,8 @@ namespace tempest
         template <typename FormatContext>
         static auto format(char val, FormatContext& ctx) -> void
         {
-            char char_buf[single_char_buffer_size] = {val}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            char char_buf[single_char_buffer_size] = {
+                val}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             ctx.write_padded(string_view(char_buf, single_char_buffer_size));
         }
     };
@@ -714,12 +715,14 @@ namespace tempest
     template <typename... Args>
     auto format(format_string<type_identity_t<Args>...> fmt, Args&&... args) -> string
     {
-        char stack_buf[default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+        char stack_buf
+            [default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
         detail::format_sink sink(stack_buf, stack_buf + sizeof(stack_buf));
 
         if constexpr (sizeof...(Args) > 0)
         {
-            detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            detail::format_arg packed[] = {
+                detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
         }
         else
@@ -738,7 +741,8 @@ namespace tempest
 
         if constexpr (sizeof...(Args) > 0)
         {
-            detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            detail::format_arg packed[] = {
+                detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             detail::vformat_to(heap_sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
         }
         else
@@ -753,13 +757,15 @@ namespace tempest
     template <typename... Args>
     auto format(runtime_format_string fmt, Args&&... args) -> expected<string, format_error>
     {
-        char stack_buf[default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+        char stack_buf
+            [default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
         detail::format_sink sink(stack_buf, stack_buf + sizeof(stack_buf));
 
         format_error err{format_error::none};
         if constexpr (sizeof...(Args) > 0)
         {
-            detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            detail::format_arg packed[] = {
+                detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             err = detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
         }
         else
@@ -783,7 +789,8 @@ namespace tempest
 
         if constexpr (sizeof...(Args) > 0)
         {
-            detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            detail::format_arg packed[] = {
+                detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             detail::vformat_to(heap_sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
         }
         else
@@ -800,10 +807,11 @@ namespace tempest
     {
         if constexpr (is_same_v<OutputIt, char*>)
         {
-            detail::format_sink sink(out, reinterpret_cast<char*>(UINTPTR_MAX));
+            detail::format_sink sink(out, reinterpret_cast<char*>(uintptr_max));
             if constexpr (sizeof...(Args) > 0)
             {
-                detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+                detail::format_arg packed[] = {detail::make_format_arg(
+                    args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
                 detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
             }
             else
@@ -815,11 +823,13 @@ namespace tempest
         else
         {
             // For other iterators, format to stack buffer and copy
-            char stack_buf[default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            char stack_buf
+                [default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             detail::format_sink sink(stack_buf, stack_buf + sizeof(stack_buf));
             if constexpr (sizeof...(Args) > 0)
             {
-                detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+                detail::format_arg packed[] = {detail::make_format_arg(
+                    args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
                 detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
             }
             else
@@ -841,11 +851,12 @@ namespace tempest
     {
         if constexpr (is_same_v<OutputIt, char*>)
         {
-            detail::format_sink sink(out, reinterpret_cast<char*>(UINTPTR_MAX));
+            detail::format_sink sink(out, reinterpret_cast<char*>(uintptr_max));
             format_error err{format_error::none};
             if constexpr (sizeof...(Args) > 0)
             {
-                detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+                detail::format_arg packed[] = {detail::make_format_arg(
+                    args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
                 err = detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
             }
             else
@@ -861,12 +872,14 @@ namespace tempest
         }
         else
         {
-            char stack_buf[default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            char stack_buf
+                [default_format_stack_buffer_size]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             detail::format_sink sink(stack_buf, stack_buf + sizeof(stack_buf));
             format_error err{format_error::none};
             if constexpr (sizeof...(Args) > 0)
             {
-                detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+                detail::format_arg packed[] = {detail::make_format_arg(
+                    args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
                 err = detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
             }
             else
@@ -900,7 +913,8 @@ namespace tempest
         detail::format_sink sink(buf, buf + (N - 1));
         if constexpr (sizeof...(Args) > 0)
         {
-            detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            detail::format_arg packed[] = {
+                detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
         }
         else
@@ -927,7 +941,8 @@ namespace tempest
         format_error err{format_error::none};
         if constexpr (sizeof...(Args) > 0)
         {
-            detail::format_arg packed[] = {detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+            detail::format_arg packed[] = {
+                detail::make_format_arg(args)...}; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
             err = detail::vformat_to(sink, fmt.str, span<const detail::format_arg>(packed, sizeof...(Args)));
         }
         else

@@ -227,3 +227,15 @@ TEST(tempest_limits, numeric_limits_64bit_integers)
     ASSERT_EQ(tempest::numeric_limits<tempest::uint64_t>::lowest(), 0ULL);
     ASSERT_EQ(tempest::numeric_limits<tempest::uint64_t>::max(), 18446744073709551615ULL);
 }
+
+/// @brief Verify numeric_limits<uintptr_t> and the named constant uintptr_max.
+TEST(tempest_limits, numeric_limits_uintptr)
+{
+    // 1. Act & Assert: Common integral properties for uintptr_t
+    test_integral_numeric_limits<tempest::uintptr_t>();
+
+    // 2. Act & Assert: Named constant and maximum value consistency
+    static_assert(tempest::uintptr_max == (~tempest::uintptr_t{0}));
+    ASSERT_EQ(tempest::numeric_limits<tempest::uintptr_t>::min(), 0U);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uintptr_t>::max(), tempest::uintptr_max);
+}
