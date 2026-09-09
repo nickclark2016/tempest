@@ -22,7 +22,7 @@ namespace tempest
     class TEMPEST_API mutex
     {
       public:
-#ifdef TEMPEST_WIN_THREADS
+#if defined(TEMPEST_WIN_THREADS)
         using native_handle_type = SRWLOCK;
 #elif defined(TEMPEST_POSIX_THREADS)
         using native_handle_type = pthread_mutex_t;
@@ -33,7 +33,12 @@ namespace tempest
         constexpr mutex() noexcept;
         mutex(const mutex&) = delete;
         mutex(mutex&&) = delete;
+
+#if defined(TEMPEST_WIN_THREADS)
         ~mutex() = default;
+#elif defined(TEMPEST_POSIX_THREADS)
+        ~mutex();
+#endif
 
         auto operator=(const mutex&) -> mutex& = delete;
         auto operator=(mutex&&) -> mutex& = delete;

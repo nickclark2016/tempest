@@ -200,7 +200,8 @@ namespace tempest
     {
       public:
         virtual ~abstract_allocator() = default;
-        virtual auto allocate(size_t size, size_t alignment, source_location loc = source_location::current()) -> void* = 0;
+        virtual auto allocate(size_t size, size_t alignment, source_location loc = source_location::current())
+            -> void* = 0;
         virtual void deallocate(void* ptr) = 0;
     };
 
@@ -216,8 +217,8 @@ namespace tempest
         auto operator=(const stack_allocator&) -> stack_allocator& = delete;
         auto operator=(stack_allocator&& rhs) noexcept -> stack_allocator&;
 
-        [[nodiscard]] auto allocate(size_t size, size_t alignment,
-                                     source_location loc = source_location::current()) -> void* override;
+        [[nodiscard]] auto allocate(size_t size, size_t alignment, source_location loc = source_location::current())
+            -> void* override;
         void deallocate(void* ptr) override;
 
         [[nodiscard]] auto get_marker() const noexcept -> size_t;
@@ -250,8 +251,8 @@ namespace tempest
         auto operator=(const heap_allocator&) -> heap_allocator& = delete;
         auto operator=(heap_allocator&& rhs) noexcept -> heap_allocator&;
 
-        [[nodiscard]] auto allocate(size_t size, size_t alignment,
-                                     source_location loc = source_location::current()) -> void* override;
+        [[nodiscard]] auto allocate(size_t size, size_t alignment, source_location loc = source_location::current())
+            -> void* override;
         void deallocate(void* ptr) override;
 
       private:
@@ -274,8 +275,8 @@ namespace tempest
         auto operator=(const system_allocator&) -> system_allocator& = default;
         auto operator=(system_allocator&&) noexcept -> system_allocator& = default;
 
-        [[nodiscard]] auto allocate(size_t size, size_t alignment,
-                                     source_location loc = source_location::current()) -> void* override;
+        [[nodiscard]] auto allocate(size_t size, size_t alignment, source_location loc = source_location::current())
+            -> void* override;
         void deallocate(void* ptr) override;
     };
 
@@ -290,6 +291,9 @@ namespace tempest
     {
         alignas(N * 64) T data;
     };
+
+    TEMPEST_API auto aligned_alloc(size_t n, size_t alignment) -> void*;
+    TEMPEST_API void aligned_free(void* ptr);
 
     template <typename T>
     class allocator
@@ -315,20 +319,21 @@ namespace tempest
         auto operator=(const allocator&) noexcept -> allocator& = default;
         auto operator=(allocator&&) noexcept -> allocator& = default;
 
-        [[nodiscard]] constexpr auto allocate(size_t n) -> T*
+        [[nodiscard]] auto allocate(size_t n) -> T*
         {
-            void* data = ::operator new[](sizeof(T) * n, std::align_val_t(alignof(T)), std::nothrow);
+            void* data = tempest::aligned_alloc(sizeof(T) * n, alignof(T));
             return static_cast<T*>(data);
         }
 
         void deallocate(T* ptr, [[maybe_unused]] size_t n)
         {
-            ::operator delete[](ptr, std::align_val_t(alignof(T)), std::nothrow);
+            tempest::aligned_free(ptr);
         }
     };
 
     template <typename T, typename U>
-    [[nodiscard]] constexpr auto operator==(const allocator<T>& /*unused*/, const allocator<U>& /*unused*/) noexcept -> bool
+    [[nodiscard]] constexpr auto operator==(const allocator<T>& /*unused*/, const allocator<U>& /*unused*/) noexcept
+        -> bool
     {
         return true;
     }
@@ -428,10 +433,8 @@ namespace tempest
         using void_pointer = void*;
         using const_void_pointer = const void*;
 
-        using propagate_on_container_copy_assignment =
-            detail::propagate_on_container_copy_assignment<Alloc>::type;
-        using propagate_on_container_move_assignment =
-            detail::propagate_on_container_move_assignment<Alloc>::type;
+        using propagate_on_container_copy_assignment = detail::propagate_on_container_copy_assignment<Alloc>::type;
+        using propagate_on_container_move_assignment = detail::propagate_on_container_move_assignment<Alloc>::type;
         using propagate_on_container_swap = detail::propagate_on_container_swap<Alloc>::type;
         using is_always_equal = detail::is_always_equal<Alloc>::type;
 
@@ -456,8 +459,8 @@ namespace tempest
     };
 
     template <typename Alloc>
-    constexpr auto allocator_traits<Alloc>::allocate(allocator_type& alloc,
-                                                                                        size_type n) -> allocator_traits<Alloc>::pointer
+    constexpr auto allocator_traits<Alloc>::allocate(allocator_type& alloc, size_type n)
+        -> allocator_traits<Alloc>::pointer
     {
         return alloc.allocate(n);
     }
@@ -470,8 +473,7 @@ namespace tempest
 
     template <typename Alloc>
     template <typename T, typename... Args>
-    constexpr void allocator_traits<Alloc>::construct([[maybe_unused]] allocator_type& alloc, T* p,
-                                                             Args&&... args)
+    constexpr void allocator_traits<Alloc>::construct([[maybe_unused]] allocator_type& alloc, T* p, Args&&... args)
     {
         (void)::tempest::construct_at(p, tempest::forward<Args>(args)...);
     }
@@ -484,8 +486,8 @@ namespace tempest
     }
 
     template <typename Alloc>
-    constexpr auto allocator_traits<Alloc>::max_size(
-        [[maybe_unused]] const allocator_type& alloc) noexcept -> allocator_traits<Alloc>::size_type
+    constexpr auto allocator_traits<Alloc>::max_size([[maybe_unused]] const allocator_type& alloc) noexcept
+        -> allocator_traits<Alloc>::size_type
     {
         return numeric_limits<size_type>::max() / sizeof(value_type);
     }
@@ -721,8 +723,8 @@ namespace tempest
         return static_cast<bool>(rhs);
     }
 
-    auto aligned_alloc(size_t n, size_t alignment) -> void*;
-    void aligned_free(void* ptr);
+    
+    
 } // namespace tempest
 
 #endif // tempest_core_memory_hpp
