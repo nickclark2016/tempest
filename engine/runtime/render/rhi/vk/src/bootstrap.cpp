@@ -12,9 +12,22 @@
 #include <vulkan/vulkan_win32.h>
 #include <windows.h>
 #elif defined(TEMPEST_PLATFORM_LINUX)
+// clang-format off
 #include <dlfcn.h>
-#include <vulkan/vulkan_xcb.h>
+#include <X11/Xlib.h>
+#include <xcb/xcb.h>
 #include <vulkan/vulkan_xlib.h>
+#include <vulkan/vulkan_xcb.h>
+// clang-format on
+#if defined(None)
+#undef None
+#endif
+#if defined(Success)
+#undef Success
+#endif
+#if defined(Always)
+#undef Always
+#endif
 #else
 #include <dlfcn.h>
 #endif
