@@ -121,6 +121,16 @@ namespace tempest
         }
     }
 
+    template <typename Iter, typename T>
+    constexpr void iota(Iter begin, Iter end, T value)
+    {
+        for (auto it = begin; it != end; ++it)
+        {
+            *it = value;
+            ++value;
+        }
+    }
+
     namespace detail
     {
         TEMPEST_API

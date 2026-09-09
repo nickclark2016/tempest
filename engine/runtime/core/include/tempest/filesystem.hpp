@@ -6,6 +6,7 @@
 #include <tempest/chrono.hpp>
 #include <tempest/concepts.hpp>
 #include <tempest/enum.hpp>
+#include <tempest/int.hpp>
 #include <tempest/iterator.hpp>
 #include <tempest/string.hpp>
 #include <tempest/string_view.hpp>
@@ -428,7 +429,11 @@ namespace tempest::filesystem
 
     [[nodiscard]] TEMPEST_API auto temp_directory_path() -> path;
 
+    TEMPEST_API auto create_directory(const path& p) -> bool;
+    TEMPEST_API auto create_directories(const path& p) -> bool;
+
     TEMPEST_API auto remove(const path& p) -> bool;
+    TEMPEST_API auto remove_all(const path& p) -> uintmax_t;
 
     [[nodiscard]] TEMPEST_API auto file_size(const path& p) -> size_t;
 

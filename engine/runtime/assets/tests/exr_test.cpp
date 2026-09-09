@@ -35,8 +35,8 @@ TEST(exr_test, roundtrip_memory_miniz)
     }
 
     // 2. Act - Save to compressed memory buffer (using miniz ZIP compression)
-    auto *memory_buffer = static_cast<unsigned char*>(nullptr);
-    const auto *err = static_cast<const char*>(nullptr);
+    auto* memory_buffer = static_cast<unsigned char*>(nullptr);
+    const auto* err = static_cast<const char*>(nullptr);
 
     auto save_result = SaveEXRToMemory(input_pixels.data(), width, height, components,
                                        /*save_as_fp16=*/0, &memory_buffer, &err);
@@ -45,7 +45,7 @@ TEST(exr_test, roundtrip_memory_miniz)
     ASSERT_NE(memory_buffer, nullptr);
 
     // Decompress the EXR buffer back into floating-point pixels
-    auto *loaded_pixels = static_cast<float*>(nullptr);
+    auto* loaded_pixels = static_cast<float*>(nullptr);
     auto loaded_width = 0;
     auto loaded_height = 0;
 
@@ -64,8 +64,8 @@ TEST(exr_test, roundtrip_memory_miniz)
     }
 
     // Cleanup
-    std::free(memory_buffer);
-    std::free(loaded_pixels);
+    ::free(memory_buffer);
+    ::free(loaded_pixels);
 }
 
 /// @brief Verifies TinyEXR header initialization and cleanup without memory leaks.
@@ -77,9 +77,9 @@ TEST(exr_test, header_lifecycle)
 
     // 2. Act
     header.num_channels = 3;
-    header.channels = static_cast<EXRChannelInfo*>(std::malloc(sizeof(EXRChannelInfo) * 3));
-    header.pixel_types = static_cast<int*>(std::malloc(sizeof(int) * 3));
-    header.requested_pixel_types = static_cast<int*>(std::malloc(sizeof(int) * 3));
+    header.channels = static_cast<EXRChannelInfo*>(::malloc(sizeof(EXRChannelInfo) * 3));
+    header.pixel_types = static_cast<int*>(::malloc(sizeof(int) * 3));
+    header.requested_pixel_types = static_cast<int*>(::malloc(sizeof(int) * 3));
 
     // 3. Assert
     EXPECT_EQ(header.compression_type, TINYEXR_COMPRESSIONTYPE_NONE);

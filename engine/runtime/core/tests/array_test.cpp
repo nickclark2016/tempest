@@ -1,4 +1,5 @@
 #include <tempest/array.hpp>
+#include <tempest/utility.hpp>
 
 #include <gtest/gtest.h>
 
@@ -63,9 +64,7 @@ TEST(array, copy_constructor_non_trivial_copy)
         non_trivial(int i) : i(i)
         {
         }
-        non_trivial(const non_trivial& other) : i(other.i)
-        {
-        }
+        non_trivial(const non_trivial& other) = default;
     };
 
     tempest::array<non_trivial, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
@@ -80,7 +79,7 @@ TEST(array, copy_constructor_non_trivial_copy)
 TEST(array, move_constructor)
 {
     tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    tempest::array<int, 10> arr2(std::move(arr));
+    tempest::array<int, 10> arr2(tempest::move(arr));
 
     for (size_t i = 0; i < arr2.size(); ++i)
     {
@@ -101,9 +100,7 @@ TEST(array, move_constructor_non_trivial_copy)
         {
         }
 
-        non_trivial(const non_trivial& other) : i(other.i)
-        {
-        }
+        non_trivial(const non_trivial& other) = default;
 
         non_trivial(non_trivial&& other) noexcept : i(other.i)
         {
@@ -112,7 +109,7 @@ TEST(array, move_constructor_non_trivial_copy)
     };
 
     tempest::array<non_trivial, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    tempest::array<non_trivial, 10> arr2(std::move(arr));
+    tempest::array<non_trivial, 10> arr2(tempest::move(arr));
 
     for (size_t i = 0; i < arr2.size(); ++i)
     {
@@ -120,9 +117,9 @@ TEST(array, move_constructor_non_trivial_copy)
     }
 
     // Check that the moved-from array is zeroed out
-    for (size_t i = 0; i < arr.size(); ++i)
+    for (auto& i : arr)
     {
-        EXPECT_EQ(arr[i].i, 0);
+        EXPECT_EQ(i.i, 0);
     }
 }
 
@@ -170,7 +167,7 @@ TEST(array, move_assignment)
 {
     tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
     tempest::array<int, 10> arr2;
-    arr2 = std::move(arr);
+    arr2 = tempest::move(arr);
 
     for (size_t i = 0; i < arr2.size(); ++i)
     {
@@ -191,16 +188,14 @@ TEST(array, move_assignment_non_trivial_move)
         {
         }
 
-        non_trivial(const non_trivial& other) : i(other.i)
-        {
-        }
+        non_trivial(const non_trivial& other) = default;
 
         non_trivial(non_trivial&& other) noexcept : i(other.i)
         {
             other.i = 0;
         }
 
-        non_trivial operator=(non_trivial&& other) noexcept
+        auto operator=(non_trivial&& other) noexcept -> non_trivial
         {
             i = other.i;
             other.i = 0;
@@ -210,7 +205,7 @@ TEST(array, move_assignment_non_trivial_move)
 
     tempest::array<non_trivial, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
     tempest::array<non_trivial, 10> arr2;
-    arr2 = std::move(arr);
+    arr2 = tempest::move(arr);
 
     for (size_t i = 0; i < arr2.size(); ++i)
     {
@@ -218,9 +213,9 @@ TEST(array, move_assignment_non_trivial_move)
     }
 
     // Check that the moved-from array is zeroed out
-    for (size_t i = 0; i < arr.size(); ++i)
+    for (auto& i : arr)
     {
-        EXPECT_EQ(arr[i].i, 0);
+        EXPECT_EQ(i.i, 0);
     }
 }
 
@@ -301,7 +296,7 @@ TEST(array, begin)
 {
     tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-    for (auto it = arr.begin(); it != arr.end(); ++it)
+    for (auto* it = arr.begin(); it != arr.end(); ++it)
     {
         EXPECT_EQ(*it, it - arr.begin() + 1);
     }
@@ -311,7 +306,7 @@ TEST(array, begin_const)
 {
     const tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-    for (auto it = arr.begin(); it != arr.end(); ++it)
+    for (const auto* it = arr.begin(); it != arr.end(); ++it)
     {
         EXPECT_EQ(*it, it - arr.begin() + 1);
     }
@@ -321,7 +316,7 @@ TEST(array, cbegin)
 {
     const tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-    for (auto it = arr.cbegin(); it != arr.cend(); ++it)
+    for (const auto* it = arr.cbegin(); it != arr.cend(); ++it)
     {
         EXPECT_EQ(*it, it - arr.cbegin() + 1);
     }
@@ -331,7 +326,7 @@ TEST(array, end)
 {
     tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-    for (auto it = arr.begin(); it != arr.end(); ++it)
+    for (auto* it = arr.begin(); it != arr.end(); ++it)
     {
         EXPECT_EQ(*it, it - arr.begin() + 1);
     }
@@ -341,7 +336,7 @@ TEST(array, end_const)
 {
     const tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-    for (auto it = arr.begin(); it != arr.end(); ++it)
+    for (const auto* it = arr.begin(); it != arr.end(); ++it)
     {
         EXPECT_EQ(*it, it - arr.begin() + 1);
     }
@@ -351,7 +346,7 @@ TEST(array, cend)
 {
     const tempest::array<int, 10> arr = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-    for (auto it = arr.cbegin(); it != arr.cend(); ++it)
+    for (const auto* it = arr.cbegin(); it != arr.cend(); ++it)
     {
         EXPECT_EQ(*it, it - arr.cbegin() + 1);
     }

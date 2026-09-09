@@ -1,4 +1,5 @@
 #include <tempest/string.hpp>
+#include <tempest/utility.hpp>
 
 #include <gtest/gtest.h>
 
@@ -55,7 +56,7 @@ TEST(string, copy_constructor)
 TEST(string, move_constructor)
 {
     tempest::string s1(10, 'a');
-    tempest::string s2(std::move(s1));
+    tempest::string s2(tempest::move(s1));
     EXPECT_EQ(s2.size(), 10);
     EXPECT_GE(s2.capacity(), 10);
 
@@ -149,7 +150,7 @@ TEST(string, move_assignment)
 {
     tempest::string s1(10, 'a');
     tempest::string s2;
-    s2 = std::move(s1);
+    s2 = tempest::move(s1);
     EXPECT_EQ(s2.size(), 10);
     EXPECT_GE(s2.capacity(), 10);
 
@@ -163,7 +164,7 @@ TEST(string, move_assignment_with_initial_contents)
 {
     tempest::string s1(10, 'a');
     tempest::string s2(5, 'b');
-    s2 = std::move(s1);
+    s2 = tempest::move(s1);
     EXPECT_EQ(s2.size(), 10);
     EXPECT_GE(s2.capacity(), 10);
 
@@ -177,7 +178,7 @@ TEST(string, move_assignment_large_string_to_small_string)
 {
     tempest::string s1(100, 'a');
     tempest::string s2(10, 'b');
-    s2 = std::move(s1);
+    s2 = tempest::move(s1);
     EXPECT_EQ(s2.size(), 100);
     EXPECT_GE(s2.capacity(), 100);
 
@@ -191,7 +192,7 @@ TEST(string, move_assignment_small_string_to_large_string)
 {
     tempest::string s1(10, 'a');
     tempest::string s2(100, 'b');
-    s2 = std::move(s1);
+    s2 = tempest::move(s1);
     EXPECT_EQ(s2.size(), 10);
     EXPECT_GE(s2.capacity(), 10);
 
@@ -695,9 +696,9 @@ TEST(string, erase_from_start_of_small_string)
     s.erase(s.begin());
     EXPECT_EQ(s.size(), 9);
     EXPECT_GE(s.capacity(), 10);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 
@@ -726,9 +727,9 @@ TEST(string, erase_from_end_of_small_string)
     s.erase(s.end() - 1);
     EXPECT_EQ(s.size(), 9);
     EXPECT_GE(s.capacity(), 10);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 
@@ -738,9 +739,9 @@ TEST(string, erase_from_start_of_large_string)
     s.erase(s.begin());
     EXPECT_EQ(s.size(), 99);
     EXPECT_GE(s.capacity(), 100);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 
@@ -769,9 +770,9 @@ TEST(string, erase_from_end_of_large_string)
     s.erase(s.end() - 1);
     EXPECT_EQ(s.size(), 99);
     EXPECT_GE(s.capacity(), 100);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 
@@ -781,9 +782,9 @@ TEST(string, erase_range_from_start_of_small_string)
     s.erase(s.begin(), s.begin() + 5);
     EXPECT_EQ(s.size(), 5);
     EXPECT_GE(s.capacity(), 10);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 
@@ -808,9 +809,9 @@ TEST(string, erase_range_from_end_of_small_string)
     s.erase(s.begin() + 5, s.end());
     EXPECT_EQ(s.size(), 5);
     EXPECT_GE(s.capacity(), 10);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 
@@ -820,9 +821,9 @@ TEST(string, erase_range_from_start_of_large_string)
     s.erase(s.begin(), s.begin() + 50);
     EXPECT_EQ(s.size(), 50);
     EXPECT_GE(s.capacity(), 100);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 
@@ -851,9 +852,9 @@ TEST(string, erase_range_from_end_of_large_string)
     s.erase(s.begin() + 50, s.end());
     EXPECT_EQ(s.size(), 50);
     EXPECT_GE(s.capacity(), 100);
-    for (size_t i = 0; i < s.size(); ++i)
+    for (char i : s)
     {
-        EXPECT_EQ(s[i], 'a');
+        EXPECT_EQ(i, 'a');
     }
 }
 

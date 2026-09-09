@@ -1,41 +1,44 @@
 #include <tempest/int.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/math.hpp>
-
-#include <limits>
+#include <tempest/type_traits.hpp>
 
 #include <gtest/gtest.h>
 
+//=============================================================================
+// Floating-Point Limits Tests
+//=============================================================================
+
+/// @brief Verify numeric_limits<float> properties against literal ground-truth values.
 TEST(tempest_limits, numeric_limits_float)
 {
-    // Test all the values of the numeric_limits<float> specialization against the standard library
-    // numeric_limits<float> specialization.
+    // 1. Assert: Type traits and representation properties
+    ASSERT_TRUE(tempest::numeric_limits<float>::is_specialized);
+    ASSERT_TRUE(tempest::numeric_limits<float>::is_signed);
+    ASSERT_FALSE(tempest::numeric_limits<float>::is_integer);
+    ASSERT_FALSE(tempest::numeric_limits<float>::is_exact);
+    ASSERT_TRUE(tempest::numeric_limits<float>::has_infinity);
+    ASSERT_TRUE(tempest::numeric_limits<float>::has_quiet_NaN);
+    ASSERT_TRUE(tempest::numeric_limits<float>::has_signaling_NaN);
+    ASSERT_TRUE(tempest::numeric_limits<float>::is_iec559);
+    ASSERT_TRUE(tempest::numeric_limits<float>::is_bounded);
+    ASSERT_FALSE(tempest::numeric_limits<float>::is_modulo);
+    ASSERT_EQ(tempest::numeric_limits<float>::digits, 24);
+    ASSERT_EQ(tempest::numeric_limits<float>::digits10, 6);
+    ASSERT_EQ(tempest::numeric_limits<float>::max_digits10, 9);
+    ASSERT_EQ(tempest::numeric_limits<float>::radix, 2);
+    ASSERT_EQ(tempest::numeric_limits<float>::min_exponent, -125);
+    ASSERT_EQ(tempest::numeric_limits<float>::min_exponent10, -37);
+    ASSERT_EQ(tempest::numeric_limits<float>::max_exponent, 128);
+    ASSERT_EQ(tempest::numeric_limits<float>::max_exponent10, 38);
 
-    ASSERT_EQ(tempest::numeric_limits<float>::is_specialized, std::numeric_limits<float>::is_specialized);
-    ASSERT_EQ(tempest::numeric_limits<float>::is_signed, std::numeric_limits<float>::is_signed);
-    ASSERT_EQ(tempest::numeric_limits<float>::is_integer, std::numeric_limits<float>::is_integer);
-    ASSERT_EQ(tempest::numeric_limits<float>::is_exact, std::numeric_limits<float>::is_exact);
-    ASSERT_EQ(tempest::numeric_limits<float>::has_infinity, std::numeric_limits<float>::has_infinity);
-    ASSERT_EQ(tempest::numeric_limits<float>::has_quiet_NaN, std::numeric_limits<float>::has_quiet_NaN);
-    ASSERT_EQ(tempest::numeric_limits<float>::has_signaling_NaN, std::numeric_limits<float>::has_signaling_NaN);
-    ASSERT_EQ(tempest::numeric_limits<float>::is_iec559, std::numeric_limits<float>::is_iec559);
-    ASSERT_EQ(tempest::numeric_limits<float>::is_bounded, std::numeric_limits<float>::is_bounded);
-    ASSERT_EQ(tempest::numeric_limits<float>::is_modulo, std::numeric_limits<float>::is_modulo);
-    ASSERT_EQ(tempest::numeric_limits<float>::digits, std::numeric_limits<float>::digits);
-    ASSERT_EQ(tempest::numeric_limits<float>::digits10, std::numeric_limits<float>::digits10);
-    ASSERT_EQ(tempest::numeric_limits<float>::max_digits10, std::numeric_limits<float>::max_digits10);
-    ASSERT_EQ(tempest::numeric_limits<float>::radix, std::numeric_limits<float>::radix);
-    ASSERT_EQ(tempest::numeric_limits<float>::min_exponent, std::numeric_limits<float>::min_exponent);
-    ASSERT_EQ(tempest::numeric_limits<float>::min_exponent10, std::numeric_limits<float>::min_exponent10);
-    ASSERT_EQ(tempest::numeric_limits<float>::max_exponent, std::numeric_limits<float>::max_exponent);
-    ASSERT_EQ(tempest::numeric_limits<float>::max_exponent10, std::numeric_limits<float>::max_exponent10);
-
-    ASSERT_EQ(tempest::numeric_limits<float>::min(), std::numeric_limits<float>::min());
-    ASSERT_EQ(tempest::numeric_limits<float>::max(), std::numeric_limits<float>::max());
-    ASSERT_EQ(tempest::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest());
-    ASSERT_EQ(tempest::numeric_limits<float>::epsilon(), std::numeric_limits<float>::epsilon());
-    ASSERT_EQ(tempest::numeric_limits<float>::round_error(), std::numeric_limits<float>::round_error());
-    ASSERT_EQ(tempest::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+    // 2. Assert: Boundary values, precision, and special floating-point values
+    ASSERT_EQ(tempest::numeric_limits<float>::min(), 1.17549435e-38F);
+    ASSERT_EQ(tempest::numeric_limits<float>::max(), 3.40282347e+38F);
+    ASSERT_EQ(tempest::numeric_limits<float>::lowest(), -3.40282347e+38F);
+    ASSERT_EQ(tempest::numeric_limits<float>::epsilon(), 1.19209290e-7F);
+    ASSERT_EQ(tempest::numeric_limits<float>::round_error(), 0.5F);
+    ASSERT_TRUE(tempest::isinf(tempest::numeric_limits<float>::infinity()));
 
     if constexpr (tempest::numeric_limits<float>::has_quiet_NaN)
     {
@@ -48,36 +51,36 @@ TEST(tempest_limits, numeric_limits_float)
     }
 }
 
+/// @brief Verify numeric_limits<double> properties against literal ground-truth values.
 TEST(tempest_limits, numeric_limits_double)
 {
-    // Test all the values of the numeric_limits<double> specialization against the standard library
-    // numeric_limits<double> specialization.
+    // 1. Assert: Type traits and representation properties
+    ASSERT_TRUE(tempest::numeric_limits<double>::is_specialized);
+    ASSERT_TRUE(tempest::numeric_limits<double>::is_signed);
+    ASSERT_FALSE(tempest::numeric_limits<double>::is_integer);
+    ASSERT_FALSE(tempest::numeric_limits<double>::is_exact);
+    ASSERT_TRUE(tempest::numeric_limits<double>::has_infinity);
+    ASSERT_TRUE(tempest::numeric_limits<double>::has_quiet_NaN);
+    ASSERT_TRUE(tempest::numeric_limits<double>::has_signaling_NaN);
+    ASSERT_TRUE(tempest::numeric_limits<double>::is_iec559);
+    ASSERT_TRUE(tempest::numeric_limits<double>::is_bounded);
+    ASSERT_FALSE(tempest::numeric_limits<double>::is_modulo);
+    ASSERT_EQ(tempest::numeric_limits<double>::digits, 53);
+    ASSERT_EQ(tempest::numeric_limits<double>::digits10, 15);
+    ASSERT_EQ(tempest::numeric_limits<double>::max_digits10, 17);
+    ASSERT_EQ(tempest::numeric_limits<double>::radix, 2);
+    ASSERT_EQ(tempest::numeric_limits<double>::min_exponent, -1021);
+    ASSERT_EQ(tempest::numeric_limits<double>::min_exponent10, -307);
+    ASSERT_EQ(tempest::numeric_limits<double>::max_exponent, 1024);
+    ASSERT_EQ(tempest::numeric_limits<double>::max_exponent10, 308);
 
-    ASSERT_EQ(tempest::numeric_limits<double>::is_specialized, std::numeric_limits<double>::is_specialized);
-    ASSERT_EQ(tempest::numeric_limits<double>::is_signed, std::numeric_limits<double>::is_signed);
-    ASSERT_EQ(tempest::numeric_limits<double>::is_integer, std::numeric_limits<double>::is_integer);
-    ASSERT_EQ(tempest::numeric_limits<double>::is_exact, std::numeric_limits<double>::is_exact);
-    ASSERT_EQ(tempest::numeric_limits<double>::has_infinity, std::numeric_limits<double>::has_infinity);
-    ASSERT_EQ(tempest::numeric_limits<double>::has_quiet_NaN, std::numeric_limits<double>::has_quiet_NaN);
-    ASSERT_EQ(tempest::numeric_limits<double>::has_signaling_NaN, std::numeric_limits<double>::has_signaling_NaN);
-    ASSERT_EQ(tempest::numeric_limits<double>::is_iec559, std::numeric_limits<double>::is_iec559);
-    ASSERT_EQ(tempest::numeric_limits<double>::is_bounded, std::numeric_limits<double>::is_bounded);
-    ASSERT_EQ(tempest::numeric_limits<double>::is_modulo, std::numeric_limits<double>::is_modulo);
-    ASSERT_EQ(tempest::numeric_limits<double>::digits, std::numeric_limits<double>::digits);
-    ASSERT_EQ(tempest::numeric_limits<double>::digits10, std::numeric_limits<double>::digits10);
-    ASSERT_EQ(tempest::numeric_limits<double>::max_digits10, std::numeric_limits<double>::max_digits10);
-    ASSERT_EQ(tempest::numeric_limits<double>::radix, std::numeric_limits<double>::radix);
-    ASSERT_EQ(tempest::numeric_limits<double>::min_exponent, std::numeric_limits<double>::min_exponent);
-    ASSERT_EQ(tempest::numeric_limits<double>::min_exponent10, std::numeric_limits<double>::min_exponent10);
-    ASSERT_EQ(tempest::numeric_limits<double>::max_exponent, std::numeric_limits<double>::max_exponent);
-    ASSERT_EQ(tempest::numeric_limits<double>::max_exponent10, std::numeric_limits<double>::max_exponent10);
-
-    ASSERT_EQ(tempest::numeric_limits<double>::min(), std::numeric_limits<double>::min());
-    ASSERT_EQ(tempest::numeric_limits<double>::max(), std::numeric_limits<double>::max());
-    ASSERT_EQ(tempest::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest());
-    ASSERT_EQ(tempest::numeric_limits<double>::epsilon(), std::numeric_limits<double>::epsilon());
-    ASSERT_EQ(tempest::numeric_limits<double>::round_error(), std::numeric_limits<double>::round_error());
-    ASSERT_EQ(tempest::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
+    // 2. Assert: Boundary values, precision, and special floating-point values
+    ASSERT_EQ(tempest::numeric_limits<double>::min(), 2.2250738585072014e-308);
+    ASSERT_EQ(tempest::numeric_limits<double>::max(), 1.7976931348623157e+308);
+    ASSERT_EQ(tempest::numeric_limits<double>::lowest(), -1.7976931348623157e+308);
+    ASSERT_EQ(tempest::numeric_limits<double>::epsilon(), 2.2204460492503131e-16);
+    ASSERT_EQ(tempest::numeric_limits<double>::round_error(), 0.5);
+    ASSERT_TRUE(tempest::isinf(tempest::numeric_limits<double>::infinity()));
 
     if constexpr (tempest::numeric_limits<double>::has_quiet_NaN)
     {
@@ -90,71 +93,137 @@ TEST(tempest_limits, numeric_limits_double)
     }
 }
 
+//=============================================================================
+// Integral Limits Tests
+//=============================================================================
+
 namespace
 {
     template <typename T>
     void test_integral_numeric_limits()
     {
-        ASSERT_EQ(tempest::numeric_limits<T>::is_specialized, std::numeric_limits<T>::is_specialized);
-        ASSERT_EQ(tempest::numeric_limits<T>::is_signed, std::numeric_limits<T>::is_signed);
-        ASSERT_EQ(tempest::numeric_limits<T>::is_integer, std::numeric_limits<T>::is_integer);
-        ASSERT_EQ(tempest::numeric_limits<T>::is_exact, std::numeric_limits<T>::is_exact);
-        ASSERT_EQ(tempest::numeric_limits<T>::has_infinity, std::numeric_limits<T>::has_infinity);
-        ASSERT_EQ(tempest::numeric_limits<T>::has_quiet_NaN, std::numeric_limits<T>::has_quiet_NaN);
-        ASSERT_EQ(tempest::numeric_limits<T>::has_signaling_NaN, std::numeric_limits<T>::has_signaling_NaN);
-        ASSERT_EQ(tempest::numeric_limits<T>::is_iec559, std::numeric_limits<T>::is_iec559);
-        ASSERT_EQ(tempest::numeric_limits<T>::is_bounded, std::numeric_limits<T>::is_bounded);
-        ASSERT_EQ(tempest::numeric_limits<T>::is_modulo, std::numeric_limits<T>::is_modulo);
-        ASSERT_EQ(tempest::numeric_limits<T>::digits, std::numeric_limits<T>::digits);
-        ASSERT_EQ(tempest::numeric_limits<T>::digits10, std::numeric_limits<T>::digits10);
-        ASSERT_EQ(tempest::numeric_limits<T>::max_digits10, std::numeric_limits<T>::max_digits10);
-        ASSERT_EQ(tempest::numeric_limits<T>::radix, std::numeric_limits<T>::radix);
-        ASSERT_EQ(tempest::numeric_limits<T>::min_exponent, std::numeric_limits<T>::min_exponent);
-        ASSERT_EQ(tempest::numeric_limits<T>::min_exponent10, std::numeric_limits<T>::min_exponent10);
-        ASSERT_EQ(tempest::numeric_limits<T>::max_exponent, std::numeric_limits<T>::max_exponent);
-        ASSERT_EQ(tempest::numeric_limits<T>::max_exponent10, std::numeric_limits<T>::max_exponent10);
+        ASSERT_TRUE(tempest::numeric_limits<T>::is_specialized);
+        ASSERT_EQ(tempest::numeric_limits<T>::is_signed, tempest::is_signed_v<T>);
+        ASSERT_TRUE(tempest::numeric_limits<T>::is_integer);
+        ASSERT_TRUE(tempest::numeric_limits<T>::is_exact);
+        ASSERT_FALSE(tempest::numeric_limits<T>::has_infinity);
+        ASSERT_FALSE(tempest::numeric_limits<T>::has_quiet_NaN);
+        ASSERT_FALSE(tempest::numeric_limits<T>::has_signaling_NaN);
+        ASSERT_FALSE(tempest::numeric_limits<T>::is_iec559);
+        ASSERT_TRUE(tempest::numeric_limits<T>::is_bounded);
+        if constexpr (tempest::is_same_v<T, bool>)
+        {
+            ASSERT_FALSE(tempest::numeric_limits<T>::is_modulo);
+        }
+        else
+        {
+            ASSERT_EQ(tempest::numeric_limits<T>::is_modulo, !tempest::is_signed_v<T>);
+        }
+        ASSERT_EQ(tempest::numeric_limits<T>::max_digits10, 0);
+        ASSERT_EQ(tempest::numeric_limits<T>::radix, 2);
+        ASSERT_EQ(tempest::numeric_limits<T>::min_exponent, 0);
+        ASSERT_EQ(tempest::numeric_limits<T>::min_exponent10, 0);
+        ASSERT_EQ(tempest::numeric_limits<T>::max_exponent, 0);
+        ASSERT_EQ(tempest::numeric_limits<T>::max_exponent10, 0);
 
-        ASSERT_EQ(tempest::numeric_limits<T>::min(), std::numeric_limits<T>::min());
-        ASSERT_EQ(tempest::numeric_limits<T>::max(), std::numeric_limits<T>::max());
-        ASSERT_EQ(tempest::numeric_limits<T>::lowest(), std::numeric_limits<T>::lowest());
-        ASSERT_EQ(tempest::numeric_limits<T>::epsilon(), std::numeric_limits<T>::epsilon());
-        ASSERT_EQ(tempest::numeric_limits<T>::round_error(), std::numeric_limits<T>::round_error());
-        ASSERT_EQ(tempest::numeric_limits<T>::infinity(), std::numeric_limits<T>::infinity());
-        ASSERT_EQ(tempest::numeric_limits<T>::quiet_NaN(), std::numeric_limits<T>::quiet_NaN());
-        ASSERT_EQ(tempest::numeric_limits<T>::signaling_NaN(), std::numeric_limits<T>::signaling_NaN());
+        ASSERT_EQ(tempest::numeric_limits<T>::epsilon(), T{0});
+        ASSERT_EQ(tempest::numeric_limits<T>::round_error(), T{0});
+        ASSERT_EQ(tempest::numeric_limits<T>::infinity(), T{0});
+        ASSERT_EQ(tempest::numeric_limits<T>::quiet_NaN(), T{0});
+        ASSERT_EQ(tempest::numeric_limits<T>::signaling_NaN(), T{0});
     }
 } // namespace
 
-/// @brief Verify numeric_limits<bool> properties against std::numeric_limits<bool>.
+/// @brief Verify numeric_limits<bool> properties against literal ground-truth values.
 TEST(tempest_limits, numeric_limits_bool)
 {
+    // 1. Act & Assert: Common integral properties
     test_integral_numeric_limits<bool>();
+
+    // 2. Act & Assert: Type-specific bounds and digit precision
+    ASSERT_EQ(tempest::numeric_limits<bool>::digits, 1);
+    ASSERT_EQ(tempest::numeric_limits<bool>::digits10, 0);
+    ASSERT_EQ(tempest::numeric_limits<bool>::min(), false);
+    ASSERT_EQ(tempest::numeric_limits<bool>::lowest(), false);
+    ASSERT_EQ(tempest::numeric_limits<bool>::max(), true);
 }
 
-/// @brief Verify numeric_limits<int8_t> and numeric_limits<uint8_t> against standard library specializations.
+/// @brief Verify numeric_limits<int8_t> and numeric_limits<uint8_t> against literal ground-truth values.
 TEST(tempest_limits, numeric_limits_8bit_integers)
 {
+    // 1. Act & Assert: int8_t
     test_integral_numeric_limits<tempest::int8_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::int8_t>::digits, 7);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int8_t>::digits10, 2);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int8_t>::min(), -128);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int8_t>::lowest(), -128);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int8_t>::max(), 127);
+
+    // 2. Act & Assert: uint8_t
     test_integral_numeric_limits<tempest::uint8_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint8_t>::digits, 8);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint8_t>::digits10, 2);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint8_t>::min(), 0);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint8_t>::lowest(), 0);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint8_t>::max(), 255);
 }
 
-/// @brief Verify numeric_limits<int16_t> and numeric_limits<uint16_t> against standard library specializations.
+/// @brief Verify numeric_limits<int16_t> and numeric_limits<uint16_t> against literal ground-truth values.
 TEST(tempest_limits, numeric_limits_16bit_integers)
 {
+    // 1. Act & Assert: int16_t
     test_integral_numeric_limits<tempest::int16_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::int16_t>::digits, 15);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int16_t>::digits10, 4);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int16_t>::min(), -32768);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int16_t>::lowest(), -32768);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int16_t>::max(), 32767);
+
+    // 2. Act & Assert: uint16_t
     test_integral_numeric_limits<tempest::uint16_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint16_t>::digits, 16);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint16_t>::digits10, 4);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint16_t>::min(), 0);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint16_t>::lowest(), 0);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint16_t>::max(), 65535);
 }
 
-/// @brief Verify numeric_limits<int32_t> and numeric_limits<uint32_t> against standard library specializations.
+/// @brief Verify numeric_limits<int32_t> and numeric_limits<uint32_t> against literal ground-truth values.
 TEST(tempest_limits, numeric_limits_32bit_integers)
 {
+    // 1. Act & Assert: int32_t
     test_integral_numeric_limits<tempest::int32_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::int32_t>::digits, 31);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int32_t>::digits10, 9);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int32_t>::min(), -2147483648);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int32_t>::lowest(), -2147483648);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int32_t>::max(), 2147483647);
+
+    // 2. Act & Assert: uint32_t
     test_integral_numeric_limits<tempest::uint32_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint32_t>::digits, 32);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint32_t>::digits10, 9);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint32_t>::min(), 0U);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint32_t>::lowest(), 0U);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint32_t>::max(), 4294967295U);
 }
 
-/// @brief Verify numeric_limits<int64_t> and numeric_limits<uint64_t> against standard library specializations.
+/// @brief Verify numeric_limits<int64_t> and numeric_limits<uint64_t> against literal ground-truth values.
 TEST(tempest_limits, numeric_limits_64bit_integers)
 {
+    // 1. Act & Assert: int64_t
     test_integral_numeric_limits<tempest::int64_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::int64_t>::digits, 63);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int64_t>::digits10, 18);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int64_t>::min(), -9223372036854775807LL - 1);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int64_t>::lowest(), -9223372036854775807LL - 1);
+    ASSERT_EQ(tempest::numeric_limits<tempest::int64_t>::max(), 9223372036854775807LL);
+
+    // 2. Act & Assert: uint64_t
     test_integral_numeric_limits<tempest::uint64_t>();
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint64_t>::digits, 64);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint64_t>::digits10, 19);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint64_t>::min(), 0ULL);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint64_t>::lowest(), 0ULL);
+    ASSERT_EQ(tempest::numeric_limits<tempest::uint64_t>::max(), 18446744073709551615ULL);
 }

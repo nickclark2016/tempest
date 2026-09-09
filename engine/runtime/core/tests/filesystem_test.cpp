@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <tempest/charconv.hpp>
+#include <tempest/files.hpp>
 
 namespace fs = tempest::filesystem;
 
@@ -962,4 +963,113 @@ TEST(filesystem_weakly_canonical, relative_non_existent_roots_to_current_path)
     auto expected = fs::canonical(fs::current_path()) / "__non_existent_rel_dir" / "file.txt";
     EXPECT_TRUE(resolved.is_absolute());
     EXPECT_EQ(resolved, expected);
+}
+
+// ============================================================================
+// Directory Creation & Recursive Removal Tests (create_directory, create_directories, remove_all)
+// ============================================================================
+
+/// @brief Tests that create_directory creates a single directory and succeeds idempotently if it already exists.
+TEST(filesystem_directories, create_directory_single_and_idempotent)
+{
+    // 1. Setup: prepare a unique test directory path and clean up beforehand
+    auto test_dir = fs::temp_directory_path() / "tempest_test_single_dir";
+    fs::remove_all(test_dir);
+    ASSERT_FALSE(fs::exists(test_dir));
+
+    // 2. Act: create the directory
+    auto created = fs::create_directory(test_dir);
+
+    // 3. Assert: directory was created and exists
+    EXPECT_TRUE(created);
+    EXPECT_TRUE(fs::exists(test_dir));
+    EXPECT_TRUE(fs::is_directory(test_dir));
+
+    // 4. Act & Assert: creating the directory again succeeds idempotently
+    auto created_again = fs::create_directory(test_dir);
+    EXPECT_TRUE(created_again);
+
+    // 5. Cleanup
+    auto removed_count = fs::remove_all(test_dir);
+    EXPECT_EQ(removed_count, 1U);
+    EXPECT_FALSE(fs::exists(test_dir));
+}
+
+/// @brief Tests that create_directories creates nested directory hierarchies and handles edge cases.
+TEST(filesystem_directories, create_directories_nested_hierarchy)
+{
+    // 1. Setup: target nested directory path and clean up beforehand
+    auto base_dir = fs::temp_directory_path() / "tempest_test_nested_dir";
+    auto nested_dir = base_dir / "level1" / "level2" / "level3";
+    fs::remove_all(base_dir);
+    ASSERT_FALSE(fs::exists(base_dir));
+
+    // 2. Act: create nested directory structure
+    auto created = fs::create_directories(nested_dir);
+
+    // 3. Assert: all hierarchy levels were created
+    EXPECT_TRUE(created);
+    EXPECT_TRUE(fs::exists(base_dir));
+    EXPECT_TRUE(fs::exists(base_dir / "level1"));
+    EXPECT_TRUE(fs::exists(base_dir / "level1" / "level2"));
+    EXPECT_TRUE(fs::exists(nested_dir));
+    EXPECT_TRUE(fs::is_directory(nested_dir));
+
+    // 4. Act & Assert: creating already existing path returns false
+    auto already_exists = fs::create_directories(nested_dir);
+    EXPECT_FALSE(already_exists);
+
+    // 5. Act & Assert: empty path returns false
+    auto empty_result = fs::create_directories(fs::path{});
+    EXPECT_FALSE(empty_result);
+
+    // 6. Cleanup
+    fs::remove_all(base_dir);
+    EXPECT_FALSE(fs::exists(base_dir));
+}
+
+/// @brief Tests that remove_all recursively deletes files and directories and reports exact count.
+TEST(filesystem_directories, remove_all_recursive_tree)
+{
+    // 1. Setup: create nested directories and populate with files
+    auto base_dir = fs::temp_directory_path() / "tempest_test_remove_tree";
+    auto sub_dir1 = base_dir / "sub1";
+    auto sub_dir2 = base_dir / "sub2";
+    fs::remove_all(base_dir);
+
+    ASSERT_TRUE(fs::create_directories(sub_dir1));
+    ASSERT_TRUE(fs::create_directories(sub_dir2));
+
+    const auto *const data1 = "hello";
+    tempest::write_file_from_bytes(sub_dir1 / "file1.txt", {reinterpret_cast<const tempest::byte*>(data1), 5});
+    const auto *const data2 = "world";
+    tempest::write_file_from_bytes(sub_dir2 / "file2.txt", {reinterpret_cast<const tempest::byte*>(data2), 5});
+    const auto *const data3 = "tempest";
+    tempest::write_file_from_bytes(base_dir / "root_file.txt", {reinterpret_cast<const tempest::byte*>(data3), 7});
+
+    ASSERT_TRUE(fs::exists(sub_dir1 / "file1.txt"));
+    ASSERT_TRUE(fs::exists(sub_dir2 / "file2.txt"));
+    ASSERT_TRUE(fs::exists(base_dir / "root_file.txt"));
+
+    // 2. Act: remove entire directory tree
+    auto removed_count = fs::remove_all(base_dir);
+
+    // 3. Assert: 3 files + 2 subdirectories + 1 base directory = 6 items removed
+    EXPECT_EQ(removed_count, 6U);
+    EXPECT_FALSE(fs::exists(base_dir));
+}
+
+/// @brief Tests that remove_all on a non-existent path returns 0.
+TEST(filesystem_directories, remove_all_non_existent)
+{
+    // 1. Setup: define non-existent path
+    auto non_existent = fs::temp_directory_path() / "tempest_test_non_existent_path_98765";
+    fs::remove_all(non_existent);
+    ASSERT_FALSE(fs::exists(non_existent));
+
+    // 2. Act: call remove_all on non-existent path
+    auto count = fs::remove_all(non_existent);
+
+    // 3. Assert: count is 0
+    EXPECT_EQ(count, 0U);
 }

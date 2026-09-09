@@ -1785,6 +1785,41 @@ namespace tempest::filesystem
 #endif
     }
 
+    auto create_directory(const path& p) -> bool
+    {
+#ifdef _WIN32
+        if (CreateDirectoryW(p.native().c_str(), nullptr) != 0)
+        {
+            return true;
+        }
+        return GetLastError() == ERROR_ALREADY_EXISTS;
+#else
+        if (::mkdir(p.native().c_str(), 0755) == 0)
+        {
+            return true;
+        }
+        return errno == EEXIST;
+#endif
+    }
+
+    auto create_directories(const path& p) -> bool
+    {
+        if (p.empty())
+        {
+            return false;
+        }
+        if (exists(p))
+        {
+            return false;
+        }
+        auto parent = p.parent_path();
+        if (!parent.empty() && parent != p && !exists(parent))
+        {
+            create_directories(parent);
+        }
+        return create_directory(p);
+    }
+
     auto remove(const path& p) -> bool
     {
 #ifdef _WIN32
@@ -1803,6 +1838,27 @@ namespace tempest::filesystem
 #else
         return ::remove(p.native().c_str()) == 0;
 #endif
+    }
+
+    auto remove_all(const path& p) -> uintmax_t
+    {
+        if (!exists(p))
+        {
+            return 0;
+        }
+        auto count = uintmax_t{0};
+        if (is_directory(p))
+        {
+            for (auto it = directory_iterator(p); it != directory_iterator(); ++it)
+            {
+                count += remove_all(it->path());
+            }
+        }
+        if (remove(p))
+        {
+            ++count;
+        }
+        return count;
     }
 
     directory_entry::directory_entry(const filesystem::path& p)

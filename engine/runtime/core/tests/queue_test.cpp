@@ -1,4 +1,3 @@
-#include <numbers>
 #include <tempest/queue.hpp>
 
 #include <gtest/gtest.h>
@@ -196,7 +195,7 @@ TEST(queue_test, emplace_in_place)
     EXPECT_EQ(&ref1, &test_queue.back());
 
     // 4. Act - Emplace second element
-    constexpr auto test_e_approx = std::numbers::e;
+    constexpr auto test_e_approx = 2.718281828459045;
     auto& ref2 = test_queue.emplace(99, test_e_approx, "second");
 
     // 5. Assert

@@ -2,15 +2,16 @@
 
 #include <tempest/flat_unordered_map.hpp>
 
-#include <algorithm>
-#include <utility>
-#include <vector>
+#include <tempest/algorithm.hpp>
+#include <tempest/int.hpp>
+#include <tempest/utility.hpp>
+#include <tempest/vector.hpp>
 
 TEST(metadata_group, any_empty_none_empty)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
     {
         group.entries[i] = static_cast<tempest::detail::metadata_entry>(i);
     }
@@ -22,7 +23,7 @@ TEST(metadata_group, any_empty_one_empty)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
     {
         group.entries[i] = static_cast<tempest::detail::metadata_entry>(i);
     }
@@ -36,9 +37,9 @@ TEST(metadata_group, any_empty_all_empty)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (unsigned char& entrie : group.entries)
     {
-        group.entries[i] = tempest::detail::empty_entry;
+        entrie = tempest::detail::empty_entry;
     }
 
     EXPECT_TRUE(group.any_empty());
@@ -48,7 +49,7 @@ TEST(metadata_group, any_empty_one_deleted)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
     {
         group.entries[i] = static_cast<tempest::detail::metadata_entry>(i);
     }
@@ -62,9 +63,9 @@ TEST(metadata_group, any_empty_all_deleted)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (unsigned char& entrie : group.entries)
     {
-        group.entries[i] = tempest::detail::deleted_entry;
+        entrie = tempest::detail::deleted_entry;
     }
 
     EXPECT_FALSE(group.any_empty());
@@ -74,7 +75,7 @@ TEST(metadata_group, any_empty_or_deleted_one_empty)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
     {
         group.entries[i] = static_cast<tempest::detail::metadata_entry>(i);
     }
@@ -88,9 +89,9 @@ TEST(metadata_group, any_empty_or_deleted_all_empty)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (unsigned char& entrie : group.entries)
     {
-        group.entries[i] = tempest::detail::empty_entry;
+        entrie = tempest::detail::empty_entry;
     }
 
     EXPECT_TRUE(group.any_empty_or_deleted());
@@ -100,7 +101,7 @@ TEST(metadata_group, any_empty_or_deleted_one_deleted)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
     {
         group.entries[i] = static_cast<tempest::detail::metadata_entry>(i);
     }
@@ -114,9 +115,9 @@ TEST(metadata_group, any_empty_or_deleted_all_deleted)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (unsigned char& entrie : group.entries)
     {
-        group.entries[i] = tempest::detail::deleted_entry;
+        entrie = tempest::detail::deleted_entry;
     }
 
     EXPECT_TRUE(group.any_empty_or_deleted());
@@ -126,7 +127,7 @@ TEST(metadata_group, any_empty_or_deleted_none)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
     {
         group.entries[i] = static_cast<tempest::detail::metadata_entry>(i);
     }
@@ -138,7 +139,7 @@ TEST(metadata_group, match_byte_none)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
     {
         group.entries[i] = static_cast<tempest::detail::metadata_entry>(i);
     }
@@ -153,7 +154,7 @@ TEST(metadata_group, match_byte_one)
     group.entries[10] = 1;
 
     // set 10th bit
-    std::uint16_t expected = 1 << 10;
+    uint16_t expected = 1 << 10;
 
     EXPECT_EQ(group.match_byte(1), expected);
 }
@@ -170,7 +171,7 @@ TEST(metadata_group, match_byte_alternates)
     group.entries[12] = 1;
     group.entries[14] = 1;
 
-    std::uint16_t entries = 0b0101010101010101;
+    uint16_t entries = 0b0101010101010101;
 
     EXPECT_EQ(group.match_byte(1), entries);
 }
@@ -179,12 +180,12 @@ TEST(metadata_group, match_byte_all)
 {
     tempest::detail::metadata_group group;
 
-    for (std::size_t i = 0; i < tempest::detail::metadata_group::group_size; ++i)
+    for (unsigned char& entrie : group.entries)
     {
-        group.entries[i] = 1;
+        entrie = 1;
     }
 
-    std::uint16_t expected = 0xFFFF;
+    uint16_t expected = 0xFFFF;
 
     EXPECT_EQ(group.match_byte(1), expected);
 }
@@ -291,18 +292,18 @@ TEST(flat_unordered_map, iterate)
         map.insert({i, 9 - i});
     }
 
-    std::vector<std::pair<int, int>> found_values;
+    tempest::vector<tempest::pair<int, int>> found_values;
 
     for (auto& [k, v] : map)
     {
-        found_values.push_back({k, v});
+        found_values.emplace_back(k, v);
     }
 
-    std::sort(found_values.begin(), found_values.end());
+    tempest::sort(found_values.begin(), found_values.end());
 
     for (int i = 0; i < 10; ++i)
     {
-        ASSERT_EQ(found_values[i], std::make_pair(i, 9 - i));
+        ASSERT_EQ(found_values[i], tempest::make_pair(i, 9 - i));
     }
 }
 
@@ -315,16 +316,17 @@ TEST(flat_unordered_map, const_iterator)
         map.insert({i, 9 - i});
     }
 
-    std::vector<std::pair<int, int>> found_values;
+    tempest::vector<tempest::pair<int, int>> found_values;
 
-    std::for_each(std::cbegin(map), std::cend(map), [&](auto it) {
+    for (const auto& it : map)
+    {
         found_values.push_back({it.first, it.second});
-    });
+    }
 
-    std::sort(found_values.begin(), found_values.end());
+    tempest::sort(found_values.begin(), found_values.end());
 
     for (int i = 0; i < 20; ++i)
     {
-        ASSERT_EQ(found_values[i], std::make_pair(i, 9 - i));
+        ASSERT_EQ(found_values[i], tempest::make_pair(i, 9 - i));
     }
 }

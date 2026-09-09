@@ -1,9 +1,9 @@
 #include <tempest/archetype.hpp>
 
-#include <cstring>
 #include <gtest/gtest.h>
 #include <tempest/ecs_events.hpp>
 #include <tempest/traits.hpp>
+#include <tempest/utility.hpp>
 
 TEST(basic_archetype_type_info, get_trivial_type_info)
 {
@@ -46,27 +46,27 @@ TEST(basic_archetype_storage, construct_for_trivial_struct)
 
     foo f1 = {
         .bar = 1,
-        .baz = 3.14f,
+        .baz = 3.14F,
         .quux = 'q',
     };
 
     foo f2 = {
         .bar = 2,
-        .baz = 6.28f,
+        .baz = 6.28F,
         .quux = 'r',
     };
 
-    auto dst1 = storage.element_at(0);
-    std::memcpy(dst1, &f1, sizeof(f1));
+    auto* dst1 = storage.element_at(0);
+    tempest::memcpy(dst1, &f1, sizeof(f1));
 
-    auto dst2 = storage.element_at(1);
-    std::memcpy(dst2, &f2, sizeof(f2));
+    auto* dst2 = storage.element_at(1);
+    tempest::memcpy(dst2, &f2, sizeof(f2));
 
-    ASSERT_TRUE(std::memcmp(&f1, dst1, sizeof(f1)) == 0);
-    ASSERT_TRUE(std::memcmp(&f2, dst2, sizeof(f2)) == 0);
+    ASSERT_TRUE(::memcmp(&f1, dst1, sizeof(f1)) == 0);
+    ASSERT_TRUE(::memcmp(&f2, dst2, sizeof(f2)) == 0);
 
     storage.copy(0, 1);
-    ASSERT_TRUE(std::memcmp(dst1, dst2, sizeof(foo)) == 0);
+    ASSERT_TRUE(::memcmp(dst1, dst2, sizeof(foo)) == 0);
 }
 
 TEST(basic_archetype, single_type)
@@ -86,18 +86,18 @@ TEST(basic_archetype, single_type)
     ASSERT_EQ(archetype.size(), 2);
     ASSERT_GE(archetype.capacity(), 2);
 
-    float* f1 = reinterpret_cast<float*>(archetype.element_at(e1, 0));
-    *f1 = 3.14f;
-    float* f2 = reinterpret_cast<float*>(archetype.element_at(e2, 0));
-    *f2 = 6.28f;
+    auto* f1 = reinterpret_cast<float*>(archetype.element_at(e1, 0));
+    *f1 = 3.14F;
+    auto* f2 = reinterpret_cast<float*>(archetype.element_at(e2, 0));
+    *f2 = 6.28F;
 
-    ASSERT_EQ(3.14f, *reinterpret_cast<float*>(archetype.element_at(e1, 0)));
-    ASSERT_EQ(6.28f, *reinterpret_cast<float*>(archetype.element_at(e2, 0)));
+    ASSERT_EQ(3.14F, *reinterpret_cast<float*>(archetype.element_at(e1, 0)));
+    ASSERT_EQ(6.28F, *reinterpret_cast<float*>(archetype.element_at(e2, 0)));
 
     ASSERT_TRUE(archetype.erase(e1));
 
     // Ensure the value got moved
-    ASSERT_EQ(6.28f, *reinterpret_cast<float*>(archetype.element_at(e2, 0)));
+    ASSERT_EQ(6.28F, *reinterpret_cast<float*>(archetype.element_at(e2, 0)));
 
     auto e3 = archetype.allocate();
     ASSERT_EQ(0, e3.index);
@@ -131,22 +131,22 @@ TEST(basic_archetype_registry, create)
     auto entity = reg.create<int, float>();
 
     reg.replace<int>(entity, 3);
-    reg.replace<float>(entity, 3.14f);
+    reg.replace<float>(entity, 3.14F);
 
     ASSERT_EQ(reg.size(), 1);
     ASSERT_EQ(reg.get<int>(entity), 3);
-    ASSERT_EQ(reg.get<float>(entity), 3.14f);
+    ASSERT_EQ(reg.get<float>(entity), 3.14F);
 }
 
 TEST(basic_archetype_registry, create_initialized)
 {
     auto events = tempest::event::event_registry();
     auto reg = tempest::ecs::basic_archetype_registry(events);
-    auto entity = reg.create_initialized<int, float>(3, 3.14f);
-    
+    auto entity = reg.create_initialized<int, float>(3, 3.14F);
+
     ASSERT_EQ(reg.size(), 1);
     ASSERT_EQ(reg.get<int>(entity), 3);
-    ASSERT_EQ(reg.get<float>(entity), 3.14f);
+    ASSERT_EQ(reg.get<float>(entity), 3.14F);
 }
 
 TEST(basic_archetype_registry, create_swapped)
@@ -155,11 +155,11 @@ TEST(basic_archetype_registry, create_swapped)
     auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<float, int>();
     reg.replace<int>(entity, 3);
-    reg.replace<float>(entity, 3.14f);
+    reg.replace<float>(entity, 3.14F);
 
     ASSERT_EQ(reg.size(), 1);
     ASSERT_EQ(reg.get<int>(entity), 3);
-    ASSERT_EQ(reg.get<float>(entity), 3.14f);
+    ASSERT_EQ(reg.get<float>(entity), 3.14F);
 }
 
 TEST(basic_archetype_registry, create_and_assign)
@@ -169,13 +169,13 @@ TEST(basic_archetype_registry, create_and_assign)
     auto entity = reg.create<int, float>();
 
     reg.assign_or_replace<int>(entity, 3);
-    reg.assign_or_replace<float>(entity, 3.14f);
+    reg.assign_or_replace<float>(entity, 3.14F);
 
     reg.assign<char>(entity, 'c');
 
     ASSERT_EQ(reg.size(), 1);
     ASSERT_EQ(reg.get<int>(entity), 3);
-    ASSERT_EQ(reg.get<float>(entity), 3.14f);
+    ASSERT_EQ(reg.get<float>(entity), 3.14F);
     ASSERT_EQ(reg.get<char>(entity), 'c');
 }
 
@@ -207,7 +207,7 @@ TEST(basic_archetype_registry, try_get_component_with_component)
     auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
     reg.replace<int>(entity, 3);
-    reg.replace<float>(entity, 3.14f);
+    reg.replace<float>(entity, 3.14F);
 
     ASSERT_EQ(reg.try_get<int>(entity), &reg.get<int>(entity));
     ASSERT_EQ(reg.try_get<float>(entity), &reg.get<float>(entity));
@@ -219,7 +219,7 @@ TEST(basic_archetype_registry, try_get_component_with_failure)
     auto reg = tempest::ecs::basic_archetype_registry(events);
     auto entity = reg.create<int, float>();
     reg.replace<int>(entity, 3);
-    reg.replace<float>(entity, 3.14f);
+    reg.replace<float>(entity, 3.14F);
 
     ASSERT_EQ(reg.try_get<char>(entity), nullptr);
 }
@@ -275,27 +275,27 @@ TEST(basic_archetype_registry, create_multiple_different_archetypes_with_removes
     auto e5 = reg.create<int, float, char, double, short, long>();
     auto e6 = reg.create<int, float, char, double, short, long, long long>();
     reg.assign_or_replace<int>(e1, 1);
-    reg.assign_or_replace<float>(e1, 3.14f);
+    reg.assign_or_replace<float>(e1, 3.14F);
     reg.assign_or_replace<int>(e2, 2);
-    reg.assign_or_replace<float>(e2, 6.28f);
+    reg.assign_or_replace<float>(e2, 6.28F);
     reg.assign_or_replace<char>(e2, 'c');
     reg.assign_or_replace<int>(e3, 3);
-    reg.assign_or_replace<float>(e3, 9.42f);
+    reg.assign_or_replace<float>(e3, 9.42F);
     reg.assign_or_replace<char>(e3, 'd');
     reg.assign_or_replace<double>(e3, 1.0);
     reg.assign_or_replace<int>(e4, 4);
-    reg.assign_or_replace<float>(e4, 12.56f);
+    reg.assign_or_replace<float>(e4, 12.56F);
     reg.assign_or_replace<char>(e4, 'e');
     reg.assign_or_replace<double>(e4, 2.0);
     reg.assign_or_replace<short>(e4, 1);
     reg.assign_or_replace<int>(e5, 5);
-    reg.assign_or_replace<float>(e5, 15.70f);
+    reg.assign_or_replace<float>(e5, 15.70F);
     reg.assign_or_replace<char>(e5, 'f');
     reg.assign_or_replace<double>(e5, 3.0);
     reg.assign_or_replace<short>(e5, 2);
     reg.assign_or_replace<long>(e5, 1);
     reg.assign_or_replace<int>(e6, 6);
-    reg.assign_or_replace<float>(e6, 18.84f);
+    reg.assign_or_replace<float>(e6, 18.84F);
     reg.assign_or_replace<char>(e6, 'g');
     reg.assign_or_replace<double>(e6, 4.0);
     reg.assign_or_replace<short>(e6, 3);
@@ -303,27 +303,27 @@ TEST(basic_archetype_registry, create_multiple_different_archetypes_with_removes
     reg.assign_or_replace<long long>(e6, 1);
 
     ASSERT_EQ(reg.get<int>(e1), 1);
-    ASSERT_EQ(reg.get<float>(e1), 3.14f);
+    ASSERT_EQ(reg.get<float>(e1), 3.14F);
     ASSERT_EQ(reg.get<int>(e2), 2);
-    ASSERT_EQ(reg.get<float>(e2), 6.28f);
+    ASSERT_EQ(reg.get<float>(e2), 6.28F);
     ASSERT_EQ(reg.get<char>(e2), 'c');
     ASSERT_EQ(reg.get<int>(e3), 3);
-    ASSERT_EQ(reg.get<float>(e3), 9.42f);
+    ASSERT_EQ(reg.get<float>(e3), 9.42F);
     ASSERT_EQ(reg.get<char>(e3), 'd');
     ASSERT_EQ(reg.get<double>(e3), 1.0);
     ASSERT_EQ(reg.get<int>(e4), 4);
-    ASSERT_EQ(reg.get<float>(e4), 12.56f);
+    ASSERT_EQ(reg.get<float>(e4), 12.56F);
     ASSERT_EQ(reg.get<char>(e4), 'e');
     ASSERT_EQ(reg.get<double>(e4), 2.0);
     ASSERT_EQ(reg.get<short>(e4), 1);
     ASSERT_EQ(reg.get<int>(e5), 5);
-    ASSERT_EQ(reg.get<float>(e5), 15.70f);
+    ASSERT_EQ(reg.get<float>(e5), 15.70F);
     ASSERT_EQ(reg.get<char>(e5), 'f');
     ASSERT_EQ(reg.get<double>(e5), 3.0);
     ASSERT_EQ(reg.get<short>(e5), 2);
     ASSERT_EQ(reg.get<long>(e5), 1);
     ASSERT_EQ(reg.get<int>(e6), 6);
-    ASSERT_EQ(reg.get<float>(e6), 18.84f);
+    ASSERT_EQ(reg.get<float>(e6), 18.84F);
     ASSERT_EQ(reg.get<char>(e6), 'g');
     ASSERT_EQ(reg.get<double>(e6), 4.0);
     ASSERT_EQ(reg.get<short>(e6), 3);
@@ -394,7 +394,7 @@ TEST(basic_archetype_registry, each_single_component)
 
     int sum = 0;
 
-    auto func = [&sum](int i) { sum += i; };
+    auto func = [&sum](int i) -> void { sum += i; };
     reg.each(func);
 
     ASSERT_EQ(21, sum);
@@ -427,9 +427,9 @@ TEST(basic_archetype_registry, each_single_component_no_match)
 
     // Each on a lambda that doesn't match the entity
     float sum = 0;
-    auto func = [&sum](float f) { sum += f; };
+    auto func = [&sum](float f) -> void { sum += f; };
     reg.each(func);
-    ASSERT_EQ(0.0f, sum);
+    ASSERT_EQ(0.0F, sum);
 }
 
 TEST(basic_archetype_registry, each_multiple_components_single_component_match)
@@ -443,44 +443,44 @@ TEST(basic_archetype_registry, each_multiple_components_single_component_match)
     auto e5 = reg.create<int, float>();
     auto e6 = reg.create<int, float>();
     reg.assign_or_replace<int>(e1, 1);
-    reg.assign_or_replace<float>(e1, 3.14f);
+    reg.assign_or_replace<float>(e1, 3.14F);
     reg.assign_or_replace<int>(e2, 2);
-    reg.assign_or_replace<float>(e2, 6.28f);
+    reg.assign_or_replace<float>(e2, 6.28F);
     reg.assign_or_replace<int>(e3, 3);
-    reg.assign_or_replace<float>(e3, 9.42f);
+    reg.assign_or_replace<float>(e3, 9.42F);
     reg.assign_or_replace<int>(e4, 4);
-    reg.assign_or_replace<float>(e4, 12.56f);
+    reg.assign_or_replace<float>(e4, 12.56F);
     reg.assign_or_replace<int>(e5, 5);
-    reg.assign_or_replace<float>(e5, 15.70f);
+    reg.assign_or_replace<float>(e5, 15.70F);
     reg.assign_or_replace<int>(e6, 6);
-    reg.assign_or_replace<float>(e6, 18.84f);
+    reg.assign_or_replace<float>(e6, 18.84F);
     // Check to make sure each entity has the correct value
     ASSERT_EQ(1, reg.get<int>(e1));
-    ASSERT_EQ(3.14f, reg.get<float>(e1));
+    ASSERT_EQ(3.14F, reg.get<float>(e1));
     ASSERT_EQ(2, reg.get<int>(e2));
-    ASSERT_EQ(6.28f, reg.get<float>(e2));
+    ASSERT_EQ(6.28F, reg.get<float>(e2));
     ASSERT_EQ(3, reg.get<int>(e3));
-    ASSERT_EQ(9.42f, reg.get<float>(e3));
+    ASSERT_EQ(9.42F, reg.get<float>(e3));
     ASSERT_EQ(4, reg.get<int>(e4));
-    ASSERT_EQ(12.56f, reg.get<float>(e4));
+    ASSERT_EQ(12.56F, reg.get<float>(e4));
     ASSERT_EQ(5, reg.get<int>(e5));
-    ASSERT_EQ(15.70f, reg.get<float>(e5));
+    ASSERT_EQ(15.70F, reg.get<float>(e5));
     ASSERT_EQ(6, reg.get<int>(e6));
-    ASSERT_EQ(18.84f, reg.get<float>(e6));
+    ASSERT_EQ(18.84F, reg.get<float>(e6));
 
     // Each on a lambda that matches the entity
     int sum = 0;
 
-    auto func = [&sum](int i) { sum += i; };
+    auto func = [&sum](int i) -> void { sum += i; };
     reg.each(func);
 
     ASSERT_EQ(21, sum);
 
-    float fsum = 0.0f;
-    auto func2 = [&fsum](float f) { fsum += f; };
+    float fsum = 0.0F;
+    auto func2 = [&fsum](float f) -> void { fsum += f; };
     reg.each(func2);
 
-    ASSERT_FLOAT_EQ(65.94f, fsum);
+    ASSERT_FLOAT_EQ(65.94F, fsum);
 }
 
 TEST(basic_archetype_registry, each_multiple_components_with_multiple_match_and_extra_components)
@@ -494,53 +494,53 @@ TEST(basic_archetype_registry, each_multiple_components_with_multiple_match_and_
     auto e5 = reg.create<int, float, char>();
     auto e6 = reg.create<int, float, char>();
     reg.assign_or_replace<int>(e1, 1);
-    reg.assign_or_replace<float>(e1, 3.14f);
+    reg.assign_or_replace<float>(e1, 3.14F);
     reg.assign_or_replace<char>(e1, 'a');
     reg.assign_or_replace<int>(e2, 2);
-    reg.assign_or_replace<float>(e2, 6.28f);
+    reg.assign_or_replace<float>(e2, 6.28F);
     reg.assign_or_replace<char>(e2, 'b');
     reg.assign_or_replace<int>(e3, 3);
-    reg.assign_or_replace<float>(e3, 9.42f);
+    reg.assign_or_replace<float>(e3, 9.42F);
     reg.assign_or_replace<char>(e3, 'c');
     reg.assign_or_replace<int>(e4, 4);
-    reg.assign_or_replace<float>(e4, 12.56f);
+    reg.assign_or_replace<float>(e4, 12.56F);
     reg.assign_or_replace<char>(e4, 'd');
     reg.assign_or_replace<int>(e5, 5);
-    reg.assign_or_replace<float>(e5, 15.70f);
+    reg.assign_or_replace<float>(e5, 15.70F);
     reg.assign_or_replace<char>(e5, 'e');
     reg.assign_or_replace<int>(e6, 6);
-    reg.assign_or_replace<float>(e6, 18.84f);
+    reg.assign_or_replace<float>(e6, 18.84F);
     reg.assign_or_replace<char>(e6, 'f');
     // Check to make sure each entity has the correct value
     ASSERT_EQ(1, reg.get<int>(e1));
-    ASSERT_EQ(3.14f, reg.get<float>(e1));
+    ASSERT_EQ(3.14F, reg.get<float>(e1));
     ASSERT_EQ('a', reg.get<char>(e1));
     ASSERT_EQ(2, reg.get<int>(e2));
-    ASSERT_EQ(6.28f, reg.get<float>(e2));
+    ASSERT_EQ(6.28F, reg.get<float>(e2));
     ASSERT_EQ('b', reg.get<char>(e2));
     ASSERT_EQ(3, reg.get<int>(e3));
-    ASSERT_EQ(9.42f, reg.get<float>(e3));
+    ASSERT_EQ(9.42F, reg.get<float>(e3));
     ASSERT_EQ('c', reg.get<char>(e3));
     ASSERT_EQ(4, reg.get<int>(e4));
-    ASSERT_EQ(12.56f, reg.get<float>(e4));
+    ASSERT_EQ(12.56F, reg.get<float>(e4));
     ASSERT_EQ('d', reg.get<char>(e4));
     ASSERT_EQ(5, reg.get<int>(e5));
-    ASSERT_EQ(15.70f, reg.get<float>(e5));
+    ASSERT_EQ(15.70F, reg.get<float>(e5));
     ASSERT_EQ(6, reg.get<int>(e6));
-    ASSERT_EQ(18.84f, reg.get<float>(e6));
+    ASSERT_EQ(18.84F, reg.get<float>(e6));
 
     // Each on a lambda that matches the entity
     int isum = 0;
-    float fsum = 0.0f;
+    float fsum = 0.0F;
 
-    auto func = [&isum, &fsum](int i, float f) {
+    auto func = [&isum, &fsum](int i, float f) -> void {
         isum += i;
         fsum += f;
     };
 
     reg.each(func);
     ASSERT_EQ(21, isum);
-    ASSERT_FLOAT_EQ(65.94f, fsum);
+    ASSERT_FLOAT_EQ(65.94F, fsum);
 }
 
 TEST(basic_archetype_registry, each_has_single_component_test_against_multiple)
@@ -554,13 +554,13 @@ TEST(basic_archetype_registry, each_has_single_component_test_against_multiple)
     reg.assign_or_replace<int>(e1, 1);
     reg.assign_or_replace<int>(e2, 2);
 
-    float fsum = 0.0f;
+    float fsum = 0.0F;
 
-    auto func = [&fsum](float f) { fsum += f; };
+    auto func = [&fsum](float f) -> void { fsum += f; };
 
     reg.each(func);
 
-    ASSERT_EQ(0.0f, fsum);
+    ASSERT_EQ(0.0F, fsum);
 }
 
 TEST(basic_archetype_registry, create_entity_emit_event)
@@ -570,9 +570,9 @@ TEST(basic_archetype_registry, create_entity_emit_event)
 
     auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
 
-    [[maybe_unused]] const auto subscription_handle = events.dispatcher<tempest::ecs::entity_created_event<tempest::ecs::entity>>().subscribe([&event_entity](auto evt) -> void {
-        event_entity = evt.entity;
-    });
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::entity_created_event<tempest::ecs::entity>>().subscribe(
+            [&event_entity](auto evt) -> void { event_entity = evt.entity; });
 
     const auto created_entity = reg.create();
     ASSERT_EQ(created_entity, event_entity);
@@ -585,9 +585,9 @@ TEST(basic_archetype_registry, destroy_entity_emit_event)
 
     auto event_entity = tempest::ecs::entity{tempest::ecs::tombstone};
 
-    [[maybe_unused]] const auto subscription_handle = events.dispatcher<tempest::ecs::entity_destroyed_event<tempest::ecs::entity>>().subscribe([&event_entity](auto evt) -> void {
-        event_entity = evt.entity;
-    });
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::entity_destroyed_event<tempest::ecs::entity>>().subscribe(
+            [&event_entity](auto evt) -> void { event_entity = evt.entity; });
 
     const auto created_entity = reg.create();
     reg.destroy(created_entity);
@@ -604,12 +604,12 @@ TEST(basic_archetype_registry, component_added_emit_event)
 
     constexpr auto component_value = 42;
 
-    [[maybe_unused]] const auto subscription_handle = events
-        .dispatcher<tempest::ecs::component_added_event<tempest::ecs::entity, int>>()
-        .subscribe([&event_entity, &event_component_value](auto evt) -> void {
-            event_entity = evt.entity;
-            event_component_value = evt.component;
-        });
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::component_added_event<tempest::ecs::entity, int>>().subscribe(
+            [&event_entity, &event_component_value](auto evt) -> void {
+                event_entity = evt.entity;
+                event_component_value = evt.component;
+            });
 
     const auto created_entity = reg.create();
     reg.assign_or_replace(created_entity, component_value);
@@ -630,13 +630,13 @@ TEST(basic_archetype_registry, component_replaced_emit_event)
     constexpr auto old_component_value = 42;
     constexpr auto new_component_value = 84;
 
-    [[maybe_unused]] const auto subscription_handle = events
-        .dispatcher<tempest::ecs::component_replaced_event<tempest::ecs::entity, int>>()
-        .subscribe([&event_entity, &event_old_component_value, &event_new_component_value](auto evt) -> void {
-            event_entity = evt.entity;
-            event_old_component_value = evt.old_component;
-            event_new_component_value = evt.new_component;
-        });
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::component_replaced_event<tempest::ecs::entity, int>>().subscribe(
+            [&event_entity, &event_old_component_value, &event_new_component_value](auto evt) -> void {
+                event_entity = evt.entity;
+                event_old_component_value = evt.old_component;
+                event_new_component_value = evt.new_component;
+            });
 
     const auto created_entity = reg.create();
     reg.assign_or_replace(created_entity, old_component_value);
@@ -657,12 +657,12 @@ TEST(basic_archetype_registry, component_removed_emit_event)
 
     constexpr auto component_value = 42;
 
-    [[maybe_unused]] const auto subscription_handle = events
-        .dispatcher<tempest::ecs::component_removed_event<tempest::ecs::entity, int>>()
-        .subscribe([&event_entity, &event_component_value](auto evt) -> void {
-            event_entity = evt.entity;
-            event_component_value = evt.component;
-        });
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::component_removed_event<tempest::ecs::entity, int>>().subscribe(
+            [&event_entity, &event_component_value](auto evt) -> void {
+                event_entity = evt.entity;
+                event_component_value = evt.component;
+            });
 
     const auto created_entity = reg.create();
     reg.assign_or_replace(created_entity, component_value);
@@ -682,16 +682,16 @@ TEST(basic_archetype_registry, component_removed_emit_event_with_multiple_compon
 
     constexpr auto component_value = 42;
 
-    [[maybe_unused]] const auto subscription_handle = events
-        .dispatcher<tempest::ecs::component_removed_event<tempest::ecs::entity, int>>()
-        .subscribe([&event_entity, &event_component_value](auto evt) -> void {
-            event_entity = evt.entity;
-            event_component_value = evt.component;
-        });
+    [[maybe_unused]] const auto subscription_handle =
+        events.dispatcher<tempest::ecs::component_removed_event<tempest::ecs::entity, int>>().subscribe(
+            [&event_entity, &event_component_value](auto evt) -> void {
+                event_entity = evt.entity;
+                event_component_value = evt.component;
+            });
 
     const auto created_entity = reg.create<int, float>();
     reg.assign_or_replace(created_entity, component_value);
-    reg.assign_or_replace(created_entity, 3.14f);
+    reg.assign_or_replace(created_entity, 3.14F);
     reg.remove<int>(created_entity);
 
     ASSERT_EQ(created_entity, event_entity);

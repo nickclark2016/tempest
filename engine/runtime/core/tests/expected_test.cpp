@@ -12,7 +12,7 @@ TEST(expected, default_constructor)
 TEST(expected, copy_constructor)
 {
     tempest::expected<int, int> e(tempest::unexpect);
-    tempest::expected<int, int> e2(e);
+    const tempest::expected<int, int>& e2(e);
 
     EXPECT_FALSE(e2.has_value());
 }
@@ -44,7 +44,7 @@ TEST(expected, error_construction)
 TEST(expected, copy_assignment)
 {
     tempest::expected<int, int> e(tempest::unexpect);
-    tempest::expected<int, int> e2 = e;
+    const tempest::expected<int, int>& e2 = e;
 
     EXPECT_FALSE(e2.has_value());
 }
@@ -108,7 +108,7 @@ TEST(expected, error_or_with_error)
 TEST(expected, and_then_with_value)
 {
     tempest::expected<int, int> e(10);
-    auto e2 = e.and_then([](int value) { return tempest::expected<int, int>(value * 2); });
+    auto e2 = e.and_then([](int value) -> tempest::expected<int, int> { return tempest::expected<int, int>(value * 2); });
     EXPECT_TRUE(e2.has_value());
     EXPECT_EQ(*e2, 20);
 }
@@ -116,7 +116,7 @@ TEST(expected, and_then_with_value)
 TEST(expected, and_then_with_value_return_error)
 {
     tempest::expected<int, int> e(10);
-    auto e2 = e.and_then([](int) { return tempest::expected<int, int>(tempest::unexpected(42)); });
+    auto e2 = e.and_then([](int) -> tempest::expected<int, int> { return tempest::expected<int, int>(tempest::unexpected(42)); });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 42);
 }
@@ -124,7 +124,7 @@ TEST(expected, and_then_with_value_return_error)
 TEST(expected, and_then_with_error)
 {
     tempest::expected<int, int> e(tempest::unexpected(42));
-    auto e2 = e.and_then([](int value) { return tempest::expected<int, int>(value * 2); });
+    auto e2 = e.and_then([](int value) -> tempest::expected<int, int> { return tempest::expected<int, int>(value * 2); });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 42);
 }
@@ -132,7 +132,7 @@ TEST(expected, and_then_with_error)
 TEST(expected, transform_with_value)
 {
     tempest::expected<int, int> e(10);
-    auto e2 = e.transform([](int value) { return value * 2; });
+    auto e2 = e.transform([](int value) -> int { return value * 2; });
     EXPECT_TRUE(e2.has_value());
     EXPECT_EQ(*e2, 20);
 }
@@ -140,7 +140,7 @@ TEST(expected, transform_with_value)
 TEST(expected, transform_with_error)
 {
     tempest::expected<int, int> e(tempest::unexpected(42));
-    auto e2 = e.transform([](int value) { return value * 2; });
+    auto e2 = e.transform([](int value) -> int { return value * 2; });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 42);
 }
@@ -148,7 +148,7 @@ TEST(expected, transform_with_error)
 TEST(expected, or_else_with_value)
 {
     tempest::expected<int, int> e(10);
-    auto e2 = e.or_else([](int) { return tempest::expected<int, int>(42); });
+    auto e2 = e.or_else([](int) -> tempest::expected<int, int> { return tempest::expected<int, int>(42); });
     EXPECT_TRUE(e2.has_value());
     EXPECT_EQ(*e2, 10);
 }
@@ -156,7 +156,7 @@ TEST(expected, or_else_with_value)
 TEST(expected, or_else_with_error)
 {
     tempest::expected<int, int> e(tempest::unexpected(42));
-    auto e2 = e.or_else([](int) { return tempest::expected<int, int>(84); });
+    auto e2 = e.or_else([](int) -> tempest::expected<int, int> { return tempest::expected<int, int>(84); });
     EXPECT_TRUE(e2.has_value());
     EXPECT_EQ(*e2, 84);
 }
@@ -164,7 +164,7 @@ TEST(expected, or_else_with_error)
 TEST(expected, or_else_with_error_return_error)
 {
     tempest::expected<int, int> e(tempest::unexpected(42));
-    auto e2 = e.or_else([](int err) { return tempest::expected<int, int>(tempest::unexpected(err + 1)); });
+    auto e2 = e.or_else([](int err) -> tempest::expected<int, int> { return tempest::expected<int, int>(tempest::unexpected(err + 1)); });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 43);
 }
@@ -172,7 +172,7 @@ TEST(expected, or_else_with_error_return_error)
 TEST(expected, transform_error_with_value)
 {
     tempest::expected<int, int> e(10);
-    auto e2 = e.transform_error([](int err) { return err + 1; });
+    auto e2 = e.transform_error([](int err) -> int { return err + 1; });
     EXPECT_TRUE(e2.has_value());
     EXPECT_EQ(*e2, 10);
 }
@@ -180,7 +180,7 @@ TEST(expected, transform_error_with_value)
 TEST(expected, transform_error_with_error)
 {
     tempest::expected<int, int> e(tempest::unexpected(42));
-    auto e2 = e.transform_error([](int err) { return err + 1; });
+    auto e2 = e.transform_error([](int err) -> int { return err + 1; });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 43);
 }
@@ -241,7 +241,7 @@ TEST(expected_void, error_construction)
 TEST(expected_void, copy_constructor)
 {
     tempest::expected<void, int> e(tempest::unexpected(42));
-    tempest::expected<void, int> e2(e);
+    const tempest::expected<void, int>& e2(e);
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 42);
 }
@@ -277,7 +277,7 @@ TEST(expected_void, error_or_with_error)
 TEST(expected_void, and_then_with_value)
 {
     tempest::expected<void, int> e;
-    auto e2 = e.and_then([]() { return tempest::expected<int, int>(42); });
+    auto e2 = e.and_then([]() -> tempest::expected<int, int> { return tempest::expected<int, int>(42); });
     EXPECT_TRUE(e2.has_value());
     EXPECT_EQ(*e2, 42);
 }
@@ -285,7 +285,7 @@ TEST(expected_void, and_then_with_value)
 TEST(expected_void, and_then_with_value_return_unexpected)
 {
     tempest::expected<void, int> e;
-    auto e2 = e.and_then([]() { return tempest::expected<int, int>(tempest::unexpected(42)); });
+    auto e2 = e.and_then([]() -> tempest::expected<int, int> { return tempest::expected<int, int>(tempest::unexpected(42)); });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 42);
 }
@@ -293,7 +293,7 @@ TEST(expected_void, and_then_with_value_return_unexpected)
 TEST(expected_void, and_then_with_error)
 {
     tempest::expected<void, int> e(tempest::unexpected(42));
-    auto e2 = e.and_then([]() { return tempest::expected<int, int>(42); });
+    auto e2 = e.and_then([]() -> tempest::expected<int, int> { return tempest::expected<int, int>(42); });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 42);
 }
@@ -301,7 +301,7 @@ TEST(expected_void, and_then_with_error)
 TEST(expected_void, transform_with_value)
 {
     tempest::expected<void, int> e;
-    auto e2 = e.transform([]() { return 42; });
+    auto e2 = e.transform([]() -> int { return 42; });
     EXPECT_TRUE(e2.has_value());
     EXPECT_EQ(*e2, 42);
 }
@@ -309,7 +309,7 @@ TEST(expected_void, transform_with_value)
 TEST(expected_void, transform_with_error)
 {
     tempest::expected<void, int> e(tempest::unexpected(42));
-    auto e2 = e.transform([]() { return 42; });
+    auto e2 = e.transform([]() -> int { return 42; });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 42);
 }
@@ -317,14 +317,14 @@ TEST(expected_void, transform_with_error)
 TEST(expected_void, or_else_with_value)
 {
     tempest::expected<void, int> e;
-    auto e2 = e.or_else([](int) { return tempest::expected<void, int>(); });
+    auto e2 = e.or_else([](int) -> tempest::expected<void, int> { return {}; });
     EXPECT_TRUE(e2.has_value());
 }
 
 TEST(expected_void, or_else_with_error)
 {
     tempest::expected<void, int> e(tempest::unexpected(42));
-    auto e2 = e.or_else([](int) { return tempest::expected<void, int>(tempest::unexpected(84)); });
+    auto e2 = e.or_else([](int) -> tempest::expected<void, int> { return tempest::expected<void, int>(tempest::unexpected(84)); });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 84);
 }
@@ -332,7 +332,7 @@ TEST(expected_void, or_else_with_error)
 TEST(expected_void, or_else_with_error_return_error)
 {
     tempest::expected<void, int> e(tempest::unexpected(42));
-    auto e2 = e.or_else([](int err) { return tempest::expected<void, int>(tempest::unexpected(err + 1)); });
+    auto e2 = e.or_else([](int err) -> tempest::expected<void, int> { return tempest::expected<void, int>(tempest::unexpected(err + 1)); });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 43);
 }
@@ -340,14 +340,14 @@ TEST(expected_void, or_else_with_error_return_error)
 TEST(expected_void, transform_error_with_value)
 {
     tempest::expected<void, int> e;
-    auto e2 = e.transform_error([](int err) { return err + 1; });
+    auto e2 = e.transform_error([](int err) -> int { return err + 1; });
     EXPECT_TRUE(e2.has_value());
 }
 
 TEST(expected_void, transform_error_with_error)
 {
     tempest::expected<void, int> e(tempest::unexpected(42));
-    auto e2 = e.transform_error([](int err) { return err + 1; });
+    auto e2 = e.transform_error([](int err) -> int { return err + 1; });
     EXPECT_FALSE(e2.has_value());
     EXPECT_EQ(e2.error(), 43);
 }
@@ -397,8 +397,8 @@ TEST(expected, visit_value_void_return)
     auto e = tempest::expected<char, int>{'c'};
     auto called = false;
 
-    tempest::visit([&](auto c) {
-        if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(c)>, char>)
+    tempest::visit([&](auto c) -> auto {
+        if constexpr (tempest::is_same_v<tempest::remove_cvref_t<decltype(c)>, char>)
         {
             called = true;
             EXPECT_EQ(c, 'c');
@@ -413,8 +413,8 @@ TEST(expected, visit_error_void_return)
     auto e = tempest::expected<char, int>{tempest::unexpected(42)};
     auto called = false;
 
-    tempest::visit([&](auto err) {
-        if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(err)>, int>)
+    tempest::visit([&](auto err) -> auto {
+        if constexpr (tempest::is_same_v<tempest::remove_cvref_t<decltype(err)>, int>)
         {
             called = true;
             EXPECT_EQ(err, 42);
@@ -428,15 +428,8 @@ TEST(expected, visit_value_with_return)
 {
     auto e = tempest::expected<char, int>{'c'};
 
-    const auto result = tempest::visit([&](auto c) {
-        if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(c)>, char>)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+    const auto result = tempest::visit([&](auto c) -> auto {
+        return static_cast<bool>(tempest::is_same_v<tempest::remove_cvref_t<decltype(c)>, char>);
     }, e);
 
     EXPECT_TRUE(result);
@@ -446,8 +439,8 @@ TEST(expected, visit_error_with_return)
 {
     auto e = tempest::expected<char, int>{tempest::unexpected(42)};
 
-    const auto result = tempest::visit([&](auto err) {
-        if constexpr (std::is_same_v<tempest::remove_cvref_t<decltype(err)>, int>)
+    const auto result = tempest::visit([&](auto err) -> auto {
+        if constexpr (tempest::is_same_v<tempest::remove_cvref_t<decltype(err)>, int>)
         {
             return err;
         }
@@ -464,12 +457,12 @@ TEST(expected, visit_value_with_return_callable_object)
 {
     struct Callable
     {
-        char operator()(char c) const
+        auto operator()(char c) const -> char
         {
             return c;
         }
 
-        char operator()(int) const
+        auto operator()(int /*unused*/) const -> char
         {
             return 'i';
         }
@@ -485,11 +478,11 @@ TEST(expected, visit_error_with_return_callable_object)
 {
     struct Callable
     {
-        int operator()(char) const
+        auto operator()(char /*unused*/) const -> int
         {
             return -1;
         }
-        int operator()(int err) const
+        auto operator()(int err) const -> int
         {
             return err;
         }
@@ -505,7 +498,7 @@ TEST(expected_void, visit_value_void_return)
     auto e = tempest::expected<void, int>{};
     auto called = false;
 
-    tempest::visit([&](auto...) { called = true; }, e);
+    tempest::visit([&](auto...) -> auto { called = true; }, e);
 
     EXPECT_TRUE(called);
 }
@@ -514,12 +507,12 @@ TEST(expected_void, visit_error_with_return_callable_object)
 {
     struct Callable
     {
-        int operator()() const
+        auto operator()() const -> int
         {
             return -1;
         }
 
-        int operator()(int err) const
+        auto operator()(int err) const -> int
         {
             return err;
         }
@@ -535,12 +528,12 @@ TEST(expected_void, visit_value_with_return_callable_object)
 {
     struct Callable
     {
-        int operator()() const
+        auto operator()() const -> int
         {
             return 42;
         }
 
-        int operator()(int) const
+        auto operator()(int /*unused*/) const -> int
         {
             return -1;
         }

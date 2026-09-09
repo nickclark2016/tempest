@@ -4,7 +4,7 @@
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
 
-#include <numeric>
+#include <tempest/algorithm.hpp>
 
 TEST(span, default_construct_dynamic)
 {
@@ -42,7 +42,7 @@ TEST(span, construct_from_pointer)
 TEST(span, construct_from_array)
 {
     int arr[10];
-    std::fill(std::begin(arr), std::end(arr), 42);
+    tempest::fill(tempest::begin(arr), tempest::end(arr), 42);
 
     tempest::span<int> s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -100,7 +100,7 @@ TEST(span, construct_from_const_std_array)
 TEST(span, static_length_from_array)
 {
     int arr[10];
-    std::fill(std::begin(arr), std::end(arr), 42);
+    tempest::fill(tempest::begin(arr), tempest::end(arr), 42);
 
     tempest::span<int, 10> s(arr);
     EXPECT_EQ(s.size(), 10);
@@ -225,7 +225,7 @@ TEST(span, subspan)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);
@@ -247,7 +247,7 @@ TEST(span, subspan_static)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);
@@ -269,7 +269,7 @@ TEST(span, subspan_static_dynamic)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);
@@ -291,7 +291,7 @@ TEST(span, subspan_dynamic_static)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);
@@ -313,7 +313,7 @@ TEST(span, first_dynamic)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);
@@ -335,7 +335,7 @@ TEST(span, first_static)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);
@@ -357,7 +357,7 @@ TEST(span, last_dynamic)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);
@@ -379,7 +379,7 @@ TEST(span, last_static)
 {
     // fill vector with increasing values
     tempest::vector<int> v(10);
-    std::iota(v.begin(), v.end(), 0);
+    tempest::iota(v.begin(), v.end(), 0);
 
     // create a span from the vector
     tempest::span<int> s(v);

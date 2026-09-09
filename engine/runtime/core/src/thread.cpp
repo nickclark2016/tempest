@@ -2,8 +2,9 @@
 
 #include <tempest/exception.hpp>
 
-#if defined(TEMPEST_POSIX_THREADS)
+#ifdef TEMPEST_POSIX_THREADS
 #include <sched.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 
@@ -25,7 +26,7 @@ namespace tempest
         }
     }
 
-    thread& thread::operator=(thread&& other) noexcept
+    auto thread::operator=(thread&& other) noexcept -> thread&
     {
         if (&other == this)
         {
@@ -42,9 +43,9 @@ namespace tempest
         return *this;
     }
 
-    bool thread::joinable() const noexcept
+    auto thread::joinable() const noexcept -> bool
     {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         return _handle.id != 0;
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
         // Check if a pthread is joinable
@@ -54,9 +55,9 @@ namespace tempest
 #endif
     }
 
-    thread::id thread::get_id() const noexcept
+    auto thread::get_id() const noexcept -> thread::id
     {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         return id{_handle.id};
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
         // Get the pthread id
@@ -73,7 +74,7 @@ namespace tempest
             terminate();
         }
 
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         if (_handle.id == GetCurrentThreadId())
         {
             terminate();
@@ -85,7 +86,7 @@ namespace tempest
         }
 
         auto result = CloseHandle(_handle.handle);
-        if (!result)
+        if (result == 0)
         {
             terminate();
         }
@@ -113,9 +114,9 @@ namespace tempest
             terminate();
         }
 
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         // Release the OS handle
-        if (!CloseHandle(_handle.handle))
+        if (CloseHandle(_handle.handle) == 0)
         {
             terminate();
         }
@@ -128,9 +129,9 @@ namespace tempest
         _handle = {};
     }
 
-    typename thread::native_handle_type thread::native_handle() noexcept
+    auto thread::native_handle() noexcept -> thread::native_handle_type
     {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         return _handle.handle;
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
         return _handle;
@@ -145,9 +146,9 @@ namespace tempest
         swap(_handle, other._handle);
     }
 
-    unsigned int thread::hardware_concurrency() noexcept
+    auto thread::hardware_concurrency() noexcept -> unsigned int
     {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         SYSTEM_INFO sysinfo;
         GetSystemInfo(&sysinfo);
         return sysinfo.dwNumberOfProcessors;
@@ -161,9 +162,9 @@ namespace tempest
 
     namespace this_thread
     {
-        thread::id get_id() noexcept
+        auto get_id() noexcept -> thread::id
         {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
             return thread::id{static_cast<detail::thread_handle>(GetCurrentThreadId())};
 #elif defined(TEMPEST_POSIX_THREADS)
             return thread::id{pthread_self()};
@@ -174,10 +175,25 @@ namespace tempest
 
         void yield() noexcept
         {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
             SwitchToThread();
 #elif defined(TEMPEST_POSIX_THREADS)
             sched_yield(); // pthread_yield is deprecated in favor of sched_yield
+#else
+#error "Unsupported platform"
+#endif
+        }
+
+        void sleep_for_nanoseconds(uint64_t ns) noexcept
+        {
+#ifdef TEMPEST_WIN_THREADS
+            auto ms = static_cast<DWORD>((ns + 999999) / 1000000);
+            Sleep(ms);
+#elif defined(TEMPEST_POSIX_THREADS)
+            struct timespec req;
+            req.tv_sec = static_cast<time_t>(ns / 1000000000);
+            req.tv_nsec = static_cast<long>(ns % 1000000000);
+            nanosleep(&req, nullptr);
 #else
 #error "Unsupported platform"
 #endif

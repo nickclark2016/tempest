@@ -3,6 +3,7 @@
 
 #include <tempest/api.hpp>
 #include <tempest/bit.hpp>
+#include <tempest/chrono.hpp>
 #include <tempest/compare.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
@@ -10,14 +11,14 @@
 #include <tempest/tuple.hpp>
 #include <tempest/type_traits.hpp>
 
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <process.h>
 
-#if defined(small)
+#ifdef small
 #undef small
 #endif
 
@@ -35,7 +36,7 @@ namespace tempest
 {
     namespace detail
     {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         using thread_handle = uint32_t;
         using native_handle_type = void*;
 
@@ -67,21 +68,21 @@ namespace tempest
 
         ~thread() noexcept;
 
-        thread& operator=(thread&& other) noexcept;
+        auto operator=(thread&& other) noexcept -> thread&;
 
-        bool joinable() const noexcept;
-        id get_id() const noexcept;
+        [[nodiscard]] auto joinable() const noexcept -> bool;
+        [[nodiscard]] auto get_id() const noexcept -> id;
 
         void join();
         void detach();
         void swap(thread& other) noexcept;
 
-        native_handle_type native_handle() noexcept;
+        auto native_handle() noexcept -> native_handle_type;
 
-        static unsigned int hardware_concurrency() noexcept;
+        static auto hardware_concurrency() noexcept -> unsigned int;
 
       private:
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
         template <typename Tup, size_t... Indices>
         static unsigned int __stdcall _invoke_proc(void* raw_vals) noexcept
         {
@@ -92,13 +93,13 @@ namespace tempest
         }
 
         template <typename Tup, size_t... Indices>
-        [[nodiscard]] static constexpr auto _get_invoke_proc(tempest::index_sequence<Indices...>) noexcept
+        [[nodiscard]] static constexpr auto _get_invoke_proc(tempest::index_sequence<Indices...> /*unused*/) noexcept
         {
             return &_invoke_proc<Tup, Indices...>;
         }
 
         template <typename Fn, typename... Args>
-        detail::thread_id _start(Fn&& fn, Args&&... args)
+        auto _start(Fn&& fn, Args&&... args) -> detail::thread_id
         {
             using tuple_type = tempest::tuple<decay_t<Fn>, decay_t<Args>...>;
             auto decayed_copy =
@@ -106,7 +107,7 @@ namespace tempest
             constexpr auto invoke_proc_ptr =
                 _get_invoke_proc<tuple_type>(tempest::make_index_sequence<1 + sizeof...(Args)>{});
 
-            uint32_t thread_id;
+            uint32_t thread_id = 0;
             auto handle = _beginthreadex(nullptr, 0, invoke_proc_ptr, decayed_copy.get(), 0, &thread_id);
 
             detail::thread_id result = {
@@ -167,12 +168,11 @@ namespace tempest
 #endif
     };
 
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
 
     template <typename Fn, typename... Args>
-    thread::thread(Fn&& fn, Args&&... args)
+    thread::thread(Fn&& fn, Args&&... args) : _handle(_start(tempest::forward<Fn>(fn), tempest::forward<Args>(args)...))
     {
-        _handle = _start(tempest::forward<Fn>(fn), tempest::forward<Args>(args)...);
     }
 
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
@@ -188,8 +188,19 @@ namespace tempest
 
     namespace this_thread
     {
-        TEMPEST_API thread::id get_id() noexcept;
+        TEMPEST_API auto get_id() noexcept -> thread::id;
         TEMPEST_API void yield() noexcept;
+        TEMPEST_API void sleep_for_nanoseconds(uint64_t ns) noexcept;
+
+        template <typename Rep, typename Period>
+        void sleep_for(const chrono::duration<Rep, Period>& rel_time)
+        {
+            auto ns = chrono::duration_cast<chrono::nanoseconds>(rel_time).count();
+            if (ns > 0)
+            {
+                sleep_for_nanoseconds(static_cast<uint64_t>(ns));
+            }
+        }
     }; // namespace this_thread
 
     class TEMPEST_API thread::id
@@ -201,9 +212,9 @@ namespace tempest
         {
         }
 
-        constexpr strong_ordering operator<=>(const id& other) const noexcept
+        constexpr auto operator<=>(const id& other) const noexcept -> strong_ordering
         {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
             return three_way_comparer<uintptr_t>::compare(_handle, other._handle);
 #elif defined(TEMPEST_POSIX_THREADS) // pthreads
             // Cast to uintptr_t to allow comparison
@@ -214,9 +225,9 @@ namespace tempest
 #endif
         }
 
-        constexpr uint64_t to_uint64() const noexcept
+        [[nodiscard]] constexpr auto to_uint64() const noexcept -> uint64_t
         {
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
             return static_cast<uint64_t>(_handle);
 #elif defined(TEMPEST_POSIX_THREADS)
             return static_cast<uint64_t>(tempest::bit_cast<uintptr_t>(_handle));
@@ -228,13 +239,13 @@ namespace tempest
       private:
         detail::thread_handle _handle{};
 
-        friend thread::id this_thread::get_id() noexcept;
+        friend auto this_thread::get_id() noexcept -> thread::id;
     };
 
     template <>
     struct hash<thread::id>
     {
-        size_t operator()(thread::id id) const noexcept
+        auto operator()(thread::id id) const noexcept -> size_t
         {
             return hash<uint64_t>()(id.to_uint64());
         }

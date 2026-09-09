@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <tempest/int.hpp>
 #include <tempest/sparse.hpp>
 
 using namespace tempest::ecs;
@@ -80,7 +81,7 @@ TEST(sparse_set, iterator)
 {
     sparse_set s;
 
-    for (std::uint32_t i = 0u; i < 4096; ++i)
+    for (tempest::uint32_t i = 0U; i < 4096; ++i)
     {
         auto inv_i = 4095 - i;
 
@@ -93,7 +94,7 @@ TEST(sparse_set, iterator)
     
     auto it = s.begin();
 
-    for (std::uint32_t i = 0u; i < 4096; ++i)
+    for (tempest::uint32_t i = 0U; i < 4096; ++i)
     {
         entity e = entity_traits<entity>::construct(0, i);
         ASSERT_EQ(e, *it);
@@ -101,7 +102,7 @@ TEST(sparse_set, iterator)
         ++it;
     }
 
-    std::uint32_t i = 0;
+    tempest::uint32_t i = 0;
     for (auto e : s)
     {
         entity ent = entity_traits<entity>::construct(0, i++);
@@ -184,10 +185,10 @@ TEST(sparse_map, iterator)
 {
     sparse_map<int> s;
 
-    for (std::uint32_t i = 0u; i < 4096; ++i)
+    for (tempest::uint32_t i = 0U; i < 4096; ++i)
     {
         entity e = entity_traits<entity>::construct(i, 0);
-        s.insert(e, 4095u - i);
+        s.insert(e, 4095U - i);
     }
 
     ASSERT_EQ(s.size(), 4096);
@@ -195,19 +196,19 @@ TEST(sparse_map, iterator)
     
     auto it = s.begin();
 
-    for (std::uint32_t i = 0u; i < 4096; ++i)
+    for (tempest::uint32_t i = 0U; i < 4096; ++i)
     {
-        entity e = entity_traits<entity>::construct(4095u - i, 0);
+        entity e = entity_traits<entity>::construct(4095U - i, 0);
         ASSERT_EQ(e, it->first);
         ASSERT_EQ(it->second, i);
 
         ++it;
     }
 
-    std::uint32_t i = 0;
+    tempest::uint32_t i = 0;
     for (auto [e, v] : s)
     {
-        entity ent = entity_traits<entity>::construct(4095u - i, 0);
+        entity ent = entity_traits<entity>::construct(4095U - i, 0);
         ASSERT_EQ(e, ent);
         ASSERT_EQ(v, i);
         

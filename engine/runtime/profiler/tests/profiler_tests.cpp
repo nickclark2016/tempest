@@ -1,6 +1,8 @@
 #include <tempest/algorithm.hpp>
 #include <tempest/chrono.hpp>
 #include <tempest/profiler/profiler.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 
@@ -374,7 +376,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_odd.p95_ns, 950.0);
     ASSERT_DOUBLE_EQ(stats_odd.p99_ns, 990.0);
     // Population variance for 0, 10, ..., 1000 is 100 * (100 * 102 / 12) = 85,000 -> StdDev = sqrt(85000)
-    ASSERT_NEAR(stats_odd.std_deviation_ns, std::sqrt(85000.0), 1e-6);
+    ASSERT_NEAR(stats_odd.std_deviation_ns, ::sqrt(85000.0), 1e-6);
 
     // 4. Setup & Act: Even distribution (4 samples: 100, 200, 300, 400 ns)
     auto zones_even = tempest::vector<tempest::profiler::zone_record>{};
@@ -395,7 +397,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_even.p90_ns, 370.0);
     ASSERT_DOUBLE_EQ(stats_even.p95_ns, 385.0);
     ASSERT_DOUBLE_EQ(stats_even.p99_ns, 397.0);
-    ASSERT_NEAR(stats_even.std_deviation_ns, std::sqrt(12500.0), 1e-6);
+    ASSERT_NEAR(stats_even.std_deviation_ns, ::sqrt(12500.0), 1e-6);
 
     // 6. Assert: Empty and single-element distributions
     const auto stats_empty = tempest::profiler::compute_zone_statistics({});
@@ -627,7 +629,7 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     ASSERT_EQ(roundtrip.metrics[0].samples.size(), 1000U);
 
     // Clean up temporary disk file
-    std::remove(file_path);
+    ::remove(file_path);
 }
 
 //==============================================================================
@@ -755,7 +757,7 @@ TEST(profiler_tests, json_chrome_trace_export_and_json_validation)
     ASSERT_TRUE(found_metric);
 
     // Clean up temporary file
-    std::remove(json_file);
+    ::remove(json_file);
 }
 
 //==============================================================================
@@ -913,14 +915,14 @@ namespace
             return true;
         }
 
-        auto send_string(std::string_view s) -> bool
+        auto send_string(tempest::string_view s) -> bool
         {
             return send_all(s.data(), s.size());
         }
 
-        auto receive_all(size_t timeout_ms = 1000) -> std::string
+        auto receive_all(size_t timeout_ms = 1000) -> tempest::string
         {
-            auto out = std::string{};
+            auto out = tempest::string{};
             if (sock == invalid_s)
             {
                 return out;
@@ -949,7 +951,7 @@ namespace
                     break;
                 }
                 out.append(buffer, static_cast<size_t>(bytes));
-                if (std::cmp_less(bytes, sizeof(buffer)))
+                if (static_cast<size_t>(bytes) < sizeof(buffer))
                 {
                     timeout_ms = 50;
                 }
@@ -1025,11 +1027,11 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/html; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("<!DOCTYPE html>"), std::string::npos);
-        ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
-        ASSERT_NE(response.find("id=\"timeline-canvas\""), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/html; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "<!DOCTYPE html>"));
+        ASSERT_TRUE(tempest::contains(response, "Tempest Engine Profiler"));
+        ASSERT_TRUE(tempest::contains(response, "id=\"timeline-canvas\""));
     }
 
     // 3. Act & Assert: HTTP GET /index.html
@@ -1039,9 +1041,9 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /index.html HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/html; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("<!DOCTYPE html>"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/html; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "<!DOCTYPE html>"));
     }
 
     // 4. Act & Assert: HTTP GET /app.js
@@ -1051,11 +1053,11 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /app.js HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1500);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: application/javascript; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
-        ASSERT_NE(response.find("initWebSocket"), std::string::npos);
-        ASSERT_NE(response.find("renderTimeline"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: application/javascript; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "Tempest Engine Profiler"));
+        ASSERT_TRUE(tempest::contains(response, "initWebSocket"));
+        ASSERT_TRUE(tempest::contains(response, "renderTimeline"));
         EXPECT_GT(response.size(), 65536U);
     }
 
@@ -1066,10 +1068,10 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /styles.css HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/css; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("--accent-purple"), std::string::npos);
-        ASSERT_NE(response.find(".timeline-section"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/css; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "--accent-purple"));
+        ASSERT_TRUE(tempest::contains(response, ".timeline-section"));
     }
 
     // 6. Act & Assert: HTTP GET /status
@@ -1079,9 +1081,9 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /status HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: application/json; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("\"status\":\"ok\""), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: application/json; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "\"status\":\"ok\""));
     }
 
     // 7. Act & Assert: HTTP GET /unknown_path (404)
@@ -1091,8 +1093,8 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /unknown_path HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 404 Not Found"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/plain; charset=utf-8"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 404 Not Found"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/plain; charset=utf-8"));
     }
 
     server.stop();
@@ -1125,7 +1127,7 @@ TEST(profiler_tests, rfc6455_websocket_handshake_key_computation)
 TEST(profiler_tests, websocket_frame_encoding_and_decoding)
 {
     // 1. Setup: Test short text frame (len <= 125)
-    const auto text_sample = std::string{"Hello, Tempest Profiler RFC-6455!"};
+    const auto text_sample = tempest::string{"Hello, Tempest Profiler RFC-6455!"};
     auto text_bytes = tempest::vector<tempest::byte>{};
     for (auto c : text_sample)
     {
@@ -1222,8 +1224,8 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
 
     ASSERT_TRUE(client.send_string(ws_handshake_req));
     const auto hs_response = client.receive_all(500);
-    ASSERT_NE(hs_response.find("HTTP/1.1 101 Switching Protocols"), std::string::npos);
-    ASSERT_NE(hs_response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), std::string::npos);
+    ASSERT_TRUE(tempest::contains(hs_response, "HTTP/1.1 101 Switching Protocols"));
+    ASSERT_TRUE(tempest::contains(hs_response, "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="));
 
     // Allow worker thread to register connection
     tempest::this_thread::yield();
@@ -1231,7 +1233,7 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
 
     // 3. Act & Assert: Command "start_capture"
     {
-        const auto cmd = std::string{R"({"command":"start_capture"})"};
+        const auto cmd = tempest::string{R"({"command":"start_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -1247,15 +1249,16 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(resp_str.find("\"command\":\"start_capture\""), std::string::npos);
-        ASSERT_NE(resp_str.find("\"recording\":true"), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(resp_str, "\"command\":\"start_capture\""));
+        ASSERT_TRUE(tempest::contains(resp_str, "\"recording\":true"));
         ASSERT_TRUE(session.is_enabled());
     }
 
     // 4. Act & Assert: Command "query_stats"
     {
-        const auto cmd = std::string{R"({"command":"query_stats"})"};
+        const auto cmd = tempest::string{R"({"command":"query_stats"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -1271,9 +1274,10 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(resp_str.find("\"type\":\"stats\""), std::string::npos);
-        ASSERT_NE(resp_str.find("EngineInit"), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(resp_str, "\"type\":\"stats\""));
+        ASSERT_TRUE(tempest::contains(resp_str, "EngineInit"));
     }
 
     // 5. Act & Assert: Telemetry packet serialization & server broadcast
@@ -1293,10 +1297,10 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             tempest::profiler::marker_record{.timestamp_ns = 2500000, .name = "SwapchainPresent"});
 
         const auto json_payload = tempest::profiler::serialize_telemetry_frame_json(t_frame);
-        const auto json_payload_std = std::string(json_payload.data(), json_payload.size());
-        ASSERT_NE(json_payload_std.find("\"frame_index\":42"), std::string::npos);
-        ASSERT_NE(json_payload_std.find("\"name\":\"RenderFrame\""), std::string::npos);
-        ASSERT_NE(json_payload_std.find("\"name\":\"SwapchainPresent\""), std::string::npos);
+        const auto json_payload_std = tempest::string(json_payload.data(), json_payload.size());
+        ASSERT_TRUE(tempest::contains(json_payload_std, "\"frame_index\":42"));
+        ASSERT_TRUE(tempest::contains(json_payload_std, "\"name\":\"RenderFrame\""));
+        ASSERT_TRUE(tempest::contains(json_payload_std, "\"name\":\"SwapchainPresent\""));
 
         // Broadcast to connected client
         server.broadcast_telemetry(t_frame);
@@ -1306,13 +1310,13 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(bc_raw.data()), bc_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto bc_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(bc_str.find("\"frame_index\":42"), std::string::npos);
+        auto bc_str = tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(bc_str, "\"frame_index\":42"));
     }
 
     // 6. Act & Assert: Command "stop_capture"
     {
-        const auto cmd = std::string{R"({"command":"stop_capture"})"};
+        const auto cmd = tempest::string{R"({"command":"stop_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -1328,9 +1332,10 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(resp_str.find("\"command\":\"stop_capture\""), std::string::npos);
-        ASSERT_NE(resp_str.find("\"recording\":false"), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(resp_str, "\"command\":\"stop_capture\""));
+        ASSERT_TRUE(tempest::contains(resp_str, "\"recording\":false"));
         ASSERT_FALSE(session.is_enabled());
     }
 
@@ -1385,9 +1390,9 @@ TEST(profiler_tests, http_request_query_string_stripping)
         const auto* const req = "GET /index.html?token=test1234&v=1.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
         ASSERT_TRUE(client.send_string(req));
         const auto resp = client.receive_all(500);
-        EXPECT_NE(resp.find("HTTP/1.1 200 OK"), std::string::npos);
-        EXPECT_NE(resp.find("Content-Type: text/html"), std::string::npos);
-        EXPECT_NE(resp.find("Tempest Engine Profiler"), std::string::npos);
+        EXPECT_TRUE(tempest::contains(resp, "HTTP/1.1 200 OK"));
+        EXPECT_TRUE(tempest::contains(resp, "Content-Type: text/html"));
+        EXPECT_TRUE(tempest::contains(resp, "Tempest Engine Profiler"));
     }
 
     // 3. Act & Assert: Request /?v=1
@@ -1397,8 +1402,8 @@ TEST(profiler_tests, http_request_query_string_stripping)
         const auto* const req = "GET /?v=1 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
         ASSERT_TRUE(client.send_string(req));
         const auto resp = client.receive_all(500);
-        EXPECT_NE(resp.find("HTTP/1.1 200 OK"), std::string::npos);
-        EXPECT_NE(resp.find("Content-Type: text/html"), std::string::npos);
+        EXPECT_TRUE(tempest::contains(resp, "HTTP/1.1 200 OK"));
+        EXPECT_TRUE(tempest::contains(resp, "Content-Type: text/html"));
     }
 
     server.stop();
@@ -1440,9 +1445,9 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
     const auto resp2 = client2.receive_all(500);
     const auto resp3 = client3.receive_all(500);
 
-    ASSERT_NE(resp1.find("HTTP/1.1 101"), std::string::npos);
-    ASSERT_NE(resp2.find("HTTP/1.1 101"), std::string::npos);
-    ASSERT_NE(resp3.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp1, "HTTP/1.1 101"));
+    ASSERT_TRUE(tempest::contains(resp2, "HTTP/1.1 101"));
+    ASSERT_TRUE(tempest::contains(resp3, "HTTP/1.1 101"));
 
     tempest::this_thread::yield();
     EXPECT_EQ(server.connected_client_count(), 3U);
@@ -1472,15 +1477,12 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
     ASSERT_TRUE(d2.has_value());
     ASSERT_TRUE(d3.has_value());
 
-    EXPECT_NE(
-        std::string(reinterpret_cast<const char*>(d1->payload.data()), d1->payload.size()).find("\"frame_index\":100"),
-        std::string::npos);
-    EXPECT_NE(
-        std::string(reinterpret_cast<const char*>(d2->payload.data()), d2->payload.size()).find("\"frame_index\":100"),
-        std::string::npos);
-    EXPECT_NE(
-        std::string(reinterpret_cast<const char*>(d3->payload.data()), d3->payload.size()).find("\"frame_index\":100"),
-        std::string::npos);
+    EXPECT_TRUE(tempest::contains(
+        tempest::string(reinterpret_cast<const char*>(d1->payload.data()), d1->payload.size()), "\"frame_index\":100"));
+    EXPECT_TRUE(tempest::contains(
+        tempest::string(reinterpret_cast<const char*>(d2->payload.data()), d2->payload.size()), "\"frame_index\":100"));
+    EXPECT_TRUE(tempest::contains(
+        tempest::string(reinterpret_cast<const char*>(d3->payload.data()), d3->payload.size()), "\"frame_index\":100"));
 
     server.stop();
 }
@@ -1701,7 +1703,7 @@ TEST(profiler_tests, nonblocking_socket_broadcast_handling)
 
     ASSERT_TRUE(client.send_string(ws_req));
     const auto resp = client.receive_all(500);
-    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
     tempest::this_thread::yield();
     EXPECT_EQ(server.connected_client_count(), 1U);
@@ -1746,10 +1748,10 @@ TEST(profiler_tests, large_payload_nonblocking_send_all)
 
     ASSERT_TRUE(client.send_string(ws_req));
     const auto resp = client.receive_all(500);
-    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
     // 3. Act: Broadcast a 128KB large payload
-    auto large_text = std::string(128 * 1024, 'A');
+    auto large_text = tempest::string(128 * 1024, 'A');
     server.broadcast_text(tempest::string_view{large_text.data(), large_text.size()});
 
     // 4. Assert: Client receives the complete WebSocket payload without truncation
@@ -1834,18 +1836,18 @@ TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
 
     // 4. Act: Serialize telemetry frame to JSON
     const auto json_str = tempest::profiler::serialize_telemetry_frame_json(telemetry);
-    const auto json_std = std::string(json_str.data(), json_str.size());
+    const auto json_std = tempest::string(json_str.data(), json_str.size());
 
     // 5. Assert: JSON payload contains GPU track zones with all pipeline metrics
-    EXPECT_NE(json_std.find("\"gpu_tracks\":["), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"PBROpaquePass\""), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Input Assembly Vertices\",\"value\":1200.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Input Assembly Primitives\",\"value\":400.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Vertex Shader Invocations\",\"value\":1200.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Clipping Input Primitives\",\"value\":400.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Clipping Output Primitives\",\"value\":380.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Fragment Shader Invocations\",\"value\":50000.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Compute Shader Invocations\",\"value\":1024.000"), std::string::npos);
+    EXPECT_TRUE(tempest::contains(json_std, "\"gpu_tracks\":["));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"PBROpaquePass\""));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Input Assembly Vertices\",\"value\":1200.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Input Assembly Primitives\",\"value\":400.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Vertex Shader Invocations\",\"value\":1200.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Clipping Input Primitives\",\"value\":400.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Clipping Output Primitives\",\"value\":380.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Fragment Shader Invocations\",\"value\":50000.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Compute Shader Invocations\",\"value\":1024.000"));
 }
 
 //==============================================================================
@@ -2163,7 +2165,7 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
                                    "Sec-WebSocket-Version: 13\r\n\r\n";
         ASSERT_TRUE(client.send_string(ws_req));
         const auto resp = client.receive_all(500);
-        ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
         EXPECT_EQ(server.connected_client_count(), 1U);
 
         // Send unmasked text frame from client
@@ -2212,11 +2214,11 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
                                "Sec-WebSocket-Version: 13\r\n\r\n";
     ASSERT_TRUE(client.send_string(ws_req));
     const auto resp = client.receive_all(500);
-    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
     // 2. Act & Assert: Send "stop_capture" with extra metadata mentioning "start_capture"
     {
-        const auto cmd = std::string{R"({"command":"stop_capture","note":"do not start_capture"})"};
+        const auto cmd = tempest::string{R"({"command":"stop_capture","note":"do not start_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -2231,14 +2233,15 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
         auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        EXPECT_NE(resp_str.find("\"command\":\"stop_capture\""), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        EXPECT_TRUE(tempest::contains(resp_str, "\"command\":\"stop_capture\""));
         EXPECT_FALSE(session.is_enabled());
     }
 
     // 3. Act & Assert: Send unknown command "restart_capture" (containing "start_capture" as substring)
     {
-        const auto cmd = std::string{R"({"command":"restart_capture"})"};
+        const auto cmd = tempest::string{R"({"command":"restart_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -2253,8 +2256,9 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
         auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        EXPECT_NE(resp_str.find("\"unknown_command\""), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        EXPECT_TRUE(tempest::contains(resp_str, "\"unknown_command\""));
         EXPECT_FALSE(session.is_enabled());
     }
 

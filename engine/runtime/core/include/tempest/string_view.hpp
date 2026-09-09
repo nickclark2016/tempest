@@ -473,7 +473,8 @@ namespace tempest
     }
 
     template <typename CharT, typename Traits>
-    constexpr auto starts_with(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept -> bool
+    constexpr auto starts_with(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept
+        -> bool
     {
         return starts_with(sv.begin(), sv.end(), str.begin(), str.end());
     }
@@ -506,6 +507,30 @@ namespace tempest
     constexpr auto ends_with(basic_string_view<CharT, Traits> sv, It first, It last) noexcept -> bool
     {
         return ends_with(sv.begin(), sv.end(), first, last);
+    }
+
+    template <typename CharT, typename Traits>
+    constexpr auto contains(basic_string_view<CharT, Traits> sv, CharT ch) noexcept -> bool
+    {
+        return contains(sv.begin(), sv.end(), ch);
+    }
+
+    template <typename CharT, typename Traits>
+    constexpr auto contains(basic_string_view<CharT, Traits> sv, const CharT* str) noexcept -> bool
+    {
+        return contains(sv.begin(), sv.end(), str, Traits::length(str));
+    }
+
+    template <typename CharT, typename Traits>
+    constexpr auto contains(basic_string_view<CharT, Traits> sv, basic_string_view<CharT, Traits> str) noexcept -> bool
+    {
+        return contains(sv.begin(), sv.end(), str.begin(), str.end());
+    }
+
+    template <typename CharT, typename Traits, typename It>
+    constexpr auto contains(basic_string_view<CharT, Traits> sv, It first, It last) noexcept -> bool
+    {
+        return contains(sv.begin(), sv.end(), first, last);
     }
 
     template <typename CharT, typename Traits>

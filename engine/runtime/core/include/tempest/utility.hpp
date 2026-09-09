@@ -207,6 +207,7 @@ namespace tempest
     template <typename T1, typename T2>
     constexpr void pair<T1, T2>::swap(pair& other) noexcept(is_nothrow_swappable_v<T1> && is_nothrow_swappable_v<T2>)
     {
+        using tempest::swap;
         swap(first, other.first);
         swap(second, other.second);
     }

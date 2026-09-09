@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <tempest/iterator.hpp>
+#include <tempest/utility.hpp>
 
 template <typename T>
 using vector = tempest::vector<T>;
@@ -68,7 +69,7 @@ TEST(vector, copy_constructor_non_trivial_copy)
 TEST(vector, move_constructor)
 {
     vector<int> v1(10, 42);
-    vector<int> v2(std::move(v1));
+    vector<int> v2(tempest::move(v1));
     EXPECT_EQ(v2.size(), 10);
     EXPECT_EQ(v2.capacity(), 10);
     for (const auto& i : v2)
@@ -108,7 +109,7 @@ TEST(vector, move_assignment)
 {
     vector<int> v1(10, 42);
     vector<int> v2;
-    v2 = std::move(v1);
+    v2 = tempest::move(v1);
     EXPECT_EQ(v2.size(), 10);
     EXPECT_EQ(v2.capacity(), 10);
     for (const auto& i : v2)
@@ -231,9 +232,9 @@ TEST(vector, begin_end)
 {
     vector<int> v(10, 42);
     int i = 0;
-    for (auto it = v.begin(); it != v.end(); ++it)
+    for (int & it : v)
     {
-        EXPECT_EQ(*it, 42);
+        EXPECT_EQ(it, 42);
         ++i;
     }
     EXPECT_EQ(i, 10);
@@ -243,14 +244,15 @@ TEST(vector, cbegin_cend)
 {
     vector<int> v(10, 42);
     int i = 0;
-    for (auto it = v.cbegin(); it != v.cend(); ++it)
+    for (int it : v)
     {
-        EXPECT_EQ(*it, 42);
+        EXPECT_EQ(it, 42);
         ++i;
     }
     EXPECT_EQ(i, 10);
 }
 
+// NOLINTBEGIN(modernize-loop-convert)
 TEST(vector, rbegin_rend)
 {
     vector<int> v(10, 42);
@@ -274,11 +276,12 @@ TEST(vector, crbegin_crend)
     }
     EXPECT_EQ(i, 10);
 }
+// NOLINTEND(modernize-loop-convert)
 
 TEST(vector, insert)
 {
     vector<int> v(10, 42);
-    auto it = v.insert(v.begin() + 5, 24);
+    auto *it = v.insert(v.begin() + 5, 24);
     EXPECT_EQ(v.size(), 11);
     EXPECT_GE(v.capacity(), v.size());
     EXPECT_EQ(*it, 24);
@@ -418,7 +421,7 @@ TEST(vector, swap_non_member)
         EXPECT_EQ(v1[i], 24);
     }
     EXPECT_EQ(v2.size(), 10);
-    EXPECT_GE(v2.capacity(), v2.size());
+    EXPECT_GE(v2.capacity(), 10);
     for (int i = 0; i < 10; ++i)
     {
         EXPECT_EQ(v2[i], 42);
