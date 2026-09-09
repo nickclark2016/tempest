@@ -1,52 +1,51 @@
 #include <tempest/flat_unordered_map.hpp>
 
-namespace tempest
-{
-    namespace detail
+
+    namespace tempest::detail
     {
-        uint8_t control_byte(uint8_t h2) noexcept
+        auto control_byte(uint8_t h2) noexcept -> uint8_t
         {
             // return the most significant bit
             return h2 & 0x80;
         }
 
-        uint8_t hash_byte(uint8_t h2) noexcept
+        auto hash_byte(uint8_t h2) noexcept -> uint8_t
         {
             // return the least significant 7 bits
             return h2 & 0x7F;
         }
 
-        bool is_empty(uint8_t entry) noexcept
+        auto is_empty(uint8_t entry) noexcept -> bool
         {
             return entry == empty_entry;
         }
 
-        bool is_deleted(uint8_t entry) noexcept
+        auto is_deleted(uint8_t entry) noexcept -> bool
         {
             return entry == deleted_entry;
         }
 
-        bool metadata_entry_strategy::is_empty(metadata_entry entry) const noexcept
+        auto metadata_entry_strategy::is_empty(metadata_entry entry) const noexcept -> bool
         {
             return entry == empty_entry;
         }
 
-        bool metadata_entry_strategy::is_full(metadata_entry entry) const noexcept
+        auto metadata_entry_strategy::is_full(metadata_entry entry) const noexcept -> bool
         {
             return entry != empty_entry && entry != deleted_entry;
         }
 
-        bool metadata_entry_strategy::is_deleted(metadata_entry entry) const noexcept
+        auto metadata_entry_strategy::is_deleted(metadata_entry entry) const noexcept -> bool
         {
             return entry == deleted_entry;
         }
 
-        bool metadata_group::any_empty() const noexcept
+        auto metadata_group::any_empty() const noexcept -> bool
         {
             return any_of(begin(entries), end(entries), is_empty);
         }
 
-        uint16_t metadata_group::match_byte(uint8_t h2) const noexcept
+        auto metadata_group::match_byte(uint8_t h2) const noexcept -> uint16_t
         {
             uint16_t result = 0;
 
@@ -61,10 +60,9 @@ namespace tempest
             return result;
         }
 
-        bool metadata_group::any_empty_or_deleted() const noexcept
+        auto metadata_group::any_empty_or_deleted() const noexcept -> bool
         {
             return any_of(begin(entries), end(entries),
-                               [](uint8_t entry) { return is_empty(entry) || is_deleted(entry); });
+                               [](uint8_t entry) -> bool { return is_empty(entry) || is_deleted(entry); });
         }
-    } // namespace detail
-} // namespace tempest
+    } // namespace tempest::detail

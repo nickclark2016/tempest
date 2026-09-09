@@ -19,7 +19,7 @@ namespace tempest
     } // namespace
 
     stack_allocator::stack_allocator(size_t bytes)
-        : _buffer{reinterpret_cast<byte*>(std::malloc(bytes))}, _capacity{bytes}
+        : _buffer{reinterpret_cast<byte*>(::malloc(bytes))}, _capacity{bytes}
     {
     }
 
@@ -98,7 +98,7 @@ namespace tempest
     {
         if (_buffer != nullptr)
         {
-            std::free(_buffer);
+            ::free(_buffer);
             _buffer = nullptr;
             _capacity = 0;
             _allocated_bytes = 0;
@@ -111,7 +111,7 @@ namespace tempest
     }
 
     heap_allocator::heap_allocator(size_t bytes)
-        : _memory{reinterpret_cast<byte*>(std::malloc(bytes))}, _max_size{bytes}
+        : _memory{reinterpret_cast<byte*>(::malloc(bytes))}, _max_size{bytes}
     {
         _tlsf_handle = tlsf_create_with_pool(_memory, _max_size);
     }
@@ -164,7 +164,7 @@ namespace tempest
         if (_memory != nullptr)
         {
             tlsf_destroy(_tlsf_handle);
-            std::free(_memory);
+            ::free(_memory);
 
             _tlsf_handle = nullptr;
             _memory = nullptr;
@@ -194,7 +194,7 @@ namespace tempest
 #ifdef _MSC_VER
         return _aligned_malloc(n, alignment);
 #else
-        return std::aligned_alloc(alignment, n);
+        return ::aligned_alloc(alignment, n);
 #endif
     }
 
@@ -203,7 +203,7 @@ namespace tempest
 #ifdef _MSC_VER
         _aligned_free(ptr);
 #else
-        std::free(ptr);
+        ::free(ptr);
 #endif
     }
 } // namespace tempest

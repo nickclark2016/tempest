@@ -8,8 +8,6 @@
 
 #include <clocale>
 #include <cstdlib>
-#include <iostream>
-#include <locale>
 #include <tempest/chrono.hpp>
 
 #ifdef _WIN32
@@ -45,19 +43,6 @@ namespace tempest
         if (::setlocale(LC_ALL, "en_US.UTF-8") == nullptr)
         {
             _logger.error("Failed to set locale to UTF-8. Logging may not work correctly.");
-        }
-
-        try
-        {
-            std::locale utf8_locale("en_US.UTF-8");
-            std::locale::global(utf8_locale);
-            std::cin.imbue(utf8_locale);
-            std::cout.imbue(utf8_locale);
-            std::cerr.imbue(utf8_locale);
-        }
-        catch (const std::runtime_error&)
-        {
-            _logger.error("Failed to set global locale to UTF-8. Logging may not work correctly.");
         }
 
 #ifdef _WIN32

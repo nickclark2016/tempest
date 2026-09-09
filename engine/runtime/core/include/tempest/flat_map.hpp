@@ -9,11 +9,21 @@
 
 #include <compare>
 #include <initializer_list>
-#include <iterator>
 #include <utility>
 
 namespace tempest
 {
+    template <typename T1, typename T2, typename U1, typename U2, template <typename> class TQual,
+              template <typename> class UQual>
+        requires requires {
+            typename common_reference_t<TQual<T1>, UQual<U1>>;
+            typename common_reference_t<TQual<T2>, UQual<U2>>;
+        }
+    struct basic_common_reference<pair<T1, T2>, pair<U1, U2>, TQual, UQual>
+    {
+        using type = pair<common_reference_t<TQual<T1>, UQual<U1>>, common_reference_t<TQual<T2>, UQual<U2>>>;
+    };
+
     namespace detail
     {
         template <typename K, typename V>
@@ -232,8 +242,8 @@ namespace tempest
         using difference_type = ptrdiff_t;
         using iterator = detail::flat_map_iterator<K, V>;
         using const_iterator = detail::flat_map_iterator<K, const V>;
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = tempest::reverse_iterator<iterator>;
+        using const_reverse_iterator = tempest::reverse_iterator<const_iterator>;
         using key_container_type = KeyContainer;
         using value_container_type = ValueContainer;
 
