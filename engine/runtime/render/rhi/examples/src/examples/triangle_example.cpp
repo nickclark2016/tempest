@@ -6,6 +6,9 @@
 
 namespace shaders::triangle
 {
+    using uint32_t = tempest::uint32_t;
+    using size_t = tempest::size_t;
+
     namespace vs
     {
 #include <triangle.vert.h>

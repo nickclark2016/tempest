@@ -6,6 +6,9 @@
 
 namespace shaders::triangle
 {
+    using uint32_t = tempest::uint32_t;
+    using size_t = tempest::size_t;
+
     namespace vs
     {
 #include <triangle.vert.h>
@@ -15,14 +18,16 @@ namespace shaders::triangle
     {
 #include <triangle.frag.h>
     } // namespace fs
+
 } // namespace shaders::triangle
 
+namespace shaders::animate::cs
+{
+    using uint32_t = tempest::uint32_t;
+    using size_t = tempest::size_t;
 
-    namespace shaders::animate::cs
-    {
 #include <animate.comp.h>
-    } // namespace shaders::animate::cs
-
+} // namespace shaders::animate::cs
 
 namespace tempest::rhi::examples
 {
@@ -59,17 +64,17 @@ namespace tempest::rhi::examples
         // 3-blade symmetric star geometry (9 vertices, 3 triangles)
         constexpr auto template_positions = array<vec2, 9>{
             // Blade 1 (Top)
-            vec2{.x=0.0F, .y=-0.65F},
-            vec2{.x=0.22F, .y=-0.05F},
-            vec2{.x=-0.22F, .y=-0.05F},
+            vec2{.x = 0.0F, .y = -0.65F},
+            vec2{.x = 0.22F, .y = -0.05F},
+            vec2{.x = -0.22F, .y = -0.05F},
             // Blade 2 (Bottom-Right)
-            vec2{.x=0.56F, .y=0.35F},
-            vec2{.x=0.05F, .y=0.25F},
-            vec2{.x=0.18F, .y=-0.15F},
+            vec2{.x = 0.56F, .y = 0.35F},
+            vec2{.x = 0.05F, .y = 0.25F},
+            vec2{.x = 0.18F, .y = -0.15F},
             // Blade 3 (Bottom-Left)
-            vec2{.x=-0.56F, .y=0.35F},
-            vec2{.x=-0.18F, .y=-0.15F},
-            vec2{.x=-0.05F, .y=0.25F},
+            vec2{.x = -0.56F, .y = 0.35F},
+            vec2{.x = -0.18F, .y = -0.15F},
+            vec2{.x = -0.05F, .y = 0.25F},
         };
 
         constexpr auto indices = array<uint16_t, 9>{
@@ -316,12 +321,13 @@ namespace tempest::rhi::examples
                     builder.read(compute_pass.output_pos, rhi::pipeline_stage::vertex, rhi::resource_access::read);
                 data.col =
                     builder.read(compute_pass.output_col, rhi::pipeline_stage::vertex, rhi::resource_access::read);
-                data.target = builder.set_color_attachment(0, render_graph::rg_color_attachment{
-                                                                  .texture = sc_tex,
-                                                                  .load_op = rhi::load_op::clear,
-                                                                  .store_op = rhi::store_op::store,
-                                                                  .clear_value = {.r=0.05F, .g=0.05F, .b=0.05F, .a=1.0F},
-                                                              });
+                data.target =
+                    builder.set_color_attachment(0, render_graph::rg_color_attachment{
+                                                        .texture = sc_tex,
+                                                        .load_op = rhi::load_op::clear,
+                                                        .store_op = rhi::store_op::store,
+                                                        .clear_value = {.r = 0.05F, .g = 0.05F, .b = 0.05F, .a = 1.0F},
+                                                    });
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const raster_pass_data& data,
