@@ -14,6 +14,7 @@ scoped.project('rhi-vk', function()
 
     includedirs {
         'include',
+        'src',
     }
 
     scoped.filter({
