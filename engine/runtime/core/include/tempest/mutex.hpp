@@ -93,7 +93,7 @@ namespace tempest
     class TEMPEST_API shared_mutex
     {
       public:
-#ifdef TEMPEST_WIN_THREADS
+#if defined(TEMPEST_WIN_THREADS)
         using native_handle_type = SRWLOCK;
 #elif defined(TEMPEST_POSIX_THREADS)
         using native_handle_type = pthread_rwlock_t;
@@ -103,7 +103,11 @@ namespace tempest
 
         constexpr shared_mutex() noexcept;
         shared_mutex(const shared_mutex&) = delete;
+#if defined(TEMPEST_WIN_THREADS)
         ~shared_mutex() = default;
+#elif defined(TEMPEST_POSIX_THREADS)
+        ~shared_mutex();
+#endif
 
         auto operator=(const shared_mutex&) -> shared_mutex& = delete;
 
@@ -274,7 +278,6 @@ namespace tempest
     inline unique_lock<Mutex>::unique_lock(mutex_type& m) : _mutex{&m}, _owns_lock(true)
     {
         _mutex->lock();
-        
     }
 
     template <lockable Mutex>
