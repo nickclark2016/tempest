@@ -4,6 +4,22 @@
 #include <tempest/api.hpp>
 #include <tempest/int.hpp>
 
+#if defined(__GNUC__) || defined(__clang__)
+namespace std
+{
+    struct source_location
+    {
+        struct __impl
+        {
+            const char* _M_file_name;
+            const char* _M_function_name;
+            unsigned int _M_line;
+            unsigned int _M_column;
+        };
+    };
+} // namespace std
+#endif
+
 namespace tempest
 {
     struct TEMPEST_API source_location
@@ -54,20 +70,12 @@ namespace tempest
 #elif defined(__GNUC__) || defined(__clang__)
     consteval auto source_location::current(decltype(__builtin_source_location()) ptr) noexcept -> source_location
     {
-        struct __builtin_source_location_layout
-        {
-            const char* _file_name;
-            const char* _function_name;
-            unsigned int _line;
-            unsigned int _column;
-        };
-
-        const auto* data = static_cast<const __builtin_source_location_layout*>(ptr);
+        const auto* data = static_cast<const std::source_location::__impl*>(ptr);
         source_location loc;
-        loc._impl._file = data->_file_name;
-        loc._impl._function = data->_function_name;
-        loc._impl._line = data->_line;
-        loc._impl._column = data->_column;
+        loc._impl._file = data->_M_file_name;
+        loc._impl._function = data->_M_function_name;
+        loc._impl._line = data->_M_line;
+        loc._impl._column = data->_M_column;
         return loc;
     }
 #endif
