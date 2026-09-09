@@ -1553,13 +1553,25 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     });
     chunks.push_back(tempest::move(chunk_cpu));
 
+    // CPU thread with 64-bit pointer address where bit 31 is set (e.g. Linux pthread_self in mmap region)
+    constexpr auto linux_ptr_tid = uint64_t{0x7FFF'8000'1234ULL};
+    auto chunk_linux_cpu = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk_linux_cpu->set_thread_id(linux_ptr_tid);
+    chunk_linux_cpu->add_zone(tempest::profiler::zone_record{
+        .start_ns = 900,
+        .end_ns = 2100,
+        .depth = 0,
+        .name = "WorkerJob",
+    });
+    chunks.push_back(tempest::move(chunk_linux_cpu));
+
     // 2. Act: Create capture session data from chunks
     const auto chunk_span =
         tempest::span<const tempest::unique_ptr<tempest::profiler::event_chunk>>{chunks.data(), chunks.size()};
     const auto capture = tempest::profiler::create_capture_from_chunks(chunk_span);
 
     // 3. Assert: Verify track classification and naming in capture session data
-    ASSERT_EQ(capture.tracks.size(), 5U);
+    ASSERT_EQ(capture.tracks.size(), 6U);
 
     // GPU: Graphics
     EXPECT_EQ(capture.tracks[0].track_id, 0x8000'0001ULL);
@@ -1586,10 +1598,15 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     EXPECT_EQ(capture.tracks[4].type, tempest::profiler::track_type::cpu_thread);
     EXPECT_EQ(capture.tracks[4].name, "Thread 42");
 
+    // CPU Thread (Linux 64-bit pointer with bit 31 set)
+    EXPECT_EQ(capture.tracks[5].track_id, linux_ptr_tid);
+    EXPECT_EQ(capture.tracks[5].type, tempest::profiler::track_type::cpu_thread);
+    EXPECT_EQ(capture.tracks[5].name, "Thread 140735340876340");
+
     // 4. Act & Assert: Convert to telemetry frame and verify segregation
     const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(1, capture);
     EXPECT_EQ(telemetry.gpu_tracks.size(), 4U);
-    EXPECT_EQ(telemetry.cpu_tracks.size(), 1U);
+    EXPECT_EQ(telemetry.cpu_tracks.size(), 2U);
 
     EXPECT_EQ(telemetry.gpu_tracks[0].name, "GPU: Graphics");
     EXPECT_EQ(telemetry.gpu_tracks[1].name, "GPU: Async Compute");
@@ -1597,6 +1614,7 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     EXPECT_EQ(telemetry.gpu_tracks[3].name, "GPU: Queue 7");
 
     EXPECT_EQ(telemetry.cpu_tracks[0].name, "Thread 42");
+    EXPECT_EQ(telemetry.cpu_tracks[1].name, "Thread 140735340876340");
 }
 
 /// @brief Verify GPU track IDs remain strictly within JavaScript safe integer range (53 bits, < 2^53).

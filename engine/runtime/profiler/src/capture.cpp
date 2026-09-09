@@ -37,7 +37,7 @@ namespace tempest::profiler
             if (target_track == nullptr)
             {
                 constexpr auto gpu_bit = uint64_t{0x8000'0000ULL};
-                const auto is_gpu = (tid & gpu_bit) != 0;
+                const auto is_gpu = (tid <= 0xFFFF'FFFFULL) && ((tid & gpu_bit) != 0);
                 auto name_buf = string{};
                 auto type = track_type::cpu_thread;
 

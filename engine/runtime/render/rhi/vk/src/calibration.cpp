@@ -24,7 +24,7 @@ namespace tempest::rhi::vk
 #if defined(TEMPEST_PLATFORM_WINDOWS) || defined(_WIN32)
           _host_time_domain{VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_EXT}
 #elif defined(TEMPEST_PLATFORM_LINUX) || defined(__linux__)
-          _host_time_domain{VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT}
+          _host_time_domain{VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT}
 #else
           _host_time_domain{VK_TIME_DOMAIN_DEVICE_EXT}
 #endif
@@ -53,7 +53,7 @@ namespace tempest::rhi::vk
                (((count % frequency) * nanoseconds_per_second) / frequency);
 #elif defined(TEMPEST_PLATFORM_LINUX) || defined(__linux__)
         struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+        clock_gettime(CLOCK_MONOTONIC, &ts);
         return static_cast<uint64_t>(ts.tv_sec) * nanoseconds_per_second + static_cast<uint64_t>(ts.tv_nsec);
 #else
         return static_cast<uint64_t>(tempest::chrono::duration_cast<tempest::chrono::nanoseconds>(

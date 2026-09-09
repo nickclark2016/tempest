@@ -139,7 +139,7 @@ TEST(files_test, file_truncation_on_overwrite)
 TEST(files_test, invalid_path_returns_error)
 {
     // 1. Setup: non-existent nested directory path without creating parents
-    auto test_path = fs::temp_directory_path() / R"(non_existent_dir_xyz_123\sub\file.bin)";
+    auto test_path = fs::temp_directory_path() / "non_existent_dir_xyz_123" / "sub" / "file.bin";
     auto data = tempest::vector<tempest::byte>(8, static_cast<tempest::byte>(1));
 
     // 2. Act
