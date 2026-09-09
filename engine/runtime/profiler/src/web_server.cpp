@@ -29,6 +29,7 @@ constexpr auto shutdown_send = SD_SEND;
 constexpr auto shutdown_both = SD_BOTH;
 #else
 #include <arpa/inet.h>
+#include <cerrno>
 #include <csignal>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -270,6 +271,11 @@ namespace tempest::profiler
             return sub_view(text, start, end - start);
         }
 
+        constexpr auto ascii_to_lower(char c) noexcept -> char
+        {
+            return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c;
+        }
+
         auto find_header_value(string_view header_str, string_view key_name) -> string_view
         {
             auto pos = size_t{0};
@@ -295,8 +301,7 @@ namespace tempest::profiler
                         auto match = true;
                         for (auto i = size_t{0}; i < key_name.size(); ++i)
                         {
-                            if (tolower(static_cast<unsigned char>(header_key[i])) !=
-                                tolower(static_cast<unsigned char>(key_name[i])))
+                            if (ascii_to_lower(header_key[i]) != ascii_to_lower(key_name[i]))
                             {
                                 match = false;
                                 break;
@@ -941,8 +946,7 @@ namespace tempest::profiler
         }
         else if (path == "/status" || path == "/health")
         {
-            constexpr const char* status_json = R"({"status":"ok","profiler_running":true})";
-            const auto json_len = strlen(status_json);
+            constexpr auto status_json = string_view{R"({"status":"ok","profiler_running":true})"};
             format_to(tempest::back_inserter(response),
                       "HTTP/1.1 200 OK\r\n"
                       "Content-Type: application/json; charset=utf-8\r\n"
@@ -950,12 +954,11 @@ namespace tempest::profiler
                       "Connection: close\r\n"
                       "\r\n"
                       "{}",
-                      json_len, status_json);
+                      status_json.size(), status_json);
         }
         else
         {
-            constexpr const char* not_found = "Not Found";
-            const auto nf_len = strlen(not_found);
+            constexpr auto not_found = string_view{"Not Found"};
             format_to(tempest::back_inserter(response),
                       "HTTP/1.1 404 Not Found\r\n"
                       "Content-Type: text/plain; charset=utf-8\r\n"
@@ -963,7 +966,7 @@ namespace tempest::profiler
                       "Connection: close\r\n"
                       "\r\n"
                       "{}",
-                      nf_len, not_found);
+                      not_found.size(), not_found);
         }
 
         send_all_nonblocking(static_cast<native_socket_t>(client_socket), response.data(), response.size());
