@@ -1139,7 +1139,8 @@ TEST(atomic_int32_test, fetch_and_seq_cst)
 
 TEST(atomic_int64_test, fetch_and)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
@@ -1148,7 +1149,8 @@ TEST(atomic_int64_test, fetch_and)
 
 TEST(atomic_int64_test, fetch_and_relaxed)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::relaxed);
 
@@ -1158,7 +1160,8 @@ TEST(atomic_int64_test, fetch_and_relaxed)
 
 TEST(atomic_int64_test, fetch_and_acquire)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::acquire);
 
@@ -1168,7 +1171,8 @@ TEST(atomic_int64_test, fetch_and_acquire)
 
 TEST(atomic_int64_test, fetch_and_acq_rel)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::acq_rel);
 
@@ -1178,7 +1182,8 @@ TEST(atomic_int64_test, fetch_and_acq_rel)
 
 TEST(atomic_int64_test, fetch_and_seq_cst)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::seq_cst);
 
@@ -1327,7 +1332,8 @@ TEST(atomic_int32_test, fetch_or_seq_cst)
 
 TEST(atomic_int64_test, fetch_or)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
@@ -1336,7 +1342,8 @@ TEST(atomic_int64_test, fetch_or)
 
 TEST(atomic_int64_test, fetch_or_relaxed)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                       tempest::memory_order::relaxed);
 
@@ -1346,7 +1353,8 @@ TEST(atomic_int64_test, fetch_or_relaxed)
 
 TEST(atomic_int64_test, fetch_or_acquire)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                       tempest::memory_order::acquire);
 
@@ -1356,7 +1364,8 @@ TEST(atomic_int64_test, fetch_or_acquire)
 
 TEST(atomic_int64_test, fetch_or_acq_rel)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                       tempest::memory_order::acq_rel);
 
@@ -1366,7 +1375,8 @@ TEST(atomic_int64_test, fetch_or_acq_rel)
 
 TEST(atomic_int64_test, fetch_or_seq_cst)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                       tempest::memory_order::seq_cst);
 
@@ -1515,7 +1525,8 @@ TEST(atomic_int32_test, fetch_xor_seq_cst)
 
 TEST(atomic_int64_test, fetch_xor)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
@@ -1524,7 +1535,8 @@ TEST(atomic_int64_test, fetch_xor)
 
 TEST(atomic_int64_test, fetch_xor_relaxed)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::relaxed);
 
@@ -1534,7 +1546,8 @@ TEST(atomic_int64_test, fetch_xor_relaxed)
 
 TEST(atomic_int64_test, fetch_xor_acquire)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::acquire);
 
@@ -1544,7 +1557,8 @@ TEST(atomic_int64_test, fetch_xor_acquire)
 
 TEST(atomic_int64_test, fetch_xor_acq_rel)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::acq_rel);
 
@@ -1554,7 +1568,8 @@ TEST(atomic_int64_test, fetch_xor_acq_rel)
 
 TEST(atomic_int64_test, fetch_xor_seq_cst)
 {
-    auto val = tempest::atomic<tempest::int64_t>{0b1010101010101010101010101010101010101010101010101010101010101010LL};
+    auto val = tempest::atomic<tempest::int64_t>{
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
     const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
                                        tempest::memory_order::seq_cst);
 
@@ -1705,7 +1720,7 @@ TEST(atomic_int16_test, wait_notify_all)
 
         auto workers = tempest::vector<tempest::thread>();
 
-        for (auto idx = 0; idx < total_workers; ++idx)
+        for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
         {
             workers.emplace_back([&]() -> void {
                 ready_count.fetch_add(1, tempest::memory_order::release);

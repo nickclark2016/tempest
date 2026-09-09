@@ -153,41 +153,49 @@ namespace tempest
                                           (static_cast<double>(Num2) / static_cast<double>(Den2));
         };
 
-        template <typename R1, typename R2>
-        struct ratio_less_impl
+        constexpr auto ratio_less_impl(intmax_t num1, intmax_t den1, intmax_t num2, intmax_t den2) noexcept -> bool
         {
-            static constexpr bool value = []() constexpr -> bool {
-                // Different signs
-                if constexpr ((R1::num < 0) != (R2::num < 0))
-                {
-                    return R1::num < R2::num;
-                }
-                // Same signs or zeros
-                // Compute quotient and remainder
-                constexpr intmax_t quot1 = R1::num / R1::den;
-                constexpr intmax_t quot2 = R2::num / R2::den;
-                constexpr intmax_t rem1 = R1::num % R1::den;
-                constexpr intmax_t rem2 = R2::num % R2::den;
+            // Different signs
+            if ((num1 < 0) != (num2 < 0))
+            {
+                return num1 < num2;
+            }
 
-                if constexpr (quot1 != quot2)
+            // If both negative, flip comparison: -a / b < -c / d <=> c / d < a / b
+            if (num1 < 0 && num2 < 0)
+            {
+                return ratio_less_impl(-num2, den2, -num1, den1);
+            }
+
+            // Both non-negative: compare quotients and recurse/loop on remainders
+            while (true)
+            {
+                const auto quot1 = num1 / den1;
+                const auto quot2 = num2 / den2;
+                if (quot1 != quot2)
                 {
                     return quot1 < quot2;
                 }
-                else if constexpr (rem1 == 0 || rem2 == 0)
+
+                const auto rem1 = num1 % den1;
+                const auto rem2 = num2 % den2;
+                if (rem1 == 0 || rem2 == 0)
                 {
                     return rem1 < rem2;
                 }
-                else
-                {
-                    // Recurse with inverted ratios: rem1 / Den1 < rem2 / Den2 <=> Den2 / rem2 < Den1 / rem1
-                    return ratio_less_impl<ratio<R2::den, rem2>, ratio<R1::den, rem1>>::value;
-                }
-            }();
-        };
+
+                // Invert with swap: rem1 / den1 < rem2 / den2 <=> den2 / rem2 < den1 / rem1
+                const auto prev_den1 = den1;
+                num1 = den2;
+                den1 = rem2;
+                num2 = prev_den1;
+                den2 = rem1;
+            }
+        }
     } // namespace detail
 
     template <typename R1, typename R2>
-    struct ratio_less : bool_constant<detail::ratio_less_impl<R1, R2>::value>
+    struct ratio_less : bool_constant<detail::ratio_less_impl(R1::num, R1::den, R2::num, R2::den)>
     {
     };
 

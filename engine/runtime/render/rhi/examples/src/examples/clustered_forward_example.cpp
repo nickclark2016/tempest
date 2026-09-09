@@ -268,7 +268,8 @@ namespace tempest::rhi::examples
                 _meshes.register_mesh(create_box_mesh({1.4F, 0.2F, 0.25F}, {0.80F, 0.75F, 0.70F, 1.0F}));
 
             // Instantiate Colonnade Columns along longitudinal sides
-            for (float side_z : {-2.2F, 2.2F})
+            const float side_zs[] = {-2.2F, 2.2F};
+            for (float side_z : side_zs)
             {
                 for (int x_idx = -6; x_idx <= 6; ++x_idx)
                 {
@@ -306,7 +307,8 @@ namespace tempest::rhi::examples
             // End Walls (along X = +/- 12.0m)
             auto wall_mesh_id =
                 _meshes.register_mesh(create_box_mesh({0.5F, 4.25F, 5.0F}, {0.70F, 0.68F, 0.65F, 1.0F}));
-            for (float x_wall : {-12.0F, 12.0F})
+            const float x_walls[] = {-12.0F, 12.0F};
+            for (float x_wall : x_walls)
             {
                 auto wall_ent = _registry.create();
                 _registry.assign(wall_ent, core::mesh_component{.mesh_id = wall_mesh_id});
