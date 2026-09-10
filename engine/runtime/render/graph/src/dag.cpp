@@ -7,9 +7,9 @@ namespace tempest::render_graph
 {
     auto dag_compiler::register_texture(const rg_texture_desc& desc) -> rg_texture_id
     {
-        const auto id = static_cast<uint32_t>(_textures.size());
+        const auto resource_id = static_cast<uint32_t>(_textures.size());
         _textures.push_back(registered_texture{
-            .id = id,
+            .id = resource_id,
             .desc = desc,
             .is_imported = false,
             .imported_handle = {},
@@ -17,23 +17,23 @@ namespace tempest::render_graph
         });
 
         return rg_texture_id{
-            .id = id,
+            .id = resource_id,
             .version = 0,
         };
     }
 
     auto dag_compiler::register_buffer(const rg_buffer_desc& desc) -> rg_buffer_id
     {
-        const auto id = static_cast<uint32_t>(_buffers.size());
+        const auto resource_id = static_cast<uint32_t>(_buffers.size());
         _buffers.push_back(registered_buffer{
-            .id = id,
+            .id = resource_id,
             .desc = desc,
             .is_imported = false,
             .imported_handle = {},
         });
 
         return rg_buffer_id{
-            .id = id,
+            .id = resource_id,
             .version = 0,
         };
     }
@@ -41,9 +41,9 @@ namespace tempest::render_graph
     auto dag_compiler::import_texture(rhi::texture_handle handle, rhi::texture_view_handle view,
                                       rhi::image_layout initial_layout) -> rg_texture_id
     {
-        const auto id = static_cast<uint32_t>(_textures.size());
+        const auto resource_id = static_cast<uint32_t>(_textures.size());
         _textures.push_back(registered_texture{
-            .id = id,
+            .id = resource_id,
             .desc = {},
             .is_imported = true,
             .imported_handle = handle,
@@ -52,7 +52,7 @@ namespace tempest::render_graph
         });
 
         return rg_texture_id{
-            .id = id,
+            .id = resource_id,
             .version = 0,
         };
     }
@@ -64,16 +64,16 @@ namespace tempest::render_graph
 
     auto dag_compiler::import_buffer(rhi::buffer_handle handle) -> rg_buffer_id
     {
-        const auto id = static_cast<uint32_t>(_buffers.size());
+        const auto resource_id = static_cast<uint32_t>(_buffers.size());
         _buffers.push_back(registered_buffer{
-            .id = id,
+            .id = resource_id,
             .desc = {},
             .is_imported = true,
             .imported_handle = handle,
         });
 
         return rg_buffer_id{
-            .id = id,
+            .id = resource_id,
             .version = 0,
         };
     }
@@ -93,6 +93,7 @@ namespace tempest::render_graph
         _passes.clear();
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     auto dag_compiler::compile() const -> expected<compiled_dag, dag_compile_error>
     {
         if (_passes.empty())
@@ -104,7 +105,7 @@ namespace tempest::render_graph
 
         // 1. Evaluate pass enablement and gather aliases from disabled passes
         auto pass_enabled = vector<bool>(_passes.size(), true);
-        for (size_t i = 0; i < _passes.size(); ++i)
+        for (auto i = size_t{0}; i < _passes.size(); ++i)
         {
             const auto& pass = _passes[i];
             if (pass.enable_condition && !pass.enable_condition())
@@ -122,30 +123,30 @@ namespace tempest::render_graph
         }
 
         // Transitive alias resolution
-        auto resolve_texture = [&](rg_texture_id id) -> rg_texture_id {
-            auto current = id;
+        auto resolve_texture = [&](rg_texture_id target_id) -> rg_texture_id {
+            auto current = target_id;
             while (true)
             {
-                auto it = result.resolved_texture_aliases.find(current);
-                if (it == result.resolved_texture_aliases.end() || it->second == current)
+                auto iter = result.resolved_texture_aliases.find(current);
+                if (iter == result.resolved_texture_aliases.end() || iter->second == current)
                 {
                     break;
                 }
-                current = it->second;
+                current = iter->second;
             }
             return current;
         };
 
-        auto resolve_buffer = [&](rg_buffer_id id) -> rg_buffer_id {
-            auto current = id;
+        auto resolve_buffer = [&](rg_buffer_id target_id) -> rg_buffer_id {
+            auto current = target_id;
             while (true)
             {
-                auto it = result.resolved_buffer_aliases.find(current);
-                if (it == result.resolved_buffer_aliases.end() || it->second == current)
+                auto iter = result.resolved_buffer_aliases.find(current);
+                if (iter == result.resolved_buffer_aliases.end() || iter->second == current)
                 {
                     break;
                 }
-                current = it->second;
+                current = iter->second;
             }
             return current;
         };
@@ -154,7 +155,7 @@ namespace tempest::render_graph
         auto texture_producer = flat_unordered_map<rg_texture_id, uint32_t>{};
         auto buffer_producer = flat_unordered_map<rg_buffer_id, uint32_t>{};
 
-        for (size_t i = 0; i < _passes.size(); ++i)
+        for (auto i = size_t{0}; i < _passes.size(); ++i)
         {
             if (!pass_enabled[i])
             {
@@ -181,7 +182,7 @@ namespace tempest::render_graph
         auto active_passes = vector<bool>(_passes.size(), false);
         auto work_queue = deque<uint32_t>{};
 
-        for (size_t i = 0; i < _passes.size(); ++i)
+        for (auto i = size_t{0}; i < _passes.size(); ++i)
         {
             if (pass_enabled[i] && _passes[i].is_sink)
             {
@@ -202,10 +203,10 @@ namespace tempest::render_graph
                 if (acc.type == access_type::read || acc.load_op == rhi::load_op::load || acc.texture.version > 0)
                 {
                     const auto resolved = resolve_texture(acc.texture);
-                    auto it = texture_producer.find(resolved);
-                    if (it != texture_producer.end())
+                    auto iter = texture_producer.find(resolved);
+                    if (iter != texture_producer.end())
                     {
-                        const auto prod_idx = it->second;
+                        const auto prod_idx = iter->second;
                         if (!active_passes[prod_idx])
                         {
                             active_passes[prod_idx] = true;
@@ -220,10 +221,10 @@ namespace tempest::render_graph
                 if (acc.type == access_type::read || acc.buffer.version > 0)
                 {
                     const auto resolved = resolve_buffer(acc.buffer);
-                    auto it = buffer_producer.find(resolved);
-                    if (it != buffer_producer.end())
+                    auto iter = buffer_producer.find(resolved);
+                    if (iter != buffer_producer.end())
                     {
-                        const auto prod_idx = it->second;
+                        const auto prod_idx = iter->second;
                         if (!active_passes[prod_idx])
                         {
                             active_passes[prod_idx] = true;
@@ -236,9 +237,9 @@ namespace tempest::render_graph
 
         // If no sink pass was explicitly marked, and no passes are active, check if all enabled passes should run
         auto active_count = size_t{0};
-        for (size_t i = 0; i < active_passes.size(); ++i)
+        for (const auto active_pass : active_passes)
         {
-            if (active_passes[i])
+            if (active_pass)
             {
                 ++active_count;
             }
@@ -247,7 +248,7 @@ namespace tempest::render_graph
         if (active_count == 0)
         {
             // Fallback: If no sink was marked, treat all enabled passes as active (useful for testing or full graphs)
-            for (size_t i = 0; i < _passes.size(); ++i)
+            for (auto i = size_t{0}; i < _passes.size(); ++i)
             {
                 if (pass_enabled[i])
                 {
@@ -266,7 +267,7 @@ namespace tempest::render_graph
         auto adjacency = vector<vector<uint32_t>>(_passes.size());
         auto in_degrees = vector<uint32_t>(_passes.size(), 0);
 
-        for (size_t i = 0; i < _passes.size(); ++i)
+        for (auto i = size_t{0}; i < _passes.size(); ++i)
         {
             if (!active_passes[i])
             {
@@ -276,7 +277,7 @@ namespace tempest::render_graph
             const auto consumer_idx = static_cast<uint32_t>(i);
             const auto& pass = _passes[i];
 
-            auto add_dependency = [&](uint32_t producer_idx) {
+            auto add_dependency = [&](uint32_t producer_idx) -> void {
                 if (producer_idx == consumer_idx || !active_passes[producer_idx])
                 {
                     return;
@@ -296,10 +297,10 @@ namespace tempest::render_graph
                 if (acc.type == access_type::read || acc.load_op == rhi::load_op::load || acc.texture.version > 0)
                 {
                     const auto resolved = resolve_texture(acc.texture);
-                    auto it = texture_producer.find(resolved);
-                    if (it != texture_producer.end())
+                    auto iter = texture_producer.find(resolved);
+                    if (iter != texture_producer.end())
                     {
-                        add_dependency(it->second);
+                        add_dependency(iter->second);
                     }
                 }
             }
@@ -309,10 +310,10 @@ namespace tempest::render_graph
                 if (acc.type == access_type::read || acc.buffer.version > 0)
                 {
                     const auto resolved = resolve_buffer(acc.buffer);
-                    auto it = buffer_producer.find(resolved);
-                    if (it != buffer_producer.end())
+                    auto iter = buffer_producer.find(resolved);
+                    if (iter != buffer_producer.end())
                     {
-                        add_dependency(it->second);
+                        add_dependency(iter->second);
                     }
                 }
             }
@@ -320,7 +321,7 @@ namespace tempest::render_graph
 
         // 5. Kahn's Algorithm (Topological Sort)
         auto ready_queue = deque<uint32_t>{};
-        for (size_t i = 0; i < _passes.size(); ++i)
+        for (auto i = size_t{0}; i < _passes.size(); ++i)
         {
             if (active_passes[i] && in_degrees[i] == 0)
             {
@@ -352,7 +353,7 @@ namespace tempest::render_graph
         }
 
         // 6. Resource Lifetime Interval Calculation
-        auto update_texture_lifetime = [&](rg_texture_id tex, uint32_t order_idx) {
+        auto update_texture_lifetime = [&](rg_texture_id tex, uint32_t order_idx) -> void {
             const auto resolved = resolve_texture(tex);
             if (resolved.is_valid())
             {
@@ -370,7 +371,7 @@ namespace tempest::render_graph
             }
         };
 
-        auto update_buffer_lifetime = [&](rg_buffer_id buf, uint32_t order_idx) {
+        auto update_buffer_lifetime = [&](rg_buffer_id buf, uint32_t order_idx) -> void {
             const auto resolved = resolve_buffer(buf);
             if (resolved.is_valid())
             {
@@ -388,7 +389,7 @@ namespace tempest::render_graph
             }
         };
 
-        for (size_t order = 0; order < result.sorted_pass_indices.size(); ++order)
+        for (auto order = size_t{0}; order < result.sorted_pass_indices.size(); ++order)
         {
             const auto pass_idx = result.sorted_pass_indices[order];
             const auto order_idx = static_cast<uint32_t>(order);

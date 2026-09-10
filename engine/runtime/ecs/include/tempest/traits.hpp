@@ -5,7 +5,7 @@
 #include <tempest/int.hpp>
 #include <tempest/type_traits.hpp>
 
-#include <bit>
+#include <tempest/bit.hpp>
 
 namespace tempest::ecs
 {
@@ -44,7 +44,7 @@ namespace tempest::ecs
         requires is_trivial_v<T>
     class basic_entity_traits
     {
-        static constexpr auto length = std::popcount(T::entity_mask);
+        static constexpr auto length = tempest::popcount(T::entity_mask);
 
       public:
         using value_type = typename T::value_type;

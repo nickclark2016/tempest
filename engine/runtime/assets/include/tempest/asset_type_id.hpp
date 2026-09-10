@@ -14,27 +14,27 @@ namespace tempest::assets
         constexpr asset_type_id() noexcept = default;
 
         template <typename T>
-        static constexpr asset_type_id of() noexcept
+        static constexpr auto of() noexcept -> asset_type_id
         {
             return asset_type_id{core::type_hash<T>::value()};
         }
 
-        static constexpr asset_type_id from_hash(size_t hash_value) noexcept
+        static constexpr auto from_hash(size_t hash_value) noexcept -> asset_type_id
         {
             return asset_type_id{hash_value};
         }
 
-        constexpr size_t hash() const noexcept
+        [[nodiscard]] constexpr auto hash() const noexcept -> size_t
         {
             return _hash;
         }
 
-        constexpr bool operator==(const asset_type_id& other) const noexcept
+        constexpr auto operator==(const asset_type_id& other) const noexcept -> bool
         {
             return _hash == other._hash;
         }
 
-        constexpr bool operator!=(const asset_type_id& other) const noexcept
+        constexpr auto operator!=(const asset_type_id& other) const noexcept -> bool
         {
             return _hash != other._hash;
         }
@@ -53,7 +53,7 @@ namespace tempest
     template <>
     struct hash<assets::asset_type_id>
     {
-        [[nodiscard]] size_t operator()(const assets::asset_type_id& type_id) const noexcept
+        [[nodiscard]] auto operator()(const assets::asset_type_id& type_id) const noexcept -> size_t
         {
             return hash<size_t>{}(type_id.hash());
         }

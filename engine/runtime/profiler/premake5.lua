@@ -97,7 +97,6 @@ scoped.group('Tests', function()
         uses {
             'tempest',
             'googletest',
-            'simdjson',
         }
 
         scoped.filter({ 'system:windows' }, function()

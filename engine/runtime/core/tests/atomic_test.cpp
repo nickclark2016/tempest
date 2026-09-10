@@ -3,8 +3,6 @@
 #include <tempest/atomic.hpp>
 #include <tempest/thread.hpp>
 
-#include <thread>
-
 TEST(atomic_int8_test, value_construct)
 {
     auto val = tempest::atomic<tempest::int8_t>{42};
@@ -1142,9 +1140,8 @@ TEST(atomic_int32_test, fetch_and_seq_cst)
 TEST(atomic_int64_test, fetch_and)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_and(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL));
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1000100010001000100010001000100010001000100010001000100010001000LL));
@@ -1153,10 +1150,9 @@ TEST(atomic_int64_test, fetch_and)
 TEST(atomic_int64_test, fetch_and_relaxed)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_and(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::relaxed);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::relaxed);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1000100010001000100010001000100010001000100010001000100010001000LL));
@@ -1165,10 +1161,9 @@ TEST(atomic_int64_test, fetch_and_relaxed)
 TEST(atomic_int64_test, fetch_and_acquire)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_and(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::acquire);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::acquire);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1000100010001000100010001000100010001000100010001000100010001000LL));
@@ -1177,10 +1172,9 @@ TEST(atomic_int64_test, fetch_and_acquire)
 TEST(atomic_int64_test, fetch_and_acq_rel)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_and(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::acq_rel);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::acq_rel);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1000100010001000100010001000100010001000100010001000100010001000LL));
@@ -1189,10 +1183,9 @@ TEST(atomic_int64_test, fetch_and_acq_rel)
 TEST(atomic_int64_test, fetch_and_seq_cst)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_and(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::seq_cst);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_and(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::seq_cst);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1000100010001000100010001000100010001000100010001000100010001000LL));
@@ -1340,9 +1333,8 @@ TEST(atomic_int32_test, fetch_or_seq_cst)
 TEST(atomic_int64_test, fetch_or)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL));
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1351,10 +1343,9 @@ TEST(atomic_int64_test, fetch_or)
 TEST(atomic_int64_test, fetch_or_relaxed)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                     tempest::memory_order::relaxed);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                      tempest::memory_order::relaxed);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1363,10 +1354,9 @@ TEST(atomic_int64_test, fetch_or_relaxed)
 TEST(atomic_int64_test, fetch_or_acquire)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                     tempest::memory_order::acquire);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                      tempest::memory_order::acquire);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1375,10 +1365,9 @@ TEST(atomic_int64_test, fetch_or_acquire)
 TEST(atomic_int64_test, fetch_or_acq_rel)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                     tempest::memory_order::acq_rel);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                      tempest::memory_order::acq_rel);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1387,10 +1376,9 @@ TEST(atomic_int64_test, fetch_or_acq_rel)
 TEST(atomic_int64_test, fetch_or_seq_cst)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_or(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                     tempest::memory_order::seq_cst);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_or(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                      tempest::memory_order::seq_cst);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b1110111011101110111011101110111011101110111011101110111011101110LL));
@@ -1538,9 +1526,8 @@ TEST(atomic_int32_test, fetch_xor_seq_cst)
 TEST(atomic_int64_test, fetch_xor)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_xor(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL));
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b0110011001100110011001100110011001100110011001100110011001100110LL));
@@ -1549,10 +1536,9 @@ TEST(atomic_int64_test, fetch_xor)
 TEST(atomic_int64_test, fetch_xor_relaxed)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_xor(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::relaxed);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::relaxed);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b0110011001100110011001100110011001100110011001100110011001100110LL));
@@ -1561,10 +1547,9 @@ TEST(atomic_int64_test, fetch_xor_relaxed)
 TEST(atomic_int64_test, fetch_xor_acquire)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_xor(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::acquire);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::acquire);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b0110011001100110011001100110011001100110011001100110011001100110LL));
@@ -1573,10 +1558,9 @@ TEST(atomic_int64_test, fetch_xor_acquire)
 TEST(atomic_int64_test, fetch_xor_acq_rel)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_xor(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::acq_rel);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::acq_rel);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b0110011001100110011001100110011001100110011001100110011001100110LL));
@@ -1585,10 +1569,9 @@ TEST(atomic_int64_test, fetch_xor_acq_rel)
 TEST(atomic_int64_test, fetch_xor_seq_cst)
 {
     auto val = tempest::atomic<tempest::int64_t>{
-        static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL)};
-    const auto old_val =
-        val.fetch_xor(static_cast<long long>(0b1100110011001100110011001100110011001100110011001100110011001100LL),
-                      tempest::memory_order::seq_cst);
+        static_cast<tempest::int64_t>(0b1010101010101010101010101010101010101010101010101010101010101010ULL)};
+    const auto old_val = val.fetch_xor(0b1100110011001100110011001100110011001100110011001100110011001100LL,
+                                       tempest::memory_order::seq_cst);
 
     EXPECT_EQ(old_val, static_cast<long long>(0b1010101010101010101010101010101010101010101010101010101010101010LL));
     EXPECT_EQ(val.load(), static_cast<long long>(0b0110011001100110011001100110011001100110011001100110011001100110LL));
@@ -1602,7 +1585,7 @@ TEST(atomic_int8_test, wait_notify)
         auto ready_threads = tempest::atomic<int8_t>(0);
         auto woken_threads = tempest::atomic<int8_t>(0);
 
-        auto worker_job = [&]() {
+        auto worker_job = [&]() -> void {
             ready_threads.fetch_add(1, tempest::memory_order::release);
             target_atom.wait(0);
             woken_threads.fetch_add(1, tempest::memory_order::relaxed);
@@ -1617,7 +1600,7 @@ TEST(atomic_int8_test, wait_notify)
         }
 
         // Sleep because of scheduling gap
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_one();
@@ -1628,7 +1611,7 @@ TEST(atomic_int8_test, wait_notify)
         }
 
         // Allow the thread time to settle
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         EXPECT_GE(woken_threads.load(tempest::memory_order::relaxed), 1);
 
@@ -1654,7 +1637,7 @@ TEST(atomic_int8_test, wait_notify_all)
 
         for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
         {
-            workers.emplace_back([&]() {
+            workers.emplace_back([&]() -> void {
                 ready_count.fetch_add(1, tempest::memory_order::release);
                 target_atom.wait(0);
             });
@@ -1665,7 +1648,7 @@ TEST(atomic_int8_test, wait_notify_all)
             tempest::this_thread::yield();
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_all();
@@ -1687,7 +1670,7 @@ TEST(atomic_int16_test, wait_notify)
         auto ready_threads = tempest::atomic<int16_t>(0);
         auto woken_threads = tempest::atomic<int16_t>(0);
 
-        auto worker_job = [&]() {
+        auto worker_job = [&]() -> void {
             ready_threads.fetch_add(1, tempest::memory_order::release);
             target_atom.wait(0);
             woken_threads.fetch_add(1, tempest::memory_order::relaxed);
@@ -1702,7 +1685,7 @@ TEST(atomic_int16_test, wait_notify)
         }
 
         // Sleep because of scheduling gap
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_one();
@@ -1713,7 +1696,7 @@ TEST(atomic_int16_test, wait_notify)
         }
 
         // Allow the thread time to settle
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         EXPECT_GE(woken_threads.load(tempest::memory_order::relaxed), 1);
 
@@ -1737,9 +1720,9 @@ TEST(atomic_int16_test, wait_notify_all)
 
         auto workers = tempest::vector<tempest::thread>();
 
-        for (auto idx = 0; idx < total_workers; ++idx)
+        for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
         {
-            workers.emplace_back([&]() {
+            workers.emplace_back([&]() -> void {
                 ready_count.fetch_add(1, tempest::memory_order::release);
                 target_atom.wait(0);
             });
@@ -1750,7 +1733,7 @@ TEST(atomic_int16_test, wait_notify_all)
             tempest::this_thread::yield();
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_all();
@@ -1772,7 +1755,7 @@ TEST(atomic_int32_test, wait_notify)
         auto ready_threads = tempest::atomic<int32_t>(0);
         auto woken_threads = tempest::atomic<int32_t>(0);
 
-        auto worker_job = [&]() {
+        auto worker_job = [&]() -> void {
             ready_threads.fetch_add(1, tempest::memory_order::release);
             target_atom.wait(0);
             woken_threads.fetch_add(1, tempest::memory_order::relaxed);
@@ -1787,7 +1770,7 @@ TEST(atomic_int32_test, wait_notify)
         }
 
         // Sleep because of scheduling gap
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_one();
@@ -1798,7 +1781,7 @@ TEST(atomic_int32_test, wait_notify)
         }
 
         // Allow the thread time to settle
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         EXPECT_GE(woken_threads.load(tempest::memory_order::relaxed), 1);
 
@@ -1824,7 +1807,7 @@ TEST(atomic_int32_test, wait_notify_all)
 
         for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
         {
-            workers.emplace_back([&]() {
+            workers.emplace_back([&]() -> void {
                 ready_count.fetch_add(1, tempest::memory_order::release);
                 target_atom.wait(0);
             });
@@ -1835,7 +1818,7 @@ TEST(atomic_int32_test, wait_notify_all)
             tempest::this_thread::yield();
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_all();
@@ -1857,7 +1840,7 @@ TEST(atomic_int64_test, wait_notify)
         auto ready_threads = tempest::atomic<int64_t>(0);
         auto woken_threads = tempest::atomic<int64_t>(0);
 
-        auto worker_job = [&]() {
+        auto worker_job = [&]() -> void {
             ready_threads.fetch_add(1, tempest::memory_order::release);
             target_atom.wait(0);
             woken_threads.fetch_add(1, tempest::memory_order::relaxed);
@@ -1872,7 +1855,7 @@ TEST(atomic_int64_test, wait_notify)
         }
 
         // Sleep because of scheduling gap
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_one();
@@ -1883,7 +1866,7 @@ TEST(atomic_int64_test, wait_notify)
         }
 
         // Allow the thread time to settle
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         EXPECT_GE(woken_threads.load(tempest::memory_order::relaxed), 1);
 
@@ -1909,7 +1892,7 @@ TEST(atomic_int64_test, wait_notify_all)
 
         for (auto worker_idx = 0; worker_idx < total_workers; ++worker_idx)
         {
-            workers.emplace_back([&]() {
+            workers.emplace_back([&]() -> void {
                 ready_count.fetch_add(1, tempest::memory_order::release);
                 target_atom.wait(0);
             });
@@ -1920,7 +1903,7 @@ TEST(atomic_int64_test, wait_notify_all)
             tempest::this_thread::yield();
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        tempest::this_thread::sleep_for(tempest::chrono::milliseconds(5));
 
         target_atom.store(1, tempest::memory_order::release);
         target_atom.notify_all();

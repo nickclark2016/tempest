@@ -1,11 +1,11 @@
 #include <tempest/exception.hpp>
 
-#include <exception>
+#include <cstdlib>
 
 namespace tempest
 {
     [[noreturn]] void terminate()
     {
-        std::terminate();
+        ::abort();
     }
 } // namespace tempest

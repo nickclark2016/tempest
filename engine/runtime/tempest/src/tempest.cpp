@@ -6,11 +6,9 @@
 #include <tempest/rhi.hpp>
 #include <tempest/tempest.hpp>
 
-#include <chrono>
 #include <clocale>
 #include <cstdlib>
-#include <iostream>
-#include <locale>
+#include <tempest/chrono.hpp>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -47,19 +45,6 @@ namespace tempest
             _logger.error("Failed to set locale to UTF-8. Logging may not work correctly.");
         }
 
-        try
-        {
-            std::locale utf8_locale("en_US.UTF-8");
-            std::locale::global(utf8_locale);
-            std::cin.imbue(utf8_locale);
-            std::cout.imbue(utf8_locale);
-            std::cerr.imbue(utf8_locale);
-        }
-        catch (const std::runtime_error&)
-        {
-            _logger.error("Failed to set global locale to UTF-8. Logging may not work correctly.");
-        }
-
 #ifdef _WIN32
         SetConsoleOutputCP(CP_UTF8);
         SetConsoleCP(CP_UTF8);
@@ -78,7 +63,7 @@ namespace tempest
             .api = rhi::graphics_api::vulkan,
         };
 
-        auto ctx_res = rhi::create_context(ctx_desc);
+        auto ctx_res = rhi::create_context(ctx_desc, _logger);
         if (ctx_res.has_value())
         {
             _rhi_context = tempest::move(ctx_res).value();
@@ -91,10 +76,12 @@ namespace tempest
 
         if (_device)
         {
+            constexpr uint32_t default_render_width = 1920;
+            constexpr uint32_t default_render_height = 1080;
             auto builder = render_system::renderer::builder{};
             builder.set_config(render_system::renderer_config{
-                .render_width = 1920,
-                .render_height = 1080,
+                .render_width = default_render_width,
+                .render_height = default_render_height,
                 .tonemapped_color_format = rhi::data_format::rgba8_srgb,
                 .pipeline_statistics = render_system::all_pipeline_statistics,
             });
@@ -181,20 +168,21 @@ namespace tempest
 
         const auto cur_fb_w = _window_manager.get_framebuffer_width(handle);
         const auto cur_fb_h = _window_manager.get_framebuffer_height(handle);
-        const auto w = (cur_fb_w > 0) ? cur_fb_w : desc.width;
-        const auto h = (cur_fb_h > 0) ? cur_fb_h : desc.height;
+        const auto surface_width = (cur_fb_w > 0) ? cur_fb_w : desc.width;
+        const auto surface_height = (cur_fb_h > 0) ? cur_fb_h : desc.height;
 
         if (_renderer)
         {
-            _renderer->register_surface(handle, raw_surf, w, h, selected_present_mode);
+            _renderer->register_surface(handle, raw_surf, surface_width, surface_height, selected_present_mode);
         }
 
-        _window_manager.register_resize_callback(handle, [this, handle](uint32_t rw, uint32_t rh) {
-            if (_renderer)
-            {
-                _renderer->resize_surface(handle, rw, rh);
-            }
-        });
+        _window_manager.register_resize_callback(handle,
+                                                 [this, handle](uint32_t resize_width, uint32_t resize_height) -> void {
+                                                     if (_renderer)
+                                                     {
+                                                         _renderer->resize_surface(handle, resize_width, resize_height);
+                                                     }
+                                                 });
 
         _windows.push_back(window_context{
             .handle = handle,
@@ -218,13 +206,13 @@ namespace tempest
     }
 
     auto standalone_engine_context::register_on_fixed_update_callback(
-        function<void(engine_context&, std::chrono::duration<float>)> callback) -> void
+        function<void(engine_context&, chrono::duration<float>)> callback) -> void
     {
         _on_fixed_update_callbacks.push_back(tempest::move(callback));
     }
 
     auto standalone_engine_context::register_on_variable_update_callback(
-        function<void(engine_context&, std::chrono::duration<float>)> callback) -> void
+        function<void(engine_context&, chrono::duration<float>)> callback) -> void
     {
         _on_variable_update_callbacks.push_back(tempest::move(callback));
     }
@@ -255,22 +243,23 @@ namespace tempest
         }
         _logger.trace("Finished initialization callbacks");
 
-        auto simulated_time = std::chrono::duration<double>(0.0);
-        auto delta_time = std::chrono::duration<double>(1.0 / 60.0);
+        constexpr double target_frames_per_second = 60.0;
+        auto simulated_time = chrono::duration<double>(0.0);
+        auto delta_time = chrono::duration<double>(1.0 / target_frames_per_second);
 
-        auto current_time = std::chrono::steady_clock::now();
-        auto accumulator = std::chrono::duration<double>(0.0);
+        auto current_time = chrono::steady_clock::now();
+        auto accumulator = chrono::duration<double>(0.0);
         _last_frame_time = current_time;
 
         _logger.trace("Starting main loop");
         while (!_should_close)
         {
-            auto frame_start_time = std::chrono::steady_clock::now();
-            auto delta = std::chrono::duration_cast<std::chrono::duration<float>>(frame_start_time - _last_frame_time);
+            auto frame_start_time = chrono::steady_clock::now();
+            auto delta = chrono::duration_cast<chrono::duration<float>>(frame_start_time - _last_frame_time);
             _delta_frame_time = delta;
             _last_frame_time = frame_start_time;
 
-            auto new_time = std::chrono::steady_clock::now();
+            auto new_time = chrono::steady_clock::now();
             auto frame_time = new_time - current_time;
             current_time = new_time;
 
@@ -278,7 +267,7 @@ namespace tempest
 
             while (accumulator >= delta_time)
             {
-                _update_fixed(std::chrono::duration_cast<std::chrono::duration<float>>(delta_time));
+                _update_fixed(chrono::duration_cast<chrono::duration<float>>(delta_time));
                 if (_should_close)
                 {
                     goto exit_main_loop;
@@ -400,9 +389,9 @@ namespace tempest
 
     auto standalone_engine_context::get_render_surface(window_handle win) -> rhi::render_surface*
     {
-        for (auto& w : _windows)
+        for (auto& window : _windows)
         {
-            if (w.handle == win)
+            if (window.handle == win)
             {
                 return _renderer ? _renderer->get_render_surface(win) : nullptr;
             }
@@ -412,9 +401,9 @@ namespace tempest
 
     auto standalone_engine_context::get_render_surface(window_handle win) const -> const rhi::render_surface*
     {
-        for (const auto& w : _windows)
+        for (const auto& window : _windows)
         {
-            if (w.handle == win)
+            if (window.handle == win)
             {
                 return _renderer ? _renderer->get_render_surface(win) : nullptr;
             }
@@ -424,17 +413,17 @@ namespace tempest
 
     auto standalone_engine_context::get_raw_surface(window_handle win) const -> rhi::raw_surface_handle
     {
-        for (const auto& w : _windows)
+        for (const auto& window : _windows)
         {
-            if (w.handle == win)
+            if (window.handle == win)
             {
-                return w.raw_surface;
+                return window.raw_surface;
             }
         }
         return {};
     }
 
-    auto standalone_engine_context::_update_fixed(std::chrono::duration<float> delta_time) -> void
+    auto standalone_engine_context::_update_fixed(chrono::duration<float> delta_time) -> void
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_fixed"};
         for (auto& win : _windows)
@@ -446,7 +435,7 @@ namespace tempest
 
         _window_manager.poll_events();
 
-        for (auto it = _windows.begin(); it != _windows.end();)
+        for (auto* it = _windows.begin(); it != _windows.end();)
         {
             if (_window_manager.should_close(it->handle))
             {
@@ -479,7 +468,7 @@ namespace tempest
         }
     }
 
-    auto standalone_engine_context::_update_variable(std::chrono::duration<float> delta_time) -> void
+    auto standalone_engine_context::_update_variable(chrono::duration<float> delta_time) -> void
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "engine::update_variable"};
         for (auto&& callback : _on_variable_update_callbacks)

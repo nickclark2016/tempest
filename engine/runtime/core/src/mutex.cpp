@@ -1,19 +1,17 @@
 #include <tempest/mutex.hpp>
 
-#include <exception>
+#include <tempest/exception.hpp>
 
 namespace tempest
 {
-#if defined(TEMPEST_WIN_THREADS)
-
-    mutex::~mutex() = default;
+#ifdef TEMPEST_WIN_THREADS
 
     void mutex::lock()
     {
         AcquireSRWLockExclusive(&_handle);
     }
 
-    bool mutex::try_lock()
+    auto mutex::try_lock() -> bool
     {
         auto result = TryAcquireSRWLockExclusive(&_handle);
         return result == WAIT_OBJECT_0;
@@ -27,16 +25,14 @@ namespace tempest
 #pragma warning(pop)
     }
 
-    shared_mutex::~shared_mutex()
-    {
-    }
+    
 
     void shared_mutex::lock()
     {
         AcquireSRWLockExclusive(&_handle);
     }
 
-    bool shared_mutex::try_lock()
+    auto shared_mutex::try_lock() -> bool
     {
         return TryAcquireSRWLockExclusive(&_handle) == TRUE;
     }
@@ -44,7 +40,7 @@ namespace tempest
     void shared_mutex::unlock()
     {
 #pragma warning(push)
-#pragma warning(disable: 26110)
+#pragma warning(disable : 26110)
         ReleaseSRWLockExclusive(&_handle);
 #pragma warning(pop)
     }
@@ -54,7 +50,7 @@ namespace tempest
         AcquireSRWLockShared(&_handle);
     }
 
-    bool shared_mutex::try_lock_shared()
+    auto shared_mutex::try_lock_shared() -> bool
     {
         return TryAcquireSRWLockShared(&_handle) == TRUE;
     }
@@ -69,7 +65,7 @@ namespace tempest
     {
         if (pthread_mutex_destroy(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
     }
 
@@ -77,7 +73,7 @@ namespace tempest
     {
         if (pthread_mutex_lock(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
     }
 
@@ -90,7 +86,7 @@ namespace tempest
     {
         if (pthread_mutex_unlock(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
     }
 
@@ -98,7 +94,7 @@ namespace tempest
     {
         if (pthread_rwlock_destroy(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
     }
 
@@ -106,7 +102,7 @@ namespace tempest
     {
         if (pthread_rwlock_wrlock(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
     }
 
@@ -119,7 +115,7 @@ namespace tempest
     {
         if (pthread_rwlock_unlock(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
     }
 
@@ -127,7 +123,7 @@ namespace tempest
     {
         if (pthread_rwlock_rdlock(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
     }
 
@@ -140,9 +136,9 @@ namespace tempest
     {
         if (pthread_rwlock_unlock(&_handle) != 0)
         {
-            std::terminate();
+            tempest::terminate();
         }
-    }    
+    }
 #else
 #error "Unsupported platform"
 #endif

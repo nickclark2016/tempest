@@ -1,9 +1,9 @@
 #ifndef tempest_render_system_shader_manager_hpp
 #define tempest_render_system_shader_manager_hpp
 
-#include <filesystem>
 #include <tempest/api.hpp>
 #include <tempest/asset_database.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/flat_unordered_map.hpp>
 #include <tempest/inplace_vector.hpp>
 #include <tempest/optional.hpp>
@@ -41,20 +41,20 @@ namespace tempest::render_system
     {
         rhi::shader_stage stage{rhi::shader_stage::vertex};
         string_view entry_point{"main"};
-        optional<std::filesystem::path> disk_location{nullopt};
-        span<const byte> initial_bytes{};
+        optional<tempest::filesystem::path> disk_location{nullopt};
+        span<const byte> initial_bytes;
     };
 
     /// @brief Structured template defining immutable non-dynamic state for a graphics pipeline.
     struct graphics_pipeline_template
     {
-        span<const shader_module_handle> shader_modules{};
-        span<const rhi::data_format> color_attachment_formats{};
+        span<const shader_module_handle> shader_modules;
+        span<const rhi::data_format> color_attachment_formats;
         optional<rhi::data_format> depth_stencil_attachment_format{nullopt};
         rhi::primitive_topology primitive_topology{rhi::primitive_topology::triangle_list};
         rhi::rasterization_state rasterization_state{};
         rhi::depth_stencil_state depth_stencil_state{};
-        span<const rhi::attachment_blend_state> color_attachment_blend_states{};
+        span<const rhi::attachment_blend_state> color_attachment_blend_states;
     };
 
     /// @brief Structured template defining compute pipeline state.
@@ -70,9 +70,9 @@ namespace tempest::render_system
         ~shader_manager();
 
         shader_manager(const shader_manager&) = delete;
-        shader_manager& operator=(const shader_manager&) = delete;
-        shader_manager(shader_manager&&) noexcept;
-        shader_manager& operator=(shader_manager&&) noexcept;
+        auto operator=(const shader_manager&) -> shader_manager& = delete;
+        shader_manager(shader_manager&& /*other*/) noexcept;
+        auto operator=(shader_manager&& /*other*/) noexcept -> shader_manager&;
 
         [[nodiscard]] auto get_asset_database() noexcept -> assets::asset_database&
         {
@@ -124,7 +124,7 @@ namespace tempest::render_system
         auto update_shader_module_bytes(shader_module_handle handle, span<const byte> new_bytes) -> bool;
 
         /// @brief Filewatching notification: triggers reload for any registered module matching the given path.
-        auto notify_file_changed(const std::filesystem::path& path) -> bool;
+        auto notify_file_changed(const tempest::filesystem::path& path) -> bool;
 
         /// @brief Drains retired RHI pipelines whose GPU completion timeline sync points have been reached across all
         /// queues.
@@ -145,9 +145,9 @@ namespace tempest::render_system
       private:
         struct shader_module_record
         {
-            optional<std::filesystem::path> disk_location{nullopt};
-            optional<std::filesystem::path> canonical_path{nullopt};
-            vector<byte> memory_blob{};
+            optional<tempest::filesystem::path> disk_location{nullopt};
+            optional<tempest::filesystem::path> canonical_path{nullopt};
+            vector<byte> memory_blob;
             rhi::shader_stage stage{rhi::shader_stage::vertex};
             string entry_point{"main"};
             uint32_t revision{0};
@@ -177,11 +177,12 @@ namespace tempest::render_system
         {
             rhi::graphics_pipeline_handle graphics_pipeline{};
             rhi::compute_pipeline_handle compute_pipeline{};
-            inplace_vector<rhi::host_sync_point, 3> required_sync_points{};
+            inplace_vector<rhi::host_sync_point, 3> required_sync_points;
         };
 
-        auto resolve_path(const std::filesystem::path& input_path) const -> optional<std::filesystem::path>;
-        auto read_module_bytes(const shader_module_record& mod) const -> vector<byte>;
+        [[nodiscard]] auto resolve_path(const tempest::filesystem::path& input_path) const
+            -> optional<tempest::filesystem::path>;
+        [[nodiscard]] auto read_module_bytes(const shader_module_record& mod) const -> vector<byte>;
         auto compile_graphics_pipeline(const graphics_pipeline_record& rec, span<const byte> override_bytes = {},
                                        shader_module_handle override_handle = {}) -> rhi::graphics_pipeline_handle;
         auto compile_compute_pipeline(const compute_pipeline_record& rec, span<const byte> override_bytes = {})

@@ -4,7 +4,7 @@
 #include <tempest/api.hpp>
 #include <tempest/vec2.hpp>
 
-#include <cstdint>
+#include <tempest/int.hpp>
 
 namespace tempest::render_system
 {

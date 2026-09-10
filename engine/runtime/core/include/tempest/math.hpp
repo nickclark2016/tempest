@@ -6,37 +6,37 @@
 
 namespace tempest
 {
-    inline constexpr bool isnan(floating_point auto x) noexcept
+    constexpr auto isnan(floating_point auto x) noexcept -> bool
     {
         return x != x;
     }
 
-    inline constexpr bool isinf(floating_point auto x) noexcept
+    constexpr auto isinf(floating_point auto x) noexcept -> bool
     {
         return x == numeric_limits<decltype(x)>::infinity();
     }
 
-    inline constexpr bool isfinite(floating_point auto x) noexcept
+    constexpr auto isfinite(floating_point auto x) noexcept -> bool
     {
         return !isnan(x) && !isinf(x);
     }
 
-    inline constexpr bool signbit(floating_point auto x) noexcept
+    constexpr auto signbit(floating_point auto x) noexcept -> bool
     {
         return x < 0;
     }
 
-    inline constexpr auto signbit(integral auto x) noexcept
+    constexpr auto signbit(integral auto x) noexcept
     {
         return x < 0;
     }
 
-    inline constexpr auto abs(floating_point auto x) noexcept
+    constexpr auto abs(floating_point auto x) noexcept
     {
         return x < 0 ? -x : x;
     }
 
-    inline constexpr auto abs(integral auto x) noexcept
+    constexpr auto abs(integral auto x) noexcept
     {
         return x < 0 ? -x : x;
     }

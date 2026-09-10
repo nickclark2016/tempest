@@ -61,48 +61,48 @@ namespace tempest
         constexpr span(span&& other) noexcept = default;
         constexpr ~span() = default;
 
-        constexpr span& operator=(const span& other) noexcept = default;
-        constexpr span& operator=(span&& other) noexcept = default;
+        constexpr auto operator=(const span& other) noexcept -> span& = default;
+        constexpr auto operator=(span&& other) noexcept -> span& = default;
 
-        constexpr iterator begin() const noexcept;
-        constexpr const_iterator cbegin() const noexcept;
+        [[nodiscard]] constexpr auto begin() const noexcept -> iterator;
+        [[nodiscard]] constexpr auto cbegin() const noexcept -> const_iterator;
 
-        constexpr iterator end() const noexcept;
-        constexpr const_iterator cend() const noexcept;
+        [[nodiscard]] constexpr auto end() const noexcept -> iterator;
+        [[nodiscard]] constexpr auto cend() const noexcept -> const_iterator;
 
-        constexpr reverse_iterator rbegin() const noexcept;
-        constexpr const_reverse_iterator crbegin() const noexcept;
+        [[nodiscard]] constexpr auto rbegin() const noexcept -> reverse_iterator;
+        [[nodiscard]] constexpr auto crbegin() const noexcept -> const_reverse_iterator;
 
-        constexpr reverse_iterator rend() const noexcept;
-        constexpr const_reverse_iterator crend() const noexcept;
+        [[nodiscard]] constexpr auto rend() const noexcept -> reverse_iterator;
+        [[nodiscard]] constexpr auto crend() const noexcept -> const_reverse_iterator;
 
-        constexpr reference operator[](size_type idx) const noexcept;
-        constexpr reference at(size_type idx) const;
+        constexpr auto operator[](size_type idx) const noexcept -> reference;
+        [[nodiscard]] constexpr auto at(size_type idx) const -> reference;
 
-        constexpr reference front() const noexcept;
-        constexpr reference back() const noexcept;
+        [[nodiscard]] constexpr auto front() const noexcept -> reference;
+        [[nodiscard]] constexpr auto back() const noexcept -> reference;
 
-        constexpr pointer data() const noexcept;
+        [[nodiscard]] constexpr auto data() const noexcept -> pointer;
 
-        constexpr size_type size() const noexcept;
-        constexpr size_type size_bytes() const noexcept;
+        [[nodiscard]] constexpr auto size() const noexcept -> size_type;
+        [[nodiscard]] constexpr auto size_bytes() const noexcept -> size_type;
 
-        constexpr bool empty() const noexcept;
+        [[nodiscard]] constexpr auto empty() const noexcept -> bool;
 
-        constexpr span<T, dynamic_extent> first(size_type count) const;
-
-        template <size_t Count>
-        constexpr span<T, Count> first() const;
-
-        constexpr span<T, dynamic_extent> last(size_type count) const;
+        [[nodiscard]] constexpr auto first(size_type count) const -> span<T, dynamic_extent>;
 
         template <size_t Count>
-        constexpr span<T, Count> last() const;
+        constexpr auto first() const -> span<T, Count>;
+
+        [[nodiscard]] constexpr auto last(size_type count) const -> span<T, dynamic_extent>;
+
+        template <size_t Count>
+        constexpr auto last() const -> span<T, Count>;
 
         template <size_t Offset, size_t Count = dynamic_extent>
-        constexpr span<T, dynamic_extent> subspan() const;
+        [[nodiscard]] constexpr auto subspan() const -> span<T, dynamic_extent>;
 
-        constexpr span<T, dynamic_extent> subspan(size_type offset, size_type count = dynamic_extent) const;
+        [[nodiscard]] constexpr auto subspan(size_type offset, size_type count = dynamic_extent) const -> span<T, dynamic_extent>;
 
       private:
         T* _start{};
@@ -122,40 +122,40 @@ namespace tempest
     span(It, EndOrSize) -> span<remove_reference_t<iter_reference_t<It>>>;
 
     template <typename T>
-    inline span<const byte> as_bytes(span<const T> s) noexcept
+    inline auto as_bytes(span<const T> s) noexcept -> span<const byte>
     {
         return {reinterpret_cast<const byte*>(s.data()), s.size_bytes()};
     }
 
     template <typename T>
-    inline span<byte> as_writeable_bytes(span<T> s) noexcept
+    inline auto as_writeable_bytes(span<T> s) noexcept -> span<byte>
     {
         return {reinterpret_cast<byte*>(s.data()), s.size_bytes()};
     }
 
     template <typename T, size_t Extent>
-    inline constexpr span<T, Extent>::span() noexcept : _start{nullptr}, _end{nullptr}
+    constexpr span<T, Extent>::span() noexcept  
     {
         static_assert(Extent == 0 || Extent == dynamic_extent, "Extent must be 0 or dynamic.");
     }
 
     template <typename T, size_t Extent>
     template <typename It>
-    inline constexpr span<T, Extent>::span(It start, size_type count) : _start{start}, _end{start + count}
+    constexpr span<T, Extent>::span(It start, size_type count) : _start{start}, _end{start + count}
     {
     }
 
     template <typename T, size_t Extent>
     template <typename It, typename End>
         requires(!is_convertible_v<End, size_t>)
-    inline constexpr span<T, Extent>::span(It start, End end)
+    constexpr span<T, Extent>::span(It start, End end)
         : _start{tempest::to_address(start)}, _end{_start + (end - start)}
     {
     }
 
     template <typename T, size_t Extent>
     template <size_t N>
-    inline constexpr span<T, Extent>::span(T (&arr)[N]) noexcept
+    constexpr span<T, Extent>::span(T (&arr)[N]) noexcept
         : _start{tempest::to_address(arr)}, _end{tempest::to_address(arr) + N}
     {
     }
@@ -183,86 +183,86 @@ namespace tempest
 
     template <typename T, size_t Extent>
     template <typename R>
-    inline constexpr span<T, Extent>::span(R&& r)
+    constexpr span<T, Extent>::span(R&& r)
         : _start{detail::get_begin_ptr(r)}, _end{_start + (tempest::distance(::tempest::begin(r), ::tempest::end(r)))}
     {
     }
 
     template <typename T, size_t Extent>
     template <typename U, size_t N>
-    inline constexpr span<T, Extent>::span(array<U, N>& arr) noexcept : _start{arr.data()}, _end{arr.data() + N}
+    constexpr span<T, Extent>::span(array<U, N>& arr) noexcept : _start{arr.data()}, _end{arr.data() + N}
     {
     }
 
     template <typename T, size_t Extent>
     template <typename U, size_t N>
-    inline constexpr span<T, Extent>::span(const array<U, N>& arr) noexcept : _start{arr.data()}, _end{arr.data() + N}
+    constexpr span<T, Extent>::span(const array<U, N>& arr) noexcept : _start{arr.data()}, _end{arr.data() + N}
     {
     }
 
     template <typename T, size_t Extent>
     template <typename U, size_t N>
-    inline constexpr span<T, Extent>::span(const span<U, N>& other) noexcept
+    constexpr span<T, Extent>::span(const span<U, N>& other) noexcept
         : _start{other.data()}, _end{other.data() + other.size()}
     {
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::iterator span<T, Extent>::begin() const noexcept
+    constexpr auto span<T, Extent>::begin() const noexcept -> span<T, Extent>::iterator
     {
         return _start;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::const_iterator span<T, Extent>::cbegin() const noexcept
+    constexpr auto span<T, Extent>::cbegin() const noexcept -> span<T, Extent>::const_iterator
     {
         return _start;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::iterator span<T, Extent>::end() const noexcept
+    constexpr auto span<T, Extent>::end() const noexcept -> span<T, Extent>::iterator
     {
         return _end;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::const_iterator span<T, Extent>::cend() const noexcept
+    constexpr auto span<T, Extent>::cend() const noexcept -> span<T, Extent>::const_iterator
     {
         return _end;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::reverse_iterator span<T, Extent>::rbegin() const noexcept
+    constexpr auto span<T, Extent>::rbegin() const noexcept -> span<T, Extent>::reverse_iterator
     {
         return reverse_iterator{_end};
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::const_reverse_iterator span<T, Extent>::crbegin() const noexcept
+    constexpr auto span<T, Extent>::crbegin() const noexcept -> span<T, Extent>::const_reverse_iterator
     {
         return const_reverse_iterator{_end};
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::reverse_iterator span<T, Extent>::rend() const noexcept
+    constexpr auto span<T, Extent>::rend() const noexcept -> span<T, Extent>::reverse_iterator
     {
         return reverse_iterator{_start};
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::const_reverse_iterator span<T, Extent>::crend() const noexcept
+    constexpr auto span<T, Extent>::crend() const noexcept -> span<T, Extent>::const_reverse_iterator
     {
         return const_reverse_iterator{_start};
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::reference span<T, Extent>::operator[](size_type idx) const noexcept
+    constexpr auto span<T, Extent>::operator[](size_type idx) const noexcept -> span<T, Extent>::reference
     {
         return _start[idx];
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::reference span<T, Extent>::at(size_type idx) const
+    constexpr auto span<T, Extent>::at(size_type idx) const -> span<T, Extent>::reference
     {
         assert(idx < size());
 
@@ -270,50 +270,50 @@ namespace tempest
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::reference span<T, Extent>::front() const noexcept
+    constexpr auto span<T, Extent>::front() const noexcept -> span<T, Extent>::reference
     {
         return *_start;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::reference span<T, Extent>::back() const noexcept
+    constexpr auto span<T, Extent>::back() const noexcept -> span<T, Extent>::reference
     {
         return *(_end - 1);
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::pointer span<T, Extent>::data() const noexcept
+    constexpr auto span<T, Extent>::data() const noexcept -> span<T, Extent>::pointer
     {
         return _start;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::size_type span<T, Extent>::size() const noexcept
+    constexpr auto span<T, Extent>::size() const noexcept -> span<T, Extent>::size_type
     {
         return _end - _start;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr typename span<T, Extent>::size_type span<T, Extent>::size_bytes() const noexcept
+    constexpr auto span<T, Extent>::size_bytes() const noexcept -> span<T, Extent>::size_type
     {
         return size() * sizeof(T);
     }
 
     template <typename T, size_t Extent>
-    inline constexpr bool span<T, Extent>::empty() const noexcept
+    constexpr auto span<T, Extent>::empty() const noexcept -> bool
     {
         return _start == _end;
     }
 
     template <typename T, size_t Extent>
-    inline constexpr span<T, dynamic_extent> span<T, Extent>::first(size_type count) const
+    constexpr auto span<T, Extent>::first(size_type count) const -> span<T, dynamic_extent>
     {
         return {_start, _start + count};
     }
 
     template <typename T, size_t Extent>
     template <size_t Count>
-    inline constexpr span<T, Count> span<T, Extent>::first() const
+    constexpr auto span<T, Extent>::first() const -> span<T, Count>
     {
         static_assert(Count <= Extent, "Count must be less than or equal to the extent of the span.");
 
@@ -321,14 +321,14 @@ namespace tempest
     }
 
     template <typename T, size_t Extent>
-    inline constexpr span<T, dynamic_extent> span<T, Extent>::last(size_type count) const
+    constexpr auto span<T, Extent>::last(size_type count) const -> span<T, dynamic_extent>
     {
         return {_end - count, _end};
     }
 
     template <typename T, size_t Extent>
     template <size_t Count>
-    inline constexpr span<T, Count> span<T, Extent>::last() const
+    constexpr auto span<T, Extent>::last() const -> span<T, Count>
     {
         static_assert(Count <= Extent, "Count must be less than or equal to the extent of the span.");
 
@@ -337,7 +337,7 @@ namespace tempest
 
     template <typename T, size_t Extent>
     template <size_t Offset, size_t Count>
-    inline constexpr span<T, dynamic_extent> span<T, Extent>::subspan() const
+    constexpr auto span<T, Extent>::subspan() const -> span<T, dynamic_extent>
     {
         static_assert(Offset + Count <= Extent, "Offset + Count must be less than or equal to the extent of the span.");
 
@@ -352,7 +352,7 @@ namespace tempest
     }
 
     template <typename T, size_t Extent>
-    inline constexpr span<T, dynamic_extent> span<T, Extent>::subspan(size_type offset, size_type count) const
+    constexpr auto span<T, Extent>::subspan(size_type offset, size_type count) const -> span<T, dynamic_extent>
     {
         TEMPEST_ASSERT(offset + count <= size());
 

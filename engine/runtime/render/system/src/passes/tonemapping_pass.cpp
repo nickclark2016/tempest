@@ -1,6 +1,5 @@
 #include <tempest/render_system/passes/tonemapping_pass.hpp>
 
-#include <iostream>
 #include <tempest/array.hpp>
 
 namespace tempest::render_system
@@ -42,7 +41,7 @@ namespace tempest::render_system
         return graph.add_graphics_pass<tonemapping_pass_data>(
             "TonemappingPass",
             [hdr_color_tex, tonemapped_target, pipeline_stats](render_graph::pass_builder& builder,
-                                                               tonemapping_pass_data& data) {
+                                                               tonemapping_pass_data& data) -> void {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
@@ -54,12 +53,12 @@ namespace tempest::render_system
                                                                              .texture = tonemapped_target,
                                                                              .load_op = rhi::load_op::clear,
                                                                              .store_op = rhi::store_op::store,
-                                                                             .clear_value = {0.0F, 0.0F, 0.0F, 1.0F},
+                                                                             .clear_value = {.r=0.0F, .g=0.0F, .b=0.0F, .a=1.0F},
                                                                          });
                 builder.mark_sink();
             },
             [&pool, &shaders, exposure, pipe](const tonemapping_pass_data& data,
-                                              render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+                                              render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) -> void {
                 const auto desc_idx = ctx.get_texture_descriptor(data.hdr_color);
                 const auto hdr_tex_idx = (desc_idx != ~0U) ? static_cast<int32_t>(desc_idx) : -1;
 

@@ -4,17 +4,23 @@
 #include <tempest/rhi.hpp>
 #include <tempest/string.hpp>
 #include <tempest/vector.hpp>
+#include <tempest/vk/bootstrap.hpp>
 
-#include <VkBootstrap.h>
+namespace tempest
+{
+    class logger;
+}
 
 namespace tempest::rhi::vk
 {
-    TEMPEST_API auto create_context(const context_desc& desc) -> expected<unique_ptr<rhi::context>, context_creation_error>;
+    TEMPEST_API auto create_context(const context_desc& desc, logger& log)
+        -> expected<unique_ptr<rhi::context>, context_creation_error>;
 
     class TEMPEST_API context final : public rhi::context
     {
       public:
-        static auto create(const context_desc& desc) -> expected<unique_ptr<rhi::context>, context_creation_error>;
+        static auto create(const context_desc& desc, logger& log)
+            -> expected<unique_ptr<rhi::context>, context_creation_error>;
 
         context(const context&) = delete;
         context(context&&) noexcept = delete;
@@ -27,10 +33,11 @@ namespace tempest::rhi::vk
         [[nodiscard]] auto create_device(guid device_uuid) -> unique_ptr<rhi::device> override;
 
       private:
-        context(vkb::Instance instance, vector<device_desc> devices);
+        context(native_instance instance, vector<device_desc> devices, vector<physical_device_info> physical_devices);
 
-        vkb::Instance _instance;
+        native_instance _instance;
         vector<device_desc> _devices;
+        vector<physical_device_info> _physical_devices;
     };
 } // namespace tempest::rhi::vk
 

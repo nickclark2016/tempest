@@ -1,12 +1,14 @@
 #include "triangle_example.hpp"
 
-#include <cstring>
-#include <stdint.h> // for uint32_t for shaders
 #include <tempest/array.hpp>
 #include <tempest/span.hpp>
+#include <tempest/utility.hpp>
 
 namespace shaders::triangle
 {
+    using uint32_t = tempest::uint32_t;
+    using size_t = tempest::size_t;
+
     namespace vs
     {
 #include <triangle.vert.h>
@@ -42,16 +44,16 @@ namespace tempest::rhi::examples
         };
 
         constexpr auto positions = array<vec2, 3>{
-            vec2{0.0f, -0.6f},
-            vec2{0.6f, 0.6f},
-            vec2{-0.6f, 0.6f},
+            vec2{.x=0.0F, .y=-0.6F},
+            vec2{.x=0.6F, .y=0.6F},
+            vec2{.x=-0.6F, .y=0.6F},
         };
 
         // Linear RGB primary colors for sRGB correct rendering
         constexpr auto colors = array<vec3, 3>{
-            vec3{1.0f, 0.0f, 0.0f}, // Red
-            vec3{0.0f, 1.0f, 0.0f}, // Green
-            vec3{0.0f, 0.0f, 1.0f}, // Blue
+            vec3{.r=1.0F, .g=0.0F, .b=0.0F}, // Red
+            vec3{.r=0.0F, .g=1.0F, .b=0.0F}, // Green
+            vec3{.r=0.0F, .g=0.0F, .b=1.0F}, // Blue
         };
 
         constexpr auto indices = array<uint16_t, 3>{0, 1, 2};
@@ -71,7 +73,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_positions_buffer.cpu_address, positions.data(), sizeof(positions));
+        tempest::memcpy(_positions_buffer.cpu_address, positions.data(), sizeof(positions));
 
         // 2. Create storage buffer for vertex colors
         auto color_desc = buffer_desc{
@@ -85,7 +87,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_colors_buffer.cpu_address, colors.data(), sizeof(colors));
+        tempest::memcpy(_colors_buffer.cpu_address, colors.data(), sizeof(colors));
 
         // 3. Create index buffer
         auto index_desc = buffer_desc{
@@ -99,7 +101,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
+        tempest::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
 
         // 4. Create graphics pipeline
         return create_pipeline(dev, surface_format);

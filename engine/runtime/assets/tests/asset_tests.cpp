@@ -18,11 +18,18 @@
 
 #include "../src/importers/gltf_importer.hpp"
 
-#include <chrono>
+#include <tempest/chrono.hpp>
+#include <tempest/files.hpp>
+#include <tempest/filesystem.hpp>
+#include <tempest/format.hpp>
+#include <tempest/memory.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
+#include <tempest/thread.hpp>
+#include <tempest/utility.hpp>
+#include <tempest/vector.hpp>
+
 #include <cstdio>
-#include <filesystem>
-#include <fstream>
-#include <thread>
 
 // ============================================================================
 // Test types for asset_type_id tests
@@ -30,6 +37,13 @@
 
 namespace
 {
+    inline void test_write_file(const tempest::filesystem::path& path, tempest::string_view content = {})
+    {
+        auto bytes = tempest::span<const tempest::byte>(
+            reinterpret_cast<const tempest::byte*>(content.data()), content.size());
+        (void)tempest::write_file_from_bytes(path, bytes);
+    }
+
     struct type_a
     {
         int value;
@@ -100,8 +114,8 @@ TEST(asset_type_registry, register_new_type_succeeds)
     tempest::assets::asset_type_registry registry;
 
     auto result = registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -113,14 +127,14 @@ TEST(asset_type_registry, register_same_type_twice_is_idempotent)
     tempest::assets::asset_type_registry registry;
 
     auto result1 = registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
     auto result2 = registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -133,8 +147,8 @@ TEST(asset_type_registry, find_returns_correct_entry)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -160,8 +174,8 @@ TEST(asset_type_registry, find_by_name_returns_correct_entry)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -178,8 +192,8 @@ TEST(asset_type_registry, name_of_returns_correct_name)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -195,8 +209,8 @@ TEST(asset_type_registry, validate_returns_true_for_matching_pair)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -213,8 +227,8 @@ TEST(asset_type_registry, validate_returns_false_for_mismatched_name)
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -240,8 +254,8 @@ TEST(asset_type_registry, references_remain_valid_after_additional_registrations
     tempest::assets::asset_type_registry registry;
 
     registry.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -254,14 +268,14 @@ TEST(asset_type_registry, references_remain_valid_after_additional_registrations
 
     // Register more types to potentially cause vector reallocation
     registry.register_type<type_b>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
     registry.register_type<type_c>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -331,19 +345,19 @@ TEST(serializer_mesh, roundtrip)
     mesh.has_colors = true;
 
     tempest::core::vertex vert1;
-    vert1.position = {1.0f, 2.0f, 3.0f};
-    vert1.uv = {0.5f, 0.5f};
-    vert1.normal = {0.0f, 1.0f, 0.0f};
-    vert1.tangent = {1.0f, 0.0f, 0.0f, 1.0f};
-    vert1.color = {1.0f, 0.0f, 0.0f, 1.0f};
+    vert1.position = {1.0F, 2.0F, 3.0F};
+    vert1.uv = {0.5F, 0.5F};
+    vert1.normal = {0.0F, 1.0F, 0.0F};
+    vert1.tangent = {1.0F, 0.0F, 0.0F, 1.0F};
+    vert1.color = {1.0F, 0.0F, 0.0F, 1.0F};
     mesh.vertices.push_back(vert1);
 
     tempest::core::vertex vert2;
-    vert2.position = {4.0f, 5.0f, 6.0f};
-    vert2.uv = {0.0f, 1.0f};
-    vert2.normal = {0.0f, 0.0f, 1.0f};
-    vert2.tangent = {0.0f, 1.0f, 0.0f, 1.0f};
-    vert2.color = {0.0f, 1.0f, 0.0f, 1.0f};
+    vert2.position = {4.0F, 5.0F, 6.0F};
+    vert2.uv = {0.0F, 1.0F};
+    vert2.normal = {0.0F, 0.0F, 1.0F};
+    vert2.tangent = {0.0F, 1.0F, 0.0F, 1.0F};
+    vert2.color = {0.0F, 1.0F, 0.0F, 1.0F};
     mesh.vertices.push_back(vert2);
 
     mesh.indices.push_back(0);
@@ -376,11 +390,11 @@ TEST(serializer_material, roundtrip)
 
     tempest::core::material mat;
     mat.set_name("test_material");
-    mat.set_vec4(tempest::core::material::base_color_factor_name, tempest::math::vec4<float>{1.0f, 0.5f, 0.25f, 1.0f});
-    mat.set_scalar(tempest::core::material::metallic_factor_name, 0.8f);
-    mat.set_scalar(tempest::core::material::roughness_factor_name, 0.4f);
+    mat.set_vec4(tempest::core::material::base_color_factor_name, tempest::math::vec4<float>{1.0F, 0.5F, 0.25F, 1.0F});
+    mat.set_scalar(tempest::core::material::metallic_factor_name, 0.8F);
+    mat.set_scalar(tempest::core::material::roughness_factor_name, 0.4F);
     mat.set_bool(tempest::core::material::double_sided_name, true);
-    mat.set_vec3(tempest::core::material::emissive_factor_name, tempest::math::vec3<float>{0.1f, 0.2f, 0.3f});
+    mat.set_vec3(tempest::core::material::emissive_factor_name, tempest::math::vec3<float>{0.1F, 0.2F, 0.3F});
     mat.set_string(tempest::core::material::alpha_mode_name, "OPAQUE");
 
     tempest::serialization::serializer<tempest::serialization::binary_archive, tempest::core::material>::serialize(
@@ -392,18 +406,18 @@ TEST(serializer_material, roundtrip)
 
     auto bcf = result.get_vec4(tempest::core::material::base_color_factor_name);
     ASSERT_TRUE(bcf.has_value());
-    EXPECT_FLOAT_EQ(bcf.value().x, 1.0f);
-    EXPECT_FLOAT_EQ(bcf.value().y, 0.5f);
-    EXPECT_FLOAT_EQ(bcf.value().z, 0.25f);
-    EXPECT_FLOAT_EQ(bcf.value().w, 1.0f);
+    EXPECT_FLOAT_EQ(bcf.value().x, 1.0F);
+    EXPECT_FLOAT_EQ(bcf.value().y, 0.5F);
+    EXPECT_FLOAT_EQ(bcf.value().z, 0.25F);
+    EXPECT_FLOAT_EQ(bcf.value().w, 1.0F);
 
     auto metallic = result.get_scalar(tempest::core::material::metallic_factor_name);
     ASSERT_TRUE(metallic.has_value());
-    EXPECT_FLOAT_EQ(metallic.value(), 0.8f);
+    EXPECT_FLOAT_EQ(metallic.value(), 0.8F);
 
     auto roughness = result.get_scalar(tempest::core::material::roughness_factor_name);
     ASSERT_TRUE(roughness.has_value());
-    EXPECT_FLOAT_EQ(roughness.value(), 0.4f);
+    EXPECT_FLOAT_EQ(roughness.value(), 0.4F);
 
     auto double_sided = result.get_bool(tempest::core::material::double_sided_name);
     ASSERT_TRUE(double_sided.has_value());
@@ -411,9 +425,9 @@ TEST(serializer_material, roundtrip)
 
     auto emissive = result.get_vec3(tempest::core::material::emissive_factor_name);
     ASSERT_TRUE(emissive.has_value());
-    EXPECT_FLOAT_EQ(emissive.value().x, 0.1f);
-    EXPECT_FLOAT_EQ(emissive.value().y, 0.2f);
-    EXPECT_FLOAT_EQ(emissive.value().z, 0.3f);
+    EXPECT_FLOAT_EQ(emissive.value().x, 0.1F);
+    EXPECT_FLOAT_EQ(emissive.value().y, 0.2F);
+    EXPECT_FLOAT_EQ(emissive.value().z, 0.3F);
 
     auto alpha_mode = result.get_string(tempest::core::material::alpha_mode_name);
     ASSERT_TRUE(alpha_mode.has_value());
@@ -473,7 +487,7 @@ namespace
 
     void cleanup_test_db()
     {
-        std::remove(test_db_path);
+        ::remove(test_db_path);
     }
 } // namespace
 
@@ -488,10 +502,10 @@ TEST(asset_database, open_nonexistent_file_produces_empty_database)
     database.open("nonexistent_file.tassetdb");
 
     // Database should be empty
-    auto guid_result = database.find_by_guid(tempest::guid::generate_random_guid());
+    const auto *guid_result = database.find_by_guid(tempest::guid::generate_random_guid());
     EXPECT_EQ(guid_result, nullptr);
 
-    auto path_result = database.find_by_path("some/path.gltf");
+    const auto *path_result = database.find_by_path("some/path.gltf");
     EXPECT_EQ(path_result, nullptr);
 }
 
@@ -502,8 +516,8 @@ TEST(asset_database, save_then_open_roundtrips)
     // Register a type
     tempest::assets::asset_type_registry type_reg;
     type_reg.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -550,8 +564,8 @@ TEST(asset_database, find_by_path_returns_correct_result)
 
     tempest::assets::asset_type_registry type_reg;
     type_reg.register_type<type_a>(
-        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) { return true; },
-        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) {
+        [](tempest::span<const tempest::byte>, const tempest::guid&, tempest::assets::asset_database&) -> bool { return true; },
+        [](const tempest::guid&, const tempest::assets::asset_database&, tempest::vector<tempest::byte>&) -> bool {
             return true;
         });
 
@@ -606,16 +620,16 @@ namespace
         tempest::guid last_registered_asset_id{};
 
         // Override the path-based overload so it doesn't try to read a file from disk.
-        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db, tempest::string_view path,
-                                                  tempest::ecs::archetype_registry& registry) override
+        [[nodiscard]] auto import(tempest::assets::asset_database& asset_db, tempest::string_view path,
+                                                  tempest::ecs::archetype_registry& registry) -> tempest::ecs::entity override
         {
             return import(asset_db, tempest::span<const tempest::byte>{}, registry, tempest::some(path));
         }
 
-        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
+        [[nodiscard]] auto import(tempest::assets::asset_database& asset_db,
                                                   tempest::span<const tempest::byte> data,
                                                   tempest::ecs::archetype_registry& registry,
-                                                  tempest::optional<tempest::string_view> path) override
+                                                  tempest::optional<tempest::string_view> path) -> tempest::ecs::entity override
         {
             (void)data;
             ++import_call_count;
@@ -650,16 +664,16 @@ namespace
         tempest::vector<tempest::guid> produced_material_ids;
 
         // Override the path-based overload so it doesn't try to read a file from disk.
-        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db, tempest::string_view path,
-                                                  tempest::ecs::archetype_registry& registry) override
+        [[nodiscard]] auto import(tempest::assets::asset_database& asset_db, tempest::string_view path,
+                                                  tempest::ecs::archetype_registry& registry) -> tempest::ecs::entity override
         {
             return import(asset_db, tempest::span<const tempest::byte>{}, registry, tempest::some(path));
         }
 
-        [[nodiscard]] tempest::ecs::entity import(tempest::assets::asset_database& asset_db,
+        [[nodiscard]] auto import(tempest::assets::asset_database& asset_db,
                                                   tempest::span<const tempest::byte> data,
                                                   tempest::ecs::archetype_registry& registry,
-                                                  tempest::optional<tempest::string_view> path) override
+                                                  tempest::optional<tempest::string_view> path) -> tempest::ecs::entity override
         {
             (void)data;
             ++import_call_count;
@@ -690,7 +704,7 @@ namespace
             // Register 1 material
             {
                 auto mat_id = asset_db.register_asset(tempest::assets::asset_type_id::of<fake_material>(), source);
-                fake_material mat{.roughness = 0.42f};
+                fake_material mat{.roughness = 0.42F};
                 auto mat_bytes =
                     tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(&mat), sizeof(mat)};
                 asset_db.store_blob(mat_id, mat_bytes);
@@ -950,7 +964,7 @@ TEST(asset_database_load, multi_asset_import_roundtrips_through_save_and_open)
         ASSERT_EQ(mat_blob.size(), sizeof(fake_material));
         fake_material loaded_mat;
         tempest::memcpy(&loaded_mat, mat_blob.data(), sizeof(fake_material));
-        EXPECT_FLOAT_EQ(loaded_mat.roughness, 0.42f);
+        EXPECT_FLOAT_EQ(loaded_mat.roughness, 0.42F);
 
         // Verify texture blob data survived the roundtrip.
         auto tex0_blob = database.get_blob(texture_ids[0]);
@@ -1015,18 +1029,13 @@ TEST(asset_database_mount_and_scan, mount_roots_priority_ordering)
 TEST(asset_database_mount_and_scan, scan_and_index_discovers_shaders_and_basenames)
 {
     // 1. Setup: Create temporary mock mount directory with nested shaders
-    const auto temp_mount = std::filesystem::path("tempest_test_mount_scan");
-    std::filesystem::create_directories(temp_mount / "shaders" / "engine");
-    std::filesystem::create_directories(temp_mount / "shaders" / "post");
+    const auto temp_mount = tempest::filesystem::path("tempest_test_mount_scan");
+    tempest::filesystem::create_directories(temp_mount / "shaders" / "engine");
+    tempest::filesystem::create_directories(temp_mount / "shaders" / "post");
 
-    {
-        auto f1 = std::ofstream(temp_mount / "shaders" / "engine" / "pbr.vert.spv", std::ios::binary);
-        f1 << "mock_pbr_vert_bytecode_12345";
-        auto f2 = std::ofstream(temp_mount / "shaders" / "engine" / "pbr.frag.spv", std::ios::binary);
-        f2 << "mock_pbr_frag_bytecode_67890";
-        auto f3 = std::ofstream(temp_mount / "shaders" / "post" / "bloom.comp.spv", std::ios::binary);
-        f3 << "mock_bloom_comp_bytecode_abcde";
-    }
+    test_write_file(temp_mount / "shaders" / "engine" / "pbr.vert.spv", "mock_pbr_vert_bytecode_12345");
+    test_write_file(temp_mount / "shaders" / "engine" / "pbr.frag.spv", "mock_pbr_frag_bytecode_67890");
+    test_write_file(temp_mount / "shaders" / "post" / "bloom.comp.spv", "mock_bloom_comp_bytecode_abcde");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1054,24 +1063,20 @@ TEST(asset_database_mount_and_scan, scan_and_index_discovers_shaders_and_basenam
     EXPECT_EQ(bytes.size(), sizeof("mock_pbr_vert_bytecode_12345") - 1);
 
     // 6. Teardown
-    std::filesystem::remove_all(temp_mount);
+    tempest::filesystem::remove_all(temp_mount);
 }
 
 /// @brief Verifies that higher-priority mount roots override assets with the same basename from lower-priority roots.
 TEST(asset_database_mount_and_scan, priority_override_precedence)
 {
     // 1. Setup: Create engine and project mock folders with duplicate shader names
-    const auto engine_mount = std::filesystem::path("tempest_test_engine_root");
-    const auto project_mount = std::filesystem::path("tempest_test_project_root");
-    std::filesystem::create_directories(engine_mount / "shaders");
-    std::filesystem::create_directories(project_mount / "shaders");
+    const auto engine_mount = tempest::filesystem::path("tempest_test_engine_root");
+    const auto project_mount = tempest::filesystem::path("tempest_test_project_root");
+    tempest::filesystem::create_directories(engine_mount / "shaders");
+    tempest::filesystem::create_directories(project_mount / "shaders");
 
-    {
-        auto f_engine = std::ofstream(engine_mount / "shaders" / "lighting.frag.spv", std::ios::binary);
-        f_engine << "ENGINE_DEFAULT_LIGHTING";
-        auto f_project = std::ofstream(project_mount / "shaders" / "lighting.frag.spv", std::ios::binary);
-        f_project << "PROJECT_CUSTOM_LIGHTING_OVERRIDE";
-    }
+    test_write_file(engine_mount / "shaders" / "lighting.frag.spv", "ENGINE_DEFAULT_LIGHTING");
+    test_write_file(project_mount / "shaders" / "lighting.frag.spv", "PROJECT_CUSTOM_LIGHTING_OVERRIDE");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1087,27 +1092,23 @@ TEST(asset_database_mount_and_scan, priority_override_precedence)
 
     auto blob = database.get_blob(asset->id);
     ASSERT_FALSE(blob.empty());
-    auto content = std::string(reinterpret_cast<const char*>(blob.data()), blob.size());
+    auto content = tempest::string(reinterpret_cast<const char*>(blob.data()), blob.size());
     EXPECT_EQ(content, "PROJECT_CUSTOM_LIGHTING_OVERRIDE");
 
     // 4. Teardown
-    std::filesystem::remove_all(engine_mount);
-    std::filesystem::remove_all(project_mount);
+    tempest::filesystem::remove_all(engine_mount);
+    tempest::filesystem::remove_all(project_mount);
 }
 
 /// @brief Verifies that resolve_source_path maps compiled .spv files back to their original .slang source files.
 TEST(asset_database_mount_and_scan, resolve_source_path_maps_spv_to_slang)
 {
     // 1. Setup: Create temporary mock folder with .spv and corresponding .slang
-    const auto temp_mount = std::filesystem::path("tempest_test_source_map");
-    std::filesystem::create_directories(temp_mount / "shaders");
+    const auto temp_mount = tempest::filesystem::path("tempest_test_source_map");
+    tempest::filesystem::create_directories(temp_mount / "shaders");
 
-    {
-        auto f1 = std::ofstream(temp_mount / "shaders" / "tonemap.vert.spv", std::ios::binary);
-        f1 << "tonemap_vs";
-        auto f2 = std::ofstream(temp_mount / "shaders" / "tonemap.slang");
-        f2 << "// tonemap slang source";
-    }
+    test_write_file(temp_mount / "shaders" / "tonemap.vert.spv", "tonemap_vs");
+    test_write_file(temp_mount / "shaders" / "tonemap.slang", "// tonemap slang source");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1122,7 +1123,7 @@ TEST(asset_database_mount_and_scan, resolve_source_path_maps_spv_to_slang)
     EXPECT_EQ(*src_opt, "tonemap.slang");
 
     // 4. Teardown
-    std::filesystem::remove_all(temp_mount);
+    tempest::filesystem::remove_all(temp_mount);
 }
 
 /// @brief Verifies that notify_file_changed detects source modifications and invalidates cached blobs for
@@ -1130,14 +1131,11 @@ TEST(asset_database_mount_and_scan, resolve_source_path_maps_spv_to_slang)
 TEST(asset_database_mount_and_scan, notify_file_changed_invalidates_cache)
 {
     // 1. Setup: Create mock shader and index it
-    const auto temp_mount = std::filesystem::path("tempest_test_hotreload");
-    std::filesystem::create_directories(temp_mount / "shaders");
+    const auto temp_mount = tempest::filesystem::path("tempest_test_hotreload");
+    tempest::filesystem::create_directories(temp_mount / "shaders");
     const auto shader_path = temp_mount / "shaders" / "reloaded.frag.spv";
 
-    {
-        auto f = std::ofstream(shader_path, std::ios::binary);
-        f << "INITIAL_BYTECODE";
-    }
+    test_write_file(shader_path, "INITIAL_BYTECODE");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1150,42 +1148,37 @@ TEST(asset_database_mount_and_scan, notify_file_changed_invalidates_cache)
 
     // Load initial bytes into cache
     auto initial_blob = database.get_blob(asset_id);
-    EXPECT_EQ(std::string(reinterpret_cast<const char*>(initial_blob.data()), initial_blob.size()), "INITIAL_BYTECODE");
+    EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(initial_blob.data()), initial_blob.size()), "INITIAL_BYTECODE");
 
     // 2. Act: Modify file on disk and trigger notify_file_changed
-    {
-        auto f = std::ofstream(shader_path, std::ios::binary);
-        f << "UPDATED_HOT_RELOADED_BYTECODE";
-    }
+    test_write_file(shader_path, "UPDATED_HOT_RELOADED_BYTECODE");
 
     bool notified = database.notify_file_changed("shaders/reloaded.frag.spv");
     EXPECT_TRUE(notified);
 
     // 3. Assert: Subsequent get_blob reloads updated bytes
     auto reloaded_blob = database.get_blob(asset_id);
-    EXPECT_EQ(std::string(reinterpret_cast<const char*>(reloaded_blob.data()), reloaded_blob.size()),
+    EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(reloaded_blob.data()), reloaded_blob.size()),
               "UPDATED_HOT_RELOADED_BYTECODE");
 
     // 4. Teardown
-    std::filesystem::remove_all(temp_mount);
+    tempest::filesystem::remove_all(temp_mount);
 }
 
 /// @brief Verifies edge cases in path normalization: backslashes, leading/trailing slashes, and ./ prefixes.
 TEST(asset_database_mount_and_scan, path_normalization_edge_cases)
 {
     // 1. Setup: Create test folder with trailing slash in mount path
-    const auto temp_mount = std::filesystem::path("tempest_test_norm_edge");
-    std::filesystem::create_directories(temp_mount / "shaders" / "edge");
-    {
-        auto f = std::ofstream(temp_mount / "shaders" / "edge" / "test.vert.spv", std::ios::binary);
-        f << "NORM_EDGE_TEST";
-    }
+    const auto temp_mount = tempest::filesystem::path("tempest_test_norm_edge");
+    tempest::filesystem::create_directories(temp_mount / "shaders" / "edge");
+    test_write_file(temp_mount / "shaders" / "edge" / "test.vert.spv", "NORM_EDGE_TEST");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
 
     // 2. Act: Mount with trailing slash and redundant dot-slashes
-    auto mount_with_slashes = temp_mount.generic_string() + "/";
+    auto mount_with_slashes = temp_mount.generic_string();
+    mount_with_slashes += "/";
     database.mount_root(mount_with_slashes.c_str(), 0);
     database.scan_and_index();
 
@@ -1206,7 +1199,7 @@ TEST(asset_database_mount_and_scan, path_normalization_edge_cases)
     EXPECT_EQ(dot_slash->id, standard->id);
 
     // 4. Teardown
-    std::filesystem::remove_all(temp_mount);
+    tempest::filesystem::remove_all(temp_mount);
 }
 
 /// @brief Verifies that duplicate basenames in different subdirectories of the same mount root are uniquely addressable
@@ -1214,16 +1207,12 @@ TEST(asset_database_mount_and_scan, path_normalization_edge_cases)
 TEST(asset_database_mount_and_scan, duplicate_basename_different_subdirectories)
 {
     // 1. Setup: Create pass_a and pass_b subdirectories with identical shader file names
-    const auto temp_mount = std::filesystem::path("tempest_test_dup_basename");
-    std::filesystem::create_directories(temp_mount / "shaders" / "pass_a");
-    std::filesystem::create_directories(temp_mount / "shaders" / "pass_b");
+    const auto temp_mount = tempest::filesystem::path("tempest_test_dup_basename");
+    tempest::filesystem::create_directories(temp_mount / "shaders" / "pass_a");
+    tempest::filesystem::create_directories(temp_mount / "shaders" / "pass_b");
 
-    {
-        auto f_a = std::ofstream(temp_mount / "shaders" / "pass_a" / "main.frag.spv", std::ios::binary);
-        f_a << "PASS_A_BYTECODE";
-        auto f_b = std::ofstream(temp_mount / "shaders" / "pass_b" / "main.frag.spv", std::ios::binary);
-        f_b << "PASS_B_BYTECODE";
-    }
+    test_write_file(temp_mount / "shaders" / "pass_a" / "main.frag.spv", "PASS_A_BYTECODE");
+    test_write_file(temp_mount / "shaders" / "pass_b" / "main.frag.spv", "PASS_B_BYTECODE");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1241,11 +1230,11 @@ TEST(asset_database_mount_and_scan, duplicate_basename_different_subdirectories)
 
     auto blob_a = database.get_blob(asset_a->id);
     auto blob_b = database.get_blob(asset_b->id);
-    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob_a.data()), blob_a.size()), "PASS_A_BYTECODE");
-    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob_b.data()), blob_b.size()), "PASS_B_BYTECODE");
+    EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(blob_a.data()), blob_a.size()), "PASS_A_BYTECODE");
+    EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(blob_b.data()), blob_b.size()), "PASS_B_BYTECODE");
 
     // 4. Teardown
-    std::filesystem::remove_all(temp_mount);
+    tempest::filesystem::remove_all(temp_mount);
 }
 
 /// @brief Verifies that on-demand asset lookup locates and registers a file on disk even without an explicit
@@ -1253,12 +1242,9 @@ TEST(asset_database_mount_and_scan, duplicate_basename_different_subdirectories)
 TEST(asset_database_mount_and_scan, on_demand_lookup_without_explicit_scan)
 {
     // 1. Setup: Create test folder with a shader file
-    const auto temp_mount = std::filesystem::path("tempest_test_ondemand");
-    std::filesystem::create_directories(temp_mount / "shaders" / "ondemand");
-    {
-        auto f = std::ofstream(temp_mount / "shaders" / "ondemand" / "lazy.comp.spv", std::ios::binary);
-        f << "LAZY_DISCOVERED_BYTECODE";
-    }
+    const auto temp_mount = tempest::filesystem::path("tempest_test_ondemand");
+    tempest::filesystem::create_directories(temp_mount / "shaders" / "ondemand");
+    test_write_file(temp_mount / "shaders" / "ondemand" / "lazy.comp.spv", "LAZY_DISCOVERED_BYTECODE");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1271,10 +1257,10 @@ TEST(asset_database_mount_and_scan, on_demand_lookup_without_explicit_scan)
     ASSERT_NE(asset, nullptr);
 
     auto blob = database.get_blob(asset->id);
-    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob.data()), blob.size()), "LAZY_DISCOVERED_BYTECODE");
+    EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(blob.data()), blob.size()), "LAZY_DISCOVERED_BYTECODE");
 
     // 4. Teardown
-    std::filesystem::remove_all(temp_mount);
+    tempest::filesystem::remove_all(temp_mount);
 }
 
 /// @brief Verifies that remounting an existing root with a new priority updates the priority and re-sorts the mount
@@ -1338,11 +1324,11 @@ TEST(asset_database_mount_and_scan, large_and_small_assets_chunk_arena)
     auto small_ids = tempest::vector<tempest::guid>{};
     for (int i = 0; i < 10; ++i)
     {
-        auto name = std::string("small_asset_") + std::to_string(i) + ".bin";
-        auto id = database.register_asset(tempest::assets::asset_type_id::from_hash(100 + i), name.c_str());
+        auto name = tempest::format("small_asset_{}.bin", i);
+        auto id = database.register_asset(tempest::assets::asset_type_id::from_hash(100 + i), name);
         small_ids.push_back(id);
 
-        auto payload = std::vector<tempest::byte>(8 * 1024, static_cast<tempest::byte>(i + 1));
+        auto payload = tempest::vector<tempest::byte>(8 * 1024, static_cast<tempest::byte>(i + 1));
         database.store_blob(id, tempest::span<const tempest::byte>{payload.data(), payload.size()});
     }
 
@@ -1353,7 +1339,7 @@ TEST(asset_database_mount_and_scan, large_and_small_assets_chunk_arena)
 
     // 2. Act: Register an oversized asset (128 KB > 64 KB default chunk size)
     auto large_id = database.register_asset(tempest::assets::asset_type_id::from_hash(999), "large_asset.bin");
-    auto large_payload = std::vector<tempest::byte>(128 * 1024, static_cast<tempest::byte>(0xAA));
+    auto large_payload = tempest::vector<tempest::byte>(128 * 1024, static_cast<tempest::byte>(0xAA));
     database.store_blob(large_id, tempest::span<const tempest::byte>{large_payload.data(), large_payload.size()});
 
     // 3. Assert: Memory stability - previous small blob span pointer remains unchanged!
@@ -1372,10 +1358,10 @@ TEST(asset_database_mount_and_scan, large_and_small_assets_chunk_arena)
 /// and reopened.
 TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
 {
-    const auto test_db_path = std::filesystem::path("tempest_test_coalesce.tassetdb");
-    if (std::filesystem::exists(test_db_path))
+    const auto test_db_path = tempest::filesystem::path("tempest_test_coalesce.tassetdb");
+    if (tempest::filesystem::exists(test_db_path))
     {
-        std::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(test_db_path);
     }
 
     auto type_reg = tempest::assets::asset_type_registry{};
@@ -1388,11 +1374,11 @@ TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
         database.open(test_db_path.generic_string().c_str());
 
         id_small = database.register_asset(tempest::assets::asset_type_id::from_hash(1), "chunked_small.spv");
-        auto small_bytes = std::vector<tempest::byte>(4096, static_cast<tempest::byte>(0x11));
+        auto small_bytes = tempest::vector<tempest::byte>(4096, static_cast<tempest::byte>(0x11));
         database.store_blob(id_small, tempest::span<const tempest::byte>{small_bytes.data(), small_bytes.size()});
 
         id_large = database.register_asset(tempest::assets::asset_type_id::from_hash(2), "chunked_large.bin");
-        auto large_bytes = std::vector<tempest::byte>(96 * 1024, static_cast<tempest::byte>(0x22));
+        auto large_bytes = tempest::vector<tempest::byte>(96 * 1024, static_cast<tempest::byte>(0x22));
         database.store_blob(id_large, tempest::span<const tempest::byte>{large_bytes.data(), large_bytes.size()});
 
         bool saved = database.save();
@@ -1425,19 +1411,19 @@ TEST(asset_database_mount_and_scan, chunks_coalesce_on_save_and_reopen)
     }
 
     // 4. Teardown
-    if (std::filesystem::exists(test_db_path))
+    if (tempest::filesystem::exists(test_db_path))
     {
-        std::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(test_db_path);
     }
 }
 
 /// @brief Verifies mutation/hot-reload of an asset loaded from .tassetdb and subsequent re-coalescing on save.
 TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
 {
-    const auto test_db_path = std::filesystem::path("tempest_test_mutate_coalesce.tassetdb");
-    if (std::filesystem::exists(test_db_path))
+    const auto test_db_path = tempest::filesystem::path("tempest_test_mutate_coalesce.tassetdb");
+    if (tempest::filesystem::exists(test_db_path))
     {
-        std::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(test_db_path);
     }
 
     auto type_reg = tempest::assets::asset_type_registry{};
@@ -1450,13 +1436,13 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
         database.open(test_db_path.generic_string().c_str());
 
         shader_id = database.register_asset(tempest::assets::asset_type_id::from_hash(10), "pbr.frag.spv");
-        auto initial_shader = std::string("INITIAL_SHADER_V1");
+        auto initial_shader = tempest::string("INITIAL_SHADER_V1");
         database.store_blob(
             shader_id, tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(initial_shader.data()),
                                                           initial_shader.size()});
 
         mesh_id = database.register_asset(tempest::assets::asset_type_id::from_hash(20), "cube.mesh");
-        auto mesh_data = std::string("CUBE_MESH_DATA_UNTOUCHED");
+        auto mesh_data = tempest::string("CUBE_MESH_DATA_UNTOUCHED");
         database.store_blob(mesh_id, tempest::span<const tempest::byte>{
                                          reinterpret_cast<const tempest::byte*>(mesh_data.data()), mesh_data.size()});
 
@@ -1469,18 +1455,18 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
         database.open(test_db_path.generic_string().c_str());
 
         // Mutate shader blob
-        auto updated_shader = std::string("RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
+        auto updated_shader = tempest::string("RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
         database.store_blob(
             shader_id, tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(updated_shader.data()),
                                                           updated_shader.size()});
 
         // Verify in-memory updated content and untouched mesh content
         auto cur_shader_blob = database.get_blob(shader_id);
-        EXPECT_EQ(std::string(reinterpret_cast<const char*>(cur_shader_blob.data()), cur_shader_blob.size()),
+        EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(cur_shader_blob.data()), cur_shader_blob.size()),
                   "RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
 
         auto cur_mesh_blob = database.get_blob(mesh_id);
-        EXPECT_EQ(std::string(reinterpret_cast<const char*>(cur_mesh_blob.data()), cur_mesh_blob.size()),
+        EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(cur_mesh_blob.data()), cur_mesh_blob.size()),
                   "CUBE_MESH_DATA_UNTOUCHED");
 
         // Save mutated database
@@ -1493,18 +1479,18 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
         database.open(test_db_path.generic_string().c_str());
 
         auto final_shader_blob = database.get_blob(shader_id);
-        EXPECT_EQ(std::string(reinterpret_cast<const char*>(final_shader_blob.data()), final_shader_blob.size()),
+        EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(final_shader_blob.data()), final_shader_blob.size()),
                   "RELOADED_SHADER_V2_LONGER_PAYLOAD_HERE");
 
         auto final_mesh_blob = database.get_blob(mesh_id);
-        EXPECT_EQ(std::string(reinterpret_cast<const char*>(final_mesh_blob.data()), final_mesh_blob.size()),
+        EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(final_mesh_blob.data()), final_mesh_blob.size()),
                   "CUBE_MESH_DATA_UNTOUCHED");
     }
 
     // 4. Teardown
-    if (std::filesystem::exists(test_db_path))
+    if (tempest::filesystem::exists(test_db_path))
     {
-        std::filesystem::remove(test_db_path);
+        tempest::filesystem::remove(test_db_path);
     }
 }
 
@@ -1516,21 +1502,24 @@ TEST(asset_database_mount_and_scan, mutation_and_hot_reload_coalescing)
 TEST(gltf_importer_tests, no_orphan_template_primitives_created)
 {
     // 1. Setup: Create binary buffer with 3 vertices and 3 indices
-    const auto bin_file_path = std::filesystem::path("tempest_test_instanced_mesh.bin");
+    const auto bin_file_path = tempest::filesystem::path("tempest_test_instanced_mesh.bin");
     {
-        auto f = std::ofstream(bin_file_path, std::ios::binary);
         float verts[9] = {
             0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F,
         };
         uint16_t indices[3] = {0, 1, 2};
-        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
-        f.write(reinterpret_cast<const char*>(indices), sizeof(indices));
+        auto bin_bytes = tempest::vector<tempest::byte>{};
+        auto append_bytes = [&](const void* ptr, size_t size) -> void {
+            const auto *b = reinterpret_cast<const tempest::byte*>(ptr);
+            bin_bytes.insert(bin_bytes.end(), b, b + size);
+        };
+        append_bytes(verts, sizeof(verts));
+        append_bytes(indices, sizeof(indices));
+        (void)tempest::write_file_from_bytes(bin_file_path, bin_bytes);
     }
 
-    const auto test_file_path = std::filesystem::path("tempest_test_instanced_mesh.gltf");
-    {
-        auto f = std::ofstream(test_file_path, std::ios::binary);
-        f << R"({
+    const auto test_file_path = tempest::filesystem::path("tempest_test_instanced_mesh.gltf");
+    test_write_file(test_file_path, R"({
         "asset": { "version": "2.0" },
         "buffers": [
             { "byteLength": 42, "uri": "tempest_test_instanced_mesh.bin" }
@@ -1558,8 +1547,7 @@ TEST(gltf_importer_tests, no_orphan_template_primitives_created)
             { "nodes": [0, 1] }
         ],
         "scene": 0
-    })";
-    }
+    })");
 
     auto mesh_reg = tempest::core::mesh_registry{};
     auto tex_reg = tempest::core::texture_registry{};
@@ -1579,7 +1567,7 @@ TEST(gltf_importer_tests, no_orphan_template_primitives_created)
     // 3. Assert: Exactly 2 mesh components exist in the registry (one for each node instance), NO orphan template
     // primitives
     auto mesh_count = 0U;
-    registry.each([&](const tempest::core::mesh_component&) { ++mesh_count; });
+    registry.each([&](const tempest::core::mesh_component&) -> void { ++mesh_count; });
 
     EXPECT_EQ(mesh_count, 2U);
 
@@ -1610,13 +1598,13 @@ TEST(gltf_importer_tests, no_orphan_template_primitives_created)
     EXPECT_EQ(node_count, 2U);
 
     // 4. Teardown
-    if (std::filesystem::exists(test_file_path))
+    if (tempest::filesystem::exists(test_file_path))
     {
-        std::filesystem::remove(test_file_path);
+        tempest::filesystem::remove(test_file_path);
     }
-    if (std::filesystem::exists(bin_file_path))
+    if (tempest::filesystem::exists(bin_file_path))
     {
-        std::filesystem::remove(bin_file_path);
+        tempest::filesystem::remove(bin_file_path);
     }
 }
 
@@ -1624,31 +1612,34 @@ TEST(gltf_importer_tests, no_orphan_template_primitives_created)
 /// reload.
 TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
 {
-    const auto db_path = std::filesystem::path("tempest_test_integrity.tassetdb");
-    const auto bin_file_path = std::filesystem::path("tempest_test_mesh_integrity.bin");
-    const auto gltf_file_path = std::filesystem::path("tempest_test_mesh_integrity.gltf");
+    const auto db_path = tempest::filesystem::path("tempest_test_integrity.tassetdb");
+    const auto bin_file_path = tempest::filesystem::path("tempest_test_mesh_integrity.bin");
+    const auto gltf_file_path = tempest::filesystem::path("tempest_test_mesh_integrity.gltf");
 
-    if (std::filesystem::exists(db_path))
+    if (tempest::filesystem::exists(db_path))
     {
-        std::filesystem::remove(db_path);
+        tempest::filesystem::remove(db_path);
     }
 
     // 1. Setup: Create glTF with 3 vertices and 3 indices with distinct position, normal, uv, tangent
     {
-        auto f = std::ofstream(bin_file_path, std::ios::binary);
         float pos[9] = {1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
         float norm[9] = {0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F};
         float uvs[6] = {0.1F, 0.2F, 0.3F, 0.4F, 0.5F, 0.6F};
         uint16_t idx[3] = {0, 1, 2};
-        f.write(reinterpret_cast<const char*>(pos), sizeof(pos));
-        f.write(reinterpret_cast<const char*>(norm), sizeof(norm));
-        f.write(reinterpret_cast<const char*>(uvs), sizeof(uvs));
-        f.write(reinterpret_cast<const char*>(idx), sizeof(idx));
+        auto bin_bytes = tempest::vector<tempest::byte>{};
+        auto append_bytes = [&](const void* ptr, size_t size) -> void {
+            const auto *b = reinterpret_cast<const tempest::byte*>(ptr);
+            bin_bytes.insert(bin_bytes.end(), b, b + size);
+        };
+        append_bytes(pos, sizeof(pos));
+        append_bytes(norm, sizeof(norm));
+        append_bytes(uvs, sizeof(uvs));
+        append_bytes(idx, sizeof(idx));
+        (void)tempest::write_file_from_bytes(bin_file_path, bin_bytes);
     }
 
-    {
-        auto f = std::ofstream(gltf_file_path, std::ios::binary);
-        f << R"({
+    test_write_file(gltf_file_path, R"({
         "asset": { "version": "2.0" },
         "buffers": [
             { "byteLength": 102, "uri": "tempest_test_mesh_integrity.bin" }
@@ -1679,8 +1670,7 @@ TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
             { "nodes": [0] }
         ],
         "scene": 0
-    })";
-    }
+    })");
 
     // 2. Act 1: Import fresh and save to database
     auto orig_mesh_guid = tempest::guid{};
@@ -1700,10 +1690,10 @@ TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
         EXPECT_TRUE(root != tempest::ecs::tombstone);
 
         // Find the mesh in registry
-        for (auto it = mesh_reg.begin(); it != mesh_reg.end(); ++it)
+        for (const auto & it : mesh_reg)
         {
-            orig_mesh_guid = it->first;
-            orig_mesh = it->second;
+            orig_mesh_guid = it.first;
+            orig_mesh = it.second;
             break;
         }
 
@@ -1760,29 +1750,29 @@ TEST(gltf_importer_tests, gltf_database_save_and_reload_mesh_integrity)
     }
 
     // 4. Teardown
-    if (std::filesystem::exists(db_path))
+    if (tempest::filesystem::exists(db_path))
     {
-        std::filesystem::remove(db_path);
+        tempest::filesystem::remove(db_path);
     }
-    if (std::filesystem::exists(gltf_file_path))
+    if (tempest::filesystem::exists(gltf_file_path))
     {
-        std::filesystem::remove(gltf_file_path);
+        tempest::filesystem::remove(gltf_file_path);
     }
-    if (std::filesystem::exists(bin_file_path))
+    if (tempest::filesystem::exists(bin_file_path))
     {
-        std::filesystem::remove(bin_file_path);
+        tempest::filesystem::remove(bin_file_path);
     }
 }
 
 /// @brief Tests that Sponza glTF saves and reloads from asset database with complete hierarchy and mesh integrity.
 TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
 {
-    const auto db_path = std::filesystem::path("sponza_test.tassetdb");
-    const auto sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+    const auto db_path = tempest::filesystem::path("sponza_test.tassetdb");
+    const auto *const sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
 
-    if (std::filesystem::exists(db_path))
+    if (tempest::filesystem::exists(db_path))
     {
-        std::filesystem::remove(db_path);
+        tempest::filesystem::remove(db_path);
     }
 
     auto orig_meshes = tempest::flat_unordered_map<tempest::guid, tempest::core::mesh>{};
@@ -1803,9 +1793,9 @@ TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
         auto root = database.load(sponza_path, registry);
         ASSERT_TRUE(root != tempest::ecs::tombstone);
 
-        for (auto it = mesh_reg.begin(); it != mesh_reg.end(); ++it)
+        for (const auto & it : mesh_reg)
         {
-            orig_meshes[it->first] = it->second;
+            orig_meshes[it.first] = it.second;
             ++orig_mesh_count;
         }
 
@@ -1831,13 +1821,13 @@ TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
         ASSERT_TRUE(root != tempest::ecs::tombstone);
 
         auto reloaded_mesh_count = 0U;
-        for (auto it = mesh_reg.begin(); it != mesh_reg.end(); ++it)
+        for (const auto & it : mesh_reg)
         {
             ++reloaded_mesh_count;
-            auto orig_it = orig_meshes.find(it->first);
+            auto orig_it = orig_meshes.find(it.first);
             ASSERT_TRUE(orig_it != orig_meshes.end());
             const auto& orig_m = orig_it->second;
-            const auto& reloaded_m = it->second;
+            const auto& reloaded_m = it.second;
 
             EXPECT_EQ(reloaded_m.vertices.size(), orig_m.vertices.size());
             EXPECT_EQ(reloaded_m.indices.size(), orig_m.indices.size());
@@ -1856,9 +1846,9 @@ TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
     }
 
     // 3. Teardown
-    if (std::filesystem::exists(db_path))
+    if (tempest::filesystem::exists(db_path))
     {
-        std::filesystem::remove(db_path);
+        tempest::filesystem::remove(db_path);
     }
 }
 
@@ -1870,23 +1860,14 @@ TEST(gltf_importer_tests, sponza_database_save_and_reload_integrity)
 TEST(asset_database_mount_aliases, grouped_mount_alias_priority_resolution)
 {
     // 1. Setup: Create directory hierarchies for high-priority and low-priority roots
-    auto root_high = std::filesystem::path("temp_test_alias_high");
-    auto root_low = std::filesystem::path("temp_test_alias_low");
-    std::filesystem::create_directories(root_high);
-    std::filesystem::create_directories(root_low);
+    auto root_high = tempest::filesystem::path("temp_test_alias_high");
+    auto root_low = tempest::filesystem::path("temp_test_alias_low");
+    tempest::filesystem::create_directories(root_high);
+    tempest::filesystem::create_directories(root_low);
 
-    {
-        std::ofstream fh((root_high / "common.slang").string().c_str());
-        fh << "// High priority common";
-    }
-    {
-        std::ofstream fl((root_low / "common.slang").string().c_str());
-        fl << "// Low priority common";
-    }
-    {
-        std::ofstream fb((root_low / "unique_low.slang").string().c_str());
-        fb << "// Unique low";
-    }
+    test_write_file(root_high / "common.slang", "// High priority common");
+    test_write_file(root_low / "common.slang", "// Low priority common");
+    test_write_file(root_low / "unique_low.slang", "// Unique low");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1899,11 +1880,11 @@ TEST(asset_database_mount_aliases, grouped_mount_alias_priority_resolution)
     // 3. Assert: Resolution checks
     auto common_disk = database.resolve_disk_path("@shaders/common.slang");
     ASSERT_TRUE(common_disk.has_value());
-    EXPECT_NE(std::string_view(common_disk->c_str()).find("temp_test_alias_high"), std::string_view::npos);
+    EXPECT_TRUE(tempest::contains(tempest::string_view(common_disk->c_str()), "temp_test_alias_high"));
 
     auto unique_disk = database.resolve_disk_path("@shaders/unique_low.slang");
     ASSERT_TRUE(unique_disk.has_value());
-    EXPECT_NE(std::string_view(unique_disk->c_str()).find("temp_test_alias_low"), std::string_view::npos);
+    EXPECT_TRUE(tempest::contains(tempest::string_view(unique_disk->c_str()), "temp_test_alias_low"));
 
     const auto* common_asset = database.find_asset("@shaders/common.slang");
     ASSERT_NE(common_asset, nullptr);
@@ -1916,27 +1897,21 @@ TEST(asset_database_mount_aliases, grouped_mount_alias_priority_resolution)
     EXPECT_EQ(common_src.value(), "@shaders/common.slang");
 
     // 4. Teardown
-    std::filesystem::remove_all(root_high);
-    std::filesystem::remove_all(root_low);
+    tempest::filesystem::remove_all(root_high);
+    tempest::filesystem::remove_all(root_low);
 }
 
 /// @brief Tests that @alias/ queries enforce strict isolation and do not fall back to other roots.
 TEST(asset_database_mount_aliases, strict_alias_isolation)
 {
     // 1. Setup: Create two separate roots (one unaliased, one under "textures")
-    auto root_unaliased = std::filesystem::path("temp_test_iso_unaliased");
-    auto root_textures = std::filesystem::path("temp_test_iso_textures");
-    std::filesystem::create_directories(root_unaliased);
-    std::filesystem::create_directories(root_textures);
+    auto root_unaliased = tempest::filesystem::path("temp_test_iso_unaliased");
+    auto root_textures = tempest::filesystem::path("temp_test_iso_textures");
+    tempest::filesystem::create_directories(root_unaliased);
+    tempest::filesystem::create_directories(root_textures);
 
-    {
-        std::ofstream f1((root_unaliased / "secret.txt").string().c_str());
-        f1 << "unaliased secret";
-    }
-    {
-        std::ofstream f2((root_textures / "diffuse.png").string().c_str());
-        f2 << "texture data";
-    }
+    test_write_file(root_unaliased / "secret.txt", "unaliased secret");
+    test_write_file(root_textures / "diffuse.png", "texture data");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1957,21 +1932,18 @@ TEST(asset_database_mount_aliases, strict_alias_isolation)
     EXPECT_TRUE(database.resolve_disk_path("@textures/diffuse.png").has_value());
 
     // 4. Teardown
-    std::filesystem::remove_all(root_unaliased);
-    std::filesystem::remove_all(root_textures);
+    tempest::filesystem::remove_all(root_unaliased);
+    tempest::filesystem::remove_all(root_textures);
 }
 
 /// @brief Tests case-sensitive matching for mount aliases.
 TEST(asset_database_mount_aliases, case_sensitive_alias_matching)
 {
     // 1. Setup: Create mount directory with shader
-    auto root_case = std::filesystem::path("temp_test_case_alias");
-    std::filesystem::create_directories(root_case);
+    auto root_case = tempest::filesystem::path("temp_test_case_alias");
+    tempest::filesystem::create_directories(root_case);
 
-    {
-        std::ofstream f((root_case / "pass.slang").string().c_str());
-        f << "// Case shader";
-    }
+    test_write_file(root_case / "pass.slang", "// Case shader");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -1987,20 +1959,17 @@ TEST(asset_database_mount_aliases, case_sensitive_alias_matching)
     EXPECT_EQ(database.find_asset("@shaders/pass.slang"), nullptr);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_case);
+    tempest::filesystem::remove_all(root_case);
 }
 
 /// @brief Tests path normalization with aliases across forward-slash and backslash representations.
 TEST(asset_database_mount_aliases, path_normalization_with_aliases)
 {
     // 1. Setup: Create nested subdirectories
-    auto root_norm = std::filesystem::path("temp_test_alias_norm");
-    std::filesystem::create_directories(root_norm / "sub" / "nested");
+    auto root_norm = tempest::filesystem::path("temp_test_alias_norm");
+    tempest::filesystem::create_directories(root_norm / "sub" / "nested");
 
-    {
-        std::ofstream f((root_norm / "sub" / "nested" / "effect.slang").string().c_str());
-        f << "// Nested effect";
-    }
+    test_write_file(root_norm / "sub" / "nested" / "effect.slang", "// Nested effect");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2011,28 +1980,25 @@ TEST(asset_database_mount_aliases, path_normalization_with_aliases)
 
     // 3. Assert: Querying with backslashes and redundant prefixes resolves cleanly
     auto disk_forward = database.resolve_disk_path("@core/sub/nested/effect.slang");
-    auto disk_backward = database.resolve_disk_path("@core\\sub\\nested\\effect.slang");
+    auto disk_backward = database.resolve_disk_path(R"(@core\sub\nested\effect.slang)");
     ASSERT_TRUE(disk_forward.has_value());
     ASSERT_TRUE(disk_backward.has_value());
     EXPECT_EQ(disk_forward.value(), disk_backward.value());
 
-    EXPECT_NE(database.find_asset("@core\\sub\\nested\\effect.slang"), nullptr);
+    EXPECT_NE(database.find_asset(R"(@core\sub\nested\effect.slang)"), nullptr);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_norm);
+    tempest::filesystem::remove_all(root_norm);
 }
 
 /// @brief Tests that non-aliased fallback lookups resolve assets indexed inside aliased roots by basename.
 TEST(asset_database_mount_aliases, non_aliased_fallback_to_basenames)
 {
     // 1. Setup: Create an aliased file
-    auto root_base = std::filesystem::path("temp_test_alias_base");
-    std::filesystem::create_directories(root_base / "pipelines");
+    auto root_base = tempest::filesystem::path("temp_test_alias_base");
+    tempest::filesystem::create_directories(root_base / "pipelines");
 
-    {
-        std::ofstream f((root_base / "pipelines" / "pbr_deferred.slang").string().c_str());
-        f << "// PBR deferred";
-    }
+    test_write_file(root_base / "pipelines" / "pbr_deferred.slang", "// PBR deferred");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2050,7 +2016,7 @@ TEST(asset_database_mount_aliases, non_aliased_fallback_to_basenames)
     EXPECT_EQ(asset_by_base->id, asset_by_alias->id);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_base);
+    tempest::filesystem::remove_all(root_base);
 }
 
 // ============================================================================
@@ -2061,25 +2027,18 @@ TEST(asset_database_mount_aliases, non_aliased_fallback_to_basenames)
 TEST(asset_database_ignores_and_predicates, default_ignored_directories_skipped)
 {
     // 1. Setup: Create hierarchy containing default ignored directories
-    auto root_ignores = std::filesystem::path("temp_test_def_ignores");
-    std::filesystem::create_directories(root_ignores / ".git");
-    std::filesystem::create_directories(root_ignores / "build");
-    std::filesystem::create_directories(root_ignores / "bin");
-    std::filesystem::create_directories(root_ignores / ".agents");
-    std::filesystem::create_directories(root_ignores / "src");
+    auto root_ignores = tempest::filesystem::path("temp_test_def_ignores");
+    tempest::filesystem::create_directories(root_ignores / ".git");
+    tempest::filesystem::create_directories(root_ignores / "build");
+    tempest::filesystem::create_directories(root_ignores / "bin");
+    tempest::filesystem::create_directories(root_ignores / ".agents");
+    tempest::filesystem::create_directories(root_ignores / "src");
 
-    {
-        std::ofstream f1((root_ignores / ".git" / "ignored.slang").string().c_str());
-        f1 << "git";
-        std::ofstream f2((root_ignores / "build" / "ignored.slang").string().c_str());
-        f2 << "build";
-        std::ofstream f3((root_ignores / "bin" / "ignored.slang").string().c_str());
-        f3 << "bin";
-        std::ofstream f4((root_ignores / ".agents" / "ignored.slang").string().c_str());
-        f4 << "agents";
-        std::ofstream f5((root_ignores / "src" / "valid.slang").string().c_str());
-        f5 << "valid";
-    }
+    test_write_file(root_ignores / ".git" / "ignored.slang", "git");
+    test_write_file(root_ignores / "build" / "ignored.slang", "build");
+    test_write_file(root_ignores / "bin" / "ignored.slang", "bin");
+    test_write_file(root_ignores / ".agents" / "ignored.slang", "agents");
+    test_write_file(root_ignores / "src" / "valid.slang", "valid");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2096,28 +2055,21 @@ TEST(asset_database_ignores_and_predicates, default_ignored_directories_skipped)
     EXPECT_EQ(database.find_asset(".agents/ignored.slang"), nullptr);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_ignores);
+    tempest::filesystem::remove_all(root_ignores);
 }
 
 /// @brief Tests that default ignored extensions (.tmp, .bak, .pdb, .obj, etc.) are skipped during scan.
 TEST(asset_database_ignores_and_predicates, default_ignored_extensions_skipped)
 {
     // 1. Setup: Create files with various extensions
-    auto root_ext = std::filesystem::path("temp_test_ext_ignores");
-    std::filesystem::create_directories(root_ext);
+    auto root_ext = tempest::filesystem::path("temp_test_ext_ignores");
+    tempest::filesystem::create_directories(root_ext);
 
-    {
-        std::ofstream f1((root_ext / "shader.tmp").string().c_str());
-        f1 << "tmp";
-        std::ofstream f2((root_ext / "shader.bak").string().c_str());
-        f2 << "bak";
-        std::ofstream f3((root_ext / "shader.pdb").string().c_str());
-        f3 << "pdb";
-        std::ofstream f4((root_ext / "shader.obj").string().c_str());
-        f4 << "obj";
-        std::ofstream f5((root_ext / "shader.slang").string().c_str());
-        f5 << "slang";
-    }
+    test_write_file(root_ext / "shader.tmp", "tmp");
+    test_write_file(root_ext / "shader.bak", "bak");
+    test_write_file(root_ext / "shader.pdb", "pdb");
+    test_write_file(root_ext / "shader.obj", "obj");
+    test_write_file(root_ext / "shader.slang", "slang");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2134,25 +2086,20 @@ TEST(asset_database_ignores_and_predicates, default_ignored_extensions_skipped)
     EXPECT_EQ(database.find_asset("shader.obj"), nullptr);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_ext);
+    tempest::filesystem::remove_all(root_ext);
 }
 
 /// @brief Tests adding custom ignored directory and extension entries to asset_database.
 TEST(asset_database_ignores_and_predicates, custom_ignored_directory_and_extension)
 {
     // 1. Setup: Create custom directory and custom extension files
-    auto root_custom = std::filesystem::path("temp_test_custom_ignores");
-    std::filesystem::create_directories(root_custom / "my_secret_dir");
-    std::filesystem::create_directories(root_custom / "normal_dir");
+    auto root_custom = tempest::filesystem::path("temp_test_custom_ignores");
+    tempest::filesystem::create_directories(root_custom / "my_secret_dir");
+    tempest::filesystem::create_directories(root_custom / "normal_dir");
 
-    {
-        std::ofstream f1((root_custom / "my_secret_dir" / "file.slang").string().c_str());
-        f1 << "secret";
-        std::ofstream f2((root_custom / "normal_dir" / "file.custom").string().c_str());
-        f2 << "custom";
-        std::ofstream f3((root_custom / "normal_dir" / "file.slang").string().c_str());
-        f3 << "normal";
-    }
+    test_write_file(root_custom / "my_secret_dir" / "file.slang", "secret");
+    test_write_file(root_custom / "normal_dir" / "file.custom", "custom");
+    test_write_file(root_custom / "normal_dir" / "file.slang", "normal");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2174,20 +2121,17 @@ TEST(asset_database_ignores_and_predicates, custom_ignored_directory_and_extensi
     EXPECT_EQ(database.find_asset("normal_dir/file.custom"), nullptr);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_custom);
+    tempest::filesystem::remove_all(root_custom);
 }
 
 /// @brief Tests that clear_ignores() removes all default and custom ignore rules.
 TEST(asset_database_ignores_and_predicates, clear_ignores_enables_all)
 {
     // 1. Setup: Create file in build directory with .tmp extension
-    auto root_clear = std::filesystem::path("temp_test_clear_ignores");
-    std::filesystem::create_directories(root_clear / "build");
+    auto root_clear = tempest::filesystem::path("temp_test_clear_ignores");
+    tempest::filesystem::create_directories(root_clear / "build");
 
-    {
-        std::ofstream f((root_clear / "build" / "output.tmp").string().c_str());
-        f << "data";
-    }
+    test_write_file(root_clear / "build" / "output.tmp", "data");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2204,28 +2148,22 @@ TEST(asset_database_ignores_and_predicates, clear_ignores_enables_all)
     EXPECT_TRUE(database.resolve_source_path("build/output.tmp").has_value());
 
     // 4. Teardown
-    std::filesystem::remove_all(root_clear);
+    tempest::filesystem::remove_all(root_clear);
 }
 
 /// @brief Tests scan_options with extension whitelist, additional directory ignores, and custom predicate.
 TEST(asset_database_ignores_and_predicates, scan_options_whitelist_and_predicate)
 {
     // 1. Setup: Create hierarchy with various folders and extensions
-    auto root_opts = std::filesystem::path("temp_test_scan_opts");
-    std::filesystem::create_directories(root_opts / "included");
-    std::filesystem::create_directories(root_opts / "pruned_by_predicate");
-    std::filesystem::create_directories(root_opts / "ad_hoc_ignored");
+    auto root_opts = tempest::filesystem::path("temp_test_scan_opts");
+    tempest::filesystem::create_directories(root_opts / "included");
+    tempest::filesystem::create_directories(root_opts / "pruned_by_predicate");
+    tempest::filesystem::create_directories(root_opts / "ad_hoc_ignored");
 
-    {
-        std::ofstream f1((root_opts / "included" / "test.slang").string().c_str());
-        f1 << "slang";
-        std::ofstream f2((root_opts / "included" / "test.txt").string().c_str());
-        f2 << "text";
-        std::ofstream f3((root_opts / "pruned_by_predicate" / "test.slang").string().c_str());
-        f3 << "pruned";
-        std::ofstream f4((root_opts / "ad_hoc_ignored" / "test.slang").string().c_str());
-        f4 << "adhoc";
-    }
+    test_write_file(root_opts / "included" / "test.slang", "slang");
+    test_write_file(root_opts / "included" / "test.txt", "text");
+    test_write_file(root_opts / "pruned_by_predicate" / "test.slang", "pruned");
+    test_write_file(root_opts / "ad_hoc_ignored" / "test.slang", "adhoc");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2235,7 +2173,7 @@ TEST(asset_database_ignores_and_predicates, scan_options_whitelist_and_predicate
     auto opts = tempest::assets::scan_options{};
     opts.extension_whitelist.push_back(".slang");
     opts.additional_ignored_directories.push_back("ad_hoc_ignored");
-    opts.predicate = [](tempest::string_view rel_path, [[maybe_unused]] bool is_dir) {
+    opts.predicate = [](tempest::string_view rel_path, [[maybe_unused]] bool is_dir) -> auto {
         return !tempest::starts_with(rel_path, "pruned_by_predicate");
     };
     database.scan_and_index(opts);
@@ -2247,7 +2185,7 @@ TEST(asset_database_ignores_and_predicates, scan_options_whitelist_and_predicate
     EXPECT_EQ(database.find_asset("@assets/ad_hoc_ignored/test.slang"), nullptr);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_opts);
+    tempest::filesystem::remove_all(root_opts);
 }
 
 /// @brief Tests that loading an asset through an alias loads via importer initially, and subsequent loads hit the
@@ -2255,13 +2193,10 @@ TEST(asset_database_ignores_and_predicates, scan_options_whitelist_and_predicate
 TEST(asset_database_mount_aliases, aliased_load_subsequent_blob_cache_hit)
 {
     // 1. Setup: Create mock asset file and register a dummy importer
-    auto root_dir = std::filesystem::path("temp_test_alias_load_cache");
-    std::filesystem::create_directories(root_dir);
+    auto root_dir = tempest::filesystem::path("temp_test_alias_load_cache");
+    tempest::filesystem::create_directories(root_dir);
 
-    {
-        std::ofstream f((root_dir / "model.mock").string().c_str());
-        f << "MOCK_MESH_PAYLOAD";
-    }
+    test_write_file(root_dir / "model.mock", "MOCK_MESH_PAYLOAD");
 
     struct mock_importer : tempest::assets::asset_importer
     {
@@ -2273,7 +2208,7 @@ TEST(asset_database_mount_aliases, aliased_load_subsequent_blob_cache_hit)
             ++import_count;
             auto path = asset_path.value_or("mock_asset");
             auto asset_id = db.register_asset(tempest::assets::asset_type_id::from_hash(123), path);
-            auto blob_str = std::string("PROCESSED_BLOB");
+            auto blob_str = tempest::string("PROCESSED_BLOB");
             db.store_blob(asset_id, tempest::span<const tempest::byte>{
                                         reinterpret_cast<const tempest::byte*>(blob_str.data()), blob_str.size()});
             return registry.create<>();
@@ -2302,24 +2237,20 @@ TEST(asset_database_mount_aliases, aliased_load_subsequent_blob_cache_hit)
     EXPECT_EQ(imp_ptr->import_count, 1U);
 
     // 4. Teardown
-    std::filesystem::remove_all(root_dir);
+    tempest::filesystem::remove_all(root_dir);
 }
 
 /// @brief Tests unmounting an aliased root and verifying resolution fallbacks update accordingly.
 TEST(asset_database_mount_aliases, unmount_aliased_root_updates_resolution)
 {
     // 1. Setup: Create two mount roots with same alias but different priorities
-    auto root_high = std::filesystem::path("temp_test_unmount_high");
-    auto root_low = std::filesystem::path("temp_test_unmount_low");
-    std::filesystem::create_directories(root_high);
-    std::filesystem::create_directories(root_low);
+    auto root_high = tempest::filesystem::path("temp_test_unmount_high");
+    auto root_low = tempest::filesystem::path("temp_test_unmount_low");
+    tempest::filesystem::create_directories(root_high);
+    tempest::filesystem::create_directories(root_low);
 
-    {
-        std::ofstream fh((root_high / "common.slang").string().c_str());
-        fh << "// High";
-        std::ofstream fl((root_low / "common.slang").string().c_str());
-        fl << "// Low";
-    }
+    test_write_file(root_high / "common.slang", "// High");
+    test_write_file(root_low / "common.slang", "// Low");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2329,7 +2260,7 @@ TEST(asset_database_mount_aliases, unmount_aliased_root_updates_resolution)
     // 2. Act & Assert 1: High priority root resolves first
     auto disk1 = database.resolve_disk_path("@shaders/common.slang");
     ASSERT_TRUE(disk1.has_value());
-    EXPECT_NE(std::string_view(disk1->c_str()).find("temp_test_unmount_high"), std::string_view::npos);
+    EXPECT_TRUE(tempest::contains(tempest::string_view(disk1->c_str()), "temp_test_unmount_high"));
 
     // 3. Act 2: Unmount high priority root
     database.unmount_root(root_high.generic_string().c_str());
@@ -2337,28 +2268,24 @@ TEST(asset_database_mount_aliases, unmount_aliased_root_updates_resolution)
     // 4. Assert 2: Resolution falls back to low priority root
     auto disk2 = database.resolve_disk_path("@shaders/common.slang");
     ASSERT_TRUE(disk2.has_value());
-    EXPECT_NE(std::string_view(disk2->c_str()).find("temp_test_unmount_low"), std::string_view::npos);
+    EXPECT_TRUE(tempest::contains(tempest::string_view(disk2->c_str()), "temp_test_unmount_low"));
 
     // 5. Teardown
-    std::filesystem::remove_all(root_high);
-    std::filesystem::remove_all(root_low);
+    tempest::filesystem::remove_all(root_high);
+    tempest::filesystem::remove_all(root_low);
 }
 
 /// @brief Tests that notify_file_changed invalidates only the specific aliased source matching the disk path.
 TEST(asset_database_mount_aliases, notify_file_changed_isolates_exact_aliased_mount)
 {
     // 1. Setup: Create two separate roots containing a file with identical relative names
-    auto root_a = std::filesystem::path("temp_test_notify_a");
-    auto root_b = std::filesystem::path("temp_test_notify_b");
-    std::filesystem::create_directories(root_a);
-    std::filesystem::create_directories(root_b);
+    auto root_a = tempest::filesystem::path("temp_test_notify_a");
+    auto root_b = tempest::filesystem::path("temp_test_notify_b");
+    tempest::filesystem::create_directories(root_a);
+    tempest::filesystem::create_directories(root_b);
 
-    {
-        std::ofstream fa((root_a / "effect.slang").string().c_str());
-        fa << "ALPHA";
-        std::ofstream fb((root_b / "effect.slang").string().c_str());
-        fb << "BETA";
-    }
+    test_write_file(root_a / "effect.slang", "ALPHA");
+    test_write_file(root_b / "effect.slang", "BETA");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2372,8 +2299,8 @@ TEST(asset_database_mount_aliases, notify_file_changed_isolates_exact_aliased_mo
     ASSERT_NE(asset_b, nullptr);
 
     // Store blobs for both assets
-    auto data_a = std::string("BLOB_A");
-    auto data_b = std::string("BLOB_B");
+    auto data_a = tempest::string("BLOB_A");
+    auto data_b = tempest::string("BLOB_B");
     database.store_blob(asset_a->id, tempest::span<const tempest::byte>{
                                          reinterpret_cast<const tempest::byte*>(data_a.data()), data_a.size()});
     database.store_blob(asset_b->id, tempest::span<const tempest::byte>{
@@ -2389,29 +2316,26 @@ TEST(asset_database_mount_aliases, notify_file_changed_isolates_exact_aliased_mo
     // 3. Assert: asset_a blob was invalidated and reloads "ALPHA" from disk, while asset_b blob remains cached as
     // "BLOB_B"
     auto blob_a = database.get_blob(asset_a->id);
-    auto str_a = std::string(reinterpret_cast<const char*>(blob_a.data()), blob_a.size());
+    auto str_a = tempest::string(reinterpret_cast<const char*>(blob_a.data()), blob_a.size());
     EXPECT_EQ(str_a, "ALPHA");
 
     auto blob_b = database.get_blob(asset_b->id);
-    auto str_b = std::string(reinterpret_cast<const char*>(blob_b.data()), blob_b.size());
+    auto str_b = tempest::string(reinterpret_cast<const char*>(blob_b.data()), blob_b.size());
     EXPECT_EQ(str_b, "BLOB_B");
 
     // 4. Teardown
-    std::filesystem::remove_all(root_a);
-    std::filesystem::remove_all(root_b);
+    tempest::filesystem::remove_all(root_a);
+    tempest::filesystem::remove_all(root_b);
 }
 
 /// @brief Tests parsing and handling of corner-case alias string formats (@, @/, @@alias).
 TEST(asset_database_mount_aliases, corner_case_alias_strings_handling)
 {
     // 1. Setup: Create test folder with files
-    auto root_dir = std::filesystem::path("temp_test_corner_alias");
-    std::filesystem::create_directories(root_dir);
+    auto root_dir = tempest::filesystem::path("temp_test_corner_alias");
+    tempest::filesystem::create_directories(root_dir);
 
-    {
-        std::ofstream f1((root_dir / "test.slang").string().c_str());
-        f1 << "test";
-    }
+    test_write_file(root_dir / "test.slang", "test");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2434,7 +2358,7 @@ TEST(asset_database_mount_aliases, corner_case_alias_strings_handling)
     EXPECT_NE(database.find_asset("@core//test.slang"), nullptr);
 
     // 3. Teardown
-    std::filesystem::remove_all(root_dir);
+    tempest::filesystem::remove_all(root_dir);
 }
 
 //==============================================================================
@@ -2445,9 +2369,9 @@ TEST(asset_database_mount_aliases, corner_case_alias_strings_handling)
 TEST(asset_database_disk_freshness, content_hash_deterministic_and_unique)
 {
     // 1. Setup: Create sample byte payloads
-    auto bytes_a = std::string("Hello Tempest Asset Database");
-    auto bytes_b = std::string("Hello Tempest Asset Database Modified");
-    auto bytes_empty = std::string("");
+    auto bytes_a = tempest::string("Hello Tempest Asset Database");
+    auto bytes_b = tempest::string("Hello Tempest Asset Database Modified");
+    auto bytes_empty = tempest::string("");
 
     // 2. Act: Compute hashes
     auto hash_a1 = tempest::assets::content_hash::compute(
@@ -2469,15 +2393,12 @@ TEST(asset_database_disk_freshness, content_hash_deterministic_and_unique)
 TEST(asset_database_disk_freshness, get_blob_returns_new_disk_blob_after_external_file_modification)
 {
     // 1. Setup: Create test folder with test_shader.slang
-    auto root_dir = std::filesystem::path("temp_test_get_blob_freshness");
-    std::filesystem::create_directories(root_dir);
+    auto root_dir = tempest::filesystem::path("temp_test_get_blob_freshness");
+    tempest::filesystem::create_directories(root_dir);
     auto db_file = root_dir / "assets.tassetdb";
     auto shader_file = root_dir / "test_shader.slang";
 
-    {
-        std::ofstream f(shader_file.string().c_str());
-        f << "version 1 payload";
-    }
+    test_write_file(shader_file, "version 1 payload");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database1 = tempest::assets::asset_database{&type_reg};
@@ -2485,23 +2406,20 @@ TEST(asset_database_disk_freshness, get_blob_returns_new_disk_blob_after_externa
     database1.mount_root(root_dir.generic_string().c_str(), 10);
     database1.scan_and_index();
 
-    auto* entry1 = database1.find_asset("test_shader.slang");
+    const auto* entry1 = database1.find_asset("test_shader.slang");
     ASSERT_NE(entry1, nullptr);
     auto asset_id = entry1->id;
 
     auto blob1 = database1.get_blob(asset_id);
-    auto str1 = std::string(reinterpret_cast<const char*>(blob1.data()), blob1.size());
+    auto str1 = tempest::string(reinterpret_cast<const char*>(blob1.data()), blob1.size());
     EXPECT_EQ(str1, "version 1 payload");
 
     // Save database to disk with version 1 cached
     EXPECT_TRUE(database1.save());
 
     // 2. Act: Modify the file on disk before opening the database in a new instance
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    {
-        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
-        f << "version 2 new payload from disk";
-    }
+    tempest::this_thread::sleep_for(tempest::chrono::milliseconds(20));
+    test_write_file(shader_file, "version 2 new payload from disk");
 
     auto database2 = tempest::assets::asset_database{&type_reg};
     database2.mount_root(root_dir.generic_string().c_str(), 10);
@@ -2509,114 +2427,99 @@ TEST(asset_database_disk_freshness, get_blob_returns_new_disk_blob_after_externa
 
     // Call get_blob on database2 without calling notify_file_changed
     auto blob2 = database2.get_blob(asset_id);
-    auto str2 = std::string(reinterpret_cast<const char*>(blob2.data()), blob2.size());
+    auto str2 = tempest::string(reinterpret_cast<const char*>(blob2.data()), blob2.size());
 
     // 3. Assert: get_blob must return the fresh version 2 from disk, not the stale blob from .tassetdb
     EXPECT_EQ(str2, "version 2 new payload from disk");
 
     // 4. Teardown
-    std::filesystem::remove_all(root_dir);
+    tempest::filesystem::remove_all(root_dir);
 }
 
 /// @brief Tests that notify_file_changed works with absolute filesystem paths and root-relative paths.
 TEST(asset_database_disk_freshness, notify_file_changed_absolute_and_relative_paths)
 {
     // 1. Setup: Create test folder with pbr.slang
-    auto root_dir = std::filesystem::path("temp_test_notify_paths");
-    std::filesystem::create_directories(root_dir);
+    auto root_dir = tempest::filesystem::path("temp_test_notify_paths");
+    tempest::filesystem::create_directories(root_dir);
     auto shader_file = root_dir / "pbr.slang";
 
-    {
-        std::ofstream f(shader_file.string().c_str());
-        f << "initial pbr shader code";
-    }
+    test_write_file(shader_file, "initial pbr shader code");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
     database.mount_root(root_dir.generic_string().c_str(), 10);
     database.scan_and_index();
 
-    auto* entry = database.find_asset("pbr.slang");
+    const auto* entry = database.find_asset("pbr.slang");
     ASSERT_NE(entry, nullptr);
     auto asset_id = entry->id;
 
     auto initial_blob = database.get_blob(asset_id);
-    auto initial_str = std::string(reinterpret_cast<const char*>(initial_blob.data()), initial_blob.size());
+    auto initial_str = tempest::string(reinterpret_cast<const char*>(initial_blob.data()), initial_blob.size());
     EXPECT_EQ(initial_str, "initial pbr shader code");
 
     // 2. Act: Modify disk file and notify using absolute OS path
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    {
-        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
-        f << "modified via absolute path";
-    }
+    tempest::this_thread::sleep_for(tempest::chrono::milliseconds(20));
+    test_write_file(shader_file, "modified via absolute path");
 
-    auto abs_path = std::filesystem::absolute(shader_file).generic_string();
+    auto abs_path = (tempest::filesystem::current_path() / shader_file).generic_string();
     auto changed_abs = database.notify_file_changed(abs_path.c_str());
     EXPECT_TRUE(changed_abs);
 
     auto blob_after_abs = database.get_blob(asset_id);
-    auto str_after_abs = std::string(reinterpret_cast<const char*>(blob_after_abs.data()), blob_after_abs.size());
+    auto str_after_abs = tempest::string(reinterpret_cast<const char*>(blob_after_abs.data()), blob_after_abs.size());
     EXPECT_EQ(str_after_abs, "modified via absolute path");
 
     // 3. Act: Modify disk file and notify using relative path
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    {
-        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
-        f << "modified via relative path";
-    }
+    tempest::this_thread::sleep_for(tempest::chrono::milliseconds(20));
+    test_write_file(shader_file, "modified via relative path");
 
     auto changed_rel = database.notify_file_changed("pbr.slang");
     EXPECT_TRUE(changed_rel);
 
     auto blob_after_rel = database.get_blob(asset_id);
-    auto str_after_rel = std::string(reinterpret_cast<const char*>(blob_after_rel.data()), blob_after_rel.size());
+    auto str_after_rel = tempest::string(reinterpret_cast<const char*>(blob_after_rel.data()), blob_after_rel.size());
     EXPECT_EQ(str_after_rel, "modified via relative path");
 
     // 4. Teardown
-    std::filesystem::remove_all(root_dir);
+    tempest::filesystem::remove_all(root_dir);
 }
 
 /// @brief Tests that scan_and_index() refreshes existing source entries and stored blobs when files change on disk.
 TEST(asset_database_disk_freshness, scan_and_index_refreshes_modified_source_blobs)
 {
     // 1. Setup: Create test folder with compute.slang
-    auto root_dir = std::filesystem::path("temp_test_scan_refresh");
-    std::filesystem::create_directories(root_dir);
+    auto root_dir = tempest::filesystem::path("temp_test_scan_refresh");
+    tempest::filesystem::create_directories(root_dir);
     auto shader_file = root_dir / "compute.slang";
 
-    {
-        std::ofstream f(shader_file.string().c_str());
-        f << "compute shader v1";
-    }
+    test_write_file(shader_file, "compute shader v1");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
     database.mount_root(root_dir.generic_string().c_str(), 10);
     database.scan_and_index();
 
-    auto* entry = database.find_asset("compute.slang");
+    const auto* entry = database.find_asset("compute.slang");
     ASSERT_NE(entry, nullptr);
     auto asset_id = entry->id;
 
     auto blob1 = database.get_blob(asset_id);
-    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob1.data()), blob1.size()), "compute shader v1");
+    EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(blob1.data()), blob1.size()), "compute shader v1");
 
     // 2. Act: Modify file on disk and re-scan
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    {
-        std::ofstream f(shader_file.string().c_str(), std::ios::trunc);
-        f << "compute shader v2 refreshed";
-    }
+    tempest::this_thread::sleep_for(tempest::chrono::milliseconds(20));
+    test_write_file(shader_file, "compute shader v2 refreshed");
 
     database.scan_and_index();
 
     // 3. Assert: Blob is updated to v2
     auto blob2 = database.get_blob(asset_id);
-    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob2.data()), blob2.size()), "compute shader v2 refreshed");
+    EXPECT_EQ(tempest::string(reinterpret_cast<const char*>(blob2.data()), blob2.size()), "compute shader v2 refreshed");
 
     // 4. Teardown
-    std::filesystem::remove_all(root_dir);
+    tempest::filesystem::remove_all(root_dir);
 }
 
 /// @brief Tests that load() detects source file changes on disk and re-imports rather than returning stale cached
@@ -2650,14 +2553,11 @@ TEST(asset_database_disk_freshness, load_reimports_when_source_file_changed_on_d
         }
     };
 
-    auto root_dir = std::filesystem::path("temp_test_load_reimport");
-    std::filesystem::create_directories(root_dir);
+    auto root_dir = tempest::filesystem::path("temp_test_load_reimport");
+    tempest::filesystem::create_directories(root_dir);
     auto model_file = root_dir / "model.vasset";
 
-    {
-        std::ofstream f(model_file.string().c_str());
-        f << "version 1 model geometry";
-    }
+    test_write_file(model_file, "version 1 model geometry");
 
     auto type_reg = tempest::assets::asset_type_registry{};
     auto database = tempest::assets::asset_database{&type_reg};
@@ -2681,11 +2581,8 @@ TEST(asset_database_disk_freshness, load_reimports_when_source_file_changed_on_d
     EXPECT_EQ(importer_raw->import_count, 1);
 
     // Modify file on disk
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    {
-        std::ofstream f(model_file.string().c_str(), std::ios::trunc);
-        f << "version 2 model geometry updated";
-    }
+    tempest::this_thread::sleep_for(tempest::chrono::milliseconds(20));
+    test_write_file(model_file, "version 2 model geometry updated");
 
     // Third load() detects content hash change and triggers re-import
     auto ent3 = database.load("model.vasset", registry);
@@ -2693,5 +2590,5 @@ TEST(asset_database_disk_freshness, load_reimports_when_source_file_changed_on_d
     EXPECT_EQ(importer_raw->import_count, 2);
 
     // 3. Teardown
-    std::filesystem::remove_all(root_dir);
+    tempest::filesystem::remove_all(root_dir);
 }

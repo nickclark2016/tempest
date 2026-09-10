@@ -8,8 +8,8 @@
 
 #include <imgui.h>
 
-#include <algorithm>
-#include <format>
+#include <tempest/format.hpp>
+#include <tempest/utility.hpp>
 
 namespace tempest::editor
 {
@@ -40,10 +40,10 @@ namespace tempest::editor
             if (selected_name_opt.has_value())
             {
                 const auto& n = selected_name_opt.value();
-                std::format_to(tempest::back_inserter(name_str), "{:.{}}", n.data(), n.size());
+                tempest::format_to(tempest::back_inserter(name_str), "{}", n);
             }
 
-            const auto id = bit_cast<void*>(target);
+            auto* const id = bit_cast<void*>(target);
             ImGui::PushID(id);
             const auto name_modified = ui::input_text_with_hint("Name", "Unnamed", name_str);
             ImGui::PopID();
@@ -71,12 +71,12 @@ namespace tempest::editor
                     component_search.sorted_providers.push_back(provider.get());
                 }
 
-                std::sort(component_search.sorted_providers.begin(), component_search.sorted_providers.end(),
-                          [](auto* lhs, auto* rhs) {
-                              const auto lhs_name = lhs->name();
-                              const auto rhs_name = rhs->name();
-                              return lhs_name < rhs_name;
-                          });
+                tempest::sort(component_search.sorted_providers.begin(), component_search.sorted_providers.end(),
+                              [](auto* lhs, auto* rhs) -> auto {
+                                  const auto lhs_name = lhs->name();
+                                  const auto rhs_name = rhs->name();
+                                  return lhs_name < rhs_name;
+                              });
             }
 
             if (ImGui::BeginPopup("AddComponentPopup", ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking))
@@ -97,7 +97,7 @@ namespace tempest::editor
                 {
                     component_search.filtered_indices.clear();
 
-                    for (auto idx = 0u; idx < component_search.sorted_providers.size(); ++idx)
+                    for (auto idx = 0U; idx < component_search.sorted_providers.size(); ++idx)
                     {
                         auto& provider = component_search.sorted_providers[idx];
                         const auto provider_name = provider->name();
@@ -109,7 +109,7 @@ namespace tempest::editor
                         component_search.filtered_indices.push_back(static_cast<int>(idx));
                     }
 
-                    if (component_search.selected >= static_cast<int>(component_search.sorted_providers.size()))
+                    if (tempest::cmp_greater_equal(component_search.selected, component_search.sorted_providers.size()))
                     {
                         component_search.selected = -1;
                     }
@@ -118,7 +118,7 @@ namespace tempest::editor
                 if (ImGui::BeginChild("Components", ImVec2(0, 400)))
                 {
                     auto clipper = ImGuiListClipper{};
-                    clipper.Begin((int)component_search.filtered_indices.size());
+                    clipper.Begin(static_cast<int>(component_search.filtered_indices.size()));
 
                     while (clipper.Step())
                     {

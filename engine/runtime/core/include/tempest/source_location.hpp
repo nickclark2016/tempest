@@ -4,57 +4,20 @@
 #include <tempest/api.hpp>
 #include <tempest/int.hpp>
 
-// If (GNUC or CLANG) and not (_GLIBCXX_SRCLOC or _LIBCPP_SOURCE_LOCATION)
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(_GLIBCXX_SRCLOC) && !defined(_LIBCPP_SOURCE_LOCATION)
-// Known UB. If libstdc++ or libc++ changes the layout of std::source_location::__impl, this will break
-// TODO: Investigate a robust way to test for this. Maybe C++26 static reflection will provide a solution.
+#if defined(__GNUC__) || defined(__clang__)
 namespace std
 {
-    class TEMPEST_API source_location
+    struct source_location
     {
         struct __impl
         {
-            const char* _M_file_name = nullptr;
-            const char* _M_function_name = nullptr;
-            unsigned _M_line = 0;
-            unsigned _M_column = 0;
+            const char* _M_file_name;
+            const char* _M_function_name;
+            unsigned int _M_line;
+            unsigned int _M_column;
         };
-
-      public:
-        const __impl* _impl;
-
-        constexpr source_location() noexcept = default;
-
-        constexpr const char* file_name() const noexcept
-        {
-            return _impl->_M_file_name;
-        }
-
-        constexpr const char* function_name() const noexcept
-        {
-            return _impl->_M_function_name;
-        }
-
-        constexpr unsigned line() const noexcept
-        {
-            return _impl->_M_line;
-        }
-
-        constexpr unsigned column() const noexcept
-        {
-            return _impl->_M_column;
-        }
-
-        static consteval source_location current(
-            decltype(__builtin_source_location()) ptr = __builtin_source_location()) noexcept
-        {
-            source_location loc;
-            loc._impl = static_cast<const __impl*>(ptr);
-            return loc;
-        }
     };
 } // namespace std
-
 #endif
 
 namespace tempest
@@ -63,24 +26,23 @@ namespace tempest
     {
       public:
 #if defined(_MSC_VER)
-        static consteval source_location current(const uint32_t line = __builtin_LINE(),
-                                                 const uint32_t column = __builtin_COLUMN(),
-                                                 const char* file = __builtin_FILE(),
-                                                 const char* func = __builtin_FUNCSIG()) noexcept;
-#elif defined(__GNUC__)
-        static consteval source_location current(
-            decltype(__builtin_source_location()) ptr = __builtin_source_location()) noexcept;
+        static consteval auto current(uint32_t line = __builtin_LINE(), uint32_t column = __builtin_COLUMN(),
+                                      const char* file = __builtin_FILE(),
+                                      const char* func = __builtin_FUNCSIG()) noexcept -> source_location;
+#elif defined(__GNUC__) || defined(__clang__)
+        static consteval auto current(decltype(__builtin_source_location()) ptr = __builtin_source_location()) noexcept
+            -> source_location;
 #else
 #error "Unsupported compiler."
 #endif
 
         constexpr source_location() noexcept = default;
 
-        constexpr const char* file_name() const noexcept;
-        constexpr const char* function_name() const noexcept;
+        [[nodiscard]] constexpr auto file_name() const noexcept -> const char*;
+        [[nodiscard]] constexpr auto function_name() const noexcept -> const char*;
 
-        constexpr size_t line() const noexcept;
-        constexpr size_t column() const noexcept;
+        [[nodiscard]] constexpr auto line() const noexcept -> size_t;
+        [[nodiscard]] constexpr auto column() const noexcept -> size_t;
 
       private:
         struct impl
@@ -95,8 +57,8 @@ namespace tempest
     };
 
 #if defined(_MSC_VER)
-    inline consteval source_location source_location::current(const uint32_t line, const uint32_t column,
-                                                              const char* file, const char* func) noexcept
+    consteval auto source_location::current(const uint32_t line, const uint32_t column, const char* file,
+                                            const char* func) noexcept -> source_location
     {
         source_location loc;
         loc._impl._file = file;
@@ -105,35 +67,35 @@ namespace tempest
         loc._impl._column = column;
         return loc;
     }
-#else
-    inline consteval source_location source_location::current(decltype(__builtin_source_location()) ptr) noexcept
+#elif defined(__GNUC__) || defined(__clang__)
+    consteval auto source_location::current(decltype(__builtin_source_location()) ptr) noexcept -> source_location
     {
-        auto loc = std::source_location::current(ptr);
-        source_location result;
-        result._impl._file = loc.file_name();
-        result._impl._function = loc.function_name();
-        result._impl._line = loc.line();
-        result._impl._column = loc.column();
-        return result;
+        const auto* data = static_cast<const std::source_location::__impl*>(ptr);
+        source_location loc;
+        loc._impl._file = data->_M_file_name;
+        loc._impl._function = data->_M_function_name;
+        loc._impl._line = data->_M_line;
+        loc._impl._column = data->_M_column;
+        return loc;
     }
 #endif
 
-    inline constexpr const char* source_location::file_name() const noexcept
+    constexpr auto source_location::file_name() const noexcept -> const char*
     {
         return _impl._file;
     }
 
-    inline constexpr const char* source_location::function_name() const noexcept
+    constexpr auto source_location::function_name() const noexcept -> const char*
     {
         return _impl._function;
     }
 
-    inline constexpr size_t source_location::line() const noexcept
+    constexpr auto source_location::line() const noexcept -> size_t
     {
         return _impl._line;
     }
 
-    inline constexpr size_t source_location::column() const noexcept
+    constexpr auto source_location::column() const noexcept -> size_t
     {
         return _impl._column;
     }

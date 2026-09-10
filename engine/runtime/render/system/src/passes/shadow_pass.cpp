@@ -1,6 +1,5 @@
 #include <tempest/render_system/passes/shadow_pass.hpp>
 
-#include <cmath>
 #include <tempest/algorithm.hpp>
 #include <tempest/array.hpp>
 #include <tempest/limits.hpp>
@@ -46,13 +45,13 @@ namespace tempest::render_system
                 const auto rot = math::quat(tx.rotation());
                 const auto forward = math::extract_forward(rot);
                 const auto* sc = registry.try_get<shadow_caster_component>(self.entity);
-                const auto priority = sc ? sc->priority : 0U;
+                const auto priority = (sc != nullptr) ? sc->priority : 0U;
 
                 if (!result.has_light || priority < best_priority)
                 {
                     result.has_light = true;
                     result.direction = math::normalize(math::vec3<float>{forward.x, forward.y, forward.z});
-                    result.caster = sc ? *sc : shadow_caster_component{};
+                    result.caster = (sc != nullptr) ? *sc : shadow_caster_component{};
                     best_priority = priority;
                 }
             }
@@ -69,7 +68,7 @@ namespace tempest::render_system
         const auto sun = resolve_sun(params.registry);
         const auto cam_opt = params.camera_override.has_value()
                                  ? params.camera_override
-                                 : (params.camera_sys ? params.camera_sys->get_active_camera() : tempest::nullopt);
+                                 : ((params.camera_sys != nullptr) ? params.camera_sys->get_active_camera() : tempest::nullopt);
 
         if (!sun.has_light || !cam_opt.has_value())
         {
@@ -83,7 +82,7 @@ namespace tempest::render_system
         auto fov_y = 1.0F;
         auto aspect = 16.0F / 9.0F;
 
-        if (!params.camera_override.has_value() && params.camera_sys)
+        if (!params.camera_override.has_value() && (params.camera_sys != nullptr))
         {
             const auto cam_ent_opt = params.camera_sys->get_active_camera_entity();
             if (cam_ent_opt.has_value())
@@ -98,10 +97,10 @@ namespace tempest::render_system
         }
         else
         {
-            const auto f = std::abs(cam_opt->proj[1][1]);
+            const auto f = tempest::abs(cam_opt->proj[1][1]);
             if (f > 1e-4F)
             {
-                fov_y = 2.0F * std::atan(1.0F / f);
+                fov_y = 2.0F * math::atan(1.0F / f);
                 if (cam_opt->proj[0][0] > 0.0F)
                 {
                     aspect = f / cam_opt->proj[0][0];
@@ -117,7 +116,7 @@ namespace tempest::render_system
         const auto cam_eye = math::vec3<float>{cam.eye_position.x, cam.eye_position.y, cam.eye_position.z};
         auto cam_forward =
             math::normalize(math::vec3<float>{-cam.inv_view[2][0], -cam.inv_view[2][1], -cam.inv_view[2][2]});
-        if (!params.camera_override.has_value() && params.camera_sys)
+        if (!params.camera_override.has_value() && (params.camera_sys != nullptr))
         {
             const auto cam_ent_opt = params.camera_sys->get_active_camera_entity();
             if (cam_ent_opt.has_value())
@@ -140,14 +139,14 @@ namespace tempest::render_system
         {
             const auto fi = static_cast<float>(i);
             const auto f_num = static_cast<float>(num_cascades);
-            const auto log_split = z_near * std::pow(z_far / z_near, fi / f_num);
-            const auto lin_split = z_near + (fi / f_num) * (z_far - z_near);
-            splits[i] = lambda * log_split + (1.0F - lambda) * lin_split;
+            const auto log_split = z_near * math::pow(z_far / z_near, fi / f_num);
+            const auto lin_split = z_near + ((fi / f_num) * (z_far - z_near));
+            splits[i] = (lambda * log_split) + ((1.0F - lambda) * lin_split);
         }
         splits[num_cascades] = z_far;
 
-        const auto tan_half_fov = std::tan(fov_y * 0.5F);
-        const auto alpha = tan_half_fov * std::sqrt(1.0F + aspect * aspect);
+        const auto tan_half_fov = math::tan(fov_y * 0.5F);
+        const auto alpha = tan_half_fov * math::sqrt(1.0F + (aspect * aspect));
         const auto alpha_sq = alpha * alpha;
 
         auto rendered_cascades = vector<cascade_render_info>{};
@@ -159,17 +158,14 @@ namespace tempest::render_system
             const auto z1 = splits[i + 1];
 
             auto cz = 0.5F * (z0 + z1) * (1.0F + alpha_sq);
-            if (cz > z1)
-            {
-                cz = z1;
-            }
+            cz = tempest::min(cz, z1);
 
-            const auto radius = std::sqrt((z1 - cz) * (z1 - cz) + (z1 * alpha) * (z1 * alpha));
+            const auto radius = math::sqrt(((z1 - cz) * (z1 - cz)) + ((z1 * alpha) * (z1 * alpha)));
             const auto sphere_center_world = cam_eye + cam_forward * cz;
 
             const auto sun_dir = sun.direction;
             auto light_up = math::vec3<float>{0.0F, 1.0F, 0.0F};
-            if (std::abs(math::dot(sun_dir, light_up)) > 0.99F)
+            if (tempest::abs(math::dot(sun_dir, light_up)) > 0.99F)
             {
                 light_up = math::vec3<float>{0.0F, 0.0F, 1.0F};
             }
@@ -181,8 +177,8 @@ namespace tempest::render_system
 
             const auto cascade_res = sun.caster.resolution;
             const auto world_units_per_texel = (2.0F * radius) / static_cast<float>(cascade_res);
-            const auto snapped_x = std::floor(center_light.x / world_units_per_texel) * world_units_per_texel;
-            const auto snapped_y = std::floor(center_light.y / world_units_per_texel) * world_units_per_texel;
+            const auto snapped_x = math::floor(center_light.x / world_units_per_texel) * world_units_per_texel;
+            const auto snapped_y = math::floor(center_light.y / world_units_per_texel) * world_units_per_texel;
             const auto delta_x = snapped_x - center_light.x;
             const auto delta_y = snapped_y - center_light.y;
 
@@ -313,7 +309,7 @@ namespace tempest::render_system
         const auto& pass_data = params.graph.add_graphics_pass<shadow_pass_data>(
             "ShadowPass",
             [&pool = params.pool, shadow_atlas_tex = params.shadow_atlas,
-             stats = params.pipeline_statistics](render_graph::pass_builder& builder, shadow_pass_data& data) {
+             stats = params.pipeline_statistics](render_graph::pass_builder& builder, shadow_pass_data& data) -> void {
                 if (stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(stats);
@@ -341,7 +337,7 @@ namespace tempest::render_system
              alpha_masked_draw_offset = params.alpha_masked_draw_offset, opaque_pipe, masked_pipe,
              cascades_to_render = rendered_cascades]([[maybe_unused]] const shadow_pass_data& data,
                                                      [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                                                     rhi::command_list& pass_cmd) {
+                                                     rhi::command_list& pass_cmd) -> void {
                 if ((opaque_draw_count == 0 && alpha_masked_draw_count == 0) || cascades_to_render.empty())
                 {
                     return;
@@ -385,7 +381,7 @@ namespace tempest::render_system
 
                         const auto byte_offset =
                             pool.get_draw_commands_buffer_offset() +
-                            static_cast<uint64_t>(opaque_draw_offset) * sizeof(indexed_indirect_command);
+                            (static_cast<uint64_t>(opaque_draw_offset) * sizeof(indexed_indirect_command));
                         pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset, opaque_draw_count,
                                                        sizeof(indexed_indirect_command));
                     }
@@ -399,7 +395,7 @@ namespace tempest::render_system
 
                         const auto byte_offset =
                             pool.get_draw_commands_buffer_offset() +
-                            static_cast<uint64_t>(alpha_masked_draw_offset) * sizeof(indexed_indirect_command);
+                            (static_cast<uint64_t>(alpha_masked_draw_offset) * sizeof(indexed_indirect_command));
                         pass_cmd.draw_indexed_indirect(pool.get_draw_commands_buffer(), byte_offset,
                                                        alpha_masked_draw_count, sizeof(indexed_indirect_command));
                     }

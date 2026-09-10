@@ -1,9 +1,9 @@
 #include <tempest/render_system/renderer.hpp>
 
-#include <bit>
-#include <cmath>
-#include <format>
+#include <tempest/math_utils.hpp>
 #include <tempest/algorithm.hpp>
+#include <tempest/bit.hpp>
+#include <tempest/format.hpp>
 #include <tempest/limits.hpp>
 #include <tempest/relationship_component.hpp>
 #include <tempest/render_system/passes/depth_prepass.hpp>
@@ -23,6 +23,7 @@
 #include <tempest/render_system/shadow_atlas_math.hpp>
 #include <tempest/transform_component.hpp>
 #include <tempest/transformations.hpp>
+#include <tempest/utility.hpp>
 
 namespace tempest::render_system
 {
@@ -66,7 +67,7 @@ namespace tempest::render_system
                      registry->with<ecs::self_component, directional_light_component, ecs::transform_component>())
                 {
                     const auto* sc = registry->try_get<shadow_caster_component>(self.entity);
-                    const auto priority = sc ? sc->priority : 0U;
+                    const auto priority = (sc != nullptr) ? sc->priority : 0U;
 
                     if (!has_caster || priority < best_priority)
                     {
@@ -84,9 +85,9 @@ namespace tempest::render_system
                 {
                     const auto plan = calculate_directional_shadow_atlas_plan(cascade_res, cascade_count, max_atlas_dim,
                                                                               shadow_padding);
-                    if (log && plan.was_clamped)
+                    if ((log != nullptr) && plan.was_clamped)
                     {
-                        const auto msg = std::format(
+                        const auto msg = tempest::format(
                             "Directional shadow cascade resolution clamped from {} to {} to satisfy device limit {}.",
                             cascade_res, plan.effective_cascade_resolution, max_atlas_dim);
                         log->warn(string_view{msg.data(), msg.size()});
@@ -114,7 +115,7 @@ namespace tempest::render_system
     renderer::renderer(rhi::device& dev, logger& log, renderer_config cfg, renderer_inputs inputs,
                        unique_ptr<camera_system> camera_sys)
         : _device{&dev}, _log{&log}, _cfg{cfg}, _inputs{inputs}, _owned_camera_system{tempest::move(camera_sys)},
-          _camera_system{_inputs.camera_sys ? _inputs.camera_sys : _owned_camera_system.get()},
+          _camera_system{(_inputs.camera_sys != nullptr) ? _inputs.camera_sys : _owned_camera_system.get()},
           _frames_in_flight{math::max(1U, cfg.pool_config.frames_in_flight)}, _pool{dev, cfg.pool_config},
           _shaders{dev, inputs.asset_db}, _graph{cfg.render_width, cfg.render_height},
           _shadow_debug_mode{cfg.shadow_debug}, _pipeline_statistics{cfg.pipeline_statistics}
@@ -139,7 +140,7 @@ namespace tempest::render_system
     renderer::~renderer()
     {
         _unsubscribe_events();
-        if (_device)
+        if (_device != nullptr)
         {
             _device->wait_idle();
             for (auto& surf : _surfaces)
@@ -213,12 +214,12 @@ namespace tempest::render_system
         _subscribe_events();
     }
 
-    renderer& renderer::operator=(renderer&& other) noexcept
+    auto renderer::operator=(renderer&& other) noexcept -> renderer&
     {
         if (this != &other)
         {
             _unsubscribe_events();
-            if (_device)
+            if (_device != nullptr)
             {
                 for (auto& surf : _surfaces)
                 {
@@ -340,14 +341,14 @@ namespace tempest::render_system
         }
 
         auto tex_ids = vector<guid>{};
-        if (_inputs.materials)
+        if (_inputs.materials != nullptr)
         {
             for (const auto& mat_id : mat_ids)
             {
                 if (auto mat_opt = _inputs.materials->find(mat_id))
                 {
                     const auto& m = *mat_opt;
-                    auto check_tex = [&](const string& tex_name) {
+                    auto check_tex = [&](const string& tex_name) -> void {
                         if (auto t = m.get_texture(tex_name))
                         {
                             if (_pool.get_texture_descriptor_index(*t) == -1)
@@ -367,15 +368,15 @@ namespace tempest::render_system
             }
         }
 
-        if (!tex_ids.empty() && _inputs.textures)
+        if (!tex_ids.empty() && (_inputs.textures != nullptr))
         {
             _pool.load_textures(tex_ids, *_inputs.textures, _graph);
         }
-        if (!mat_ids.empty() && _inputs.materials)
+        if (!mat_ids.empty() && (_inputs.materials != nullptr))
         {
             _pool.load_materials(mat_ids, *_inputs.materials, _graph);
         }
-        if (!mesh_ids.empty() && _inputs.meshes)
+        if (!mesh_ids.empty() && (_inputs.meshes != nullptr))
         {
             _pool.load_meshes(mesh_ids, *_inputs.meshes, _graph);
         }
@@ -414,7 +415,7 @@ namespace tempest::render_system
                 continue;
             }
 
-            if (!_inputs.entity_registry->try_get<ecs::transform_component>(entity))
+            if (_inputs.entity_registry->try_get<ecs::transform_component>(entity) == nullptr)
             {
                 continue;
             }
@@ -533,7 +534,7 @@ namespace tempest::render_system
     void renderer::register_surface(window_handle win, rhi::raw_surface_handle raw_surface, uint32_t width,
                                     uint32_t height, rhi::present_mode mode)
     {
-        if (!_device || !win.is_valid())
+        if ((_device == nullptr) || !win.is_valid())
         {
             return;
         }
@@ -595,11 +596,11 @@ namespace tempest::render_system
 
     void renderer::unregister_surface(window_handle win)
     {
-        for (auto it = _surfaces.begin(); it != _surfaces.end(); ++it)
+        for (auto* it = _surfaces.begin(); it != _surfaces.end(); ++it)
         {
             if (it->window == win)
             {
-                if (_device)
+                if (_device != nullptr)
                 {
                     _device->wait_idle();
                     for (auto sem : it->acquire_semaphores)
@@ -643,26 +644,26 @@ namespace tempest::render_system
     auto renderer::get_render_surface(window_handle win) const noexcept -> const rhi::render_surface*
     {
         const auto* surf = _find_surface(win);
-        return surf ? surf->render_surface.get() : nullptr;
+        return (surf != nullptr) ? surf->render_surface.get() : nullptr;
     }
 
     auto renderer::get_render_surface(window_handle win) noexcept -> rhi::render_surface*
     {
         auto* surf = _find_surface(win);
-        return surf ? surf->render_surface.get() : nullptr;
+        return (surf != nullptr) ? surf->render_surface.get() : nullptr;
     }
 
     auto renderer::get_surface_format(window_handle win) const noexcept -> rhi::render_surface_format
     {
         const auto* surf = get_render_surface(win);
-        return surf ? surf->get_format() : rhi::render_surface_format::bgra8_srgb;
+        return (surf != nullptr) ? surf->get_format() : rhi::render_surface_format::bgra8_srgb;
     }
 
     void renderer::begin_frame(window_handle win)
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::begin_frame"};
         const auto slot_idx = get_current_flight_slot();
-        if (_device && !_flight_slots.empty())
+        if ((_device != nullptr) && !_flight_slots.empty())
         {
             auto& slot = _flight_slots[slot_idx];
             if (slot.timeline_value > 0)
@@ -692,7 +693,7 @@ namespace tempest::render_system
 
         if (auto* surf = _find_surface(target_win))
         {
-            if (_device && surf->render_surface && surf->raw_surface.handle != 0)
+            if ((_device != nullptr) && surf->render_surface && surf->raw_surface.handle != 0)
             {
                 if (surf->width > 0 && surf->height > 0 &&
                     (surf->width != surf->render_surface->get_width() ||
@@ -773,13 +774,13 @@ namespace tempest::render_system
         }
         _frame_begun = false;
 
-        auto effective_sc_tex = swapchain_tex;
-        auto effective_sc_view = swapchain_view;
+        auto effective_sc_tex = tempest::move(swapchain_tex);
+        auto effective_sc_view = tempest::move(swapchain_view);
 
         if (!effective_sc_tex.has_value() && _active_surface_window.is_valid())
         {
             const auto* surf = _find_surface(_active_surface_window);
-            if (surf && surf->current_sc_image.has_value())
+            if ((surf != nullptr) && surf->current_sc_image.has_value())
             {
                 effective_sc_tex = surf->current_sc_image->texture;
                 effective_sc_view = surf->current_sc_image->view;
@@ -798,7 +799,7 @@ namespace tempest::render_system
         }
 
         // 3. Automatically update dynamic object transforms from entity registry
-        if (_inputs.entity_registry && !_tracked_entities.empty())
+        if ((_inputs.entity_registry != nullptr) && !_tracked_entities.empty())
         {
             auto objects = vector<object_payload>{};
             objects.reserve(_tracked_entities.size());
@@ -822,7 +823,7 @@ namespace tempest::render_system
                 }
 
                 const auto* t = _inputs.entity_registry->try_get<ecs::transform_component>(entity);
-                if (!t)
+                if (t == nullptr)
                 {
                     continue;
                 }
@@ -859,13 +860,13 @@ namespace tempest::render_system
             for (const auto entity : _point_light_entities)
             {
                 const auto* const pl = _inputs.entity_registry->try_get<point_light_component>(entity);
-                if (!pl)
+                if (pl == nullptr)
                 {
                     continue;
                 }
 
                 auto world_pos = math::vec3<float>{0.0F, 0.0F, 0.0F};
-                if (_inputs.entity_registry->try_get<ecs::transform_component>(entity))
+                if (_inputs.entity_registry->try_get<ecs::transform_component>(entity) != nullptr)
                 {
                     const auto world_mat = compute_world_matrix(*_inputs.entity_registry, entity);
                     world_pos = math::vec3<float>{world_mat[3][0], world_mat[3][1], world_mat[3][2]};
@@ -901,9 +902,10 @@ namespace tempest::render_system
         };
 
         auto near_plane = 0.1F;
-        auto active_cam_opt = camera_override.has_value()
-                                  ? camera_override
-                                  : (_camera_system ? _camera_system->get_active_camera() : tempest::nullopt);
+        auto active_cam_opt =
+            camera_override.has_value()
+                ? camera_override
+                : ((_camera_system != nullptr) ? _camera_system->get_active_camera() : tempest::nullopt);
 
         if (active_cam_opt.has_value())
         {
@@ -919,7 +921,7 @@ namespace tempest::render_system
         {
             near_plane = camera_override->proj[3][2];
         }
-        else if (!camera_override.has_value() && _camera_system && _inputs.entity_registry)
+        else if (!camera_override.has_value() && (_camera_system != nullptr) && (_inputs.entity_registry != nullptr))
         {
             auto cam_ent_opt = _camera_system->get_active_camera_entity();
             if (cam_ent_opt.has_value())
@@ -933,7 +935,7 @@ namespace tempest::render_system
 
         const auto far_plane = _cfg.cluster_far_plane;
         const auto valid_near = near_plane > 0.0F ? near_plane : 0.1F;
-        const auto log_far_near = std::log(far_plane / valid_near);
+        const auto log_far_near = math::log(far_plane / valid_near);
 
         const auto grid_dims = compute_cluster_grid_dimensions(width, height);
         const auto total_clusters = grid_dims.x * grid_dims.y * grid_dims.z;
@@ -947,11 +949,11 @@ namespace tempest::render_system
         scene.cluster_depth_params = {valid_near, far_plane, log_far_near, 0.0F};
 
         // Query directional sun light
-        if (_inputs.entity_registry)
+        if (_inputs.entity_registry != nullptr)
         {
             _inputs.entity_registry->each([&scene]([[maybe_unused]] const ecs::self_component& self,
                                                    const directional_light_component& dl,
-                                                   const ecs::transform_component& tx) {
+                                                   const ecs::transform_component& tx) -> void {
                 const auto rot = math::quat(tx.rotation());
                 const auto forward = math::extract_forward(rot);
                 scene.sun_direction = {forward.x, forward.y, forward.z, 0.0F};
@@ -962,7 +964,8 @@ namespace tempest::render_system
         _pool.write_scene_constants(scene);
 
         // Create Transient Render Targets
-        const auto max_image_dim = _device ? _device->get_device_desc().limits.max_image_dimension_2d : 8192U;
+        const auto max_image_dim =
+            (_device != nullptr) ? _device->get_device_desc().limits.max_image_dimension_2d : 8192U;
         const auto dir_shadow_plan =
             calculate_directional_shadow_atlas_dimensions(_inputs.entity_registry, max_image_dim, _log);
         _directional_shadow_allocator.reset(dir_shadow_plan.atlas_size.x, dir_shadow_plan.atlas_size.y, 4);
@@ -1108,7 +1111,7 @@ namespace tempest::render_system
             add_light_culling_pass(_graph, _pool, _shaders, cluster_data.cluster_bounds_buffer, lights_buf,
                                    cluster_data.create_info, scene.light_count, _light_bitmask_target, cs_stats);
 
-        if (_inputs.entity_registry)
+        if (_inputs.entity_registry != nullptr)
         {
             auto shadow_res = add_shadow_pass(shadow_pass_params{
                 .graph = _graph,
@@ -1183,7 +1186,7 @@ namespace tempest::render_system
 
             _graph.add_graphics_pass<ui_pass_data>(
                 "UIRenderPass",
-                [this, swapchain_target](render_graph::pass_builder& builder, ui_pass_data& data) {
+                [this, swapchain_target](render_graph::pass_builder& builder, ui_pass_data& data) -> void {
                     data.tonemapped_tex = _tonemapped_color_target;
                     data.swapchain_target = swapchain_target;
                     builder.read(data.tonemapped_tex, rhi::pipeline_stage::fragment, rhi::resource_access::read,
@@ -1194,12 +1197,12 @@ namespace tempest::render_system
                 },
                 [ui_cb = tempest::move(ui_callback), view = *effective_sc_view, width,
                  height]([[maybe_unused]] const ui_pass_data& data,
-                         [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& cmd) {
+                         [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& cmd) -> void {
                     auto color_att = rhi::color_attachment{
                         .view = view,
                         .load_op = rhi::load_op::clear,
                         .store_op = rhi::store_op::store,
-                        .clear_value = rhi::clear_color_value{0.0F, 0.0F, 0.0F, 1.0F},
+                        .clear_value = rhi::clear_color_value{.r = 0.0F, .g = 0.0F, .b = 0.0F, .a = 1.0F},
                     };
                     cmd.begin_render_pass(span<const rhi::color_attachment>{&color_att, 1}, nullopt, width, height);
                     ui_cb(cmd, width, height);
@@ -1211,7 +1214,7 @@ namespace tempest::render_system
     auto renderer::render(const render_graph::frame_sync_options& sync) -> expected<void, render_graph::execution_error>
     {
         auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::render"};
-        if (!_device)
+        if (_device == nullptr)
         {
             return unexpected(render_graph::execution_error::compile_failed);
         }
@@ -1229,7 +1232,7 @@ namespace tempest::render_system
         if (_active_surface_window.is_valid())
         {
             auto* surf = _find_surface(_active_surface_window);
-            if (surf && surf->current_sc_image.has_value())
+            if ((surf != nullptr) && surf->current_sc_image.has_value())
             {
                 if (!effective_sync.wait_semaphore.has_value())
                 {
@@ -1268,7 +1271,7 @@ namespace tempest::render_system
     auto renderer::present(window_handle win) -> expected<void, rhi::swapchain_error>
     {
         [[maybe_unused]] const auto zone = profiler::scoped_zone{_inputs.profiler, "renderer::present"};
-        if (!_device)
+        if (_device == nullptr)
         {
             return {};
         }
@@ -1280,7 +1283,7 @@ namespace tempest::render_system
         }
 
         auto* surf = _find_surface(target_win);
-        if (!surf || !surf->render_surface || !surf->current_sc_image.has_value())
+        if ((surf == nullptr) || !surf->render_surface || !surf->current_sc_image.has_value())
         {
             return {};
         }
@@ -1317,18 +1320,18 @@ namespace tempest::render_system
         }
 
         auto* surf = _find_surface(target_win);
-        auto w = (surf && surf->render_surface) ? surf->render_surface->get_width() : _cfg.render_width;
-        auto h = (surf && surf->render_surface) ? surf->render_surface->get_height() : _cfg.render_height;
+        auto w = ((surf != nullptr) && surf->render_surface) ? surf->render_surface->get_width() : _cfg.render_width;
+        auto h = ((surf != nullptr) && surf->render_surface) ? surf->render_surface->get_height() : _cfg.render_height;
 
         begin_frame(target_win);
 
-        if (surf && surf->render_surface && !surf->current_sc_image.has_value())
+        if ((surf != nullptr) && surf->render_surface && !surf->current_sc_image.has_value())
         {
             // Image acquisition failed / recreate pending
             return {};
         }
 
-        prepare_frame(w, h, nullopt, nullopt, camera_override, tempest::move(ui_callback));
+        prepare_frame(w, h, nullopt, nullopt, tempest::move(camera_override), tempest::move(ui_callback));
 
         const auto render_res = render();
         if (!render_res.has_value())
@@ -1336,7 +1339,7 @@ namespace tempest::render_system
             return render_res;
         }
 
-        if (surf && surf->render_surface)
+        if ((surf != nullptr) && surf->render_surface)
         {
             [[maybe_unused]] auto present_res = present(target_win);
         }
@@ -1361,7 +1364,7 @@ namespace tempest::render_system
         // Mesh Component Added
         _mesh_added_sub =
             _events->dispatcher<ecs::component_added_event<ecs::entity, core::mesh_component>>().subscribe(
-                [this](const ecs::component_added_event<ecs::entity, core::mesh_component>& evt) {
+                [this](const ecs::component_added_event<ecs::entity, core::mesh_component>& evt) -> void {
                     if (!_renderable_indices.contains(evt.entity))
                     {
                         const auto idx = _tracked_entities.size();
@@ -1374,14 +1377,13 @@ namespace tempest::render_system
         // Mesh Component Replaced
         _mesh_replaced_sub =
             _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::mesh_component>>().subscribe(
-                [this]([[maybe_unused]] const ecs::component_replaced_event<ecs::entity, core::mesh_component>& evt) {
-                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
-                });
+                [this]([[maybe_unused]] const ecs::component_replaced_event<ecs::entity, core::mesh_component>& evt)
+                    -> void { _renderables_dirty_count = _cfg.pool_config.frames_in_flight; });
 
         // Mesh Component Removed
         _mesh_removed_sub =
             _events->dispatcher<ecs::component_removed_event<ecs::entity, core::mesh_component>>().subscribe(
-                [this](const ecs::component_removed_event<ecs::entity, core::mesh_component>& evt) {
+                [this](const ecs::component_removed_event<ecs::entity, core::mesh_component>& evt) -> void {
                     auto it = _renderable_indices.find(evt.entity);
                     if (it != _renderable_indices.end())
                     {
@@ -1402,28 +1404,23 @@ namespace tempest::render_system
         // Material Component Added / Replaced / Removed
         _material_added_sub =
             _events->dispatcher<ecs::component_added_event<ecs::entity, core::material_component>>().subscribe(
-                [this]([[maybe_unused]] const ecs::component_added_event<ecs::entity, core::material_component>& evt) {
-                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
-                });
+                [this]([[maybe_unused]] const ecs::component_added_event<ecs::entity, core::material_component>& evt)
+                    -> void { _renderables_dirty_count = _cfg.pool_config.frames_in_flight; });
 
         _material_replaced_sub =
             _events->dispatcher<ecs::component_replaced_event<ecs::entity, core::material_component>>().subscribe(
-                [this](
-                    [[maybe_unused]] const ecs::component_replaced_event<ecs::entity, core::material_component>& evt) {
-                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
-                });
+                [this]([[maybe_unused]] const ecs::component_replaced_event<ecs::entity, core::material_component>& evt)
+                    -> void { _renderables_dirty_count = _cfg.pool_config.frames_in_flight; });
 
         _material_removed_sub =
             _events->dispatcher<ecs::component_removed_event<ecs::entity, core::material_component>>().subscribe(
-                [this](
-                    [[maybe_unused]] const ecs::component_removed_event<ecs::entity, core::material_component>& evt) {
-                    _renderables_dirty_count = _cfg.pool_config.frames_in_flight;
-                });
+                [this]([[maybe_unused]] const ecs::component_removed_event<ecs::entity, core::material_component>& evt)
+                    -> void { _renderables_dirty_count = _cfg.pool_config.frames_in_flight; });
 
         // Point Light Added
         _point_light_added_sub =
             _events->dispatcher<ecs::component_added_event<ecs::entity, point_light_component>>().subscribe(
-                [this](const ecs::component_added_event<ecs::entity, point_light_component>& evt) {
+                [this](const ecs::component_added_event<ecs::entity, point_light_component>& evt) -> void {
                     if (!_point_light_indices.contains(evt.entity))
                     {
                         const auto idx = _point_light_entities.size();
@@ -1436,7 +1433,7 @@ namespace tempest::render_system
         // Point Light Replaced
         _point_light_replaced_sub =
             _events->dispatcher<ecs::component_replaced_event<ecs::entity, point_light_component>>().subscribe(
-                [this](const ecs::component_replaced_event<ecs::entity, point_light_component>& evt) {
+                [this](const ecs::component_replaced_event<ecs::entity, point_light_component>& evt) -> void {
                     if (_point_light_indices.contains(evt.entity))
                     {
                         _lights_dirty_count = _cfg.pool_config.frames_in_flight;
@@ -1446,7 +1443,7 @@ namespace tempest::render_system
         // Point Light Removed
         _point_light_removed_sub =
             _events->dispatcher<ecs::component_removed_event<ecs::entity, point_light_component>>().subscribe(
-                [this](const ecs::component_removed_event<ecs::entity, point_light_component>& evt) {
+                [this](const ecs::component_removed_event<ecs::entity, point_light_component>& evt) -> void {
                     auto it = _point_light_indices.find(evt.entity);
                     if (it != _point_light_indices.end())
                     {
@@ -1467,25 +1464,25 @@ namespace tempest::render_system
         // Directional Light Added / Replaced / Removed
         _dir_light_added_sub =
             _events->dispatcher<ecs::component_added_event<ecs::entity, directional_light_component>>().subscribe(
-                [this](
-                    [[maybe_unused]] const ecs::component_added_event<ecs::entity, directional_light_component>& evt) {
-                    _lights_dirty_count = _cfg.pool_config.frames_in_flight;
-                });
+                [this]([[maybe_unused]] const ecs::component_added_event<ecs::entity, directional_light_component>& evt)
+                    -> void { _lights_dirty_count = _cfg.pool_config.frames_in_flight; });
 
         _dir_light_replaced_sub =
             _events->dispatcher<ecs::component_replaced_event<ecs::entity, directional_light_component>>().subscribe(
-                [this]([[maybe_unused]] const ecs::component_replaced_event<ecs::entity, directional_light_component>&
-                           evt) { _lights_dirty_count = _cfg.pool_config.frames_in_flight; });
+                [this](
+                    [[maybe_unused]] const ecs::component_replaced_event<ecs::entity, directional_light_component>& evt)
+                    -> void { _lights_dirty_count = _cfg.pool_config.frames_in_flight; });
 
         _dir_light_removed_sub =
             _events->dispatcher<ecs::component_removed_event<ecs::entity, directional_light_component>>().subscribe(
-                [this]([[maybe_unused]] const ecs::component_removed_event<ecs::entity, directional_light_component>&
-                           evt) { _lights_dirty_count = _cfg.pool_config.frames_in_flight; });
+                [this](
+                    [[maybe_unused]] const ecs::component_removed_event<ecs::entity, directional_light_component>& evt)
+                    -> void { _lights_dirty_count = _cfg.pool_config.frames_in_flight; });
 
         // Transform Replaced (filter for tracked light entities or directional lights)
         _transform_replaced_sub =
             _events->dispatcher<ecs::component_replaced_event<ecs::entity, ecs::transform_component>>().subscribe(
-                [this](const ecs::component_replaced_event<ecs::entity, ecs::transform_component>& evt) {
+                [this](const ecs::component_replaced_event<ecs::entity, ecs::transform_component>& evt) -> void {
                     if (_point_light_indices.contains(evt.entity))
                     {
                         _lights_dirty_count = _cfg.pool_config.frames_in_flight;
@@ -1499,7 +1496,7 @@ namespace tempest::render_system
 
         // Entity Destroyed
         _entity_destroyed_sub = _events->dispatcher<ecs::entity_destroyed_event<ecs::entity>>().subscribe(
-            [this](const ecs::entity_destroyed_event<ecs::entity>& evt) {
+            [this](const ecs::entity_destroyed_event<ecs::entity>& evt) -> void {
                 // Check renderables
                 if (auto it = _renderable_indices.find(evt.entity); it != _renderable_indices.end())
                 {
@@ -1659,7 +1656,7 @@ namespace tempest::render_system
 
         if (_inputs.entity_registry != nullptr)
         {
-            _inputs.entity_registry->each([this](const ecs::self_component& self, const core::mesh_component&) {
+            _inputs.entity_registry->each([this](const ecs::self_component& self, const core::mesh_component&) -> void {
                 const auto idx = _tracked_entities.size();
                 _renderable_indices[self.entity] = idx;
                 _tracked_entities.push_back(self.entity);
@@ -1675,11 +1672,12 @@ namespace tempest::render_system
 
         if (_inputs.entity_registry != nullptr)
         {
-            _inputs.entity_registry->each([this](const ecs::self_component& self, const point_light_component&) {
-                const auto idx = _point_light_entities.size();
-                _point_light_indices[self.entity] = idx;
-                _point_light_entities.push_back(self.entity);
-            });
+            _inputs.entity_registry->each(
+                [this](const ecs::self_component& self, const point_light_component&) -> void {
+                    const auto idx = _point_light_entities.size();
+                    _point_light_indices[self.entity] = idx;
+                    _point_light_entities.push_back(self.entity);
+                });
             _lights_dirty_count = _cfg.pool_config.frames_in_flight;
         }
     }

@@ -1,18 +1,20 @@
 #include <tempest/filesystem.hpp>
 
 #include <gtest/gtest.h>
+#include <tempest/charconv.hpp>
+#include <tempest/files.hpp>
 
 namespace fs = tempest::filesystem;
 
-TEST(path_detail, convert_wide_to_narrow)
+TEST(charconv, convert_wide_to_narrow)
 {
-    auto narrow_str = fs::detail::convert_wide_to_narrow(L"Hello World");
+    auto narrow_str = tempest::convert_wide_to_narrow(L"Hello World");
     EXPECT_EQ(narrow_str, "Hello World");
 }
 
-TEST(path_detail, convert_narrow_to_wide)
+TEST(charconv, convert_narrow_to_wide)
 {
-    auto wide_str = fs::detail::convert_narrow_to_wide("Hello World");
+    auto wide_str = tempest::convert_narrow_to_wide("Hello World");
     EXPECT_EQ(wide_str, L"Hello World");
 }
 
@@ -494,8 +496,8 @@ TEST(path, append)
     fs::path win_style_left_root = fs::path("C:\\hello").append("world");
     fs::path win_style_right_root = fs::path("hello").append("C:\\world");
     fs::path win_style_both_roots = fs::path("C:\\hello").append("C:\\world");
-    fs::path win_style_unc_left = fs::path("\\\\server\\share").append("file.txt");
-    fs::path win_style_unc_right = fs::path("file.txt").append("\\\\server\\share");
+    fs::path win_style_unc_left = fs::path(R"(\\server\share)").append("file.txt");
+    fs::path win_style_unc_right = fs::path("file.txt").append(R"(\\server\share)");
     fs::path unix_style_left_root = fs::path("/hello").append("world");
     fs::path unix_style_right_root = fs::path("hello").append("/world");
     fs::path unix_style_both_roots = fs::path("/hello").append("/world");
@@ -602,7 +604,7 @@ TEST(path, remove_filename)
     fs::path only_filename = fs::path("HelloWorld");
     fs::path win_root = fs::path("C:\\");
     fs::path unix_root = fs::path("/");
-    fs::path win_style_path = fs::path("C:\\Users\\User\\Documents\\file.txt");
+    fs::path win_style_path = fs::path(R"(C:\Users\User\Documents\file.txt)");
     fs::path unix_style_path = fs::path("/home/user/documents/file.txt");
 
     only_filename.remove_filename();
@@ -761,7 +763,7 @@ TEST(directory_iterator, traverse_current_directory)
         EXPECT_TRUE(entry.exists());
     }
 
-    EXPECT_GT(count, 0u);
+    EXPECT_GT(count, 0U);
 }
 
 /// @brief Tests that constructing an iterator on an invalid or non-existent path produces an empty range.
@@ -805,7 +807,7 @@ TEST(directory_iterator, cached_attributes_match_standalone_queries)
 #endif
     }
 
-    EXPECT_GT(count, 0u);
+    EXPECT_GT(count, 0U);
 }
 
 // ============================================================================
@@ -845,4 +847,229 @@ TEST(filesystem_status, symlink_status_equality)
 
     // 3. Assert - For non-symlink directories, status and symlink_status match
     EXPECT_EQ(direct_status.type(), sym_status.type());
+}
+
+// ============================================================================
+// Filesystem Path Resolution & Metadata Tests (canonical, weakly_canonical, last_write_time)
+// ============================================================================
+
+/// @brief Tests that last_write_time on an existing path returns a non-zero time point.
+TEST(filesystem_metadata, last_write_time_existing_directory)
+{
+    // 1. Setup: get current working directory
+    auto cwd = fs::current_path();
+
+    // 2. Act: read last write time
+    auto lwt = fs::last_write_time(cwd);
+
+    // 3. Assert: last write time is valid and non-zero
+    EXPECT_GT(lwt.time_since_epoch().count(), 0LL);
+}
+
+/// @brief Tests that last_write_time on a non-existent path returns a default zero time point.
+TEST(filesystem_metadata, last_write_time_non_existent)
+{
+    // 1. Setup: define non-existent path
+    auto non_existent = fs::path{"__non_existent_file_metadata_test_12345.tmp"};
+
+    // 2. Act: read last write time
+    auto lwt = fs::last_write_time(non_existent);
+
+    // 3. Assert: last write time is epoch (count is 0)
+    EXPECT_EQ(lwt.time_since_epoch().count(), 0LL);
+}
+
+/// @brief Tests that canonical resolves '.' to an absolute path matching current_path.
+TEST(filesystem_canonical, resolve_dot_to_current_path)
+{
+    // 1. Setup: get current working directory
+    auto cwd = fs::current_path();
+
+    // 2. Act: canonicalize "."
+    auto resolved = fs::canonical(fs::path{"."});
+
+    // 3. Assert: matches cwd and is absolute
+    EXPECT_TRUE(resolved.is_absolute());
+    EXPECT_EQ(resolved, cwd);
+}
+
+/// @brief Tests that canonical returns the input path unchanged when the path does not exist.
+TEST(filesystem_canonical, non_existent_returns_input_path)
+{
+    // 1. Setup: non-existent path
+    auto non_existent = fs::path{"__non_existent_file_canonical_test_12345.tmp"};
+
+    // 2. Act: canonicalize non-existent path
+    auto resolved = fs::canonical(non_existent);
+
+    // 3. Assert: returns original path
+    EXPECT_EQ(resolved, non_existent);
+}
+
+/// @brief Tests that weakly_canonical on an existing path returns the exact same result as canonical.
+TEST(filesystem_weakly_canonical, existing_path_matches_canonical)
+{
+    // 1. Setup: current working directory
+    auto cwd = fs::current_path();
+
+    // 2. Act: compute weakly_canonical and canonical
+    auto weakly = fs::weakly_canonical(cwd);
+    auto canon = fs::canonical(cwd);
+
+    // 3. Assert: results match and are absolute
+    EXPECT_TRUE(weakly.is_absolute());
+    EXPECT_EQ(weakly, canon);
+}
+
+/// @brief Tests that weakly_canonical on an empty path returns an empty path.
+TEST(filesystem_weakly_canonical, empty_path_returns_empty)
+{
+    // 1. Setup: empty path
+    auto empty_path = fs::path{};
+
+    // 2. Act: compute weakly_canonical
+    auto resolved = fs::weakly_canonical(empty_path);
+
+    // 3. Assert: result is empty
+    EXPECT_TRUE(resolved.empty());
+}
+
+/// @brief Tests that weakly_canonical resolves existing parent prefixes and appends non-existent child elements.
+TEST(filesystem_weakly_canonical, resolves_parent_prefix_and_appends_non_existent_elements)
+{
+    // 1. Setup: construct a path with existing cwd prefix and non-existent child directories
+    auto cwd = fs::current_path();
+    auto non_existent_subpath = cwd / "__non_existent_dir_alpha" / "sub_beta" / "file.txt";
+
+    // 2. Act: resolve weakly canonical path
+    auto resolved = fs::weakly_canonical(non_existent_subpath);
+
+    // 3. Assert: canonical cwd is prepended to non-existent tail
+    auto expected = fs::canonical(cwd) / "__non_existent_dir_alpha" / "sub_beta" / "file.txt";
+    EXPECT_TRUE(resolved.is_absolute());
+    EXPECT_EQ(resolved, expected);
+}
+
+/// @brief Tests that weakly_canonical on a relative non-existent path roots to canonical current_path.
+TEST(filesystem_weakly_canonical, relative_non_existent_roots_to_current_path)
+{
+    // 1. Setup: relative non-existent path
+    auto rel_path = fs::path{"__non_existent_rel_dir"} / "file.txt";
+
+    // 2. Act: resolve weakly canonical path
+    auto resolved = fs::weakly_canonical(rel_path);
+
+    // 3. Assert: rooted to canonical current working directory
+    auto expected = fs::canonical(fs::current_path()) / "__non_existent_rel_dir" / "file.txt";
+    EXPECT_TRUE(resolved.is_absolute());
+    EXPECT_EQ(resolved, expected);
+}
+
+// ============================================================================
+// Directory Creation & Recursive Removal Tests (create_directory, create_directories, remove_all)
+// ============================================================================
+
+/// @brief Tests that create_directory creates a single directory and succeeds idempotently if it already exists.
+TEST(filesystem_directories, create_directory_single_and_idempotent)
+{
+    // 1. Setup: prepare a unique test directory path and clean up beforehand
+    auto test_dir = fs::temp_directory_path() / "tempest_test_single_dir";
+    fs::remove_all(test_dir);
+    ASSERT_FALSE(fs::exists(test_dir));
+
+    // 2. Act: create the directory
+    auto created = fs::create_directory(test_dir);
+
+    // 3. Assert: directory was created and exists
+    EXPECT_TRUE(created);
+    EXPECT_TRUE(fs::exists(test_dir));
+    EXPECT_TRUE(fs::is_directory(test_dir));
+
+    // 4. Act & Assert: creating the directory again succeeds idempotently
+    auto created_again = fs::create_directory(test_dir);
+    EXPECT_TRUE(created_again);
+
+    // 5. Cleanup
+    auto removed_count = fs::remove_all(test_dir);
+    EXPECT_EQ(removed_count, 1U);
+    EXPECT_FALSE(fs::exists(test_dir));
+}
+
+/// @brief Tests that create_directories creates nested directory hierarchies and handles edge cases.
+TEST(filesystem_directories, create_directories_nested_hierarchy)
+{
+    // 1. Setup: target nested directory path and clean up beforehand
+    auto base_dir = fs::temp_directory_path() / "tempest_test_nested_dir";
+    auto nested_dir = base_dir / "level1" / "level2" / "level3";
+    fs::remove_all(base_dir);
+    ASSERT_FALSE(fs::exists(base_dir));
+
+    // 2. Act: create nested directory structure
+    auto created = fs::create_directories(nested_dir);
+
+    // 3. Assert: all hierarchy levels were created
+    EXPECT_TRUE(created);
+    EXPECT_TRUE(fs::exists(base_dir));
+    EXPECT_TRUE(fs::exists(base_dir / "level1"));
+    EXPECT_TRUE(fs::exists(base_dir / "level1" / "level2"));
+    EXPECT_TRUE(fs::exists(nested_dir));
+    EXPECT_TRUE(fs::is_directory(nested_dir));
+
+    // 4. Act & Assert: creating already existing path returns false
+    auto already_exists = fs::create_directories(nested_dir);
+    EXPECT_FALSE(already_exists);
+
+    // 5. Act & Assert: empty path returns false
+    auto empty_result = fs::create_directories(fs::path{});
+    EXPECT_FALSE(empty_result);
+
+    // 6. Cleanup
+    fs::remove_all(base_dir);
+    EXPECT_FALSE(fs::exists(base_dir));
+}
+
+/// @brief Tests that remove_all recursively deletes files and directories and reports exact count.
+TEST(filesystem_directories, remove_all_recursive_tree)
+{
+    // 1. Setup: create nested directories and populate with files
+    auto base_dir = fs::temp_directory_path() / "tempest_test_remove_tree";
+    auto sub_dir1 = base_dir / "sub1";
+    auto sub_dir2 = base_dir / "sub2";
+    fs::remove_all(base_dir);
+
+    ASSERT_TRUE(fs::create_directories(sub_dir1));
+    ASSERT_TRUE(fs::create_directories(sub_dir2));
+
+    const auto *const data1 = "hello";
+    tempest::write_file_from_bytes(sub_dir1 / "file1.txt", {reinterpret_cast<const tempest::byte*>(data1), 5});
+    const auto *const data2 = "world";
+    tempest::write_file_from_bytes(sub_dir2 / "file2.txt", {reinterpret_cast<const tempest::byte*>(data2), 5});
+    const auto *const data3 = "tempest";
+    tempest::write_file_from_bytes(base_dir / "root_file.txt", {reinterpret_cast<const tempest::byte*>(data3), 7});
+
+    ASSERT_TRUE(fs::exists(sub_dir1 / "file1.txt"));
+    ASSERT_TRUE(fs::exists(sub_dir2 / "file2.txt"));
+    ASSERT_TRUE(fs::exists(base_dir / "root_file.txt"));
+
+    // 2. Act: remove entire directory tree
+    auto removed_count = fs::remove_all(base_dir);
+
+    // 3. Assert: 3 files + 2 subdirectories + 1 base directory = 6 items removed
+    EXPECT_EQ(removed_count, 6U);
+    EXPECT_FALSE(fs::exists(base_dir));
+}
+
+/// @brief Tests that remove_all on a non-existent path returns 0.
+TEST(filesystem_directories, remove_all_non_existent)
+{
+    // 1. Setup: define non-existent path
+    auto non_existent = fs::temp_directory_path() / "tempest_test_non_existent_path_98765";
+    fs::remove_all(non_existent);
+    ASSERT_FALSE(fs::exists(non_existent));
+
+    // 2. Act: call remove_all on non-existent path
+    auto count = fs::remove_all(non_existent);
+
+    // 3. Assert: count is 0
+    EXPECT_EQ(count, 0U);
 }

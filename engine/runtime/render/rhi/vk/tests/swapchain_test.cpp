@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <tempest/guid.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
@@ -9,7 +10,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #elif defined(TEMPEST_PLATFORM_LINUX)
@@ -30,11 +31,14 @@ namespace
 
     auto create_test_env() -> test_env
     {
+        static auto test_sink = stdout_log_sink{};
+        static auto test_log = logger{test_sink};
+
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Swapchain Test";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_log);
         if (!result.has_value())
         {
             return {};
@@ -55,6 +59,8 @@ namespace
     }
 } // namespace
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
 TEST(swapchain_test, create_and_acquire)
 {
     auto env = create_test_env();
@@ -68,7 +74,7 @@ TEST(swapchain_test, create_and_acquire)
     auto* window = glfwCreateWindow(640, 480, "Tempest Swapchain Test", nullptr, nullptr);
     ASSERT_NE(window, nullptr);
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
@@ -140,7 +146,7 @@ TEST(swapchain_test, acquire_render_and_present)
     auto* window = glfwCreateWindow(800, 600, "Tempest Present Test", nullptr, nullptr);
     ASSERT_NE(window, nullptr);
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
@@ -213,10 +219,10 @@ TEST(swapchain_test, acquire_render_and_present)
         .store_op = store_op::store,
         .clear_value =
             clear_color_value{
-                .r = 0.0f,
-                .g = 0.4f,
-                .b = 0.8f,
-                .a = 1.0f,
+                .r = 0.0F,
+                .g = 0.4F,
+                .b = 0.8F,
+                .a = 1.0F,
             },
     };
     cmd.begin_render_pass(span<const color_attachment>{&color_att, 1}, nullopt, 800, 600);
@@ -288,7 +294,7 @@ TEST(swapchain_test, swapchain_recreation_handover)
     auto* window = glfwCreateWindow(640, 480, "Tempest Recreate Test", nullptr, nullptr);
     ASSERT_NE(window, nullptr);
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
@@ -392,10 +398,10 @@ TEST(swapchain_test, swapchain_recreation_handover)
         .store_op = store_op::store,
         .clear_value =
             clear_color_value{
-                .r = 0.1f,
-                .g = 0.9f,
-                .b = 0.2f,
-                .a = 1.0f,
+                .r = 0.1F,
+                .g = 0.9F,
+                .b = 0.2F,
+                .a = 1.0F,
             },
     };
     cmd.begin_render_pass(span<const color_attachment>{&color_att, 1}, nullopt, 800, 600);
@@ -452,3 +458,5 @@ TEST(swapchain_test, swapchain_recreation_handover)
     glfwDestroyWindow(window);
     glfwTerminate();
 }
+
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)

@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 
-#include <filesystem>
 #include <tempest/archetype.hpp>
 #include <tempest/asset_database.hpp>
 #include <tempest/default_importers.hpp>
+#include <tempest/filesystem.hpp>
 #include <tempest/logger.hpp>
 #include <tempest/render_system/camera_system.hpp>
 #include <tempest/render_system/passes/depth_prepass.hpp>
@@ -34,8 +34,8 @@ namespace tempest::render_system::tests
     {
         struct test_fixture
         {
-            unique_ptr<rhi::context> ctx{};
-            unique_ptr<rhi::device> dev{};
+            unique_ptr<rhi::context> ctx;
+            unique_ptr<rhi::device> dev;
             assets::asset_database asset_db{nullptr};
         };
 
@@ -58,7 +58,10 @@ namespace tempest::render_system::tests
                 .api = rhi::graphics_api::vulkan,
             };
 
-            auto ctx_res = rhi::create_context(ctx_desc);
+            static auto test_sink = stdout_log_sink{};
+            static auto test_log = logger{test_sink};
+
+            auto ctx_res = rhi::create_context(ctx_desc, test_log);
             if (!ctx_res.has_value())
             {
                 return test_fixture{};
@@ -324,7 +327,7 @@ namespace tempest::render_system::tests
 
             const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
             ASSERT_NE(alloc, nullptr);
-            if (alloc)
+            if (alloc != nullptr)
             {
                 auto& port = dev->get_graphics_execution_port();
                 auto& cmd = port.acquire_command_list();
@@ -354,17 +357,17 @@ namespace tempest::render_system::tests
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
-                if (pixels)
+                if (pixels != nullptr)
                 {
                     // Sample center pixel (640, 360) (Rendered red PBR geometry)
-                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto center_idx = ((360 * 1280) + 640) * 4;
                     const auto r = pixels[center_idx + 0];
                     const auto a = pixels[center_idx + 3];
                     EXPECT_GT(r, 50);
                     EXPECT_EQ(a, 255);
 
                     // Sample corner pixel (100, 100) (Skybox gradient)
-                    const auto sky_idx = (100 * 1280 + 100) * 4;
+                    const auto sky_idx = ((100 * 1280) + 100) * 4;
                     const auto sky_b = pixels[sky_idx + 2];
                     const auto sky_a = pixels[sky_idx + 3];
                     EXPECT_GT(sky_b, 50);
@@ -433,8 +436,8 @@ namespace tempest::render_system::tests
             auto asset_db = assets::asset_database{&asset_type_reg};
             assets::register_default_importers(asset_db, &meshes, &textures, &materials);
 
-            const auto sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
-            if (std::filesystem::exists(sponza_path))
+            const auto* const sponza_path = "assets/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf";
+            if (filesystem::exists(sponza_path))
             {
                 [[maybe_unused]] auto prefab_root = asset_db.load(sponza_path, registry);
             }
@@ -608,12 +611,12 @@ namespace tempest::render_system::tests
         graph.add_compute_pass<sink_pass_data>(
             "BitmaskSinkPass",
             [bitmask_id = culling_data.light_bitmask_buffer](render_graph::pass_builder& builder,
-                                                             sink_pass_data& data) {
+                                                             sink_pass_data& data) -> void {
                 data.bitmask_buf = builder.read(bitmask_id, rhi::pipeline_stage::compute, rhi::resource_access::read);
                 builder.mark_sink();
             },
             []([[maybe_unused]] const sink_pass_data& data, [[maybe_unused]] render_graph::pass_execution_context& ctx,
-               [[maybe_unused]] rhi::command_list& cmd) {});
+               [[maybe_unused]] rhi::command_list& cmd) -> void {});
 
         auto res = graph.execute(*dev);
         EXPECT_TRUE(res.has_value());
@@ -629,7 +632,7 @@ namespace tempest::render_system::tests
 
         const auto* cluster_alloc = graph.get_physical_buffer(cluster_bounds_buf.id);
         ASSERT_NE(cluster_alloc, nullptr);
-        if (cluster_alloc)
+        if (cluster_alloc != nullptr)
         {
             auto& port = dev->get_graphics_execution_port();
             auto& cmd = port.acquire_command_list();
@@ -648,7 +651,7 @@ namespace tempest::render_system::tests
             dev->wait_idle();
 
             const auto* cb = static_cast<const cluster_bounds*>(cluster_readback.cpu_address);
-            if (cb)
+            if (cb != nullptr)
             {
                 // Verify cluster 0 depth range is near plane [tile_near, tile_far]
                 EXPECT_LT(cb[0].min_corner.z, 0.0F);
@@ -670,7 +673,7 @@ namespace tempest::render_system::tests
 
         const auto* bitmask_alloc = graph.get_physical_buffer(culling_data.light_bitmask_buffer.id);
         ASSERT_NE(bitmask_alloc, nullptr);
-        if (bitmask_alloc)
+        if (bitmask_alloc != nullptr)
         {
             auto& port = dev->get_graphics_execution_port();
             auto& cmd = port.acquire_command_list();
@@ -924,7 +927,7 @@ namespace tempest::render_system::tests
         EXPECT_NE(reloaded_rhi2.handle, 0ULL);
 
         // Notify file changed triggers surgical reload
-        auto notify_ok = shaders.notify_file_changed(std::filesystem::path("pbr.frag.spv"));
+        auto notify_ok = shaders.notify_file_changed(tempest::filesystem::path("pbr.frag.spv"));
         EXPECT_TRUE(notify_ok);
 
         // Drain retired pipelines
@@ -1076,12 +1079,13 @@ namespace tempest::render_system::tests
             // Validate the mapped GPU buffers for the active frame slot
             auto& pool = rend->get_resource_pool();
             const auto slot = pool.get_frame_slot();
-            auto* cmds = static_cast<const indexed_indirect_command*>(pool.get_draw_commands_buffer().cpu_address) +
-                         slot * pool.get_config().max_draw_command_count;
-            auto* instances = static_cast<const uint32_t*>(pool.get_instance_buffer().cpu_address) +
-                              slot * pool.get_config().max_instance_count;
-            auto* objects = static_cast<const object_payload*>(pool.get_object_buffer().cpu_address) +
-                            slot * pool.get_config().max_object_count;
+            const auto* cmds =
+                static_cast<const indexed_indirect_command*>(pool.get_draw_commands_buffer().cpu_address) +
+                (slot * pool.get_config().max_draw_command_count);
+            const auto* instances = static_cast<const uint32_t*>(pool.get_instance_buffer().cpu_address) +
+                                    (slot * pool.get_config().max_instance_count);
+            const auto* objects = static_cast<const object_payload*>(pool.get_object_buffer().cpu_address) +
+                                  (slot * pool.get_config().max_object_count);
 
             ASSERT_NE(cmds, nullptr);
             ASSERT_NE(instances, nullptr);
@@ -1379,9 +1383,9 @@ namespace tempest::render_system::tests
         EXPECT_FLOAT_EQ(shadow_data.cascades[3].split_depth, 150.0F);
 
         // Validate UV offsets and scales in the atlas
-        for (uint32_t i = 0; i < 4; ++i)
+        for (const auto& cascade : shadow_data.cascades)
         {
-            const auto& uv = shadow_data.cascades[i].uv_offset_scale;
+            const auto& uv = cascade.uv_offset_scale;
             EXPECT_GE(uv.x, 0.0F);
             EXPECT_GE(uv.y, 0.0F);
             EXPECT_GT(uv.z, 0.0F);
@@ -1784,9 +1788,9 @@ namespace tempest::render_system::tests
             ASSERT_NE(shadow_data, nullptr);
             EXPECT_EQ(shadow_data->cascade_count, 4U);
 
-            for (auto i = 0U; i < 4U; ++i)
+            for (const auto& cascade : shadow_data->cascades)
             {
-                const auto& uv = shadow_data->cascades[i].uv_offset_scale;
+                const auto& uv = cascade.uv_offset_scale;
                 EXPECT_GE(uv.x, 0.0F);
                 EXPECT_GE(uv.y, 0.0F);
                 EXPECT_GT(uv.z, 0.0F);
@@ -1931,7 +1935,7 @@ namespace tempest::render_system::tests
 
             const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
             ASSERT_NE(alloc, nullptr);
-            if (alloc)
+            if (alloc != nullptr)
             {
                 auto& port = dev->get_graphics_execution_port();
                 auto& cmd = port.acquire_command_list();
@@ -1962,10 +1966,10 @@ namespace tempest::render_system::tests
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
                 ASSERT_NE(pixels, nullptr);
-                if (pixels)
+                if (pixels != nullptr)
                 {
                     // Center pixel (640, 360) is in Cascade 0 -> Red channel should be significantly higher than Green
-                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto center_idx = ((360 * 1280) + 640) * 4;
                     const auto r = pixels[center_idx + 0];
                     const auto g = pixels[center_idx + 1];
                     const auto b = pixels[center_idx + 2];
@@ -1986,7 +1990,7 @@ namespace tempest::render_system::tests
 
             const auto* alloc2 = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
             ASSERT_NE(alloc2, nullptr);
-            if (alloc2)
+            if (alloc2 != nullptr)
             {
                 auto& port = dev->get_graphics_execution_port();
                 auto& cmd = port.acquire_command_list();
@@ -2017,11 +2021,11 @@ namespace tempest::render_system::tests
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
                 ASSERT_NE(pixels, nullptr);
-                if (pixels)
+                if (pixels != nullptr)
                 {
                     // Center pixel in shadow_factor mode must be grayscale (R == G == B within tonemapping
                     // quantization)
-                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto center_idx = ((360 * 1280) + 640) * 4;
                     const auto r = pixels[center_idx + 0];
                     const auto g = pixels[center_idx + 1];
                     const auto b = pixels[center_idx + 2];
@@ -2313,8 +2317,8 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<gather_sink_data>(
             "GatherSinkPass",
-            [m = gather_data.moments_texture,
-             z = gather_data.zeroth_moment_texture](render_graph::pass_builder& builder, gather_sink_data& data) {
+            [m = gather_data.moments_texture, z = gather_data.zeroth_moment_texture](
+                render_graph::pass_builder& builder, gather_sink_data& data) -> void {
                 data.moments = builder.read(m, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                             rhi::image_layout::general);
                 data.zeroth = builder.read(z, rhi::pipeline_stage::fragment, rhi::resource_access::read,
@@ -2322,7 +2326,7 @@ namespace tempest::render_system::tests
                 builder.mark_sink();
             },
             []([[maybe_unused]] const gather_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
-               [[maybe_unused]] rhi::command_list&) {});
+               [[maybe_unused]] rhi::command_list&) -> void {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2415,7 +2419,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(zeroth_pixels, nullptr);
 
         // Center pixel (32, 32) is covered by transparent quad
-        const auto center_idx = 32 * width + 32;
+        const auto center_idx = (32 * width) + 32;
         EXPECT_GT(zeroth_pixels[center_idx], 0.0F);
 
         // Corner pixel (0, 0) is outside the quad
@@ -2427,7 +2431,7 @@ namespace tempest::render_system::tests
 
         // Verify moments are non-zero at center pixel for both layers
         const auto even_center_offset = center_idx * 4;
-        const auto odd_center_offset = (width * height + center_idx) * 4;
+        const auto odd_center_offset = ((width * height) + center_idx) * 4;
         EXPECT_NE(moments_pixels[even_center_offset + 0], 0);
         EXPECT_NE(moments_pixels[odd_center_offset + 0], 0);
 
@@ -2556,8 +2560,8 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<gather_sink_data>(
             "GatherSinkPass",
-            [m = gather_data.moments_texture,
-             z = gather_data.zeroth_moment_texture](render_graph::pass_builder& builder, gather_sink_data& data) {
+            [m = gather_data.moments_texture, z = gather_data.zeroth_moment_texture](
+                render_graph::pass_builder& builder, gather_sink_data& data) -> void {
                 data.moments = builder.read(m, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                             rhi::image_layout::general);
                 data.zeroth = builder.read(z, rhi::pipeline_stage::fragment, rhi::resource_access::read,
@@ -2565,7 +2569,7 @@ namespace tempest::render_system::tests
                 builder.mark_sink();
             },
             []([[maybe_unused]] const gather_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
-               [[maybe_unused]] rhi::command_list&) {});
+               [[maybe_unused]] rhi::command_list&) -> void {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2612,7 +2616,7 @@ namespace tempest::render_system::tests
         const auto* zeroth_pixels = static_cast<const float*>(zeroth_readback_buf.cpu_address);
         ASSERT_NE(zeroth_pixels, nullptr);
 
-        const auto center_idx = 32 * width + 32;
+        const auto center_idx = (32 * width) + 32;
         EXPECT_GT(zeroth_pixels[center_idx], 0.0F);
 
         dev->destroy_buffer(zeroth_readback_buf);
@@ -2773,13 +2777,13 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<resolve_sink_data>(
             "ResolveSinkPass",
-            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) {
+            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) -> void {
                 data.accum = builder.read(acc, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                           rhi::image_layout::general);
                 builder.mark_sink();
             },
             []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
-               [[maybe_unused]] rhi::command_list&) {});
+               [[maybe_unused]] rhi::command_list&) -> void {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -2827,7 +2831,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(accum_pixels, nullptr);
 
         // Center pixel (32, 32) is covered by transparent quad
-        const auto center_idx = (32 * width + 32) * 4;
+        const auto center_idx = ((32 * width) + 32) * 4;
         EXPECT_NE(accum_pixels[center_idx + 0], 0); // Red channel > 0
         EXPECT_NE(accum_pixels[center_idx + 3], 0); // Alpha coverage > 0
 
@@ -2974,13 +2978,13 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<resolve_sink_data>(
             "ResolveSinkPass",
-            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) {
+            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) -> void {
                 data.accum = builder.read(acc, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                           rhi::image_layout::general);
                 builder.mark_sink();
             },
             []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
-               [[maybe_unused]] rhi::command_list&) {});
+               [[maybe_unused]] rhi::command_list&) -> void {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -3028,7 +3032,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(accum_pixels, nullptr);
 
         // Center pixel (32, 32) is covered by transmissive quad
-        const auto center_idx = (32 * width + 32) * 4;
+        const auto center_idx = ((32 * width) + 32) * 4;
         EXPECT_NE(accum_pixels[center_idx + 0], 0); // Color channel > 0
         EXPECT_NE(accum_pixels[center_idx + 3], 0); // Alpha coverage > 0
 
@@ -3193,13 +3197,13 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<resolve_sink_data>(
             "ResolveSinkPass",
-            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) {
+            [acc = resolve_data.accum_texture](render_graph::pass_builder& builder, resolve_sink_data& data) -> void {
                 data.accum = builder.read(acc, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                           rhi::image_layout::general);
                 builder.mark_sink();
             },
             []([[maybe_unused]] const resolve_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
-               [[maybe_unused]] rhi::command_list&) {});
+               [[maybe_unused]] rhi::command_list&) -> void {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -3247,7 +3251,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(accum_pixels, nullptr);
 
         // Center pixel has both red and green contributions
-        const auto center_idx = (32 * width + 32) * 4;
+        const auto center_idx = ((32 * width) + 32) * 4;
         EXPECT_NE(accum_pixels[center_idx + 0], 0); // Red > 0
         EXPECT_NE(accum_pixels[center_idx + 1], 0); // Green > 0
         EXPECT_NE(accum_pixels[center_idx + 3], 0); // Alpha > 0
@@ -3367,7 +3371,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(hdr_pixels, nullptr);
 
         // Center pixel should be pure skybox (no alpha blending altered it)
-        const auto center_idx = (32 * width + 32) * 4;
+        const auto center_idx = ((32 * width) + 32) * 4;
         EXPECT_NE(hdr_pixels[center_idx + 2], 0); // Blue channel from skybox > 0
 
         dev->destroy_buffer(hdr_readback_buf);
@@ -3520,13 +3524,13 @@ namespace tempest::render_system::tests
 
         graph.add_graphics_pass<blend_sink_data>(
             "BlendSinkPass",
-            [h = blend_data.hdr_color](render_graph::pass_builder& builder, blend_sink_data& data) {
+            [h = blend_data.hdr_color](render_graph::pass_builder& builder, blend_sink_data& data) -> void {
                 data.hdr = builder.read(h, rhi::pipeline_stage::fragment, rhi::resource_access::read,
                                         rhi::image_layout::general);
                 builder.mark_sink();
             },
             []([[maybe_unused]] const blend_sink_data&, [[maybe_unused]] render_graph::pass_execution_context&,
-               [[maybe_unused]] rhi::command_list&) {});
+               [[maybe_unused]] rhi::command_list&) -> void {});
 
         auto exec_res = graph.execute(*dev);
         EXPECT_TRUE(exec_res.has_value());
@@ -3574,11 +3578,11 @@ namespace tempest::render_system::tests
         ASSERT_NE(hdr_pixels, nullptr);
 
         // Center pixel (32, 32) should have transparent red blended over skybox background
-        const auto center_idx = (32 * width + 32) * 4;
+        const auto center_idx = ((32 * width) + 32) * 4;
         EXPECT_NE(hdr_pixels[center_idx + 0], 0); // Red channel > 0
 
         // Corner pixel (2, 2) is outside geometry, retains skybox background
-        const auto corner_idx = (2 * width + 2) * 4;
+        const auto corner_idx = ((2 * width) + 2) * 4;
         EXPECT_NE(hdr_pixels[corner_idx + 2], 0); // Blue channel from skybox > 0
 
         dev->destroy_buffer(hdr_readback_buf);
@@ -3756,7 +3760,7 @@ namespace tempest::render_system::tests
 
         // Center pixel (32, 32) should contain composite of:
         // Red foreground blend + Green middle transmissive + Blue background opaque
-        const auto center_idx = (32 * width + 32) * 4;
+        const auto center_idx = ((32 * width) + 32) * 4;
         EXPECT_GT(pixels[center_idx + 0], 0); // Red channel > 0
         EXPECT_GT(pixels[center_idx + 3], 0); // Alpha > 0
 
@@ -3837,9 +3841,9 @@ namespace tempest::render_system::tests
         auto asset_db = assets::asset_database{&asset_type_reg};
         assets::register_default_importers(asset_db, &meshes, &textures, &materials);
 
-        const auto chess_path = "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
+        const auto* const chess_path = "assets/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf";
 
-        if (std::filesystem::exists(chess_path))
+        if (filesystem::exists(chess_path))
         {
             auto prefab_root = asset_db.load(chess_path, registry);
             ASSERT_TRUE(prefab_root != ecs::tombstone);
@@ -3899,7 +3903,7 @@ namespace tempest::render_system::tests
         ASSERT_NE(pixels, nullptr);
 
         // Center pixel (640, 360) should see chessboard / chess pieces
-        const auto center_idx = (360 * width + 640) * 4;
+        const auto center_idx = ((360 * width) + 640) * 4;
         EXPECT_GT(pixels[center_idx + 3], 0); // Valid alpha
 
         dev->destroy_buffer(readback_buf);
@@ -4163,7 +4167,7 @@ namespace tempest::render_system::tests
 
             const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
             ASSERT_NE(alloc, nullptr);
-            if (alloc)
+            if (alloc != nullptr)
             {
                 auto& port = dev->get_graphics_execution_port();
                 auto& cmd = port.acquire_command_list();
@@ -4193,10 +4197,10 @@ namespace tempest::render_system::tests
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
-                if (pixels)
+                if (pixels != nullptr)
                 {
                     // Sample center pixel (640, 360) (Rendered point-lit PBR geometry)
-                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto center_idx = ((360 * 1280) + 640) * 4;
                     const auto r = pixels[center_idx + 0];
                     const auto a = pixels[center_idx + 3];
                     // Strong red illumination from the point light
@@ -4298,7 +4302,7 @@ namespace tempest::render_system::tests
 
             const auto* alloc = rend->get_render_graph().get_physical_texture(rend->get_tonemapped_color_texture().id);
             ASSERT_NE(alloc, nullptr);
-            if (alloc)
+            if (alloc != nullptr)
             {
                 auto& port = dev->get_graphics_execution_port();
                 auto& cmd = port.acquire_command_list();
@@ -4328,10 +4332,10 @@ namespace tempest::render_system::tests
                 dev->wait_idle();
 
                 const auto* pixels = static_cast<const uint8_t*>(readback_buf.cpu_address);
-                if (pixels)
+                if (pixels != nullptr)
                 {
                     // Sample center pixel (640, 360) (Rendered transparent point-lit PBR geometry)
-                    const auto center_idx = (360 * 1280 + 640) * 4;
+                    const auto center_idx = ((360 * 1280) + 640) * 4;
                     const auto g = pixels[center_idx + 1];
                     const auto a = pixels[center_idx + 3];
                     // Strong green accumulation from the point light through MBOIT resolve and blend
@@ -4765,9 +4769,9 @@ namespace tempest::render_system::tests
             rend->prepare_frame(1280, 720, nullopt, nullopt, override_camera);
 
             auto slot = rend->get_resource_pool().get_frame_slot();
-            auto* scene = static_cast<const scene_constants*>(
-                              rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
-                          slot;
+            const auto* scene = static_cast<const scene_constants*>(
+                                    rend->get_resource_pool().get_scene_constants_buffer().cpu_address) +
+                                slot;
             ASSERT_NE(scene, nullptr);
             // Override camera takes precedence!
             EXPECT_FLOAT_EQ(scene->camera_position.y, 5.0F);
@@ -4877,9 +4881,9 @@ namespace tempest::render_system::tests
         // 1. Setup: Create test fixture and registry
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
-        if (!dev)
+        if (dev == nullptr)
         {
-            GTEST_SKIP() << "Vulkan device unavailable";
+            GTEST_SKIP() << true;
         }
 
         auto sink = stdout_log_sink{};
@@ -4936,9 +4940,9 @@ namespace tempest::render_system::tests
         // 1. Setup: Create test fixture and renderer
         auto fixture = create_test_device();
         auto* dev = fixture.dev.get();
-        if (!dev)
+        if (dev == nullptr)
         {
-            GTEST_SKIP() << "Vulkan device unavailable";
+            GTEST_SKIP() << true;
         }
 
         auto sink = stdout_log_sink{};

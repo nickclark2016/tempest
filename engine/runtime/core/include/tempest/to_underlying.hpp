@@ -11,7 +11,7 @@ namespace tempest
     /// @return Underlying type of the enumeration.
     template <typename T>
         requires is_enum_v<T>
-    inline constexpr underlying_type_t<T> to_underlying(T value) noexcept
+    constexpr auto to_underlying(T value) noexcept -> underlying_type_t<T>
     {
         return static_cast<underlying_type_t<T>>(value);
     }

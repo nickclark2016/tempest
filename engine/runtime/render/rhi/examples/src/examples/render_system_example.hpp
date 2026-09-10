@@ -60,12 +60,12 @@ namespace tempest::rhi::examples
 
         stdout_log_sink _log_sink{};
         logger _logger{_log_sink};
-        event::event_registry _events{};
+        event::event_registry _events;
         ecs::archetype_registry _registry{_events};
-        core::mesh_registry _meshes{};
-        core::material_registry _materials{};
-        core::texture_registry _textures{};
-        assets::asset_type_registry _asset_types{};
+        core::mesh_registry _meshes;
+        core::material_registry _materials;
+        core::texture_registry _textures;
+        assets::asset_type_registry _asset_types;
         assets::asset_database _asset_db{&_asset_types};
 
         unique_ptr<render_system::renderer> _renderer;

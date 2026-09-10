@@ -61,23 +61,23 @@ namespace tempest
 
         template <typename... Args>
             requires is_constructible_v<T, Args...>
-        constexpr explicit expected(in_place_t, Args&&... args);
+        constexpr explicit expected(in_place_t /*unused*/, Args&&... args);
 
         template <typename... Args>
             requires is_constructible_v<T, Args...>
-        constexpr explicit expected(unexpect_t, Args&&... args);
+        constexpr explicit expected(unexpect_t /*unused*/, Args&&... args);
 
         constexpr ~expected();
 
-        constexpr expected& operator=(const expected& other)
+        constexpr auto operator=(const expected& other) -> expected&
             requires is_copy_constructible_v<T> && is_copy_constructible_v<E> && is_copy_assignable_v<T> &&
                      is_copy_assignable_v<E> &&
                      (is_nothrow_move_constructible_v<T> || !is_nothrow_move_constructible_v<T>);
 
-        constexpr expected& operator=(expected&& other) noexcept(is_nothrow_move_constructible_v<T> &&
+        constexpr auto operator=(expected&& other) noexcept(is_nothrow_move_constructible_v<T> &&
                                                                  is_nothrow_move_constructible_v<E> &&
                                                                  is_nothrow_move_assignable_v<T> &&
-                                                                 is_nothrow_move_assignable_v<E>)
+                                                                 is_nothrow_move_assignable_v<E>) -> expected&
             requires is_move_constructible_v<T> && is_move_constructible_v<E> && is_move_assignable_v<T> &&
                      is_move_assignable_v<E> &&
                      (is_nothrow_move_constructible_v<T> || !is_nothrow_move_constructible_v<T>);
@@ -87,55 +87,55 @@ namespace tempest
                      is_assignable_v<T&, U> &&
                      (is_nothrow_constructible_v<T, U> || is_nothrow_move_constructible_v<T> ||
                       is_nothrow_move_constructible_v<E>))
-        constexpr expected& operator=(U&& value);
+        constexpr auto operator=(U&& value) -> expected&;
 
         template <typename G>
             requires(is_constructible_v<E, const G&> && is_assignable_v<E&, const G&> &&
                      (is_nothrow_constructible_v<E, const G&> || is_nothrow_move_constructible_v<T> ||
                       is_nothrow_move_constructible_v<E>))
-        constexpr expected& operator=(const unexpected<G>& value);
+        constexpr auto operator=(const unexpected<G>& value) -> expected&;
 
         template <typename G>
             requires(is_constructible_v<E, G> && is_assignable_v<E&, G> &&
                      (is_nothrow_constructible_v<E, G> || is_nothrow_move_constructible_v<T> ||
                       is_nothrow_move_constructible_v<E>))
-        constexpr expected& operator=(unexpected<G>&& value);
+        constexpr auto operator=(unexpected<G>&& value) -> expected&;
 
-        constexpr const T* operator->() const noexcept;
-        constexpr T* operator->() noexcept;
-        constexpr const T& operator*() const& noexcept;
-        constexpr T& operator*() & noexcept;
-        constexpr const T&& operator*() const&& noexcept;
-        constexpr T&& operator*() && noexcept;
+        constexpr auto operator->() const noexcept -> const T*;
+        constexpr auto operator->() noexcept -> T*;
+        constexpr auto operator*() const& noexcept -> const T&;
+        constexpr auto operator*() & noexcept -> T&;
+        constexpr auto operator*() const&& noexcept -> const T&&;
+        constexpr auto operator*() && noexcept -> T&&;
 
         constexpr explicit operator bool() const noexcept;
-        constexpr bool has_value() const noexcept;
+        [[nodiscard]] constexpr auto has_value() const noexcept -> bool;
 
-        constexpr const T& value() const&;
-        constexpr T& value() &;
-        constexpr const T&& value() const&&;
-        constexpr T&& value() &&;
+        [[nodiscard]] constexpr auto value() const& -> const T&;
+        constexpr auto value() & -> T&;
+        [[nodiscard]] constexpr auto value() const&& -> const T&&;
+        constexpr auto value() && -> T&&;
 
-        constexpr const E& error() const&;
-        constexpr E& error() &;
-        constexpr const E&& error() const&&;
-        constexpr E&& error() &&;
+        [[nodiscard]] constexpr auto error() const& -> const E&;
+        constexpr auto error() & -> E&;
+        [[nodiscard]] constexpr auto error() const&& -> const E&&;
+        constexpr auto error() && -> E&&;
 
         template <typename U>
             requires is_copy_constructible_v<T> && is_convertible_v<U, T>
-        constexpr T value_or(U&& default_value) const&;
+        constexpr auto value_or(U&& default_value) const& -> T;
 
         template <typename U>
             requires is_move_constructible_v<T> && is_convertible_v<U, T>
-        constexpr T value_or(U&& default_value) &&;
+        constexpr auto value_or(U&& default_value) && -> T;
 
         template <typename G = E>
             requires is_copy_constructible_v<E> && is_convertible_v<G, E>
-        constexpr E error_or(G&& default_error) const&;
+        constexpr auto error_or(G&& default_error) const& -> E;
 
         template <typename G = E>
             requires is_move_constructible_v<E> && is_convertible_v<G, E>
-        constexpr E error_or(G&& default_error) &&;
+        constexpr auto error_or(G&& default_error) && -> E;
 
         template <typename F>
         constexpr auto and_then(F&& func) &;
@@ -186,7 +186,7 @@ namespace tempest
         constexpr auto transform_error(F&& func) const&&;
 
         template <typename... Args>
-        constexpr T& emplace(Args&&... args);
+        constexpr auto emplace(Args&&... args) -> T&;
 
         constexpr void swap(expected& other) noexcept(is_nothrow_move_constructible_v<T> && is_nothrow_swappable_v<T> &&
                                                       is_nothrow_move_constructible_v<E> && is_nothrow_swappable_v<E>);
@@ -201,14 +201,14 @@ namespace tempest
     };
 
     template <typename T, typename E>
-    inline constexpr expected<T, E>::expected()
+    constexpr expected<T, E>::expected()
         requires is_default_constructible_v<T>
         : _value{}, _has_value{true}
     {
     }
 
     template <typename T, typename E>
-    inline constexpr expected<T, E>::expected(const expected& other)
+    constexpr expected<T, E>::expected(const expected& other)
         requires is_copy_constructible_v<T> && is_copy_constructible_v<E>
         : _has_value{other._has_value}
     {
@@ -223,7 +223,7 @@ namespace tempest
     }
 
     template <typename T, typename E>
-    inline constexpr expected<T, E>::expected(expected&& other) noexcept(is_nothrow_move_constructible_v<T> &&
+    constexpr expected<T, E>::expected(expected&& other) noexcept(is_nothrow_move_constructible_v<T> &&
                                                                          is_nothrow_move_constructible_v<E>)
         requires is_move_constructible_v<T> && is_move_constructible_v<E>
         : _has_value{other._has_value}
@@ -241,7 +241,7 @@ namespace tempest
     template <typename T, typename E>
     template <typename U, typename G>
         requires is_constructible_v<T, const U&> && is_constructible_v<E, const G&>
-    inline constexpr expected<T, E>::expected(const expected<U, G>& other) : _has_value{other._has_value}
+    constexpr expected<T, E>::expected(const expected<U, G>& other) : _has_value{other._has_value}
     {
         if (_has_value)
         {
@@ -256,7 +256,7 @@ namespace tempest
     template <typename T, typename E>
     template <typename U, typename G>
         requires is_constructible_v<T, U&&> && is_constructible_v<E, G>
-    inline constexpr expected<T, E>::expected(expected<U, G>&& other) : _has_value{other._has_value}
+    constexpr expected<T, E>::expected(expected<U, G>&& other) : _has_value{other._has_value}
     {
         if (_has_value)
         {
@@ -272,21 +272,21 @@ namespace tempest
     template <typename U>
         requires(!is_same_v<remove_cvref_t<U>, in_place_t> && !is_same_v<expected<T, E>, remove_cvref_t<U>> &&
                  is_constructible_v<T, U>)
-    inline constexpr expected<T, E>::expected(U&& value) : _value{tempest::forward<U>(value)}, _has_value{true}
+    constexpr expected<T, E>::expected(U&& value) : _value{tempest::forward<U>(value)}, _has_value{true}
     {
     }
 
     template <typename T, typename E>
     template <typename G>
         requires is_constructible_v<E, const G&>
-    inline constexpr expected<T, E>::expected(const unexpected<G>& value) : _error{value.value}, _has_value{false}
+    constexpr expected<T, E>::expected(const unexpected<G>& value) : _error{value.value}, _has_value{false}
     {
     }
 
     template <typename T, typename E>
     template <typename G>
         requires is_constructible_v<E, G>
-    inline constexpr expected<T, E>::expected(unexpected<G>&& value)
+    constexpr expected<T, E>::expected(unexpected<G>&& value)
         : _error{tempest::move(value.value)}, _has_value{false}
     {
     }
@@ -294,7 +294,7 @@ namespace tempest
     template <typename T, typename E>
     template <typename... Args>
         requires is_constructible_v<T, Args...>
-    inline constexpr expected<T, E>::expected(in_place_t, Args&&... args)
+    constexpr expected<T, E>::expected(in_place_t /*unused*/, Args&&... args)
         : _value{tempest::forward<Args>(args)...}, _has_value{true}
     {
     }
@@ -302,13 +302,13 @@ namespace tempest
     template <typename T, typename E>
     template <typename... Args>
         requires is_constructible_v<T, Args...>
-    inline constexpr expected<T, E>::expected(unexpect_t, Args&&... args)
+    constexpr expected<T, E>::expected(unexpect_t /*unused*/, Args&&... args)
         : _error{tempest::forward<Args>(args)...}, _has_value{false}
     {
     }
 
     template <typename T, typename E>
-    inline constexpr expected<T, E>::~expected()
+    constexpr expected<T, E>::~expected()
     {
         if (_has_value)
         {
@@ -321,7 +321,7 @@ namespace tempest
     }
 
     template <typename T, typename E>
-    inline constexpr expected<T, E>& expected<T, E>::operator=(const expected& other)
+    constexpr auto expected<T, E>::operator=(const expected& other) -> expected<T, E>&
         requires is_copy_constructible_v<T> && is_copy_constructible_v<E> && is_copy_assignable_v<T> &&
                  is_copy_assignable_v<E> && (is_nothrow_move_constructible_v<T> || !is_nothrow_move_constructible_v<T>)
     {
@@ -353,9 +353,9 @@ namespace tempest
     }
 
     template <typename T, typename E>
-    inline constexpr expected<T, E>& expected<T, E>::operator=(expected&& other) noexcept(
+    constexpr auto expected<T, E>::operator=(expected&& other) noexcept(
         is_nothrow_move_constructible_v<T> && is_nothrow_move_constructible_v<E> && is_nothrow_move_assignable_v<T> &&
-        is_nothrow_move_assignable_v<E>)
+        is_nothrow_move_assignable_v<E>) -> expected<T, E>&
         requires is_move_constructible_v<T> && is_move_constructible_v<E> && is_move_assignable_v<T> &&
                  is_move_assignable_v<E> && (is_nothrow_move_constructible_v<T> || !is_nothrow_move_constructible_v<T>)
     {
@@ -391,7 +391,7 @@ namespace tempest
         requires(!is_same_v<expected<T, E>, remove_cvref_t<U>> && is_constructible_v<T, U> && is_assignable_v<T&, U> &&
                  (is_nothrow_constructible_v<T, U> || is_nothrow_move_constructible_v<T> ||
                   is_nothrow_move_constructible_v<E>))
-    inline constexpr expected<T, E>& expected<T, E>::operator=(U&& value)
+    constexpr auto expected<T, E>::operator=(U&& value) -> expected<T, E>&
     {
         if (_has_value)
         {
@@ -413,7 +413,7 @@ namespace tempest
         requires(is_constructible_v<E, const G&> && is_assignable_v<E&, const G&> &&
                  (is_nothrow_constructible_v<E, const G&> || is_nothrow_move_constructible_v<T> ||
                   is_nothrow_move_constructible_v<E>))
-    inline constexpr expected<T, E>& expected<T, E>::operator=(const unexpected<G>& value)
+    constexpr auto expected<T, E>::operator=(const unexpected<G>& value) -> expected<T, E>&
     {
         if (_has_value)
         {
@@ -435,7 +435,7 @@ namespace tempest
         requires(is_constructible_v<E, G> && is_assignable_v<E&, G> &&
                  (is_nothrow_constructible_v<E, G> || is_nothrow_move_constructible_v<T> ||
                   is_nothrow_move_constructible_v<E>))
-    inline constexpr expected<T, E>& expected<T, E>::operator=(unexpected<G>&& value)
+    constexpr auto expected<T, E>::operator=(unexpected<G>&& value) -> expected<T, E>&
     {
         if (_has_value)
         {
@@ -453,97 +453,97 @@ namespace tempest
     }
 
     template <typename T, typename E>
-    inline constexpr const T* expected<T, E>::operator->() const noexcept
+    constexpr auto expected<T, E>::operator->() const noexcept -> const T*
     {
         return &_value;
     }
 
     template <typename T, typename E>
-    inline constexpr T* expected<T, E>::operator->() noexcept
+    constexpr auto expected<T, E>::operator->() noexcept -> T*
     {
         return &_value;
     }
 
     template <typename T, typename E>
-    inline constexpr const T& expected<T, E>::operator*() const& noexcept
+    constexpr auto expected<T, E>::operator*() const& noexcept -> const T&
     {
         return _value;
     }
 
     template <typename T, typename E>
-    inline constexpr T& expected<T, E>::operator*() & noexcept
+    constexpr auto expected<T, E>::operator*() & noexcept -> T&
     {
         return _value;
     }
 
     template <typename T, typename E>
-    inline constexpr const T&& expected<T, E>::operator*() const&& noexcept
+    constexpr auto expected<T, E>::operator*() const&& noexcept -> const T&&
     {
         return tempest::move(_value);
     }
 
     template <typename T, typename E>
-    inline constexpr T&& expected<T, E>::operator*() && noexcept
+    constexpr auto expected<T, E>::operator*() && noexcept -> T&&
     {
         return tempest::move(_value);
     }
 
     template <typename T, typename E>
-    inline constexpr expected<T, E>::operator bool() const noexcept
+    constexpr expected<T, E>::operator bool() const noexcept
     {
         return has_value();
     }
 
     template <typename T, typename E>
-    inline constexpr bool expected<T, E>::has_value() const noexcept
+    constexpr auto expected<T, E>::has_value() const noexcept -> bool
     {
         return _has_value;
     }
 
     template <typename T, typename E>
-    inline constexpr const T& expected<T, E>::value() const&
+    constexpr auto expected<T, E>::value() const& -> const T&
     {
         return _value;
     }
 
     template <typename T, typename E>
-    inline constexpr T& expected<T, E>::value() &
+    constexpr auto expected<T, E>::value() & -> T&
     {
         return _value;
     }
 
     template <typename T, typename E>
-    inline constexpr const T&& expected<T, E>::value() const&&
+    constexpr auto expected<T, E>::value() const&& -> const T&&
     {
         return tempest::move(_value);
     }
 
     template <typename T, typename E>
-    inline constexpr T&& expected<T, E>::value() &&
+    constexpr auto expected<T, E>::value() && -> T&&
     {
         return tempest::move(_value);
     }
 
     template <typename T, typename E>
-    inline constexpr const E& expected<T, E>::error() const&
+    constexpr auto expected<T, E>::error() const& -> const E&
     {
         return _error;
     }
 
     template <typename T, typename E>
-    inline constexpr E& expected<T, E>::error() &
+    constexpr auto expected<T, E>::error() & -> E&
     {
         return _error;
     }
 
     template <typename T, typename E>
-    inline constexpr const E&& expected<T, E>::error() const&&
+    constexpr auto expected<T, E>::error() const&& -> const E&&
     {
         return tempest::move(_error);
     }
 
     template <typename T, typename E>
-    inline constexpr E&& expected<T, E>::error() &&
+    constexpr auto expected<T, E>::error() && -> E&&
     {
         return tempest::move(_error);
     }
@@ -551,7 +551,7 @@ namespace tempest
     template <typename T, typename E>
     template <typename U>
         requires is_copy_constructible_v<T> && is_convertible_v<U, T>
-    inline constexpr T expected<T, E>::value_or(U&& default_value) const&
+    constexpr auto expected<T, E>::value_or(U&& default_value) const& -> T
     {
         return has_value() ? _value : static_cast<T>(forward<U>(default_value));
     }
@@ -559,7 +559,7 @@ namespace tempest
     template <typename T, typename E>
     template <typename U>
         requires is_move_constructible_v<T> && is_convertible_v<U, T>
-    inline constexpr T expected<T, E>::value_or(U&& default_value) &&
+    constexpr auto expected<T, E>::value_or(U&& default_value) && -> T
     {
         return has_value() ? tempest::move(_value) : static_cast<T>(forward<U>(default_value));
     }
@@ -567,7 +567,7 @@ namespace tempest
     template <typename T, typename E>
     template <typename G>
         requires is_copy_constructible_v<E> && is_convertible_v<G, E>
-    inline constexpr E expected<T, E>::error_or(G&& default_error) const&
+    constexpr auto expected<T, E>::error_or(G&& default_error) const& -> E
     {
         return has_value() ? static_cast<E>(forward<G>(default_error)) : _error;
     }
@@ -575,70 +575,70 @@ namespace tempest
     template <typename T, typename E>
     template <typename G>
         requires is_move_constructible_v<E> && is_convertible_v<G, E>
-    inline constexpr E expected<T, E>::error_or(G&& default_error) &&
+    constexpr auto expected<T, E>::error_or(G&& default_error) && -> E
     {
         return has_value() ? static_cast<E>(forward<G>(default_error)) : tempest::move(_error);
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::and_then(F&& func) &
+    constexpr auto expected<T, E>::and_then(F&& func) &
     {
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), _value);
         }
-        else
-        {
+        
+        
             return expected<E, T>(unexpect, _error);
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::and_then(F&& func) const&
+    constexpr auto expected<T, E>::and_then(F&& func) const&
     {
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), _value);
         }
-        else
-        {
+        
+        
             return expected<E, T>(unexpect, _error);
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::and_then(F&& func) &&
+    constexpr auto expected<T, E>::and_then(F&& func) &&
     {
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), tempest::move(_value));
         }
-        else
-        {
+        
+        
             return expected<E, T>(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::and_then(F&& func) const&&
+    constexpr auto expected<T, E>::and_then(F&& func) const&&
     {
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), tempest::move(_value));
         }
-        else
-        {
+        
+        
             return expected<E, T>(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform(F&& func) &
+    constexpr auto expected<T, E>::transform(F&& func) &
     {
         using U = invoke_result_t<F, T&>;
         using result_t = expected<U, E>;
@@ -647,15 +647,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func), _value));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, _error);
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform(F&& func) const&
+    constexpr auto expected<T, E>::transform(F&& func) const&
     {
         using U = invoke_result_t<F, const T&>;
         using result_t = expected<U, E>;
@@ -664,15 +664,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func), _value));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, _error);
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform(F&& func) &&
+    constexpr auto expected<T, E>::transform(F&& func) &&
     {
         using U = invoke_result_t<F, T&&>;
         using result_t = expected<U, E>;
@@ -681,15 +681,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func), tempest::move(_value)));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform(F&& func) const&&
+    constexpr auto expected<T, E>::transform(F&& func) const&&
     {
         using U = invoke_result_t<F, const T&&>;
         using result_t = expected<U, E>;
@@ -698,15 +698,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func), tempest::move(_value)));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::or_else(F&& func) &
+    constexpr auto expected<T, E>::or_else(F&& func) &
     {
         using result_t = invoke_result_t<F, E&>;
 
@@ -714,15 +714,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), _error);
         }
-        else
-        {
+        
+        
             return result_t(_value);
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::or_else(F&& func) const&
+    constexpr auto expected<T, E>::or_else(F&& func) const&
     {
         using result_t = invoke_result_t<F, const E&>;
 
@@ -730,15 +730,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), _error);
         }
-        else
-        {
+        
+        
             return result_t(_value);
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::or_else(F&& func) &&
+    constexpr auto expected<T, E>::or_else(F&& func) &&
     {
         using result_t = invoke_result_t<F, E&&>;
 
@@ -746,15 +746,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), tempest::move(_error));
         }
-        else
-        {
+        
+        
             return result_t(tempest::move(_value));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::or_else(F&& func) const&&
+    constexpr auto expected<T, E>::or_else(F&& func) const&&
     {
         using result_t = invoke_result_t<F, const E&&>;
 
@@ -762,15 +762,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), tempest::move(_error));
         }
-        else
-        {
+        
+        
             return result_t(tempest::move(_value));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform_error(F&& func) &
+    constexpr auto expected<T, E>::transform_error(F&& func) &
     {
         using U = invoke_result_t<F, E&>;
         using result_t = expected<T, U>;
@@ -779,15 +779,15 @@ namespace tempest
         {
             return result_t(_value);
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), _error));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform_error(F&& func) const&
+    constexpr auto expected<T, E>::transform_error(F&& func) const&
     {
         using U = invoke_result_t<F, const E&>;
         using result_t = expected<T, U>;
@@ -796,15 +796,15 @@ namespace tempest
         {
             return result_t(_value);
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), _error));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform_error(F&& func) &&
+    constexpr auto expected<T, E>::transform_error(F&& func) &&
     {
         using U = invoke_result_t<F, E&&>;
         using result_t = expected<T, U>;
@@ -813,15 +813,15 @@ namespace tempest
         {
             return result_t(_value);
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), tempest::move(_error)));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename F>
-    inline constexpr auto expected<T, E>::transform_error(F&& func) const&&
+    constexpr auto expected<T, E>::transform_error(F&& func) const&&
     {
         using U = invoke_result_t<F, const E&&>;
         using result_t = expected<T, U>;
@@ -830,15 +830,15 @@ namespace tempest
         {
             return result_t(_value);
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), tempest::move(_error)));
-        }
+       
     }
 
     template <typename T, typename E>
     template <typename... Args>
-    inline constexpr T& expected<T, E>::emplace(Args&&... args)
+    constexpr auto expected<T, E>::emplace(Args&&... args) -> T&
     {
         if (_has_value)
         {
@@ -851,7 +851,7 @@ namespace tempest
     }
 
     template <typename T, typename E>
-    inline constexpr void expected<T, E>::swap(expected& other) noexcept(is_nothrow_move_constructible_v<T> &&
+    constexpr void expected<T, E>::swap(expected& other) noexcept(is_nothrow_move_constructible_v<T> &&
                                                                          is_nothrow_swappable_v<T> &&
                                                                          is_nothrow_move_constructible_v<E> &&
                                                                          is_nothrow_swappable_v<E>)
@@ -915,40 +915,40 @@ namespace tempest
             requires is_constructible_v<E, G>
         constexpr explicit(!is_convertible_v<G&&, E>) expected(unexpected<G>&& value);
 
-        constexpr explicit expected(in_place_t);
+        constexpr explicit expected(in_place_t /*unused*/);
 
         template <typename... Args>
             requires is_constructible_v<E, Args...>
-        constexpr explicit expected(unexpect_t, Args&&... args);
+        constexpr explicit expected(unexpect_t /*unused*/, Args&&... args);
 
         constexpr ~expected();
 
-        constexpr expected& operator=(const expected& other);
-        constexpr expected& operator=(expected&& other) noexcept(is_nothrow_move_constructible_v<E> &&
-                                                                 is_nothrow_move_assignable_v<E>);
+        constexpr auto operator=(const expected& other) -> expected&;
+        constexpr auto operator=(expected&& other) noexcept(is_nothrow_move_constructible_v<E> &&
+                                                                 is_nothrow_move_assignable_v<E>) -> expected&;
 
         template <typename G>
             requires(is_constructible_v<E, const G&> && is_assignable_v<E&, const G&>)
-        constexpr expected& operator=(const unexpected<G>& value);
+        constexpr auto operator=(const unexpected<G>& value) -> expected&;
 
         template <typename G>
             requires(is_constructible_v<E, G> && is_assignable_v<E&, G>)
-        constexpr expected& operator=(unexpected<G>&& value);
+        constexpr auto operator=(unexpected<G>&& value) -> expected&;
 
         constexpr void operator*() const noexcept;
-        constexpr bool has_value() const noexcept;
+        [[nodiscard]] constexpr auto has_value() const noexcept -> bool;
         constexpr explicit operator bool() const noexcept;
 
-        constexpr const E& error() const&;
-        constexpr E& error() &;
-        constexpr const E&& error() const&&;
-        constexpr E&& error() &&;
+        constexpr auto error() const& -> const E&;
+        constexpr auto error() & -> E&;
+        constexpr auto error() const&& -> const E&&;
+        constexpr auto error() && -> E&&;
 
         template <typename G = remove_cv_t<E>>
-        constexpr E error_or(G&& default_error) const&;
+        constexpr auto error_or(G&& default_error) const& -> E;
 
         template <typename G = remove_cv_t<E>>
-        constexpr E error_or(G&& default_error) &&;
+        constexpr auto error_or(G&& default_error) && -> E;
 
         template <typename F>
         constexpr auto and_then(F&& func) &;
@@ -1012,12 +1012,12 @@ namespace tempest
     };
 
     template <typename E>
-    inline constexpr expected<void, E>::expected() : _dummy{}, _has_value{true}
+    constexpr expected<void, E>::expected() : _dummy{}, _has_value{true}
     {
     }
 
     template <typename E>
-    inline constexpr expected<void, E>::expected(const expected& other)
+    constexpr expected<void, E>::expected(const expected& other)
         requires is_copy_constructible_v<E>
         : _has_value{other._has_value}
     {
@@ -1028,7 +1028,7 @@ namespace tempest
     }
 
     template <typename E>
-    inline constexpr expected<void, E>::expected(expected&& other) noexcept(is_nothrow_move_constructible_v<E>)
+    constexpr expected<void, E>::expected(expected&& other) noexcept(is_nothrow_move_constructible_v<E>)
         requires is_move_constructible_v<E>
         : _has_value{other._has_value}
     {
@@ -1041,7 +1041,7 @@ namespace tempest
     template <typename E>
     template <typename U, typename G>
         requires is_constructible_v<E, const G&>
-    inline constexpr expected<void, E>::expected(const expected<U, G>& other) : _has_value{other._has_value}
+    constexpr expected<void, E>::expected(const expected<U, G>& other) : _has_value{other._has_value}
     {
         if (!other._has_value)
         {
@@ -1052,7 +1052,7 @@ namespace tempest
     template <typename E>
     template <typename U, typename G>
         requires is_constructible_v<E, G>
-    inline constexpr expected<void, E>::expected(expected<U, G>&& other) : _has_value{other._has_value}
+    constexpr expected<void, E>::expected(expected<U, G>&& other) : _has_value{other._has_value}
     {
         if (!other._has_value)
         {
@@ -1063,33 +1063,33 @@ namespace tempest
     template <typename E>
     template <typename G>
         requires is_constructible_v<E, const G&>
-    inline constexpr expected<void, E>::expected(const unexpected<G>& value) : _error{value.value}, _has_value{false}
+    constexpr expected<void, E>::expected(const unexpected<G>& value) : _error{value.value}, _has_value{false}
     {
     }
 
     template <typename E>
     template <typename G>
         requires is_constructible_v<E, G>
-    inline constexpr expected<void, E>::expected(unexpected<G>&& value)
+    constexpr expected<void, E>::expected(unexpected<G>&& value)
         : _error{tempest::move(value.value)}, _has_value{false}
     {
     }
 
     template <typename E>
-    inline constexpr expected<void, E>::expected(in_place_t) : _dummy{}, _has_value{true}
+    constexpr expected<void, E>::expected(in_place_t /*unused*/) : _dummy{}, _has_value{true}
     {
     }
 
     template <typename E>
     template <typename... Args>
         requires is_constructible_v<E, Args...>
-    inline constexpr expected<void, E>::expected(unexpect_t, Args&&... args)
+    constexpr expected<void, E>::expected(unexpect_t /*unused*/, Args&&... args)
         : _error{tempest::forward<Args>(args)...}, _has_value{false}
     {
     }
 
     template <typename E>
-    inline constexpr expected<void, E>::~expected()
+    constexpr expected<void, E>::~expected()
     {
         if (!_has_value)
         {
@@ -1098,7 +1098,7 @@ namespace tempest
     }
 
     template <typename E>
-    inline constexpr expected<void, E>& expected<void, E>::operator=(const expected& other)
+    constexpr auto expected<void, E>::operator=(const expected& other) -> expected<void, E>&
     {
         if (&other == this)
         {
@@ -1121,8 +1121,8 @@ namespace tempest
     }
 
     template <typename E>
-    inline constexpr expected<void, E>& expected<void, E>::operator=(expected&& other) noexcept(
-        is_nothrow_move_constructible_v<E> && is_nothrow_move_assignable_v<E>)
+    constexpr auto expected<void, E>::operator=(expected&& other) noexcept(
+        is_nothrow_move_constructible_v<E> && is_nothrow_move_assignable_v<E>) -> expected<void, E>&
     {
         if (&other == this)
         {
@@ -1147,7 +1147,7 @@ namespace tempest
     template <typename E>
     template <typename G>
         requires(is_constructible_v<E, const G&> && is_assignable_v<E&, const G&>)
-    inline constexpr expected<void, E>& expected<void, E>::operator=(const unexpected<G>& value)
+    constexpr auto expected<void, E>::operator=(const unexpected<G>& value) -> expected<void, E>&
     {
         if (!_has_value)
         {
@@ -1166,7 +1166,7 @@ namespace tempest
     template <typename E>
     template <typename G>
         requires(is_constructible_v<E, G> && is_assignable_v<E&, G>)
-    inline constexpr expected<void, E>& expected<void, E>::operator=(unexpected<G>&& value)
+    constexpr auto expected<void, E>::operator=(unexpected<G>&& value) -> expected<void, E>&
     {
         if (!_has_value)
         {
@@ -1183,63 +1183,63 @@ namespace tempest
     }
 
     template <typename E>
-    inline constexpr void expected<void, E>::operator*() const noexcept
+    constexpr void expected<void, E>::operator*() const noexcept
     {
     }
 
     template <typename E>
-    inline constexpr bool expected<void, E>::has_value() const noexcept
+    constexpr auto expected<void, E>::has_value() const noexcept -> bool
     {
         return _has_value;
     }
 
     template <typename E>
-    inline constexpr expected<void, E>::operator bool() const noexcept
+    constexpr expected<void, E>::operator bool() const noexcept
     {
         return has_value();
     }
 
     template <typename E>
-    inline constexpr const E& expected<void, E>::error() const&
+    constexpr auto expected<void, E>::error() const& -> const E&
     {
         return _error;
     }
 
     template <typename E>
-    inline constexpr E& expected<void, E>::error() &
+    constexpr auto expected<void, E>::error() & -> E&
     {
         return _error;
     }
 
     template <typename E>
-    inline constexpr const E&& expected<void, E>::error() const&&
+    constexpr auto expected<void, E>::error() const&& -> const E&&
     {
         return tempest::move(_error);
     }
 
     template <typename E>
-    inline constexpr E&& expected<void, E>::error() &&
+    constexpr auto expected<void, E>::error() && -> E&&
     {
         return tempest::move(_error);
     }
 
     template <typename E>
     template <typename G>
-    inline constexpr E expected<void, E>::error_or(G&& default_error) const&
+    constexpr auto expected<void, E>::error_or(G&& default_error) const& -> E
     {
         return has_value() ? static_cast<E>(forward<G>(default_error)) : _error;
     }
 
     template <typename E>
     template <typename G>
-    inline constexpr E expected<void, E>::error_or(G&& default_error) &&
+    constexpr auto expected<void, E>::error_or(G&& default_error) && -> E
     {
         return has_value() ? static_cast<E>(forward<G>(default_error)) : tempest::move(_error);
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::and_then(F&& func) &
+    constexpr auto expected<void, E>::and_then(F&& func) &
     {
         using result_t = invoke_result_t<F>;
 
@@ -1247,15 +1247,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func));
         }
-        else
-        {
+        
+        
             return expected<typename result_t::value_type, E>(unexpect, _error);
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::and_then(F&& func) const&
+    constexpr auto expected<void, E>::and_then(F&& func) const&
     {
         using result_t = invoke_result_t<F>;
 
@@ -1263,15 +1263,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func));
         }
-        else
-        {
+        
+        
             return expected<typename result_t::value_type, E>(unexpect, _error);
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::and_then(F&& func) &&
+    constexpr auto expected<void, E>::and_then(F&& func) &&
     {
         using result_t = invoke_result_t<F>;
 
@@ -1279,15 +1279,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func));
         }
-        else
-        {
+        
+        
             return expected<typename result_t::value_type, E>(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::and_then(F&& func) const&&
+    constexpr auto expected<void, E>::and_then(F&& func) const&&
     {
         using result_t = invoke_result_t<F>;
 
@@ -1295,15 +1295,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func));
         }
-        else
-        {
+        
+        
             return expected<typename result_t::value_type, E>(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform(F&& func) &
+    constexpr auto expected<void, E>::transform(F&& func) &
     {
         using U = invoke_result_t<F>;
         using result_t = expected<U, E>;
@@ -1312,15 +1312,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func)));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, _error);
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform(F&& func) const&
+    constexpr auto expected<void, E>::transform(F&& func) const&
     {
         using U = invoke_result_t<F>;
         using result_t = expected<U, E>;
@@ -1329,15 +1329,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func)));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, _error);
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform(F&& func) &&
+    constexpr auto expected<void, E>::transform(F&& func) &&
     {
         using U = invoke_result_t<F>;
         using result_t = expected<U, E>;
@@ -1346,15 +1346,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func)));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform(F&& func) const&&
+    constexpr auto expected<void, E>::transform(F&& func) const&&
     {
         using U = invoke_result_t<F>;
         using result_t = expected<U, E>;
@@ -1363,15 +1363,15 @@ namespace tempest
         {
             return result_t(invoke(tempest::forward<F>(func)));
         }
-        else
-        {
+        
+        
             return result_t(unexpect, tempest::move(_error));
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::or_else(F&& func) &
+    constexpr auto expected<void, E>::or_else(F&& func) &
     {
         using result_t = invoke_result_t<F, E>;
 
@@ -1379,15 +1379,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), _error);
         }
-        else
-        {
+        
+        
             return result_t();
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::or_else(F&& func) const&
+    constexpr auto expected<void, E>::or_else(F&& func) const&
     {
         using result_t = invoke_result_t<F, E>;
 
@@ -1395,15 +1395,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), _error);
         }
-        else
-        {
+        
+        
             return result_t();
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::or_else(F&& func) &&
+    constexpr auto expected<void, E>::or_else(F&& func) &&
     {
         using result_t = invoke_result_t<F, E>;
 
@@ -1411,15 +1411,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), tempest::move(_error));
         }
-        else
-        {
+        
+        
             return result_t();
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::or_else(F&& func) const&&
+    constexpr auto expected<void, E>::or_else(F&& func) const&&
     {
         using result_t = invoke_result_t<F, E>;
 
@@ -1427,15 +1427,15 @@ namespace tempest
         {
             return invoke(tempest::forward<F>(func), tempest::move(_error));
         }
-        else
-        {
+        
+        
             return result_t();
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform_error(F&& func) &
+    constexpr auto expected<void, E>::transform_error(F&& func) &
     {
         using U = invoke_result_t<F, E&>;
         using result_t = expected<void, U>;
@@ -1444,15 +1444,15 @@ namespace tempest
         {
             return result_t();
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), _error));
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform_error(F&& func) const&
+    constexpr auto expected<void, E>::transform_error(F&& func) const&
     {
         using U = invoke_result_t<F, const E&>;
         using result_t = expected<void, U>;
@@ -1461,15 +1461,15 @@ namespace tempest
         {
             return result_t();
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), _error));
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform_error(F&& func) &&
+    constexpr auto expected<void, E>::transform_error(F&& func) &&
     {
         using U = invoke_result_t<F, E&&>;
         using result_t = expected<void, U>;
@@ -1478,15 +1478,15 @@ namespace tempest
         {
             return result_t();
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), tempest::move(_error)));
-        }
+       
     }
 
     template <typename E>
     template <typename F>
-    inline constexpr auto expected<void, E>::transform_error(F&& func) const&&
+    constexpr auto expected<void, E>::transform_error(F&& func) const&&
     {
         using U = invoke_result_t<F, const E&&>;
         using result_t = expected<void, U>;
@@ -1495,14 +1495,14 @@ namespace tempest
         {
             return result_t();
         }
-        else
-        {
+        
+        
             return result_t(unexpect, invoke(tempest::forward<F>(func), tempest::move(_error)));
-        }
+       
     }
 
     template <typename E>
-    inline constexpr void expected<void, E>::emplace() noexcept
+    constexpr void expected<void, E>::emplace() noexcept
     {
         if (!_has_value)
         {
@@ -1513,7 +1513,7 @@ namespace tempest
     }
 
     template <typename E>
-    inline constexpr void expected<void, E>::swap(expected& other) noexcept(is_nothrow_move_constructible_v<E> &&
+    constexpr void expected<void, E>::swap(expected& other) noexcept(is_nothrow_move_constructible_v<E> &&
                                                                             is_nothrow_swappable_v<E>)
     {
         // 4 cases, both have value, both have error, this has value other has error, this has error other has value
@@ -1546,13 +1546,13 @@ namespace tempest
     }
 
     template <typename T, typename E>
-    inline constexpr void swap(expected<T, E>& a, expected<T, E>& b) noexcept(noexcept(a.swap(b)))
+    constexpr void swap(expected<T, E>& a, expected<T, E>& b) noexcept(noexcept(a.swap(b)))
     {
         a.swap(b);
     }
 
     template <typename T, typename E>
-    inline constexpr bool operator==(const expected<T, E>& lhs, const expected<T, E>& rhs)
+    constexpr auto operator==(const expected<T, E>& lhs, const expected<T, E>& rhs) -> bool
     {
         if (lhs.has_value() != rhs.has_value())
         {
@@ -1604,10 +1604,10 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func), exp.value());
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), exp.error());
-                    }
+                   
                 }
             }
         };
@@ -1635,10 +1635,10 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func));
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), exp.error());
-                    }
+                   
                 }
             }
         };
@@ -1666,10 +1666,10 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func), exp.value());
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), exp.error());
-                    }
+                   
                 }
             }
         };
@@ -1697,10 +1697,10 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func));
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), exp.error());
-                    }
+                   
                 }
             }
         };
@@ -1728,10 +1728,10 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func), tempest::move(exp).value());
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
-                    }
+                   
                 }
             }
         };
@@ -1759,10 +1759,10 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func));
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
-                    }
+                   
                 }
             }
         };
@@ -1790,10 +1790,10 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func), tempest::move(exp).value());
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
-                    }
+                   
                 }
             }
         };
@@ -1821,36 +1821,36 @@ namespace tempest
                     {
                         return invoke(tempest::forward<Callable>(func));
                     }
-                    else
-                    {
+                    
+                    
                         return invoke(tempest::forward<Callable>(func), tempest::move(exp).error());
-                    }
+                   
                 }
             }
         };
     } // namespace detail
 
     template <typename T, typename E, typename Callable>
-    inline constexpr auto visit(Callable&& func, expected<T, E>& exp)
+    constexpr auto visit(Callable&& func, expected<T, E>& exp)
     {
         return detail::expected_visitor<expected<T, E>&, Callable>()(exp, tempest::forward<Callable>(func));
     }
 
     template <typename T, typename E, typename Callable>
-    inline constexpr auto visit(Callable&& func, const expected<T, E>& exp)
+    constexpr auto visit(Callable&& func, const expected<T, E>& exp)
     {
         return detail::expected_visitor<const expected<T, E>&, Callable>()(exp, tempest::forward<Callable>(func));
     }
 
     template <typename T, typename E, typename Callable>
-    inline constexpr auto visit(Callable&& func, expected<T, E>&& exp)
+    constexpr auto visit(Callable&& func, expected<T, E>&& exp)
     {
         return detail::expected_visitor<expected<T, E>&, Callable>()(tempest::move(exp),
                                                                      tempest::forward<Callable>(func));
     }
 
     template <typename T, typename E, typename Callable>
-    inline constexpr auto visit(Callable&& func, const expected<T, E>&& exp)
+    constexpr auto visit(Callable&& func, const expected<T, E>&& exp)
     {
         return detail::expected_visitor<const expected<T, E>&, Callable>()(tempest::move(exp),
                                                                            tempest::forward<Callable>(func));

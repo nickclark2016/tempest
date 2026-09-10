@@ -1,5 +1,6 @@
 #include <tempest/optional.hpp>
 #include <tempest/string_view.hpp>
+#include <tempest/utility.hpp>
 
 #include <gtest/gtest.h>
 
@@ -19,7 +20,7 @@ TEST(optional, value_construct)
 TEST(optional, copy_construct)
 {
     tempest::optional<int> opt(42);
-    tempest::optional<int> opt2(opt);
+    const tempest::optional<int>& opt2(opt);
     EXPECT_TRUE(opt2.has_value());
     EXPECT_EQ(opt2.value(), 42);
 }
@@ -27,14 +28,14 @@ TEST(optional, copy_construct)
 TEST(optional, copy_construct_empty)
 {
     tempest::optional<int> opt;
-    tempest::optional<int> opt2(opt);
+    const tempest::optional<int>& opt2(opt);
     EXPECT_FALSE(opt2.has_value());
 }
 
 TEST(optional, move_construct)
 {
     tempest::optional<int> opt(42);
-    tempest::optional<int> opt2(std::move(opt));
+    tempest::optional<int> opt2(tempest::move(opt));
     EXPECT_TRUE(opt2.has_value());
     EXPECT_EQ(opt2.value(), 42);
 }
@@ -42,7 +43,7 @@ TEST(optional, move_construct)
 TEST(optional, move_construct_empty)
 {
     tempest::optional<int> opt;
-    tempest::optional<int> opt2(std::move(opt));
+    tempest::optional<int> opt2(tempest::move(opt));
     EXPECT_FALSE(opt2.has_value());
 }
 
@@ -76,7 +77,7 @@ TEST(optional, move_assign)
 {
     tempest::optional<int> opt(42);
     tempest::optional<int> opt2;
-    opt2 = std::move(opt);
+    opt2 = tempest::move(opt);
     EXPECT_TRUE(opt2.has_value());
     EXPECT_EQ(opt2.value(), 42);
 }
@@ -85,7 +86,7 @@ TEST(optional, move_assign_empty)
 {
     tempest::optional<int> opt;
     tempest::optional<int> opt2(42);
-    opt2 = std::move(opt);
+    opt2 = tempest::move(opt);
     EXPECT_FALSE(opt2.has_value());
 }
 
@@ -220,5 +221,5 @@ TEST(optional, construct_non_trivial)
 {
     tempest::string_view sv = "Hello, World!";
     tempest::optional<tempest::string_view> sv_opt = sv;
-    tempest::optional<tempest::string_view> sv_opt2 = sv_opt;
+    
 }

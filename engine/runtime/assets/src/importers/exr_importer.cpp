@@ -5,6 +5,8 @@
 
 #include <tinyexr/tinyexr.h>
 
+#include <cstdlib>
+
 namespace tempest::assets
 {
     exr_importer::exr_importer(core::texture_registry* tex_reg) : _texture_reg(tex_reg)

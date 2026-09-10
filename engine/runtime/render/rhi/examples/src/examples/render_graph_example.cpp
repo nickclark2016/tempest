@@ -1,12 +1,14 @@
 #include "render_graph_example.hpp"
 
-#include <cstring>
-#include <stdint.h> // for uint32_t for shaders
 #include <tempest/array.hpp>
 #include <tempest/span.hpp>
+#include <tempest/utility.hpp>
 
 namespace shaders::triangle
 {
+    using uint32_t = tempest::uint32_t;
+    using size_t = tempest::size_t;
+
     namespace vs
     {
 #include <triangle.vert.h>
@@ -43,41 +45,41 @@ namespace tempest::rhi::examples
 
         // Pass 1: Outer Primary RGB Triangle
         constexpr auto primary_positions = array<vec2, 3>{
-            vec2{0.0F, -0.70F},
-            vec2{0.70F, 0.60F},
-            vec2{-0.70F, 0.60F},
+            vec2{.x=0.0F, .y=-0.70F},
+            vec2{.x=0.70F, .y=0.60F},
+            vec2{.x=-0.70F, .y=0.60F},
         };
 
         constexpr auto primary_colors = array<vec3, 3>{
-            vec3{1.0F, 0.15F, 0.15F}, // Vivid Red
-            vec3{0.15F, 1.0F, 0.15F}, // Vivid Green
-            vec3{0.15F, 0.40F, 1.0F}, // Vivid Blue
+            vec3{.r=1.0F, .g=0.15F, .b=0.15F}, // Vivid Red
+            vec3{.r=0.15F, .g=1.0F, .b=0.15F}, // Vivid Green
+            vec3{.r=0.15F, .g=0.40F, .b=1.0F}, // Vivid Blue
         };
 
         // Pass 2: Inverted Center Geometric Accent Triangle
         constexpr auto accent_positions = array<vec2, 3>{
-            vec2{0.0F, 0.60F},
-            vec2{-0.35F, -0.05F},
-            vec2{0.35F, -0.05F},
+            vec2{.x=0.0F, .y=0.60F},
+            vec2{.x=-0.35F, .y=-0.05F},
+            vec2{.x=0.35F, .y=-0.05F},
         };
 
         constexpr auto accent_colors = array<vec3, 3>{
-            vec3{1.0F, 0.85F, 0.05F}, // Gold / Yellow
-            vec3{0.05F, 0.95F, 0.95F}, // Cyan
-            vec3{0.95F, 0.15F, 0.90F}, // Magenta
+            vec3{.r=1.0F, .g=0.85F, .b=0.05F}, // Gold / Yellow
+            vec3{.r=0.05F, .g=0.95F, .b=0.95F}, // Cyan
+            vec3{.r=0.95F, .g=0.15F, .b=0.90F}, // Magenta
         };
 
         // Pass 3: Top Apex Center Emblem Triangle
         constexpr auto emblem_positions = array<vec2, 3>{
-            vec2{0.0F, -0.60F},
-            vec2{0.25F, -0.15F},
-            vec2{-0.25F, -0.15F},
+            vec2{.x=0.0F, .y=-0.60F},
+            vec2{.x=0.25F, .y=-0.15F},
+            vec2{.x=-0.25F, .y=-0.15F},
         };
 
         constexpr auto emblem_colors = array<vec3, 3>{
-            vec3{1.0F, 1.0F, 1.0F},     // Pure White
-            vec3{0.90F, 0.85F, 1.0F},   // Light Violet
-            vec3{0.85F, 0.95F, 1.0F},   // Light Cyan
+            vec3{.r=1.0F, .g=1.0F, .b=1.0F},     // Pure White
+            vec3{.r=0.90F, .g=0.85F, .b=1.0F},   // Light Violet
+            vec3{.r=0.85F, .g=0.95F, .b=1.0F},   // Light Cyan
         };
 
         constexpr auto indices = array<uint16_t, 3>{0, 1, 2};
@@ -99,7 +101,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_positions_buffer.cpu_address, primary_positions.data(), sizeof(primary_positions));
+        tempest::memcpy(_positions_buffer.cpu_address, primary_positions.data(), sizeof(primary_positions));
 
         const auto color_desc = buffer_desc{
             .size = sizeof(primary_colors),
@@ -112,7 +114,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_colors_buffer.cpu_address, primary_colors.data(), sizeof(primary_colors));
+        tempest::memcpy(_colors_buffer.cpu_address, primary_colors.data(), sizeof(primary_colors));
 
         // 2. Create Accent Triangle Buffers
         const auto accent_pos_desc = buffer_desc{
@@ -126,7 +128,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_accent_positions_buffer.cpu_address, accent_positions.data(), sizeof(accent_positions));
+        tempest::memcpy(_accent_positions_buffer.cpu_address, accent_positions.data(), sizeof(accent_positions));
 
         const auto accent_color_desc = buffer_desc{
             .size = sizeof(accent_colors),
@@ -139,7 +141,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_accent_colors_buffer.cpu_address, accent_colors.data(), sizeof(accent_colors));
+        tempest::memcpy(_accent_colors_buffer.cpu_address, accent_colors.data(), sizeof(accent_colors));
 
         // 3. Create Emblem Triangle Buffers
         const auto emblem_pos_desc = buffer_desc{
@@ -153,7 +155,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_emblem_positions_buffer.cpu_address, emblem_positions.data(), sizeof(emblem_positions));
+        tempest::memcpy(_emblem_positions_buffer.cpu_address, emblem_positions.data(), sizeof(emblem_positions));
 
         const auto emblem_color_desc = buffer_desc{
             .size = sizeof(emblem_colors),
@@ -166,7 +168,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_emblem_colors_buffer.cpu_address, emblem_colors.data(), sizeof(emblem_colors));
+        tempest::memcpy(_emblem_colors_buffer.cpu_address, emblem_colors.data(), sizeof(emblem_colors));
 
         // 4. Create Shared Index Buffer
         const auto index_desc = buffer_desc{
@@ -180,7 +182,7 @@ namespace tempest::rhi::examples
         {
             return false;
         }
-        std::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
+        tempest::memcpy(_index_buffer.cpu_address, indices.data(), sizeof(indices));
 
         // 5. Initialize Render Graph
         _render_graph = make_unique<render_graph::render_graph>(1920, 1080);
@@ -240,7 +242,7 @@ namespace tempest::rhi::examples
 
     auto render_graph_example::render(const frame_render_info& info) -> void
     {
-        if (!_device || !_render_graph)
+        if ((_device == nullptr) || !_render_graph)
         {
             return;
         }
@@ -262,7 +264,7 @@ namespace tempest::rhi::examples
         // 2. Pass 1: Primary Outer Triangle Pass (Clears swapchain to dark background)
         const auto& primary_pass = _render_graph->add_graphics_pass<primary_pass_data>(
             "PrimaryGeometryPass",
-            [this, sc_tex](render_graph::pass_builder& builder, primary_pass_data& data) {
+            [this, sc_tex](render_graph::pass_builder& builder, primary_pass_data& data) -> void {
                 const auto pos = builder.import_buffer(_positions_buffer);
                 const auto col = builder.import_buffer(_colors_buffer);
                 data.pos_buf = builder.read(pos, rhi::pipeline_stage::vertex, rhi::resource_access::read);
@@ -272,12 +274,12 @@ namespace tempest::rhi::examples
                            .texture = sc_tex,
                            .load_op = rhi::load_op::clear,
                            .store_op = rhi::store_op::store,
-                           .clear_value = {0.05F, 0.05F, 0.05F, 1.0F},
+                           .clear_value = {.r=0.05F, .g=0.05F, .b=0.05F, .a=1.0F},
                        });
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const primary_pass_data& data,
-                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) -> void {
                 pass_cmd.bind_pipeline(_pipeline);
                 pass_cmd.bind_index_buffer(_index_buffer, index_type::uint16, 0);
 
@@ -301,7 +303,7 @@ namespace tempest::rhi::examples
         // 3. Pass 2: Inverted Accent Triangle Pass (Loads previous pass color target)
         const auto& accent_pass = _render_graph->add_graphics_pass<accent_pass_data>(
             "AccentGeometryPass",
-            [this, &primary_pass](render_graph::pass_builder& builder, accent_pass_data& data) {
+            [this, &primary_pass](render_graph::pass_builder& builder, accent_pass_data& data) -> void {
                 const auto pos = builder.import_buffer(_accent_positions_buffer);
                 const auto col = builder.import_buffer(_accent_colors_buffer);
                 data.pos_buf = builder.read(pos, rhi::pipeline_stage::vertex, rhi::resource_access::read);
@@ -315,7 +317,7 @@ namespace tempest::rhi::examples
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const accent_pass_data& data,
-                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) -> void {
                 pass_cmd.bind_pipeline(_pipeline);
                 pass_cmd.bind_index_buffer(_index_buffer, index_type::uint16, 0);
 
@@ -339,7 +341,7 @@ namespace tempest::rhi::examples
         // 4. Pass 3: Center Core Emblem Pass (Loads previous pass color target, Sinks DAG)
         _render_graph->add_graphics_pass<emblem_pass_data>(
             "CoreEmblemPass",
-            [this, &accent_pass](render_graph::pass_builder& builder, emblem_pass_data& data) {
+            [this, &accent_pass](render_graph::pass_builder& builder, emblem_pass_data& data) -> void {
                 const auto pos = builder.import_buffer(_emblem_positions_buffer);
                 const auto col = builder.import_buffer(_emblem_colors_buffer);
                 data.pos_buf = builder.read(pos, rhi::pipeline_stage::vertex, rhi::resource_access::read);
@@ -353,7 +355,7 @@ namespace tempest::rhi::examples
                 builder.mark_sink();
             },
             [this]([[maybe_unused]] const emblem_pass_data& data,
-                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) {
+                   [[maybe_unused]] render_graph::pass_execution_context& ctx, rhi::command_list& pass_cmd) -> void {
                 pass_cmd.bind_pipeline(_pipeline);
                 pass_cmd.bind_index_buffer(_index_buffer, index_type::uint16, 0);
 

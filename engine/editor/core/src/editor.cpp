@@ -14,10 +14,10 @@
 #include <tempest/windows/engine_component_view_providers.hpp>
 #include <tempest/windows/scene_hierarchy_window.hpp>
 
-#include <cmath>
-#include <format>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <tempest/format.hpp>
+#include <tempest/math_utils.hpp>
 
 namespace tempest::editor
 {
@@ -66,7 +66,7 @@ namespace tempest::editor
             {
             }
 
-            auto get_shortcut() const noexcept -> string_view override
+            [[nodiscard]] auto get_shortcut() const noexcept -> string_view override
             {
                 return "Ctrl+Alt+P";
             }
@@ -88,7 +88,7 @@ namespace tempest::editor
             {
             }
 
-            auto is_checked() const noexcept -> bool override
+            [[nodiscard]] auto is_checked() const noexcept -> bool override
             {
                 return _ctx->is_live_stream_enabled();
             }
@@ -110,7 +110,7 @@ namespace tempest::editor
             {
             }
 
-            auto is_checked() const noexcept -> bool override
+            [[nodiscard]] auto is_checked() const noexcept -> bool override
             {
                 return _ctx->is_gpu_stats_enabled();
             }
@@ -153,7 +153,7 @@ namespace tempest::editor
             if (node.menu)
             {
                 const auto shortcut = node.menu->get_shortcut();
-                const auto shortcut_str = shortcut.empty() ? nullptr : string(shortcut).c_str();
+                const auto *const shortcut_str = shortcut.empty() ? nullptr : string(shortcut).c_str();
                 const auto selected = node.menu->is_checked();
                 const auto pressed = ImGui::MenuItem(title.c_str(), shortcut_str, selected, enabled);
                 if (pressed)
@@ -184,7 +184,7 @@ namespace tempest::editor
     void editor_context::menu_hierarchy::add_menu_item(unique_ptr<menu_item> menu)
     {
         auto* menus_to_search = &_root_nodes;
-        auto path_begin_it = menu->get_menu_path().begin();
+        const auto *path_begin_it = menu->get_menu_path().begin();
 
         for (const auto& path_elem : menu->get_menu_path())
         {
@@ -209,7 +209,7 @@ namespace tempest::editor
         }
 
         // Insert the elements
-        for (auto it = path_begin_it; it != menu->get_menu_path().end(); ++it)
+        for (const auto *it = path_begin_it; it != menu->get_menu_path().end(); ++it)
         {
             auto node = make_unique<menu_node>();
             node->name = string(*it);
@@ -233,17 +233,16 @@ namespace tempest::editor
     }
 
     editor_context::editor_context(editor_engine_context& ctx, window_handle win, ui_context& ui_ctx)
-        : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx}
+        : _engine_ctx{&ctx}, _win{win}, _ui_ctx{&ui_ctx},
+          _entity_view(register_window(make_unique<entity_view_window>(ctx.get_entities()))),
+          _scene_hierarchy_view(register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()))),
+          _viewport_view(register_window(make_unique<viewport_window>(ctx)))
     {
         ctx.set_ui_context(&ui_ctx);
 
-        _entity_view = register_window(make_unique<entity_view_window>(ctx.get_entities()));
-        _scene_hierarchy_view = register_window(make_unique<scene_hierarchy_window>(ctx.get_entities()));
-        _viewport_view = register_window(make_unique<viewport_window>(ctx));
-
         register_engine_component_view_providers(*this);
 
-        register_on_paint_callback([&, this](engine_context& engine_ctx) {
+        register_on_paint_callback([&, this](engine_context& engine_ctx) -> void {
             _entity_view->target = _scene_hierarchy_view->selected_entity;
 
             // Sync aspect ratio to editor camera
@@ -258,7 +257,7 @@ namespace tempest::editor
                 const auto active_ent = active_cam_opt.value();
                 if (const auto* cam = engine_ctx.get_entities().try_get<render_system::camera_component>(active_ent))
                 {
-                    if (std::abs(cam->aspect_ratio - current_aspect) > 1e-4F)
+                    if (tempest::abs(cam->aspect_ratio - current_aspect) > 1e-4F)
                     {
                         auto camera_copy = *cam;
                         camera_copy.aspect_ratio = current_aspect;
@@ -282,7 +281,7 @@ namespace tempest::editor
 
     auto editor_context::_process_shortcuts() -> void
     {
-        if (!_engine_ctx)
+        if (_engine_ctx == nullptr)
         {
             return;
         }
@@ -314,13 +313,13 @@ namespace tempest::editor
 
     auto editor_context::_draw_status_bar() -> void
     {
-        if (!_engine_ctx)
+        if (_engine_ctx == nullptr)
         {
             return;
         }
 
-        const auto viewport = ImGui::GetMainViewport();
-        const auto height = ImGui::GetFrameHeight() * 1.35f;
+        auto* const viewport = ImGui::GetMainViewport();
+        const auto height = ImGui::GetFrameHeight() * 1.35F;
 
         if (ImGui::BeginViewportSideBar("##EditorStatusBar", viewport, ImGuiDir_Down, height,
                                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_MenuBar))
@@ -340,8 +339,8 @@ namespace tempest::editor
     auto editor_context::_draw_profiler_status_pill() -> void
     {
         const auto* server = _engine_ctx->get_web_server();
-        const auto port = server ? server->get_bound_port() : uint16_t{0};
-        const auto clients = server ? server->connected_client_count() : size_t{0};
+        const auto port = (server != nullptr) ? server->get_bound_port() : uint16_t{0};
+        const auto clients = (server != nullptr) ? server->connected_client_count() : size_t{0};
         const auto is_rec = _engine_ctx->is_recording();
 
         const auto fps = _engine_ctx->get_rolling_fps();
@@ -349,28 +348,28 @@ namespace tempest::editor
         const auto cpu_ms = _engine_ctx->get_rolling_cpu_time_ms();
         const auto gpu_ms = _engine_ctx->get_rolling_gpu_time_ms();
 
-        const auto pill_text = std::format(" {:.1f} FPS | {:.1f}ms (CPU {:.1f}ms / GPU {:.1f}ms) | :{} ({}) ]", fps,
-                                           frame_ms, cpu_ms, gpu_ms, port, clients);
+        const auto pill_text = tempest::format(" {:.1f} FPS | {:.1f}ms (CPU {:.1f}ms / GPU {:.1f}ms) | :{} ({}) ]", fps,
+                                               frame_ms, cpu_ms, gpu_ms, port, clients);
 
-        auto dot_color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f); // Gray (idle, 0 clients)
-        auto dot_symbol = "○";
+        auto dot_color = ImVec4(0.6F, 0.6F, 0.6F, 1.0F); // Gray (idle, 0 clients)
+        const auto* dot_symbol = "○";
 
         if (is_rec)
         {
-            const auto alpha = 0.4f + 0.6f * static_cast<float>(std::sin(ImGui::GetTime() * 6.0));
-            dot_color = ImVec4(1.0f, 0.2f, 0.2f, alpha); // Pulsing Red
+            const auto alpha = 0.4F + (0.6F * static_cast<float>(tempest::math::sin(ImGui::GetTime() * 6.0)));
+            dot_color = ImVec4(1.0F, 0.2F, 0.2F, alpha); // Pulsing Red
             dot_symbol = "●";
         }
         else if (clients > 0)
         {
-            dot_color = ImVec4(0.2f, 0.9f, 0.2f, 1.0f); // Green
+            dot_color = ImVec4(0.2F, 0.9F, 0.2F, 1.0F); // Green
             dot_symbol = "●";
         }
 
         const auto bracket_left_size = ImGui::CalcTextSize("[ ");
         const auto dot_size = ImGui::CalcTextSize(dot_symbol);
         const auto text_size = ImGui::CalcTextSize(pill_text.c_str());
-        const auto total_width = bracket_left_size.x + dot_size.x + text_size.x + 16.0f;
+        const auto total_width = bracket_left_size.x + dot_size.x + text_size.x + 16.0F;
         const auto avail_width = ImGui::GetContentRegionAvail().x;
 
         if (avail_width > total_width)
@@ -384,8 +383,8 @@ namespace tempest::editor
         auto* draw_list = ImGui::GetWindowDrawList();
         const auto bg_color = ImGui::GetColorU32(ImGuiCol_FrameBg);
         const auto border_color = ImGui::GetColorU32(ImGuiCol_Border);
-        draw_list->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), bg_color, 4.0f);
-        draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), border_color, 4.0f);
+        draw_list->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), bg_color, 4.0F);
+        draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), border_color, 4.0F);
 
         ImGui::InvisibleButton("##ProfilerStatusPill", size);
 
@@ -395,11 +394,11 @@ namespace tempest::editor
         if (is_hovered)
         {
             draw_list->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(ImGuiCol_ButtonHovered),
-                               4.0f);
+                               4.0F);
         }
 
-        const auto text_pos_y = pos.y + (size.y - dot_size.y) * 0.5f;
-        auto cur_x = pos.x + 8.0f;
+        const auto text_pos_y = pos.y + ((size.y - dot_size.y) * 0.5F);
+        auto cur_x = pos.x + 8.0F;
         draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(ImGuiCol_Text), "[ ");
         cur_x += bracket_left_size.x;
         draw_list->AddText(ImVec2(cur_x, text_pos_y), ImGui::GetColorU32(dot_color), dot_symbol);
@@ -418,8 +417,8 @@ namespace tempest::editor
                 _engine_ctx->open_profiler_in_browser();
             }
 
-            const auto server_url = server ? server->get_server_url() : string{};
-            auto copy_label = std::format("Copy Profiler URL ({})", server_url.c_str());
+            const auto server_url = (server != nullptr) ? server->get_server_url() : string{};
+            auto copy_label = tempest::format("Copy Profiler URL ({})", server_url.c_str());
             if (ImGui::MenuItem(copy_label.c_str(), nullptr, false, !server_url.empty()))
             {
                 ImGui::SetClipboardText(server_url.c_str());
@@ -427,7 +426,7 @@ namespace tempest::editor
 
             ImGui::Separator();
 
-            const auto rec_text = is_rec ? "Stop Recording" : "Start Recording";
+            const auto* const rec_text = is_rec ? "Stop Recording" : "Start Recording";
             if (ImGui::MenuItem(rec_text, "Ctrl+Shift+R"))
             {
                 _engine_ctx->toggle_recording();
@@ -459,7 +458,7 @@ namespace tempest::editor
     {
         const auto& frame = _engine_ctx->get_last_telemetry_frame();
         const auto* server = _engine_ctx->get_web_server();
-        const auto clients = server ? server->connected_client_count() : size_t{0};
+        const auto clients = (server != nullptr) ? server->connected_client_count() : size_t{0};
 
         const auto fps = _engine_ctx->get_rolling_fps();
         const auto frame_ms = _engine_ctx->get_rolling_frame_time_ms();
@@ -468,7 +467,7 @@ namespace tempest::editor
 
         ImGui::BeginTooltip();
 
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Tempest Telemetry (Frame #%llu)",
+        ImGui::TextColored(ImVec4(0.4F, 0.8F, 1.0F, 1.0F), "Tempest Telemetry (Frame #%llu)",
                            static_cast<unsigned long long>(frame.frame_index));
         ImGui::Separator();
 
@@ -480,7 +479,7 @@ namespace tempest::editor
         const auto cpu_zones = _engine_ctx->get_top_cpu_hot_zones(5);
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Top CPU Zones (Rolling):");
+        ImGui::TextColored(ImVec4(1.0F, 0.8F, 0.3F, 1.0F), "Top CPU Zones (Rolling):");
         if (cpu_zones.empty())
         {
             ImGui::TextDisabled("  (No CPU zones recorded)");
@@ -496,7 +495,7 @@ namespace tempest::editor
         const auto gpu_zones = _engine_ctx->get_top_gpu_hot_zones(5);
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1.0f), "Top GPU Passes (Rolling):");
+        ImGui::TextColored(ImVec4(0.3F, 1.0F, 0.5F, 1.0F), "Top GPU Passes (Rolling):");
         if (gpu_zones.empty())
         {
             ImGui::TextDisabled("  (No GPU passes recorded)");
@@ -530,7 +529,7 @@ namespace tempest::editor
         ImGui::EndDisabled();
 
         const auto dockspace_id = ImGui::GetID("Tempest Editor Dockspace");
-        const auto viewport = ImGui::GetMainViewport();
+        auto* const viewport = ImGui::GetMainViewport();
 
         if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr)
         {
@@ -541,13 +540,13 @@ namespace tempest::editor
             auto dock_id_main = dockspace_id;
 
             auto dock_id_bottom = ImGuiID{};
-            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Down, 0.2f, &dock_id_bottom, &dock_id_main);
+            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Down, 0.2F, &dock_id_bottom, &dock_id_main);
 
             auto dock_id_left = ImGuiID{};
-            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Left, 0.2f, &dock_id_left, &dock_id_main);
+            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Left, 0.2F, &dock_id_left, &dock_id_main);
 
             auto dock_id_right = ImGuiID{};
-            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Right, 0.25f, &dock_id_right, &dock_id_main);
+            ImGui::DockBuilderSplitNode(dock_id_main, ImGuiDir_Right, 0.25F, &dock_id_right, &dock_id_main);
 
             for (const auto& window : _windows)
             {

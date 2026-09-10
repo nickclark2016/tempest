@@ -3,8 +3,6 @@
 #include <tempest/profiler/statistics.hpp>
 #include <tempest/utility.hpp>
 
-#include <algorithm>
-
 namespace tempest::profiler
 {
     namespace
@@ -29,7 +27,7 @@ namespace tempest::profiler
                 return sorted_durations.back();
             }
 
-            return sorted_durations[k] + frac * (sorted_durations[k + 1] - sorted_durations[k]);
+            return sorted_durations[k] + (frac * (sorted_durations[k + 1] - sorted_durations[k]));
         }
     } // namespace
 
@@ -55,7 +53,7 @@ namespace tempest::profiler
             total_sum += dur;
         }
 
-        std::sort(durations.begin(), durations.end());
+        sort(durations.begin(), durations.end());
 
         stats.min_ns = durations.front();
         stats.max_ns = durations.back();
@@ -83,8 +81,8 @@ namespace tempest::profiler
     {
         struct zone_group
         {
-            string_view name{};
-            vector<zone_record> zones{};
+            string_view name;
+            vector<zone_record> zones;
         };
 
         auto groups = vector<zone_group>{};
@@ -103,7 +101,7 @@ namespace tempest::profiler
                     }
                 }
 
-                if (!found)
+                if (found == nullptr)
                 {
                     groups.push_back(zone_group{
                         .name = z.name,
@@ -125,8 +123,8 @@ namespace tempest::profiler
             result.push_back(compute_zone_statistics(z_span));
         }
 
-        std::sort(result.begin(), result.end(),
-                  [](const zone_statistics& a, const zone_statistics& b) { return a.zone_name < b.zone_name; });
+        sort(result.begin(), result.end(),
+                  [](const zone_statistics& a, const zone_statistics& b) -> bool { return a.zone_name < b.zone_name; });
 
         return result;
     }
@@ -282,7 +280,7 @@ namespace tempest::profiler
                     }
                 }
 
-                if (found)
+                if (found != nullptr)
                 {
                     found->exclusive_duration_ms += ex_ms;
                     found->total_duration_ms += tot_ms;
@@ -300,7 +298,7 @@ namespace tempest::profiler
             }
         }
 
-        std::sort(map_entries.begin(), map_entries.end(), [](const hot_zone_entry& a, const hot_zone_entry& b) {
+        sort(map_entries.begin(), map_entries.end(), [](const hot_zone_entry& a, const hot_zone_entry& b) -> bool {
             return a.exclusive_duration_ms > b.exclusive_duration_ms;
         });
 
@@ -346,7 +344,7 @@ namespace tempest::profiler
     {
         if (_count == 0)
         {
-            return 0.0f;
+            return 0.0F;
         }
         auto sum = 0.0;
         for (auto i = size_t{0}; i < _count; ++i)
@@ -360,7 +358,7 @@ namespace tempest::profiler
     {
         if (_count == 0)
         {
-            return 0.0f;
+            return 0.0F;
         }
         auto sum = 0.0;
         for (auto i = size_t{0}; i < _count; ++i)
@@ -374,7 +372,7 @@ namespace tempest::profiler
     {
         if (_count == 0)
         {
-            return 0.0f;
+            return 0.0F;
         }
         auto sum = 0.0;
         for (auto i = size_t{0}; i < _count; ++i)
@@ -388,7 +386,7 @@ namespace tempest::profiler
     {
         if (_count == 0)
         {
-            return 0.0f;
+            return 0.0F;
         }
         auto sum = 0.0;
         for (auto i = size_t{0}; i < _count; ++i)
@@ -420,7 +418,7 @@ namespace tempest::profiler
                     }
                 }
 
-                if (found)
+                if (found != nullptr)
                 {
                     found->exclusive_duration_ms += z.exclusive_duration_ms;
                     found->total_duration_ms += z.total_duration_ms;
@@ -445,7 +443,7 @@ namespace tempest::profiler
             entry.total_duration_ms /= divisor;
         }
 
-        std::sort(aggregated.begin(), aggregated.end(), [](const hot_zone_entry& a, const hot_zone_entry& b) {
+        sort(aggregated.begin(), aggregated.end(), [](const hot_zone_entry& a, const hot_zone_entry& b) -> bool {
             return a.exclusive_duration_ms > b.exclusive_duration_ms;
         });
 
@@ -479,7 +477,7 @@ namespace tempest::profiler
                     }
                 }
 
-                if (found)
+                if (found != nullptr)
                 {
                     found->exclusive_duration_ms += z.exclusive_duration_ms;
                     found->total_duration_ms += z.total_duration_ms;
@@ -504,7 +502,7 @@ namespace tempest::profiler
             entry.total_duration_ms /= divisor;
         }
 
-        std::sort(aggregated.begin(), aggregated.end(), [](const hot_zone_entry& a, const hot_zone_entry& b) {
+        sort(aggregated.begin(), aggregated.end(), [](const hot_zone_entry& a, const hot_zone_entry& b) -> bool {
             return a.exclusive_duration_ms > b.exclusive_duration_ms;
         });
 

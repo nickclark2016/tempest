@@ -1,10 +1,10 @@
 #include "example_registry.hpp"
 #include "examples/render_system_example.hpp"
 
-#include <cstdlib>
-#include <iostream>
-#include <string>
 #include <tempest/array.hpp>
+#include <tempest/format.hpp>
+#include <tempest/logger.hpp>
+#include <tempest/print.hpp>
 #include <tempest/rhi.hpp>
 #include <tempest/span.hpp>
 #include <tempest/string_view.hpp>
@@ -14,7 +14,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #elif defined(TEMPEST_PLATFORM_LINUX)
@@ -28,19 +28,21 @@ namespace
     using namespace tempest::rhi;
     using namespace tempest::rhi::examples;
 
-    inline auto operator<<(std::ostream& os, string_view sv) -> std::ostream&
+    auto parse_u32(string_view s) -> uint32_t
     {
-        return os.write(sv.data(), static_cast<std::streamsize>(sv.size()));
-    }
-
-    inline auto operator<<(std::ostream& os, cstring_view sv) -> std::ostream&
-    {
-        return os.write(sv.data(), static_cast<std::streamsize>(sv.size()));
-    }
-
-    inline auto operator<<(std::ostream& os, const string& str) -> std::ostream&
-    {
-        return os.write(str.data(), static_cast<std::streamsize>(str.size()));
+        auto val = uint32_t{0};
+        for (auto ch : s)
+        {
+            if (ch >= '0' && ch <= '9')
+            {
+                val = (val * 10) + static_cast<uint32_t>(ch - '0');
+            }
+            else
+            {
+                break;
+            }
+        }
+        return val;
     }
 
     struct cli_options
@@ -56,35 +58,38 @@ namespace
 
     auto print_help(const char* prog_name) -> void
     {
-        std::cout << "Tempest RHI Examples\n"
-                  << "Usage: " << prog_name << " [options] [example-name]\n\n"
-                  << "Options:\n"
-                  << "  -l, --list             List all available examples\n"
-                  << "  -e, --example <name>   Select an example to run (default: triangle)\n"
-                  << "  -m, --model <name>     Select model for render_system (sponza, chess, abeautifulgame)\n"
-                  << "  -w, --width <pixels>   Window width (default: 1280)\n"
-                  << "  -h, --height <pixels>  Window height (default: 720)\n"
-                  << "  -f, --frames <count>   Run for N frames and exit (0 = infinite)\n"
-                  << "  --help                 Show this help message\n\n"
-                  << "Available Examples:\n";
+        println("Tempest RHI Examples\n"
+                "Usage: {} [options] [example-name]\n\n"
+                "Options:\n"
+                "  -l, --list             List all available examples\n"
+                "  -e, --example <name>   Select an example to run (default: triangle)\n"
+                "  -m, --model <name>     Select model for render_system (sponza, chess, abeautifulgame)\n"
+                "  -w, --width <pixels>   Window width (default: 1280)\n"
+                "  -h, --height <pixels>  Window height (default: 720)\n"
+                "  -f, --frames <count>   Run for N frames and exit (0 = infinite)\n"
+                "  --help                 Show this help message\n\n"
+                "Available Examples:",
+                prog_name);
 
         for (const auto& ex : example_registry::get_examples())
         {
-            std::cout << "  " << ex.name << "\t- " << ex.description << "\n";
+            println("  {}\t- {}", ex.name, ex.description);
         }
     }
 
     auto print_list() -> void
     {
-        std::cout << "Tempest RHI Examples - Available Examples:\n";
+        println("Tempest RHI Examples - Available Examples:");
         for (const auto& ex : example_registry::get_examples())
         {
-            std::cout << "  * " << ex.name;
             if (ex.name == "triangle")
             {
-                std::cout << " (Default)";
+                println("  * {} (Default)\n    {}", ex.name, ex.description);
             }
-            std::cout << "\n    " << ex.description << "\n";
+            else
+            {
+                println("  * {}\n    {}", ex.name, ex.description);
+            }
         }
     }
 
@@ -114,7 +119,7 @@ namespace
                 }
                 else
                 {
-                    std::cerr << "Error: --example requires an argument.\n";
+                    println_to(stderr_stream, "Error: --example requires an argument.");
                     return nullopt;
                 }
             }
@@ -126,7 +131,8 @@ namespace
                 }
                 else
                 {
-                    std::cerr << "Error: --model requires an argument (e.g. sponza, chess, abeautifulgame).\n";
+                    println_to(stderr_stream,
+                               "Error: --model requires an argument (e.g. sponza, chess, abeautifulgame).");
                     return nullopt;
                 }
             }
@@ -134,11 +140,11 @@ namespace
             {
                 if (i + 1 < argc)
                 {
-                    options.width = static_cast<uint32_t>(std::atoi(argv[++i]));
+                    options.width = parse_u32(argv[++i]);
                 }
                 else
                 {
-                    std::cerr << "Error: --width requires a numeric argument.\n";
+                    println_to(stderr_stream, "Error: --width requires a numeric argument.");
                     return nullopt;
                 }
             }
@@ -146,11 +152,11 @@ namespace
             {
                 if (i + 1 < argc)
                 {
-                    options.height = static_cast<uint32_t>(std::atoi(argv[++i]));
+                    options.height = parse_u32(argv[++i]);
                 }
                 else
                 {
-                    std::cerr << "Error: --height requires a numeric argument.\n";
+                    println_to(stderr_stream, "Error: --height requires a numeric argument.");
                     return nullopt;
                 }
             }
@@ -158,17 +164,17 @@ namespace
             {
                 if (i + 1 < argc)
                 {
-                    options.max_frames = static_cast<uint32_t>(std::atoi(argv[++i]));
+                    options.max_frames = parse_u32(argv[++i]);
                 }
                 else
                 {
-                    std::cerr << "Error: --frames requires a numeric argument.\n";
+                    println_to(stderr_stream, "Error: --frames requires a numeric argument.");
                     return nullopt;
                 }
             }
             else if (!arg.empty() && arg[0] == '-')
             {
-                std::cerr << "Error: Unknown option '" << arg << "'. Use --help for usage.\n";
+                println_to(stderr_stream, "Error: Unknown option '{}'. Use --help for usage.", arg);
                 return nullopt;
             }
             else
@@ -189,7 +195,7 @@ namespace
     };
 } // namespace
 
-int main(int argc, char** argv)
+auto main(int argc, char** argv) -> int
 {
     auto parsed_opts = parse_args(argc, argv);
     if (!parsed_opts.has_value())
@@ -214,33 +220,35 @@ int main(int argc, char** argv)
     auto example_meta = example_registry::find_example(opts.example_name);
     if (!example_meta.has_value())
     {
-        std::cerr << "Error: Unknown example '" << opts.example_name << "'.\n\n";
+        println_to(stderr_stream, "Error: Unknown example '{}'.\n", opts.example_name);
         print_list();
         return 1;
     }
 
-    std::cout << "Starting Tempest RHI Example: " << example_meta->name << "\n"
-              << "Description: " << example_meta->description << "\n";
+    println("Starting Tempest RHI Example: {}\nDescription: {}", example_meta->name, example_meta->description);
 
     // 1. Initialize GLFW
     if (glfwInit() != GLFW_TRUE)
     {
-        std::cerr << "Failed to initialize GLFW.\n";
+        println_to(stderr_stream, "Failed to initialize GLFW.");
         return 1;
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    auto title = "Tempest RHI - " + std::string(example_meta->name.data(), example_meta->name.size());
-    auto* window = glfwCreateWindow(static_cast<int>(opts.width), static_cast<int>(opts.height), title.c_str(),
-                                    nullptr, nullptr);
+    auto title = format("Tempest RHI - {}", example_meta->name);
+    auto* window =
+        glfwCreateWindow(static_cast<int>(opts.width), static_cast<int>(opts.height), title.c_str(), nullptr, nullptr);
     if (window == nullptr)
     {
-        std::cerr << "Failed to create GLFW window.\n";
+        println_to(stderr_stream, "Failed to create GLFW window.");
         glfwTerminate();
         return 1;
     }
 
     // 2. Create RHI Context and Device
+    auto log_sink = stdout_log_sink{};
+    auto log = logger{log_sink};
+
     auto ctx_desc = context_desc{
         .application_name = "Tempest RHI Examples",
         .version_major = 1,
@@ -250,10 +258,10 @@ int main(int argc, char** argv)
         .api = graphics_api::vulkan,
     };
 
-    auto ctx_res = vk::create_context(ctx_desc);
+    auto ctx_res = vk::create_context(ctx_desc, log);
     if (!ctx_res.has_value())
     {
-        std::cerr << "Failed to create RHI context.\n";
+        println_to(stderr_stream, "Failed to create RHI context.");
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
@@ -263,24 +271,24 @@ int main(int argc, char** argv)
     auto devices = context->enumerate_devices();
     if (devices.empty())
     {
-        std::cerr << "No compatible GPU devices found.\n";
+        println_to(stderr_stream, "No compatible GPU devices found.");
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
     }
 
-    std::cout << "Using GPU: " << devices[0].name << "\n";
+    println("Using GPU: {}", devices[0].name);
     auto dev = context->create_device(devices[0].device_uuid);
     if (!dev)
     {
-        std::cerr << "Failed to create RHI device.\n";
+        println_to(stderr_stream, "Failed to create RHI device.");
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
     }
 
     // 3. Create WSI Surface & Negotiate sRGB Swapchain Format
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
     auto native_handle = native_wsi_handle{
         .display = GetModuleHandle(nullptr),
         .window = glfwGetWin32Window(window),
@@ -297,7 +305,7 @@ int main(int argc, char** argv)
     auto raw_res = dev->create_raw_surface(native_handle);
     if (!raw_res.has_value())
     {
-        std::cerr << "Failed to create raw surface.\n";
+        println_to(stderr_stream, "Failed to create raw surface.");
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
@@ -307,7 +315,7 @@ int main(int argc, char** argv)
     auto caps = dev->get_surface_capabilities(raw_surf);
     if (caps.supported_formats.empty() || caps.supported_present_modes.empty())
     {
-        std::cerr << "Surface capabilities query returned no formats or present modes.\n";
+        println_to(stderr_stream, "Surface capabilities query returned no formats or present modes.");
         dev->destroy_raw_surface(raw_surf);
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -341,13 +349,11 @@ int main(int argc, char** argv)
         }
     }
 
-    std::cout << "Selected Surface Format: "
-              << (selected_surface_format->format == render_surface_format::bgra8_srgb   ? "BGRA8_SRGB"
-                  : selected_surface_format->format == render_surface_format::rgba8_srgb ? "RGBA8_SRGB"
-                  : selected_surface_format->format == render_surface_format::bgra8_unorm
-                      ? "BGRA8_UNORM"
-                      : "RGBA8_UNORM")
-              << " (sRGB Non-linear)\n";
+    println("Selected Surface Format: {} (sRGB Non-linear)",
+            selected_surface_format->format == render_surface_format::bgra8_srgb    ? "BGRA8_SRGB"
+            : selected_surface_format->format == render_surface_format::rgba8_srgb  ? "RGBA8_SRGB"
+            : selected_surface_format->format == render_surface_format::bgra8_unorm ? "BGRA8_UNORM"
+                                                                                    : "RGBA8_UNORM");
 
     auto surf_desc = render_surface_desc{
         .raw_surface = raw_surf,
@@ -362,7 +368,7 @@ int main(int argc, char** argv)
     auto surface = dev->create_render_surface(surf_desc);
     if (!surface)
     {
-        std::cerr << "Failed to create render surface.\n";
+        println_to(stderr_stream, "Failed to create render surface.");
         dev->destroy_raw_surface(raw_surf);
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -385,7 +391,7 @@ int main(int argc, char** argv)
     auto example_instance = example_meta->factory();
     if (!example_instance->init(*dev, surface->get_format()))
     {
-        std::cerr << "Failed to initialize example '" << example_meta->name << "'.\n";
+        println_to(stderr_stream, "Failed to initialize example '{}'.", example_meta->name);
         dev->destroy_render_surface(tempest::move(surface));
         dev->destroy_raw_surface(raw_surf);
         glfwDestroyWindow(window);
@@ -423,8 +429,8 @@ int main(int argc, char** argv)
     {
         glfwPollEvents();
 
-        auto cur_w = int{0};
-        auto cur_h = int{0};
+        auto cur_w = 0;
+        auto cur_h = 0;
         glfwGetFramebufferSize(window, &cur_w, &cur_h);
 
         if (cur_w == 0 || cur_h == 0)
@@ -516,8 +522,8 @@ int main(int argc, char** argv)
                                                                .semaphore = render_sem,
                                                                .value = 0,
                                                            });
-        if (!present_res.has_value() && (present_res.error() == swapchain_error::out_of_date ||
-                                         present_res.error() == swapchain_error::suboptimal))
+        if (!present_res.has_value() &&
+            (present_res.error() == swapchain_error::out_of_date || present_res.error() == swapchain_error::suboptimal))
         {
             need_recreate = true;
         }

@@ -5,8 +5,7 @@
 #include <tempest/render_graph/render_graph.hpp>
 #include <tempest/render_graph/temporal_texture.hpp>
 
-#include <algorithm>
-#include <format>
+#include <tempest/format.hpp>
 
 namespace tempest::render_graph
 {
@@ -76,10 +75,7 @@ namespace tempest::render_graph
                     const auto end_ticks = ts_results[pass_rec.end_timestamp_idx];
                     const auto start_ns = dev.convert_gpu_timestamp_to_cpu_ns(start_ticks);
                     auto end_ns = dev.convert_gpu_timestamp_to_cpu_ns(end_ticks);
-                    if (end_ns < start_ns)
-                    {
-                        end_ns = start_ns;
-                    }
+                    end_ns = max(end_ns, start_ns);
 
                     auto z = profiler::zone_record{
                         .start_ns = start_ns,
@@ -100,7 +96,7 @@ namespace tempest::render_graph
                         auto entry_idx = size_t{0};
                         const auto pool_flags = flight_state.queue_stats[static_cast<size_t>(pass_rec.queue)].mask;
 
-                        auto check_flag = [&](rhi::pipeline_statistic_flags flag, string_view metric_name) {
+                        auto check_flag = [&](rhi::pipeline_statistic_flags flag, string_view metric_name) -> void {
                             if (static_cast<bool>(pool_flags & flag))
                             {
                                 if (query_offset + entry_idx < ps_results.size())
@@ -152,8 +148,8 @@ namespace tempest::render_graph
                     frame_sync.profiler->register_track(track_id, get_queue_track_name(q_type));
 
                     // Sort zones so submit zones (depth 0) come before their nested child passes
-                    std::sort(zones.begin(), zones.end(),
-                              [](const profiler::zone_record& a, const profiler::zone_record& b) {
+                    tempest::sort(zones.begin(), zones.end(),
+                              [](const profiler::zone_record& a, const profiler::zone_record& b) -> bool {
                                   if (a.start_ns != b.start_ns)
                                   {
                                       return a.start_ns < b.start_ns;
@@ -292,12 +288,12 @@ namespace tempest::render_graph
             auto& port = get_execution_port(dev, batch.queue);
             auto& cmd = port.acquire_command_list(0, rhi::command_list_lifetime::transient);
 
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
             auto batch_name = string{};
             const auto* queue_name = batch.queue == queue_type::graphics        ? "Graphics"
                                      : batch.queue == queue_type::async_compute ? "Async Compute"
                                                                                 : "Async Transfer";
-            std::format_to(tempest::back_inserter(batch_name), "Queue Batch {} ({})", batch_idx, queue_name);
+            format_to(tempest::back_inserter(batch_name), "Queue Batch {} ({})", batch_idx, queue_name);
             port.begin_debug_region(rhi::debug_label{.name = batch_name.c_str()});
 #endif
 
@@ -347,7 +343,7 @@ namespace tempest::render_graph
 
                 const auto& pass = all_passes[pass_idx];
 
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
                 for (const auto& access : pass.texture_accesses)
                 {
                     if (access.texture.id < reg_textures.size())
@@ -501,7 +497,7 @@ namespace tempest::render_graph
                     .pipeline_stats_flags = pass.pipeline_statistics,
                 });
 
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
                 cmd.end_debug_region();
 #endif
             }
@@ -639,7 +635,7 @@ namespace tempest::render_graph
             const rhi::command_list* cmds[] = {&cmd};
             const auto submit_res = port.submit(span<const rhi::command_list*>{cmds}, wait_sync, signal_sync);
 
-#if defined(TEMPEST_ENABLE_DEBUG_MARKERS)
+#ifdef TEMPEST_ENABLE_DEBUG_MARKERS
             port.end_debug_region();
 #endif
 

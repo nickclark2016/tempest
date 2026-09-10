@@ -14,6 +14,11 @@
 #include <tempest/string.hpp>
 #include <tempest/vector.hpp>
 
+namespace tempest
+{
+    class logger;
+}
+
 namespace tempest::rhi
 {
     class context;
@@ -326,7 +331,7 @@ namespace tempest::rhi
         pipeline_statistics,
     };
 
-    enum class pipeline_statistic_flags : uint32_t
+    enum class pipeline_statistic_flags : uint16_t
     {
         none = 0x00,
         input_assembly_vertices = 0x01,
@@ -347,7 +352,7 @@ namespace tempest::rhi
         query_type type{query_type::timestamp};
         uint32_t query_count{0};
         enum_mask<pipeline_statistic_flags> pipeline_statistics{pipeline_statistic_flags::none};
-        cstring_view name{};
+        cstring_view name;
     };
 
     enum class pipeline_stage : uint32_t
@@ -804,6 +809,7 @@ namespace tempest::rhi
         virtual auto end_query([[maybe_unused]] query_pool_handle pool, [[maybe_unused]] uint32_t query_index) -> void
         {
         }
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
         virtual auto reset_query_pool([[maybe_unused]] query_pool_handle pool, [[maybe_unused]] uint32_t first_query,
                                       [[maybe_unused]] uint32_t query_count) -> void
         {
@@ -914,7 +920,8 @@ namespace tempest::rhi
         context() = default;
     };
 
-    TEMPEST_API auto create_context(const context_desc& desc) -> expected<unique_ptr<context>, context_creation_error>;
+    TEMPEST_API auto create_context(const context_desc& desc, logger& log)
+        -> expected<unique_ptr<context>, context_creation_error>;
 
     enum class surface_color_space : uint8_t
     {
@@ -1077,6 +1084,7 @@ namespace tempest::rhi
         {
         }
         virtual auto get_query_pool_results([[maybe_unused]] query_pool_handle pool,
+                                            // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                             [[maybe_unused]] uint32_t first_query,
                                             [[maybe_unused]] uint32_t query_count,
                                             [[maybe_unused]] span<uint64_t> results, [[maybe_unused]] bool wait = false)

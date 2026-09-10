@@ -42,7 +42,7 @@ TEST(string_view, construct_with_literal)
 
 TEST(string_view, construct_from_string)
 {
-    std::string s = "hello";
+    tempest::string s = "hello";
     tempest::string_view sv(s);
 
     EXPECT_EQ(sv.length(), 5);
@@ -78,7 +78,7 @@ TEST(string_view, construct_from_string_view)
 
 TEST(string_view, construct_from_iterators)
 {
-    std::string s = "hello";
+    tempest::string s = "hello";
     tempest::string_view sv(s.begin(), s.end());
 
     EXPECT_EQ(sv.length(), 5);

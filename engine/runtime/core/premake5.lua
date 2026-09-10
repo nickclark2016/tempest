@@ -37,7 +37,7 @@ scoped.project('core', function()
     externalwarnings 'Off'
     warnings 'Extra'
 
-    uses { 'glfw', 'tlsf' }
+    uses { 'glfw', 'tlsf', 'yyjson' }
 
     scoped.filter({
         'options:shared-engine',
@@ -88,7 +88,17 @@ scoped.project('core', function()
             'core',
             'glfw',
             'tlsf',
+            'yyjson',
         }
+
+        scoped.filter({
+            'system:windows',
+            'toolset:not msc*'
+        }, function()
+            links {
+                'bcrypt',
+            }
+        end)
     end)
 end)
 

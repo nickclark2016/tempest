@@ -8,6 +8,7 @@
 #include <tempest/iterator.hpp>
 #include <tempest/span.hpp>
 #include <tempest/type_traits.hpp>
+#include <tempest/utility.hpp>
 #include <tempest/vector.hpp>
 
 namespace tempest
@@ -17,14 +18,14 @@ namespace tempest
                              is_same_v<remove_cvref_t<T>, char8_t> || is_same_v<remove_cvref_t<T>, char16_t> ||
                              is_same_v<remove_cvref_t<T>, char32_t>;
 
-    inline void* memmove(void* dst, const void* src, size_t count)
+    inline auto memmove(void* dst, const void* src, size_t count) -> void*
     {
         auto* dst_ptr = reinterpret_cast<byte*>(dst);
         const auto* src_ptr = reinterpret_cast<const byte*>(src);
 
         if (dst_ptr < src_ptr)
         {
-            while (count--)
+            while ((count--) != 0U)
             {
                 *dst_ptr++ = *src_ptr++;
             }
@@ -34,7 +35,7 @@ namespace tempest
             dst_ptr += (count - 1);
             src_ptr += (count - 1);
 
-            while (count--)
+            while ((count--) != 0U)
             {
                 *dst_ptr-- = *src_ptr--;
             }
@@ -56,27 +57,27 @@ namespace tempest
         using pos_type = long long;
 
         static constexpr void assign(char_type& c1, const char_type& c2) noexcept;
-        static constexpr char_type* assign(char_type* s, size_t n, char_type a);
+        static constexpr auto assign(char_type* s, size_t n, char_type a) -> char_type*;
 
-        static constexpr bool eq(char_type a, char_type b) noexcept;
-        static constexpr bool lt(char_type a, char_type b) noexcept;
+        static constexpr auto eq(char_type a, char_type b) noexcept -> bool;
+        static constexpr auto lt(char_type a, char_type b) noexcept -> bool;
 
-        static constexpr char_type* move(char_type* dest, const char_type* src, size_t count);
-        static constexpr char_type* copy(char_type* dest, const char_type* src, size_t count);
+        static constexpr auto move(char_type* dest, const char_type* src, size_t count) -> char_type*;
+        static constexpr auto copy(char_type* dest, const char_type* src, size_t count) -> char_type*;
 
-        static constexpr int compare(const char_type* s1, const char_type* s2, size_t count);
-        static constexpr size_t length(const char_type* s);
+        static constexpr auto compare(const char_type* s1, const char_type* s2, size_t count) -> int;
+        static constexpr auto length(const char_type* s) -> size_t;
 
-        static constexpr const char_type* find(const char_type* ptr, size_t count, const char_type& ch);
+        static constexpr auto find(const char_type* ptr, size_t count, const char_type& ch) -> const char_type*;
 
-        static constexpr char_type to_char_type(int_type c) noexcept;
-        static constexpr int_type to_int_type(char_type c) noexcept;
+        static constexpr auto to_char_type(int_type c) noexcept -> char_type;
+        static constexpr auto to_int_type(char_type c) noexcept -> int_type;
 
-        static constexpr bool eq_int_type(int_type c1, int_type c2) noexcept;
+        static constexpr auto eq_int_type(int_type c1, int_type c2) noexcept -> bool;
 
-        static constexpr int_type eof() noexcept;
+        static constexpr auto eof() noexcept -> int_type;
 
-        static constexpr int_type not_eof(int_type c) noexcept;
+        static constexpr auto not_eof(int_type c) noexcept -> int_type;
     };
 
     template <>
@@ -89,35 +90,35 @@ namespace tempest
         using pos_type = long long;
 
         static constexpr void assign(char_type& c1, const char_type& c2) noexcept;
-        static constexpr char_type* assign(char_type* s, size_t n, char_type a);
+        static constexpr auto assign(char_type* s, size_t n, char_type a) -> char_type*;
 
-        static constexpr bool eq(char_type a, char_type b) noexcept;
-        static constexpr bool lt(char_type a, char_type b) noexcept;
+        static constexpr auto eq(char_type a, char_type b) noexcept -> bool;
+        static constexpr auto lt(char_type a, char_type b) noexcept -> bool;
 
-        static constexpr char_type* move(char_type* dest, const char_type* src, size_t count);
-        static constexpr char_type* copy(char_type* dest, const char_type* src, size_t count);
+        static constexpr auto move(char_type* dest, const char_type* src, size_t count) -> char_type*;
+        static constexpr auto copy(char_type* dest, const char_type* src, size_t count) -> char_type*;
 
-        static constexpr int compare(const char_type* s1, const char_type* s2, size_t count);
-        static constexpr size_t length(const char_type* s);
+        static constexpr auto compare(const char_type* s1, const char_type* s2, size_t count) -> int;
+        static constexpr auto length(const char_type* s) -> size_t;
 
-        static constexpr const char_type* find(const char_type* ptr, size_t count, const char_type& ch);
+        static constexpr auto find(const char_type* ptr, size_t count, const char_type& ch) -> const char_type*;
 
-        static constexpr char_type to_char_type(int_type c) noexcept;
-        static constexpr int_type to_int_type(char_type c) noexcept;
+        static constexpr auto to_char_type(int_type c) noexcept -> char_type;
+        static constexpr auto to_int_type(char_type c) noexcept -> int_type;
 
-        static constexpr bool eq_int_type(int_type c1, int_type c2) noexcept;
+        static constexpr auto eq_int_type(int_type c1, int_type c2) noexcept -> bool;
 
-        static constexpr int_type eof() noexcept;
+        static constexpr auto eof() noexcept -> int_type;
 
-        static constexpr int_type not_eof(int_type c) noexcept;
+        static constexpr auto not_eof(int_type c) noexcept -> int_type;
     };
 
-    inline constexpr void char_traits<char>::assign(char_type& c1, const char_type& c2) noexcept
+    constexpr void char_traits<char>::assign(char_type& c1, const char_type& c2) noexcept
     {
         c1 = c2;
     }
 
-    inline constexpr char_traits<char>::char_type* char_traits<char>::assign(char_type* s, size_t n, char_type a)
+    constexpr auto char_traits<char>::assign(char_type* s, size_t n, char_type a) -> char_traits<char>::char_type*
     {
         for (size_t i = 0; i < n; ++i)
         {
@@ -126,18 +127,18 @@ namespace tempest
         return s;
     }
 
-    inline constexpr bool char_traits<char>::eq(char_type a, char_type b) noexcept
+    constexpr auto char_traits<char>::eq(char_type a, char_type b) noexcept -> bool
     {
         return a == b;
     }
 
-    inline constexpr bool char_traits<char>::lt(char_type a, char_type b) noexcept
+    constexpr auto char_traits<char>::lt(char_type a, char_type b) noexcept -> bool
     {
         return a < b;
     }
 
-    inline constexpr char_traits<char>::char_type* char_traits<char>::move(char_type* dest, const char_type* src,
-                                                                           size_t count)
+    constexpr auto char_traits<char>::move(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<char>::char_type*
     {
         // For constant expressions, we need to fall back to a less efficient implementation to correctly handle
         // overlapping regions of memory.
@@ -162,22 +163,20 @@ namespace tempest
                 }
                 return dest;
             }
-            else
+
+            for (size_t i = count; i != 0; --i)
             {
-                for (size_t i = count; i != 0; --i)
-                {
-                    dest[i - 1] = src[i - 1];
-                }
-                return dest;
+                dest[i - 1] = src[i - 1];
             }
+            return dest;
         }
 
         (void)memmove(dest, src, count);
         return dest;
     }
 
-    inline constexpr char_traits<char>::char_type* char_traits<char>::copy(char_type* dest, const char_type* src,
-                                                                           size_t count)
+    constexpr auto char_traits<char>::copy(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<char>::char_type*
     {
         // Assume: No overlapping regions
         for (size_t i = 0; i < count; ++i)
@@ -188,7 +187,7 @@ namespace tempest
         return dest;
     }
 
-    inline constexpr int char_traits<char>::compare(const char_type* s1, const char_type* s2, size_t count)
+    constexpr auto char_traits<char>::compare(const char_type* s1, const char_type* s2, size_t count) -> int
     {
         for (size_t i = 0; i < count; ++i)
         {
@@ -202,7 +201,7 @@ namespace tempest
         return 0;
     }
 
-    inline constexpr size_t char_traits<char>::length(const char_type* s)
+    constexpr auto char_traits<char>::length(const char_type* s) -> size_t
     {
         size_t len = 0;
         while (s[len] != char_type())
@@ -212,8 +211,8 @@ namespace tempest
         return len;
     }
 
-    inline constexpr const char_traits<char>::char_type* char_traits<char>::find(const char_type* ptr, size_t count,
-                                                                                 const char_type& ch)
+    constexpr auto char_traits<char>::find(const char_type* ptr, size_t count, const char_type& ch)
+        -> const char_traits<char>::char_type*
     {
         for (size_t i = 0; i < count; ++i)
         {
@@ -226,37 +225,37 @@ namespace tempest
         return nullptr;
     }
 
-    inline constexpr char_traits<char>::char_type char_traits<char>::to_char_type(int_type c) noexcept
+    constexpr auto char_traits<char>::to_char_type(int_type c) noexcept -> char_traits<char>::char_type
     {
         return static_cast<char_type>(c);
     }
 
-    inline constexpr char_traits<char>::int_type char_traits<char>::to_int_type(char_type c) noexcept
+    constexpr auto char_traits<char>::to_int_type(char_type c) noexcept -> char_traits<char>::int_type
     {
         return static_cast<int_type>(c);
     }
 
-    inline constexpr bool char_traits<char>::eq_int_type(int_type c1, int_type c2) noexcept
+    constexpr auto char_traits<char>::eq_int_type(int_type c1, int_type c2) noexcept -> bool
     {
         return c1 == c2;
     }
 
-    inline constexpr char_traits<char>::int_type char_traits<char>::eof() noexcept
+    constexpr auto char_traits<char>::eof() noexcept -> char_traits<char>::int_type
     {
         return -1; // EOF is -1
     }
 
-    inline constexpr char_traits<char>::int_type char_traits<char>::not_eof(int_type c) noexcept
+    constexpr auto char_traits<char>::not_eof(int_type c) noexcept -> char_traits<char>::int_type
     {
-        return c != eof() ? c : !eof();
+        return c != eof() ? c : static_cast<int>(static_cast<int>(eof()) == 0);
     }
 
-    inline constexpr void char_traits<wchar_t>::assign(char_type& c1, const char_type& c2) noexcept
+    constexpr void char_traits<wchar_t>::assign(char_type& c1, const char_type& c2) noexcept
     {
         c1 = c2;
     }
 
-    inline constexpr char_traits<wchar_t>::char_type* char_traits<wchar_t>::assign(char_type* s, size_t n, char_type c)
+    constexpr auto char_traits<wchar_t>::assign(char_type* s, size_t n, char_type c) -> char_traits<wchar_t>::char_type*
     {
         for (size_t i = 0; i < n; ++i)
         {
@@ -266,18 +265,18 @@ namespace tempest
         return s;
     }
 
-    inline constexpr bool char_traits<wchar_t>::eq(char_type a, char_type b) noexcept
+    constexpr auto char_traits<wchar_t>::eq(char_type a, char_type b) noexcept -> bool
     {
         return a == b;
     }
 
-    inline constexpr bool char_traits<wchar_t>::lt(char_type a, char_type b) noexcept
+    constexpr auto char_traits<wchar_t>::lt(char_type a, char_type b) noexcept -> bool
     {
         return a < b;
     }
 
-    inline constexpr char_traits<wchar_t>::char_type* char_traits<wchar_t>::move(char_type* dest, const char_type* src,
-                                                                                 size_t count)
+    constexpr auto char_traits<wchar_t>::move(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<wchar_t>::char_type*
     {
         // For constant expressions, we need to fall back to a less efficient implementation to correctly handle
         // overlapping regions of memory.
@@ -302,22 +301,20 @@ namespace tempest
                 }
                 return dest;
             }
-            else
+
+            for (size_t i = count; i != 0; --i)
             {
-                for (size_t i = count; i != 0; --i)
-                {
-                    dest[i - 1] = src[i - 1];
-                }
-                return dest;
+                dest[i - 1] = src[i - 1];
             }
+            return dest;
         }
 
         (void)memmove(dest, src, count * sizeof(wchar_t));
         return dest;
     }
 
-    inline constexpr char_traits<wchar_t>::char_type* char_traits<wchar_t>::copy(char_type* dest, const char_type* src,
-                                                                                 size_t count)
+    constexpr auto char_traits<wchar_t>::copy(char_type* dest, const char_type* src, size_t count)
+        -> char_traits<wchar_t>::char_type*
     {
         // Assume: No overlapping regions
         for (size_t i = 0; i < count; ++i)
@@ -327,7 +324,7 @@ namespace tempest
         return dest;
     }
 
-    inline constexpr int char_traits<wchar_t>::compare(const char_type* s1, const char_type* s2, size_t count)
+    constexpr auto char_traits<wchar_t>::compare(const char_type* s1, const char_type* s2, size_t count) -> int
     {
         for (size_t i = 0; i < count; ++i)
         {
@@ -340,7 +337,7 @@ namespace tempest
         return 0;
     }
 
-    inline constexpr size_t char_traits<wchar_t>::length(const char_type* s)
+    constexpr auto char_traits<wchar_t>::length(const char_type* s) -> size_t
     {
         size_t len = 0;
         while (s[len] != char_type())
@@ -350,9 +347,8 @@ namespace tempest
         return len;
     }
 
-    inline constexpr const char_traits<wchar_t>::char_type* char_traits<wchar_t>::find(const char_type* ptr,
-                                                                                       size_t count,
-                                                                                       const char_type& ch)
+    constexpr auto char_traits<wchar_t>::find(const char_type* ptr, size_t count, const char_type& ch)
+        -> const char_traits<wchar_t>::char_type*
     {
         for (size_t i = 0; i < count; ++i)
         {
@@ -364,22 +360,22 @@ namespace tempest
         return nullptr;
     }
 
-    inline constexpr char_traits<wchar_t>::char_type char_traits<wchar_t>::to_char_type(int_type c) noexcept
+    constexpr auto char_traits<wchar_t>::to_char_type(int_type c) noexcept -> char_traits<wchar_t>::char_type
     {
         return static_cast<char_type>(c);
     }
 
-    inline constexpr char_traits<wchar_t>::int_type char_traits<wchar_t>::to_int_type(char_type c) noexcept
+    constexpr auto char_traits<wchar_t>::to_int_type(char_type c) noexcept -> char_traits<wchar_t>::int_type
     {
         return static_cast<int_type>(c);
     }
 
-    inline constexpr bool char_traits<wchar_t>::eq_int_type(int_type c1, int_type c2) noexcept
+    constexpr auto char_traits<wchar_t>::eq_int_type(int_type c1, int_type c2) noexcept -> bool
     {
         return c1 == c2;
     }
 
-    inline constexpr char_traits<wchar_t>::int_type char_traits<wchar_t>::eof() noexcept
+    constexpr auto char_traits<wchar_t>::eof() noexcept -> char_traits<wchar_t>::int_type
     {
         return static_cast<char_traits<wchar_t>::int_type>(-1); // EOF is -1
     }
@@ -387,12 +383,12 @@ namespace tempest
     namespace detail
     {
         template <typename CharT, typename Traits>
-        constexpr typename Traits::int_type bad_character_heuristic(const CharT* str, size_t size,
-                                                                    span<typename Traits::int_type> table)
+        constexpr auto bad_character_heuristic(const CharT* str, size_t size, span<typename Traits::int_type> table)
+            -> Traits::int_type
         {
             for (auto& entry : table)
             {
-                entry = static_cast<typename Traits::int_type>(-1);
+                entry = static_cast<Traits::int_type>(-1);
             }
 
             auto min_el = min_element(str, str + size);
@@ -412,12 +408,12 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr typename Traits::int_type reverse_bad_character_heuristic(const CharT* str, size_t size,
-                                                                            span<typename Traits::int_type> table)
+        constexpr auto reverse_bad_character_heuristic(const CharT* str, size_t size,
+                                                       span<typename Traits::int_type> table) -> Traits::int_type
         {
             for (auto& entry : table)
             {
-                entry = static_cast<typename Traits::int_type>(-1);
+                entry = static_cast<Traits::int_type>(-1);
             }
 
             auto min_el = min_element(str, str + size);
@@ -437,12 +433,12 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr const CharT* boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern,
-                                                  size_t pattern_len, span<typename Traits::int_type> bad_char_table)
+        constexpr auto boyer_moore_helper(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len,
+                                          span<typename Traits::int_type> bad_char_table) -> const CharT*
         {
             auto min_value = bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
 
-            for (ptrdiff_t s = 0; s <= static_cast<ptrdiff_t>(str_len - pattern_len);)
+            for (ptrdiff_t s = 0; tempest::cmp_less_equal(s, str_len - pattern_len);)
             {
                 ptrdiff_t p = static_cast<ptrdiff_t>(pattern_len) - 1;
 
@@ -471,9 +467,9 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr const CharT* reverse_boyer_more_helper(const CharT* str, size_t str_len, const CharT* pattern,
-                                                         size_t pattern_len,
-                                                         span<typename Traits::int_type> bad_char_table)
+        constexpr auto reverse_boyer_more_helper(const CharT* str, size_t str_len, const CharT* pattern,
+                                                 size_t pattern_len, span<typename Traits::int_type> bad_char_table)
+            -> const CharT*
         {
             auto s_pattern_len = static_cast<ptrdiff_t>(pattern_len);
             auto min_value = reverse_bad_character_heuristic<CharT, Traits>(pattern, pattern_len, bad_char_table);
@@ -507,7 +503,8 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr const CharT* boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+        constexpr auto boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+            -> const CharT*
         {
             if constexpr (sizeof(CharT) == 1)
             {
@@ -526,8 +523,8 @@ namespace tempest
         }
 
         template <typename CharT, typename Traits>
-        constexpr const CharT* reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern,
-                                                   size_t pattern_len)
+        constexpr auto reverse_boyer_moore(const CharT* str, size_t str_len, const CharT* pattern, size_t pattern_len)
+            -> const CharT*
         {
             if constexpr (sizeof(CharT) == 1)
             {
@@ -547,7 +544,7 @@ namespace tempest
     } // namespace detail
 
     template <typename It, character_type CharT>
-    constexpr It search(It first, It last, CharT ch)
+    constexpr auto search(It first, It last, CharT ch) -> It
     {
         while (first != last && *first != ch)
         {
@@ -558,9 +555,9 @@ namespace tempest
     }
 
     template <typename It, character_type CharT>
-    constexpr It search(It first, It last, const CharT* s, size_t count)
+    constexpr auto search(It first, It last, const CharT* s, size_t count) -> It
     {
-        using char_t = typename iterator_traits<It>::value_type;
+        using char_t = iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto first_char_ptr = detail::boyer_moore<char_t, traits_t>(&(*first), last - first, s, count);
@@ -571,9 +568,9 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr It search(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto search(It first, It last, It2 p_first, It2 p_last) -> It
     {
-        using char_t = typename iterator_traits<It>::value_type;
+        using char_t = iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto first_char_ptr =
@@ -585,7 +582,7 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr It search_first_of(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto search_first_of(It first, It last, It2 p_first, It2 p_last) -> It
     {
         // Fast path for 8 bit characters
         if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
@@ -633,14 +630,14 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_first_of(It first, It last, const CharT* s, size_t count)
+    constexpr auto search_first_of(It first, It last, const CharT* s, size_t count) -> It
     {
         return search_first_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_first_of(It first, It last, const CharT* s)
+    constexpr auto search_first_of(It first, It last, const CharT* s) -> It
     {
         using traits = char_traits<CharT>;
         return search_first_of(first, last, s, traits::length(s));
@@ -648,7 +645,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_first_of(It first, It last, CharT ch)
+    constexpr auto search_first_of(It first, It last, CharT ch) -> It
     {
         for (; first != last; ++first)
         {
@@ -663,7 +660,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It reverse_search(It first, It last, CharT ch)
+    constexpr auto reverse_search(It first, It last, CharT ch) -> It
     {
         for (auto it = last; it != first;)
         {
@@ -680,9 +677,9 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr It reverse_search(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto reverse_search(It first, It last, It2 p_first, It2 p_last) -> It
     {
-        using char_t = typename iterator_traits<It>::value_type;
+        using char_t = iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto last_char_ptr =
@@ -693,9 +690,9 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It reverse_search(It first, It last, const CharT* s, size_t count)
+    constexpr auto reverse_search(It first, It last, const CharT* s, size_t count) -> It
     {
-        using char_t = typename iterator_traits<It>::value_type;
+        using char_t = iterator_traits<It>::value_type;
         using traits_t = char_traits<char_t>;
 
         auto last_char_ptr = detail::reverse_boyer_moore<char_t, traits_t>(&(*first), last - first, s, count);
@@ -705,7 +702,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It reverse_search(It first, It last, const CharT* s)
+    constexpr auto reverse_search(It first, It last, const CharT* s) -> It
     {
         using traits = char_traits<CharT>;
         return reverse_search(first, last, s, traits::length(s));
@@ -713,7 +710,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_last_of(It first, It last, CharT ch)
+    constexpr auto search_last_of(It first, It last, CharT ch) -> It
     {
         return reverse_search(first, last, ch);
     }
@@ -721,7 +718,7 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr It search_last_of(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto search_last_of(It first, It last, It2 p_first, It2 p_last) -> It
     {
         // Fast path for 8 bit characters
         if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
@@ -772,14 +769,14 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_last_of(It first, It last, const CharT* s, size_t count)
+    constexpr auto search_last_of(It first, It last, const CharT* s, size_t count) -> It
     {
         return search_last_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_last_of(It first, It last, const CharT* s)
+    constexpr auto search_last_of(It first, It last, const CharT* s) -> It
     {
         using traits = char_traits<CharT>;
         return search_last_of(first, last, s, traits::length(s));
@@ -787,7 +784,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_first_not_of(It first, It last, CharT ch)
+    constexpr auto search_first_not_of(It first, It last, CharT ch) -> It
     {
         for (; first != last; ++first)
         {
@@ -803,7 +800,7 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr It search_first_not_of(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto search_first_not_of(It first, It last, It2 p_first, It2 p_last) -> It
     {
         // Fast path for 8 bit characters
         if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
@@ -859,7 +856,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_first_not_of(It first, It last, const CharT* s)
+    constexpr auto search_first_not_of(It first, It last, const CharT* s) -> It
     {
         using traits = char_traits<CharT>;
         return search_first_not_of(first, last, s, traits::length(s));
@@ -867,14 +864,14 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_first_not_of(It first, It last, const CharT* s, size_t count)
+    constexpr auto search_first_not_of(It first, It last, const CharT* s, size_t count) -> It
     {
         return search_first_not_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_last_not_of(It first, It last, CharT ch)
+    constexpr auto search_last_not_of(It first, It last, CharT ch) -> It
     {
         for (auto it = last; it != first;)
         {
@@ -891,7 +888,7 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr It search_last_not_of(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto search_last_not_of(It first, It last, It2 p_first, It2 p_last) -> It
     {
         // Fast path for 8 bit characters
         if constexpr (sizeof(typename iterator_traits<It>::value_type) == 1)
@@ -949,14 +946,14 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_last_not_of(It first, It last, const CharT* s, size_t count)
+    constexpr auto search_last_not_of(It first, It last, const CharT* s, size_t count) -> It
     {
         return search_last_not_of(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr It search_last_not_of(It first, It last, const CharT* s)
+    constexpr auto search_last_not_of(It first, It last, const CharT* s) -> It
     {
         using traits = char_traits<CharT>;
         return search_last_not_of(first, last, s, traits::length(s));
@@ -964,14 +961,14 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool starts_with(It first, It last, CharT ch)
+    constexpr auto starts_with(It first, It last, CharT ch) -> bool
     {
         return first != last && *first == ch;
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool starts_with(It first, It last, const CharT* s)
+    constexpr auto starts_with(It first, It last, const CharT* s) -> bool
     {
         using traits = char_traits<CharT>;
         auto len = traits::length(s);
@@ -982,7 +979,7 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr bool starts_with(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto starts_with(It first, It last, It2 p_first, It2 p_last) -> bool
     {
         while (first != last && p_first != p_last)
         {
@@ -1000,14 +997,14 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool starts_with(It first, It last, const CharT* s, size_t count)
+    constexpr auto starts_with(It first, It last, const CharT* s, size_t count) -> bool
     {
         return starts_with(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool ends_with(It first, It last, CharT ch)
+    constexpr auto ends_with(It first, It last, CharT ch) -> bool
     {
         if (first == last)
         {
@@ -1021,7 +1018,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool ends_with(It first, It last, const CharT* s)
+    constexpr auto ends_with(It first, It last, const CharT* s) -> bool
     {
         using traits = char_traits<CharT>;
         auto len = traits::length(s);
@@ -1032,7 +1029,7 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr bool ends_with(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto ends_with(It first, It last, It2 p_first, It2 p_last) -> bool
     {
         if (distance(first, last) < distance(p_first, p_last))
         {
@@ -1058,21 +1055,21 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool ends_with(It first, It last, const CharT* s, size_t count)
+    constexpr auto ends_with(It first, It last, const CharT* s, size_t count) -> bool
     {
         return ends_with(first, last, s, s + count);
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool contains(It first, It last, CharT ch)
+    constexpr auto contains(It first, It last, CharT ch) -> bool
     {
         return search(first, last, ch) != last;
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool contains(It first, It last, const CharT* s)
+    constexpr auto contains(It first, It last, const CharT* s) -> bool
     {
         using traits = char_traits<CharT>;
         auto len = traits::length(s);
@@ -1082,7 +1079,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr bool contains(It first, It last, const CharT* s, size_t count)
+    constexpr auto contains(It first, It last, const CharT* s, size_t count) -> bool
     {
         return search(first, last, s, s + count) != last;
     }
@@ -1090,14 +1087,14 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr bool contains(It first, It last, It2 p_first, It2 p_last)
+    constexpr auto contains(It first, It last, It2 p_first, It2 p_last) -> bool
     {
         return search(first, last, p_first, p_last) != last;
     }
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr int compare(It first1, It last1, const CharT* s)
+    constexpr auto compare(It first1, It last1, const CharT* s) -> int
     {
         using traits = char_traits<CharT>;
         auto len = traits::length(s);
@@ -1107,7 +1104,7 @@ namespace tempest
 
     template <typename It, character_type CharT>
         requires character_type<typename iterator_traits<It>::value_type>
-    constexpr int compare(It first1, It last1, const CharT* s, size_t count)
+    constexpr auto compare(It first1, It last1, const CharT* s, size_t count) -> int
     {
         return compare(first1, last1, s, s + count);
     }
@@ -1115,7 +1112,7 @@ namespace tempest
     template <typename It, typename It2>
         requires character_type<typename iterator_traits<It>::value_type> &&
                  character_type<typename iterator_traits<It2>::value_type>
-    constexpr int compare(It first1, It last1, It2 first2, It2 last2)
+    constexpr auto compare(It first1, It last1, It2 first2, It2 last2) -> int
     {
         while (first1 != last1 && first2 != last2)
         {

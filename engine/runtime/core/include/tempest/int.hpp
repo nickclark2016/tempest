@@ -15,7 +15,7 @@ namespace tempest
     /// @brief 64 bit floating point type.
     using float64_t = double;
 
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 
     /// @brief 8 bit signed integer type.
     using int8_t = signed char;
@@ -78,6 +78,18 @@ namespace tempest
     /// @brief Unsigned integer type capable of holding a pointer.
     using uintptr_t = decltype(sizeof(static_cast<void*>(nullptr)));
 
+    /// @brief Maximum value of an unsigned integer capable of holding a pointer.
+    inline constexpr uintptr_t uintptr_max = (~static_cast<uintptr_t>(0));
+
+    /// @brief Maximum-width signed integer type.
+    using intmax_t = int64_t;
+
+    /// @brief Maximum-width unsigned integer type.
+    using uintmax_t = uint64_t;
+
+    /// @brief Number of bits in a byte.
+    inline constexpr size_t char_bit = 8;
+
     /// @brief Integer type representing a byte as specified by the C++ language standard.
     enum class byte : unsigned char
     {
@@ -85,63 +97,63 @@ namespace tempest
 
     /// @brief Converts a byte to an integer type.
     /// @tparam T The integer type to convert to.
-    /// @param b The byte to convert.
+    /// @param byte_val The byte to convert.
     /// @return The byte converted to the specified integer type.
     template <typename T>
-    constexpr T to_integer(byte b) noexcept
+    constexpr auto to_integer(byte byte_val) noexcept -> T
     {
-        return static_cast<T>(b);
+        return static_cast<T>(byte_val);
     }
 
     /// @brief Left shift assignment operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr byte& operator<<=(byte& b, T shift) noexcept
+    constexpr auto operator<<=(byte& byte_val, T shift) noexcept -> byte&
     {
-        return b = byte(to_integer<unsigned int>(b) << shift);
+        return byte_val = byte(to_integer<unsigned int>(byte_val) << shift);
     }
 
     /// @brief Right shift assignment operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr byte& operator>>=(byte& b, T shift) noexcept
+    constexpr auto operator>>=(byte& byte_val, T shift) noexcept -> byte&
     {
-        return b = byte(to_integer<unsigned int>(b) >> shift);
+        return byte_val = byte(to_integer<unsigned int>(byte_val) >> shift);
     }
 
     /// @brief Left shift operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr byte operator<<(byte b, T shift) noexcept
+    constexpr auto operator<<(byte byte_val, T shift) noexcept -> byte
     {
-        return byte(to_integer<unsigned int>(b) << shift);
+        return byte(to_integer<unsigned int>(byte_val) << shift);
     }
 
     /// @brief Right shift operator for byte.
     /// @tparam T The type to shift by.
-    /// @param b The byte to shift.
+    /// @param byte_val The byte to shift.
     /// @param shift The amount to shift by.
     /// @return The byte shifted by the specified amount.
     template <typename T>
-    constexpr byte operator>>(byte b, T shift) noexcept
+    constexpr auto operator>>(byte byte_val, T shift) noexcept -> byte
     {
-        return byte(to_integer<unsigned int>(b) >> shift);
+        return byte(to_integer<unsigned int>(byte_val) >> shift);
     }
 
     /// @brief Bitwise AND assignment operator for byte.
     /// @param lhs The left hand side byte.
     /// @param rhs The right hand side byte.
     /// @return The result of the bitwise AND operation.
-    constexpr byte& operator&=(byte& lhs, byte rhs) noexcept
+    constexpr auto operator&=(byte& lhs, byte rhs) noexcept -> byte&
     {
         return lhs = byte(to_integer<unsigned int>(lhs) & to_integer<unsigned int>(rhs));
     }
@@ -150,7 +162,7 @@ namespace tempest
     /// @param lhs The left hand side byte.
     /// @param rhs The right hand side byte.
     /// @return The result of the bitwise OR operation.
-    constexpr byte& operator|=(byte& lhs, byte rhs) noexcept
+    constexpr auto operator|=(byte& lhs, byte rhs) noexcept -> byte&
     {
         return lhs = byte(to_integer<unsigned int>(lhs) | to_integer<unsigned int>(rhs));
     }
@@ -159,7 +171,7 @@ namespace tempest
     /// @param lhs The left hand side byte.
     /// @param rhs The right hand side byte.
     /// @return The result of the bitwise XOR operation.
-    constexpr byte& operator^=(byte& lhs, byte rhs) noexcept
+    constexpr auto operator^=(byte& lhs, byte rhs) noexcept -> byte&
     {
         return lhs = byte(to_integer<unsigned int>(lhs) ^ to_integer<unsigned int>(rhs));
     }
@@ -168,7 +180,7 @@ namespace tempest
     /// @param lhs The left hand side byte.
     /// @param rhs The right hand side byte.
     /// @return The result of the bitwise AND operation.
-    constexpr byte operator&(byte lhs, byte rhs) noexcept
+    constexpr auto operator&(byte lhs, byte rhs) noexcept -> byte
     {
         return byte(to_integer<unsigned int>(lhs) & to_integer<unsigned int>(rhs));
     }
@@ -177,7 +189,7 @@ namespace tempest
     /// @param lhs The left hand side byte.
     /// @param rhs The right hand side byte.
     /// @return The result of the bitwise OR operation.
-    constexpr byte operator|(byte lhs, byte rhs) noexcept
+    constexpr auto operator|(byte lhs, byte rhs) noexcept -> byte
     {
         return byte(to_integer<unsigned int>(lhs) | to_integer<unsigned int>(rhs));
     }
@@ -186,17 +198,17 @@ namespace tempest
     /// @param lhs The left hand side byte.
     /// @param rhs The right hand side byte.
     /// @return The result of the bitwise XOR operation.
-    constexpr byte operator^(byte lhs, byte rhs) noexcept
+    constexpr auto operator^(byte lhs, byte rhs) noexcept -> byte
     {
         return byte(to_integer<unsigned int>(lhs) ^ to_integer<unsigned int>(rhs));
     }
 
     /// @brief Bitwise NOT operator for byte.
-    /// @param b The byte to invert.
+    /// @param byte_val The byte to invert.
     /// @return The inverted byte.
-    constexpr byte operator~(byte b) noexcept
+    constexpr auto operator~(byte byte_val) noexcept -> byte
     {
-        return byte(~to_integer<unsigned int>(b));
+        return byte(~to_integer<unsigned int>(byte_val));
     }
 } // namespace tempest
 

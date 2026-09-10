@@ -697,7 +697,7 @@ TEST(type_traits, is_trivial)
 
     struct NonTrivial
     {
-        NonTrivial()
+        NonTrivial() // NOLINT(modernize-use-equals-default)
         {
         }
     };
@@ -715,7 +715,7 @@ TEST(type_traits, is_trivially_copyable)
 
     struct NonTriviallyCopyable
     {
-        NonTriviallyCopyable(const NonTriviallyCopyable&)
+        NonTriviallyCopyable(const NonTriviallyCopyable& /*unused*/) // NOLINT(modernize-use-equals-default)
         {
         }
     };
@@ -827,9 +827,7 @@ TEST(type_traits, is_aggregate)
 
     struct NonAggregate
     {
-        NonAggregate()
-        {
-        }
+        NonAggregate() = default;
     };
     result = tempest::is_aggregate<NonAggregate>::value;
     EXPECT_FALSE(result);
@@ -968,7 +966,7 @@ TEST(type_traits, is_constructible)
 {
     struct Foo
     {
-        Foo(int)
+        Foo(int /*unused*/)
         {
         }
     };
@@ -997,7 +995,7 @@ TEST(type_traits, is_trivially_constructible)
 {
     struct Foo
     {
-        Foo(int)
+        Foo(int /*unused*/)
         {
         }
     };
@@ -1026,7 +1024,7 @@ TEST(type_traits, is_nothrow_constructible)
 {
     struct Foo
     {
-        Foo(int) noexcept
+        Foo(int /*unused*/) noexcept
         {
         }
     };
@@ -1062,7 +1060,7 @@ TEST(type_traits, is_default_constructible)
 {
     struct Foo
     {
-        Foo(int)
+        Foo(int /*unused*/)
         {
         }
     };
@@ -1086,7 +1084,7 @@ TEST(type_traits, is_default_constructible)
     // Check with default argument in constructor
     struct Qux
     {
-        Qux(int = 0)
+        Qux(int /*unused*/ = 0)
         {
         }
     };
@@ -1098,7 +1096,7 @@ TEST(type_traits, is_trivially_default_constructible)
 {
     struct Foo
     {
-        Foo(int)
+        Foo(int /*unused*/)
         {
         }
     };
@@ -1122,7 +1120,7 @@ TEST(type_traits, is_trivially_default_constructible)
     // Check with default argument in constructor
     struct Qux
     {
-        Qux(int = 0)
+        Qux(int /*unused*/ = 0)
         {
         }
     };
@@ -1134,7 +1132,7 @@ TEST(type_traits, is_nothrow_default_constructible)
 {
     struct Foo
     {
-        Foo(int) noexcept
+        Foo(int /*unused*/) noexcept
         {
         }
     };
@@ -1167,9 +1165,7 @@ TEST(type_traits, is_copy_constructible)
 {
     struct Foo
     {
-        Foo(const Foo&)
-        {
-        }
+        Foo(const Foo& /*unused*/) = default;
     };
     auto result = tempest::is_copy_constructible<Foo>::value;
     EXPECT_TRUE(result);
@@ -1200,7 +1196,7 @@ TEST(type_traits, is_trivially_copy_constructible)
 {
     struct Foo
     {
-        Foo(const Foo&)
+        Foo(const Foo& /*unused*/) // NOLINT(modernize-use-equals-default)
         {
         }
     };
@@ -1233,9 +1229,7 @@ TEST(type_traits, is_nothrow_copy_constructible)
 {
     struct Foo
     {
-        Foo(const Foo&) noexcept
-        {
-        }
+        Foo(const Foo& /*unused*/) noexcept = default;
     };
     auto result = tempest::is_nothrow_copy_constructible<Foo>::value;
     EXPECT_TRUE(result);
@@ -1266,7 +1260,7 @@ TEST(type_traits, is_move_constructible)
 {
     struct Foo
     {
-        Foo(Foo&&)
+        Foo(Foo&& /*unused*/) noexcept
         {
         }
     };
@@ -1299,7 +1293,7 @@ TEST(type_traits, is_trivially_move_constructible)
 {
     struct Foo
     {
-        Foo(Foo&&)
+        Foo(Foo&& /*unused*/) noexcept
         {
         }
     };
@@ -1332,7 +1326,7 @@ TEST(type_traits, is_nothrow_move_constructible)
 {
     struct Foo
     {
-        Foo(Foo&&) noexcept
+        Foo(Foo&& /*unused*/) noexcept
         {
         }
     };
@@ -1365,10 +1359,7 @@ TEST(type_traits, is_assignable)
 {
     struct Foo
     {
-        Foo& operator=(const Foo&)
-        {
-            return *this;
-        }
+        auto operator=(const Foo& /*unused*/) -> Foo& = default;
     };
     auto result = tempest::is_assignable<Foo, Foo>::value;
     EXPECT_TRUE(result);
@@ -1389,7 +1380,7 @@ TEST(type_traits, is_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) = delete;
+        auto operator=(Qux&&) -> Qux& = delete;
     };
     result = tempest::is_assignable<Qux, Qux>::value;
     EXPECT_FALSE(result);
@@ -1397,7 +1388,7 @@ TEST(type_traits, is_assignable)
     // Assign from a type not matching the assignment operator
     struct Quux
     {
-        Quux& operator=(int)
+        auto operator=(int /*unused*/) -> Quux&
         {
             return *this;
         }
@@ -1408,7 +1399,7 @@ TEST(type_traits, is_assignable)
     // Assign from a type matching the assignment operator
     struct Quuux
     {
-        Quuux& operator=(int)
+        auto operator=(int /*unused*/) -> Quuux&
         {
             return *this;
         }
@@ -1421,7 +1412,7 @@ TEST(type_traits, is_trivially_assignable)
 {
     struct Foo
     {
-        Foo& operator=(const Foo&)
+        auto operator=(const Foo& /*unused*/) -> Foo& // NOLINT(modernize-use-equals-default)
         {
             return *this;
         }
@@ -1445,7 +1436,7 @@ TEST(type_traits, is_trivially_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) = delete;
+        auto operator=(Qux&&) -> Qux& = delete;
     };
     result = tempest::is_trivially_assignable<Qux, Qux>::value;
     EXPECT_FALSE(result);
@@ -1453,7 +1444,7 @@ TEST(type_traits, is_trivially_assignable)
     // Assign from a type not matching the assignment operator
     struct Quux
     {
-        Quux& operator=(int)
+        auto operator=(int /*unused*/) -> Quux&
         {
             return *this;
         }
@@ -1464,7 +1455,7 @@ TEST(type_traits, is_trivially_assignable)
     // Assign from a type matching the assignment operator
     struct Quuux
     {
-        Quuux& operator=(int)
+        auto operator=(int /*unused*/) -> Quuux&
         {
             return *this;
         }
@@ -1477,10 +1468,7 @@ TEST(type_traits, is_nothrow_assignable)
 {
     struct Foo
     {
-        Foo& operator=(const Foo&) noexcept
-        {
-            return *this;
-        }
+        auto operator=(const Foo& /*unused*/) noexcept -> Foo& = default;
     };
     auto result = tempest::is_nothrow_assignable<Foo, Foo>::value;
     EXPECT_TRUE(result);
@@ -1501,7 +1489,7 @@ TEST(type_traits, is_nothrow_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) noexcept = delete;
+        auto operator=(Qux&&) noexcept -> Qux& = delete;
     };
     result = tempest::is_nothrow_assignable<Qux, Qux>::value;
     EXPECT_FALSE(result);
@@ -1511,10 +1499,7 @@ TEST(type_traits, is_copy_assignable)
 {
     struct Foo
     {
-        Foo& operator=(const Foo&)
-        {
-            return *this;
-        }
+        auto operator=(const Foo& /*unused*/) -> Foo& = default;
     };
     auto result = tempest::is_copy_assignable<Foo>::value;
     EXPECT_TRUE(result);
@@ -1535,14 +1520,14 @@ TEST(type_traits, is_copy_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) = delete;
+        auto operator=(Qux&&) -> Qux& = delete;
     };
     result = tempest::is_copy_assignable<Qux>::value;
     EXPECT_FALSE(result);
 
     struct Quux
     {
-        Quux& operator=(const Quux&) = delete;
+        auto operator=(const Quux&) -> Quux& = delete;
     };
     result = tempest::is_copy_assignable<Quux>::value;
     EXPECT_FALSE(result);
@@ -1552,7 +1537,7 @@ TEST(type_traits, is_trivially_copy_assignable)
 {
     struct Foo
     {
-        Foo& operator=(const Foo&)
+        auto operator=(const Foo& /*unused*/) -> Foo& // NOLINT(modernize-use-equals-default)
         {
             return *this;
         }
@@ -1576,14 +1561,14 @@ TEST(type_traits, is_trivially_copy_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) = delete;
+        auto operator=(Qux&&) -> Qux& = delete;
     };
     result = tempest::is_trivially_copy_assignable<Qux>::value;
     EXPECT_FALSE(result);
 
     struct Quux
     {
-        Quux& operator=(const Quux&) = delete;
+        auto operator=(const Quux&) -> Quux& = delete;
     };
     result = tempest::is_trivially_copy_assignable<Quux>::value;
     EXPECT_FALSE(result);
@@ -1593,10 +1578,7 @@ TEST(type_traits, is_nothrow_copy_assignable)
 {
     struct Foo
     {
-        Foo& operator=(const Foo&) noexcept
-        {
-            return *this;
-        }
+        auto operator=(const Foo& /*unused*/) noexcept -> Foo& = default;
     };
     auto result = tempest::is_nothrow_copy_assignable<Foo>::value;
     EXPECT_TRUE(result);
@@ -1617,14 +1599,14 @@ TEST(type_traits, is_nothrow_copy_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) noexcept = delete;
+        auto operator=(Qux&&) noexcept -> Qux& = delete;
     };
     result = tempest::is_nothrow_copy_assignable<Qux>::value;
     EXPECT_FALSE(result);
 
     struct Quux
     {
-        Quux& operator=(const Quux&) noexcept = delete;
+        auto operator=(const Quux&) noexcept -> Quux& = delete;
     };
     result = tempest::is_nothrow_copy_assignable<Quux>::value;
     EXPECT_FALSE(result);
@@ -1640,10 +1622,7 @@ TEST(type_traits, is_nothrow_copy_assignable)
 
     struct Quuuux
     {
-        Quuuux& operator=(const Quuuux&) noexcept(false)
-        {
-            return *this;
-        }
+        auto operator=(const Quuuux& /*unused*/) noexcept(false) -> Quuuux& = default;
     };
     result = tempest::is_nothrow_copy_assignable<Quuuux>::value;
     EXPECT_FALSE(result);
@@ -1653,7 +1632,7 @@ TEST(type_traits, is_move_assignable)
 {
     struct Foo
     {
-        Foo& operator=(Foo&&)
+        auto operator=(Foo&& /*unused*/) noexcept -> Foo&
         {
             return *this;
         }
@@ -1677,7 +1656,7 @@ TEST(type_traits, is_move_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) = delete;
+        auto operator=(Qux&&) -> Qux& = delete;
     };
     result = tempest::is_move_assignable<Qux>::value;
     EXPECT_FALSE(result);
@@ -1687,7 +1666,7 @@ TEST(type_traits, is_trivially_move_assignable)
 {
     struct Foo
     {
-        Foo& operator=(Foo&&)
+        auto operator=(Foo&& /*unused*/) noexcept -> Foo&
         {
             return *this;
         }
@@ -1711,7 +1690,7 @@ TEST(type_traits, is_trivially_move_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) = delete;
+        auto operator=(Qux&&) -> Qux& = delete;
     };
     result = tempest::is_trivially_move_assignable<Qux>::value;
     EXPECT_FALSE(result);
@@ -1721,7 +1700,7 @@ TEST(type_traits, is_nothrow_move_assignable)
 {
     struct Foo
     {
-        Foo& operator=(Foo&&) noexcept
+        auto operator=(Foo&& /*unused*/) noexcept -> Foo&
         {
             return *this;
         }
@@ -1745,7 +1724,7 @@ TEST(type_traits, is_nothrow_move_assignable)
 
     struct Qux
     {
-        Qux& operator=(Qux&&) noexcept = delete;
+        auto operator=(Qux&&) noexcept -> Qux& = delete;
     };
     result = tempest::is_nothrow_move_assignable<Qux>::value;
     EXPECT_FALSE(result);
@@ -1761,7 +1740,7 @@ TEST(type_traits, is_nothrow_move_assignable)
 
     struct Quuux
     {
-        Quuux& operator=(Quuux&&) noexcept(false)
+        auto operator=(Quuux&& /*unused*/) noexcept(false) -> Quuux&
         {
             return *this;
         }
@@ -1774,9 +1753,7 @@ TEST(type_traits, is_destructible)
 {
     struct Foo
     {
-        ~Foo()
-        {
-        }
+        ~Foo() = default;
     };
     auto result = tempest::is_destructible<Foo>::value;
     EXPECT_TRUE(result);
@@ -1807,7 +1784,7 @@ TEST(type_traits, is_trivially_destructible)
 {
     struct Foo
     {
-        ~Foo()
+        ~Foo() // NOLINT(modernize-use-equals-default)
         {
         }
     };
@@ -1840,9 +1817,7 @@ TEST(type_traits, is_nothrow_destructible)
 {
     struct Foo
     {
-        ~Foo() noexcept
-        {
-        }
+        ~Foo() noexcept = default;
     };
     auto result = tempest::is_nothrow_destructible<Foo>::value;
     EXPECT_TRUE(result);
@@ -1873,9 +1848,7 @@ TEST(type_traits, has_virtual_destructor)
 {
     struct Foo
     {
-        virtual ~Foo()
-        {
-        }
+        virtual ~Foo() = default;
     };
     auto result = tempest::has_virtual_destructor<Foo>::value;
     EXPECT_TRUE(result);
@@ -1907,12 +1880,12 @@ namespace
         int b;
     };
 
-    void swap(SwappableType1& lhs, SwappableType1& rhs)
+    void swap(SwappableType1& lhs, SwappableType1& rhs) noexcept
     {
         tempest::swap(lhs.a, rhs.a);
     }
 
-    void swap(SwappableType2& lhs, SwappableType2& rhs)
+    void swap(SwappableType2& lhs, SwappableType2& rhs) noexcept
     {
         tempest::swap(lhs.b, rhs.b);
     }
@@ -1936,17 +1909,17 @@ namespace
     {
     };
 
-    void swap(NothrowSwappableType1&, NothrowSwappableType1&) noexcept
+    void swap(NothrowSwappableType1& /*unused*/, NothrowSwappableType1& /*unused*/) noexcept
     {
     }
-    void swap(NothrowSwappableType2&, NothrowSwappableType2&) noexcept
+    void swap(NothrowSwappableType2& /*unused*/, NothrowSwappableType2& /*unused*/) noexcept
     {
     }
     // Swap with each other
-    void swap(NothrowSwappableType1&, NothrowSwappableType2&) noexcept
+    void swap(NothrowSwappableType1& /*unused*/, NothrowSwappableType2& /*unused*/) noexcept
     {
     }
-    void swap(NothrowSwappableType2&, NothrowSwappableType1&) noexcept
+    void swap(NothrowSwappableType2& /*unused*/, NothrowSwappableType1& /*unused*/) noexcept
     {
     }
 } // namespace
@@ -2102,7 +2075,7 @@ TEST(type_traits, is_nothrow_swappable)
     struct Bar
     {
         Bar() = default;
-        Bar& operator=(Bar&&) noexcept(false)
+        auto operator=(Bar&& /*unused*/) noexcept(false) -> Bar&
         {
             return *this;
         }
@@ -2222,7 +2195,7 @@ TEST(type_traits, is_convertible)
     {
         operator Foo() const
         {
-            return Foo();
+            return {};
         }
     };
     auto result = tempest::is_convertible<Bar, Foo>::value;
@@ -2239,7 +2212,7 @@ TEST(type_traits, is_convertible)
     {
         operator Foo() const
         {
-            return Foo();
+            return {};
         };
     };
     result = tempest::is_convertible<Qux, Foo>::value;
@@ -2255,7 +2228,7 @@ TEST(type_traits, is_convertible_fallback)
     {
         operator Foo() const
         {
-            return Foo();
+            return {};
         }
     };
     auto result = tempest::detail::is_convertible_fallback<Bar, Foo>::value;
@@ -2272,7 +2245,7 @@ TEST(type_traits, is_convertible_fallback)
     {
         operator Foo() const
         {
-            return Foo();
+            return {};
         };
     };
     result = tempest::detail::is_convertible_fallback<Qux, Foo>::value;
@@ -2288,7 +2261,7 @@ TEST(type_traits, is_nothrow_convertible)
     {
         operator Foo() const noexcept
         {
-            return Foo();
+            return {};
         }
     };
     auto result = tempest::is_nothrow_convertible<Bar, Foo>::value;
@@ -2305,7 +2278,7 @@ TEST(type_traits, is_nothrow_convertible)
     {
         operator Foo() const noexcept
         {
-            return Foo();
+            return {};
         };
     };
     result = tempest::is_nothrow_convertible<Qux, Foo>::value;
@@ -2321,7 +2294,7 @@ TEST(type_traits, is_nothrow_convertible_fallback)
     {
         operator Foo() const noexcept
         {
-            return Foo();
+            return {};
         }
     };
     auto result = tempest::detail::is_nothrow_convertible_fallback<Bar, Foo>::value;
@@ -2338,7 +2311,7 @@ TEST(type_traits, is_nothrow_convertible_fallback)
     {
         operator Foo() const noexcept
         {
-            return Foo();
+            return {};
         };
     };
     result = tempest::detail::is_nothrow_convertible_fallback<Qux, Foo>::value;
@@ -2422,7 +2395,7 @@ TEST(type_traits, is_invocable)
 
     struct Bar
     {
-        void operator()(int)
+        void operator()(int /*unused*/)
         {
         }
     };
@@ -2444,7 +2417,7 @@ TEST(type_traits, is_invocable_r)
 {
     struct Foo
     {
-        int operator()()
+        auto operator()() -> int
         {
             return 0;
         }
@@ -2463,14 +2436,14 @@ TEST(type_traits, is_invocable_r)
 
     struct Baz
     {
-        int operator()() = delete;
+        auto operator()() -> int = delete;
     };
     result = tempest::is_invocable_r<int, Baz>::value;
     EXPECT_FALSE(result);
 
     struct Qux
     {
-        int operator()()
+        auto operator()() -> int
         {
             return 0;
         }
@@ -2515,7 +2488,7 @@ TEST(type_traits, is_nothrow_invocable_r)
 {
     struct Foo
     {
-        int operator()() noexcept
+        auto operator()() noexcept -> int
         {
             return 0;
         }
@@ -2534,14 +2507,14 @@ TEST(type_traits, is_nothrow_invocable_r)
 
     struct Baz
     {
-        int operator()() noexcept = delete;
+        auto operator()() noexcept -> int = delete;
     };
     result = tempest::is_nothrow_invocable_r<int, Baz>::value;
     EXPECT_FALSE(result);
 
     struct Qux
     {
-        int operator()() noexcept
+        auto operator()() noexcept -> int
         {
             return 0;
         }
@@ -2556,43 +2529,43 @@ TEST(type_traits, is_nothrow_invocable_r)
 
 TEST(type_traits, remove_extent)
 {
-    auto result = std::is_same<tempest::remove_extent<int>::type, int>::value;
+    auto result = tempest::is_same<tempest::remove_extent<int>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_extent<int[]>::type, int>::value;
+    result = tempest::is_same<tempest::remove_extent<int[]>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_extent<int[5]>::type, int>::value;
+    result = tempest::is_same<tempest::remove_extent<int[5]>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_extent<int[][5]>::type, int[5]>::value;
+    result = tempest::is_same<tempest::remove_extent<int[][5]>::type, int[5]>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_extent<int[5][5]>::type, int[5]>::value;
+    result = tempest::is_same<tempest::remove_extent<int[5][5]>::type, int[5]>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_extent<int[][5][5]>::type, int[5][5]>::value;
+    result = tempest::is_same<tempest::remove_extent<int[][5][5]>::type, int[5][5]>::value;
     EXPECT_TRUE(result);
 }
 
 TEST(type_traits, remove_all_extents)
 {
-    auto result = std::is_same<tempest::remove_all_extents<int>::type, int>::value;
+    auto result = tempest::is_same<tempest::remove_all_extents<int>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_all_extents<int[]>::type, int>::value;
+    result = tempest::is_same<tempest::remove_all_extents<int[]>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_all_extents<int[5]>::type, int>::value;
+    result = tempest::is_same<tempest::remove_all_extents<int[5]>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_all_extents<int[][5]>::type, int>::value;
+    result = tempest::is_same<tempest::remove_all_extents<int[][5]>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_all_extents<int[5][5]>::type, int>::value;
+    result = tempest::is_same<tempest::remove_all_extents<int[5][5]>::type, int>::value;
     EXPECT_TRUE(result);
 
-    result = std::is_same<tempest::remove_all_extents<int[][5][5]>::type, int>::value;
+    result = tempest::is_same<tempest::remove_all_extents<int[][5][5]>::type, int>::value;
     EXPECT_TRUE(result);
 }
 
@@ -2648,9 +2621,15 @@ TEST(type_traits, common_type)
 
 TEST(type_traits, common_reference)
 {
-    class A {};
-    class B : public A {};
-    class C : public A {};
+    class A
+    {
+    };
+    class B : public A
+    {
+    };
+    class C : public A
+    {
+    };
 
     auto result = tempest::is_same<tempest::common_reference<A, B>::type, A>::value;
     EXPECT_TRUE(result);
@@ -2664,7 +2643,9 @@ TEST(type_traits, common_reference)
     result = tempest::is_same<tempest::common_reference<A&, B&>::type, A&>::value;
     EXPECT_TRUE(result);
 
-    class D : public B {};
+    class D : public B
+    {
+    };
     result = tempest::is_same<tempest::common_reference<A, B, D>::type, A>::value;
     EXPECT_TRUE(result);
 

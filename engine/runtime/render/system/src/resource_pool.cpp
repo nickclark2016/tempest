@@ -1,6 +1,6 @@
 #include <tempest/render_system/resource_pool.hpp>
 
-#include <cstring>
+#include <tempest/utility.hpp>
 #include <tempest/algorithm.hpp>
 #include <tempest/bit.hpp>
 
@@ -42,10 +42,10 @@ namespace tempest::render_system
             for (uint32_t dst_mip = first_generated_mip; dst_mip < total_texture_mips; ++dst_mip)
             {
                 const auto src_mip = dst_mip - 1;
-                const auto src_w = tempest::max(1u, width >> src_mip);
-                const auto src_h = tempest::max(1u, height >> src_mip);
-                const auto dst_w = tempest::max(1u, width >> dst_mip);
-                const auto dst_h = tempest::max(1u, height >> dst_mip);
+                const auto src_w = tempest::max(1U, width >> src_mip);
+                const auto src_h = tempest::max(1U, height >> src_mip);
+                const auto dst_w = tempest::max(1U, width >> dst_mip);
+                const auto dst_h = tempest::max(1U, height >> dst_mip);
 
                 const auto blit_reg = rhi::texture_blit_region{
                     .src_subresource =
@@ -56,8 +56,8 @@ namespace tempest::render_system
                         },
                     .src_offsets =
                         {
-                            rhi::offset_3d{0, 0, 0},
-                            rhi::offset_3d{static_cast<int32_t>(src_w), static_cast<int32_t>(src_h), 1},
+                            rhi::offset_3d{.x=0, .y=0, .z=0},
+                            rhi::offset_3d{.x=static_cast<int32_t>(src_w), .y=static_cast<int32_t>(src_h), .z=1},
                         },
                     .dst_subresource =
                         {
@@ -67,8 +67,8 @@ namespace tempest::render_system
                         },
                     .dst_offsets =
                         {
-                            rhi::offset_3d{0, 0, 0},
-                            rhi::offset_3d{static_cast<int32_t>(dst_w), static_cast<int32_t>(dst_h), 1},
+                            rhi::offset_3d{.x=0, .y=0, .z=0},
+                            rhi::offset_3d{.x=static_cast<int32_t>(dst_w), .y=static_cast<int32_t>(dst_h), .z=1},
                         },
                 };
 
@@ -165,7 +165,7 @@ namespace tempest::render_system
         other._draw_commands_buffer = {};
     }
 
-    resource_pool& resource_pool::operator=(resource_pool&& other) noexcept
+    auto resource_pool::operator=(resource_pool&& other) noexcept -> resource_pool&
     {
         if (this != &other)
         {
@@ -214,7 +214,7 @@ namespace tempest::render_system
 
     void resource_pool::_init_buffers()
     {
-        if (!_device)
+        if (_device == nullptr)
         {
             return;
         }
@@ -297,7 +297,7 @@ namespace tempest::render_system
 
     void resource_pool::_init_samplers()
     {
-        if (!_device)
+        if (_device == nullptr)
         {
             return;
         }
@@ -385,7 +385,7 @@ namespace tempest::render_system
             // 1. Positions
             for (uint32_t i = 0; i < vtx_count; ++i)
             {
-                auto* pos_dst = reinterpret_cast<float*>(current_staging + pos_offset + i * 3 * sizeof(float));
+                auto* pos_dst = reinterpret_cast<float*>(current_staging + pos_offset + (i * 3 * sizeof(float)));
                 pos_dst[0] = m.vertices[i].position.x;
                 pos_dst[1] = m.vertices[i].position.y;
                 pos_dst[2] = m.vertices[i].position.z;
@@ -394,7 +394,7 @@ namespace tempest::render_system
             // 2. Interleaved: uv, normal, tangent, color
             for (uint32_t i = 0; i < vtx_count; ++i)
             {
-                auto* attr_dst = reinterpret_cast<float*>(current_staging + interleave_offset + i * stride);
+                auto* attr_dst = reinterpret_cast<float*>(current_staging + interleave_offset + (i * stride));
                 // UV0 (offset 0)
                 attr_dst[0] = m.vertices[i].uv.x;
                 attr_dst[1] = m.vertices[i].uv.y;
@@ -417,7 +417,7 @@ namespace tempest::render_system
             // 3. Indices
             if (idx_count > 0)
             {
-                std::memcpy(current_staging + idx_offset, m.indices.data(), idx_size);
+                tempest::memcpy(current_staging + idx_offset, m.indices.data(), idx_size);
             }
 
             auto layout = mesh_layout{
@@ -439,7 +439,7 @@ namespace tempest::render_system
             _mesh_layouts[id] = layout;
             newly_loaded_layouts.push_back(layout);
 
-            if (_mesh_table_buffer.cpu_address && mesh_idx < _cfg.max_mesh_count)
+            if ((_mesh_table_buffer.cpu_address != nullptr) && mesh_idx < _cfg.max_mesh_count)
             {
                 static_cast<mesh_layout*>(_mesh_table_buffer.cpu_address)[mesh_idx] = layout;
             }
@@ -453,7 +453,7 @@ namespace tempest::render_system
             // Record transfer pass in render graph
             graph.add_transfer_pass<mesh_upload_pass_data>(
                 "MeshUploadTransferPass",
-                [this](render_graph::pass_builder& builder, mesh_upload_pass_data& data) {
+                [this](render_graph::pass_builder& builder, mesh_upload_pass_data& data) -> void {
                     data.staging = builder.import_buffer(_staging_buffer);
                     data.vtx_buf = builder.import_buffer(_vertex_buffer);
                     builder.read(data.staging, rhi::pipeline_stage::copy, rhi::resource_access::read);
@@ -462,7 +462,7 @@ namespace tempest::render_system
                 },
                 [this, staging_byte_offset]([[maybe_unused]] const mesh_upload_pass_data& data,
                                             [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                                            rhi::command_list& cmd) {
+                                            rhi::command_list& cmd) -> void {
                     const auto region = rhi::buffer_copy_region{
                         .src_offset = 0,
                         .dst_offset = _vertex_bytes_allocated - staging_byte_offset,
@@ -585,7 +585,7 @@ namespace tempest::render_system
             _material_indices[id] = mat_idx;
             _materials[id] = payload;
 
-            if (_material_table_buffer.cpu_address && mat_idx < _cfg.max_material_count)
+            if ((_material_table_buffer.cpu_address != nullptr) && mat_idx < _cfg.max_material_count)
             {
                 static_cast<material_payload*>(_material_table_buffer.cpu_address)[mat_idx] = payload;
             }
@@ -595,7 +595,7 @@ namespace tempest::render_system
     void resource_pool::load_textures(span<const guid> texture_ids, const core::texture_registry& registry,
                                       render_graph::render_graph& graph, mipmap_generation_mode mip_mode)
     {
-        if (!_device)
+        if (_device == nullptr)
         {
             return;
         }
@@ -630,8 +630,8 @@ namespace tempest::render_system
 
             const auto full_mips = (t.width > 0 && t.height > 0)
                                        ? static_cast<uint32_t>(tempest::bit_width(tempest::min(t.width, t.height)))
-                                       : 1u;
-            const auto full_mip_count = tempest::max(1u, full_mips);
+                                       : 1U;
+            const auto full_mip_count = tempest::max(1U, full_mips);
             const auto asset_mips_count = static_cast<uint32_t>(t.mips.size());
 
             uint32_t total_texture_mips = asset_mips_count;
@@ -727,7 +727,7 @@ namespace tempest::render_system
                 {
                     if (!t.mips[i].data.empty())
                     {
-                        std::memcpy(staging_ptr + staging_offset, t.mips[i].data.data(), t.mips[i].data.size());
+                        tempest::memcpy(staging_ptr + staging_offset, t.mips[i].data.data(), t.mips[i].data.size());
                         staging_offset += t.mips[i].data.size();
                     }
                 }
@@ -742,7 +742,7 @@ namespace tempest::render_system
                 graph.add_graphics_pass<tex_upload_pass_data>(
                     "TextureUploadPass",
                     [staging, tex_handle, view_handle, generate_mips](render_graph::pass_builder& builder,
-                                                                      tex_upload_pass_data& data) {
+                                                                      tex_upload_pass_data& data) -> void {
                         data.staging = builder.import_buffer(staging);
                         data.tex = builder.import_texture(tex_handle, view_handle, rhi::image_layout::undefined);
                         builder.read(data.staging, rhi::pipeline_stage::copy, rhi::resource_access::read);
@@ -757,14 +757,14 @@ namespace tempest::render_system
                     [staging, tex_handle, w = t.width, h = t.height, mips_to_upload, generate_mips, first_generated_mip,
                      total_texture_mips, mip_sizes]([[maybe_unused]] const tex_upload_pass_data& data,
                                                     [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                                                    rhi::command_list& cmd) {
+                                                    rhi::command_list& cmd) -> void {
                         auto copy_regions = vector<rhi::buffer_texture_copy_region>{};
                         copy_regions.reserve(mips_to_upload);
                         uint64_t current_buf_offset = 0;
                         for (uint32_t i = 0; i < mips_to_upload; ++i)
                         {
-                            const auto mip_w = tempest::max(1u, w >> i);
-                            const auto mip_h = tempest::max(1u, h >> i);
+                            const auto mip_w = tempest::max(1U, w >> i);
+                            const auto mip_h = tempest::max(1U, h >> i);
                             copy_regions.push_back(rhi::buffer_texture_copy_region{
                                 .buffer_offset = current_buf_offset,
                                 .buffer_row_length = 0,
@@ -814,7 +814,7 @@ namespace tempest::render_system
         auto it = _mesh_indices.find(id);
         if (it != _mesh_indices.end())
         {
-            return _mesh_table_buffer.gpu_address + it->second * sizeof(mesh_layout);
+            return _mesh_table_buffer.gpu_address + (it->second * sizeof(mesh_layout));
         }
         return 0;
     }
@@ -824,7 +824,7 @@ namespace tempest::render_system
         auto it = _material_indices.find(id);
         if (it != _material_indices.end())
         {
-            return _material_table_buffer.gpu_address + it->second * sizeof(material_payload);
+            return _material_table_buffer.gpu_address + (it->second * sizeof(material_payload));
         }
         return 0;
     }
@@ -871,31 +871,31 @@ namespace tempest::render_system
 
     auto resource_pool::get_scene_constants_address() const noexcept -> uint64_t
     {
-        return _scene_constants_buffer.gpu_address + static_cast<uint64_t>(_frame_slot) * sizeof(scene_constants);
+        return _scene_constants_buffer.gpu_address + (static_cast<uint64_t>(_frame_slot) * sizeof(scene_constants));
     }
 
     auto resource_pool::get_directional_shadow_address() const noexcept -> uint64_t
     {
         return _directional_shadow_buffer.gpu_address +
-               static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data);
+               (static_cast<uint64_t>(_frame_slot) * sizeof(directional_shadow_data));
     }
 
     auto resource_pool::get_lights_buffer_address() const noexcept -> uint64_t
     {
         return _lights_buffer.gpu_address +
-               static_cast<uint64_t>(_frame_slot) * sizeof(light_payload) * _cfg.max_lights;
+               (static_cast<uint64_t>(_frame_slot) * sizeof(light_payload) * _cfg.max_lights);
     }
 
     auto resource_pool::get_object_buffer_address() const noexcept -> uint64_t
     {
         return _object_buffer.gpu_address +
-               static_cast<uint64_t>(_frame_slot) * sizeof(object_payload) * _cfg.max_object_count;
+               (static_cast<uint64_t>(_frame_slot) * sizeof(object_payload) * _cfg.max_object_count);
     }
 
     auto resource_pool::get_instance_buffer_address() const noexcept -> uint64_t
     {
         return _instance_buffer.gpu_address +
-               static_cast<uint64_t>(_frame_slot) * sizeof(uint32_t) * _cfg.max_instance_count;
+               (static_cast<uint64_t>(_frame_slot) * sizeof(uint32_t) * _cfg.max_instance_count);
     }
 
     auto resource_pool::get_draw_commands_buffer_offset() const noexcept -> uint64_t
@@ -943,63 +943,63 @@ namespace tempest::render_system
 
     void resource_pool::write_scene_constants(const scene_constants& constants)
     {
-        if (_scene_constants_buffer.cpu_address)
+        if (_scene_constants_buffer.cpu_address != nullptr)
         {
             auto* dst = static_cast<scene_constants*>(_scene_constants_buffer.cpu_address) + _frame_slot;
-            std::memcpy(dst, &constants, sizeof(constants));
+            tempest::memcpy(dst, &constants, sizeof(constants));
         }
     }
 
     void resource_pool::write_directional_shadow_data(const directional_shadow_data& data)
     {
-        if (_directional_shadow_buffer.cpu_address)
+        if (_directional_shadow_buffer.cpu_address != nullptr)
         {
             auto* dst = static_cast<directional_shadow_data*>(_directional_shadow_buffer.cpu_address) + _frame_slot;
-            std::memcpy(dst, &data, sizeof(data));
+            tempest::memcpy(dst, &data, sizeof(data));
         }
     }
 
     void resource_pool::write_lights(span<const light_payload> lights)
     {
-        if (_lights_buffer.cpu_address && !lights.empty())
+        if ((_lights_buffer.cpu_address != nullptr) && !lights.empty())
         {
             const auto count = tempest::min(lights.size(), static_cast<size_t>(_cfg.max_lights));
             auto* dst = static_cast<light_payload*>(_lights_buffer.cpu_address) +
-                        static_cast<size_t>(_frame_slot) * _cfg.max_lights;
-            std::memcpy(dst, lights.data(), count * sizeof(light_payload));
+                        (static_cast<size_t>(_frame_slot) * _cfg.max_lights);
+            tempest::memcpy(dst, lights.data(), count * sizeof(light_payload));
         }
     }
 
     void resource_pool::write_objects(span<const object_payload> objects)
     {
-        if (_object_buffer.cpu_address && !objects.empty())
+        if ((_object_buffer.cpu_address != nullptr) && !objects.empty())
         {
             const auto count = tempest::min(objects.size(), static_cast<size_t>(_cfg.max_object_count));
             auto* dst = static_cast<object_payload*>(_object_buffer.cpu_address) +
-                        static_cast<size_t>(_frame_slot) * _cfg.max_object_count;
-            std::memcpy(dst, objects.data(), count * sizeof(object_payload));
+                        (static_cast<size_t>(_frame_slot) * _cfg.max_object_count);
+            tempest::memcpy(dst, objects.data(), count * sizeof(object_payload));
         }
     }
 
     void resource_pool::write_instances(span<const uint32_t> instances)
     {
-        if (_instance_buffer.cpu_address && !instances.empty())
+        if ((_instance_buffer.cpu_address != nullptr) && !instances.empty())
         {
             const auto count = tempest::min(instances.size(), static_cast<size_t>(_cfg.max_instance_count));
             auto* dst = static_cast<uint32_t*>(_instance_buffer.cpu_address) +
-                        static_cast<size_t>(_frame_slot) * _cfg.max_instance_count;
-            std::memcpy(dst, instances.data(), count * sizeof(uint32_t));
+                        (static_cast<size_t>(_frame_slot) * _cfg.max_instance_count);
+            tempest::memcpy(dst, instances.data(), count * sizeof(uint32_t));
         }
     }
 
     void resource_pool::write_draw_commands(span<const indexed_indirect_command> commands)
     {
-        if (_draw_commands_buffer.cpu_address && !commands.empty())
+        if ((_draw_commands_buffer.cpu_address != nullptr) && !commands.empty())
         {
             const auto count = tempest::min(commands.size(), static_cast<size_t>(_cfg.max_draw_command_count));
             auto* dst = static_cast<indexed_indirect_command*>(_draw_commands_buffer.cpu_address) +
-                        static_cast<size_t>(_frame_slot) * _cfg.max_draw_command_count;
-            std::memcpy(dst, commands.data(), count * sizeof(indexed_indirect_command));
+                        (static_cast<size_t>(_frame_slot) * _cfg.max_draw_command_count);
+            tempest::memcpy(dst, commands.data(), count * sizeof(indexed_indirect_command));
         }
     }
 
@@ -1025,7 +1025,7 @@ namespace tempest::render_system
 
     void resource_pool::clear_staging_buffers()
     {
-        if (_device)
+        if (_device != nullptr)
         {
             for (auto& buf : _staging_buffers_to_free)
             {
@@ -1042,7 +1042,7 @@ namespace tempest::render_system
     {
         clear_staging_buffers();
 
-        if (!_device)
+        if (_device == nullptr)
         {
             return;
         }
@@ -1086,7 +1086,7 @@ namespace tempest::render_system
             _point_sampler = {};
         }
 
-        auto destroy_buf = [this](rhi::buffer_handle& buf) {
+        auto destroy_buf = [this](rhi::buffer_handle& buf) -> void {
             if (buf.handle != 0)
             {
                 _device->destroy_buffer(buf);

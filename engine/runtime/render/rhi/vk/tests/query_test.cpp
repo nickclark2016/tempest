@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <tempest/array.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/span.hpp>
 #include <tempest/vector.hpp>
 #include <tempest/vk/calibration.hpp>
@@ -38,11 +39,14 @@ namespace tempest::rhi::vk
 
         auto create_test_env() -> test_env
         {
+            static auto test_sink = stdout_log_sink{};
+            static auto test_log = logger{test_sink};
+
             auto ctx_desc = context_desc{};
             ctx_desc.application_name = "Tempest Query Test";
             ctx_desc.api = graphics_api::vulkan;
 
-            auto result = vk::create_context(ctx_desc);
+            auto result = vk::create_context(ctx_desc, test_log);
             if (!result.has_value())
             {
                 return {};
@@ -70,6 +74,8 @@ namespace tempest::rhi::vk
             float a;
         };
     } // namespace
+
+    // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
     // =========================================================================
     // GPU Queries & Timestamp Monotonicity Tests
@@ -288,23 +294,23 @@ namespace tempest::rhi::vk
             .store_op = store_op::store,
             .clear_value =
                 clear_color_value{
-                    .r = 0.0f,
-                    .g = 0.0f,
-                    .b = 0.0f,
-                    .a = 1.0f,
+                    .r = 0.0F,
+                    .g = 0.0F,
+                    .b = 0.0F,
+                    .a = 1.0F,
                 },
         };
 
         cmd.begin_render_pass(span<const color_attachment>{&color_att, 1}, nullopt, width, height);
-        cmd.set_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
+        cmd.set_viewport(0.0F, 0.0F, static_cast<float>(width), static_cast<float>(height), 0.0F, 1.0F);
         cmd.set_scissor(0, 0, width, height);
         cmd.bind_pipeline(pipe);
 
         const auto tint = raster_push_constants{
-            .r = 1.0f,
-            .g = 1.0f,
-            .b = 1.0f,
-            .a = 1.0f,
+            .r = 1.0F,
+            .g = 1.0F,
+            .b = 1.0F,
+            .a = 1.0F,
         };
         cmd.push_constants(shader_stage::vertex, 0,
                            span<const byte>{reinterpret_cast<const byte*>(&tint), sizeof(tint)});
@@ -574,4 +580,6 @@ namespace tempest::rhi::vk
         dev->destroy_semaphore(timeline_sem);
         dev->destroy_query_pool(pool);
     }
+
+    // NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 } // namespace tempest::rhi::vk

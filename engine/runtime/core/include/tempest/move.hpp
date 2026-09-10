@@ -14,7 +14,7 @@ namespace tempest
 #if defined(_MSC_VER) && !defined(__clang__)
     [[msvc::intrinsic]]
 #endif
-    inline constexpr remove_reference_t<T>&& move(T&& t) noexcept
+    constexpr auto move(T&& t) noexcept -> remove_reference_t<T>&&
     {
         return static_cast<remove_reference_t<T>&&>(t);
     }

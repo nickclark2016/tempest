@@ -18,7 +18,6 @@ scoped.project('assets', function()
 
     uses {
         'stb',
-        'simdjson',
         'tinyexr',
     }
 
@@ -58,7 +57,6 @@ scoped.project('assets', function()
         links {
             'assets',
             'miniz',
-            'simdjson',
             'tinyexr',
         }
     end)
@@ -91,6 +89,7 @@ scoped.group('Tests', function()
         uses {
             'googletest',
             'tempest',
+            'tinyexr',
         }
 
         externalwarnings 'Off'

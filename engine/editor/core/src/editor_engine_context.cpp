@@ -12,10 +12,11 @@
 #include <tempest/ui.hpp>
 #include <tempest/vector.hpp>
 
-#include <chrono>
-#include <format>
+#include <cstdlib>
+#include <tempest/chrono.hpp>
+#include <tempest/format.hpp>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -46,11 +47,11 @@ namespace tempest::editor
             MultiByteToWideChar(CP_UTF8, 0, url.data(), static_cast<int>(url.size()), wide_url.data(), len);
             wide_url[len] = L'\0';
 
-            auto shell32 = LoadLibraryA("shell32.dll");
-            if (shell32)
+            auto* shell32 = LoadLibraryA("shell32.dll");
+            if (shell32 != nullptr)
             {
                 auto pfn = reinterpret_cast<PFN_ShellExecuteW>(GetProcAddress(shell32, "ShellExecuteW"));
-                if (pfn)
+                if (pfn != nullptr)
                 {
                     pfn(nullptr, L"open", wide_url.data(), nullptr, nullptr, SW_SHOWNORMAL);
                 }
@@ -74,11 +75,11 @@ namespace tempest::editor
                                 len);
             wide_path[len] = L'\0';
 
-            auto shell32 = LoadLibraryA("shell32.dll");
-            if (shell32)
+            auto* shell32 = LoadLibraryA("shell32.dll");
+            if (shell32 != nullptr)
             {
                 auto pfn = reinterpret_cast<PFN_ShellExecuteW>(GetProcAddress(shell32, "ShellExecuteW"));
-                if (pfn)
+                if (pfn != nullptr)
                 {
                     pfn(nullptr, L"open", wide_path.data(), nullptr, nullptr, SW_SHOWNORMAL);
                 }
@@ -99,8 +100,8 @@ namespace tempest::editor
             {
                 return;
             }
-            auto cmd = std::format("xdg-open '{}' &", std::string_view{url.data(), url.size()});
-            [[maybe_unused]] const auto res = std::system(cmd.c_str());
+            auto cmd = tempest::format("xdg-open '{}' &", string_view{url.data(), url.size()});
+            [[maybe_unused]] const auto res = system(cmd.c_str());
         }
 
         auto open_folder_in_explorer(string_view folder_path) -> void
@@ -109,8 +110,8 @@ namespace tempest::editor
             {
                 return;
             }
-            auto cmd = std::format("xdg-open '{}' &", std::string_view{folder_path.data(), folder_path.size()});
-            [[maybe_unused]] const auto res = std::system(cmd.c_str());
+            auto cmd = tempest::format("xdg-open '{}' &", string_view{folder_path.data(), folder_path.size()});
+            [[maybe_unused]] const auto res = system(cmd.c_str());
         }
     } // namespace
 } // namespace tempest::editor
@@ -189,24 +190,24 @@ namespace tempest::editor
             _profiler_session.get_or_register_thread().flush_active_chunk();
             const auto capture = profiler::create_capture_from_session(_profiler_session);
 
-            const auto now = std::chrono::system_clock::now();
-            const auto ts = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-            auto fname = std::format("captures/capture_{}.tprof", ts);
+            const auto now = tempest::chrono::system_clock::now();
+            const auto ts = tempest::chrono::duration_cast<tempest::chrono::seconds>(now.time_since_epoch()).count();
+            auto fname = tempest::format("captures/capture_{}.tprof", ts);
 
-#if defined(_WIN32)
+#ifdef _WIN32
             CreateDirectoryA("captures", nullptr);
 #else
-            std::system("mkdir -p captures");
+            system("mkdir -p captures");
 #endif
             auto save_result = profiler::save_binary_capture(capture, string_view{fname.data(), fname.size()});
             if (save_result)
             {
-                const auto log_msg = std::format("Saved profiler capture to {}", fname);
+                const auto log_msg = tempest::format("Saved profiler capture to {}", fname);
                 _logger.info(string_view{log_msg.data(), log_msg.size()});
             }
             else
             {
-                const auto log_msg = std::format("Failed to save profiler capture to {}", fname);
+                const auto log_msg = tempest::format("Failed to save profiler capture to {}", fname);
                 _logger.error(string_view{log_msg.data(), log_msg.size()});
             }
         }
@@ -223,7 +224,7 @@ namespace tempest::editor
         auto marker_name = string{};
         if (name.empty())
         {
-            auto formatted = std::format("ViewportBookmark_Frame{}", _frame_index);
+            auto formatted = tempest::format("ViewportBookmark_Frame{}", _frame_index);
             marker_name = string{formatted.data(), formatted.size()};
         }
         else
@@ -231,8 +232,8 @@ namespace tempest::editor
             marker_name = string{name.data(), name.size()};
         }
 
-        const auto log_msg = std::format("Inserted profiler bookmark marker: {}",
-                                         std::string_view{marker_name.data(), marker_name.size()});
+        const auto log_msg = tempest::format("Inserted profiler bookmark marker: {}",
+                                             string_view{marker_name.data(), marker_name.size()});
         _logger.info(string_view{log_msg.data(), log_msg.size()});
         _profiler_session.get_or_register_thread().add_marker(marker_name);
     }
@@ -242,7 +243,7 @@ namespace tempest::editor
         if (_web_server && _web_server->is_running())
         {
             const auto url = _web_server->get_server_url();
-            const auto log_msg = std::format("Opening profiler Web UI at {}", std::string_view{url.data(), url.size()});
+            const auto log_msg = tempest::format("Opening profiler Web UI at {}", string_view{url.data(), url.size()});
             _logger.info(string_view{log_msg.data(), log_msg.size()});
             open_url_in_browser(string_view{url.data(), url.size()});
         }
@@ -250,10 +251,10 @@ namespace tempest::editor
 
     auto editor_engine_context::open_captures_folder() -> void
     {
-#if defined(_WIN32)
+#ifdef _WIN32
         CreateDirectoryA("captures", nullptr);
 #else
-        std::system("mkdir -p captures");
+        system("mkdir -p captures");
 #endif
         open_folder_in_explorer(string_view{"captures"});
     }
@@ -275,10 +276,10 @@ namespace tempest::editor
                 gpu_time_ns += ez.exclusive_duration_ns;
             }
         }
-        _last_gpu_time_ms = static_cast<float>(gpu_time_ns) / 1000000.0f;
+        _last_gpu_time_ms = static_cast<float>(gpu_time_ns) / 1000000.0F;
 
         const auto frame_ms = _delta_frame_time.count() > 0.0f ? (_delta_frame_time.count() * 1000.0f) : 16.67f;
-        const auto fps = frame_ms > 0.0f ? (1000.0f / frame_ms) : 60.0f;
+        const auto fps = frame_ms > 0.0F ? (1000.0F / frame_ms) : 60.0F;
 
         _stats_accumulator.record_frame(fps, frame_ms, _last_cpu_time_ms, _last_gpu_time_ms, telemetry);
 
@@ -301,22 +302,23 @@ namespace tempest::editor
         }
         _logger.trace("Finished initialization callbacks");
 
-        auto simulated_time = std::chrono::duration<double>(0.0);
-        auto delta_time = std::chrono::duration<double>(1.0 / 60.0);
+        auto simulated_time = tempest::chrono::duration<double>(0.0);
+        auto delta_time = tempest::chrono::duration<double>(1.0 / 60.0);
 
-        auto current_time = std::chrono::steady_clock::now();
-        auto accumulator = std::chrono::duration<double>(0.0);
+        auto current_time = tempest::chrono::steady_clock::now();
+        auto accumulator = tempest::chrono::duration<double>(0.0);
         _last_frame_time = current_time;
 
         _logger.trace("Starting editor main loop");
         while (!_should_close)
         {
-            auto frame_start_time = std::chrono::steady_clock::now();
-            auto delta = std::chrono::duration_cast<std::chrono::duration<float>>(frame_start_time - _last_frame_time);
+            auto frame_start_time = tempest::chrono::steady_clock::now();
+            auto delta =
+                tempest::chrono::duration_cast<tempest::chrono::duration<float>>(frame_start_time - _last_frame_time);
             _delta_frame_time = delta;
             _last_frame_time = frame_start_time;
 
-            auto new_time = std::chrono::steady_clock::now();
+            auto new_time = tempest::chrono::steady_clock::now();
             auto frame_time = new_time - current_time;
             current_time = new_time;
 
@@ -364,7 +366,7 @@ namespace tempest::editor
                 {
                     for (auto&& callback : _on_fixed_update_callbacks)
                     {
-                        callback(*this, std::chrono::duration_cast<std::chrono::duration<float>>(delta_time));
+                        callback(*this, tempest::chrono::duration_cast<tempest::chrono::duration<float>>(delta_time));
                     }
                     if (_should_close)
                     {
@@ -382,7 +384,7 @@ namespace tempest::editor
             }
             else
             {
-                accumulator = std::chrono::duration<double>(0.0);
+                accumulator = tempest::chrono::duration<double>(0.0);
             }
 
             for (auto&& on_update : _editor_callbacks.on_update)
@@ -410,7 +412,7 @@ namespace tempest::editor
 
     auto editor_engine_context::_render_editor_frame() -> void
     {
-        const auto frame_start = std::chrono::steady_clock::now();
+        const auto frame_start = tempest::chrono::steady_clock::now();
         {
             [[maybe_unused]] const auto zone = profiler::scoped_zone{_profiler_session, "editor::render_frame"};
             if (!_renderer || _windows.empty())
@@ -442,9 +444,9 @@ namespace tempest::editor
                     }
                 });
 
-            const auto frame_end = std::chrono::steady_clock::now();
-            const auto frame_dur =
-                std::chrono::duration_cast<std::chrono::duration<float, std::milli>>(frame_end - frame_start);
+            const auto frame_end = tempest::chrono::steady_clock::now();
+            const auto frame_dur = tempest::chrono::duration_cast<tempest::chrono::duration<float, tempest::milli>>(
+                frame_end - frame_start);
             _last_cpu_time_ms = frame_dur.count();
         }
 

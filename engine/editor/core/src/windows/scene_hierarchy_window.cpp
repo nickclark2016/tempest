@@ -7,7 +7,7 @@
 
 #include <imgui.h>
 
-#include <format>
+#include <tempest/format.hpp>
 
 namespace tempest::editor
 {
@@ -23,7 +23,7 @@ namespace tempest::editor
             const auto* rel_comp = reg.try_get<ecs::relationship_component<ecs::entity>>(entity);
             const bool has_children = rel_comp != nullptr && rel_comp->first_child != ecs::tombstone;
 
-            auto draw_children = [&]() {
+            auto draw_children = [&]() -> void {
                 if (rel_comp == nullptr)
                 {
                     return;
@@ -55,11 +55,11 @@ namespace tempest::editor
             if (name.has_value())
             {
                 const auto& n = name.value();
-                std::format_to(tempest::back_inserter(label), "{:.{}}", n.data(), n.size());
+                tempest::format_to(tempest::back_inserter(label), "{}", n);
             }
             else
             {
-                std::format_to(tempest::back_inserter(label), "<Unnamed:{}>", static_cast<size_t>(entity));
+                tempest::format_to(tempest::back_inserter(label), "<Unnamed:{}>", static_cast<size_t>(entity));
             }
 
             auto node_open = false;

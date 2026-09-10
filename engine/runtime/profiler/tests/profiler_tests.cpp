@@ -1,13 +1,18 @@
 #include <tempest/algorithm.hpp>
+#include <tempest/chrono.hpp>
 #include <tempest/profiler/profiler.hpp>
+#include <tempest/string.hpp>
+#include <tempest/string_view.hpp>
 #include <tempest/thread.hpp>
 #include <tempest/vector.hpp>
 
 #include <gtest/gtest.h>
-#include <simdjson.h>
+#include <tempest/json.hpp>
+#include <tempest/memory.hpp>
 
 #include <cmath>
 #include <cstdio>
+#include <utility>
 
 //==============================================================================
 // Single-Threaded & Hierarchical Profiler Tests
@@ -42,7 +47,7 @@ TEST(profiler_tests, nested_zone_hierarchies)
     {
         total_zones += chunk->zones().size();
     }
-    ASSERT_EQ(total_zones, 4u);
+    ASSERT_EQ(total_zones, 4U);
 
     // Records are emitted upon zone exit (LIFO completion order): Grandchild (depth 2), Child1 (depth 1), Child2 (depth
     // 1), Root (depth 0)
@@ -50,21 +55,21 @@ TEST(profiler_tests, nested_zone_hierarchies)
     auto zones = chunk.zones();
 
     ASSERT_EQ(zones[0].name, "GrandchildZone");
-    ASSERT_EQ(zones[0].depth, 2u);
+    ASSERT_EQ(zones[0].depth, 2U);
     ASSERT_LE(zones[0].start_ns, zones[0].end_ns);
 
     ASSERT_EQ(zones[1].name, "ChildZone1");
-    ASSERT_EQ(zones[1].depth, 1u);
+    ASSERT_EQ(zones[1].depth, 1U);
     ASSERT_LE(zones[1].start_ns, zones[1].end_ns);
     ASSERT_LE(zones[1].start_ns, zones[0].start_ns);
     ASSERT_GE(zones[1].end_ns, zones[0].end_ns);
 
     ASSERT_EQ(zones[2].name, "ChildZone2");
-    ASSERT_EQ(zones[2].depth, 1u);
+    ASSERT_EQ(zones[2].depth, 1U);
     ASSERT_LE(zones[2].start_ns, zones[2].end_ns);
 
     ASSERT_EQ(zones[3].name, "RootZone");
-    ASSERT_EQ(zones[3].depth, 0u);
+    ASSERT_EQ(zones[3].depth, 0U);
     ASSERT_LE(zones[3].start_ns, zones[3].end_ns);
     ASSERT_LE(zones[3].start_ns, zones[1].start_ns);
     ASSERT_GE(zones[3].end_ns, zones[2].end_ns);
@@ -87,7 +92,7 @@ TEST(profiler_tests, concurrent_multithreaded_recording)
     // 2. Act: Spawn threads and record zones concurrently
     for (auto i = size_t{0}; i < thread_count; ++i)
     {
-        threads.push_back(tempest::thread([&session]() {
+        threads.push_back(tempest::thread([&session]() -> void {
             for (auto j = size_t{0}; j < zones_per_thread; ++j)
             {
                 [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "ConcurrentZone"};
@@ -154,8 +159,8 @@ TEST(profiler_tests, session_instance_isolation)
         }
     }
 
-    ASSERT_EQ(count_a, 1u);
-    ASSERT_EQ(count_b, 2u);
+    ASSERT_EQ(count_a, 1U);
+    ASSERT_EQ(count_b, 2U);
 }
 
 //==============================================================================
@@ -169,17 +174,17 @@ TEST(profiler_tests, implicit_thread_registration_and_naming)
     auto session = tempest::profiler::profiler_session{};
 
     // 2. Act: Spawn a thread, set thread name, and record a zone
-    auto worker = tempest::thread([&session]() {
+    auto worker = tempest::thread([&session]() -> void {
         session.set_thread_name("WorkerThread-Alpha");
         [[maybe_unused]] const auto zone = tempest::profiler::scoped_zone{session, "WorkerTask"};
     });
     worker.join();
 
     // 3. Assert: Verify thread registration and thread name
-    ASSERT_GE(session.registered_thread_count(), 1u);
+    ASSERT_GE(session.registered_thread_count(), 1U);
     auto chunks = session.drain_completed_chunks();
     ASSERT_FALSE(chunks.empty());
-    ASSERT_EQ(chunks[0]->zones().size(), 1u);
+    ASSERT_EQ(chunks[0]->zones().size(), 1U);
 
     const auto tid = chunks[0]->get_thread_id();
     ASSERT_EQ(session.get_track_name(tid), "WorkerThread-Alpha");
@@ -223,8 +228,8 @@ TEST(profiler_tests, markers_and_attached_metrics)
         total_zones += chunk->zones().size();
     }
 
-    ASSERT_EQ(total_markers, 2u);
-    ASSERT_EQ(total_zones, 1u);
+    ASSERT_EQ(total_markers, 2U);
+    ASSERT_EQ(total_zones, 1U);
 
     const auto& chunk = *chunks[0];
     auto zones = chunk.zones();
@@ -232,12 +237,12 @@ TEST(profiler_tests, markers_and_attached_metrics)
 
     ASSERT_EQ(markers[0].name, "FrameStart");
     ASSERT_EQ(markers[1].name, "FrameEnd");
-    ASSERT_GT(markers[0].timestamp_ns, 0u);
+    ASSERT_GT(markers[0].timestamp_ns, 0U);
     ASSERT_LE(markers[0].timestamp_ns, markers[1].timestamp_ns);
 
     ASSERT_EQ(zones[0].name, "RenderPass");
-    ASSERT_EQ(zones[0].task_id, 42u);
-    ASSERT_EQ(zones[0].metrics.size(), 2u);
+    ASSERT_EQ(zones[0].task_id, 42U);
+    ASSERT_EQ(zones[0].metrics.size(), 2U);
     ASSERT_EQ(zones[0].metrics[0].name, "draw_calls");
     ASSERT_DOUBLE_EQ(zones[0].metrics[0].value, 150.0);
     ASSERT_EQ(zones[0].metrics[0].unit, tempest::profiler::metric_unit::count);
@@ -266,7 +271,7 @@ TEST(profiler_tests, chunk_arena_pool_recycling)
 
     // Drain chunks and assert multiple chunks were filled
     auto chunks = session.drain_completed_chunks();
-    ASSERT_GT(chunks.size(), 1u);
+    ASSERT_GT(chunks.size(), 1U);
 
     auto drained_count = size_t{0};
     for (const auto& chunk : chunks)
@@ -287,7 +292,7 @@ TEST(profiler_tests, chunk_arena_pool_recycling)
     }
 
     auto second_chunks = session.drain_completed_chunks();
-    ASSERT_GT(second_chunks.size(), 1u);
+    ASSERT_GT(second_chunks.size(), 1U);
     auto second_drained_count = size_t{0};
     for (const auto& chunk : second_chunks)
     {
@@ -332,7 +337,7 @@ TEST(profiler_tests, compile_time_and_runtime_disabled_traits)
     {
         total_events += chunk->zones().size() + chunk->markers().size() + chunk->metrics().size();
     }
-    ASSERT_EQ(total_events, 0u);
+    ASSERT_EQ(total_events, 0U);
 }
 
 //==============================================================================
@@ -362,7 +367,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
 
     // 3. Assert: Verify exact percentiles and moments
     ASSERT_EQ(stats_odd.zone_name, "OddDistribution");
-    ASSERT_EQ(stats_odd.count, 101u);
+    ASSERT_EQ(stats_odd.count, 101U);
     ASSERT_DOUBLE_EQ(stats_odd.min_ns, 0.0);
     ASSERT_DOUBLE_EQ(stats_odd.max_ns, 1000.0);
     ASSERT_DOUBLE_EQ(stats_odd.mean_ns, 500.0);
@@ -371,7 +376,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_odd.p95_ns, 950.0);
     ASSERT_DOUBLE_EQ(stats_odd.p99_ns, 990.0);
     // Population variance for 0, 10, ..., 1000 is 100 * (100 * 102 / 12) = 85,000 -> StdDev = sqrt(85000)
-    ASSERT_NEAR(stats_odd.std_deviation_ns, std::sqrt(85000.0), 1e-6);
+    ASSERT_NEAR(stats_odd.std_deviation_ns, ::sqrt(85000.0), 1e-6);
 
     // 4. Setup & Act: Even distribution (4 samples: 100, 200, 300, 400 ns)
     auto zones_even = tempest::vector<tempest::profiler::zone_record>{};
@@ -384,7 +389,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
         tempest::span<const tempest::profiler::zone_record>{zones_even.data(), zones_even.size()});
 
     // 5. Assert: Verify even distribution interpolation
-    ASSERT_EQ(stats_even.count, 4u);
+    ASSERT_EQ(stats_even.count, 4U);
     ASSERT_DOUBLE_EQ(stats_even.min_ns, 100.0);
     ASSERT_DOUBLE_EQ(stats_even.max_ns, 400.0);
     ASSERT_DOUBLE_EQ(stats_even.mean_ns, 250.0);
@@ -392,18 +397,18 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     ASSERT_DOUBLE_EQ(stats_even.p90_ns, 370.0);
     ASSERT_DOUBLE_EQ(stats_even.p95_ns, 385.0);
     ASSERT_DOUBLE_EQ(stats_even.p99_ns, 397.0);
-    ASSERT_NEAR(stats_even.std_deviation_ns, std::sqrt(12500.0), 1e-6);
+    ASSERT_NEAR(stats_even.std_deviation_ns, ::sqrt(12500.0), 1e-6);
 
     // 6. Assert: Empty and single-element distributions
     const auto stats_empty = tempest::profiler::compute_zone_statistics({});
-    ASSERT_EQ(stats_empty.count, 0u);
+    ASSERT_EQ(stats_empty.count, 0U);
     ASSERT_DOUBLE_EQ(stats_empty.mean_ns, 0.0);
 
     auto zones_single = tempest::vector<tempest::profiler::zone_record>{};
     zones_single.push_back(tempest::profiler::zone_record{.start_ns = 10, .end_ns = 52, .name = "Single"});
     const auto stats_single = tempest::profiler::compute_zone_statistics(
         tempest::span<const tempest::profiler::zone_record>{zones_single.data(), zones_single.size()});
-    ASSERT_EQ(stats_single.count, 1u);
+    ASSERT_EQ(stats_single.count, 1U);
     ASSERT_DOUBLE_EQ(stats_single.min_ns, 42.0);
     ASSERT_DOUBLE_EQ(stats_single.max_ns, 42.0);
     ASSERT_DOUBLE_EQ(stats_single.mean_ns, 42.0);
@@ -420,7 +425,7 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     const auto rolling =
         tempest::profiler::compute_rolling_averages(tempest::span<const double>{values.data(), values.size()}, 3);
 
-    ASSERT_EQ(rolling.size(), 5u);
+    ASSERT_EQ(rolling.size(), 5U);
     ASSERT_DOUBLE_EQ(rolling[0], 10.0);
     ASSERT_DOUBLE_EQ(rolling[1], 15.0);
     ASSERT_DOUBLE_EQ(rolling[2], 20.0);
@@ -440,14 +445,14 @@ TEST(profiler_tests, statistical_calculations_and_exact_percentiles)
     capture.tracks.push_back(tempest::move(track2));
 
     const auto all_stats = tempest::profiler::compute_all_zone_statistics(capture);
-    ASSERT_EQ(all_stats.size(), 2u);
+    ASSERT_EQ(all_stats.size(), 2U);
     // Alphabetical order: "Render", "Update"
     ASSERT_EQ(all_stats[0].zone_name, "Render");
-    ASSERT_EQ(all_stats[0].count, 1u);
+    ASSERT_EQ(all_stats[0].count, 1U);
     ASSERT_DOUBLE_EQ(all_stats[0].mean_ns, 200.0);
 
     ASSERT_EQ(all_stats[1].zone_name, "Update");
-    ASSERT_EQ(all_stats[1].count, 2u);
+    ASSERT_EQ(all_stats[1].count, 2U);
     ASSERT_DOUBLE_EQ(all_stats[1].mean_ns, 200.0);
 }
 
@@ -480,8 +485,8 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     for (auto i = uint64_t{0}; i < 30000; ++i)
     {
         auto zone = tempest::profiler::zone_record{
-            .start_ns = 1000000 + i * 20,
-            .end_ns = 1000000 + i * 20 + 15,
+            .start_ns = 1000000 + (i * 20),
+            .end_ns = 1000000 + (i * 20) + 15,
             .depth = static_cast<uint32_t>(i % 8),
             .name = (i % 2 == 0) ? "PhysicsStep" : "AnimationEvaluation",
             .location = {},
@@ -503,7 +508,7 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     for (auto i = uint64_t{0}; i < 500; ++i)
     {
         cpu_track.markers.push_back(tempest::profiler::marker_record{
-            .timestamp_ns = 1000000 + i * 1000,
+            .timestamp_ns = 1000000 + (i * 1000),
             .name = "CheckpointMarker",
             .location = {},
         });
@@ -521,8 +526,8 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     for (auto i = uint64_t{0}; i < 25000; ++i)
     {
         gpu_track.zones.push_back(tempest::profiler::zone_record{
-            .start_ns = 2000000 + i * 30,
-            .end_ns = 2000000 + i * 30 + 25,
+            .start_ns = 2000000 + (i * 30),
+            .end_ns = 2000000 + (i * 30) + 25,
             .depth = static_cast<uint32_t>(i % 4),
             .name = (i % 3 == 0)   ? "GBufferPass"
                     : (i % 3 == 1) ? "ShadowPass"
@@ -546,9 +551,9 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     for (auto i = uint64_t{0}; i < 1000; ++i)
     {
         vram_stream.samples.push_back(tempest::profiler::metric_record{
-            .timestamp_ns = 1000000 + i * 500,
+            .timestamp_ns = 1000000 + (i * 500),
             .name = "VRAM_Allocated_Bytes",
-            .value = static_cast<double>(1024 * 1024 * (64 + i % 128)),
+            .value = static_cast<double>(1024 * 1024 * (64 + (i % 128))),
             .unit = tempest::profiler::metric_unit::bytes,
         });
     }
@@ -558,7 +563,7 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     const auto binary_buffer = tempest::profiler::serialize_binary_to_buffer(capture);
     ASSERT_FALSE(binary_buffer.empty());
 
-    const auto file_path = "test_large_capture.tprof";
+    const auto* const file_path = "test_large_capture.tprof";
     const auto save_res = tempest::profiler::save_binary_capture(capture, file_path);
     ASSERT_TRUE(save_res.has_value());
 
@@ -575,14 +580,14 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     const auto& roundtrip = loaded_from_file.value();
     ASSERT_EQ(roundtrip.start_time_ns, capture.start_time_ns);
     ASSERT_EQ(roundtrip.end_time_ns, capture.end_time_ns);
-    ASSERT_EQ(roundtrip.tracks.size(), 2u);
+    ASSERT_EQ(roundtrip.tracks.size(), 2U);
 
     // Verify CPU track
-    ASSERT_EQ(roundtrip.tracks[0].track_id, 1001u);
+    ASSERT_EQ(roundtrip.tracks[0].track_id, 1001U);
     ASSERT_EQ(roundtrip.tracks[0].name, "MainThread_Worker");
     ASSERT_EQ(roundtrip.tracks[0].type, tempest::profiler::track_type::cpu_thread);
-    ASSERT_EQ(roundtrip.tracks[0].zones.size(), 30000u);
-    ASSERT_EQ(roundtrip.tracks[0].markers.size(), 500u);
+    ASSERT_EQ(roundtrip.tracks[0].zones.size(), 30000U);
+    ASSERT_EQ(roundtrip.tracks[0].markers.size(), 500U);
 
     for (auto i = size_t{0}; i < 30000; ++i)
     {
@@ -603,10 +608,10 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     }
 
     // Verify GPU track
-    ASSERT_EQ(roundtrip.tracks[1].track_id, 2001u);
+    ASSERT_EQ(roundtrip.tracks[1].track_id, 2001U);
     ASSERT_EQ(roundtrip.tracks[1].name, "Vulkan_Graphics_Queue");
     ASSERT_EQ(roundtrip.tracks[1].type, tempest::profiler::track_type::gpu_queue);
-    ASSERT_EQ(roundtrip.tracks[1].zones.size(), 25000u);
+    ASSERT_EQ(roundtrip.tracks[1].zones.size(), 25000U);
 
     for (auto i = size_t{0}; i < 25000; ++i)
     {
@@ -618,22 +623,22 @@ TEST(profiler_tests, lossless_roundtrip_binary_serialization)
     }
 
     // Verify Metric Streams
-    ASSERT_EQ(roundtrip.metrics.size(), 1u);
+    ASSERT_EQ(roundtrip.metrics.size(), 1U);
     ASSERT_EQ(roundtrip.metrics[0].name, "VRAM_Allocated_Bytes");
     ASSERT_EQ(roundtrip.metrics[0].unit, tempest::profiler::metric_unit::bytes);
-    ASSERT_EQ(roundtrip.metrics[0].samples.size(), 1000u);
+    ASSERT_EQ(roundtrip.metrics[0].samples.size(), 1000U);
 
     // Clean up temporary disk file
-    std::remove(file_path);
+    ::remove(file_path);
 }
 
 //==============================================================================
 // JSON Chrome Trace Event Export & Validation Tests
 //==============================================================================
 
-/// @brief Verify JSON Chrome Trace export generates schema-valid JSON parseable by simdjson with correct
+/// @brief Verify JSON Chrome Trace export generates schema-valid JSON parseable by tempest::json with correct
 /// PID/TID/timestamps.
-TEST(profiler_tests, json_chrome_trace_export_and_simdjson_validation)
+TEST(profiler_tests, json_chrome_trace_export_and_json_validation)
 {
     // 1. Setup: Create capture data with CPU track, GPU track, attached metrics, and counters
     auto capture = tempest::profiler::capture_session_data{};
@@ -688,18 +693,19 @@ TEST(profiler_tests, json_chrome_trace_export_and_simdjson_validation)
     const auto json_str = tempest::profiler::export_chrome_trace_json_string(capture);
     ASSERT_FALSE(json_str.empty());
 
-    const auto json_file = "test_chrome_trace.json";
+    const auto* const json_file = "test_chrome_trace.json";
     const auto export_res = tempest::profiler::export_chrome_trace_json(capture, json_file);
     ASSERT_TRUE(export_res.has_value());
 
-    // 3. Assert: Validate JSON schema with simdjson
-    auto parser = simdjson::dom::parser{};
-    auto doc = parser.parse(json_str.data(), json_str.size());
-    ASSERT_FALSE(doc.error());
+    // 3. Assert: Validate JSON schema with tempest::json
+    auto alloc = tempest::system_allocator{};
+    auto doc_res = tempest::json_document::from_string(json_str, alloc);
+    ASSERT_TRUE(doc_res.has_value());
+    const auto& doc = *doc_res;
 
-    auto trace_events = doc["traceEvents"].get_array();
-    ASSERT_FALSE(trace_events.error());
-    ASSERT_GE(trace_events.value().size(), 4u); // process_name, thread_name, zone, marker, metric
+    auto trace_events = doc.root()["traceEvents"].as_array();
+    ASSERT_TRUE(trace_events.has_value());
+    ASSERT_GE(trace_events->size(), 4U); // process_name, thread_name, zone, marker, metric
 
     auto found_process_metadata = false;
     auto found_thread_metadata = false;
@@ -707,10 +713,10 @@ TEST(profiler_tests, json_chrome_trace_export_and_simdjson_validation)
     auto found_marker = false;
     auto found_metric = false;
 
-    for (const auto element : trace_events.value())
+    for (const auto element : *trace_events)
     {
-        auto ph = std::string_view{element["ph"].get_string().value()};
-        auto name = std::string_view{element["name"].get_string().value()};
+        auto ph = element["ph"].as_string().value_or("");
+        auto name = element["name"].as_string().value_or("");
 
         if (ph == "M" && name == "process_name")
         {
@@ -719,28 +725,28 @@ TEST(profiler_tests, json_chrome_trace_export_and_simdjson_validation)
         else if (ph == "M" && name == "thread_name")
         {
             found_thread_metadata = true;
-            ASSERT_EQ(element["tid"].get_uint64().value(), 10u);
+            ASSERT_EQ(element["tid"].as_uint64().value(), 10U);
         }
         else if (ph == "X" && name == "ExecutePhysics")
         {
             found_zone = true;
-            ASSERT_DOUBLE_EQ(element["ts"].get_double().value(), 100.0);  // 100,000 ns -> 100.0 us
-            ASSERT_DOUBLE_EQ(element["dur"].get_double().value(), 150.0); // 150,000 ns -> 150.0 us
-            ASSERT_EQ(element["tid"].get_uint64().value(), 10u);
-            ASSERT_EQ(element["args"]["task_id"].get_uint64().value(), 77u);
-            ASSERT_DOUBLE_EQ(element["args"]["contacts_solved"].get_double().value(), 142.0);
+            ASSERT_DOUBLE_EQ(element["ts"].as_number().value(), 100.0);  // 100,000 ns -> 100.0 us
+            ASSERT_DOUBLE_EQ(element["dur"].as_number().value(), 150.0); // 150,000 ns -> 150.0 us
+            ASSERT_EQ(element["tid"].as_uint64().value(), 10U);
+            ASSERT_EQ(element["args"]["task_id"].as_uint64().value(), 77U);
+            ASSERT_DOUBLE_EQ(element["args"]["contacts_solved"].as_number().value(), 142.0);
         }
         else if (ph == "i" && name == "PhysicsComplete")
         {
             found_marker = true;
-            ASSERT_DOUBLE_EQ(element["ts"].get_double().value(), 260.0);
-            ASSERT_EQ(element["s"].get_string().value(), "t");
+            ASSERT_DOUBLE_EQ(element["ts"].as_number().value(), 260.0);
+            ASSERT_EQ(element["s"].as_string().value(), "t");
         }
         else if (ph == "C" && name == "FPS")
         {
             found_metric = true;
-            ASSERT_DOUBLE_EQ(element["ts"].get_double().value(), 300.0);
-            ASSERT_DOUBLE_EQ(element["args"]["value"].get_double().value(), 120.0);
+            ASSERT_DOUBLE_EQ(element["ts"].as_number().value(), 300.0);
+            ASSERT_DOUBLE_EQ(element["args"]["value"].as_number().value(), 120.0);
         }
     }
 
@@ -751,7 +757,7 @@ TEST(profiler_tests, json_chrome_trace_export_and_simdjson_validation)
     ASSERT_TRUE(found_metric);
 
     // Clean up temporary file
-    std::remove(json_file);
+    ::remove(json_file);
 }
 
 //==============================================================================
@@ -821,7 +827,7 @@ TEST(profiler_tests, corrupted_and_truncated_binary_error_handling)
 // Embedded Web Server & RFC-6455 WebSocket Tests
 //==============================================================================
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -845,7 +851,7 @@ namespace
 {
     struct test_tcp_client
     {
-#if defined(_WIN32)
+#ifdef _WIN32
         using socket_type = SOCKET;
         static constexpr socket_type invalid_s = INVALID_SOCKET;
 #else
@@ -865,7 +871,7 @@ namespace
         auto connect_to(const char* host, uint16_t port) -> bool
         {
             close_sock();
-#if defined(_WIN32)
+#ifdef _WIN32
             auto wsa = WSADATA{};
             WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
@@ -894,7 +900,7 @@ namespace
             {
                 return false;
             }
-            auto ptr = reinterpret_cast<const char*>(data);
+            const auto* ptr = reinterpret_cast<const char*>(data);
             auto remaining = len;
             while (remaining > 0)
             {
@@ -909,14 +915,14 @@ namespace
             return true;
         }
 
-        auto send_string(std::string_view s) -> bool
+        auto send_string(tempest::string_view s) -> bool
         {
             return send_all(s.data(), s.size());
         }
 
-        auto receive_all(size_t timeout_ms = 1000) -> std::string
+        auto receive_all(size_t timeout_ms = 1000) -> tempest::string
         {
-            auto out = std::string{};
+            auto out = tempest::string{};
             if (sock == invalid_s)
             {
                 return out;
@@ -945,7 +951,7 @@ namespace
                     break;
                 }
                 out.append(buffer, static_cast<size_t>(bytes));
-                if (bytes < static_cast<int>(sizeof(buffer)))
+                if (static_cast<size_t>(bytes) < sizeof(buffer))
                 {
                     timeout_ms = 50;
                 }
@@ -957,7 +963,7 @@ namespace
         {
             if (sock != invalid_s)
             {
-#if defined(_WIN32)
+#ifdef _WIN32
                 closesocket(sock);
 #else
                 close(sock);
@@ -980,7 +986,7 @@ TEST(profiler_tests, socket_lifecycle_and_port_auto_increment)
     server1.start();
     ASSERT_TRUE(server1.is_running());
     const auto port1 = server1.get_bound_port();
-    ASSERT_EQ(port1, 8080u);
+    ASSERT_EQ(port1, 8080U);
     ASSERT_EQ(server1.get_server_url(), "http://127.0.0.1:8080");
 
     // 3. Act & Assert: Start server 2 with same preferred port 8080 (should auto-increment to 8081)
@@ -989,17 +995,17 @@ TEST(profiler_tests, socket_lifecycle_and_port_auto_increment)
     server2.start();
     ASSERT_TRUE(server2.is_running());
     const auto port2 = server2.get_bound_port();
-    ASSERT_EQ(port2, 8081u);
+    ASSERT_EQ(port2, 8081U);
     ASSERT_EQ(server2.get_server_url(), "http://127.0.0.1:8081");
 
     // 4. Act & Assert: Gracefully stop both servers
     server1.stop();
     ASSERT_FALSE(server1.is_running());
-    ASSERT_EQ(server1.get_bound_port(), 0u);
+    ASSERT_EQ(server1.get_bound_port(), 0U);
 
     server2.stop();
     ASSERT_FALSE(server2.is_running());
-    ASSERT_EQ(server2.get_bound_port(), 0u);
+    ASSERT_EQ(server2.get_bound_port(), 0U);
 }
 
 /// @brief Verify HTTP GET request handling for all embedded single-page app web assets and endpoints with appropriate
@@ -1021,11 +1027,11 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/html; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("<!DOCTYPE html>"), std::string::npos);
-        ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
-        ASSERT_NE(response.find("id=\"timeline-canvas\""), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/html; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "<!DOCTYPE html>"));
+        ASSERT_TRUE(tempest::contains(response, "Tempest Engine Profiler"));
+        ASSERT_TRUE(tempest::contains(response, "id=\"timeline-canvas\""));
     }
 
     // 3. Act & Assert: HTTP GET /index.html
@@ -1035,9 +1041,9 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /index.html HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/html; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("<!DOCTYPE html>"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/html; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "<!DOCTYPE html>"));
     }
 
     // 4. Act & Assert: HTTP GET /app.js
@@ -1047,12 +1053,12 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /app.js HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1500);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: application/javascript; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("Tempest Engine Profiler"), std::string::npos);
-        ASSERT_NE(response.find("initWebSocket"), std::string::npos);
-        ASSERT_NE(response.find("renderTimeline"), std::string::npos);
-        EXPECT_GT(response.size(), 65536u);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: application/javascript; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "Tempest Engine Profiler"));
+        ASSERT_TRUE(tempest::contains(response, "initWebSocket"));
+        ASSERT_TRUE(tempest::contains(response, "renderTimeline"));
+        EXPECT_GT(response.size(), 65536U);
     }
 
     // 5. Act & Assert: HTTP GET /styles.css
@@ -1062,10 +1068,10 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /styles.css HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/css; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("--accent-purple"), std::string::npos);
-        ASSERT_NE(response.find(".timeline-section"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/css; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "--accent-purple"));
+        ASSERT_TRUE(tempest::contains(response, ".timeline-section"));
     }
 
     // 6. Act & Assert: HTTP GET /status
@@ -1075,9 +1081,9 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /status HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: application/json; charset=utf-8"), std::string::npos);
-        ASSERT_NE(response.find("\"status\":\"ok\""), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 200 OK"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: application/json; charset=utf-8"));
+        ASSERT_TRUE(tempest::contains(response, "\"status\":\"ok\""));
     }
 
     // 7. Act & Assert: HTTP GET /unknown_path (404)
@@ -1087,8 +1093,8 @@ TEST(profiler_tests, http_get_request_handling)
         ASSERT_TRUE(client.send_string("GET /unknown_path HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"));
         const auto response = client.receive_all(1000);
         ASSERT_FALSE(response.empty());
-        ASSERT_NE(response.find("HTTP/1.1 404 Not Found"), std::string::npos);
-        ASSERT_NE(response.find("Content-Type: text/plain; charset=utf-8"), std::string::npos);
+        ASSERT_TRUE(tempest::contains(response, "HTTP/1.1 404 Not Found"));
+        ASSERT_TRUE(tempest::contains(response, "Content-Type: text/plain; charset=utf-8"));
     }
 
     server.stop();
@@ -1098,21 +1104,21 @@ TEST(profiler_tests, http_get_request_handling)
 TEST(profiler_tests, rfc6455_websocket_handshake_key_computation)
 {
     // 1. Setup: Test vector from RFC-6455 Section 1.3
-    const auto client_key1 = "dGhlIHNhbXBsZSBub25jZQ==";
-    const auto expected_accept1 = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
+    const auto* const client_key1 = "dGhlIHNhbXBsZSBub25jZQ==";
+    const auto* const expected_accept1 = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
 
     // 2. Act & Assert: Primary RFC test vector
     const auto actual_accept1 = tempest::profiler::compute_websocket_accept_key(client_key1);
     ASSERT_EQ(actual_accept1, expected_accept1);
 
     // 3. Act & Assert: Additional valid nonce key test vector
-    const auto client_key2 = "x3JJHMbDL1EzLkh9GBhXDw==";
-    const auto expected_accept2 = "HSmrc0sMlYUkAGmm5OPpG2HaGWk=";
+    const auto* const client_key2 = "x3JJHMbDL1EzLkh9GBhXDw==";
+    const auto* const expected_accept2 = "HSmrc0sMlYUkAGmm5OPpG2HaGWk=";
     const auto actual_accept2 = tempest::profiler::compute_websocket_accept_key(client_key2);
     ASSERT_EQ(actual_accept2, expected_accept2);
 
     // 4. Act & Assert: Nonce key with leading/trailing whitespace
-    const auto client_key3 = "  dGhlIHNhbXBsZSBub25jZQ== \r\n";
+    const auto* const client_key3 = "  dGhlIHNhbXBsZSBub25jZQ== \r\n";
     const auto actual_accept3 = tempest::profiler::compute_websocket_accept_key(client_key3);
     ASSERT_EQ(actual_accept3, expected_accept1);
 }
@@ -1121,7 +1127,7 @@ TEST(profiler_tests, rfc6455_websocket_handshake_key_computation)
 TEST(profiler_tests, websocket_frame_encoding_and_decoding)
 {
     // 1. Setup: Test short text frame (len <= 125)
-    const auto text_sample = std::string{"Hello, Tempest Profiler RFC-6455!"};
+    const auto text_sample = tempest::string{"Hello, Tempest Profiler RFC-6455!"};
     auto text_bytes = tempest::vector<tempest::byte>{};
     for (auto c : text_sample)
     {
@@ -1131,7 +1137,7 @@ TEST(profiler_tests, websocket_frame_encoding_and_decoding)
     // 2. Act: Encode server text frame and decode
     auto encoded_text = tempest::profiler::encode_websocket_frame(
         tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{text_bytes.data(), text_bytes.size()});
-    ASSERT_GE(encoded_text.size(), 2u + text_bytes.size());
+    ASSERT_GE(encoded_text.size(), 2U + text_bytes.size());
     ASSERT_EQ(static_cast<uint8_t>(encoded_text[0]), 0x81); // FIN + text opcode
 
     auto decoded_text = tempest::profiler::decode_websocket_frame(
@@ -1160,14 +1166,14 @@ TEST(profiler_tests, websocket_frame_encoding_and_decoding)
         tempest::span<const tempest::byte>{encoded_medium.data(), encoded_medium.size()});
     ASSERT_TRUE(decoded_medium.has_value());
     ASSERT_EQ(decoded_medium->opcode, tempest::profiler::ws_opcode::binary);
-    ASSERT_EQ(decoded_medium->payload.size(), 1024u);
+    ASSERT_EQ(decoded_medium->payload.size(), 1024U);
     ASSERT_EQ(decoded_medium->payload[500], medium_binary[500]);
 
     // 4. Act & Assert: Masked client-to-server text frame
     auto client_masked_frame = tempest::profiler::encode_websocket_client_frame(
         tempest::profiler::ws_opcode::text, tempest::span<const tempest::byte>{text_bytes.data(), text_bytes.size()},
         0x37FA213D);
-    ASSERT_GE(client_masked_frame.size(), 6u + text_bytes.size());
+    ASSERT_GE(client_masked_frame.size(), 6U + text_bytes.size());
     ASSERT_TRUE((static_cast<uint8_t>(client_masked_frame[1]) & 0x80) != 0); // Mask bit set
 
     auto decoded_client_frame = tempest::profiler::decode_websocket_frame(
@@ -1209,25 +1215,25 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
     auto client = test_tcp_client{};
     ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
-    const auto ws_handshake_req = "GET /ws HTTP/1.1\r\n"
-                                  "Host: 127.0.0.1\r\n"
-                                  "Upgrade: websocket\r\n"
-                                  "Connection: Upgrade\r\n"
-                                  "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                                  "Sec-WebSocket-Version: 13\r\n\r\n";
+    const auto* const ws_handshake_req = "GET /ws HTTP/1.1\r\n"
+                                         "Host: 127.0.0.1\r\n"
+                                         "Upgrade: websocket\r\n"
+                                         "Connection: Upgrade\r\n"
+                                         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                                         "Sec-WebSocket-Version: 13\r\n\r\n";
 
     ASSERT_TRUE(client.send_string(ws_handshake_req));
     const auto hs_response = client.receive_all(500);
-    ASSERT_NE(hs_response.find("HTTP/1.1 101 Switching Protocols"), std::string::npos);
-    ASSERT_NE(hs_response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), std::string::npos);
+    ASSERT_TRUE(tempest::contains(hs_response, "HTTP/1.1 101 Switching Protocols"));
+    ASSERT_TRUE(tempest::contains(hs_response, "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="));
 
     // Allow worker thread to register connection
     tempest::this_thread::yield();
-    ASSERT_EQ(server.connected_client_count(), 1u);
+    ASSERT_EQ(server.connected_client_count(), 1U);
 
     // 3. Act & Assert: Command "start_capture"
     {
-        const auto cmd = std::string{"{\"command\":\"start_capture\"}"};
+        const auto cmd = tempest::string{R"({"command":"start_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -1243,15 +1249,16 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(resp_str.find("\"command\":\"start_capture\""), std::string::npos);
-        ASSERT_NE(resp_str.find("\"recording\":true"), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(resp_str, "\"command\":\"start_capture\""));
+        ASSERT_TRUE(tempest::contains(resp_str, "\"recording\":true"));
         ASSERT_TRUE(session.is_enabled());
     }
 
     // 4. Act & Assert: Command "query_stats"
     {
-        const auto cmd = std::string{"{\"command\":\"query_stats\"}"};
+        const auto cmd = tempest::string{R"({"command":"query_stats"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -1267,9 +1274,10 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(resp_str.find("\"type\":\"stats\""), std::string::npos);
-        ASSERT_NE(resp_str.find("EngineInit"), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(resp_str, "\"type\":\"stats\""));
+        ASSERT_TRUE(tempest::contains(resp_str, "EngineInit"));
     }
 
     // 5. Act & Assert: Telemetry packet serialization & server broadcast
@@ -1289,10 +1297,10 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             tempest::profiler::marker_record{.timestamp_ns = 2500000, .name = "SwapchainPresent"});
 
         const auto json_payload = tempest::profiler::serialize_telemetry_frame_json(t_frame);
-        const auto json_payload_std = std::string(json_payload.data(), json_payload.size());
-        ASSERT_NE(json_payload_std.find("\"frame_index\":42"), std::string::npos);
-        ASSERT_NE(json_payload_std.find("\"name\":\"RenderFrame\""), std::string::npos);
-        ASSERT_NE(json_payload_std.find("\"name\":\"SwapchainPresent\""), std::string::npos);
+        const auto json_payload_std = tempest::string(json_payload.data(), json_payload.size());
+        ASSERT_TRUE(tempest::contains(json_payload_std, "\"frame_index\":42"));
+        ASSERT_TRUE(tempest::contains(json_payload_std, "\"name\":\"RenderFrame\""));
+        ASSERT_TRUE(tempest::contains(json_payload_std, "\"name\":\"SwapchainPresent\""));
 
         // Broadcast to connected client
         server.broadcast_telemetry(t_frame);
@@ -1302,13 +1310,13 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             tempest::span<const tempest::byte>{reinterpret_cast<const tempest::byte*>(bc_raw.data()), bc_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto bc_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(bc_str.find("\"frame_index\":42"), std::string::npos);
+        auto bc_str = tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(bc_str, "\"frame_index\":42"));
     }
 
     // 6. Act & Assert: Command "stop_capture"
     {
-        const auto cmd = std::string{"{\"command\":\"stop_capture\"}"};
+        const auto cmd = tempest::string{R"({"command":"stop_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -1324,9 +1332,10 @@ TEST(profiler_tests, telemetry_streaming_and_bidirectional_command_dispatch)
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
         ASSERT_EQ(decoded->opcode, tempest::profiler::ws_opcode::text);
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        ASSERT_NE(resp_str.find("\"command\":\"stop_capture\""), std::string::npos);
-        ASSERT_NE(resp_str.find("\"recording\":false"), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        ASSERT_TRUE(tempest::contains(resp_str, "\"command\":\"stop_capture\""));
+        ASSERT_TRUE(tempest::contains(resp_str, "\"recording\":false"));
         ASSERT_FALSE(session.is_enabled());
     }
 
@@ -1378,23 +1387,23 @@ TEST(profiler_tests, http_request_query_string_stripping)
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
-        const auto req = "GET /index.html?token=test1234&v=1.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        const auto* const req = "GET /index.html?token=test1234&v=1.0 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
         ASSERT_TRUE(client.send_string(req));
         const auto resp = client.receive_all(500);
-        EXPECT_NE(resp.find("HTTP/1.1 200 OK"), std::string::npos);
-        EXPECT_NE(resp.find("Content-Type: text/html"), std::string::npos);
-        EXPECT_NE(resp.find("Tempest Engine Profiler"), std::string::npos);
+        EXPECT_TRUE(tempest::contains(resp, "HTTP/1.1 200 OK"));
+        EXPECT_TRUE(tempest::contains(resp, "Content-Type: text/html"));
+        EXPECT_TRUE(tempest::contains(resp, "Tempest Engine Profiler"));
     }
 
     // 3. Act & Assert: Request /?v=1
     {
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
-        const auto req = "GET /?v=1 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        const auto* const req = "GET /?v=1 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
         ASSERT_TRUE(client.send_string(req));
         const auto resp = client.receive_all(500);
-        EXPECT_NE(resp.find("HTTP/1.1 200 OK"), std::string::npos);
-        EXPECT_NE(resp.find("Content-Type: text/html"), std::string::npos);
+        EXPECT_TRUE(tempest::contains(resp, "HTTP/1.1 200 OK"));
+        EXPECT_TRUE(tempest::contains(resp, "Content-Type: text/html"));
     }
 
     server.stop();
@@ -1421,12 +1430,12 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
     ASSERT_TRUE(client2.connect_to("127.0.0.1", port));
     ASSERT_TRUE(client3.connect_to("127.0.0.1", port));
 
-    const auto ws_req = "GET /ws HTTP/1.1\r\n"
-                        "Host: 127.0.0.1\r\n"
-                        "Upgrade: websocket\r\n"
-                        "Connection: Upgrade\r\n"
-                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                        "Sec-WebSocket-Version: 13\r\n\r\n";
+    const auto* const ws_req = "GET /ws HTTP/1.1\r\n"
+                               "Host: 127.0.0.1\r\n"
+                               "Upgrade: websocket\r\n"
+                               "Connection: Upgrade\r\n"
+                               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                               "Sec-WebSocket-Version: 13\r\n\r\n";
 
     ASSERT_TRUE(client1.send_string(ws_req));
     ASSERT_TRUE(client2.send_string(ws_req));
@@ -1436,12 +1445,12 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
     const auto resp2 = client2.receive_all(500);
     const auto resp3 = client3.receive_all(500);
 
-    ASSERT_NE(resp1.find("HTTP/1.1 101"), std::string::npos);
-    ASSERT_NE(resp2.find("HTTP/1.1 101"), std::string::npos);
-    ASSERT_NE(resp3.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp1, "HTTP/1.1 101"));
+    ASSERT_TRUE(tempest::contains(resp2, "HTTP/1.1 101"));
+    ASSERT_TRUE(tempest::contains(resp3, "HTTP/1.1 101"));
 
     tempest::this_thread::yield();
-    EXPECT_EQ(server.connected_client_count(), 3u);
+    EXPECT_EQ(server.connected_client_count(), 3U);
 
     // 3. Act: Broadcast telemetry frame to all 3 clients
     auto t_frame = tempest::profiler::telemetry_frame{};
@@ -1468,15 +1477,12 @@ TEST(profiler_tests, multiple_concurrent_websocket_clients_broadcast)
     ASSERT_TRUE(d2.has_value());
     ASSERT_TRUE(d3.has_value());
 
-    EXPECT_NE(
-        std::string(reinterpret_cast<const char*>(d1->payload.data()), d1->payload.size()).find("\"frame_index\":100"),
-        std::string::npos);
-    EXPECT_NE(
-        std::string(reinterpret_cast<const char*>(d2->payload.data()), d2->payload.size()).find("\"frame_index\":100"),
-        std::string::npos);
-    EXPECT_NE(
-        std::string(reinterpret_cast<const char*>(d3->payload.data()), d3->payload.size()).find("\"frame_index\":100"),
-        std::string::npos);
+    EXPECT_TRUE(tempest::contains(
+        tempest::string(reinterpret_cast<const char*>(d1->payload.data()), d1->payload.size()), "\"frame_index\":100"));
+    EXPECT_TRUE(tempest::contains(
+        tempest::string(reinterpret_cast<const char*>(d2->payload.data()), d2->payload.size()), "\"frame_index\":100"));
+    EXPECT_TRUE(tempest::contains(
+        tempest::string(reinterpret_cast<const char*>(d3->payload.data()), d3->payload.size()), "\"frame_index\":100"));
 
     server.stop();
 }
@@ -1547,13 +1553,25 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     });
     chunks.push_back(tempest::move(chunk_cpu));
 
+    // CPU thread with 64-bit pointer address where bit 31 is set (e.g. Linux pthread_self in mmap region)
+    constexpr auto linux_ptr_tid = uint64_t{0x7FFF'8000'1234ULL};
+    auto chunk_linux_cpu = tempest::make_unique<tempest::profiler::event_chunk>();
+    chunk_linux_cpu->set_thread_id(linux_ptr_tid);
+    chunk_linux_cpu->add_zone(tempest::profiler::zone_record{
+        .start_ns = 900,
+        .end_ns = 2100,
+        .depth = 0,
+        .name = "WorkerJob",
+    });
+    chunks.push_back(tempest::move(chunk_linux_cpu));
+
     // 2. Act: Create capture session data from chunks
     const auto chunk_span =
         tempest::span<const tempest::unique_ptr<tempest::profiler::event_chunk>>{chunks.data(), chunks.size()};
     const auto capture = tempest::profiler::create_capture_from_chunks(chunk_span);
 
     // 3. Assert: Verify track classification and naming in capture session data
-    ASSERT_EQ(capture.tracks.size(), 5u);
+    ASSERT_EQ(capture.tracks.size(), 6U);
 
     // GPU: Graphics
     EXPECT_EQ(capture.tracks[0].track_id, 0x8000'0001ULL);
@@ -1576,14 +1594,19 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     EXPECT_EQ(capture.tracks[3].name, "GPU: Queue 7");
 
     // CPU Thread
-    EXPECT_EQ(capture.tracks[4].track_id, 42u);
+    EXPECT_EQ(capture.tracks[4].track_id, 42U);
     EXPECT_EQ(capture.tracks[4].type, tempest::profiler::track_type::cpu_thread);
     EXPECT_EQ(capture.tracks[4].name, "Thread 42");
 
+    // CPU Thread (Linux 64-bit pointer with bit 31 set)
+    EXPECT_EQ(capture.tracks[5].track_id, linux_ptr_tid);
+    EXPECT_EQ(capture.tracks[5].type, tempest::profiler::track_type::cpu_thread);
+    EXPECT_EQ(capture.tracks[5].name, "Thread 140735340876340");
+
     // 4. Act & Assert: Convert to telemetry frame and verify segregation
     const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(1, capture);
-    EXPECT_EQ(telemetry.gpu_tracks.size(), 4u);
-    EXPECT_EQ(telemetry.cpu_tracks.size(), 1u);
+    EXPECT_EQ(telemetry.gpu_tracks.size(), 4U);
+    EXPECT_EQ(telemetry.cpu_tracks.size(), 2U);
 
     EXPECT_EQ(telemetry.gpu_tracks[0].name, "GPU: Graphics");
     EXPECT_EQ(telemetry.gpu_tracks[1].name, "GPU: Async Compute");
@@ -1591,6 +1614,7 @@ TEST(profiler_tests, gpu_track_classification_and_telemetry_routing)
     EXPECT_EQ(telemetry.gpu_tracks[3].name, "GPU: Queue 7");
 
     EXPECT_EQ(telemetry.cpu_tracks[0].name, "Thread 42");
+    EXPECT_EQ(telemetry.cpu_tracks[1].name, "Thread 140735340876340");
 }
 
 /// @brief Verify GPU track IDs remain strictly within JavaScript safe integer range (53 bits, < 2^53).
@@ -1628,7 +1652,7 @@ TEST(profiler_tests, gpu_track_id_js_safe_integer_range)
         tempest::span<const tempest::unique_ptr<tempest::profiler::event_chunk>>{chunks.data(), chunks.size()};
     const auto capture = tempest::profiler::create_capture_from_chunks(chunk_span);
 
-    ASSERT_EQ(capture.tracks.size(), 1u);
+    ASSERT_EQ(capture.tracks.size(), 1U);
     EXPECT_EQ(capture.tracks[0].type, tempest::profiler::track_type::gpu_queue);
     EXPECT_EQ(capture.tracks[0].name, "GPU: Graphics");
     EXPECT_LT(capture.tracks[0].track_id, js_max_safe_integer);
@@ -1639,7 +1663,7 @@ TEST(profiler_tests, chunk_recycling_via_create_capture_from_session)
 {
     // 1. Setup profiler session and verify empty initial pool
     auto session = tempest::profiler::profiler_session{true};
-    EXPECT_EQ(session.get_chunk_pool().pool_size(), 0u);
+    EXPECT_EQ(session.get_chunk_pool().pool_size(), 0U);
 
     // 2. Act: Record multiple zones exceeding a chunk, then create capture from session
     constexpr auto event_count = size_t{2000};
@@ -1657,7 +1681,7 @@ TEST(profiler_tests, chunk_recycling_via_create_capture_from_session)
         total_zones += tr.zones.size();
     }
     EXPECT_EQ(total_zones, event_count);
-    EXPECT_GT(session.get_chunk_pool().pool_size(), 0u);
+    EXPECT_GT(session.get_chunk_pool().pool_size(), 0U);
 
     // 4. Act: Record second frame and capture again, verifying pool reuse
     const auto pool_size_before = session.get_chunk_pool().pool_size();
@@ -1688,19 +1712,19 @@ TEST(profiler_tests, nonblocking_socket_broadcast_handling)
     auto client = test_tcp_client{};
     ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
-    const auto ws_req = "GET /ws HTTP/1.1\r\n"
-                        "Host: 127.0.0.1\r\n"
-                        "Upgrade: websocket\r\n"
-                        "Connection: Upgrade\r\n"
-                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                        "Sec-WebSocket-Version: 13\r\n\r\n";
+    const auto* const ws_req = "GET /ws HTTP/1.1\r\n"
+                               "Host: 127.0.0.1\r\n"
+                               "Upgrade: websocket\r\n"
+                               "Connection: Upgrade\r\n"
+                               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                               "Sec-WebSocket-Version: 13\r\n\r\n";
 
     ASSERT_TRUE(client.send_string(ws_req));
     const auto resp = client.receive_all(500);
-    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
     tempest::this_thread::yield();
-    EXPECT_EQ(server.connected_client_count(), 1u);
+    EXPECT_EQ(server.connected_client_count(), 1U);
 
     // 3. Act: Issue multiple non-blocking broadcasts in rapid succession
     for (auto i = uint64_t{0}; i < 10; ++i)
@@ -1711,7 +1735,7 @@ TEST(profiler_tests, nonblocking_socket_broadcast_handling)
     }
 
     // 4. Assert: Client is still connected and can receive frames without server stalling
-    EXPECT_EQ(server.connected_client_count(), 1u);
+    EXPECT_EQ(server.connected_client_count(), 1U);
     const auto bc_data = client.receive_all(500);
     EXPECT_FALSE(bc_data.empty());
 
@@ -1733,24 +1757,24 @@ TEST(profiler_tests, large_payload_nonblocking_send_all)
     auto client = test_tcp_client{};
     ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
-    const auto ws_req = "GET /ws HTTP/1.1\r\n"
-                        "Host: 127.0.0.1\r\n"
-                        "Upgrade: websocket\r\n"
-                        "Connection: Upgrade\r\n"
-                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                        "Sec-WebSocket-Version: 13\r\n\r\n";
+    const auto* const ws_req = "GET /ws HTTP/1.1\r\n"
+                               "Host: 127.0.0.1\r\n"
+                               "Upgrade: websocket\r\n"
+                               "Connection: Upgrade\r\n"
+                               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                               "Sec-WebSocket-Version: 13\r\n\r\n";
 
     ASSERT_TRUE(client.send_string(ws_req));
     const auto resp = client.receive_all(500);
-    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
     // 3. Act: Broadcast a 128KB large payload
-    auto large_text = std::string(128 * 1024, 'A');
+    auto large_text = tempest::string(128 * 1024, 'A');
     server.broadcast_text(tempest::string_view{large_text.data(), large_text.size()});
 
     // 4. Assert: Client receives the complete WebSocket payload without truncation
     const auto bc_data = client.receive_all(1000);
-    EXPECT_GT(bc_data.size(), 128 * 1024u);
+    EXPECT_GT(bc_data.size(), 128 * 1024U);
 
     server.stop();
 }
@@ -1813,7 +1837,7 @@ TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
         .unit = tempest::profiler::metric_unit::count,
     });
 
-    ASSERT_EQ(z.metrics.size(), 7u);
+    ASSERT_EQ(z.metrics.size(), 7U);
     ASSERT_TRUE(chunk->add_zone(z));
     session.push_completed_chunk(tempest::move(chunk));
 
@@ -1822,26 +1846,26 @@ TEST(profiler_tests, gpu_track_zone_metrics_telemetry_serialization)
     const auto telemetry = tempest::profiler::create_telemetry_frame_from_capture(42, capture);
 
     // 3. Assert: Verify GPU track structure and zone metrics preservation
-    ASSERT_EQ(telemetry.gpu_tracks.size(), 1u);
-    ASSERT_EQ(telemetry.gpu_tracks[0].zones.size(), 1u);
+    ASSERT_EQ(telemetry.gpu_tracks.size(), 1U);
+    ASSERT_EQ(telemetry.gpu_tracks[0].zones.size(), 1U);
     const auto& t_zone = telemetry.gpu_tracks[0].zones[0];
     EXPECT_EQ(t_zone.name, "PBROpaquePass");
-    EXPECT_EQ(t_zone.metrics.size(), 7u);
+    EXPECT_EQ(t_zone.metrics.size(), 7U);
 
     // 4. Act: Serialize telemetry frame to JSON
     const auto json_str = tempest::profiler::serialize_telemetry_frame_json(telemetry);
-    const auto json_std = std::string(json_str.data(), json_str.size());
+    const auto json_std = tempest::string(json_str.data(), json_str.size());
 
     // 5. Assert: JSON payload contains GPU track zones with all pipeline metrics
-    EXPECT_NE(json_std.find("\"gpu_tracks\":["), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"PBROpaquePass\""), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Input Assembly Vertices\",\"value\":1200.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Input Assembly Primitives\",\"value\":400.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Vertex Shader Invocations\",\"value\":1200.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Clipping Input Primitives\",\"value\":400.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Clipping Output Primitives\",\"value\":380.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Fragment Shader Invocations\",\"value\":50000.000"), std::string::npos);
-    EXPECT_NE(json_std.find("\"name\":\"Compute Shader Invocations\",\"value\":1024.000"), std::string::npos);
+    EXPECT_TRUE(tempest::contains(json_std, "\"gpu_tracks\":["));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"PBROpaquePass\""));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Input Assembly Vertices\",\"value\":1200.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Input Assembly Primitives\",\"value\":400.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Vertex Shader Invocations\",\"value\":1200.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Clipping Input Primitives\",\"value\":400.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Clipping Output Primitives\",\"value\":380.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Fragment Shader Invocations\",\"value\":50000.000"));
+    EXPECT_TRUE(tempest::contains(json_std, "\"name\":\"Compute Shader Invocations\",\"value\":1024.000"));
 }
 
 //==============================================================================
@@ -1888,27 +1912,27 @@ TEST(profiler_tests, zone_exclusive_duration_calculation)
     const auto result = tempest::profiler::compute_exclusive_durations(z_span);
 
     // 3. Assert: Verify each zone's exclusive time
-    ASSERT_EQ(result.size(), 4u);
+    ASSERT_EQ(result.size(), 4U);
 
     // RootZone: Total = 2000ns, direct children (ChildA 800ns + ChildB 600ns = 1400ns) -> Exclusive = 600ns
     EXPECT_EQ(result[0].name, "RootZone");
-    EXPECT_EQ(result[0].total_duration_ns, 2000u);
-    EXPECT_EQ(result[0].exclusive_duration_ns, 600u);
+    EXPECT_EQ(result[0].total_duration_ns, 2000U);
+    EXPECT_EQ(result[0].exclusive_duration_ns, 600U);
 
     // ChildA: Total = 800ns, direct child (Grandchild 400ns) -> Exclusive = 400ns
     EXPECT_EQ(result[1].name, "ChildA");
-    EXPECT_EQ(result[1].total_duration_ns, 800u);
-    EXPECT_EQ(result[1].exclusive_duration_ns, 400u);
+    EXPECT_EQ(result[1].total_duration_ns, 800U);
+    EXPECT_EQ(result[1].exclusive_duration_ns, 400U);
 
     // Grandchild: Total = 400ns, no children -> Exclusive = 400ns
     EXPECT_EQ(result[2].name, "Grandchild");
-    EXPECT_EQ(result[2].total_duration_ns, 400u);
-    EXPECT_EQ(result[2].exclusive_duration_ns, 400u);
+    EXPECT_EQ(result[2].total_duration_ns, 400U);
+    EXPECT_EQ(result[2].exclusive_duration_ns, 400U);
 
     // ChildB: Total = 600ns, no children -> Exclusive = 600ns
     EXPECT_EQ(result[3].name, "ChildB");
-    EXPECT_EQ(result[3].total_duration_ns, 600u);
-    EXPECT_EQ(result[3].exclusive_duration_ns, 600u);
+    EXPECT_EQ(result[3].total_duration_ns, 600U);
+    EXPECT_EQ(result[3].exclusive_duration_ns, 600U);
 }
 
 /// @brief Verifies detection and filtering of GPU queue submit envelopes from hot zones.
@@ -1960,7 +1984,7 @@ TEST(profiler_tests, gpu_submit_envelope_detection_and_hot_zone_filtering)
         tempest::span<const tempest::profiler::telemetry_track>{tracks.data(), tracks.size()}, true, 5);
 
     // 4. Assert: Submit envelope is omitted, passes are ranked by exclusive duration
-    ASSERT_EQ(hot_zones.size(), 2u);
+    ASSERT_EQ(hot_zones.size(), 2U);
     EXPECT_EQ(hot_zones[0].name, "ForwardLightingPass");
     EXPECT_NEAR(hot_zones[0].exclusive_duration_ms, 3.0, 1e-4);
     EXPECT_EQ(hot_zones[1].name, "TonemapPass");
@@ -1972,48 +1996,48 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_averages_and_wrap)
 {
     // 1. Setup: Create accumulator with capacity N = 4 frames
     auto acc = tempest::profiler::frame_stats_accumulator{4};
-    EXPECT_EQ(acc.window_capacity(), 4u);
-    EXPECT_EQ(acc.sample_count(), 0u);
-    EXPECT_FLOAT_EQ(acc.get_rolling_fps(), 0.0f);
-    EXPECT_FLOAT_EQ(acc.get_rolling_frame_time_ms(), 0.0f);
-    EXPECT_FLOAT_EQ(acc.get_rolling_cpu_time_ms(), 0.0f);
-    EXPECT_FLOAT_EQ(acc.get_rolling_gpu_time_ms(), 0.0f);
+    EXPECT_EQ(acc.window_capacity(), 4U);
+    EXPECT_EQ(acc.sample_count(), 0U);
+    EXPECT_FLOAT_EQ(acc.get_rolling_fps(), 0.0F);
+    EXPECT_FLOAT_EQ(acc.get_rolling_frame_time_ms(), 0.0F);
+    EXPECT_FLOAT_EQ(acc.get_rolling_cpu_time_ms(), 0.0F);
+    EXPECT_FLOAT_EQ(acc.get_rolling_gpu_time_ms(), 0.0F);
 
     auto empty_frame = tempest::profiler::telemetry_frame{};
 
     // 2. Act & Assert: Push 1st frame (FPS=60, Frame=16.6ms, CPU=5.0ms, GPU=4.0ms)
-    acc.record_frame(60.0f, 16.6f, 5.0f, 4.0f, empty_frame);
-    EXPECT_EQ(acc.sample_count(), 1u);
-    EXPECT_NEAR(acc.get_rolling_fps(), 60.0f, 1e-3);
-    EXPECT_NEAR(acc.get_rolling_frame_time_ms(), 16.6f, 1e-3);
-    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 5.0f, 1e-3);
-    EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 4.0f, 1e-3);
+    acc.record_frame(60.0F, 16.6F, 5.0F, 4.0F, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 1U);
+    EXPECT_NEAR(acc.get_rolling_fps(), 60.0F, 1e-3);
+    EXPECT_NEAR(acc.get_rolling_frame_time_ms(), 16.6F, 1e-3);
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 5.0F, 1e-3);
+    EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 4.0F, 1e-3);
 
     // 3. Act & Assert: Push 2nd frame (FPS=30, Frame=33.3ms, CPU=15.0ms, GPU=12.0ms)
-    acc.record_frame(30.0f, 33.3f, 15.0f, 12.0f, empty_frame);
-    EXPECT_EQ(acc.sample_count(), 2u);
-    EXPECT_NEAR(acc.get_rolling_fps(), 45.0f, 1e-3);            // (60 + 30) / 2
-    EXPECT_NEAR(acc.get_rolling_frame_time_ms(), 24.95f, 1e-2); // (16.6 + 33.3) / 2
-    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 10.0f, 1e-3);    // (5.0 + 15.0) / 2
-    EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 8.0f, 1e-3);     // (4.0 + 12.0) / 2
+    acc.record_frame(30.0F, 33.3F, 15.0F, 12.0F, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 2U);
+    EXPECT_NEAR(acc.get_rolling_fps(), 45.0F, 1e-3);            // (60 + 30) / 2
+    EXPECT_NEAR(acc.get_rolling_frame_time_ms(), 24.95F, 1e-2); // (16.6 + 33.3) / 2
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 10.0F, 1e-3);    // (5.0 + 15.0) / 2
+    EXPECT_NEAR(acc.get_rolling_gpu_time_ms(), 8.0F, 1e-3);     // (4.0 + 12.0) / 2
 
     // Push 3rd and 4th frames
-    acc.record_frame(60.0f, 16.0f, 6.0f, 4.0f, empty_frame);
-    acc.record_frame(60.0f, 16.0f, 6.0f, 4.0f, empty_frame);
-    EXPECT_EQ(acc.sample_count(), 4u);
+    acc.record_frame(60.0F, 16.0F, 6.0F, 4.0F, empty_frame);
+    acc.record_frame(60.0F, 16.0F, 6.0F, 4.0F, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 4U);
     // Mean CPU over [5, 15, 6, 6] = 32 / 4 = 8.0ms
-    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 8.0f, 1e-3);
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 8.0F, 1e-3);
 
     // 4. Act & Assert: Push 5th frame to trigger wrap-around (evicts 1st frame with CPU=5.0)
     // New window: [15, 6, 6, 20] -> Sum = 47 / 4 = 11.75ms
-    acc.record_frame(50.0f, 20.0f, 20.0f, 10.0f, empty_frame);
-    EXPECT_EQ(acc.sample_count(), 4u);
-    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 11.75f, 1e-3);
+    acc.record_frame(50.0F, 20.0F, 20.0F, 10.0F, empty_frame);
+    EXPECT_EQ(acc.sample_count(), 4U);
+    EXPECT_NEAR(acc.get_rolling_cpu_time_ms(), 11.75F, 1e-3);
 
     // 5. Act & Assert: Reset clears history
     acc.reset();
-    EXPECT_EQ(acc.sample_count(), 0u);
-    EXPECT_FLOAT_EQ(acc.get_rolling_cpu_time_ms(), 0.0f);
+    EXPECT_EQ(acc.sample_count(), 0U);
+    EXPECT_FLOAT_EQ(acc.get_rolling_cpu_time_ms(), 0.0F);
 }
 
 /// @brief Verifies rolling hot zone aggregation and exclusive time averaging over multiple frames.
@@ -2071,8 +2095,8 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
     frame2.cpu_tracks.push_back(tempest::move(track2));
 
     // 2. Act: Record both frames
-    acc.record_frame(60.0f, 16.6f, 6.0f, 0.0f, frame1);
-    acc.record_frame(60.0f, 16.6f, 5.0f, 0.0f, frame2);
+    acc.record_frame(60.0F, 16.6F, 6.0F, 0.0F, frame1);
+    acc.record_frame(60.0F, 16.6F, 5.0F, 0.0F, frame2);
 
     // 3. Act: Query rolling top CPU hot zones
     const auto top_cpu = acc.get_top_cpu_hot_zones(5);
@@ -2082,7 +2106,7 @@ TEST(profiler_tests, frame_stats_accumulator_rolling_hot_zones)
     // "Render": frame1=3ms exclusive, frame2=0ms -> avg = 1.5ms
     // "RenderChild": frame1=1ms exclusive, frame2=0ms -> avg = 0.5ms
     // "Audio": frame1=0ms, frame2=1ms -> avg = 0.5ms
-    ASSERT_GE(top_cpu.size(), 2u);
+    ASSERT_GE(top_cpu.size(), 2U);
     EXPECT_EQ(top_cpu[0].name, "Physics");
     EXPECT_NEAR(top_cpu[0].exclusive_duration_ms, 3.0, 1e-4);
     EXPECT_EQ(top_cpu[1].name, "Render");
@@ -2151,19 +2175,19 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         auto client = test_tcp_client{};
         ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
-        const auto ws_req = "GET /ws HTTP/1.1\r\n"
-                            "Host: 127.0.0.1\r\n"
-                            "Upgrade: websocket\r\n"
-                            "Connection: Upgrade\r\n"
-                            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                            "Sec-WebSocket-Version: 13\r\n\r\n";
+        const auto* const ws_req = "GET /ws HTTP/1.1\r\n"
+                                   "Host: 127.0.0.1\r\n"
+                                   "Upgrade: websocket\r\n"
+                                   "Connection: Upgrade\r\n"
+                                   "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                                   "Sec-WebSocket-Version: 13\r\n\r\n";
         ASSERT_TRUE(client.send_string(ws_req));
         const auto resp = client.receive_all(500);
-        ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
-        EXPECT_EQ(server.connected_client_count(), 1u);
+        ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
+        EXPECT_EQ(server.connected_client_count(), 1U);
 
         // Send unmasked text frame from client
-        const auto raw_cmd = tempest::string_view{"{\"command\":\"start_capture\"}"};
+        const auto raw_cmd = tempest::string_view{R"({"command":"start_capture"})"};
         auto unmasked_frame = tempest::vector<tempest::byte>{};
         unmasked_frame.push_back(static_cast<tempest::byte>(0x81));           // FIN | text
         unmasked_frame.push_back(static_cast<tempest::byte>(raw_cmd.size())); // Mask bit = 0
@@ -2174,12 +2198,12 @@ TEST(profiler_tests, rfc6455_protocol_violations_and_control_frame_validation)
         ASSERT_TRUE(client.send_all(unmasked_frame.data(), unmasked_frame.size()));
 
         // Client must be disconnected by server
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-        while (server.connected_client_count() > 0 && std::chrono::steady_clock::now() < deadline)
+        const auto deadline = tempest::chrono::steady_clock::now() + tempest::chrono::milliseconds(500);
+        while (server.connected_client_count() > 0 && tempest::chrono::steady_clock::now() < deadline)
         {
             tempest::this_thread::yield();
         }
-        EXPECT_EQ(server.connected_client_count(), 0u);
+        EXPECT_EQ(server.connected_client_count(), 0U);
 
         client.close_sock();
         server.stop();
@@ -2200,19 +2224,19 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
     auto client = test_tcp_client{};
     ASSERT_TRUE(client.connect_to("127.0.0.1", port));
 
-    const auto ws_req = "GET /ws HTTP/1.1\r\n"
-                        "Host: 127.0.0.1\r\n"
-                        "Upgrade: websocket\r\n"
-                        "Connection: Upgrade\r\n"
-                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                        "Sec-WebSocket-Version: 13\r\n\r\n";
+    const auto* const ws_req = "GET /ws HTTP/1.1\r\n"
+                               "Host: 127.0.0.1\r\n"
+                               "Upgrade: websocket\r\n"
+                               "Connection: Upgrade\r\n"
+                               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                               "Sec-WebSocket-Version: 13\r\n\r\n";
     ASSERT_TRUE(client.send_string(ws_req));
     const auto resp = client.receive_all(500);
-    ASSERT_NE(resp.find("HTTP/1.1 101"), std::string::npos);
+    ASSERT_TRUE(tempest::contains(resp, "HTTP/1.1 101"));
 
     // 2. Act & Assert: Send "stop_capture" with extra metadata mentioning "start_capture"
     {
-        const auto cmd = std::string{"{\"command\":\"stop_capture\",\"note\":\"do not start_capture\"}"};
+        const auto cmd = tempest::string{R"({"command":"stop_capture","note":"do not start_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -2227,14 +2251,15 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
         auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        EXPECT_NE(resp_str.find("\"command\":\"stop_capture\""), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        EXPECT_TRUE(tempest::contains(resp_str, "\"command\":\"stop_capture\""));
         EXPECT_FALSE(session.is_enabled());
     }
 
     // 3. Act & Assert: Send unknown command "restart_capture" (containing "start_capture" as substring)
     {
-        const auto cmd = std::string{"{\"command\":\"restart_capture\"}"};
+        const auto cmd = tempest::string{R"({"command":"restart_capture"})"};
         auto cmd_bytes = tempest::vector<tempest::byte>{};
         for (auto c : cmd)
         {
@@ -2249,8 +2274,9 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
         auto decoded = tempest::profiler::decode_websocket_frame(tempest::span<const tempest::byte>{
             reinterpret_cast<const tempest::byte*>(resp_raw.data()), resp_raw.size()});
         ASSERT_TRUE(decoded.has_value());
-        auto resp_str = std::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
-        EXPECT_NE(resp_str.find("\"unknown_command\""), std::string::npos);
+        auto resp_str =
+            tempest::string(reinterpret_cast<const char*>(decoded->payload.data()), decoded->payload.size());
+        EXPECT_TRUE(tempest::contains(resp_str, "\"unknown_command\""));
         EXPECT_FALSE(session.is_enabled());
     }
 

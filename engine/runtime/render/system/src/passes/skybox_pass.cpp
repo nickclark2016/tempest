@@ -1,6 +1,5 @@
 #include <tempest/render_system/passes/skybox_pass.hpp>
 
-#include <iostream>
 #include <tempest/array.hpp>
 
 namespace tempest::render_system
@@ -40,7 +39,7 @@ namespace tempest::render_system
 
         return graph.add_graphics_pass<skybox_pass_data>(
             "SkyboxPass",
-            [&pool, hdr_color_tex, pipeline_stats](render_graph::pass_builder& builder, skybox_pass_data& data) {
+            [&pool, hdr_color_tex, pipeline_stats](render_graph::pass_builder& builder, skybox_pass_data& data) -> void {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
@@ -50,7 +49,7 @@ namespace tempest::render_system
                                                                      .texture = hdr_color_tex,
                                                                      .load_op = rhi::load_op::clear,
                                                                      .store_op = rhi::store_op::store,
-                                                                     .clear_value = {0.05F, 0.05F, 0.08F, 1.0F},
+                                                                     .clear_value = {.r=0.05F, .g=0.05F, .b=0.08F, .a=1.0F},
                                                                  });
 
                 data.scene_constants = builder.import_buffer(pool.get_scene_constants_buffer());
@@ -59,7 +58,7 @@ namespace tempest::render_system
             },
             [&pool, &shaders, skybox_tex_idx, pipe]([[maybe_unused]] const skybox_pass_data& data,
                                                     [[maybe_unused]] render_graph::pass_execution_context& ctx,
-                                                    rhi::command_list& pass_cmd) {
+                                                    rhi::command_list& pass_cmd) -> void {
                 auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
                 if (rhi_pipe.handle == 0)
                 {

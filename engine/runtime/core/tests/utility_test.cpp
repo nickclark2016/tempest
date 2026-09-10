@@ -20,7 +20,7 @@ TEST(pair, copy_object_constructor)
 
 TEST(pair, perfect_forward_constructor)
 {
-    tempest::pair<double, double> p{1.0f, 2.0f};
+    tempest::pair<double, double> p{1.0F, 2.0F};
 
     EXPECT_EQ(p.first, 1.0);
     EXPECT_EQ(p.second, 2.0);
@@ -28,7 +28,7 @@ TEST(pair, perfect_forward_constructor)
 
 TEST(pair, copy_constructor_from_convertible)
 {
-    tempest::pair<float, float> p{1.0f, 2.0f};
+    tempest::pair<float, float> p{1.0F, 2.0F};
     tempest::pair<double, double> p2{p};
 
     EXPECT_EQ(p2.first, 1.0);
@@ -37,7 +37,7 @@ TEST(pair, copy_constructor_from_convertible)
 
 TEST(pair, move_constructor_from_convertible)
 {
-    tempest::pair<float, float> p{1.0f, 2.0f};
+    tempest::pair<float, float> p{1.0F, 2.0F};
     tempest::pair<double, double> p2{move(p)};
 
     EXPECT_EQ(p2.first, 1.0);
@@ -118,4 +118,33 @@ TEST(pair, compare)
     EXPECT_EQ(p1 <=> p2, tempest::strong_ordering::equal);
     EXPECT_EQ(p1 <=> p3, tempest::strong_ordering::less);
     EXPECT_EQ(p3 <=> p1, tempest::strong_ordering::greater);
+}
+
+TEST(utility, integer_comparison_functions)
+{
+    // cmp_equal
+    EXPECT_TRUE(tempest::cmp_equal(0, 0U));
+    EXPECT_FALSE(tempest::cmp_equal(-1, 0U));
+    EXPECT_FALSE(tempest::cmp_equal(-1, 4294967295U));
+    EXPECT_TRUE(tempest::cmp_equal(42, 42U));
+
+    // cmp_not_equal
+    EXPECT_FALSE(tempest::cmp_not_equal(0, 0U));
+    EXPECT_TRUE(tempest::cmp_not_equal(-1, 0U));
+
+    // cmp_less
+    EXPECT_TRUE(tempest::cmp_less(-1, 0U));
+    EXPECT_TRUE(tempest::cmp_less(1, 2U));
+    EXPECT_FALSE(tempest::cmp_less(2, 1U));
+    EXPECT_FALSE(tempest::cmp_less(0U, -1));
+
+    // cmp_greater
+    EXPECT_TRUE(tempest::cmp_greater(0U, -1));
+    EXPECT_TRUE(tempest::cmp_greater(5, 3U));
+    EXPECT_FALSE(tempest::cmp_greater(-1, 0U));
+
+    // in_range
+    EXPECT_TRUE((tempest::in_range<uint8_t>(255)));
+    EXPECT_FALSE((tempest::in_range<uint8_t>(256)));
+    EXPECT_FALSE((tempest::in_range<uint8_t>(-1)));
 }

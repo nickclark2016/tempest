@@ -7,7 +7,7 @@
 #include <tempest/tuple.hpp>
 #include <tempest/utility.hpp>
 
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -33,24 +33,29 @@ namespace tempest
         constexpr mutex() noexcept;
         mutex(const mutex&) = delete;
         mutex(mutex&&) = delete;
-        ~mutex();
 
-        mutex& operator=(const mutex&) = delete;
-        mutex& operator=(mutex&&) = delete;
+#if defined(TEMPEST_WIN_THREADS)
+        ~mutex() = default;
+#elif defined(TEMPEST_POSIX_THREADS)
+        ~mutex();
+#endif
+
+        auto operator=(const mutex&) -> mutex& = delete;
+        auto operator=(mutex&&) -> mutex& = delete;
 
         void lock();
-        bool try_lock();
+        auto try_lock() -> bool;
         void unlock();
 
-        native_handle_type native_handle() const noexcept;
+        [[nodiscard]] auto native_handle() const noexcept -> native_handle_type;
 
       private:
         native_handle_type _handle{};
     };
 
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
 
-    inline constexpr mutex::mutex() noexcept
+    constexpr mutex::mutex() noexcept
     {
         if (is_constant_evaluated())
         {
@@ -80,7 +85,7 @@ namespace tempest
 #error "Unsupported platform"
 #endif
 
-    inline typename mutex::native_handle_type mutex::native_handle() const noexcept
+    inline auto mutex::native_handle() const noexcept -> typename mutex::native_handle_type
     {
         return _handle;
     }
@@ -98,27 +103,31 @@ namespace tempest
 
         constexpr shared_mutex() noexcept;
         shared_mutex(const shared_mutex&) = delete;
+#if defined(TEMPEST_WIN_THREADS)
+        ~shared_mutex() = default;
+#elif defined(TEMPEST_POSIX_THREADS)
         ~shared_mutex();
+#endif
 
-        shared_mutex& operator=(const shared_mutex&) = delete;
+        auto operator=(const shared_mutex&) -> shared_mutex& = delete;
 
         void lock();
-        bool try_lock();
+        auto try_lock() -> bool;
         void unlock();
 
         void lock_shared();
-        bool try_lock_shared();
+        auto try_lock_shared() -> bool;
         void unlock_shared();
 
-        native_handle_type native_handle() const noexcept;
+        [[nodiscard]] auto native_handle() const noexcept -> native_handle_type;
 
       private:
         native_handle_type _handle{};
     };
 
-#if defined(TEMPEST_WIN_THREADS)
+#ifdef TEMPEST_WIN_THREADS
 
-    inline constexpr shared_mutex::shared_mutex() noexcept
+    constexpr shared_mutex::shared_mutex() noexcept
     {
         if (is_constant_evaluated())
         {
@@ -148,7 +157,7 @@ namespace tempest
 #error "Unsupported platform"
 #endif
 
-    inline typename shared_mutex::native_handle_type shared_mutex::native_handle() const noexcept
+    inline auto shared_mutex::native_handle() const noexcept -> typename shared_mutex::native_handle_type
     {
         return _handle;
     }
@@ -188,12 +197,12 @@ namespace tempest
         using mutex_type = Mutex;
 
         explicit lock_guard(mutex_type& m);
-        lock_guard(mutex_type& m, adopt_lock_t);
+        lock_guard(mutex_type& m, adopt_lock_t /*unused*/);
         lock_guard(const lock_guard&) = delete;
 
         ~lock_guard();
 
-        lock_guard& operator=(const lock_guard&) = delete;
+        auto operator=(const lock_guard&) -> lock_guard& = delete;
 
       private:
         mutex_type& _mutex;
@@ -209,7 +218,7 @@ namespace tempest
     }
 
     template <lockable Mutex>
-    inline lock_guard<Mutex>::lock_guard(mutex_type& m, adopt_lock_t) : _mutex{m}
+    inline lock_guard<Mutex>::lock_guard(mutex_type& m, adopt_lock_t /*unused*/) : _mutex{m}
     {
     }
 
@@ -229,21 +238,21 @@ namespace tempest
         unique_lock(const unique_lock&) = delete;
         unique_lock(unique_lock&& other) noexcept;
         explicit unique_lock(mutex_type& m);
-        unique_lock(mutex_type& m, adopt_lock_t);
-        unique_lock(mutex_type& m, defer_lock_t);
+        unique_lock(mutex_type& m, adopt_lock_t /*unused*/);
+        unique_lock(mutex_type& m, defer_lock_t /*unused*/);
 
         ~unique_lock();
 
-        unique_lock& operator=(const unique_lock&) = delete;
-        unique_lock& operator=(unique_lock&& rhs) noexcept;
+        auto operator=(const unique_lock&) -> unique_lock& = delete;
+        auto operator=(unique_lock&& rhs) noexcept -> unique_lock&;
 
         void lock();
-        bool try_lock();
+        auto try_lock() -> bool;
         void unlock();
 
         void swap(unique_lock& other) noexcept;
-        mutex_type* release() noexcept;
-        bool owns_lock() const noexcept;
+        auto release() noexcept -> mutex_type*;
+        [[nodiscard]] auto owns_lock() const noexcept -> bool;
         explicit operator bool() const noexcept;
 
       private:
@@ -266,19 +275,18 @@ namespace tempest
     }
 
     template <lockable Mutex>
-    inline unique_lock<Mutex>::unique_lock(mutex_type& m) : _mutex{&m}
+    inline unique_lock<Mutex>::unique_lock(mutex_type& m) : _mutex{&m}, _owns_lock(true)
     {
         _mutex->lock();
-        _owns_lock = true;
     }
 
     template <lockable Mutex>
-    inline unique_lock<Mutex>::unique_lock(mutex_type& m, adopt_lock_t) : _mutex{&m}, _owns_lock{true}
+    inline unique_lock<Mutex>::unique_lock(mutex_type& m, adopt_lock_t /*unused*/) : _mutex{&m}, _owns_lock{true}
     {
     }
 
     template <lockable Mutex>
-    inline unique_lock<Mutex>::unique_lock(mutex_type& m, defer_lock_t) : _mutex{&m}
+    inline unique_lock<Mutex>::unique_lock(mutex_type& m, defer_lock_t /*unused*/) : _mutex{&m}
     {
     }
 
@@ -295,7 +303,7 @@ namespace tempest
     }
 
     template <lockable Mutex>
-    inline unique_lock<Mutex>& unique_lock<Mutex>::operator=(unique_lock&& rhs) noexcept
+    inline auto unique_lock<Mutex>::operator=(unique_lock&& rhs) noexcept -> unique_lock<Mutex>&
     {
         if (&rhs == this)
         {
@@ -316,7 +324,7 @@ namespace tempest
     template <lockable Mutex>
     inline void unique_lock<Mutex>::lock()
     {
-        if (!_mutex || owns_lock())
+        if ((_mutex == nullptr) || owns_lock())
         {
             terminate();
         }
@@ -326,9 +334,9 @@ namespace tempest
     }
 
     template <lockable Mutex>
-    inline bool unique_lock<Mutex>::try_lock()
+    inline auto unique_lock<Mutex>::try_lock() -> bool
     {
-        if (!_mutex || owns_lock())
+        if ((_mutex == nullptr) || owns_lock())
         {
             terminate();
         }
@@ -339,7 +347,7 @@ namespace tempest
     template <lockable Mutex>
     inline void unique_lock<Mutex>::unlock()
     {
-        if (!_mutex || !owns_lock())
+        if ((_mutex == nullptr) || !owns_lock())
         {
             terminate();
         }
@@ -356,14 +364,14 @@ namespace tempest
     }
 
     template <lockable Mutex>
-    inline typename unique_lock<Mutex>::mutex_type* unique_lock<Mutex>::release() noexcept
+    inline auto unique_lock<Mutex>::release() noexcept -> typename unique_lock<Mutex>::mutex_type*
     {
         _owns_lock = false;
         return exchange(_mutex, nullptr);
     }
 
     template <lockable Mutex>
-    inline bool unique_lock<Mutex>::owns_lock() const noexcept
+    inline auto unique_lock<Mutex>::owns_lock() const noexcept -> bool
     {
         return _owns_lock;
     }

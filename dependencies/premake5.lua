@@ -3,12 +3,10 @@ scoped.group('Vendor', function()
     include 'googletest'
     include 'imgui'
     include 'miniz'
-    include 'simdjson'
-    include 'spdlog'
+    include 'yyjson'
     include 'stb'
     include 'tinyexr'
     include 'tlsf'
-    include 'vk-bootstrap'
     include 'vma'
     include 'vulkan'
 

@@ -1,9 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <tempest/logger.hpp>
 #include <tempest/vk/context.hpp>
 #include <tempest/vk/device.hpp>
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
 #define GLFW_EXPOSE_NATIVE_WIN32
 #elif defined(TEMPEST_PLATFORM_LINUX)
 #define GLFW_EXPOSE_NATIVE_X11
@@ -16,13 +17,22 @@
 
 namespace tempest::rhi::vk
 {
-    TEST(device_test, create_surface)
+    class device_test : public ::testing::Test
+    {
+      protected:
+        stdout_log_sink log_sink{};
+        logger test_logger{log_sink};
+    };
+
+    // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
+    TEST_F(device_test, create_surface)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -35,14 +45,14 @@ namespace tempest::rhi::vk
         // Create a GLFW window
         if (glfwInit() != GLFW_TRUE)
         {
-            FAIL() << "Failed to initialize GLFW";
+            FAIL() << true;
         }
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         auto* window = glfwCreateWindow(800, 600, "Tempest Test Window", nullptr, nullptr);
         ASSERT_NE(window, nullptr);
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
         auto native_window_handle = native_wsi_handle{
             .display = GetModuleHandle(nullptr),
             .window = glfwGetWin32Window(window),
@@ -68,13 +78,13 @@ namespace tempest::rhi::vk
         glfwTerminate();
     }
 
-    TEST(device_test, query_surface_capabilities)
+    TEST_F(device_test, query_surface_capabilities)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -87,14 +97,14 @@ namespace tempest::rhi::vk
         // Create a GLFW window
         if (glfwInit() != GLFW_TRUE)
         {
-            FAIL() << "Failed to initialize GLFW";
+            FAIL() << true;
         }
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         auto* window = glfwCreateWindow(800, 600, "Tempest Test Window", nullptr, nullptr);
         ASSERT_NE(window, nullptr);
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
         auto native_window_handle = native_wsi_handle{
             .display = GetModuleHandle(nullptr),
             .window = glfwGetWin32Window(window),
@@ -127,13 +137,13 @@ namespace tempest::rhi::vk
         glfwTerminate();
     }
 
-    TEST(device_test, create_render_surface)
+    TEST_F(device_test, create_render_surface)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -146,7 +156,7 @@ namespace tempest::rhi::vk
         // Create a GLFW window
         if (glfwInit() != GLFW_TRUE)
         {
-            FAIL() << "Failed to initialize GLFW";
+            FAIL() << true;
         }
 
         const auto window_width = 800;
@@ -156,7 +166,7 @@ namespace tempest::rhi::vk
         auto* window = glfwCreateWindow(window_width, window_height, "Tempest Test Window", nullptr, nullptr);
         ASSERT_NE(window, nullptr);
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
         auto native_window_handle = native_wsi_handle{
             .display = GetModuleHandle(nullptr),
             .window = glfwGetWin32Window(window),
@@ -207,13 +217,13 @@ namespace tempest::rhi::vk
         glfwTerminate();
     }
 
-    TEST(device_test, create_buffer_device_only)
+    TEST_F(device_test, create_buffer_device_only)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -237,13 +247,13 @@ namespace tempest::rhi::vk
         device->destroy_buffer(buf);
     }
 
-    TEST(device_test, create_buffer_upload)
+    TEST_F(device_test, create_buffer_upload)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -280,13 +290,13 @@ namespace tempest::rhi::vk
         device->destroy_buffer(buf);
     }
 
-    TEST(device_test, create_buffer_readback)
+    TEST_F(device_test, create_buffer_readback)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -309,13 +319,13 @@ namespace tempest::rhi::vk
         device->destroy_buffer(buf);
     }
 
-    TEST(device_test, create_texture_and_view)
+    TEST_F(device_test, create_texture_and_view)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -354,13 +364,13 @@ namespace tempest::rhi::vk
         device->destroy_texture(tex);
     }
 
-    TEST(device_test, create_sampler)
+    TEST_F(device_test, create_sampler)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -390,13 +400,13 @@ namespace tempest::rhi::vk
         device->destroy_sampler(samp);
     }
 
-    TEST(device_test, create_semaphores_and_event)
+    TEST_F(device_test, create_semaphores_and_event)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -420,13 +430,13 @@ namespace tempest::rhi::vk
         device->destroy_event(evt);
     }
 
-    TEST(device_test, create_depth_texture_and_view)
+    TEST_F(device_test, create_depth_texture_and_view)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -465,13 +475,13 @@ namespace tempest::rhi::vk
         device->destroy_texture(tex);
     }
 
-    TEST(device_test, multiple_resource_allocations)
+    TEST_F(device_test, multiple_resource_allocations)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -486,7 +496,7 @@ namespace tempest::rhi::vk
         for (auto i = 0U; i < 64; ++i)
         {
             auto buf = device->create_buffer(buffer_desc{
-                .size = 256 * (i + 1),
+                .size = static_cast<uint64_t>(256) * (i + 1),
                 .memory_usage = (i % 2 == 0) ? memory_usage::device_only : memory_usage::upload,
                 .usage = buffer_usage::storage_buffer | buffer_usage::device_address,
             });
@@ -500,13 +510,13 @@ namespace tempest::rhi::vk
         }
     }
 
-    TEST(device_test, create_compute_storage_texture)
+    TEST_F(device_test, create_compute_storage_texture)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -537,13 +547,13 @@ namespace tempest::rhi::vk
         device->destroy_texture(tex);
     }
 
-    TEST(device_test, object_debug_naming_and_markers)
+    TEST_F(device_test, object_debug_naming_and_markers)
     {
         auto ctx_desc = context_desc{};
         ctx_desc.application_name = "Tempest Test Application";
         ctx_desc.api = graphics_api::vulkan;
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -619,14 +629,14 @@ namespace tempest::rhi::vk
         device->destroy_semaphore(sem);
     }
 
-    TEST(device_test, get_device_desc)
+    TEST_F(device_test, get_device_desc)
     {
         auto ctx_desc = context_desc{
             .application_name = "Tempest Device Desc Test",
             .api = graphics_api::vulkan,
         };
 
-        auto result = vk::create_context(ctx_desc);
+        auto result = vk::create_context(ctx_desc, test_logger);
         ASSERT_TRUE(result.has_value());
 
         auto context = tempest::move(result).value();
@@ -650,4 +660,6 @@ namespace tempest::rhi::vk
         EXPECT_EQ(dev_desc.limits.max_storage_buffer_range, enumerated_desc.limits.max_storage_buffer_range);
         EXPECT_GE(dev_desc.limits.max_image_dimension_2d, 4096U);
     }
+
+    // NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 } // namespace tempest::rhi::vk

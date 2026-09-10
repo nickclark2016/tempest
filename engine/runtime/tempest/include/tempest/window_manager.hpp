@@ -20,11 +20,14 @@ namespace tempest
         disabled,
     };
 
+    constexpr auto default_window_width = uint32_t{1280};
+    constexpr auto default_window_height = uint32_t{720};
+
     /// \brief Description for creating an OS window.
     struct window_desc
     {
-        uint32_t width{1280};
-        uint32_t height{720};
+        uint32_t width{default_window_width};
+        uint32_t height{default_window_height};
         string title{"Tempest Engine"};
         bool fullscreen{false};
         bool resizable{true};
@@ -67,14 +70,15 @@ namespace tempest
         [[nodiscard]] auto get_mouse(window_handle win) const -> const core::mouse&;
         [[nodiscard]] auto get_input_group(window_handle win) -> core::input_group;
 
-        auto register_key_callback(window_handle win, function<void(core::key_state)> cb) -> void;
-        auto register_char_callback(window_handle win, function<void(uint32_t)> cb) -> void;
-        auto register_mouse_button_callback(window_handle win, function<void(core::mouse_button_state)> cb) -> void;
-        auto register_cursor_pos_callback(window_handle win, function<void(float, float)> cb) -> void;
-        auto register_scroll_callback(window_handle win, function<void(float, float)> cb) -> void;
-        auto register_resize_callback(window_handle win, function<void(uint32_t, uint32_t)> cb) -> void;
-        auto register_focus_callback(window_handle win, function<void(bool)> cb) -> void;
-        auto register_close_callback(window_handle win, function<void()> cb) -> void;
+        auto register_key_callback(window_handle win, function<void(core::key_state)> callback) -> void;
+        auto register_char_callback(window_handle win, function<void(uint32_t)> callback) -> void;
+        auto register_mouse_button_callback(window_handle win, function<void(core::mouse_button_state)> callback)
+            -> void;
+        auto register_cursor_pos_callback(window_handle win, function<void(float, float)> callback) -> void;
+        auto register_scroll_callback(window_handle win, function<void(float, float)> callback) -> void;
+        auto register_resize_callback(window_handle win, function<void(uint32_t, uint32_t)> callback) -> void;
+        auto register_focus_callback(window_handle win, function<void(bool)> callback) -> void;
+        auto register_close_callback(window_handle win, function<void()> callback) -> void;
 
       private:
         struct impl;

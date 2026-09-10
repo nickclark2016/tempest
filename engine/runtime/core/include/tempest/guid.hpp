@@ -1,8 +1,8 @@
 #ifndef tempest_guid_hpp
 #define tempest_guid_hpp
 
-#include <tempest/api.hpp>
 #include <tempest/algorithm.hpp>
+#include <tempest/api.hpp>
 #include <tempest/array.hpp>
 #include <tempest/hash.hpp>
 #include <tempest/int.hpp>
@@ -34,15 +34,15 @@ namespace tempest
     template <>
     struct hash<guid>
     {
-        [[nodiscard]] size_t operator()(const guid& g) const noexcept // NOLINT(modernize-use-trailing-return-type)
+        [[nodiscard]] size_t operator()(const guid& uid) const noexcept // NOLINT(modernize-use-trailing-return-type)
         {
             uint64_t data_qwords[2]; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
-            tempest::detail::copy_bytes(g.data.data(), data_qwords, sizeof(data_qwords));
+            tempest::detail::copy_bytes(uid.data.data(), data_qwords, sizeof(data_qwords));
             return detail::fnv1a64(data_qwords, 2);
         }
     };
 
     [[nodiscard]] TEMPEST_API auto to_string(const guid& uid) -> string;
-};
+}; // namespace tempest
 
 #endif // tempest_guid_hpp

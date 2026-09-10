@@ -13,9 +13,13 @@ project 'tinyexr'
 
     uses { 'miniz' }
 
+    defines {
+        'TINYEXR_USE_MINIZ=1',
+    }
+
     usage 'PUBLIC'
         defines {
-            'TINYEXR_USE_MINIZ=1'
+            'TINYEXR_USE_MINIZ=1',
         }
 
     usage 'INTERFACE'
@@ -29,4 +33,5 @@ project 'tinyexr'
 
         links {
             'tinyexr',
+            'miniz',
         }

@@ -49,8 +49,8 @@ namespace tempest
 
         constexpr ~basic_cstring_view() noexcept = default;
 
-        constexpr basic_cstring_view& operator=(const basic_cstring_view&) noexcept = default;
-        constexpr basic_cstring_view& operator=(basic_cstring_view&&) noexcept = default;
+        constexpr auto operator=(const basic_cstring_view&) noexcept -> basic_cstring_view& = default;
+        constexpr auto operator=(basic_cstring_view&&) noexcept -> basic_cstring_view& = default;
 
         [[nodiscard]] constexpr auto begin() const noexcept -> const_iterator;
         [[nodiscard]] constexpr auto cbegin() const noexcept -> const_iterator;

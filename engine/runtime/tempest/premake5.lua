@@ -131,11 +131,9 @@ scoped.project('tempest', function()
         'units',
 
         'miniz',
-        'simdjson',
+        'yyjson',
         'tinyexr',
         'tlsf',
-        'vk-bootstrap',
-        'vma',
     }
 
     scoped.filter({
@@ -193,11 +191,9 @@ scoped.project('tempest', function()
 
                 'glfw',
                 'miniz',
-                'simdjson',
+                'yyjson',
                 'tinyexr',
                 'tlsf',
-                'vk-bootstrap',
-                'vma',
                 'rhi-vk',
            }
         end)

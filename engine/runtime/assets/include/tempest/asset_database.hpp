@@ -32,12 +32,12 @@ namespace tempest::assets
 
         array<byte, hash_size> data{};
 
-        bool operator==(const content_hash& rhs) const noexcept
+        auto operator==(const content_hash& rhs) const noexcept -> bool
         {
             return data == rhs.data;
         }
 
-        bool operator!=(const content_hash& rhs) const noexcept
+        auto operator!=(const content_hash& rhs) const noexcept -> bool
         {
             return data != rhs.data;
         }
@@ -96,7 +96,7 @@ namespace tempest::assets
         int32_t priority{0};
         string alias;
 
-        bool operator==(const mount_point& rhs) const noexcept
+        auto operator==(const mount_point& rhs) const noexcept -> bool
         {
             return priority == rhs.priority && path == rhs.path && alias == rhs.alias;
         }

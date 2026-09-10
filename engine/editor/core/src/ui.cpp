@@ -17,9 +17,8 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
-#include <chrono>
-#include <cstring>
-#include <filesystem>
+#include <tempest/algorithm.hpp>
+#include <tempest/chrono.hpp>
 
 namespace tempest::editor
 {
@@ -333,8 +332,8 @@ namespace tempest::editor
         vector<per_frame_buffer> frame_buffers;
         uint32_t current_frame_index{0};
 
-        std::chrono::steady_clock::time_point last_time;
-        ImVec2 last_mouse_pos{0.0f, 0.0f};
+        tempest::chrono::steady_clock::time_point last_time;
+        ImVec2 last_mouse_pos{0.0F, 0.0F};
 
         auto init_input_callbacks() -> void;
         auto init_render_backend() -> void;
@@ -343,12 +342,12 @@ namespace tempest::editor
 
     auto ui_context::impl::init_input_callbacks() -> void
     {
-        if (!win_mgr || !win.is_valid())
+        if ((win_mgr == nullptr) || !win.is_valid())
         {
             return;
         }
 
-        win_mgr->register_key_callback(win, [this](const core::key_state& key_state) {
+        win_mgr->register_key_callback(win, [this](const core::key_state& key_state) -> void {
             if (key_state.action != core::key_action::press && key_state.action != core::key_action::release)
             {
                 return;
@@ -363,13 +362,13 @@ namespace tempest::editor
             io.AddKeyEvent(ImGuiKey_ModSuper, core::test_modifier(key_state, core::key_modifier::super));
         });
 
-        win_mgr->register_char_callback(win, [this](uint32_t codepoint) {
+        win_mgr->register_char_callback(win, [this](uint32_t codepoint) -> void {
             ImGui::SetCurrentContext(imgui_context);
             auto& io = ImGui::GetIO();
             io.AddInputCharacter(codepoint);
         });
 
-        win_mgr->register_mouse_button_callback(win, [this](const core::mouse_button_state& mouse_state) {
+        win_mgr->register_mouse_button_callback(win, [this](const core::mouse_button_state& mouse_state) -> void {
             if (mouse_state.action != core::mouse_action::press && mouse_state.action != core::mouse_action::release)
             {
                 return;
@@ -397,20 +396,20 @@ namespace tempest::editor
             }
         });
 
-        win_mgr->register_cursor_pos_callback(win, [this](float x, float y) {
+        win_mgr->register_cursor_pos_callback(win, [this](float x, float y) -> void {
             ImGui::SetCurrentContext(imgui_context);
             auto& io = ImGui::GetIO();
             io.AddMousePosEvent(x, y);
             last_mouse_pos = ImVec2(x, y);
         });
 
-        win_mgr->register_scroll_callback(win, [this](float x_offset, float y_offset) {
+        win_mgr->register_scroll_callback(win, [this](float x_offset, float y_offset) -> void {
             ImGui::SetCurrentContext(imgui_context);
             auto& io = ImGui::GetIO();
             io.AddMouseWheelEvent(x_offset, y_offset);
         });
 
-        win_mgr->register_focus_callback(win, [this](bool focused) {
+        win_mgr->register_focus_callback(win, [this](bool focused) -> void {
             ImGui::SetCurrentContext(imgui_context);
             auto& io = ImGui::GetIO();
             io.AddFocusEvent(focused);
@@ -419,7 +418,7 @@ namespace tempest::editor
 
     auto ui_context::impl::setup_font_texture() -> void
     {
-        if (!dev)
+        if (dev == nullptr)
         {
             return;
         }
@@ -454,7 +453,7 @@ namespace tempest::editor
             .name = "ImGui Font Upload Buffer",
         };
         auto upload_buf = dev->create_buffer(upload_desc);
-        std::memcpy(upload_buf.cpu_address, pixels, upload_size);
+        tempest::memcpy(upload_buf.cpu_address, pixels, upload_size);
 
         auto& graphics_port = dev->get_graphics_execution_port();
         auto& cmd = graphics_port.acquire_command_list(0, rhi::command_list_lifetime::transient);
@@ -541,7 +540,7 @@ namespace tempest::editor
 
     auto ui_context::impl::init_render_backend() -> void
     {
-        if (!dev)
+        if (dev == nullptr)
         {
             return;
         }
@@ -561,8 +560,8 @@ namespace tempest::editor
         dev->write_sampler_descriptor(linear_sampler_descriptor, linear_sampler);
 
         // Load Slang-compiled shaders
-        auto vs_bytes = asset_db ? load_shader_bytecode(*asset_db, "imgui.vert.spv") : vector<byte>{};
-        auto fs_bytes = asset_db ? load_shader_bytecode(*asset_db, "imgui.frag.spv") : vector<byte>{};
+        auto vs_bytes = (asset_db != nullptr) ? load_shader_bytecode(*asset_db, "imgui.vert.spv") : vector<byte>{};
+        auto fs_bytes = (asset_db != nullptr) ? load_shader_bytecode(*asset_db, "imgui.frag.spv") : vector<byte>{};
 
         if (!vs_bytes.empty() && !fs_bytes.empty())
         {
@@ -628,7 +627,7 @@ namespace tempest::editor
         _impl->dev = &device;
         _impl->asset_db = &asset_db;
         _impl->target_format = target_format;
-        _impl->frames_in_flight = tempest::max(1u, frames_in_flight);
+        _impl->frames_in_flight = tempest::max(1U, frames_in_flight);
 
         IMGUI_CHECKVERSION();
         _impl->imgui_context = ImGui::CreateContext();
@@ -640,7 +639,7 @@ namespace tempest::editor
         io.BackendPlatformName = "tempest_window_manager";
         io.BackendRendererName = "tempest_rhi_vk_slang";
 
-        _impl->last_time = std::chrono::steady_clock::now();
+        _impl->last_time = tempest::chrono::steady_clock::now();
 
         _impl->init_input_callbacks();
         _impl->init_render_backend();
@@ -650,7 +649,7 @@ namespace tempest::editor
     {
         if (_impl)
         {
-            if (_impl->dev)
+            if (_impl->dev != nullptr)
             {
                 if (_impl->font_descriptor.index != ~0U)
                 {
@@ -689,7 +688,7 @@ namespace tempest::editor
                 }
             }
 
-            if (_impl->imgui_context)
+            if (_impl->imgui_context != nullptr)
             {
                 ImGui::DestroyContext(_impl->imgui_context);
                 _impl->imgui_context = nullptr;
@@ -702,7 +701,7 @@ namespace tempest::editor
         ImGui::SetCurrentContext(_impl->imgui_context);
         auto& io = ImGui::GetIO();
 
-        if (_impl->win_mgr && _impl->win.is_valid())
+        if ((_impl->win_mgr != nullptr) && _impl->win.is_valid())
         {
             auto width = _impl->win_mgr->get_width(_impl->win);
             auto height = _impl->win_mgr->get_height(_impl->win);
@@ -717,13 +716,13 @@ namespace tempest::editor
             }
             else
             {
-                io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+                io.DisplayFramebufferScale = ImVec2(1.0F, 1.0F);
             }
         }
 
-        auto current_time = std::chrono::steady_clock::now();
-        auto dt = std::chrono::duration<float>(current_time - _impl->last_time).count();
-        io.DeltaTime = dt > 0.0f ? dt : (1.0f / 60.0f);
+        auto current_time = tempest::chrono::steady_clock::now();
+        auto dt = tempest::chrono::duration<float>(current_time - _impl->last_time).count();
+        io.DeltaTime = dt > 0.0F ? dt : (1.0F / 60.0F);
         _impl->last_time = current_time;
 
         ImGui::NewFrame();
@@ -744,7 +743,8 @@ namespace tempest::editor
     {
         ImGui::SetCurrentContext(_impl->imgui_context);
         auto* draw_data = ImGui::GetDrawData();
-        if (!draw_data || draw_data->TotalVtxCount <= 0 || width == 0 || height == 0 || _impl->pipeline.handle == 0)
+        if ((draw_data == nullptr) || draw_data->TotalVtxCount <= 0 || width == 0 || height == 0 ||
+            _impl->pipeline.handle == 0)
         {
             return;
         }
@@ -795,8 +795,8 @@ namespace tempest::editor
         for (int n = 0; n < draw_data->CmdListsCount; ++n)
         {
             const auto* cmd_list = draw_data->CmdLists[n];
-            std::memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
-            std::memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+            tempest::memcpy(vtx_dst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+            tempest::memcpy(idx_dst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
             vtx_dst += cmd_list->VtxBuffer.Size;
             idx_dst += cmd_list->IdxBuffer.Size;
         }
@@ -804,12 +804,12 @@ namespace tempest::editor
         cmd.bind_pipeline(_impl->pipeline);
         cmd.bind_index_buffer(fb.index_buffer,
                               sizeof(ImDrawIdx) == 2 ? rhi::index_type::uint16 : rhi::index_type::uint32, 0);
-        cmd.set_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
+        cmd.set_viewport(0.0F, 0.0F, static_cast<float>(width), static_cast<float>(height), 0.0F, 1.0F);
 
         const auto clip_off = draw_data->DisplayPos;
         const auto clip_scale = draw_data->FramebufferScale;
-        auto global_vtx_offset = 0u;
-        auto global_idx_offset = 0u;
+        auto global_vtx_offset = 0U;
+        auto global_idx_offset = 0U;
 
         for (int n = 0; n < draw_data->CmdListsCount; ++n)
         {
@@ -825,7 +825,7 @@ namespace tempest::editor
                         cmd.bind_index_buffer(
                             fb.index_buffer, sizeof(ImDrawIdx) == 2 ? rhi::index_type::uint16 : rhi::index_type::uint32,
                             0);
-                        cmd.set_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f);
+                        cmd.set_viewport(0.0F, 0.0F, static_cast<float>(width), static_cast<float>(height), 0.0F, 1.0F);
                     }
                     else
                     {
@@ -839,14 +839,10 @@ namespace tempest::editor
                     auto clip_max = math::float2((pcmd.ClipRect.z - clip_off.x) * clip_scale.x,
                                                  (pcmd.ClipRect.w - clip_off.y) * clip_scale.y);
 
-                    if (clip_min.x < 0.0f)
-                        clip_min.x = 0.0f;
-                    if (clip_min.y < 0.0f)
-                        clip_min.y = 0.0f;
-                    if (clip_max.x > static_cast<float>(width))
-                        clip_max.x = static_cast<float>(width);
-                    if (clip_max.y > static_cast<float>(height))
-                        clip_max.y = static_cast<float>(height);
+                    clip_min.x = tempest::max(clip_min.x, 0.0F);
+                    clip_min.y = tempest::max(clip_min.y, 0.0F);
+                    clip_max.x = tempest::min(clip_max.x, static_cast<float>(width));
+                    clip_max.y = tempest::min(clip_max.y, static_cast<float>(height));
 
                     if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
                     {
@@ -858,11 +854,13 @@ namespace tempest::editor
                                     static_cast<uint32_t>(clip_max.y - clip_min.y));
 
                     const auto pc = push_constants{
-                        .scale = math::float2(2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y),
-                        .translate = math::float2(-1.0f - draw_data->DisplayPos.x * (2.0f / draw_data->DisplaySize.x),
-                                                  -1.0f - draw_data->DisplayPos.y * (2.0f / draw_data->DisplaySize.y)),
-                        .vertex_buffer = fb.vertex_buffer.gpu_address +
-                                         static_cast<uint64_t>(pcmd.VtxOffset + global_vtx_offset) * sizeof(ImDrawVert),
+                        .scale = math::float2(2.0F / draw_data->DisplaySize.x, 2.0F / draw_data->DisplaySize.y),
+                        .translate =
+                            math::float2(-1.0F - (draw_data->DisplayPos.x * (2.0F / draw_data->DisplaySize.x)),
+                                         -1.0F - (draw_data->DisplayPos.y * (2.0F / draw_data->DisplaySize.y))),
+                        .vertex_buffer =
+                            fb.vertex_buffer.gpu_address +
+                            (static_cast<uint64_t>(pcmd.VtxOffset + global_vtx_offset) * sizeof(ImDrawVert)),
                         .texture_id = static_cast<uint32_t>(pcmd.GetTexID()),
                         .sampler_id = _impl->linear_sampler_descriptor.index,
                     };
@@ -908,13 +906,13 @@ namespace tempest::editor
 
         auto drag_integral(cstring_view label, int input, int minimum, int maximum) -> int
         {
-            ImGui::DragInt(label.c_str(), &input, 1.0f, minimum, maximum);
+            ImGui::DragInt(label.c_str(), &input, 1.0F, minimum, maximum);
             return input;
         }
 
         auto drag_scalar(cstring_view label, float input, float minimum, float maximum) -> float
         {
-            ImGui::DragFloat(label.c_str(), &input, 1.0f, minimum, maximum);
+            ImGui::DragFloat(label.c_str(), &input, 1.0F, minimum, maximum);
             return input;
         }
 
@@ -949,7 +947,7 @@ namespace tempest::editor
                                  input_text_callback, &cb_user_data);
             if (modified)
             {
-                input.resize(std::strlen(input.data()));
+                input.resize(cstring_view{input.c_str()}.size());
             }
             return modified;
         }
@@ -964,7 +962,7 @@ namespace tempest::editor
                                          ImGuiInputTextFlags_CallbackResize, input_text_callback, &cb_user_data);
             if (modified)
             {
-                input.resize(std::strlen(input.data()));
+                input.resize(cstring_view{input.c_str()}.size());
             }
             return modified;
         }
@@ -972,12 +970,12 @@ namespace tempest::editor
         auto centered_button(cstring_view label) -> bool
         {
             const auto text_width = ImGui::CalcTextSize(label.c_str()).x;
-            const auto button_width = text_width + ImGui::GetStyle().FramePadding.x * 2.0f;
+            const auto button_width = text_width + (ImGui::GetStyle().FramePadding.x * 2.0F);
             const auto available_width = ImGui::GetContentRegionAvail().x;
 
             if (button_width < available_width)
             {
-                const auto offset_x = (available_width - button_width) / 2.0f;
+                const auto offset_x = (available_width - button_width) / 2.0F;
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset_x);
             }
 

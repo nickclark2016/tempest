@@ -1,6 +1,6 @@
 #include <tempest/render_system/passes/light_clustering_pass.hpp>
 
-#include <cmath>
+#include <tempest/math_utils.hpp>
 #include <tempest/algorithm.hpp>
 
 namespace tempest::render_system
@@ -45,7 +45,7 @@ namespace tempest::render_system
         else
         {
             const auto target_ratio = 16.0F / 9.0F;
-            const auto scaled_x = std::round(16.0F * (aspect / target_ratio));
+            const auto scaled_x = math::round(16.0F * (aspect / target_ratio));
             cx = tempest::max(1U, static_cast<uint32_t>(scaled_x));
             cy = 9U;
         }
@@ -103,7 +103,7 @@ namespace tempest::render_system
         return graph.add_compute_pass<light_clustering_pass_data>(
             "LightClusteringPass",
             [cluster_bounds_buf, create_info, pipeline_stats](render_graph::pass_builder& builder,
-                                                              light_clustering_pass_data& data) {
+                                                              light_clustering_pass_data& data) -> void {
                 if (pipeline_stats != rhi::pipeline_statistic_flags::none)
                 {
                     builder.enable_pipeline_statistics(pipeline_stats);
@@ -115,7 +115,7 @@ namespace tempest::render_system
             },
             [&shaders, actual_cx, actual_cy, actual_cz, pipe](const light_clustering_pass_data& data,
                                                               render_graph::pass_execution_context& ctx,
-                                                              rhi::command_list& pass_cmd) {
+                                                              rhi::command_list& pass_cmd) -> void {
                 auto rhi_pipe = shaders.get_rhi_pipeline(pipe);
                 if (rhi_pipe.handle == 0)
                 {

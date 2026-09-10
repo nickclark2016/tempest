@@ -7,12 +7,12 @@
 #include <tempest/string.hpp>
 #include <tempest/utility.hpp>
 
-#include <bit>
+#include <tempest/bit.hpp>
 
 namespace tempest::ecs
 {
     basic_archetype_storage::basic_archetype_storage(basic_archetype_type_info info, size_t initial_capacity)
-        : _storage{info}, _data{nullptr}, _size{info.size * initial_capacity}
+        : _storage{info}, _size{info.size * initial_capacity}
     {
         reserve(initial_capacity);
     }
@@ -25,21 +25,21 @@ namespace tempest::ecs
 
     basic_archetype_storage::~basic_archetype_storage()
     {
-        if (_data)
+        if (_data != nullptr)
         {
             aligned_free(_data);
         }
         _data = nullptr;
     }
 
-    basic_archetype_storage& basic_archetype_storage::operator=(basic_archetype_storage&& rhs) noexcept
+    auto basic_archetype_storage::operator=(basic_archetype_storage&& rhs) noexcept -> basic_archetype_storage&
     {
         if (&rhs == this)
         {
             return *this;
         }
 
-        if (_data)
+        if (_data != nullptr)
         {
             aligned_free(_data);
         }
@@ -61,7 +61,7 @@ namespace tempest::ecs
             return;
         }
 
-        auto new_data = reinterpret_cast<byte*>(aligned_alloc(requested, _storage.alignment));
+        auto* new_data = reinterpret_cast<byte*>(aligned_alloc(requested, _storage.alignment));
         copy_n(_data, _size, new_data);
         aligned_free(_data);
 
@@ -69,13 +69,13 @@ namespace tempest::ecs
         _size = requested;
     }
 
-    byte* basic_archetype_storage::element_at(size_t index)
+    auto basic_archetype_storage::element_at(size_t index) -> byte*
     {
         auto offset = index * _storage.size;
         return _data + offset;
     }
 
-    const byte* basic_archetype_storage::element_at(size_t index) const
+    auto basic_archetype_storage::element_at(size_t index) const -> const byte*
     {
         auto offset = index * _storage.size;
         return _data + offset;
@@ -83,13 +83,13 @@ namespace tempest::ecs
 
     void basic_archetype_storage::copy(size_t dst, size_t src)
     {
-        auto dst_p = element_at(dst);
-        auto src_p = element_at(src);
+        auto* dst_p = element_at(dst);
+        auto* src_p = element_at(src);
         copy_n(src_p, _storage.size, dst_p);
     }
 
     basic_archetype::basic_archetype(span<const basic_archetype_type_info> fields)
-        : _element_count{0}, _element_capacity{0}, _first_free_element{0}
+
     {
         _storage.reserve(fields.size());
 
@@ -99,14 +99,14 @@ namespace tempest::ecs
         }
     }
 
-    typename basic_archetype::key_type basic_archetype::allocate()
+    auto basic_archetype::allocate() -> basic_archetype::key_type
     {
         if (_element_count >= _element_capacity)
         {
             // no elements in the implicit free list
             // reserve more entities
 
-            auto new_size = std::bit_ceil(_element_capacity + 8); // Force a minimum of 8
+            auto new_size = tempest::bit_ceil(_element_capacity + 8); // Force a minimum of 8
             _trampoline.reserve(new_size);
             _look_back_table.reserve(new_size);
 
@@ -143,7 +143,7 @@ namespace tempest::ecs
             .generation = trampoline.generation,
         };
 
-        _trampoline[_first_free_element].index = _element_count;
+        _trampoline[_first_free_element].index = static_cast<uint32_t>(_element_count);
 
         _first_free_element = next_index;
 
@@ -160,7 +160,7 @@ namespace tempest::ecs
         }
 
         // Round up to a power of 2
-        count = std::bit_ceil(count);
+        count = tempest::bit_ceil(count);
 
         _trampoline.reserve(count);
         _look_back_table.reserve(count);
@@ -196,7 +196,7 @@ namespace tempest::ecs
         _element_capacity = count;
     }
 
-    bool basic_archetype::erase(typename basic_archetype::key_type key)
+    auto basic_archetype::erase(basic_archetype::key_type key) -> bool
     {
         auto& trampoline = _trampoline[key.index];
         if (trampoline.generation != key.generation)
@@ -230,19 +230,19 @@ namespace tempest::ecs
         return true;
     }
 
-    byte* basic_archetype::element_at(size_t el_index, size_t type_info_index)
+    auto basic_archetype::element_at(size_t el_index, size_t type_info_index) -> byte*
     {
         auto& s = _storage[type_info_index];
         return s.element_at(el_index);
     }
 
-    const byte* basic_archetype::element_at(size_t el_index, size_t type_info_index) const
+    auto basic_archetype::element_at(size_t el_index, size_t type_info_index) const -> const byte*
     {
         const auto& s = _storage[type_info_index];
         return s.element_at(el_index);
     }
 
-    byte* basic_archetype::element_at(typename basic_archetype::key_type key, size_t type_info_index)
+    auto basic_archetype::element_at(basic_archetype::key_type key, size_t type_info_index) -> byte*
     {
         auto trampoline = _trampoline[key.index];
         if (trampoline.generation != key.generation)
@@ -252,7 +252,7 @@ namespace tempest::ecs
         return _storage[type_info_index].element_at(trampoline.index);
     }
 
-    const byte* basic_archetype::element_at(typename basic_archetype::key_type key, size_t type_info_index) const
+    auto basic_archetype::element_at(basic_archetype::key_type key, size_t type_info_index) const -> const byte*
     {
         auto trampoline = _trampoline[key.index];
         if (trampoline.generation != key.generation)
@@ -264,7 +264,7 @@ namespace tempest::ecs
 
     namespace detail
     {
-        size_t get_archetype_type_index(string_view name)
+        auto get_archetype_type_index(string_view name) -> size_t
         {
             static flat_unordered_map<string, size_t> type_index_map;
             static size_t next_index = 0;
@@ -278,7 +278,7 @@ namespace tempest::ecs
         }
     } // namespace detail
 
-    void basic_archetype_registry::destroy(typename basic_archetype_registry::entity_type entity)
+    void basic_archetype_registry::destroy(basic_archetype_registry::entity_type entity)
     {
         const auto& key = _entity_archetype_mapping[entity];
 
@@ -287,13 +287,14 @@ namespace tempest::ecs
         archetype.erase(key.archetype_key);
         _entities.release(entity);
 
-        _event_registry->dispatcher<entity_destroyed_event<basic_archetype_registry::entity_type>>().publish(entity_destroyed_event{
-            .entity = entity,
-        });
+        _event_registry->dispatcher<entity_destroyed_event<basic_archetype_registry::entity_type>>().publish(
+            entity_destroyed_event{
+                .entity = entity,
+            });
     }
 
-    typename basic_archetype_registry::entity_type basic_archetype_registry::duplicate(
-        typename basic_archetype_registry::entity_type src)
+    auto basic_archetype_registry::duplicate(basic_archetype_registry::entity_type src)
+        -> basic_archetype_registry::entity_type
     {
         auto src_key = _entity_archetype_mapping[src];
         auto& src_arch = _archetypes[src_key.archetype_index];
@@ -311,11 +312,12 @@ namespace tempest::ecs
 
         // We will always have a self_component, so add that to the hash
         static const auto self_component_ti = create_archetype_type_info<self_component>();
-        const auto updated_byte = set_bit(static_cast<unsigned int>(hash.hash[self_component_ti.index / 8]), self_component_ti.index % 8);
+        const auto updated_byte =
+            set_bit(static_cast<unsigned int>(hash.hash[self_component_ti.index / 8]), self_component_ti.index % 8);
         hash.hash[self_component_ti.index / 8] = static_cast<byte>(updated_byte);
 
         // Find the archetype
-        auto it = tempest::find(_hashes.begin(), _hashes.end(), hash);
+        auto* it = tempest::find(_hashes.begin(), _hashes.end(), hash);
         if (it == _hashes.end())
         {
             // Create a new archetype
@@ -332,8 +334,8 @@ namespace tempest::ecs
             // Ensure self component exists
             new_types.push_back(create_archetype_type_info<self_component>());
 
-            std::sort(new_types.begin(), new_types.end(),
-                      [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
+            tempest::sort(new_types.begin(), new_types.end(),
+                          [](const auto& lhs, const auto& rhs) -> auto { return lhs.index < rhs.index; });
 
             _archetypes.emplace_back(new_types);
             _hashes.push_back(hash);
@@ -352,8 +354,8 @@ namespace tempest::ecs
             auto src_index = _index_of_component_in_archetype(src_key.archetype_index, index);
             auto dst_index = _index_of_component_in_archetype(new_archetype_index, index);
 
-            auto src_bytes = src_arch.element_at(src_key.archetype_key, src_index);
-            auto dst_bytes = new_arch.element_at(new_key, dst_index);
+            auto* src_bytes = src_arch.element_at(src_key.archetype_key, src_index);
+            auto* dst_bytes = new_arch.element_at(new_key, dst_index);
             copy_n(src_bytes, storage.type_info().size, dst_bytes);
         }
 
@@ -376,7 +378,7 @@ namespace tempest::ecs
             name(result, *n);
         }
 
-        auto src_rel_comp = try_get<relationship_component<basic_archetype_registry::entity_type>>(src);
+        const auto* src_rel_comp = try_get<relationship_component<basic_archetype_registry::entity_type>>(src);
         if (src_rel_comp != nullptr && src_rel_comp->first_child != tombstone)
         {
             auto child = src_rel_comp->first_child;
@@ -394,7 +396,7 @@ namespace tempest::ecs
         return result;
     }
 
-    optional<string_view> basic_archetype_registry::name(entity_type entity) const
+    auto basic_archetype_registry::name(entity_type entity) const -> optional<string_view>
     {
         if (auto it = _names.find(entity); it != _names.end())
         {
@@ -408,7 +410,8 @@ namespace tempest::ecs
         _names[entity] = name;
     }
 
-    [[nodiscard]] auto basic_archetype_registry::find_first_with_name(string_view name) const -> optional<basic_archetype_registry::entity_type>
+    [[nodiscard]] auto basic_archetype_registry::find_first_with_name(string_view name) const
+        -> optional<basic_archetype_registry::entity_type>
     {
         for (const auto& [entity, entity_name] : _names)
         {
@@ -483,7 +486,7 @@ namespace tempest::ecs
             opt_child_rel.next_sibling = opt_parent_rel.first_child;
             opt_child_rel.parent = parent;
             opt_parent_rel.first_child = child;
-            
+
             // Replace the components to update the archetype
             reg.replace(parent, opt_parent_rel);
             reg.replace(child, opt_child_rel);

@@ -1,8 +1,9 @@
+#include <tempest/algorithm.hpp>
+#include <tempest/format.hpp>
+#include <tempest/iterator.hpp>
 #include <tempest/profiler/capture.hpp>
 #include <tempest/profiler/session.hpp>
-
-#include <format>
-#include <tempest/iterator.hpp>
+#include <tempest/string.hpp>
 
 namespace tempest::profiler
 {
@@ -33,11 +34,11 @@ namespace tempest::profiler
                 }
             }
 
-            if (!target_track)
+            if (target_track == nullptr)
             {
                 constexpr auto gpu_bit = uint64_t{0x8000'0000ULL};
-                const auto is_gpu = (tid & gpu_bit) != 0;
-                auto name_buf = std::string{};
+                const auto is_gpu = (tid <= 0xFFFF'FFFFULL) && ((tid & gpu_bit) != 0);
+                auto name_buf = string{};
                 auto type = track_type::cpu_thread;
 
                 if (session != nullptr)
@@ -45,7 +46,7 @@ namespace tempest::profiler
                     auto registered_name = session->get_track_name(tid);
                     if (!registered_name.empty())
                     {
-                        name_buf = std::string{registered_name.data(), registered_name.size()};
+                        name_buf = string{registered_name.data(), registered_name.size()};
                     }
                 }
 
@@ -67,7 +68,7 @@ namespace tempest::profiler
                             name_buf = "GPU: Async Transfer";
                             break;
                         default:
-                            std::format_to(tempest::back_inserter(name_buf), "GPU: Queue {}", queue_idx);
+                            tempest::format_to(tempest::back_inserter(name_buf), "GPU: Queue {}", queue_idx);
                             break;
                         }
                     }
@@ -77,7 +78,7 @@ namespace tempest::profiler
                     type = track_type::cpu_thread;
                     if (name_buf.empty())
                     {
-                        std::format_to(tempest::back_inserter(name_buf), "Thread {}", tid);
+                        tempest::format_to(tempest::back_inserter(name_buf), "Thread {}", tid);
                     }
                 }
 
@@ -97,14 +98,8 @@ namespace tempest::profiler
             {
                 target_track->zones.push_back(z);
                 has_events = true;
-                if (z.start_ns < min_ts)
-                {
-                    min_ts = z.start_ns;
-                }
-                if (z.end_ns > max_ts)
-                {
-                    max_ts = z.end_ns;
-                }
+                min_ts = tempest::min(z.start_ns, min_ts);
+                max_ts = tempest::max(z.end_ns, max_ts);
             }
 
             const auto markers = chunk_ptr->markers();
@@ -112,28 +107,16 @@ namespace tempest::profiler
             {
                 target_track->markers.push_back(m);
                 has_events = true;
-                if (m.timestamp_ns < min_ts)
-                {
-                    min_ts = m.timestamp_ns;
-                }
-                if (m.timestamp_ns > max_ts)
-                {
-                    max_ts = m.timestamp_ns;
-                }
+                min_ts = tempest::min(m.timestamp_ns, min_ts);
+                max_ts = tempest::max(m.timestamp_ns, max_ts);
             }
 
             const auto metrics = chunk_ptr->metrics();
             for (const auto& met : metrics)
             {
                 has_events = true;
-                if (met.timestamp_ns < min_ts)
-                {
-                    min_ts = met.timestamp_ns;
-                }
-                if (met.timestamp_ns > max_ts)
-                {
-                    max_ts = met.timestamp_ns;
-                }
+                min_ts = tempest::min(met.timestamp_ns, min_ts);
+                max_ts = tempest::max(met.timestamp_ns, max_ts);
 
                 auto* target_stream = static_cast<metric_stream*>(nullptr);
                 for (auto& st : result.metrics)
@@ -145,7 +128,7 @@ namespace tempest::profiler
                     }
                 }
 
-                if (!target_stream)
+                if (target_stream == nullptr)
                 {
                     auto new_stream = metric_stream{
                         .name = string{met.name.data(), met.name.size()},

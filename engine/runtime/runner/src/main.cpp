@@ -10,7 +10,7 @@ namespace
 {
     using namespace tempest;
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
     inline constexpr auto game_library_name = L"game-runtime.dll";
 #elif defined(TEMPEST_PLATFORM_LINUX)
     inline constexpr auto game_library_name = "libgame-runtime.so";
@@ -62,7 +62,7 @@ namespace
     }
 } // namespace
 
-#if defined(TEMPEST_PLATFORM_WINDOWS)
+#ifdef TEMPEST_PLATFORM_WINDOWS
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN

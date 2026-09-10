@@ -1,10 +1,11 @@
 #include <tempest/functional.hpp>
+#include <tempest/vector.hpp>
 
 #include <gtest/gtest.h>
 
 TEST(functional, invoke_lambda_non_void)
 {
-    auto foo = [](int a, int b) { return a + b; };
+    auto foo = [](int a, int b) -> int { return a + b; };
 
     auto invoke_result = tempest::invoke(foo, 1, 2);
     auto invoke_result_r = tempest::invoke_r<int>(foo, 1, 2);
@@ -15,7 +16,7 @@ TEST(functional, invoke_lambda_non_void)
 
 TEST(functional, invoke_lambda_void)
 {
-    auto foo = []([[maybe_unused]] int a, [[maybe_unused]] int b) {};
+    auto foo = []([[maybe_unused]] int a, [[maybe_unused]] int b) -> void {};
 
     tempest::invoke(foo, 1, 2);
     tempest::invoke_r<void>(foo, 1, 2);
@@ -27,7 +28,7 @@ TEST(functional, invoke_member_function_non_void)
 {
     struct Foo
     {
-        int add(int a, int b)
+        auto add(int a, int b) -> int
         {
             return a + b;
         }
@@ -63,7 +64,7 @@ TEST(functional, invoke_static_member_function_non_void)
 {
     struct Foo
     {
-        static int add(int a, int b)
+        static auto add(int a, int b) -> int
         {
             return a + b;
         }
@@ -119,7 +120,7 @@ TEST(functional, reference_wrapper_call_operator)
 {
     struct Foo
     {
-        int operator()(int a, int b)
+        auto operator()(int a, int b) -> int
         {
             return a + b;
         }
@@ -142,7 +143,7 @@ TEST(functional, function_default_constructor)
 
 TEST(functional, function_constructor_lambda)
 {
-    tempest::function<int(int, int)> f = [](int a, int b) { return a + b; };
+    tempest::function<int(int, int)> f = [](int a, int b) -> int { return a + b; };
 
     EXPECT_TRUE(f);
     EXPECT_EQ(f(1, 2), 3);
@@ -151,15 +152,15 @@ TEST(functional, function_constructor_lambda)
 TEST(functional, function_copy_constructor_empty)
 {
     tempest::function<int(int, int)> f1;
-    tempest::function<int(int, int)> f2 = f1;
+    const tempest::function<int(int, int)>& f2 = f1;
 
     EXPECT_FALSE(f2);
 }
 
 TEST(functional, function_copy_constructor_from_lambda)
 {
-    tempest::function<int(int, int)> f1 = [](int a, int b) { return a + b; };
-    tempest::function<int(int, int)> f2 = f1;
+    tempest::function<int(int, int)> f1 = [](int a, int b) -> int { return a + b; };
+    const tempest::function<int(int, int)>& f2 = f1;
 
     EXPECT_TRUE(f2);
     EXPECT_EQ(f2(1, 2), 3);
@@ -175,7 +176,7 @@ TEST(functional, function_move_constructor_from_empty)
 
 TEST(functional, function_move_constructor_from_lambda)
 {
-    tempest::function<int(int, int)> f1 = [](int a, int b) { return a + b; };
+    tempest::function<int(int, int)> f1 = [](int a, int b) -> int { return a + b; };
     tempest::function<int(int, int)> f2 = tempest::move(f1);
 
     EXPECT_TRUE(f2);
@@ -189,7 +190,7 @@ TEST(functional, function_constructor_lambda_with_capture)
     int a = 1;
     int b = 2;
 
-    tempest::function<int()> f = [&]() { return a + b; };
+    tempest::function<int()> f = [&]() -> int { return a + b; };
 
     EXPECT_TRUE(f);
     EXPECT_EQ(f(), 3);
@@ -197,9 +198,9 @@ TEST(functional, function_constructor_lambda_with_capture)
 
 TEST(functional, function_constructor_lambda_with_large_capture)
 {
-    std::vector<int> v(1000, 42);
+    tempest::vector<int> v(1000, 42);
 
-    tempest::function<int()> f = [=]() { return v[0]; };
+    tempest::function<int()> f = [=]() -> int { return v[0]; };
 
     EXPECT_TRUE(f);
     EXPECT_EQ(f(), 42);
@@ -209,7 +210,7 @@ TEST(functional, function_constructor_static_member)
 {
     struct Foo
     {
-        static int add(int a, int b)
+        static auto add(int a, int b) -> int
         {
             return a + b;
         }
@@ -224,7 +225,7 @@ TEST(functional, function_constructor_static_member)
 TEST(functional, function_assign_lambda_to_empty)
 {
     tempest::function<int(int, int)> f(nullptr);
-    f = [](int a, int b) { return a + b; };
+    f = [](int a, int b) -> int { return a + b; };
 
     EXPECT_TRUE(f);
     EXPECT_EQ(f(1, 2), 3);
@@ -232,8 +233,8 @@ TEST(functional, function_assign_lambda_to_empty)
 
 TEST(functional, function_assign_lambda_to_lambda)
 {
-    tempest::function<int(int, int)> f = [](int a, int b) { return a + b; };
-    f = [](int a, int b) { return a * b; };
+    tempest::function<int(int, int)> f = [](int a, int b) -> int { return a + b; };
+    f = [](int a, int b) -> int { return a * b; };
 
     EXPECT_TRUE(f);
     EXPECT_EQ(f(2, 3), 6);
@@ -243,14 +244,14 @@ TEST(functional, function_assign_lambda_to_static_member)
 {
     struct Foo
     {
-        static int add(int a, int b)
+        static auto add(int a, int b) -> int
         {
             return a + b;
         }
     };
 
     tempest::function<int(int, int)> f = &Foo::add;
-    f = [](int a, int b) { return a * b; };
+    f = [](int a, int b) -> int { return a * b; };
 
     EXPECT_TRUE(f);
     EXPECT_EQ(f(2, 3), 6);
@@ -260,13 +261,13 @@ TEST(functional, function_assign_static_member_to_lambda)
 {
     struct Foo
     {
-        static int add(int a, int b)
+        static auto add(int a, int b) -> int
         {
             return a + b;
         }
     };
 
-    tempest::function<int(int, int)> f = [](int a, int b) { return a * b; };
+    tempest::function<int(int, int)> f = [](int a, int b) -> int { return a * b; };
     f = &Foo::add;
 
     EXPECT_TRUE(f);
@@ -275,7 +276,7 @@ TEST(functional, function_assign_static_member_to_lambda)
 
 TEST(functional, function_assign_empty_to_lambda)
 {
-    tempest::function<int(int, int)> f = [](int a, int b) { return a + b; };
+    tempest::function<int(int, int)> f = [](int a, int b) -> int { return a + b; };
     f = nullptr;
 
     EXPECT_FALSE(f);
@@ -285,7 +286,7 @@ TEST(functional, function_assign_empty_to_static_member)
 {
     struct Foo
     {
-        static int add(int a, int b)
+        static auto add(int a, int b) -> int
         {
             return a + b;
         }
@@ -317,7 +318,7 @@ TEST(functional, function_assign_empty_to_empty_move)
 
 TEST(functional, function_assign_lambda_to_empty_move)
 {
-    tempest::function<int(int, int)> f1 = [](int a, int b) { return a + b; };
+    tempest::function<int(int, int)> f1 = [](int a, int b) -> int { return a + b; };
     tempest::function<int(int, int)> f2;
     f2 = tempest::move(f1);
 
@@ -327,8 +328,8 @@ TEST(functional, function_assign_lambda_to_empty_move)
 
 TEST(functional, function_assign_lambda_to_lambda_move)
 {
-    tempest::function<int(int, int)> f1 = [](int a, int b) { return a + b; };
-    tempest::function<int(int, int)> f2 = [](int a, int b) { return a * b; };
+    tempest::function<int(int, int)> f1 = [](int a, int b) -> int { return a + b; };
+    tempest::function<int(int, int)> f2 = [](int a, int b) -> int { return a * b; };
     f2 = tempest::move(f1);
 
     EXPECT_TRUE(f2);
@@ -337,10 +338,10 @@ TEST(functional, function_assign_lambda_to_lambda_move)
 
 TEST(functional, function_assign_lambda_to_lambda_with_large_capture)
 {
-    std::vector<int> v(1000, 42);
+    tempest::vector<int> v(1000, 42);
 
-    tempest::function<int()> f1 = [=]() { return v[0]; };
-    tempest::function<int()> f2 = [=]() { return v[1]; };
+    tempest::function<int()> f1 = [=]() -> int { return v[0]; };
+    tempest::function<int()> f2 = [=]() -> int { return v[1]; };
     f2 = f1;
 
     EXPECT_TRUE(f2);
@@ -349,7 +350,7 @@ TEST(functional, function_assign_lambda_to_lambda_with_large_capture)
 
 TEST(functional, function_template_deduction_guides)
 {
-    auto lambda = [](int a, int b) { return a + b; };
+    auto lambda = [](int a, int b) -> int { return a + b; };
 
     tempest::function f1 = lambda;
     tempest::function<int(int, int)> f2(lambda);
@@ -364,7 +365,7 @@ TEST(functional, mem_fn)
 {
     struct Foo
     {
-        int add(int a, int b)
+        auto add(int a, int b) -> int
         {
             return a + b;
         }
@@ -379,7 +380,7 @@ TEST(functional, mem_fn)
 
 TEST(functional, function_ref)
 {
-    auto fn = [](int a, int b) { return a + b; };
+    auto fn = [](int a, int b) -> int { return a + b; };
 
     tempest::function_ref<int(int, int)> f(fn);
 
@@ -390,7 +391,7 @@ TEST(functional, function_ref_to_member)
 {
     struct Foo
     {
-        int add(int a, int b)
+        auto add(int a, int b) -> int
         {
             return a + b;
         }

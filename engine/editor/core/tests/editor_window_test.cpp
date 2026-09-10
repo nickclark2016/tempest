@@ -5,6 +5,7 @@
 #include <tempest/default_importers.hpp>
 #include <tempest/editor.hpp>
 #include <tempest/editor_engine_context.hpp>
+#include <tempest/logger.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/render_system/camera_system.hpp>
@@ -35,11 +36,14 @@ namespace tempest::editor::tests
 
         auto create_test_env() -> test_env
         {
+            static auto test_sink = stdout_log_sink{};
+            static auto test_log = logger{test_sink};
+
             auto ctx_desc = rhi::context_desc{};
             ctx_desc.application_name = "Tempest Editor Window Test";
             ctx_desc.api = rhi::graphics_api::vulkan;
 
-            auto result = rhi::vk::create_context(ctx_desc);
+            auto result = rhi::vk::create_context(ctx_desc, test_log);
             if (!result.has_value())
             {
                 return {};
@@ -132,8 +136,8 @@ namespace tempest::editor::tests
         shadow_provider.create_default(&reg, ent4);
         ASSERT_TRUE(reg.has<render_system::shadow_caster_component>(ent4));
         const auto& sc = reg.get<render_system::shadow_caster_component>(ent4);
-        EXPECT_EQ(sc.resolution, 2048u);
-        EXPECT_EQ(sc.num_cascades, 4u);
+        EXPECT_EQ(sc.resolution, 2048U);
+        EXPECT_EQ(sc.num_cascades, 4U);
     }
 
     TEST(editor_window_test, component_view_providers_draw_execution)

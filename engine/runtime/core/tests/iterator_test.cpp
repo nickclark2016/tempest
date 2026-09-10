@@ -5,7 +5,7 @@
 #include <tempest/string.hpp>
 #include <tempest/vector.hpp>
 
-#include <format>
+#include <tempest/format.hpp>
 
 namespace tempest
 {
@@ -40,10 +40,10 @@ namespace tempest
         EXPECT_EQ(str, "Hello");
     }
 
-    TEST(iterator_test, back_inserter_with_std_format_to)
+    TEST(iterator_test, back_inserter_with_format_to)
     {
         auto str = string{};
-        std::format_to(back_inserter(str), "Batch {} ({})", 42, "Graphics");
+        tempest::format_to(back_inserter(str), "Batch {} ({})", 42, "Graphics");
 
         EXPECT_EQ(str, "Batch 42 (Graphics)");
     }

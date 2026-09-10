@@ -1,5 +1,7 @@
 #include <tempest/editor_camera.hpp>
 
+#include <tempest/int.hpp>
+#include <tempest/limits.hpp>
 #include <tempest/math_utils.hpp>
 #include <tempest/transformations.hpp>
 
@@ -39,9 +41,9 @@ namespace tempest::editor::tests
 
         // 4. Assert Projection Invertibility
         const auto proj_ident = render_cam.proj * render_cam.inv_proj;
-        for (std::size_t i = 0; i < 4; ++i)
+        for (size_t i = 0; i < 4; ++i)
         {
-            for (std::size_t j = 0; j < 4; ++j)
+            for (size_t j = 0; j < 4; ++j)
             {
                 const auto expected = (i == j) ? 1.0F : 0.0F;
                 EXPECT_NEAR(proj_ident[i][j], expected, 1e-4F);
@@ -50,9 +52,9 @@ namespace tempest::editor::tests
 
         // 5. Assert View Matrix Invertibility
         const auto view_ident = render_cam.view * render_cam.inv_view;
-        for (std::size_t i = 0; i < 4; ++i)
+        for (size_t i = 0; i < 4; ++i)
         {
-            for (std::size_t j = 0; j < 4; ++j)
+            for (size_t j = 0; j < 4; ++j)
             {
                 const auto expected = (i == j) ? 1.0F : 0.0F;
                 EXPECT_NEAR(view_ident[i][j], expected, 1e-4F);
@@ -244,8 +246,8 @@ namespace tempest::editor::tests
         const auto initial_yaw = cam.get_yaw();
         const auto initial_pitch = cam.get_pitch();
 
-        constexpr auto nan_val = std::numeric_limits<float>::quiet_NaN();
-        constexpr auto inf_val = std::numeric_limits<float>::infinity();
+        constexpr auto nan_val = tempest::numeric_limits<float>::quiet_NaN();
+        constexpr auto inf_val = tempest::numeric_limits<float>::infinity();
 
         // 1. Position NaN / Inf Rejected
         cam.set_position({nan_val, 0.0F, 0.0F});
