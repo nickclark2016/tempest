@@ -71,7 +71,7 @@ namespace tempest
 
         [[nodiscard]] auto done() const noexcept -> bool
         {
-#if defined(TEMPEST_PLATFORM_WINOWS)
+#if defined(TEMPEST_PLATFORM_WINDOWS)
             return _builtin_coro_done(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             return __builtin_coro_done(_frame_ptr);
@@ -80,7 +80,7 @@ namespace tempest
 
         auto resume() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINOWS)
+#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_resume(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             __builtin_coro_resume(_frame_ptr);
@@ -94,7 +94,7 @@ namespace tempest
 
         auto destroy() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINOWS)
+#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_destroy(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             __builtin_coro_destroy(_frame_ptr);
@@ -173,7 +173,7 @@ namespace tempest
 
         [[nodiscard]] auto done() const noexcept -> bool
         {
-#if defined(TEMPEST_PLATFORM_WINOWS)
+#if defined(TEMPEST_PLATFORM_WINDOWS)
             return _builtin_coro_done(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             return __builtin_coro_done(_frame_ptr);
@@ -182,7 +182,7 @@ namespace tempest
 
         auto resume() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINOWS)
+#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_resume(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             __builtin_coro_resume(_frame_ptr);
@@ -196,7 +196,7 @@ namespace tempest
 
         auto destroy() const -> void
         {
-#if defined(TEMPEST_PLATFORM_WINOWS)
+#if defined(TEMPEST_PLATFORM_WINDOWS)
             __builtin_coro_destroy(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             __builtin_coro_destroy(_frame_ptr);
