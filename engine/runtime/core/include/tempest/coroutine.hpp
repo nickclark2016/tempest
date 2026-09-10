@@ -72,7 +72,7 @@ namespace tempest
         [[nodiscard]] auto done() const noexcept -> bool
         {
 #if defined(TEMPEST_PLATFORM_WINDOWS)
-            return _builtin_coro_done(_frame_ptr);
+            return __builtin_coro_done(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             return __builtin_coro_done(_frame_ptr);
 #endif
@@ -174,7 +174,7 @@ namespace tempest
         [[nodiscard]] auto done() const noexcept -> bool
         {
 #if defined(TEMPEST_PLATFORM_WINDOWS)
-            return _builtin_coro_done(_frame_ptr);
+            return __builtin_coro_done(_frame_ptr);
 #elif defined(TEMPEST_PLATFORM_LINUX)
             return __builtin_coro_done(_frame_ptr);
 #endif
