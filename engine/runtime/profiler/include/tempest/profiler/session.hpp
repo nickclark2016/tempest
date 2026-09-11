@@ -25,6 +25,9 @@ namespace tempest::profiler
         string_view name{};
         source_location location{};
         uint64_t task_id{0};
+        uint64_t coroutine_id{0};
+        uint32_t slice_index{0};
+        suspend_reason reason{suspend_reason::none};
         inplace_vector<metric_record, 16> metrics{};
     };
 
@@ -41,9 +44,19 @@ namespace tempest::profiler
 
         auto begin_zone(string_view name, source_location loc = source_location::current()) -> void;
         auto end_zone() -> void;
+        auto begin_coroutine_slice(uint64_t coroutine_id, uint32_t slice_index, string_view name,
+                                   source_location loc = source_location::current()) -> void;
+        auto end_coroutine_slice(suspend_reason reason = suspend_reason::none) -> void;
+        auto tag_current_slice_suspend_reason(suspend_reason reason) -> void;
         auto add_marker(string_view name, source_location loc = source_location::current()) -> void;
         auto add_metric(string_view name, double val, metric_unit unit = metric_unit::raw) -> void;
         auto set_current_zone_task_id(uint64_t task_id) -> void;
+
+        auto set_current_coroutine_id(uint64_t id) noexcept -> void;
+        [[nodiscard]] auto get_current_coroutine_id() const noexcept -> uint64_t;
+
+        static auto set_current_thread_context(thread_profiler_context* ctx) noexcept -> void;
+        [[nodiscard]] static auto get_current_thread_context() noexcept -> thread_profiler_context*;
 
         auto set_thread_name(string_view name) -> void;
         [[nodiscard]] auto get_thread_name() const noexcept -> string_view;
@@ -60,6 +73,7 @@ namespace tempest::profiler
 
         profiler_session& _session;
         uint64_t _thread_id{0};
+        uint64_t _active_coroutine_id{0};
         string _thread_name{};
         vector<open_zone_state> _open_zones;
         unique_ptr<event_chunk> _current_chunk;

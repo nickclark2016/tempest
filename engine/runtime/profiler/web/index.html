@@ -58,6 +58,12 @@
         <button class="btn btn-dark" id="btn-clear" title="Clear Telemetry Buffer">Clear</button>
       </div>
 
+      <div class="button-group">
+        <button class="btn btn-dark active" id="btn-view-physical" title="Physical Threads View">Threads</button>
+        <button class="btn btn-dark" id="btn-view-logical" title="Logical Coroutines View">Coroutines</button>
+        <button class="btn btn-dark active" id="btn-flow-arrows" title="Toggle Cross-Thread Bézier Flow Arrows">Flow: ON</button>
+      </div>
+
       <input type="file" id="file-input" accept=".json,.tprof" style="display: none;" />
 
       <div class="view-controls">
@@ -89,6 +95,7 @@
     <!-- Center Flame Chart Timeline -->
     <section class="timeline-section" id="timeline-container">
       <canvas id="timeline-canvas"></canvas>
+      <svg id="timeline-svg-overlay" class="timeline-svg-overlay"></svg>
       <!-- Floating Selection Duration Badge -->
       <div class="selection-badge" id="selection-badge" style="display: none;">
         <span class="badge-title">Selected Duration (&Delta;t):</span>

@@ -11,6 +11,7 @@
 #include <tempest/job/task.hpp>
 #include <tempest/job/types.hpp>
 #include <tempest/memory.hpp>
+#include <tempest/profiler/types.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::job
@@ -245,6 +246,11 @@ namespace tempest::job
             auto await_resume() const noexcept -> void
             {
             }
+
+            [[nodiscard]] constexpr auto suspend_reason_tag() const noexcept -> profiler::suspend_reason
+            {
+                return profiler::suspend_reason::channel_full;
+            }
         };
 
         struct consumer_waiter
@@ -276,6 +282,11 @@ namespace tempest::job
 
             auto await_resume() const noexcept -> void
             {
+            }
+
+            [[nodiscard]] constexpr auto suspend_reason_tag() const noexcept -> profiler::suspend_reason
+            {
+                return profiler::suspend_reason::channel_empty;
             }
         };
 

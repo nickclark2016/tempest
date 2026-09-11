@@ -103,9 +103,10 @@ namespace tempest::profiler
                                    escaped_zone_name.c_str(), cat, start_us, dur_us, track.track_id);
 
                 const auto has_task_id = (z.task_id != 0);
+                const auto has_coro = (z.coroutine_id != 0);
                 const auto has_metrics = !z.metrics.empty();
 
-                if (has_task_id || has_metrics)
+                if (has_task_id || has_coro || has_metrics)
                 {
                     json += ", \"args\": {";
                     auto first_arg = true;
@@ -113,6 +114,18 @@ namespace tempest::profiler
                     if (has_task_id)
                     {
                         tempest::format_to(tempest::back_inserter(json), "\"task_id\": {}", z.task_id);
+                        first_arg = false;
+                    }
+
+                    if (has_coro)
+                    {
+                        if (!first_arg)
+                        {
+                            json += ", ";
+                        }
+                        tempest::format_to(tempest::back_inserter(json),
+                                           "\"coroutine_id\": {}, \"slice_index\": {}, \"suspend_reason\": \"{}\"",
+                                           z.coroutine_id, z.slice_index, to_string(z.reason).data());
                         first_arg = false;
                     }
 

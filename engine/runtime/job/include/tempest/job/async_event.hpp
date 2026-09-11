@@ -5,6 +5,7 @@
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
 #include <tempest/mutex.hpp>
+#include <tempest/profiler/types.hpp>
 
 namespace tempest::job
 {
@@ -48,6 +49,11 @@ namespace tempest::job
             auto await_suspend(coroutine_handle<> h) noexcept -> bool;
             constexpr auto await_resume() const noexcept -> void
             {
+            }
+
+            [[nodiscard]] constexpr auto suspend_reason_tag() const noexcept -> profiler::suspend_reason
+            {
+                return profiler::suspend_reason::event_wait;
             }
         };
 

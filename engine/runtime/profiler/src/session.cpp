@@ -179,6 +179,31 @@ namespace tempest::profiler
         return _available_chunks.size();
     }
 
+    namespace
+    {
+        thread_local thread_profiler_context* tl_current_profiler_context{nullptr};
+    }
+
+    auto thread_profiler_context::set_current_thread_context(thread_profiler_context* ctx) noexcept -> void
+    {
+        tl_current_profiler_context = ctx;
+    }
+
+    auto thread_profiler_context::get_current_thread_context() noexcept -> thread_profiler_context*
+    {
+        return tl_current_profiler_context;
+    }
+
+    auto thread_profiler_context::set_current_coroutine_id(uint64_t id) noexcept -> void
+    {
+        _active_coroutine_id = id;
+    }
+
+    auto thread_profiler_context::get_current_coroutine_id() const noexcept -> uint64_t
+    {
+        return _active_coroutine_id;
+    }
+
     thread_profiler_context::thread_profiler_context(profiler_session& session, uint64_t thread_id,
                                                      string_view thread_name)
         : _session(session), _thread_id(thread_id), _thread_name(thread_name)
@@ -187,6 +212,10 @@ namespace tempest::profiler
 
     thread_profiler_context::~thread_profiler_context()
     {
+        if (tl_current_profiler_context == this)
+        {
+            tl_current_profiler_context = nullptr;
+        }
         flush_active_chunk();
     }
 
@@ -201,6 +230,9 @@ namespace tempest::profiler
             .name = name,
             .location = loc,
             .task_id = 0,
+            .coroutine_id = _active_coroutine_id,
+            .slice_index = 0,
+            .reason = suspend_reason::none,
             .metrics = {},
         });
     }
@@ -223,6 +255,9 @@ namespace tempest::profiler
             .name = state.name,
             .location = state.location,
             .task_id = state.task_id,
+            .coroutine_id = state.coroutine_id,
+            .slice_index = state.slice_index,
+            .reason = state.reason,
             .metrics = tempest::move(state.metrics),
         };
 
@@ -232,6 +267,73 @@ namespace tempest::profiler
             _flush_chunk_locked();
             _ensure_active_chunk_locked();
             _current_chunk->add_zone(record);
+        }
+    }
+
+    auto thread_profiler_context::begin_coroutine_slice(uint64_t coroutine_id, uint32_t slice_index,
+                                                        string_view name, source_location loc) -> void
+    {
+        auto now_ns = get_timestamp_ns();
+        lock_guard guard(_mutex);
+        _active_coroutine_id = coroutine_id;
+        auto depth = static_cast<uint32_t>(_open_zones.size());
+        _open_zones.push_back(open_zone_state{
+            .start_ns = now_ns,
+            .depth = depth,
+            .name = name,
+            .location = loc,
+            .task_id = 0,
+            .coroutine_id = coroutine_id,
+            .slice_index = slice_index,
+            .reason = suspend_reason::none,
+            .metrics = {},
+        });
+    }
+
+    auto thread_profiler_context::end_coroutine_slice(suspend_reason reason) -> void
+    {
+        auto end_ns = get_timestamp_ns();
+        lock_guard guard(_mutex);
+        if (_open_zones.empty())
+        {
+            _active_coroutine_id = 0;
+            return;
+        }
+        auto state = tempest::move(_open_zones.back());
+        _open_zones.pop_back();
+
+        auto effective_reason = (reason != suspend_reason::none) ? reason : state.reason;
+
+        auto record = zone_record{
+            .start_ns = state.start_ns,
+            .end_ns = end_ns,
+            .depth = state.depth,
+            .name = state.name,
+            .location = state.location,
+            .task_id = state.task_id,
+            .coroutine_id = state.coroutine_id,
+            .slice_index = state.slice_index,
+            .reason = effective_reason,
+            .metrics = tempest::move(state.metrics),
+        };
+
+        _ensure_active_chunk_locked();
+        if (!_current_chunk->add_zone(record))
+        {
+            _flush_chunk_locked();
+            _ensure_active_chunk_locked();
+            _current_chunk->add_zone(record);
+        }
+
+        _active_coroutine_id = _open_zones.empty() ? 0 : _open_zones.back().coroutine_id;
+    }
+
+    auto thread_profiler_context::tag_current_slice_suspend_reason(suspend_reason reason) -> void
+    {
+        lock_guard guard(_mutex);
+        if (!_open_zones.empty())
+        {
+            _open_zones.back().reason = reason;
         }
     }
 
@@ -387,6 +489,11 @@ namespace tempest::profiler
 
     auto profiler_session::get_or_register_thread() -> thread_profiler_context&
     {
+        if (tl_current_profiler_context != nullptr && &tl_current_profiler_context->get_session() == this)
+        {
+            return *tl_current_profiler_context;
+        }
+
         auto tid = tempest::this_thread::get_id().to_uint64();
         auto hash_val = hash<uint64_t>{}(tid);
         auto slot_idx = hash_val % max_thread_slots;
@@ -394,10 +501,13 @@ namespace tempest::profiler
         auto occupant = _slots[slot_idx].thread_id.load(memory_order::relaxed);
         if (occupant == tid && _slots[slot_idx].context) [[likely]]
         {
+            tl_current_profiler_context = _slots[slot_idx].context.get();
             return *_slots[slot_idx].context;
         }
 
-        return _register_thread_slow(tid);
+        auto& ctx = _register_thread_slow(tid);
+        tl_current_profiler_context = &ctx;
+        return ctx;
     }
 
     auto profiler_session::register_track(uint64_t track_id, string_view track_name) -> thread_profiler_context&

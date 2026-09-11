@@ -379,6 +379,47 @@ html, body {
   display: block;
 }
 
+.timeline-svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+.coroutine-flow-path {
+  fill: none;
+  stroke: var(--accent-cyan);
+  stroke-width: 2;
+  stroke-dasharray: 4, 3;
+  animation: flowDash 1.2s linear infinite;
+  opacity: 0.9;
+}
+
+@keyframes flowDash {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.coroutine-flow-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--text-primary);
+  text-anchor: middle;
+  font-weight: 600;
+}
+
+.coroutine-badge-rect {
+  fill: rgba(22, 27, 34, 0.92);
+  stroke: var(--accent-cyan);
+  stroke-width: 1;
+  rx: 4;
+}
+
 /* Selection Badge */
 .selection-badge {
   position: absolute;

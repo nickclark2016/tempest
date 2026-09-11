@@ -9,11 +9,15 @@
 #include <tempest/job/types.hpp>
 #include <tempest/memory.hpp>
 #include <tempest/optional.hpp>
+#include <tempest/profiler/session.hpp>
+#include <tempest/profiler/types.hpp>
 #include <tempest/type_traits.hpp>
 #include <tempest/utility.hpp>
 
 namespace tempest::job
 {
+    inline atomic<uint64_t> g_next_coroutine_id{1};
+
     template <typename T = void, typename E = job_error>
     class [[nodiscard]] task;
 
@@ -146,6 +150,121 @@ namespace tempest::job
         template <typename PrevTask, typename F>
         using continuation_result_t = typename continuation_result<PrevTask, F>::type;
 
+        template <typename Awaiter>
+        concept has_suspend_reason = requires(const Awaiter& a) {
+            { a.suspend_reason_tag() } -> same_as<profiler::suspend_reason>;
+        };
+
+        template <typename Awaiter>
+        constexpr auto get_suspend_reason(const Awaiter& a) noexcept -> profiler::suspend_reason
+        {
+            if constexpr (has_suspend_reason<Awaiter>)
+            {
+                return a.suspend_reason_tag();
+            }
+            else
+            {
+                return profiler::suspend_reason::yield;
+            }
+        }
+
+        template <typename T>
+        decltype(auto) get_underlying_awaiter(T&& expr)
+        {
+            if constexpr (requires { tempest::forward<T>(expr).operator co_await(); })
+            {
+                return tempest::forward<T>(expr).operator co_await();
+            }
+            else if constexpr (requires { operator co_await(tempest::forward<T>(expr)); })
+            {
+                return operator co_await(tempest::forward<T>(expr));
+            }
+            else
+            {
+                return tempest::forward<T>(expr);
+            }
+        }
+
+        template <typename Promise, typename Awaiter>
+        struct profiled_awaiter;
+
+        template <typename T>
+        struct is_profiled_awaiter : false_type
+        {
+        };
+
+        template <typename P, typename A>
+        struct is_profiled_awaiter<profiled_awaiter<P, A>> : true_type
+        {
+        };
+
+        template <typename T>
+        inline constexpr bool is_profiled_awaiter_v = is_profiled_awaiter<remove_cvref_t<T>>::value;
+
+        template <typename Promise, typename Awaiter>
+        struct profiled_awaiter
+        {
+            Promise& promise;
+            Awaiter awaiter;
+            profiler::suspend_reason reason{profiler::suspend_reason::yield};
+            bool did_suspend{false};
+
+            auto await_ready() noexcept(noexcept(awaiter.await_ready())) -> decltype(auto)
+            {
+                return awaiter.await_ready();
+            }
+
+            template <typename Handle>
+            auto await_suspend(Handle h) -> decltype(auto)
+            {
+                did_suspend = true;
+                auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                if (ctx != nullptr && ctx->get_session().is_enabled())
+                {
+                    ctx->end_coroutine_slice(reason);
+                }
+                return awaiter.await_suspend(h);
+            }
+
+            auto await_resume() -> decltype(auto)
+            {
+                if (did_suspend)
+                {
+                    auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                    if (ctx != nullptr && ctx->get_session().is_enabled())
+                    {
+                        promise.current_slice_index++;
+                        ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name);
+                    }
+                }
+                return awaiter.await_resume();
+            }
+        };
+
+        template <typename Promise>
+        struct task_initial_awaiter
+        {
+            Promise& promise;
+
+            [[nodiscard]] constexpr auto await_ready() const noexcept -> bool
+            {
+                return false;
+            }
+
+            auto await_suspend(coroutine_handle<Promise>) noexcept -> void
+            {
+            }
+
+            auto await_resume() const noexcept -> void
+            {
+                auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                if (ctx != nullptr && ctx->get_session().is_enabled())
+                {
+                    ctx->begin_coroutine_slice(promise.coroutine_id, promise.current_slice_index, promise.name);
+                }
+            }
+        };
+
         template <typename Promise>
         struct task_final_awaiter
         {
@@ -156,6 +275,12 @@ namespace tempest::job
 
             auto await_suspend(coroutine_handle<Promise> h) noexcept -> coroutine_handle<>
             {
+                auto* ctx = profiler::thread_profiler_context::get_current_thread_context();
+                if (ctx != nullptr && ctx->get_session().is_enabled())
+                {
+                    ctx->end_coroutine_slice(profiler::suspend_reason::completed);
+                }
+
                 if constexpr (requires { h.promise().result.has_value(); h.promise().parent_propagator; })
                 {
                     if (!h.promise().result.has_value() && h.promise().parent_propagator != nullptr)
@@ -232,15 +357,18 @@ namespace tempest::job
             result_type result{unexpected<E>{E::none}};
             coroutine_handle<> continuation{nullptr};
             detail::error_propagator* parent_propagator{nullptr};
+            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+            uint32_t current_slice_index{0};
+            string_view name{"task"};
 
             auto get_return_object() noexcept -> task
             {
                 return task{coroutine_handle<promise_type>::from_promise(*this)};
             }
 
-            auto initial_suspend() noexcept -> suspend_always
+            auto initial_suspend() noexcept -> detail::task_initial_awaiter<promise_type>
             {
-                return {};
+                return detail::task_initial_awaiter<promise_type>{*this};
             }
 
             auto final_suspend() noexcept -> detail::task_final_awaiter<promise_type>
@@ -347,7 +475,8 @@ namespace tempest::job
                     }
                 };
 
-                return child_task_awaiter{move(child)};
+                return detail::profiled_awaiter<promise_type, child_task_awaiter>{
+                    *this, child_task_awaiter{move(child)}, profiler::suspend_reason::yield};
             }
 
             // Await transform for unexpected<Err>
@@ -381,7 +510,8 @@ namespace tempest::job
                     }
                 };
 
-                return unexp_awaiter{unexp};
+                return detail::profiled_awaiter<promise_type, unexp_awaiter>{
+                    *this, unexp_awaiter{unexp}, profiler::suspend_reason::yield};
             }
 
             // Await transform for expected<Val, Err>
@@ -419,14 +549,25 @@ namespace tempest::job
                     }
                 };
 
-                return exp_awaiter{move(exp)};
+                return detail::profiled_awaiter<promise_type, exp_awaiter>{
+                    *this, exp_awaiter{move(exp)}, profiler::suspend_reason::yield};
             }
 
             // Fallthrough for generic awaitables
             template <typename Awaitable>
-            auto await_transform(Awaitable&& awaitable) -> decltype(auto)
+            auto await_transform(Awaitable&& awaitable)
             {
-                return forward<Awaitable>(awaitable);
+                if constexpr (detail::is_profiled_awaiter_v<Awaitable>)
+                {
+                    return forward<Awaitable>(awaitable);
+                }
+                else
+                {
+                    auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
+                    auto reason = detail::get_suspend_reason(actual);
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
+                        *this, move(actual), reason};
+                }
             }
         };
 
@@ -549,6 +690,11 @@ namespace tempest::job
             return _handle;
         }
 
+        [[nodiscard]] auto coroutine_id() const noexcept -> uint64_t
+        {
+            return _handle ? _handle.promise().coroutine_id : 0;
+        }
+
         auto operator co_await() &&
         {
             return task_awaiter<T, E>{move(*this)};
@@ -586,15 +732,18 @@ namespace tempest::job
             result_type result{};
             coroutine_handle<> continuation{nullptr};
             detail::error_propagator* parent_propagator{nullptr};
+            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+            uint32_t current_slice_index{0};
+            string_view name{"task"};
 
             auto get_return_object() noexcept -> task
             {
                 return task{coroutine_handle<promise_type>::from_promise(*this)};
             }
 
-            auto initial_suspend() noexcept -> suspend_always
+            auto initial_suspend() noexcept -> detail::task_initial_awaiter<promise_type>
             {
-                return {};
+                return detail::task_initial_awaiter<promise_type>{*this};
             }
 
             auto final_suspend() noexcept -> detail::task_final_awaiter<promise_type>
@@ -691,7 +840,8 @@ namespace tempest::job
                     }
                 };
 
-                return child_task_awaiter{move(child)};
+                return detail::profiled_awaiter<promise_type, child_task_awaiter>{
+                    *this, child_task_awaiter{move(child)}, profiler::suspend_reason::yield};
             }
 
             // Await transform for unexpected<Err>
@@ -725,7 +875,8 @@ namespace tempest::job
                     }
                 };
 
-                return unexp_awaiter{unexp};
+                return detail::profiled_awaiter<promise_type, unexp_awaiter>{
+                    *this, unexp_awaiter{unexp}, profiler::suspend_reason::yield};
             }
 
             // Await transform for expected<Val, Err>
@@ -763,13 +914,24 @@ namespace tempest::job
                     }
                 };
 
-                return exp_awaiter{move(exp)};
+                return detail::profiled_awaiter<promise_type, exp_awaiter>{
+                    *this, exp_awaiter{move(exp)}, profiler::suspend_reason::yield};
             }
 
             template <typename Awaitable>
-            auto await_transform(Awaitable&& awaitable) -> decltype(auto)
+            auto await_transform(Awaitable&& awaitable)
             {
-                return forward<Awaitable>(awaitable);
+                if constexpr (detail::is_profiled_awaiter_v<Awaitable>)
+                {
+                    return forward<Awaitable>(awaitable);
+                }
+                else
+                {
+                    auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
+                    auto reason = detail::get_suspend_reason(actual);
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
+                        *this, move(actual), reason};
+                }
             }
         };
 
@@ -887,6 +1049,11 @@ namespace tempest::job
             return _handle;
         }
 
+        [[nodiscard]] auto coroutine_id() const noexcept -> uint64_t
+        {
+            return _handle ? _handle.promise().coroutine_id : 0;
+        }
+
         auto operator co_await() &&
         {
             return task_awaiter<void, E>{move(*this)};
@@ -921,15 +1088,18 @@ namespace tempest::job
         {
             optional<T> result{nullopt};
             coroutine_handle<> continuation{nullptr};
+            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+            uint32_t current_slice_index{0};
+            string_view name{"task"};
 
             auto get_return_object() noexcept -> task
             {
                 return task{coroutine_handle<promise_type>::from_promise(*this)};
             }
 
-            auto initial_suspend() noexcept -> suspend_always
+            auto initial_suspend() noexcept -> detail::task_initial_awaiter<promise_type>
             {
-                return {};
+                return detail::task_initial_awaiter<promise_type>{*this};
             }
 
             auto final_suspend() noexcept -> detail::task_final_awaiter<promise_type>
@@ -945,6 +1115,22 @@ namespace tempest::job
             auto unhandled_exception() noexcept -> void
             {
                 TEMPEST_ASSERT(false);
+            }
+
+            template <typename Awaitable>
+            auto await_transform(Awaitable&& awaitable)
+            {
+                if constexpr (detail::is_profiled_awaiter_v<Awaitable>)
+                {
+                    return forward<Awaitable>(awaitable);
+                }
+                else
+                {
+                    auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
+                    auto reason = detail::get_suspend_reason(actual);
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
+                        *this, move(actual), reason};
+                }
             }
         };
 
@@ -1023,6 +1209,11 @@ namespace tempest::job
             return _handle;
         }
 
+        [[nodiscard]] auto coroutine_id() const noexcept -> uint64_t
+        {
+            return _handle ? _handle.promise().coroutine_id : 0;
+        }
+
         auto operator co_await() &&
         {
             return task_awaiter<T, void>{move(*this)};
@@ -1051,15 +1242,18 @@ namespace tempest::job
         struct promise_type : detail::promise_allocator_base
         {
             coroutine_handle<> continuation{nullptr};
+            uint64_t coroutine_id{g_next_coroutine_id.fetch_add(1, memory_order::relaxed)};
+            uint32_t current_slice_index{0};
+            string_view name{"task"};
 
             auto get_return_object() noexcept -> task
             {
                 return task{coroutine_handle<promise_type>::from_promise(*this)};
             }
 
-            auto initial_suspend() noexcept -> suspend_always
+            auto initial_suspend() noexcept -> detail::task_initial_awaiter<promise_type>
             {
-                return {};
+                return detail::task_initial_awaiter<promise_type>{*this};
             }
 
             auto final_suspend() noexcept -> detail::task_final_awaiter<promise_type>
@@ -1074,6 +1268,22 @@ namespace tempest::job
             auto unhandled_exception() noexcept -> void
             {
                 TEMPEST_ASSERT(false);
+            }
+
+            template <typename Awaitable>
+            auto await_transform(Awaitable&& awaitable)
+            {
+                if constexpr (detail::is_profiled_awaiter_v<Awaitable>)
+                {
+                    return forward<Awaitable>(awaitable);
+                }
+                else
+                {
+                    auto actual = detail::get_underlying_awaiter(forward<Awaitable>(awaitable));
+                    auto reason = detail::get_suspend_reason(actual);
+                    return detail::profiled_awaiter<promise_type, decltype(actual)>{
+                        *this, move(actual), reason};
+                }
             }
         };
 
@@ -1139,6 +1349,11 @@ namespace tempest::job
         [[nodiscard]] auto handle() const noexcept -> coroutine_handle<promise_type>
         {
             return _handle;
+        }
+
+        [[nodiscard]] auto coroutine_id() const noexcept -> uint64_t
+        {
+            return _handle ? _handle.promise().coroutine_id : 0;
         }
 
         auto operator co_await() &&

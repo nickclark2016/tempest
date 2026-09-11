@@ -53,6 +53,11 @@
     sortColumn: 'total',
     sortAscending: false,
 
+    // Coroutine & View Mode State
+    viewMode: 'physical',   // 'physical' | 'logical'
+    showFlowArrows: true,
+    coroutineIndex: new Map(), // coroutine_id -> Array<zone>
+
     // Drag & Pan state
     isDragging: false,
     dragStartX: 0,
@@ -87,6 +92,9 @@
     openFileBtn: document.getElementById('btn-open-file'),
     fileInput: document.getElementById('file-input'),
     clearBtn: document.getElementById('btn-clear'),
+    btnViewPhysical: document.getElementById('btn-view-physical'),
+    btnViewLogical: document.getElementById('btn-view-logical'),
+    btnFlowArrows: document.getElementById('btn-flow-arrows'),
     fitViewBtn: document.getElementById('btn-fit-view'),
     zoomInBtn: document.getElementById('btn-zoom-in'),
     zoomOutBtn: document.getElementById('btn-zoom-out'),
@@ -104,6 +112,7 @@
     overviewFrameStats: document.getElementById('overview-frame-stats'),
     timelineContainer: document.getElementById('timeline-container'),
     timelineCanvas: document.getElementById('timeline-canvas'),
+    timelineSvgOverlay: document.getElementById('timeline-svg-overlay'),
     selectionBadge: document.getElementById('selection-badge'),
     selectionDurationVal: document.getElementById('selection-duration-val'),
     selectionRangeVal: document.getElementById('selection-range-val'),
@@ -597,6 +606,9 @@
                 trackId: key,
                 trackName: tr.name,
                 category: 'cpu',
+                coroutine_id: z.coroutine_id || 0,
+                slice_index: z.slice_index !== undefined ? z.slice_index : 0,
+                suspend_reason: z.suspend_reason || 'none',
                 frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
@@ -638,6 +650,9 @@
                 trackId: key,
                 trackName: tr.name,
                 category: 'gpu',
+                coroutine_id: z.coroutine_id || 0,
+                slice_index: z.slice_index !== undefined ? z.slice_index : 0,
+                suspend_reason: z.suspend_reason || 'none',
                 frame_index: (z.frame_index !== undefined && z.frame_index !== null && z.frame_index !== 0) ? z.frame_index : f.frame_index,
                 duration_ns: z.end_ns >= z.start_ns ? (z.end_ns - z.start_ns) : 0,
               };
@@ -670,23 +685,90 @@
       }
     }
 
-    state.tracks = Array.from(trackMap.values()).sort((a, b) => {
-      // 1. CPU tracks above GPU tracks
-      if (a.type !== b.type) {
-        return a.type === 'cpu' ? -1 : 1;
+    // Index all coroutine slices across physical tracks
+    state.coroutineIndex.clear();
+    for (const tr of trackMap.values()) {
+      for (const z of tr.zones) {
+        if (z.coroutine_id && z.coroutine_id > 0) {
+          let list = state.coroutineIndex.get(z.coroutine_id);
+          if (!list) {
+            list = [];
+            state.coroutineIndex.set(z.coroutine_id, list);
+          }
+          list.push(z);
+        }
       }
-      // 2. Main Thread first among CPU tracks
-      if (a.type === 'cpu') {
-        if (a.name === 'Main Thread') return -1;
-        if (b.name === 'Main Thread') return 1;
+    }
+    for (const list of state.coroutineIndex.values()) {
+      list.sort((a, b) => (a.slice_index !== b.slice_index ? a.slice_index - b.slice_index : a.start_ns - b.start_ns));
+    }
+
+    // Check View Mode: Logical Coroutines View vs Physical Tracks View
+    if (state.viewMode === 'logical' && state.coroutineIndex.size > 0) {
+      const logicalTracks = [];
+      for (const [coroId, slices] of state.coroutineIndex.entries()) {
+        const coroZones = [];
+        let maxD = 0;
+        for (let i = 0; i < slices.length; i++) {
+          const s = slices[i];
+          coroZones.push({
+            ...s,
+            depth: s.depth || 0,
+          });
+          if ((s.depth || 0) > maxD) maxD = s.depth;
+
+          // Inactive / wait interval between slice i and slice i+1
+          if (i + 1 < slices.length) {
+            const nextS = slices[i + 1];
+            if (nextS.start_ns > s.end_ns) {
+              const reasonText = s.suspend_reason && s.suspend_reason !== 'none' ? s.suspend_reason : 'yield';
+              coroZones.push({
+                name: `Wait: ${reasonText}`,
+                start_ns: s.end_ns,
+                end_ns: nextS.start_ns,
+                duration_ns: nextS.start_ns - s.end_ns,
+                depth: 0,
+                isWait: true,
+                suspend_reason: reasonText,
+                coroutine_id: coroId,
+                slice_index: s.slice_index,
+                trackName: `Coroutine #${coroId}`,
+              });
+            }
+          }
+        }
+
+        logicalTracks.push({
+          id: `coro_${coroId}`,
+          track_id: coroId,
+          name: `Coroutine #${coroId}`,
+          type: 'coroutine',
+          zones: coroZones,
+          maxDepth: maxD,
+        });
       }
-      // 3. Graphics Queue first among GPU tracks
-      if (a.type === 'gpu') {
-        if (a.name.includes('Graphics')) return -1;
-        if (b.name.includes('Graphics')) return 1;
-      }
-      return a.track_id - b.track_id;
-    });
+      logicalTracks.sort((a, b) => a.track_id - b.track_id);
+      state.tracks = logicalTracks;
+    } else {
+      state.tracks = Array.from(trackMap.values()).sort((a, b) => {
+        // 1. CPU tracks above GPU tracks
+        if (a.type !== b.type) {
+          return a.type === 'cpu' ? -1 : 1;
+        }
+        // 2. Main Thread first among CPU tracks
+        if (a.type === 'cpu') {
+          if (a.name === 'Main Thread') return -1;
+          if (b.name === 'Main Thread') return 1;
+        }
+        // 3. Graphics Queue first among GPU tracks
+        if (a.type === 'gpu') {
+          if (a.name.includes('Graphics')) return -1;
+          if (b.name.includes('Graphics')) return 1;
+        }
+        return a.track_id - b.track_id;
+      });
+    }
+
     state.metrics = metricsMap;
 
     updateMetricCards();
@@ -908,6 +990,11 @@
 
             const rowY = currentY + state.trackHeaderHeight + state.frameHeaderHeight + 4 + zone.depth * (state.zoneHeight + state.zoneSpacing);
 
+            // Record layout bounding box on zone for SVG flow curves and hit-testing
+            zone.renderX = zStartX;
+            zone.renderY = rowY;
+            zone.renderW = Math.max(1, zWidth);
+
             // LOD Culling: If sub-pixel, merge to prevent millions of fillRect calls
             const pixelBucket = Math.floor(zStartX);
             if (zWidth < 0.8 && pixelBucket === lastDrawnPixel) {
@@ -922,9 +1009,29 @@
             const isSelected = state.selectedZone === zone;
             const isHovered = state.hoveredZone === zone;
 
-            // Base Zone Color
-            timelineCtx.fillStyle = getZoneColor(zone.name, zone.category || track.type);
-            timelineCtx.fillRect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+            if (zone.isWait) {
+              // Draw diagonal hatch pattern for inactive/wait blocks
+              timelineCtx.save();
+              timelineCtx.beginPath();
+              timelineCtx.rect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+              timelineCtx.clip();
+              timelineCtx.fillStyle = 'rgba(110, 118, 129, 0.18)';
+              timelineCtx.fillRect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+              timelineCtx.strokeStyle = 'rgba(139, 148, 158, 0.45)';
+              timelineCtx.lineWidth = 1;
+              const step = 8;
+              for (let hx = zStartX - state.zoneHeight; hx < zStartX + zWidth; hx += step) {
+                timelineCtx.beginPath();
+                timelineCtx.moveTo(hx, rowY + state.zoneHeight);
+                timelineCtx.lineTo(hx + state.zoneHeight, rowY);
+                timelineCtx.stroke();
+              }
+              timelineCtx.restore();
+            } else {
+              // Base Zone Color
+              timelineCtx.fillStyle = getZoneColor(zone.name, zone.category || track.type);
+              timelineCtx.fillRect(zStartX, rowY, Math.max(1, zWidth), state.zoneHeight);
+            }
 
             // Highlight overlay for search, select, hover
             if (isMatch) {
@@ -941,15 +1048,16 @@
             }
 
             // Zone Text Label
-            if (zWidth > 32) {
+            if (zWidth > 28) {
               timelineCtx.save();
               timelineCtx.beginPath();
               timelineCtx.rect(zStartX, rowY, zWidth, state.zoneHeight);
               timelineCtx.clip();
 
-              timelineCtx.fillStyle = '#ffffff';
+              timelineCtx.fillStyle = zone.isWait ? '#8b949e' : '#ffffff';
               timelineCtx.font = '10px monospace';
-              const label = `${zone.name} (${formatTime(zone.duration_ns)})`;
+              const slicePrefix = (zone.coroutine_id && !zone.isWait) ? `[#${zone.coroutine_id}:${zone.slice_index}] ` : '';
+              const label = `${slicePrefix}${zone.name} (${formatTime(zone.duration_ns)})`;
               timelineCtx.fillText(label, zStartX + 4, rowY + 12);
               timelineCtx.restore();
             }
@@ -962,10 +1070,13 @@
 
     state.totalContentHeight = currentY + state.scrollY;
 
-    // 3. Draw Frame Boundaries (CPU vs GPU frames & correlation)
+    // 3. Draw Cross-Thread Coroutine Flow Curves (SVG Overlay)
+    renderFlowOverlay(width, height, nsToX);
+
+    // 4. Draw Frame Boundaries (CPU vs GPU frames & correlation)
     renderFrameBoundaries(timelineCtx, width, height, nsToX, visibleDuration);
 
-    // 4. Draw Marquee Selection
+    // 5. Draw Marquee Selection
     if (state.selectionRange) {
       const selStartX = nsToX(state.selectionRange.startNs);
       const selEndX = nsToX(state.selectionRange.endNs);
@@ -980,13 +1091,74 @@
       timelineCtx.strokeRect(selX, state.rulerHeight, selW, height - state.rulerHeight);
     }
 
-    // 5. Draw Sticky Top Ruler
+    // 6. Draw Sticky Top Ruler
     renderRuler(timelineCtx, width, nsToX, visibleDuration);
 
     // Update search count badge
     if (state.searchQuery) {
       dom.searchCount.textContent = `${state.searchResultsCount} matches`;
     }
+  }
+
+  function renderFlowOverlay(width, height, nsToX) {
+    if (!dom.timelineSvgOverlay) return;
+    dom.timelineSvgOverlay.setAttribute('width', width);
+    dom.timelineSvgOverlay.setAttribute('height', height);
+    dom.timelineSvgOverlay.innerHTML = '';
+
+    if (!state.showFlowArrows) return;
+
+    // Active coroutine ID from hovered or selected zone
+    const activeCoroId = (state.hoveredZone?.coroutine_id) || (state.selectedZone?.coroutine_id) || 0;
+    if (!activeCoroId) return;
+
+    const slices = state.coroutineIndex.get(activeCoroId);
+    if (!slices || slices.length < 2) return;
+
+    let svgContent = `
+      <defs>
+        <marker id="coro-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#39c5bb" />
+        </marker>
+      </defs>
+    `;
+
+    for (let i = 0; i < slices.length - 1; i++) {
+      const s1 = slices[i];
+      const s2 = slices[i + 1];
+
+      if (s1.renderX === undefined || s2.renderX === undefined) continue;
+
+      const x1 = s1.renderX + s1.renderW;
+      const y1 = s1.renderY + state.zoneHeight / 2;
+      const x2 = s2.renderX;
+      const y2 = s2.renderY + state.zoneHeight / 2;
+
+      // Culling if both completely out of screen on the same side
+      if ((x1 < -60 && x2 < -60) || (x1 > width + 60 && x2 > width + 60)) continue;
+
+      const dx = Math.max(24, Math.min(140, Math.abs(x2 - x1) * 0.45));
+      const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+
+      const waitDurNs = s2.start_ns > s1.end_ns ? (s2.start_ns - s1.end_ns) : 0;
+      const reasonText = s1.suspend_reason && s1.suspend_reason !== 'none' ? s1.suspend_reason : 'yield';
+      const label = `${formatTime(waitDurNs)} [${reasonText}]`;
+
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const badgeW = label.length * 6.5 + 14;
+      const badgeH = 18;
+
+      svgContent += `
+        <g class="coroutine-flow-group">
+          <path d="${pathD}" class="coroutine-flow-path" marker-end="url(#coro-arrowhead)" />
+          <rect x="${midX - badgeW / 2}" y="${midY - badgeH / 2}" width="${badgeW}" height="${badgeH}" class="coroutine-badge-rect" />
+          <text x="${midX}" y="${midY + 4}" class="coroutine-flow-badge">${label}</text>
+        </g>
+      `;
+    }
+
+    dom.timelineSvgOverlay.innerHTML = svgContent;
   }
 
   function renderFrameBoundaries(ctx, width, height, nsToX, visibleDuration) {
@@ -1328,7 +1500,11 @@
     dom.inspCategory.className = `category-pill ${zone.category || 'cpu'}`;
     dom.inspName.textContent = zone.name;
     dom.inspTrack.textContent = `${zone.trackName || 'Thread'} (Depth ${zone.depth})`;
-    dom.inspLocation.textContent = zone.location ? `${zone.location.file || 'source.cpp'}:${zone.location.line || 0}` : 'native';
+    if (zone.coroutine_id) {
+      dom.inspLocation.textContent = `Coroutine #${zone.coroutine_id} (Slice ${zone.slice_index || 0}) | Suspend: ${zone.suspend_reason || 'none'}`;
+    } else {
+      dom.inspLocation.textContent = zone.location ? `${zone.location.file || 'source.cpp'}:${zone.location.line || 0}` : 'native';
+    }
 
     // Duration & Self-Time
     const totalDur = zone.duration_ns;
@@ -1349,6 +1525,23 @@
 
     // Attached Metrics & GPU Stats
     dom.inspMetricsList.innerHTML = '';
+    if (zone.coroutine_id) {
+      const coroTag = document.createElement('div');
+      coroTag.className = 'metric-tag';
+      coroTag.innerHTML = `<span class="tag-name">coroutine_id:</span><span class="tag-value">${zone.coroutine_id}</span>`;
+      dom.inspMetricsList.appendChild(coroTag);
+
+      const sliceTag = document.createElement('div');
+      sliceTag.className = 'metric-tag';
+      sliceTag.innerHTML = `<span class="tag-name">slice_index:</span><span class="tag-value">${zone.slice_index || 0}</span>`;
+      dom.inspMetricsList.appendChild(sliceTag);
+
+      const reasonTag = document.createElement('div');
+      reasonTag.className = 'metric-tag';
+      reasonTag.innerHTML = `<span class="tag-name">suspend_reason:</span><span class="tag-value">${zone.suspend_reason || 'none'}</span>`;
+      dom.inspMetricsList.appendChild(reasonTag);
+    }
+
     if (zone.metrics && zone.metrics.length > 0) {
       for (const m of zone.metrics) {
         const tag = document.createElement('div');
@@ -1356,7 +1549,7 @@
         tag.innerHTML = `<span class="tag-name">${m.name}:</span><span class="tag-value">${m.value.toLocaleString()}</span>`;
         dom.inspMetricsList.appendChild(tag);
       }
-    } else {
+    } else if (!zone.coroutine_id) {
       dom.inspMetricsList.innerHTML = '<span class="empty-text">No custom metrics attached to this zone.</span>';
     }
 
@@ -1869,6 +2062,10 @@
         <div class="tt-row"><span>Track:</span><span>${z.trackName || 'Main'}</span></div>
         <div class="tt-row"><span>Depth:</span><span>${z.depth}</span></div>
         ${parentFrame ? `<div class="tt-row"><span>Frame:</span><span class="tt-val">#${parentFrame.frame_index}</span></div>` : ''}
+        ${z.coroutine_id ? `
+          <div class="tt-row"><span>Coroutine:</span><span class="tt-val">#${z.coroutine_id} (Slice ${z.slice_index || 0})</span></div>
+          <div class="tt-row"><span>Suspend Reason:</span><span class="tt-val">${z.suspend_reason || 'none'}</span></div>
+        ` : ''}
       `;
     } else {
       // Check if mouseX is inside any frame boundary box in empty track space
@@ -2104,6 +2301,16 @@
     }
   }
 
+  const SUSPEND_REASONS = [
+    'none',
+    'yield',
+    'mutex_contention',
+    'event_wait',
+    'channel_full',
+    'channel_empty',
+    'completed'
+  ];
+
   async function parseBinaryTprof(arrayBuffer) {
     try {
       const dataView = new DataView(arrayBuffer);
@@ -2115,6 +2322,9 @@
       if (magic !== 'TPRF') {
         throw new Error('Invalid .tprof file magic header');
       }
+
+      const versionMajor = dataView.getUint16(4, true);
+      const versionMinor = dataView.getUint16(6, true);
 
       const compressedBytes = new Uint8Array(arrayBuffer, 28);
       let uncompressedBytes;
@@ -2140,7 +2350,7 @@
       }
 
       if (uncompressedBytes) {
-        readUncompressedBinaryData(uncompressedBytes.buffer);
+        readUncompressedBinaryData(uncompressedBytes.buffer, versionMinor);
       }
     } catch (e) {
       console.warn('Binary parse fallback/error:', e);
@@ -2148,7 +2358,7 @@
     }
   }
 
-  function readUncompressedBinaryData(buffer) {
+  function readUncompressedBinaryData(buffer, versionMinor = 1) {
     const dv = new DataView(buffer);
     let cursor = 0;
 
@@ -2195,6 +2405,17 @@
         const zDepth = dv.getUint32(cursor, true); cursor += 4;
         const zNameId = dv.getUint32(cursor, true); cursor += 4;
         const zTaskId = Number(dv.getBigUint64(cursor, true)); cursor += 8;
+        let coroutineId = 0;
+        let sliceIndex = 0;
+        let suspendReason = 'none';
+
+        if (versionMinor >= 1) {
+          coroutineId = Number(dv.getBigUint64(cursor, true)); cursor += 8;
+          sliceIndex = dv.getUint32(cursor, true); cursor += 4;
+          const reasonCode = dv.getUint8(cursor); cursor += 1;
+          suspendReason = SUSPEND_REASONS[reasonCode] || 'none';
+        }
+
         const metCount = dv.getUint8(cursor); cursor += 1;
 
         const metrics = [];
@@ -2211,6 +2432,9 @@
           start_ns: zStart,
           end_ns: zEnd,
           depth: zDepth,
+          coroutine_id: coroutineId,
+          slice_index: sliceIndex,
+          suspend_reason: suspendReason,
           metrics,
         });
       }
@@ -2262,6 +2486,9 @@
         const tr = tracksById.get(tid);
         const startNs = Math.floor((ev.ts || 0) * 1000);
         const durNs = Math.floor((ev.dur || 0) * 1000);
+        const coroutineId = ev.args?.coroutine_id ? Number(ev.args.coroutine_id) : 0;
+        const sliceIndex = ev.args?.slice_index ? Number(ev.args.slice_index) : 0;
+        const suspendReason = ev.args?.suspend_reason ? String(ev.args.suspend_reason) : 'none';
 
         tr.zones.push({
           name: ev.name,
@@ -2269,7 +2496,10 @@
           end_ns: startNs + durNs,
           depth: 0,
           category: ev.cat || 'cpu',
-          metrics: ev.args ? Object.entries(ev.args).map(([k, v]) => ({ name: k, value: Number(v) })) : [],
+          coroutine_id: coroutineId,
+          slice_index: sliceIndex,
+          suspend_reason: suspendReason,
+          metrics: ev.args ? Object.entries(ev.args).filter(([k]) => k !== 'coroutine_id' && k !== 'slice_index' && k !== 'suspend_reason' && k !== 'task_id').map(([k, v]) => ({ name: k, value: Number(v) })) : [],
         });
       } else if (ev.ph === 'i') {
         frameObj.markers.push({
@@ -2368,6 +2598,44 @@
     dom.clearBtn.addEventListener('click', () => clearData());
 
     // View Controls
+    if (dom.btnViewPhysical) {
+      dom.btnViewPhysical.addEventListener('click', () => {
+        if (state.viewMode !== 'physical') {
+          state.viewMode = 'physical';
+          dom.btnViewPhysical.classList.add('active');
+          if (dom.btnViewLogical) dom.btnViewLogical.classList.remove('active');
+          recalculateTracksAndMetrics();
+          render();
+        }
+      });
+    }
+
+    if (dom.btnViewLogical) {
+      dom.btnViewLogical.addEventListener('click', () => {
+        if (state.viewMode !== 'logical') {
+          state.viewMode = 'logical';
+          dom.btnViewLogical.classList.add('active');
+          if (dom.btnViewPhysical) dom.btnViewPhysical.classList.remove('active');
+          recalculateTracksAndMetrics();
+          render();
+        }
+      });
+    }
+
+    if (dom.btnFlowArrows) {
+      dom.btnFlowArrows.addEventListener('click', () => {
+        state.showFlowArrows = !state.showFlowArrows;
+        if (state.showFlowArrows) {
+          dom.btnFlowArrows.classList.add('active');
+          dom.btnFlowArrows.textContent = 'Flow: ON';
+        } else {
+          dom.btnFlowArrows.classList.remove('active');
+          dom.btnFlowArrows.textContent = 'Flow: OFF';
+        }
+        render();
+      });
+    }
+
     dom.fitViewBtn.addEventListener('click', () => fitTimeline());
     dom.zoomInBtn.addEventListener('click', () => {
       const curDur = state.viewEndNs - state.viewStartNs;

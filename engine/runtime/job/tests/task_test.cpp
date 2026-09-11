@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <tempest/job/async_event.hpp>
 #include <tempest/job/task.hpp>
 #include <tempest/job/types.hpp>
+#include <tempest/profiler/session.hpp>
 
 namespace tempest::job::tests
 {
@@ -429,5 +431,68 @@ namespace tempest::job::tests
         EXPECT_TRUE(step1);
         EXPECT_TRUE(step2);
         EXPECT_TRUE(cont.is_ready());
+    }
+
+    /// @brief Verifies that a coroutine executing with an active profiler session
+    ///        records execution slices with matching coroutine ID, incrementing slice indices,
+    ///        and propagated suspend reasons.
+    TEST(task_test, coroutine_profiler_slice_tracking)
+    {
+        // 1. Setup
+        auto prof = profiler::profiler_session{true};
+        [[maybe_unused]] auto& ctx = prof.get_or_register_thread();
+
+        auto evt = async_event{false};
+        auto resumed = false;
+
+        auto test_coroutine = [&]() -> task<int> {
+            co_await evt;
+            resumed = true;
+            co_return 42;
+        };
+
+        // 2. Act: Start coroutine (slice 0 runs until co_await evt suspends)
+        auto t = test_coroutine();
+        const auto coro_id = t.coroutine_id();
+        EXPECT_GT(coro_id, 0U);
+
+        const auto first_step = t.resume();
+        EXPECT_FALSE(first_step);
+        EXPECT_FALSE(resumed);
+
+        // Resume coroutine by signaling event and resuming task
+        evt.set();
+        const auto second_step = t.resume();
+        EXPECT_TRUE(second_step);
+        EXPECT_TRUE(resumed);
+        EXPECT_EQ(t.value(), 42);
+
+        // 3. Assert: Verify profiler captured 2 slices with matching coroutine_id
+        auto chunks = prof.drain_completed_chunks();
+        ASSERT_FALSE(chunks.empty());
+
+        auto coro_zones = vector<profiler::zone_record>{};
+        for (const auto& chunk : chunks)
+        {
+            for (const auto& z : chunk->zones())
+            {
+                if (z.coroutine_id == coro_id)
+                {
+                    coro_zones.push_back(z);
+                }
+            }
+        }
+
+        ASSERT_EQ(coro_zones.size(), 2U);
+
+        // Slice 0 suspended due to event_wait
+        EXPECT_EQ(coro_zones[0].slice_index, 0U);
+        EXPECT_EQ(coro_zones[0].reason, profiler::suspend_reason::event_wait);
+
+        // Slice 1 completed
+        EXPECT_EQ(coro_zones[1].slice_index, 1U);
+        EXPECT_EQ(coro_zones[1].reason, profiler::suspend_reason::completed);
+
+        profiler::thread_profiler_context::set_current_thread_context(nullptr);
     }
 } // namespace tempest::job::tests

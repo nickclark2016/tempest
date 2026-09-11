@@ -164,6 +164,9 @@ namespace tempest::profiler
                 payload.write(z.depth);
                 payload.write(get_string_id(z.name));
                 payload.write(z.task_id);
+                payload.write(z.coroutine_id);
+                payload.write(z.slice_index);
+                payload.write(static_cast<uint8_t>(z.reason));
 
                 const auto met_count = static_cast<uint8_t>(z.metrics.size());
                 payload.write(met_count);
@@ -225,7 +228,7 @@ namespace tempest::profiler
         auto header = tprof_header{
             .magic = {magic_bytes[0], magic_bytes[1], magic_bytes[2], magic_bytes[3]},
             .version_major = 1,
-            .version_minor = 0,
+            .version_minor = 1,
             .uncompressed_size = static_cast<uint64_t>(uncompressed_size),
             .compressed_size = static_cast<uint64_t>(actual_compressed_len),
             .flags = 0,
@@ -377,10 +380,26 @@ namespace tempest::profiler
                 auto depth = uint32_t{0};
                 auto z_name_id = uint32_t{0};
                 auto task_id = uint64_t{0};
+                auto coroutine_id = uint64_t{0};
+                auto slice_index = uint32_t{0};
+                auto reason_raw = uint8_t{0};
                 auto met_count = uint8_t{0};
 
                 if (!reader.read(start_ns) || !reader.read(end_ns) || !reader.read(depth) || !reader.read(z_name_id) ||
-                    !reader.read(task_id) || !reader.read(met_count))
+                    !reader.read(task_id))
+                {
+                    return unexpected(capture_error::corrupted_data);
+                }
+
+                if (header.version_minor >= 1)
+                {
+                    if (!reader.read(coroutine_id) || !reader.read(slice_index) || !reader.read(reason_raw))
+                    {
+                        return unexpected(capture_error::corrupted_data);
+                    }
+                }
+
+                if (!reader.read(met_count))
                 {
                     return unexpected(capture_error::corrupted_data);
                 }
@@ -398,6 +417,9 @@ namespace tempest::profiler
                     .name = z_name_res.value(),
                     .location = {},
                     .task_id = task_id,
+                    .coroutine_id = coroutine_id,
+                    .slice_index = slice_index,
+                    .reason = static_cast<suspend_reason>(reason_raw),
                     .metrics = {},
                 };
 

@@ -214,6 +214,9 @@ namespace tempest::job
                 auto alloc_scope = job_allocator_scope{worker->allocator};
                 tl_current_worker = worker;
 
+                auto& prof_ctx = _profiler.get_or_register_thread();
+                prof_ctx.set_thread_name(worker->type == core_class::performance ? "JobWorker-P" : "JobWorker-E");
+
                 if (_config.enable_core_pinning && worker->affinity_mask != 0)
                 {
                     set_current_thread_affinity(worker->affinity_mask);
@@ -631,6 +634,7 @@ namespace tempest::job
 
     auto job_system::step() -> bool
     {
+        [[maybe_unused]] auto& prof_ctx = _profiler.get_or_register_thread();
         auto item = queue_item{};
         auto found = false;
 

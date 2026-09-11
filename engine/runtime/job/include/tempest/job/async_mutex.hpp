@@ -5,6 +5,7 @@
 #include <tempest/atomic.hpp>
 #include <tempest/coroutine.hpp>
 #include <tempest/int.hpp>
+#include <tempest/profiler/types.hpp>
 
 namespace tempest::job
 {
@@ -67,6 +68,11 @@ namespace tempest::job
             constexpr auto await_resume() const noexcept -> void
             {
             }
+
+            [[nodiscard]] constexpr auto suspend_reason_tag() const noexcept -> profiler::suspend_reason
+            {
+                return profiler::suspend_reason::mutex_contention;
+            }
         };
 
         struct scoped_lock_awaiter
@@ -84,6 +90,11 @@ namespace tempest::job
             [[nodiscard]] auto await_resume() noexcept -> scoped_lock_guard
             {
                 return scoped_lock_guard{mutex};
+            }
+
+            [[nodiscard]] constexpr auto suspend_reason_tag() const noexcept -> profiler::suspend_reason
+            {
+                return profiler::suspend_reason::mutex_contention;
             }
         };
 

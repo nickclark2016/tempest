@@ -2283,3 +2283,223 @@ TEST(profiler_tests, websocket_control_command_exact_matching_and_unknown_handli
     client.close_sock();
     server.stop();
 }
+
+//==============================================================================
+// Coroutine Slice Tracking & Profiler Awareness Tests
+//==============================================================================
+
+/// @brief Verify that begin_coroutine_slice and end_coroutine_slice record consecutive execution slices
+///        with proper coroutine IDs, slice indices, and suspend reasons.
+TEST(profiler_tests, coroutine_slice_tracking)
+{
+    // 1. Setup: Create enabled profiler session
+    auto session = tempest::profiler::profiler_session{true};
+    auto& ctx = session.get_or_register_thread();
+
+    // 2. Act: Record two consecutive slices for a coroutine
+    ctx.begin_coroutine_slice(101, 0, "TestTask");
+    ctx.end_coroutine_slice(tempest::profiler::suspend_reason::yield);
+
+    ctx.begin_coroutine_slice(101, 1, "TestTask");
+    ctx.end_coroutine_slice(tempest::profiler::suspend_reason::completed);
+
+    // 3. Assert: Drain chunks and verify slice records
+    auto chunks = session.drain_completed_chunks();
+    ASSERT_FALSE(chunks.empty());
+
+    auto total_zones = size_t{0};
+    for (const auto& chunk : chunks)
+    {
+        total_zones += chunk->zones().size();
+    }
+    ASSERT_EQ(total_zones, 2U);
+
+    const auto& chunk = *chunks[0];
+    const auto zones = chunk.zones();
+
+    ASSERT_EQ(zones[0].name, "TestTask");
+    ASSERT_EQ(zones[0].coroutine_id, 101U);
+    ASSERT_EQ(zones[0].slice_index, 0U);
+    ASSERT_EQ(zones[0].reason, tempest::profiler::suspend_reason::yield);
+
+    ASSERT_EQ(zones[1].name, "TestTask");
+    ASSERT_EQ(zones[1].coroutine_id, 101U);
+    ASSERT_EQ(zones[1].slice_index, 1U);
+    ASSERT_EQ(zones[1].reason, tempest::profiler::suspend_reason::completed);
+}
+
+/// @brief Verify that tag_current_slice_suspend_reason sets the suspend reason on the active slice,
+///        persisting even when end_coroutine_slice is called with none.
+TEST(profiler_tests, suspend_reason_tagging)
+{
+    // 1. Setup: Create enabled profiler session
+    auto session = tempest::profiler::profiler_session{true};
+    auto& ctx = session.get_or_register_thread();
+
+    // 2. Act: Begin slice, tag mutex contention, and complete slice
+    ctx.begin_coroutine_slice(202, 0, "ContendedTask");
+    ctx.tag_current_slice_suspend_reason(tempest::profiler::suspend_reason::mutex_contention);
+    ctx.end_coroutine_slice();
+
+    // 3. Assert: Verify recorded slice has mutex_contention suspend reason
+    auto chunks = session.drain_completed_chunks();
+    ASSERT_FALSE(chunks.empty());
+
+    const auto& chunk = *chunks[0];
+    const auto zones = chunk.zones();
+    ASSERT_EQ(zones.size(), 1U);
+    ASSERT_EQ(zones[0].coroutine_id, 202U);
+    ASSERT_EQ(zones[0].slice_index, 0U);
+    ASSERT_EQ(zones[0].reason, tempest::profiler::suspend_reason::mutex_contention);
+}
+
+/// @brief Verify that scoped_zone instances opened within a coroutine slice inherit
+///        the active coroutine ID automatically.
+TEST(profiler_tests, nested_zone_coroutine_id_inheritance)
+{
+    // 1. Setup: Create enabled profiler session
+    auto session = tempest::profiler::profiler_session{true};
+    auto& ctx = session.get_or_register_thread();
+
+    // 2. Act: Begin slice, open child scoped_zone, and finish
+    ctx.begin_coroutine_slice(303, 0, "CoroOuter");
+    {
+        [[maybe_unused]] const auto inner = tempest::profiler::scoped_zone{session, "InnerCompute"};
+    }
+    ctx.end_coroutine_slice(tempest::profiler::suspend_reason::completed);
+
+    // 3. Assert: Verify both inner and outer zones inherit coroutine_id 303
+    auto chunks = session.drain_completed_chunks();
+    ASSERT_FALSE(chunks.empty());
+
+    const auto& chunk = *chunks[0];
+    const auto zones = chunk.zones();
+    ASSERT_EQ(zones.size(), 2U);
+
+    // LIFO completion: InnerCompute completes first, then CoroOuter
+    ASSERT_EQ(zones[0].name, "InnerCompute");
+    ASSERT_EQ(zones[0].coroutine_id, 303U);
+    ASSERT_EQ(zones[0].depth, 1U);
+
+    ASSERT_EQ(zones[1].name, "CoroOuter");
+    ASSERT_EQ(zones[1].coroutine_id, 303U);
+    ASSERT_EQ(zones[1].slice_index, 0U);
+    ASSERT_EQ(zones[1].depth, 0U);
+}
+
+/// @brief Verify that binary serialization v1.1 preserves coroutine_id, slice_index, and suspend_reason
+///        with exact fidelity across serialize and deserialize cycles.
+TEST(profiler_tests, binary_serialization_roundtrip_v1_1)
+{
+    // 1. Setup: Populate capture_session_data with coroutine slice metadata
+    auto capture = tempest::profiler::capture_session_data{
+        .start_time_ns = 1000,
+        .end_time_ns = 5000,
+        .tracks = {},
+        .metrics = {},
+    };
+
+    auto track = tempest::profiler::track_data{
+        .track_id = 42,
+        .name = "WorkerThread_42",
+        .type = tempest::profiler::track_type::cpu_thread,
+        .zones = {},
+        .markers = {},
+    };
+
+    track.zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 1050,
+        .end_ns = 2000,
+        .depth = 0,
+        .name = "TaskSlice0",
+        .location = {},
+        .task_id = 0,
+        .coroutine_id = 404,
+        .slice_index = 0,
+        .reason = tempest::profiler::suspend_reason::channel_empty,
+        .metrics = {},
+    });
+
+    track.zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 2500,
+        .end_ns = 4800,
+        .depth = 0,
+        .name = "TaskSlice1",
+        .location = {},
+        .task_id = 0,
+        .coroutine_id = 404,
+        .slice_index = 1,
+        .reason = tempest::profiler::suspend_reason::completed,
+        .metrics = {},
+    });
+
+    capture.tracks.push_back(tempest::move(track));
+
+    // 2. Act: Serialize to binary buffer and deserialize back
+    const auto buffer = tempest::profiler::serialize_binary_to_buffer(capture);
+    ASSERT_FALSE(buffer.empty());
+
+    const auto roundtrip = tempest::profiler::deserialize_binary_from_buffer(
+        tempest::span<const tempest::byte>{buffer.data(), buffer.size()});
+
+    // 3. Assert: Verify coroutine slice fields are preserved
+    ASSERT_TRUE(roundtrip.has_value());
+    ASSERT_EQ(roundtrip->tracks.size(), 1U);
+    ASSERT_EQ(roundtrip->tracks[0].zones.size(), 2U);
+
+    const auto& z0 = roundtrip->tracks[0].zones[0];
+    ASSERT_EQ(z0.name, "TaskSlice0");
+    ASSERT_EQ(z0.coroutine_id, 404U);
+    ASSERT_EQ(z0.slice_index, 0U);
+    ASSERT_EQ(z0.reason, tempest::profiler::suspend_reason::channel_empty);
+
+    const auto& z1 = roundtrip->tracks[0].zones[1];
+    ASSERT_EQ(z1.name, "TaskSlice1");
+    ASSERT_EQ(z1.coroutine_id, 404U);
+    ASSERT_EQ(z1.slice_index, 1U);
+    ASSERT_EQ(z1.reason, tempest::profiler::suspend_reason::completed);
+}
+
+/// @brief Verify that Chrome Trace JSON export includes coroutine_id, slice_index, and suspend_reason in event args.
+TEST(profiler_tests, json_serialization_coroutine_args)
+{
+    // 1. Setup: Populate capture_session_data with coroutine metadata
+    auto capture = tempest::profiler::capture_session_data{
+        .start_time_ns = 1000,
+        .end_time_ns = 5000,
+        .tracks = {},
+        .metrics = {},
+    };
+
+    auto track = tempest::profiler::track_data{
+        .track_id = 77,
+        .name = "WorkerThread_77",
+        .type = tempest::profiler::track_type::cpu_thread,
+        .zones = {},
+        .markers = {},
+    };
+
+    track.zones.push_back(tempest::profiler::zone_record{
+        .start_ns = 1200,
+        .end_ns = 3400,
+        .depth = 0,
+        .name = "CoroEventWaitTask",
+        .location = {},
+        .task_id = 0,
+        .coroutine_id = 505,
+        .slice_index = 2,
+        .reason = tempest::profiler::suspend_reason::event_wait,
+        .metrics = {},
+    });
+
+    capture.tracks.push_back(tempest::move(track));
+
+    // 2. Act: Export Chrome trace JSON string
+    const auto json_str = tempest::profiler::export_chrome_trace_json_string(capture);
+
+    // 3. Assert: Check for serialized coroutine fields
+    EXPECT_TRUE(tempest::contains(json_str, "\"coroutine_id\": 505"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"slice_index\": 2"));
+    EXPECT_TRUE(tempest::contains(json_str, "\"suspend_reason\": \"event_wait\""));
+}
+
