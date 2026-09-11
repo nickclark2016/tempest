@@ -998,8 +998,7 @@ namespace tempest
         [[nodiscard]] auto compare_exchange_strong(T& expected, T desired, memory_order success,
                                                    memory_order failure) noexcept -> bool
         {
-            return _value.compare_exchange_strong(expected, desired, success,
-                                                  detail::find_stronger_order(success, failure));
+            return _value.compare_exchange_strong(expected, desired, detail::find_stronger_order(success, failure));
         }
 
         [[nodiscard]] auto compare_exchange_strong(T& expected, T desired, memory_order success,
@@ -1221,6 +1220,15 @@ namespace tempest
       private:
         detail::atomic_storage<T, sizeof(T)> _value;
     };
+
+    inline void atomic_thread_fence(memory_order order) noexcept
+    {
+#if defined(__linux__) || defined(__APPLE__)
+        __atomic_thread_fence(detail::convert_memory_order(order));
+#elif defined(_WIN32)
+        MemoryBarrier();
+#endif
+    }
 } // namespace tempest
 
 #endif // tempest_core_atomic_hpp

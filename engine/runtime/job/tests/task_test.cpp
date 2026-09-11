@@ -181,4 +181,253 @@ namespace tempest::job::tests
         EXPECT_EQ(executed_after, 0);       // Code after co_await was never reached
         EXPECT_EQ(parent_dtor_count, 1);    // RAII destructor fired cleanly during short-circuit
     }
+
+    // =========================================================================
+    // SECTION: Monadic Chaining Tests
+    // =========================================================================
+
+    /// @brief Verifies that fallible task results can be transformed and chained
+    ///        using expected's monadic operators (.transform, .and_then, .or_else).
+    TEST(task_test, monadic_chaining_on_task_result)
+    {
+        // 1. Setup
+        auto t = simple_success_task();
+
+        // 2. Act
+        t.resume();
+        auto transformed = t.result()
+                               .transform([](int x) { return x * 2; })
+                               .and_then([](int x) -> expected<int, job_error> { return x + 10; });
+
+        // 3. Assert
+        EXPECT_TRUE(transformed.has_value());
+        EXPECT_EQ(transformed.value(), 94);
+    }
+
+    /// @brief Verifies that monadic operations chain correctly inside a coroutine body.
+    TEST(task_test, monadic_chaining_inside_coroutine)
+    {
+        // 1. Setup
+        auto coroutine_monadic = []() -> task<expected<int, job_error>> {
+            auto step = []() -> expected<int, job_error> { return 20; };
+            auto res = step()
+                           .transform([](int x) { return x * 2; })
+                           .and_then([](int x) -> expected<int, job_error> { return x + 5; });
+            co_return res;
+        };
+
+        // 2. Act
+        auto t = coroutine_monadic();
+        t.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(t.is_ready());
+        EXPECT_TRUE(t.has_value());
+        auto inner = t.value();
+        EXPECT_TRUE(inner.has_value());
+        EXPECT_EQ(inner.value(), 45);
+    }
+
+    /// @brief Verifies that an error in a monadic chain is propagated and skips downstream transforms.
+    TEST(task_test, monadic_chaining_error_propagation_inside_coroutine)
+    {
+        // 1. Setup
+        auto coroutine_fail = []() -> task<expected<int, job_error>> {
+            auto step = []() -> expected<int, job_error> { return unexpected(job_error::timeout); };
+            auto res = step()
+                           .transform([](int x) { return x * 2; })
+                           .and_then([](int x) -> expected<int, job_error> { return x + 5; });
+            co_return res;
+        };
+
+        // 2. Act
+        auto t = coroutine_fail();
+        t.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(t.is_ready());
+        EXPECT_TRUE(t.has_value());
+        auto inner = t.value();
+        EXPECT_FALSE(inner.has_value());
+        EXPECT_EQ(inner.error(), job_error::timeout);
+    }
+
+    // =========================================================================
+    // SECTION: Task Continuation (.then) Tests
+    // =========================================================================
+
+    /// @brief Verifies that task::then chains a synchronous value transformation
+    ///        producing a new task with the transformed value.
+    TEST(task_test, continuation_value_transform)
+    {
+        // 1. Setup
+        auto t = simple_success_task();
+
+        // 2. Act
+        auto cont = t.then([](int x) { return x * 2; });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(cont.is_ready());
+        EXPECT_TRUE(cont.has_value());
+        EXPECT_EQ(cont.value(), 84);
+    }
+
+    /// @brief Verifies that task::then chains an asynchronous continuation returning
+    ///        another coroutine task and unwraps the nested task result seamlessly.
+    TEST(task_test, continuation_async_task)
+    {
+        // 1. Setup
+        auto t = simple_success_task();
+
+        // 2. Act
+        auto cont = t.then([](int x) -> task<int> { co_return x + 100; });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(cont.is_ready());
+        EXPECT_TRUE(cont.has_value());
+        EXPECT_EQ(cont.value(), 142);
+    }
+
+    /// @brief Verifies that task::then with a void-returning callable executes correctly
+    ///        and completes as task<void, E>.
+    TEST(task_test, continuation_void_return)
+    {
+        // 1. Setup
+        auto t = simple_success_task();
+        bool executed = false;
+
+        // 2. Act
+        auto cont = t.then([&](int x) {
+            EXPECT_EQ(x, 42);
+            executed = true;
+        });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(executed);
+        EXPECT_TRUE(cont.is_ready());
+        EXPECT_TRUE(cont.has_value());
+    }
+
+    /// @brief Verifies that task::then on a task<void> correctly invokes a callable
+    ///        with no arguments and returns a valued task.
+    TEST(task_test, continuation_on_void_task)
+    {
+        // 1. Setup
+        bool executed1 = false;
+        auto t = simple_void_task(&executed1);
+
+        // 2. Act
+        auto cont = t.then([]() { return 777; });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(executed1);
+        EXPECT_TRUE(cont.is_ready());
+        EXPECT_TRUE(cont.has_value());
+        EXPECT_EQ(cont.value(), 777);
+    }
+
+    /// @brief Verifies that task::then on a task<void> with a void callable completes cleanly.
+    TEST(task_test, continuation_on_void_task_to_void)
+    {
+        // 1. Setup
+        bool executed1 = false;
+        bool executed2 = false;
+        auto t = simple_void_task(&executed1);
+
+        // 2. Act
+        auto cont = t.then([&]() { executed2 = true; });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(executed1);
+        EXPECT_TRUE(executed2);
+        EXPECT_TRUE(cont.is_ready());
+        EXPECT_TRUE(cont.has_value());
+    }
+
+    /// @brief Verifies that multiple .then() continuations can be chained in sequence.
+    TEST(task_test, continuation_multi_chain)
+    {
+        // 1. Setup
+        auto t = simple_success_task();
+
+        // 2. Act: (42 + 8) * 2 - 10 = 90
+        auto chained = t.then([](int x) { return x + 8; })
+                           .then([](int x) { return x * 2; })
+                           .then([](int x) { return x - 10; });
+        const auto finished = chained.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(chained.is_ready());
+        EXPECT_TRUE(chained.has_value());
+        EXPECT_EQ(chained.value(), 90);
+    }
+
+    /// @brief Verifies that when the antecedent task fails, the continuation lambda is
+    ///        never invoked and the error propagates to the resulting task.
+    TEST(task_test, continuation_error_short_circuit)
+    {
+        // 1. Setup
+        auto t = child_fail_task();
+        bool continuation_called = false;
+
+        // 2. Act
+        auto cont = t.then([&](int x) {
+            continuation_called = true;
+            return x * 2;
+        });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(cont.is_ready());
+        EXPECT_FALSE(cont.has_value());
+        EXPECT_EQ(cont.error(), job_error::canceled);
+        EXPECT_FALSE(continuation_called);
+    }
+
+    /// @brief Verifies that non-fallible task<T, void> supports .then() continuation.
+    TEST(task_test, continuation_non_fallible_task)
+    {
+        // 1. Setup
+        auto t = non_fallible_task();
+
+        // 2. Act
+        auto cont = t.then([](int x) { return x + 1; });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(cont.is_ready());
+        EXPECT_EQ(cont.value(), 100);
+    }
+
+    /// @brief Verifies that non-fallible task<void, void> supports .then() continuation.
+    TEST(task_test, continuation_non_fallible_void_task)
+    {
+        // 1. Setup
+        bool step1 = false;
+        bool step2 = false;
+        auto t = non_fallible_void_task(&step1);
+
+        // 2. Act
+        auto cont = t.then([&]() { step2 = true; });
+        const auto finished = cont.resume();
+
+        // 3. Assert
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(step1);
+        EXPECT_TRUE(step2);
+        EXPECT_TRUE(cont.is_ready());
+    }
 } // namespace tempest::job::tests

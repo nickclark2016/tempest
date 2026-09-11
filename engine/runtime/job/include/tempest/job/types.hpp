@@ -32,8 +32,11 @@ namespace tempest::job
         channel_closed,
         channel_empty,
         channel_full,
-        timeout
+        timeout,
+        task_failed,
     };
+
+    using error_code = job_error;
 
     struct task_affinity
     {

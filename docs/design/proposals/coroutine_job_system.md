@@ -234,7 +234,7 @@ Awaiting GPU events without CPU stalls:
 ### 1. Invariants & Zero-Global Architecture (Rules #1 & #4 Compliance)
 - **Zero Globals**: The scheduler contains no global or static state. Subsystems (`renderer`, `asset_manager`, `physics_system`) accept `job_system&`.
 - **Strict Invariants**: Required dependencies (`logger&`, `profiler_session&`) are passed as non-null references. Defensive `if (ptr == nullptr)` checks are eliminated. Silent or test execution is achieved by passing a zero-sink `logger{}` and a disabled `profiler_session{false}`.
-- **`tempest::non_null<T*>` for Collections**: Where references cannot be stored (such as spans of task dependencies), `non_null<task_node*>` guarantees non-null elements at compile time.
+- **`tempest::non_null<T>` for Collections**: Where references cannot be stored (such as spans of task dependencies), `non_null<task_node>` guarantees non-null elements at compile time.
 
 ```cpp
 namespace tempest::job
@@ -301,11 +301,11 @@ namespace tempest::job
       public:
         template <typename... Nodes>
         auto precede(task_node& first, Nodes&... rest) -> task_node&;
-        auto precede(span<const non_null<task_node*>> nodes) -> task_node&;
+        auto precede(span<const non_null<task_node>> nodes) -> task_node&;
 
         template <typename... Nodes>
         auto succeed(task_node& first, Nodes&... rest) -> task_node&;
-        auto succeed(span<const non_null<task_node*>> nodes) -> task_node&;
+        auto succeed(span<const non_null<task_node>> nodes) -> task_node&;
 
         [[nodiscard]] auto name() const noexcept -> string_view;
         [[nodiscard]] auto in_degree() const noexcept -> size_t;

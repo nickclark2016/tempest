@@ -64,7 +64,7 @@ namespace tempest
         constexpr explicit expected(in_place_t /*unused*/, Args&&... args);
 
         template <typename... Args>
-            requires is_constructible_v<T, Args...>
+            requires is_constructible_v<E, Args...>
         constexpr explicit expected(unexpect_t /*unused*/, Args&&... args);
 
         constexpr ~expected();
@@ -301,7 +301,7 @@ namespace tempest
 
     template <typename T, typename E>
     template <typename... Args>
-        requires is_constructible_v<T, Args...>
+        requires is_constructible_v<E, Args...>
     constexpr expected<T, E>::expected(unexpect_t /*unused*/, Args&&... args)
         : _error{tempest::forward<Args>(args)...}, _has_value{false}
     {
@@ -584,56 +584,56 @@ namespace tempest
     template <typename F>
     constexpr auto expected<T, E>::and_then(F&& func) &
     {
+        using result_t = remove_cvref_t<invoke_result_t<F, T&>>;
+
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), _value);
         }
-        
-        
-            return expected<E, T>(unexpect, _error);
-       
+
+        return expected<typename result_t::value_type, E>(unexpect, _error);
     }
 
     template <typename T, typename E>
     template <typename F>
     constexpr auto expected<T, E>::and_then(F&& func) const&
     {
+        using result_t = remove_cvref_t<invoke_result_t<F, const T&>>;
+
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), _value);
         }
-        
-        
-            return expected<E, T>(unexpect, _error);
-       
+
+        return expected<typename result_t::value_type, E>(unexpect, _error);
     }
 
     template <typename T, typename E>
     template <typename F>
     constexpr auto expected<T, E>::and_then(F&& func) &&
     {
+        using result_t = remove_cvref_t<invoke_result_t<F, T&&>>;
+
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), tempest::move(_value));
         }
-        
-        
-            return expected<E, T>(unexpect, tempest::move(_error));
-       
+
+        return expected<typename result_t::value_type, E>(unexpect, tempest::move(_error));
     }
 
     template <typename T, typename E>
     template <typename F>
     constexpr auto expected<T, E>::and_then(F&& func) const&&
     {
+        using result_t = remove_cvref_t<invoke_result_t<F, const T&&>>;
+
         if (has_value())
         {
             return invoke(tempest::forward<F>(func), tempest::move(_value));
         }
-        
-        
-            return expected<E, T>(unexpect, tempest::move(_error));
-       
+
+        return expected<typename result_t::value_type, E>(unexpect, tempest::move(_error));
     }
 
     template <typename T, typename E>

@@ -31,6 +31,74 @@ namespace tempest::job
             }
         };
 
+        template <typename T>
+        struct is_task_helper : false_type
+        {
+        };
+
+        template <typename T, typename E>
+        struct is_task_helper<task<T, E>> : true_type
+        {
+        };
+
+        template <typename T>
+        inline constexpr bool is_task_v = is_task_helper<remove_cvref_t<T>>::value;
+
+        template <typename T>
+        struct task_traits
+        {
+            using value_type = void;
+            using error_type = void;
+        };
+
+        template <typename T, typename E>
+        struct task_traits<task<T, E>>
+        {
+            using value_type = T;
+            using error_type = E;
+        };
+
+        template <typename PrevVal, typename F>
+        struct continuation_invoke_result
+        {
+            using type = invoke_result_t<decay_t<F>, PrevVal>;
+        };
+
+        template <typename F>
+        struct continuation_invoke_result<void, F>
+        {
+            using type = invoke_result_t<decay_t<F>>;
+        };
+
+        template <typename PrevTask, typename F>
+        struct continuation_result
+        {
+            using prev_val_t = typename PrevTask::value_type;
+            using prev_err_t = typename PrevTask::error_type;
+
+            using raw_invoke_t = typename continuation_invoke_result<prev_val_t, F>::type;
+
+            using result_val_t = conditional_t<
+                is_task_v<raw_invoke_t>,
+                typename task_traits<raw_invoke_t>::value_type,
+                raw_invoke_t>;
+
+            using child_err_t = conditional_t<
+                is_task_v<raw_invoke_t>,
+                typename task_traits<raw_invoke_t>::error_type,
+                void>;
+
+            using result_err_t = conditional_t<
+                !is_void_v<prev_err_t>,
+                prev_err_t,
+                child_err_t>;
+
+            using type = task<result_val_t, result_err_t>;
+        };
+
+        template <typename PrevTask, typename F>
+        using continuation_result_t = typename continuation_result<PrevTask, F>::type;
+
         template <typename Promise>
         struct task_final_awaiter
         {
@@ -41,6 +109,17 @@ namespace tempest::job
 
             auto await_suspend(coroutine_handle<Promise> h) noexcept -> coroutine_handle<>
             {
+                if constexpr (requires { h.promise().result.has_value(); h.promise().parent_propagator; })
+                {
+                    if (!h.promise().result.has_value() && h.promise().parent_propagator != nullptr)
+                    {
+                        auto* parent = h.promise().parent_propagator;
+                        parent->propagate_error(static_cast<job_error>(h.promise().result.error()));
+                        auto cont = parent->get_continuation();
+                        parent->destroy_frame();
+                        return cont ? cont : noop_coroutine();
+                    }
+                }
                 auto cont = h.promise().continuation;
                 return cont ? cont : noop_coroutine();
             }
@@ -73,7 +152,7 @@ namespace tempest::job
         auto await_suspend(coroutine_handle<CallerPromise> h) noexcept -> coroutine_handle<>
         {
             awaited_task.handle().promise().continuation = h;
-            if constexpr (requires { h.promise().parent_propagator; })
+            if constexpr (requires { awaited_task.handle().promise().parent_propagator = &h.promise(); })
             {
                 awaited_task.handle().promise().parent_propagator = &h.promise();
             }
@@ -179,6 +258,7 @@ namespace tempest::job
 
             // Await transform for child fallible task
             template <typename ChildT, typename ChildE>
+                requires (!is_void_v<ChildE>)
             auto await_transform(task<ChildT, ChildE>&& child)
             {
                 struct child_task_awaiter
@@ -187,11 +267,24 @@ namespace tempest::job
 
                     auto await_ready() const noexcept -> bool
                     {
-                        return child_task.is_ready();
+                        return child_task.is_ready() && child_task.has_value();
                     }
 
                     auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
                     {
+                        if (child_task.is_ready())
+                        {
+                            auto err = child_task.error();
+                            auto* parent = h.promise().parent_propagator;
+                            h.promise().propagate_error(static_cast<job_error>(err));
+                            auto next = h.promise().get_continuation();
+                            h.destroy();
+                            if (parent != nullptr)
+                            {
+                                parent->destroy_frame();
+                            }
+                            return next ? next : noop_coroutine();
+                        }
                         child_task.handle().promise().continuation = h;
                         child_task.handle().promise().parent_propagator = &h.promise();
                         return child_task.handle();
@@ -414,6 +507,12 @@ namespace tempest::job
             return task_awaiter<T, E>{move(*this)};
         }
 
+        template <typename F>
+        auto then(F&& func) && -> detail::continuation_result_t<task, F>;
+
+        template <typename F>
+        auto then(F&& func) & -> detail::continuation_result_t<task, F>;
+
       private:
         template <typename, typename>
         friend class task;
@@ -503,6 +602,7 @@ namespace tempest::job
 
             // Await transform for child fallible task
             template <typename ChildT, typename ChildE>
+                requires (!is_void_v<ChildE>)
             auto await_transform(task<ChildT, ChildE>&& child)
             {
                 struct child_task_awaiter
@@ -511,11 +611,24 @@ namespace tempest::job
 
                     auto await_ready() const noexcept -> bool
                     {
-                        return child_task.is_ready();
+                        return child_task.is_ready() && child_task.has_value();
                     }
 
                     auto await_suspend(coroutine_handle<promise_type> h) noexcept -> coroutine_handle<>
                     {
+                        if (child_task.is_ready())
+                        {
+                            auto err = child_task.error();
+                            auto* parent = h.promise().parent_propagator;
+                            h.promise().propagate_error(static_cast<job_error>(err));
+                            auto next = h.promise().get_continuation();
+                            h.destroy();
+                            if (parent != nullptr)
+                            {
+                                parent->destroy_frame();
+                            }
+                            return next ? next : noop_coroutine();
+                        }
                         child_task.handle().promise().continuation = h;
                         child_task.handle().promise().parent_propagator = &h.promise();
                         return child_task.handle();
@@ -732,6 +845,12 @@ namespace tempest::job
             return task_awaiter<void, E>{move(*this)};
         }
 
+        template <typename F>
+        auto then(F&& func) && -> detail::continuation_result_t<task, F>;
+
+        template <typename F>
+        auto then(F&& func) & -> detail::continuation_result_t<task, F>;
+
       private:
         template <typename, typename>
         friend class task;
@@ -862,6 +981,12 @@ namespace tempest::job
             return task_awaiter<T, void>{move(*this)};
         }
 
+        template <typename F>
+        auto then(F&& func) && -> detail::continuation_result_t<task, F>;
+
+        template <typename F>
+        auto then(F&& func) & -> detail::continuation_result_t<task, F>;
+
       private:
         coroutine_handle<promise_type> _handle{nullptr};
     };
@@ -974,9 +1099,136 @@ namespace tempest::job
             return task_awaiter<void, void>{move(*this)};
         }
 
+        template <typename F>
+        auto then(F&& func) && -> detail::continuation_result_t<task, F>;
+
+        template <typename F>
+        auto then(F&& func) & -> detail::continuation_result_t<task, F>;
+
       private:
         coroutine_handle<promise_type> _handle{nullptr};
     };
+
+    namespace detail
+    {
+        template <typename ResultTask, typename PrevTask, typename F>
+        auto make_continuation(PrevTask prev, F func) -> ResultTask
+        {
+            using prev_val_t = typename PrevTask::value_type;
+            using raw_invoke_t = typename continuation_invoke_result<prev_val_t, F>::type;
+
+            if constexpr (is_void_v<prev_val_t>)
+            {
+                co_await move(prev);
+                if constexpr (is_task_v<raw_invoke_t>)
+                {
+                    using inner_val_t = typename task_traits<raw_invoke_t>::value_type;
+                    if constexpr (is_void_v<inner_val_t>)
+                    {
+                        co_await func();
+                        co_return;
+                    }
+                    else
+                    {
+                        co_return co_await func();
+                    }
+                }
+                else if constexpr (is_void_v<raw_invoke_t>)
+                {
+                    func();
+                    co_return;
+                }
+                else
+                {
+                    co_return func();
+                }
+            }
+            else
+            {
+                auto val = co_await move(prev);
+                if constexpr (is_task_v<raw_invoke_t>)
+                {
+                    using inner_val_t = typename task_traits<raw_invoke_t>::value_type;
+                    if constexpr (is_void_v<inner_val_t>)
+                    {
+                        co_await func(move(val));
+                        co_return;
+                    }
+                    else
+                    {
+                        co_return co_await func(move(val));
+                    }
+                }
+                else if constexpr (is_void_v<raw_invoke_t>)
+                {
+                    func(move(val));
+                    co_return;
+                }
+                else
+                {
+                    co_return func(move(val));
+                }
+            }
+        }
+    } // namespace detail
+
+    template <typename T, typename E>
+    template <typename F>
+    auto task<T, E>::then(F&& func) && -> detail::continuation_result_t<task<T, E>, F>
+    {
+        return detail::make_continuation<detail::continuation_result_t<task<T, E>, F>>(
+            move(*this), forward<F>(func));
+    }
+
+    template <typename T, typename E>
+    template <typename F>
+    auto task<T, E>::then(F&& func) & -> detail::continuation_result_t<task<T, E>, F>
+    {
+        return move(*this).then(forward<F>(func));
+    }
+
+    template <typename E>
+    template <typename F>
+    auto task<void, E>::then(F&& func) && -> detail::continuation_result_t<task<void, E>, F>
+    {
+        return detail::make_continuation<detail::continuation_result_t<task<void, E>, F>>(
+            move(*this), forward<F>(func));
+    }
+
+    template <typename E>
+    template <typename F>
+    auto task<void, E>::then(F&& func) & -> detail::continuation_result_t<task<void, E>, F>
+    {
+        return move(*this).then(forward<F>(func));
+    }
+
+    template <typename T>
+    template <typename F>
+    auto task<T, void>::then(F&& func) && -> detail::continuation_result_t<task<T, void>, F>
+    {
+        return detail::make_continuation<detail::continuation_result_t<task<T, void>, F>>(
+            move(*this), forward<F>(func));
+    }
+
+    template <typename T>
+    template <typename F>
+    auto task<T, void>::then(F&& func) & -> detail::continuation_result_t<task<T, void>, F>
+    {
+        return move(*this).then(forward<F>(func));
+    }
+
+    template <typename F>
+    inline auto task<void, void>::then(F&& func) && -> detail::continuation_result_t<task<void, void>, F>
+    {
+        return detail::make_continuation<detail::continuation_result_t<task<void, void>, F>>(
+            move(*this), forward<F>(func));
+    }
+
+    template <typename F>
+    inline auto task<void, void>::then(F&& func) & -> detail::continuation_result_t<task<void, void>, F>
+    {
+        return move(*this).then(forward<F>(func));
+    }
 } // namespace tempest::job
 
 #endif // tempest_job_task_hpp
