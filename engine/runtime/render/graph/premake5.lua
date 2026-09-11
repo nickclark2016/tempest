@@ -48,6 +48,8 @@ scoped.project('render-graph', function()
         uses {
             'api',
             'core',
+            'job',
+            'logger',
             'profiler',
             'rhi-api',
         }
@@ -75,6 +77,7 @@ scoped.group('Tests', function()
 
         uses {
             'googletest',
+            'job',
             'tempest',
         }
     end)

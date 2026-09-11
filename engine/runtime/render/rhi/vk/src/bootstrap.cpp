@@ -194,6 +194,7 @@ namespace tempest::rhi::vk
         load_dev_proc(dev, get_device_proc_addr, "vkDestroySemaphore", fp_vkDestroySemaphore);
         load_dev_proc(dev, get_device_proc_addr, "vkGetSemaphoreCounterValue", fp_vkGetSemaphoreCounterValue);
         load_dev_proc(dev, get_device_proc_addr, "vkWaitSemaphores", fp_vkWaitSemaphores);
+        load_dev_proc(dev, get_device_proc_addr, "vkSignalSemaphore", fp_vkSignalSemaphore);
         load_dev_proc(dev, get_device_proc_addr, "vkCreateEvent", fp_vkCreateEvent);
         load_dev_proc(dev, get_device_proc_addr, "vkDestroyEvent", fp_vkDestroyEvent);
         load_dev_proc(dev, get_device_proc_addr, "vkCreateImageView", fp_vkCreateImageView);

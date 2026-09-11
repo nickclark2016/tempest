@@ -283,6 +283,17 @@ namespace tempest::render_graph
                 return 0;
             }
 
+            auto signal_semaphore([[maybe_unused]] rhi::semaphore_handle semaphore, [[maybe_unused]] uint64_t value) -> void override
+            {
+            }
+
+            auto wait_semaphores([[maybe_unused]] span<const rhi::host_sync_point> sync_points,
+                                 [[maybe_unused]] uint64_t timeout_ns = ~uint64_t{0},
+                                 [[maybe_unused]] bool wait_any = false) -> rhi::wait_status override
+            {
+                return rhi::wait_status::success;
+            }
+
             [[nodiscard]] auto get_graphics_execution_port() -> rhi::execution_port& override
             {
                 return graphics_port;

@@ -183,6 +183,7 @@ namespace tempest::rhi::vk
         PFN_vkDestroySemaphore fp_vkDestroySemaphore = nullptr;
         PFN_vkGetSemaphoreCounterValue fp_vkGetSemaphoreCounterValue = nullptr;
         PFN_vkWaitSemaphores fp_vkWaitSemaphores = nullptr;
+        PFN_vkSignalSemaphore fp_vkSignalSemaphore = nullptr;
         PFN_vkCreateEvent fp_vkCreateEvent = nullptr;
         PFN_vkDestroyEvent fp_vkDestroyEvent = nullptr;
         PFN_vkCreateImageView fp_vkCreateImageView = nullptr;
@@ -277,6 +278,12 @@ namespace tempest::rhi::vk
         {
             return (fp_vkWaitSemaphores != nullptr) ? fp_vkWaitSemaphores(device, pWaitInfo, timeout)
                                                     : VK_ERROR_INITIALIZATION_FAILED;
+        }
+
+        auto signalSemaphore(const VkSemaphoreSignalInfo* pSignalInfo) const noexcept -> VkResult
+        {
+            return (fp_vkSignalSemaphore != nullptr) ? fp_vkSignalSemaphore(device, pSignalInfo)
+                                                     : VK_ERROR_INITIALIZATION_FAILED;
         }
 
         auto getSemaphoreCounterValue(VkSemaphore semaphore, uint64_t* pValue) const noexcept -> VkResult

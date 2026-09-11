@@ -1,6 +1,7 @@
 #include <tempest/bit.hpp>
 #include <tempest/exception.hpp>
 #include <tempest/utility.hpp>
+#include <tempest/vector.hpp>
 #ifdef TEMPEST_PLATFORM_WINDOWS
 #define VK_USE_PLATFORM_WIN32_KHR
 #define WIN32_LEAN_AND_MEAN
@@ -621,7 +622,7 @@ namespace tempest::rhi::vk
 
     auto device::wait_idle() -> void
     {
-        _dispatch_table.deviceWaitIdle();
+        [[maybe_unused]] const auto result = _dispatch_table.deviceWaitIdle();
     }
 
     auto device::wait_for_sync(host_sync_point sync_point) -> void
@@ -651,6 +652,76 @@ namespace tempest::rhi::vk
         auto current_val = uint64_t{0};
         _dispatch_table.getSemaphoreCounterValue(sem, &current_val);
         return current_val;
+    }
+
+    auto device::signal_semaphore(semaphore_handle semaphore, uint64_t value) -> void
+    {
+        auto* sem = get_semaphore(semaphore);
+        if (sem == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        const auto signal_info = VkSemaphoreSignalInfo{
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+            .pNext = nullptr,
+            .semaphore = sem,
+            .value = value,
+        };
+        _dispatch_table.signalSemaphore(&signal_info);
+    }
+
+    auto device::wait_semaphores(span<const host_sync_point> sync_points, uint64_t timeout_ns,
+                                 bool wait_any) -> wait_status
+    {
+        if (sync_points.empty())
+        {
+            return wait_status::success;
+        }
+
+        auto vk_semaphores = tempest::vector<VkSemaphore>{};
+        auto vk_values = tempest::vector<uint64_t>{};
+        vk_semaphores.reserve(sync_points.size());
+        vk_values.reserve(sync_points.size());
+
+        for (const auto& sp : sync_points)
+        {
+            auto* sem = get_semaphore(sp.semaphore);
+            if (sem != VK_NULL_HANDLE)
+            {
+                vk_semaphores.push_back(sem);
+                vk_values.push_back(sp.value);
+            }
+        }
+
+        if (vk_semaphores.empty())
+        {
+            return wait_status::success;
+        }
+
+        const auto wait_info = VkSemaphoreWaitInfo{
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+            .pNext = nullptr,
+            .flags = wait_any ? static_cast<VkSemaphoreWaitFlags>(VK_SEMAPHORE_WAIT_ANY_BIT) : 0u,
+            .semaphoreCount = static_cast<uint32_t>(vk_semaphores.size()),
+            .pSemaphores = vk_semaphores.data(),
+            .pValues = vk_values.data(),
+        };
+
+        const auto res = _dispatch_table.waitSemaphores(&wait_info, timeout_ns);
+        if (res == VK_SUCCESS)
+        {
+            return wait_status::success;
+        }
+        if (res == VK_TIMEOUT)
+        {
+            return wait_status::timeout;
+        }
+        if (res == VK_ERROR_DEVICE_LOST)
+        {
+            return wait_status::device_lost;
+        }
+        return wait_status::error;
     }
 
     auto device::is_ray_tracing_supported() const -> bool

@@ -34,6 +34,8 @@ namespace tempest::rhi
         /// \brief The handle to the semaphore object. This handle is unique to the device that created it and should
         /// not be used with other devices.
         uint64_t handle;
+
+        [[nodiscard]] constexpr auto operator==(const semaphore_handle&) const noexcept -> bool = default;
     };
 
     /// \brief A handle to an event object. Events are used for synchronization between commands on the same execution
@@ -726,6 +728,14 @@ namespace tempest::rhi
         uint64_t value;
     };
 
+    enum class wait_status : uint8_t
+    {
+        success = 0,
+        timeout,
+        device_lost,
+        error,
+    };
+
     class TEMPEST_API command_list
     {
       public:
@@ -1000,8 +1010,11 @@ namespace tempest::rhi
         virtual auto destroy_render_surface(unique_ptr<render_surface> surface) -> void = 0;
         virtual auto destroy_raw_surface(raw_surface_handle surface) -> void = 0;
 
-        // Sync queries
+        // Sync queries & operations
         [[nodiscard]] virtual auto get_semaphore_value(semaphore_handle semaphore) const -> uint64_t = 0;
+        virtual auto signal_semaphore(semaphore_handle semaphore, uint64_t value) -> void = 0;
+        virtual auto wait_semaphores(span<const host_sync_point> sync_points, uint64_t timeout_ns = ~uint64_t{0},
+                                     bool wait_any = false) -> wait_status = 0;
 
         // Execution ports
         [[nodiscard]] virtual auto get_graphics_execution_port() -> execution_port& = 0;
