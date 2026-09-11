@@ -66,6 +66,7 @@ end)
 
 scoped.group('Tests', function()
     scoped.project('ecs-tests', function()
+        tags { 'non-gpu-test' }
         kind 'ConsoleApp'
         language 'C++'
         cppdialect 'C++20'

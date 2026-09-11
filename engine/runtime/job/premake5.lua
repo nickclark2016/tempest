@@ -71,6 +71,7 @@ end)
 
 scoped.group('Tests', function()
     scoped.project('job-tests', function()
+        tags { 'non-gpu-test' }
         kind 'ConsoleApp'
         language 'C++'
         cppdialect 'C++20'
@@ -81,15 +82,16 @@ scoped.group('Tests', function()
         files {
             'tests/**.cpp',
             'tests/**.hpp',
+            'src/**.cpp',
         }
 
         includedirs {
             'include',
+            'src',
         }
 
         uses {
             'googletest',
-            'job',
             'tempest',
         }
 
